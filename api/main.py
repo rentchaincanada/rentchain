@@ -9,3 +9,11 @@ app = FastAPI(
 @app.get("/health")
 def health_check():
     return {"status": "ok", "service": "rentchain-api"}
+@app.get("/health/db")
+def health_db():
+    # Placeholder for now – later we’ll actually ping Firestore here.
+    return {
+        "status": "ok",
+        "service": "rentchain-api",
+        "database": "firestore-configured"
+    }
