@@ -23,7 +23,7 @@ resource "google_artifact_registry_repository" "api_repo" {
 # --------------------------------------------------------
 
 locals {
-  api_image = "northamerica-northeast1-docker.pkg.dev/${var.project_id}/rentchain-api/rentchain-api:latest"
+  api_image = "northamerica-northeast1-docker.pkg.dev/${var.project_id}/rentchain-api/rentchain-api:v1"
 }
 
 resource "google_cloud_run_service" "landlord_api" {
