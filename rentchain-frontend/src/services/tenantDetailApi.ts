@@ -22,10 +22,10 @@ export type TenantDetail = {
   paymentHistory: TenantPaymentHistoryItem[];
 };
 
-export async function fetchTenantDetail(
-  id: string
-): Promise<TenantDetail> {
-  const res = await fetch(`http://localhost:3000/tenants/${id}`);
+import { resolveApiUrl } from "../lib/apiClient";
+
+export async function fetchTenantDetail(id: string): Promise<TenantDetail> {
+  const res = await fetch(resolveApiUrl(`/tenants/${id}`));
 
   if (!res.ok) {
     throw new Error("Failed to fetch tenant detail");

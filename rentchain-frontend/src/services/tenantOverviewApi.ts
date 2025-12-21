@@ -10,8 +10,10 @@ export type TenantOverviewRow = {
   latePayments: number;
 };
 
+import { resolveApiUrl } from "../lib/apiClient";
+
 export async function fetchTenantOverview(): Promise<TenantOverviewRow[]> {
-  const res = await fetch("http://localhost:3000/tenants/overview");
+  const res = await fetch(resolveApiUrl("/tenants/overview"));
 
   if (!res.ok) {
     throw new Error("Failed to fetch tenant overview");

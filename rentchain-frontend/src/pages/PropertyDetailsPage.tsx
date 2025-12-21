@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import "./PropertyDetailsPage.css";
-import { getAuthToken } from "../lib/apiClient";
+import { getAuthToken, resolveApiUrl } from "../lib/apiClient";
 
 type PropertyOverview = {
   propertyId: string;
@@ -175,9 +175,12 @@ export const PropertyDetailsPage: React.FC = () => {
         setError(null);
 
         const token = getAuthToken();
-        const response = await fetch("http://localhost:3000/dashboard/overview", {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
+        const response = await fetch(
+          resolveApiUrl("/dashboard/overview"),
+          {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          }
+        );
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
         const json = (await response.json()) as DashboardOverviewResponse;

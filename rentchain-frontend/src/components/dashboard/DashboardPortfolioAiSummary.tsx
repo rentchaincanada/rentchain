@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { getAuthToken } from "../../lib/apiClient";
+import { getAuthToken, resolveApiUrl } from "../../lib/apiClient";
 
 export function DashboardPortfolioAiSummary() {
   const [loading, setLoading] = useState(true);
@@ -10,19 +10,16 @@ export function DashboardPortfolioAiSummary() {
     const fetchAiSummary = async () => {
       try {
         const token = getAuthToken();
-        const res = await fetch(
-          "http://localhost:3000/dashboard/portfolio-ai",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            },
-            body: JSON.stringify({
-              note: "Executive summary for landlord dashboard.",
-            }),
-          }
-        );
+        const res = await fetch(resolveApiUrl("/dashboard/portfolio-ai"), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            note: "Executive summary for landlord dashboard.",
+          }),
+        });
 
         const data = await res.json();
 
