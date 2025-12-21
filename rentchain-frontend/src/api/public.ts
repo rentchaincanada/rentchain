@@ -1,8 +1,7 @@
-export async function joinWaitlist(payload: { email: string; name?: string }) {
-  const base = String(import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
-  const url = `${base}/api/waitlist`;
+import { resolveApiUrl } from "../lib/apiClient";
 
-  const res = await fetch(url, {
+export async function joinWaitlist(payload: { email: string; name?: string }) {
+  const res = await fetch(resolveApiUrl("/waitlist"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ...payload, source: "landing" }),

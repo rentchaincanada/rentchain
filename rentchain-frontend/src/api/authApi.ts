@@ -1,15 +1,6 @@
 // src/api/authApi.ts
 import { apiFetch, apiJson } from "./http";
-import { getAuthToken, setAuthToken } from "@/lib/apiClient";
-import { API_BASE } from "../config/apiBase";
-
-function authUrl(path: string) {
-  const base = String(API_BASE || "").replace(/\/$/, "");
-  const normalized = path.startsWith("/api/")
-    ? path
-    : `/api${path.startsWith("/") ? path : `/${path}`}`;
-  return `${base}${normalized}`;
-}
+import { getAuthToken, setAuthToken, resolveApiUrl } from "@/lib/apiClient";
 
 export interface AuthUser {
   id: string;
@@ -89,7 +80,7 @@ export async function login(
   const headers = new Headers(opts.headers || {});
   headers.set("Content-Type", "application/json");
 
-  const res = await apiJson<LoginResponse>(authUrl("/auth/login"), {
+  const res = await apiJson<LoginResponse>("auth/login", {
     method: "POST",
     ...opts,
     headers,
@@ -114,7 +105,7 @@ export async function verifyTwoFactorCode(
   method: string,
   code: string
 ): Promise<TwoFaVerifyResponse> {
-  const res = await apiFetch<TwoFaVerifyResponse>(authUrl("/auth/2fa/verify"), {
+  const res = await apiFetch<TwoFaVerifyResponse>("auth/2fa/verify", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ pendingToken, method, code }),
@@ -124,44 +115,35 @@ export async function verifyTwoFactorCode(
 }
 
 export async function startTotpSetup(): Promise<TotpSetupResponse> {
-  const response = await apiFetch<TotpSetupResponse>(
-    authUrl("/auth/2fa/totp/setup"),
-    {
-      method: "POST",
-      token: getAuthToken() ?? undefined,
-    }
-  );
+  const response = await apiFetch<TotpSetupResponse>("auth/2fa/totp/setup", {
+    method: "POST",
+    token: getAuthToken() ?? undefined,
+  });
   return response;
 }
 
 export async function confirmTotpSetup(code: string): Promise<TotpConfirmResponse> {
-  const response = await apiFetch<TotpConfirmResponse>(
-    authUrl("/auth/2fa/totp/confirm"),
-    {
-      method: "POST",
-      token: getAuthToken() ?? undefined,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code }),
-    }
-  );
+  const response = await apiFetch<TotpConfirmResponse>("auth/2fa/totp/confirm", {
+    method: "POST",
+    token: getAuthToken() ?? undefined,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code }),
+  });
 
   return response;
 }
 
 export async function regenerateBackupCodes(code: string): Promise<BackupCodesRegenerateResponse> {
-  return apiFetch<BackupCodesRegenerateResponse>(
-    authUrl("/auth/2fa/backup-codes/regenerate"),
-    {
-      method: "POST",
-      token: getAuthToken() ?? undefined,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code }),
-    }
-  );
+  return apiFetch<BackupCodesRegenerateResponse>("auth/2fa/backup-codes/regenerate", {
+    method: "POST",
+    token: getAuthToken() ?? undefined,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code }),
+  });
 }
 
 export async function trustDevice(code: string, deviceName?: string): Promise<TrustDeviceResponse> {
-  return apiFetch<TrustDeviceResponse>(authUrl("/auth/2fa/trust-device"), {
+  return apiFetch<TrustDeviceResponse>("auth/2fa/trust-device", {
     method: "POST",
     token: getAuthToken() ?? undefined,
     headers: { "Content-Type": "application/json" },
@@ -170,7 +152,7 @@ export async function trustDevice(code: string, deviceName?: string): Promise<Tr
 }
 
 export async function disable2fa(code: string): Promise<Disable2faResponse> {
-  return apiFetch<Disable2faResponse>(authUrl("/auth/2fa/disable"), {
+  return apiFetch<Disable2faResponse>("auth/2fa/disable", {
     method: "POST",
     token: getAuthToken() ?? undefined,
     headers: { "Content-Type": "application/json" },
@@ -179,7 +161,7 @@ export async function disable2fa(code: string): Promise<Disable2faResponse> {
 }
 
 export async function getCurrentUser(token: string): Promise<MeResponse> {
-  const res = await fetch(authUrl("/auth/me"), {
+  const res = await fetch(resolveApiUrl("auth/me"), {
     method: "GET",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -191,7 +173,7 @@ export async function getCurrentUser(token: string): Promise<MeResponse> {
 
 export async function restoreSession(): Promise<{ user: any | null }> {
   try {
-    const res = await apiFetch<any>(authUrl("/me"));
+    const res = await apiFetch<any>("me");
     if (res && typeof res === "object") {
       if ("user" in res) {
         return { user: (res as any).user ?? null };
@@ -217,7 +199,7 @@ export async function restoreSession(): Promise<{ user: any | null }> {
 }
 
 export async function logout(token?: string): Promise<void> {
-  await apiJson("/auth/logout", {
+  await apiJson("auth/logout", {
     method: "POST",
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   });

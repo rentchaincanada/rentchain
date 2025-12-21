@@ -1,5 +1,4 @@
-const RAW_BASE = import.meta.env.VITE_API_BASE ?? "/api";
-const API_BASE = RAW_BASE.endsWith("/") ? RAW_BASE.slice(0, -1) : RAW_BASE;
+import { resolveApiUrl } from "../lib/apiClient";
 
 export type ApiError = Error & { status?: number; body?: any };
 
@@ -16,11 +15,7 @@ export async function apiFetch<T>(
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  const finalPath = normalizedPath.startsWith("/api/")
-    ? normalizedPath
-    : `${API_BASE}${normalizedPath}`;
-
-  const res = await fetch(finalPath, {
+  const res = await fetch(resolveApiUrl(normalizedPath), {
     ...opts,
     headers,
   });
