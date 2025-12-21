@@ -1,0 +1,184 @@
+.property-page {
+  padding-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.property-page__topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.property-page__back-link {
+  font-size: 0.85rem;
+  color: #9ca3af;
+  text-decoration: none;
+}
+
+.property-page__back-link:hover {
+  text-decoration: underline;
+  color: #e5e7eb;
+}
+
+.property-page__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.property-page__title {
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: #f9fafb;
+}
+
+.property-page__address {
+  font-size: 0.9rem;
+  color: #9ca3af;
+}
+
+.property-page__header-meta {
+  display: flex;
+  align-items: center;
+}
+
+/* Reuse risk badge styles */
+.risk-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border: 1px solid transparent;
+}
+
+.risk-badge--low {
+  background: #ecfdf3;
+  color: #166534;
+  border-color: #bbf7d0;
+}
+
+.risk-badge--medium {
+  background: #fffbeb;
+  color: #92400e;
+  border-color: #fed7aa;
+}
+
+.risk-badge--high {
+  background: #fef2f2;
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+
+.property-page__summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.9rem;
+}
+
+.property-summary-card {
+  padding: 0.85rem 0.9rem;
+  border-radius: 0.8rem;
+  border: 1px solid #1f2937;
+  background: #020617;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.7);
+}
+
+.property-summary-card__label {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #9ca3af;
+  margin-bottom: 0.2rem;
+}
+
+.property-summary-card__value {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #f9fafb;
+}
+
+.property-summary-card__sublabel {
+  font-size: 0.85rem;
+  color: #9ca3af;
+  margin-top: 0.15rem;
+}
+
+.property-page__section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.property-page__section-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #e5e7eb;
+}
+
+.property-page__section-subtitle {
+  font-size: 0.85rem;
+  color: #9ca3af;
+}
+
+.property-page__placeholder {
+  margin-top: 0.4rem;
+  padding: 1rem;
+  border-radius: 0.8rem;
+  border: 1px dashed #4b5563;
+  background: #020617;
+  font-size: 0.9rem;
+  color: #e5e7eb;
+}
+
+.property-page__state {
+  font-size: 0.9rem;
+  color: #e5e7eb;
+}
+.property-units-table-wrapper {
+  margin-top: 0.5rem;
+  border-radius: 0.8rem;
+  border: 1px solid #1f2937;
+  background: #020617;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.7);
+  overflow-x: auto;
+}
+
+.property-units-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 600px;
+}
+
+.property-units-table th,
+.property-units-table td {
+  padding: 0.6rem 0.8rem;
+  text-align: left;
+  font-size: 0.88rem;
+}
+
+.property-units-table thead {
+  background: #030712;
+}
+
+.property-units-table th {
+  font-weight: 600;
+  color: #e5e7eb;
+  border-bottom: 1px solid #1f2937;
+}
+
+.property-units-table tbody tr:nth-child(even) {
+  background: #020617;
+}
+
+.property-units-table tbody tr:nth-child(odd) {
+  background: #020617;
+}
+
+.property-units-table tbody tr:hover {
+  background: #0b1120;
+}

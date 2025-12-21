@@ -1,0 +1,40 @@
+.payments-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.payments-table th {
+  text-align: left;
+  padding: 8px;
+  background: #0f172a;
+  color: white;
+  font-size: 0.85rem;
+}
+
+.payments-table td {
+  padding: 8px;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 0.85rem;
+}
+
+.status-tag {
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  text-transform: capitalize;
+}
+
+.status-tag.on-time {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.status-tag.late {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.status-tag.pending {
+  background: #fef9c3;
+  color: #854d0e;
+}

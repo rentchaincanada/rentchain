@@ -1,0 +1,140 @@
+.property-table-section {
+  margin-top: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.property-table-section__header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.property-table-section__title {
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.property-table-section__subtitle {
+  font-size: 0.9rem;
+  color: #f9f9f9;
+}
+
+.property-table-wrapper {
+  overflow-x: auto;
+  border-radius: 0.75rem;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.03);
+}
+
+.property-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 650px;
+}
+
+.property-table th,
+.property-table td {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  font-size: 0.9rem;
+}
+
+.property-table thead {
+  background: #f9fafb;
+}
+
+.property-table th {
+  font-weight: 600;
+  color: #ffffff;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.property-table tbody tr:nth-child(even) {
+  background: #f9fafb;
+}
+
+.property-table tbody tr:hover {
+  background: #eef2ff;
+}
+
+.property-table__name {
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.property-table__address {
+  font-size: 0.8rem;
+  color: #ffffff;
+}
+
+.property-table__units {
+  font-weight: 500;
+  color: #f8f8f8;
+}
+
+.property-table__occupancy {
+  font-size: 0.85rem;
+  color: #4b5563;
+}
+
+.property-table__mtd {
+  font-weight: 500;
+  color: #111827;
+}
+
+.property-table__muted {
+  font-size: 0.85rem;
+  color: #0d0d0d;
+}
+
+.property-table__collection-rate {
+  font-size: 0.85rem;
+  color: #ffffff;
+}
+
+.property-table__outstanding {
+  font-weight: 500;
+  color: #b91c1c;
+}
+
+.property-table-section--state {
+  margin-top: 2rem;
+  padding: 1rem;
+  border-radius: 0.75rem;
+  border: 1px dashed #e5e7eb;
+  font-size: 0.9rem;
+  color: #8d929a;
+}
+
+/* Risk badges */
+
+.risk-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border: 1px solid transparent;
+}
+
+.risk-badge--low {
+  background: #ecfdf3;
+  color: #166534;
+  border-color: #bbf7d0;
+}
+
+.risk-badge--medium {
+  background: #fffbeb;
+  color: #92400e;
+  border-color: #fed7aa;
+}
+
+.risk-badge--high {
+  background: #fef2f2;
+  color: #b91c1c;
+  border-color: #fecaca;
+}

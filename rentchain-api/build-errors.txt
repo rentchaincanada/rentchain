@@ -1,0 +1,95 @@
+src/routes/applicationsRoutes.ts(694,9): error TS2353: Object literal may only specify known properties, and 'id' does not exist in type '{ landlordId: string; applicationId: string; runScreening: boolean; actorUserId?: string | undefined; }'.
+src/routes/applicationsRoutes.ts(706,56): error TS2339: Property 'leaseId' does not exist on type '{ tenantId: string; screening?: { screeningId: string; status: string; } | undefined; alreadyConverted: boolean; }'.
+src/routes/applicationsRoutes.ts(707,62): error TS2339: Property 'ledgerEventId' does not exist on type '{ tenantId: string; screening?: { screeningId: string; status: string; } | undefined; alreadyConverted: boolean; }'.
+src/routes/applicationsRoutes.ts(708,60): error TS2339: Property 'convertedAt' does not exist on type '{ tenantId: string; screening?: { screeningId: string; status: string; } | undefined; alreadyConverted: boolean; }'.
+src/routes/applicationsRoutes.ts(726,29): error TS2339: Property 'leaseId' does not exist on type '{ tenantId: string; screening?: { screeningId: string; status: string; } | undefined; alreadyConverted: boolean; }'.
+src/routes/applicationsRoutes.ts(727,35): error TS2339: Property 'ledgerEventId' does not exist on type '{ tenantId: string; screening?: { screeningId: string; status: string; } | undefined; alreadyConverted: boolean; }'.
+src/routes/applicationsRoutes.ts(728,33): error TS2339: Property 'convertedAt' does not exist on type '{ tenantId: string; screening?: { screeningId: string; status: string; } | undefined; alreadyConverted: boolean; }'.
+src/routes/applicationsRoutes.ts(744,25): error TS2339: Property 'leaseId' does not exist on type '{ tenantId: string; screening?: { screeningId: string; status: string; } | undefined; alreadyConverted: boolean; }'.
+src/routes/applicationsRoutes.ts(745,31): error TS2339: Property 'ledgerEventId' does not exist on type '{ tenantId: string; screening?: { screeningId: string; status: string; } | undefined; alreadyConverted: boolean; }'.
+src/routes/applicationsRoutes.ts(746,29): error TS2339: Property 'convertedAt' does not exist on type '{ tenantId: string; screening?: { screeningId: string; status: string; } | undefined; alreadyConverted: boolean; }'.
+src/routes/applicationsRoutes.ts(1189,35): error TS2552: Cannot find name 'CosignerApplicationPayload'. Did you mean 'NewApplicationPayload'?
+src/routes/applicationsRoutes.ts(1198,26): error TS2304: Cannot find name 'CosignerApplication'.
+src/routes/applicationsRoutes.ts(1203,30): error TS2339: Property 'cosignerApplication' does not exist on type 'Application'.
+src/routes/applicationsRoutes.ts(1240,20): error TS2304: Cannot find name 'LeaseDraft'.
+src/routes/blockchainRoutes.ts(38,20): error TS2339: Property 'name' does not exist on type 'TenantRecord'.
+src/routes/blockchainRoutes.ts(39,20): error TS2339: Property 'legalName' does not exist on type 'TenantRecord'.
+src/routes/blockchainRoutes.ts(41,16): error TS2339: Property 'name' does not exist on type 'TenantRecord'.
+src/routes/blockchainRoutes.ts(50,20): error TS2339: Property 'unitNumber' does not exist on type 'TenantRecord'.
+src/routes/blockchainVerifyRoutes.ts(57,18): error TS2339: Property 'name' does not exist on type 'TenantRecord'.
+src/routes/blockchainVerifyRoutes.ts(58,18): error TS2339: Property 'legalName' does not exist on type 'TenantRecord'.
+src/routes/blockchainVerifyRoutes.ts(66,18): error TS2339: Property 'unitNumber' does not exist on type 'TenantRecord'.
+src/routes/propertiesRoutes.ts(279,36): error TS2345: Argument of type '"addedProperty"' is not assignable to parameter of type '"addProperty" | "addUnits" | "viewDashboard"'.
+src/routes/propertiesRoutes.ts(298,46): error TS2769: No overload matches this call.
+  The last overload gave the following error.
+    Argument of type '(req: Request, res: Response) => void' is not assignable to parameter of type 'Application<Record<string, any>>'.
+      Type '(req: Request, res: Response<any, Record<string, any>>) => void' is missing the following properties from type 'Application<Record<string, any>>': init, defaultConfiguration, engine, set, and 63 more.
+src/routes/propertiesRoutes.ts(299,30): error TS2339: Property 'params' does not exist on type 'Request'.
+src/routes/propertiesRoutes.ts(520,32): error TS2304: Cannot find name 'currentUnits'.
+src/routes/propertiesRoutes.ts(521,32): error TS2304: Cannot find name 'currentUnits'.
+src/routes/propertiesRoutes.ts(524,59): error TS2304: Cannot find name 'currentUnits'.
+src/routes/reputationRoutes.ts(12,30): error TS2339: Property 'user' does not exist on type 'Request<ParamsDictionary, any, any, ParsedQs, Record<string, any>>'.
+src/routes/screeningRoutes.ts(97,5): error TS2304: Cannot find name 'runScreeningWithCredits'.
+src/routes/screeningRoutes.ts(102,14): error TS7006: Parameter 'result' implicitly has an 'any' type.
+src/routes/screeningRoutes.ts(120,15): error TS7006: Parameter 'err' implicitly has an 'any' type.
+src/routes/stripeWebhookRoutes.ts(154,9): error TS2322: Type 'Response<any, Record<string, any>>' is not assignable to type 'void'.
+src/routes/stripeWebhookRoutes.ts(196,11): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/routes/stripeWebhookRoutes.ts(254,11): error TS2322: Type 'Response<any, Record<string, any>>' is not assignable to type 'void'.
+src/routes/stripeWebhookRoutes.ts(262,11): error TS2322: Type 'Response<any, Record<string, any>>' is not assignable to type 'void'.
+src/routes/stripeWebhookRoutes.ts(270,11): error TS2322: Type 'Response<any, Record<string, any>>' is not assignable to type 'void'.
+src/routes/stripeWebhookRoutes.ts(278,11): error TS2322: Type 'Response<any, Record<string, any>>' is not assignable to type 'void'.
+src/routes/stripeWebhookRoutes.ts(292,9): error TS2322: Type 'Response<any, Record<string, any>>' is not assignable to type 'void'.
+src/services/applicationConversionService.ts(57,5): error TS2322: Type 'string | null' is not assignable to type 'string | undefined'.
+  Type 'null' is not assignable to type 'string | undefined'.
+src/services/applicationConversionService.ts(126,19): error TS2345: Argument of type '{ landlordId: string; status: string; convertedTenantId: `${string}-${string}-${string}-${string}-${string}`; updatedAt: string; id: string; fullName: string; applicantFullName?: string; firstName?: string; ... 48 more ...; screeningId?: string | null; }' is not assignable to parameter of type 'Application'.
+  Types of property 'status' are incompatible.
+    Type 'string' is not assignable to type 'ApplicationStatus'.
+src/services/authService.ts(57,14): error TS2769: No overload matches this call.
+  Overload 1 of 5, '(payload: string | object | Buffer<ArrayBufferLike>, secretOrPrivateKey: null, options?: (SignOptions & { algorithm: "none"; }) | undefined): string', gave the following error.
+    Argument of type 'string' is not assignable to parameter of type 'null'.
+  Overload 2 of 5, '(payload: string | object | Buffer<ArrayBufferLike>, secretOrPrivateKey: Buffer<ArrayBufferLike> | Secret | JsonWebKeyInput | PrivateKeyInput, options?: SignOptions | undefined): string', gave the following error.
+    Type 'string' is not assignable to type 'number | StringValue | undefined'.
+  Overload 3 of 5, '(payload: string | object | Buffer<ArrayBufferLike>, secretOrPrivateKey: Buffer<ArrayBufferLike> | Secret | JsonWebKeyInput | PrivateKeyInput, callback: SignCallback): void', gave the following error.
+    Object literal may only specify known properties, and 'expiresIn' does not exist in type 'SignCallback'.
+src/services/emailService.ts(1,24): error TS7016: Could not find a declaration file for module 'nodemailer'. '/Users/paul/rentchain/rentchain-api/node_modules/nodemailer/lib/nodemailer.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/nodemailer` if it exists or add a new declaration (.d.ts) file containing `declare module 'nodemailer';`
+src/services/eventProcessorService.ts(5,10): error TS2305: Module '"./ledgerService"' has no exported member 'ledgerService'.
+src/services/ledgerEventsService.ts(176,27): error TS2345: Argument of type 'string | null' is not assignable to parameter of type 'string'.
+  Type 'null' is not assignable to type 'string'.
+src/services/ledgerEventsService.ts(177,27): error TS2345: Argument of type 'string | null' is not assignable to parameter of type 'string'.
+  Type 'null' is not assignable to type 'string'.
+src/services/ledgerService.ts(31,44): error TS2304: Cannot find name 'tenantId'.
+src/services/ledgerService.ts(37,29): error TS2345: Argument of type '{ blockHeight: number; rootHash: string; eventId: string | null; }' is not assignable to parameter of type '{ tenantId: string; blockHeight: number; rootHash: string; eventId: string | null; }'.
+  Property 'tenantId' is missing in type '{ blockHeight: number; rootHash: string; eventId: string | null; }' but required in type '{ tenantId: string; blockHeight: number; rootHash: string; eventId: string | null; }'.
+src/services/propertyOverview.ts(2,20): error TS2307: Cannot find module '../config/firestore' or its corresponding type declarations.
+src/services/propertyOverview.ts(86,22): error TS7006: Parameter 'doc' implicitly has an 'any' type.
+src/services/propertyOverview.ts(142,25): error TS7006: Parameter 'doc' implicitly has an 'any' type.
+src/services/propertyOverview.ts(237,17): error TS7006: Parameter 'doc' implicitly has an 'any' type.
+src/services/propertyService.ts(93,19): error TS2339: Property 'bedrooms' does not exist on type '{ unitNumber: string; rent: number; }'.
+src/services/propertyService.ts(94,20): error TS2339: Property 'bathrooms' does not exist on type '{ unitNumber: string; rent: number; }'.
+src/services/propertyService.ts(95,15): error TS2339: Property 'sqft' does not exist on type '{ unitNumber: string; rent: number; }'.
+src/services/propertyService.ts(96,28): error TS2339: Property 'utilitiesIncluded' does not exist on type '{ unitNumber: string; rent: number; }'.
+src/services/reputationService.ts(22,16): error TS2367: This comparison appears to be unintentional because the types 'LedgerEventType' and '"charge_posted"' have no overlap.
+src/services/reputationService.ts(22,47): error TS2367: This comparison appears to be unintentional because the types 'LedgerEventType' and '"credit_applied"' have no overlap.
+src/services/screeningRequestService.ts(90,5): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/services/screeningRequestService.ts(110,5): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/services/screeningRequestService.ts(128,28): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/services/screeningRequestService.ts(145,5): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/services/screeningRequestService.ts(307,5): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/services/stripeService.ts(16,5): error TS2322: Type '"2024-06-20"' is not assignable to type '"2025-11-17.clover"'.
+src/services/tenantReportService.ts(111,20): error TS2339: Property 'toISOString' does not exist on type 'never'.
+src/services/tenantReportService.ts(114,19): error TS2339: Property 'toISOString' does not exist on type 'never'.
+src/services/tenantReportService.ts(152,23): error TS2339: Property 'name' does not exist on type 'TenantRecord'.
+src/services/tenantReportService.ts(355,12): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(text: string, x?: number | undefined, y?: number | undefined, options?: TextOptions | undefined): PDFDocument', gave the following error.
+    Argument of type '{ italic: boolean; }' is not assignable to parameter of type 'number'.
+  Overload 2 of 2, '(text: string, options?: TextOptions | undefined): PDFDocument', gave the following error.
+    Object literal may only specify known properties, and 'italic' does not exist in type 'TextOptions'.
+src/services/totpService.ts(15,54): error TS2353: Object literal may only specify known properties, and 'window' does not exist in type '{ token: string; secret: string; }'.
+src/validators/unitImportValidator.ts(2,20): error TS2732: Cannot find module '../schemas/unitImportRow.schema.json'. Consider using '--resolveJsonModule' to import module with '.json' extension.

@@ -1,0 +1,11 @@
+import { create } from "zustand";
+
+interface PropertyStore {
+  selectedId: string | null;
+  setSelectedId: (id: string) => void;
+}
+
+export const usePropertyStore = create<PropertyStore>((set) => ({
+  selectedId: null,
+  setSelectedId: (id) => set({ selectedId: id }),
+}));

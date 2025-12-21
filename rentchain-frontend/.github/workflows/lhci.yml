@@ -1,0 +1,32 @@
+name: Lighthouse CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  lhci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - run: npm ci
+        working-directory: rentchain-frontend
+      - run: npm run build
+        working-directory: rentchain-frontend
+      - run: npm install -g @lhci/cli
+      - name: Start preview server
+        run: |
+          npm run preview -- --host --port 4173 &
+          echo $! > /tmp/server.pid
+        working-directory: rentchain-frontend
+      - name: Run Lighthouse
+        run: |
+          lhci collect --url=http://localhost:4173/dashboard
+          lhci collect --url=http://localhost:4173/payments
+      - name: Stop server
+        if: always()
+        run: kill $(cat /tmp/server.pid)

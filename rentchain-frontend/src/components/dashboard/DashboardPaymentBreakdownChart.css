@@ -1,0 +1,39 @@
+/* Reuse shared styling from chart-section */
+.chart-section {
+  margin-top: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem 1rem 1.1rem;
+  border-radius: 0.9rem;
+  border: 1px solid #1f2937;
+  background: #020617;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.7);
+}
+
+.chart-section__header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.chart-section__title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #e5e7eb;
+}
+
+.chart-section__subtitle {
+  font-size: 0.85rem;
+  color: #9ca3af;
+}
+
+.chart-section--state {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  border-radius: 0.9rem;
+  border: 1px dashed #4b5563;
+  font-size: 0.9rem;
+  color: #e5e7eb;
+  background: #020617;
+}

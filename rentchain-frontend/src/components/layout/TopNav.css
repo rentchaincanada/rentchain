@@ -1,0 +1,134 @@
+/* src/components/layout/TopNav.css */
+
+.topnav-root {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  width: 100%;
+  background: linear-gradient(to right, #020617, #020617);
+  border-bottom: 1px solid rgba(30, 64, 175, 0.6);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.9);
+}
+
+.topnav-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0.6rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  color: #e5e7eb;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    sans-serif;
+}
+
+/* Left: brand */
+
+.topnav-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.topnav-logo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.topnav-logo-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  background: radial-gradient(circle at 30% 0%, #22c55e, #16a34a);
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.9),
+    0 10px 30px rgba(22, 163, 74, 0.8);
+  color: #020617;
+}
+
+.topnav-logo-text {
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  font-size: 0.95rem;
+}
+
+/* Center: nav links */
+
+.topnav-nav {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  font-size: 0.9rem;
+}
+
+.topnav-link {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.6rem;
+  border-radius: 999px;
+  text-decoration: none;
+  color: #9ca3af;
+  transition: color 120ms ease, background-color 120ms ease,
+    box-shadow 120ms ease, transform 120ms ease;
+}
+
+.topnav-link:hover {
+  color: #e5e7eb;
+  background-color: rgba(30, 64, 175, 0.35);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.9);
+  transform: translateY(-0.5px);
+}
+
+.topnav-link-active {
+  color: #e5e7eb;
+  background: linear-gradient(
+    135deg,
+    rgba(34, 197, 94, 0.18),
+    rgba(59, 130, 246, 0.22)
+  );
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.95);
+}
+
+.topnav-link-active::before {
+  content: "";
+  position: absolute;
+  left: 0.45rem;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: radial-gradient(circle at 30% 0%, #22c55e, #16a34a);
+}
+
+/* Right side placeholder */
+
+.topnav-right {
+  min-width: 40px;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+  color: #9ca3af;
+}
+
+/* Optional: little green strip under the header */
+
+.topnav-root::after {
+  content: "";
+  display: block;
+  height: 3px;
+  background: linear-gradient(
+    90deg,
+    #22c55e,
+    #a3e635,
+    #22c55e
+  );
+  opacity: 0.95;
+}

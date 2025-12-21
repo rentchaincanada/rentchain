@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "UnitImportRow",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["unitNumber", "beds", "baths", "sqft", "marketRent"],
+  "properties": {
+    "unitNumber": { "type": "string", "minLength": 1, "maxLength": 20 },
+    "floor": { "type": ["integer", "null"], "minimum": 0, "maximum": 200 },
+    "unitType": { "type": ["string", "null"], "minLength": 1, "maxLength": 20 },
+    "status": {
+      "type": ["string", "null"],
+      "enum": ["vacant", "occupied", "notice", "offline", null]
+    },
+    "beds": { "type": "integer", "minimum": 0, "maximum": 10 },
+    "baths": { "type": "number", "minimum": 0, "maximum": 10 },
+    "sqft": { "type": "integer", "minimum": 100, "maximum": 5000 },
+    "marketRent": { "type": "number", "minimum": 0, "maximum": 100000 },
+    "deposit": { "type": ["number", "null"], "minimum": 0, "maximum": 100000 },
+    "utilitiesIncluded": { "type": ["string", "null"] },
+    "amenities": { "type": ["string", "null"] },
+    "notes": { "type": ["string", "null"], "maxLength": 500 }
+  }
+}
