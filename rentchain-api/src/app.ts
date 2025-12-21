@@ -12,6 +12,7 @@ import { requestBreadcrumbs, getCrumbs } from "./middleware/requestBreadcrumbs";
 import { mountSafeRoutes } from "./app.routes";
 import { mountDevRoutes } from "./app.routes.dev";
 import { mountRouteMap } from "./routes/devRouteMap";
+import publicRoutes from "./routes/publicRoutes";
 
 const app: Application = express();
 app.set("etag", false);
@@ -55,6 +56,8 @@ app.use(cookieParser());
 /**
  * Route registration
  */
+app.use("/api", publicRoutes);
+
 // Always mount safe routes
 mountSafeRoutes(app);
 

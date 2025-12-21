@@ -11,6 +11,7 @@ import ApplyPage from "./pages/ApplyPage";
 import ApplicantApplyPage from "./pages/ApplicantApplyPage";
 import CosignPage from "./pages/CosignPage";
 import LoginPage from "./pages/LoginPage";
+import ComingSoonPage from "./pages/ComingSoonPage";
 import { TwoFactorPage } from "./pages/TwoFactorPage";
 import { AccountSecurityPage } from "./pages/AccountSecurityPage";
 import { RequireAuth } from "./components/auth/RequireAuth";
@@ -36,148 +37,141 @@ function App() {
   return (
     <>
       <Routes>
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/" element={<ComingSoonPage />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/app/login" element={<LoginPage />} />
         <Route path="/2fa" element={<TwoFactorPage />} />
         <Route path="/pricing" element={<PricingPage />} />
 
-      <Route
-        path="/dashboard"
-        element={
-          <RequireAuth>
-            <DashboardPage />
-          </RequireAuth>
-        }
-      />
-      <Route
-        path="/billing"
-        element={
-          <RequireAuth>
-            <BillingPage />
-          </RequireAuth>
-        }
-      />
-      <Route
-        path="/billing"
-        element={
-          <RequireAuth>
-            <BillingPage />
-          </RequireAuth>
-        }
-      />
-      <Route
-        path="/properties"
-        element={
-          <RequireAuth>
-            <PropertiesPage />
-          </RequireAuth>
-        }
-      />
-      <Route
-        path="/tenants"
-        element={
-          <RequireAuth>
-            <TenantsPage />
-          </RequireAuth>
-        }
-      />
-      <Route
-        path="/applications"
-        element={
-          <RequireAuth>
-            <ApplicationsPage />
-          </RequireAuth>
-        }
-      />
-      {import.meta.env.DEV ? (
         <Route
-          path="/admin/screenings"
+          path="/dashboard"
           element={
             <RequireAuth>
-              <Suspense fallback={null}>
-                <AdminScreeningsPage />
-              </Suspense>
+              <DashboardPage />
             </RequireAuth>
           }
         />
-      ) : null}
-      <Route
-        path="/screening"
-        element={
-          <RequireAuth>
-            <ScreeningPage />
-          </RequireAuth>
-        }
-      />
-      <Route
-        path="/screening/success"
-        element={
-          <RequireAuth>
-            <ScreeningSuccessPage />
-          </RequireAuth>
-        }
-      />
-      <Route
-        path="/screening/cancel"
-        element={
-          <RequireAuth>
-            <ScreeningCancelPage />
-          </RequireAuth>
-        }
-      />
-      <Route
-        path="/payments"
-        element={
-          <RequireAuth>
-            <PaymentsPage />
-          </RequireAuth>
-        }
-      />
-      {import.meta.env.DEV ? (
         <Route
-          path="/ledger"
+          path="/billing"
           element={
             <RequireAuth>
-              <Suspense fallback={null}>
-                <LedgerPage />
-              </Suspense>
+              <BillingPage />
             </RequireAuth>
           }
         />
-      ) : null}
-      {import.meta.env.DEV ? (
         <Route
-          path="/blockchain"
+          path="/properties"
           element={
             <RequireAuth>
-              <Suspense fallback={null}>
-                <BlockchainPage />
-              </Suspense>
+              <PropertiesPage />
             </RequireAuth>
           }
         />
-      ) : null}
-      <Route
-        path="/account/security"
-        element={
-          <RequireAuth>
-            <AccountSecurityPage />
-          </RequireAuth>
-        }
-      />
-      <Route path="/cosign/:applicationId" element={<CosignPage />} />
-      <Route path="/apply" element={<ApplicantApplyPage />} />
-      <Route path="/tenant/issue" element={<TenantPortalIssuePage />} />
-      {applicantApplyRedirects.map((path) => (
         <Route
-          key={path}
-          path={path}
-          element={<Navigate to="/apply" replace />}
+          path="/tenants"
+          element={
+            <RequireAuth>
+              <TenantsPage />
+            </RequireAuth>
+          }
         />
-      ))}
+        <Route
+          path="/applications"
+          element={
+            <RequireAuth>
+              <ApplicationsPage />
+            </RequireAuth>
+          }
+        />
+        {import.meta.env.DEV ? (
+          <Route
+            path="/admin/screenings"
+            element={
+              <RequireAuth>
+                <Suspense fallback={null}>
+                  <AdminScreeningsPage />
+                </Suspense>
+              </RequireAuth>
+            }
+          />
+        ) : null}
+        <Route
+          path="/screening"
+          element={
+            <RequireAuth>
+              <ScreeningPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/screening/success"
+          element={
+            <RequireAuth>
+              <ScreeningSuccessPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/screening/cancel"
+          element={
+            <RequireAuth>
+              <ScreeningCancelPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/payments"
+          element={
+            <RequireAuth>
+              <PaymentsPage />
+            </RequireAuth>
+          }
+        />
+        {import.meta.env.DEV ? (
+          <Route
+            path="/ledger"
+            element={
+              <RequireAuth>
+                <Suspense fallback={null}>
+                  <LedgerPage />
+                </Suspense>
+              </RequireAuth>
+            }
+          />
+        ) : null}
+        {import.meta.env.DEV ? (
+          <Route
+            path="/blockchain"
+            element={
+              <RequireAuth>
+                <Suspense fallback={null}>
+                  <BlockchainPage />
+                </Suspense>
+              </RequireAuth>
+            }
+          />
+        ) : null}
+        <Route
+          path="/account/security"
+          element={
+            <RequireAuth>
+              <AccountSecurityPage />
+            </RequireAuth>
+          }
+        />
+        <Route path="/cosign/:applicationId" element={<CosignPage />} />
+        <Route path="/apply" element={<ApplicantApplyPage />} />
+        <Route path="/tenant/issue" element={<TenantPortalIssuePage />} />
+        {applicantApplyRedirects.map((path) => (
+          <Route
+            key={path}
+            path={path}
+            element={<Navigate to="/apply" replace />}
+          />
+        ))}
         <Route path="/apply/:propertyId/:unit" element={<ApplyPage />} />
 
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       {import.meta.env.DEV ? <DebugPanel /> : null}
     </>
