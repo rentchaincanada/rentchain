@@ -1,4 +1,8 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000/api";
+import { API_BASE } from "../config/apiBase";
+
+const API_ORIGIN =
+  API_BASE ||
+  (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
 
 export function getAuthToken(): string | null {
   return (
@@ -23,9 +27,10 @@ export function clearAuthToken() {
 
 function normalizeUrl(path: string) {
   if (path.startsWith("http")) return path;
-  if (path.startsWith("/api/")) return `${API_BASE}${path.replace(/^\/api/, "")}`;
-  if (path.startsWith("/")) return `${API_BASE}${path}`;
-  return `${API_BASE}/${path}`;
+  const base = String(API_ORIGIN).replace(/\/$/, "");
+  if (path.startsWith("/api/")) return `${base}${path}`;
+  if (path.startsWith("/")) return `${base}/api${path}`;
+  return `${base}/api/${path}`;
 }
 
 export async function apiFetch(path: string, init: RequestInit = {}) {

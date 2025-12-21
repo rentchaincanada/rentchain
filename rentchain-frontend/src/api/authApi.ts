@@ -1,11 +1,7 @@
 // src/api/authApi.ts
 import { apiFetch, apiJson } from "./http";
 import { getAuthToken, setAuthToken } from "@/lib/apiClient";
-
-const API_BASE =
-  (import.meta as any).env?.VITE_API_URL ||
-  (import.meta as any).env?.VITE_API_BASE_URL ||
-  "";
+import { API_BASE } from "../config/apiBase";
 
 function authUrl(path: string) {
   const base = String(API_BASE || "").replace(/\/$/, "");
