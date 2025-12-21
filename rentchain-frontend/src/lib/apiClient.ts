@@ -1,8 +1,4 @@
-import { API_BASE } from "../config/apiBase";
-
-const API_ORIGIN =
-  API_BASE ||
-  (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
+import { API_BASE_URL, API_HOST } from "../api/config";
 
 export function getAuthToken(): string | null {
   return (
@@ -25,12 +21,12 @@ export function clearAuthToken() {
   localStorage.removeItem("token");
 }
 
-function normalizeUrl(path: string) {
-  if (path.startsWith("http")) return path;
-  const base = String(API_ORIGIN).replace(/\/$/, "");
-  if (path.startsWith("/api/")) return `${base}${path}`;
-  if (path.startsWith("/")) return `${base}/api${path}`;
-  return `${base}/api/${path}`;
+export function resolveApiUrl(input: string) {
+  const s = String(input || "");
+  if (/^https?:\/\//i.test(s)) return s;
+  if (s.startsWith("/api/")) return `${API_HOST}${s}`;
+  if (s.startsWith("/")) return `${API_BASE_URL}${s}`;
+  return `${API_BASE_URL}/${s}`;
 }
 
 export async function apiFetch(path: string, init: RequestInit = {}) {
@@ -44,7 +40,7 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   }
-  return fetch(normalizeUrl(path), { ...init, headers, credentials: "include" });
+  return fetch(resolveApiUrl(path), { ...init, headers, credentials: "include" });
 }
 
 export async function apiJson<T>(path: string, init: RequestInit = {}): Promise<T> {
