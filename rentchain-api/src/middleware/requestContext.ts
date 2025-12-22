@@ -5,7 +5,7 @@ export function requestContext(req: Request, res: Response, next: NextFunction) 
   const incoming = req.header("x-request-id");
   const requestId = (incoming && String(incoming).slice(0, 80)) || randomUUID();
 
-  (req as any).requestId = requestId;
+  req.requestId = requestId;
   res.setHeader("x-request-id", requestId);
 
   const started = Date.now();

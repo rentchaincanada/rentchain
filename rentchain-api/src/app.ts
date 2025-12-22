@@ -11,23 +11,9 @@ import publicRoutes from "./routes/publicRoutes";
 import { requestContext } from "./middleware/requestContext";
 import "./types/auth";
 import "./types/http";
-import "./types/auth";
 
 const app: Application = express();
 app.set("etag", false);
-
-if (process.env.NODE_ENV !== "production") {
-  app.use((req: Request, res: Response, next: NextFunction) => {
-    const start = Date.now();
-    res.on("finish", () => {
-      const ms = Date.now() - start;
-      console.log(
-        `[REQ] ${req.method} ${req.originalUrl} -> ${res.statusCode} (${ms}ms)`
-      );
-    });
-    next();
-  });
-}
 
 /**
  * Middleware
@@ -56,9 +42,17 @@ app.use(requestContext);
 /**
  * Route registration
  */
+app.use((req, res, next) => {
+  res.setHeader("x-route-source", "publicRoutes.ts");
+  next();
+});
 app.use("/api", publicRoutes);
 
 // Always mount safe routes
+app.use((req, res, next) => {
+  res.setHeader("x-route-source", "app.routes.ts");
+  next();
+});
 mountSafeRoutes(app);
 
 // Dev/legacy routes only outside production
