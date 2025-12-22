@@ -12,9 +12,7 @@ export function requestContext(req: Request, res: Response, next: NextFunction) 
   res.on("finish", () => {
     if (process.env.NODE_ENV !== "production") {
       const ms = Date.now() - started;
-      console.log(
-        `[REQ] ${req.method} ${req.originalUrl} -> ${res.statusCode} (${ms}ms) rid=${requestId}`
-      );
+      console.log(`[REQ] ${req.method} ${req.originalUrl} -> ${res.statusCode} (${ms}ms)`);
     }
   });
 

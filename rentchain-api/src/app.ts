@@ -9,6 +9,7 @@ import { mountDevRoutes } from "./app.routes.dev";
 import { mountRouteMap } from "./routes/devRouteMap";
 import publicRoutes from "./routes/publicRoutes";
 import { requestContext } from "./middleware/requestContext";
+import { routeSource } from "./middleware/routeSource";
 import "./types/auth";
 import "./types/http";
 
@@ -42,22 +43,16 @@ app.use(requestContext);
 /**
  * Route registration
  */
-app.use((req, res, next) => {
-  res.setHeader("x-route-source", "publicRoutes.ts");
-  next();
-});
-app.use("/api", publicRoutes);
+app.use("/api", routeSource("publicRoutes.ts"), publicRoutes);
 
 // Always mount safe routes
-app.use((req, res, next) => {
-  res.setHeader("x-route-source", "app.routes.ts");
-  next();
-});
 mountSafeRoutes(app);
 
 // Dev/legacy routes only outside production
 if (process.env.NODE_ENV !== "production") {
+  app.use(routeSource("app.routes.dev.ts"));
   mountDevRoutes(app);
+  app.use(routeSource("devRouteMap.ts"));
   mountRouteMap(app);
 }
 
