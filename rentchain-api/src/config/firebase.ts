@@ -20,6 +20,7 @@ firestoreInstance.settings({ ignoreUndefinedProperties: true });
 
 export const firestore = firestoreInstance;
 export const db = firestoreInstance;
+export const FieldValue = admin.firestore.FieldValue;
 
 console.log("🔥 [FIREBASE CONFIG LOADED] Path:", __filename);
 console.log("🔥 [ENV] GOOGLE_APPLICATION_CREDENTIALS =", process.env.GOOGLE_APPLICATION_CREDENTIALS);

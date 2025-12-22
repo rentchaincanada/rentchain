@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import { PLANS, Plan } from "./plans";
-import { countPropertiesForLandlord, countUnitsForLandlord } from "./usageCounters";
 import { jsonError } from "../lib/httpResponse";
+import { getUsage } from "./usageDoc";
 
 function getLandlordId(req: Request): string | null {
   const u: any = (req as any).user;
@@ -28,7 +28,8 @@ export async function enforcePropertyCap(req: Request, res: Response, next: Next
   const limit = PLANS[planKey].limits.maxProperties;
 
   try {
-    const current = await countPropertiesForLandlord(landlordId);
+    const usage = await getUsage(landlordId);
+    const current = usage.properties;
     if (current >= limit) {
       return jsonError(
         res,
@@ -62,7 +63,8 @@ export async function enforceUnitCap(req: Request, res: Response, next: NextFunc
     1;
 
   try {
-    const current = await countUnitsForLandlord(landlordId);
+    const usage = await getUsage(landlordId);
+    const current = usage.units;
     if (current + batchCount > limit) {
       return jsonError(
         res,

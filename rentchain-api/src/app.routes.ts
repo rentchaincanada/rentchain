@@ -18,6 +18,7 @@ import { authenticateJwt } from "./middleware/authMiddleware";
 import propertiesRoutes from "./routes/propertiesRoutes";
 import authMeRoutes from "./routes/authMeRoutes";
 import { routeSource } from "./middleware/routeSource";
+import unitImportRoutes from "./routes/unitImportRoutes";
 
 export function mountSafeRoutes(app: Application) {
   // ensure auth is decoded and plan is resolved before hitting guarded routes
@@ -30,6 +31,11 @@ export function mountSafeRoutes(app: Application) {
   app.use("/api/events", routeSource("eventsRoutes.ts"), eventsRoutes);
   app.use("/api/me", routeSource("meRoutes.ts"), meRoutes);
   app.use("/api/properties", routeSource("propertiesRoutes.ts"), propertiesRoutes);
+  app.use(
+    "/api/properties/:propertyId/units",
+    routeSource("unitImportRoutes.ts"),
+    unitImportRoutes
+  );
   app.use("/health", routeSource("healthRoutes.ts"), healthRoutes);
 
   // safe “platform” routes

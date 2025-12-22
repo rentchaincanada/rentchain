@@ -2,7 +2,7 @@
 import { Router } from "express";
 import { requireCapability } from "../entitlements/entitlements.middleware";
 import { enforcePropertyCap, enforceUnitCap } from "../entitlements/limits.middleware";
-import { db } from "../config/firebase";
+import { db, FieldValue } from "../config/firebase";
 
 const router = Router();
 
@@ -82,6 +82,7 @@ router.post(
         ? units.length
         : 0;
 
+    const propertyRef = db.collection("properties").doc();
     const propertyBase = {
       landlordId,
       address: address || "",
@@ -91,8 +92,21 @@ router.post(
     };
 
     try {
-      const docRef = await db.collection("properties").add(propertyBase);
-      const property = { id: docRef.id, ...propertyBase };
+      await db.runTransaction(async (tx) => {
+        tx.set(propertyRef, propertyBase);
+        const usageRef = db.collection("landlordUsage").doc(landlordId);
+        tx.set(
+          usageRef,
+          {
+            properties: FieldValue.increment(1),
+            units: FieldValue.increment(resolvedUnitCount || 0),
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+      });
+
+      const property = { id: propertyRef.id, ...propertyBase };
       return res.status(201).json(property);
     } catch (err: any) {
       console.error("[POST /api/properties] failed to write", err);
@@ -140,7 +154,23 @@ router.post(
         return res.status(403).json({ error: "forbidden" });
       }
 
-      await docRef.update({ unitCount });
+      const previousCount = Number(data?.unitCount ?? 0);
+      const delta = unitCount - previousCount;
+
+      await db.runTransaction(async (tx) => {
+        tx.update(docRef, { unitCount });
+        if (delta !== 0) {
+          const usageRef = db.collection("landlordUsage").doc(landlordId);
+          tx.set(
+            usageRef,
+            {
+              units: FieldValue.increment(delta),
+              updatedAt: FieldValue.serverTimestamp(),
+            },
+            { merge: true }
+          );
+        }
+      });
 
       return res.status(200).json({ ok: true, unitCount });
     } catch (err: any) {
