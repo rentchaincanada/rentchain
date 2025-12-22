@@ -1,13 +1,7 @@
 // src/services/authService.ts
-import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import {
-  DEMO_LANDLORD,
-  DEMO_LANDLORD_EMAIL,
-  DEMO_LANDLORD_PASSWORD_HASH,
-  JWT_EXPIRES_IN,
-  JWT_SECRET,
-} from "../config/authConfig";
+import { JWT_EXPIRES_IN, JWT_SECRET } from "../config/authConfig";
+import { db } from "../config/firebase";
 
 export interface LandlordUser {
   id: string;
@@ -30,16 +24,36 @@ export async function validateLandlordCredentials(
   email: string,
   password: string
 ): Promise<LandlordUser | null> {
-  if (email !== DEMO_LANDLORD_EMAIL) {
-    return null;
+  const fb = await firebaseSignInWithPassword(email, password);
+  if (!fb) return null;
+
+  const ref = db.collection("landlords").doc(fb.uid);
+  const snap = await ref.get();
+
+  if (!snap.exists) {
+    const createdAt = new Date().toISOString();
+    const landlord: LandlordUser = {
+      id: fb.uid,
+      landlordId: fb.uid,
+      email: fb.email,
+      role: "landlord",
+      plan: "starter",
+      screeningCredits: 0,
+    };
+    await ref.set({ ...landlord, createdAt }, { merge: true });
+    return landlord;
   }
 
-  const isValid = await bcrypt.compare(password, DEMO_LANDLORD_PASSWORD_HASH);
-  if (!isValid) {
-    return null;
-  }
-
-  return DEMO_LANDLORD;
+  const data = snap.data() as any;
+  const landlord: LandlordUser = {
+    id: data?.id || fb.uid,
+    landlordId: data?.landlordId || fb.uid,
+    email: data?.email || fb.email,
+    role: data?.role || "landlord",
+    plan: data?.plan || "starter",
+    screeningCredits: data?.screeningCredits ?? 0,
+  };
+  return landlord;
 }
 
 export function generateJwtForLandlord(
@@ -62,4 +76,32 @@ export function generateJwtForLandlord(
       expiresIn: expiresIn || JWT_EXPIRES_IN,
     } as jwt.SignOptions
   );
+}
+
+const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY;
+
+async function firebaseSignInWithPassword(
+  email: string,
+  password: string
+): Promise<{ uid: string; email: string } | null> {
+  if (!FIREBASE_API_KEY) {
+    console.error("[auth] FIREBASE_API_KEY missing");
+    return null;
+  }
+
+  const url = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password, returnSecureToken: true }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text().catch(() => "");
+    console.warn("[auth] firebase signInWithPassword failed", res.status, err);
+    return null;
+  }
+
+  const data: any = await res.json();
+  return { uid: data.localId, email: data.email };
 }
