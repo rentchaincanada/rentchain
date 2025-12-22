@@ -31,6 +31,10 @@ export async function runExistingAuth(
   res: Response
 ): Promise<ExistingAuthRunResult> {
   try {
+    if (!req.headers.authorization && !(req.headers as any).Authorization) {
+      return { ok: false, status: 401, error: "Unauthorized" };
+    }
+
     if ((req as any).user) return { ok: true };
 
     await runMiddleware(authenticateJwt as any, req, res);

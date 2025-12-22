@@ -1,14 +1,19 @@
 import type { Request, Response, NextFunction } from "express";
 import { runExistingAuth } from "../auth/authAdapter";
 
-/**
- * requireAuth
- * - If req.user exists, allow through.
- * - Otherwise, call existing auth middleware via adapter to populate req.user.
- * - If still unauthenticated, respond 401 JSON.
- */
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   try {
+    const authHeader = (req.headers.authorization ||
+      (req.headers as any).Authorization) as string | undefined;
+
+    if (!authHeader || typeof authHeader !== "string") {
+      return res.status(401).json({ error: "Unauthorized: token required" });
+    }
+
+    if (!authHeader.toLowerCase().startsWith("bearer ")) {
+      return res.status(401).json({ error: "Unauthorized: invalid token format" });
+    }
+
     if ((req as any).user) return next();
 
     const result = await runExistingAuth(req, res);
@@ -17,7 +22,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
     if (result.ok && (req as any).user) return next();
 
-    return res.status(result.ok ? 401 : result.status).json({ error: "Unauthorized" });
+    return res.status(401).json({ error: "Unauthorized" });
   } catch (_err) {
     if (res.headersSent) return;
     return res.status(401).json({ error: "Unauthorized" });
