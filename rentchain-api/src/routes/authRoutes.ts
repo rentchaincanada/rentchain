@@ -21,6 +21,7 @@ import {
 } from "../services/landlordProfileService";
 import { setPlan } from "../services/accountService";
 import { resolvePlan } from "../entitlements/plans";
+import { z } from "zod";
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
@@ -47,6 +48,18 @@ type RateLimiterEntry = {
 const rateLimiterStore: Record<string, RateLimiterEntry> = {};
 const RATE_LIMIT_MAX = 10;
 const RATE_LIMIT_WINDOW_MS = 60_000;
+
+function jsonError(res: any, status: number, error: string, code?: string, details?: any) {
+  const payload: any = { error };
+  if (code) payload.code = code;
+  if (details !== undefined) payload.details = details;
+  return res.status(status).json(payload);
+}
+
+const LoginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1),
+});
 
 function rateLimit(key: string) {
   return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
@@ -139,21 +152,23 @@ function validateCodeWithBackup(
 ensureLandlordEntry({ ...DEMO_LANDLORD });
 
 router.post("/login", async (req, res) => {
-  const email = String((req.body as any)?.email || "").trim().toLowerCase();
-  const password = String((req.body as any)?.password || "");
+  const loginEnabled =
+    (process.env.AUTH_LOGIN_ENABLED || process.env.PASSWORD_LOGIN_ENABLED || "true")
+      .toString()
+      .toLowerCase() === "true";
+
+  if (!loginEnabled) {
+    return jsonError(res, 403, "Login disabled", "LOGIN_DISABLED");
+  }
+
+  const parsed = LoginSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return jsonError(res, 400, "Invalid request payload", "BAD_REQUEST", parsed.error.flatten());
+  }
+
+  const email = String(parsed.data.email || "").trim().toLowerCase();
+  const password = String(parsed.data.password || "");
   const passwordLoginEnabled = process.env.PASSWORD_LOGIN_ENABLED === "true";
-
-  if (!email || !password) {
-    return res.status(400).json({ code: "MISSING_CREDENTIALS" });
-  }
-
-  if (!passwordLoginEnabled) {
-    return res.status(403).json({
-      error: "password_login_disabled",
-      message:
-        "Password login disabled. Set PASSWORD_LOGIN_ENABLED=true to allow credential login.",
-    });
-  }
 
   try {
     console.log("[auth/login] hit", { email, passwordLoginEnabled });
@@ -163,9 +178,13 @@ router.post("/login", async (req, res) => {
       envPasswordEnabled: process.env.PASSWORD_LOGIN_ENABLED,
     });
 
+    if (!passwordLoginEnabled) {
+      return jsonError(res, 403, "Login disabled", "LOGIN_DISABLED");
+    }
+
     const fb = await signInWithPassword(email, password);
     if (!fb) {
-      return res.status(401).json({ code: "INVALID_CREDENTIALS" });
+      return jsonError(res, 401, "Unauthorized", "INVALID_CREDENTIALS");
     }
 
     const profile = await getOrCreateLandlordProfile({
@@ -195,8 +214,20 @@ router.post("/login", async (req, res) => {
       },
     });
   } catch (err: any) {
+    const msg = String(err?.message || "");
+    const code = String(err?.code || "");
+    const looksLikeAuthFailure =
+      code.includes("auth/") ||
+      code === "UNAUTHORIZED" ||
+      code === "INVALID_CREDENTIALS" ||
+      /invalid|expired|revoked|credential|password|token|unauthorized/i.test(msg);
+
+    if (looksLikeAuthFailure) {
+      return jsonError(res, 401, "Unauthorized", "UNAUTHORIZED");
+    }
+
     console.error("[auth/login] error", err);
-    return res.status(500).json({ error: "login_failed", message: err?.message || "Login failed" });
+    return jsonError(res, 500, "Internal Server Error", "INTERNAL");
   }
 });
 
