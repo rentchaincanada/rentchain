@@ -20,6 +20,7 @@ import authMeRoutes from "./routes/authMeRoutes";
 import { routeSource } from "./middleware/routeSource";
 import unitImportRoutes from "./routes/unitImportRoutes";
 import importJobsRoutes from "./routes/importJobsRoutes";
+import importDownloadRoutes from "./routes/importDownloadRoutes";
 
 export function mountSafeRoutes(app: Application) {
   // ensure auth is decoded and plan is resolved before hitting guarded routes
@@ -38,6 +39,7 @@ export function mountSafeRoutes(app: Application) {
     unitImportRoutes
   );
   app.use("/api/import-jobs", routeSource("importJobsRoutes.ts"), importJobsRoutes);
+  app.use("/api/import-jobs", routeSource("importDownloadRoutes.ts"), importDownloadRoutes);
   app.use("/health", routeSource("healthRoutes.ts"), healthRoutes);
 
   // safe “platform” routes
