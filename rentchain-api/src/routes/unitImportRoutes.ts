@@ -1,130 +1,230 @@
 import { Router } from "express";
 import { requireLandlord } from "../middleware/requireLandlord";
-import { parseAndValidateUnitsCsv } from "../imports/unitCsvImport.service";
 import { jsonError } from "../lib/httpResponse";
+import { parseUnitsCsv } from "../imports/unitCsvImport.service";
+import { fetchExistingUnitNumbersForProperty } from "../imports/unitConflictCheck";
+import { commitInBatches } from "../imports/firestoreBatch";
+import { assertCanAddUnits } from "../entitlements/checkUnitCap";
+import {
+  getImportJob,
+  startImportJob,
+  finishImportJob,
+  failImportJob,
+} from "../imports/importJobs";
 import { db, FieldValue } from "../config/firebase";
-import { getUsage } from "../entitlements/usageDoc";
-import { PLANS } from "../entitlements/plans";
+import { unitDocId } from "../imports/unitId";
 
 const router = Router({ mergeParams: true });
 
 router.post("/import", requireLandlord, async (req: any, res, next) => {
+  const requestId = req.requestId;
   try {
     const { propertyId } = req.params as any;
+    const landlordId = (req as any).user?.landlordId || (req as any).user?.id;
+
     const csvText = String(req.body?.csvText || "");
-    const dryRun = Boolean(req.body?.dryRun);
-    const landlordId = req.user?.landlordId || req.user?.id;
-    const plan = (req.user?.plan as keyof typeof PLANS) || "starter";
+    const mode = (req.body?.mode || "dryRun") as "dryRun" | "strict" | "partial";
+    const idempotencyKey = String(req.body?.idempotencyKey || "").trim();
 
-    if (!propertyId) {
-      return jsonError(res, 400, "BAD_REQUEST", "propertyId required", undefined, req.requestId);
+    if (!propertyId) return jsonError(res, 400, "BAD_REQUEST", "propertyId required", undefined, requestId);
+    if (!landlordId) return jsonError(res, 401, "UNAUTHORIZED", "Unauthorized", undefined, requestId);
+    if (!csvText.trim()) return jsonError(res, 400, "BAD_REQUEST", "csvText required", undefined, requestId);
+
+    // ensure property belongs to landlord
+    const propSnap = await db.collection("properties").doc(propertyId).get();
+    if (!propSnap.exists) {
+      return jsonError(res, 404, "NOT_FOUND", "Property not found", undefined, requestId);
+    }
+    const propData = propSnap.data() as any;
+    if (propData?.landlordId && propData.landlordId !== landlordId) {
+      return jsonError(res, 403, "FORBIDDEN", "Forbidden", undefined, requestId);
     }
 
-    if (!csvText.trim()) {
-      return jsonError(res, 400, "BAD_REQUEST", "csvText required", undefined, req.requestId);
+    const isWrite = mode === "strict" || mode === "partial";
+    let jobRef: any = null;
+    if (isWrite) {
+      if (!idempotencyKey) {
+        return jsonError(res, 400, "BAD_REQUEST", "idempotencyKey required for write modes", undefined, requestId);
+      }
+      const { ref, snap } = await getImportJob(landlordId, propertyId, idempotencyKey);
+      jobRef = ref;
+      if (snap.exists) {
+        const job = snap.data() as any;
+        if (job.status === "completed") {
+          return res.status(200).json({ ok: true, idempotentReplay: true, job, requestId });
+        }
+        if (job.status === "started") {
+          return res.status(409).json({
+            ok: false,
+            code: "CONFLICT",
+            error: "Import already in progress for this idempotencyKey",
+            requestId,
+          });
+        }
+      }
+      await startImportJob(jobRef, {
+        landlordId,
+        propertyId,
+        idempotencyKey,
+        mode,
+        totalRows: 0,
+        attemptedValid: 0,
+        createdCount: 0,
+        skippedCount: 0,
+        errorCount: 0,
+      });
     }
 
-    const parsed = parseAndValidateUnitsCsv(csvText);
+    const parsed = parseUnitsCsv(csvText);
 
-    if (parsed.errors.length) {
+    const existing = await fetchExistingUnitNumbersForProperty(propertyId);
+
+    const conflicts: any[] = [];
+    const insertable: typeof parsed.candidates = [];
+    for (const c of parsed.candidates) {
+      if (existing.has(c.unitNumber)) {
+        conflicts.push({
+          row: c.row,
+          code: "ALREADY_EXISTS",
+          message: "Unit already exists",
+          unitNumber: c.unitNumber,
+        });
+      } else {
+        insertable.push(c);
+      }
+    }
+
+    const issues = [...parsed.invalid, ...parsed.duplicatesInCsv, ...conflicts];
+
+    if (mode === "dryRun") {
+      return res.status(200).json({
+        ok: true,
+        mode,
+        requestId,
+        summary: {
+          totalRows: parsed.totalRows,
+          candidates: parsed.candidates.length,
+          insertable: insertable.length,
+          invalid: parsed.invalid.length,
+          duplicatesInCsv: parsed.duplicatesInCsv.length,
+          conflicts: conflicts.length,
+        },
+        issues: issues.slice(0, 200),
+        preview: insertable.slice(0, 25).map((x) => x.data),
+      });
+    }
+
+    if (mode === "strict" && issues.length > 0) {
+      if (jobRef) {
+        await failImportJob(jobRef, {
+          totalRows: parsed.totalRows,
+          attemptedValid: parsed.candidates.length,
+          errorCount: issues.length,
+        });
+      }
       return res.status(400).json({
         ok: false,
         code: "CSV_INVALID",
-        requestId: req.requestId,
+        error: "CSV contains errors; strict mode aborted",
+        requestId,
         summary: {
           totalRows: parsed.totalRows,
-          validCount: parsed.validCount,
-          invalidCount: parsed.invalidCount,
+          candidates: parsed.candidates.length,
+          insertable: insertable.length,
+          issueCount: issues.length,
         },
-        errors: parsed.errors.slice(0, 200),
+        issues: issues.slice(0, 200),
       });
     }
 
-    // plan cap enforcement using usage doc
-    const usage = await getUsage(landlordId);
-    const limit = PLANS[plan]?.limits?.maxUnits ?? PLANS.starter.limits.maxUnits;
-    const batchCount = parsed.items.length;
-    if (usage.units + batchCount > limit) {
-      return jsonError(
-        res,
-        409,
-        "LIMIT_REACHED",
-        "Plan limit reached: max units",
-        { plan, current: usage.units, adding: batchCount, limit },
-        req.requestId
-      );
-    }
+    const wouldInsert = insertable.length;
 
-    // Basic duplicate check against existing units for this property (batched IN queries of 10)
-    const unitNumbers = parsed.items.map((i) => i.unitNumber);
-    const existingConflicts: Set<string> = new Set();
-    for (let i = 0; i < unitNumbers.length; i += 10) {
-      const slice = unitNumbers.slice(i, i + 10);
-      const snap = await db
-        .collection("units")
-        .where("propertyId", "==", propertyId)
-        .where("unitNumber", "in", slice)
-        .get();
-      snap.forEach((doc) => {
-        const data = doc.data() as any;
-        if (data?.unitNumber) existingConflicts.add(String(data.unitNumber));
-      });
-    }
-
-    if (existingConflicts.size > 0) {
+    const cap = await assertCanAddUnits(req as any, landlordId, wouldInsert);
+    if (!cap.ok) {
+      if (jobRef) {
+        await failImportJob(jobRef, {
+          totalRows: parsed.totalRows,
+          attemptedValid: parsed.candidates.length,
+          errorCount: issues.length,
+        });
+      }
       return res.status(409).json({
         ok: false,
-        code: "CONFLICT",
-        error: "Some units already exist for this property",
-        conflicts: Array.from(existingConflicts).slice(0, 50),
-        requestId: req.requestId,
+        code: "LIMIT_REACHED",
+        error: "Plan limit reached: max units",
+        requestId,
+        details: { plan: cap.plan, current: cap.current, adding: cap.adding, limit: cap.limit },
       });
     }
 
-    if (dryRun) {
-      return res.json({
-        ok: true,
-        dryRun: true,
-        summary: {
-          totalRows: parsed.totalRows,
-          validCount: parsed.validCount,
-        },
-        preview: parsed.items.slice(0, 25),
-      });
-    }
-
-    await db.runTransaction(async (tx) => {
-      const usageRef = db.collection("landlordUsage").doc(landlordId);
-      tx.set(
-        usageRef,
-        {
-          units: FieldValue.increment(batchCount),
-          updatedAt: FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
-
-      for (const it of parsed.items) {
-        const ref = db.collection("units").doc();
-        tx.set(ref, {
+    const ops: any[] = [];
+    for (const c of insertable) {
+      const ref = db.collection("units").doc(unitDocId(propertyId, c.unitNumber));
+      ops.push((batch: any) => {
+        batch.set(ref, {
           landlordId,
           propertyId,
-          unitNumber: it.unitNumber,
-          rent: it.rent ?? null,
-          bedrooms: it.bedrooms ?? null,
-          bathrooms: it.bathrooms ?? null,
-          sqft: it.sqft ?? null,
+          unitNumber: c.unitNumber,
+          rent: c.data.rent ?? null,
+          bedrooms: c.data.bedrooms ?? null,
+          bathrooms: c.data.bathrooms ?? null,
+          sqft: c.data.sqft ?? null,
           createdAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp(),
         });
-      }
-    });
+      });
+    }
 
-    return res.json({
+    await commitInBatches(ops, 400);
+
+    await db
+      .collection("landlordUsage")
+      .doc(landlordId)
+      .set(
+        { units: FieldValue.increment(wouldInsert), updatedAt: FieldValue.serverTimestamp() },
+        { merge: true }
+      );
+
+    await db
+      .collection("properties")
+      .doc(propertyId)
+      .set(
+        { unitCount: FieldValue.increment(wouldInsert), updatedAt: FieldValue.serverTimestamp() },
+        { merge: true }
+      );
+
+    const skippedCount =
+      parsed.invalid.length + parsed.duplicatesInCsv.length + conflicts.length + (parsed.candidates.length - insertable.length);
+
+    if (jobRef) {
+      await finishImportJob(jobRef, {
+        totalRows: parsed.totalRows,
+        attemptedValid: parsed.candidates.length,
+        createdCount: wouldInsert,
+        skippedCount,
+        errorCount: issues.length,
+      });
+    }
+
+    return res.status(200).json({
       ok: true,
-      imported: batchCount,
+      mode,
+      requestId,
+      imported: wouldInsert,
+      summary: {
+        totalRows: parsed.totalRows,
+        candidates: parsed.candidates.length,
+        insertable: insertable.length,
+        invalid: parsed.invalid.length,
+        duplicatesInCsv: parsed.duplicatesInCsv.length,
+        conflicts: conflicts.length,
+      },
+      issues: issues.slice(0, 200),
     });
   } catch (e) {
+    try {
+      // best-effort failure tracking if a job was started
+    } catch {}
     return next(e);
   }
 });
