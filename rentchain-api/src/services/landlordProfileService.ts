@@ -1,4 +1,5 @@
 import { DEMO_LANDLORD, DEMO_LANDLORD_EMAIL } from "../config/authConfig";
+import { db } from "../config/firebase";
 
 export interface LandlordProfile {
   id: string;
@@ -6,6 +7,9 @@ export interface LandlordProfile {
   screeningCredits: number;
   createdAt: string;
   updatedAt: string;
+  plan?: string;
+  role?: string;
+  landlordId?: string;
 }
 
 const DEFAULT_CREDITS =
@@ -82,4 +86,42 @@ export function setScreeningCredits(
   profile.screeningCredits = Math.max(0, Math.floor(credits));
   profile.updatedAt = new Date().toISOString();
   return profile;
+}
+
+export async function getOrCreateLandlordProfile(input: {
+  uid: string;
+  email: string;
+}): Promise<LandlordProfile> {
+  const uid = input.uid;
+  const fallbackEmail = input.email;
+  const ref = db.collection("landlords").doc(uid);
+  const snap = await ref.get();
+
+  if (!snap.exists) {
+    const now = new Date().toISOString();
+    const profile: LandlordProfile = {
+      id: uid,
+      landlordId: uid,
+      email: fallbackEmail,
+      screeningCredits: 0,
+      createdAt: now,
+      updatedAt: now,
+      plan: "starter",
+      role: "landlord",
+    };
+    await ref.set(profile, { merge: true });
+    return profile;
+  }
+
+  const data = snap.data() as any;
+  return {
+    id: data?.id || uid,
+    landlordId: data?.landlordId || uid,
+    email: data?.email || fallbackEmail,
+    screeningCredits: data?.screeningCredits ?? 0,
+    createdAt: data?.createdAt || data?.created_at || "",
+    updatedAt: data?.updatedAt || data?.updated_at || "",
+    plan: data?.plan || "starter",
+    role: data?.role || "landlord",
+  };
 }

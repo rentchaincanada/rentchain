@@ -26,7 +26,7 @@ export async function validateLandlordCredentials(
 ): Promise<LandlordUser | null> {
   console.log("[auth/validate] start", { email });
 
-  const fb = await firebaseSignInWithPassword(email, password);
+  const fb = await signInWithPassword(email, password);
 
   if (!fb) {
     console.warn("[auth/validate] firebase sign-in failed");
@@ -102,7 +102,7 @@ export function generateJwtForLandlord(
 
 const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY;
 
-async function firebaseSignInWithPassword(
+export async function signInWithPassword(
   email: string,
   password: string
 ): Promise<{ uid: string; email: string } | null> {

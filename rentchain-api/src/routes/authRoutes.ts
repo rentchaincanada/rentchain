@@ -2,10 +2,7 @@
 import { Router, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
-import {
-  generateJwtForLandlord,
-  validateLandlordCredentials,
-} from "../services/authService";
+import { generateJwtForLandlord, signInWithPassword } from "../services/authService";
 import {
   authenticateJwt,
   AuthenticatedRequest,
@@ -20,6 +17,7 @@ import {
 import {
   ensureLandlordProfile,
   getLandlordProfile,
+  getOrCreateLandlordProfile,
 } from "../services/landlordProfileService";
 import { setPlan } from "../services/accountService";
 import { resolvePlan } from "../entitlements/plans";
@@ -141,14 +139,20 @@ function validateCodeWithBackup(
 ensureLandlordEntry({ ...DEMO_LANDLORD });
 
 router.post("/login", async (req, res) => {
-  const { email, password } = req.body as {
-    email?: string;
-    password?: string;
-  };
+  const email = String((req.body as any)?.email || "").trim().toLowerCase();
+  const password = String((req.body as any)?.password || "");
   const passwordLoginEnabled = process.env.PASSWORD_LOGIN_ENABLED === "true";
 
   if (!email || !password) {
     return res.status(400).json({ code: "MISSING_CREDENTIALS" });
+  }
+
+  if (!passwordLoginEnabled) {
+    return res.status(403).json({
+      error: "password_login_disabled",
+      message:
+        "Password login disabled. Set PASSWORD_LOGIN_ENABLED=true to allow credential login.",
+    });
   }
 
   try {
@@ -158,70 +162,36 @@ router.post("/login", async (req, res) => {
       passwordLoginEnabled,
       envPasswordEnabled: process.env.PASSWORD_LOGIN_ENABLED,
     });
-    if (process.env.NODE_ENV !== "production") {
-      if (email === DEMO_LANDLORD_EMAIL && password === "demo") {
-        const rawPlan =
-          req.headers["x-rentchain-plan"] ||
-          req.headers["X-Rentchain-Plan"] ||
-          (req.headers as any)["x-rentchain-plan".toLowerCase()];
-        const planHeader = Array.isArray(rawPlan) ? rawPlan[0] : (rawPlan as string | undefined);
-        const plan = resolvePlan(planHeader || "elite");
-        const user = ensureLandlordEntry({
-          id: DEMO_LANDLORD.id,
-          email,
-          role: "landlord",
-          landlordId: DEMO_LANDLORD.id,
-          plan,
-        } as any);
 
-        console.log("DEV LOGIN plan header=", planHeader, "resolved=", plan);
-
-        console.log("DEV AUTH resolved plan=", plan, "user.plan=", (user as any).plan);
-        const token = generateJwtForLandlord({ ...user, plan } as any, "7d");
-        const profile = ensureLandlordProfile(user.id, user.email);
-
-        return res.status(200).json({
-          token,
-          user: {
-            ...user,
-            screeningCredits: profile?.screeningCredits ?? 0,
-          },
-        });
-      }
-
+    const fb = await signInWithPassword(email, password);
+    if (!fb) {
       return res.status(401).json({ code: "INVALID_CREDENTIALS" });
     }
 
-    if (!passwordLoginEnabled) {
-      return res.status(503).json({
-        error: "password_login_disabled",
-        message:
-          "Password login is disabled. Set PASSWORD_LOGIN_ENABLED=true to allow credentials login.",
-      });
-    }
+    const profile = await getOrCreateLandlordProfile({
+      uid: fb.uid,
+      email: fb.email,
+    });
 
-    const validUser = await validateLandlordCredentials(email, password);
-    if (!validUser) {
-      return res.status(401).json({ code: "INVALID_CREDENTIALS" });
-    }
-
-    const plan = resolvePlan(validUser.plan || "starter");
+    const plan = resolvePlan((profile as any)?.plan || "starter");
     const user = ensureLandlordEntry({
-      id: validUser.id,
-      email: validUser.email,
-      role: validUser.role || "landlord",
-      landlordId: validUser.landlordId || validUser.id,
+      id: (profile as any)?.id || fb.uid,
+      email: (profile as any)?.email || fb.email,
+      role: (profile as any)?.role || "landlord",
+      landlordId: (profile as any)?.landlordId || fb.uid,
       plan,
+      screeningCredits: (profile as any)?.screeningCredits,
     } as any);
 
     const token = generateJwtForLandlord({ ...user, plan } as any);
-    const profile = ensureLandlordProfile(user.id, user.email);
 
     return res.status(200).json({
+      ok: true,
       token,
       user: {
         ...user,
-        screeningCredits: profile?.screeningCredits ?? 0,
+        screeningCredits:
+          (profile as any)?.screeningCredits ?? (user as any)?.screeningCredits ?? 0,
       },
     });
   } catch (err: any) {
