@@ -3,7 +3,7 @@ import { requireLandlord } from "../middleware/requireLandlord";
 import { rateLimit } from "../middleware/rateLimit";
 import { jsonError } from "../lib/httpResponse";
 import { db } from "../config/firebase";
-import { getFileReadStream } from "../lib/gcsRead";
+import { handleArtifactDownload } from "./importDownload.controller";
 // import { redactCsvColumns } from "../imports/csvRedact";
 
 const router = Router();
@@ -25,87 +25,104 @@ function assertOwnership(req: any, job: any) {
   return landlordId && String(job.landlordId) === String(landlordId);
 }
 
-router.get(
-  "/:jobId/download/csv",
-  requireLandlord,
-  rateLimit({ windowMs: 60_000, max: 20 }),
-  async (req, res) => {
-    const requestId = req.requestId;
-    const job = await loadJob(req);
-    if (!job) return jsonError(res, 404, "NOT_FOUND", "Import job not found", undefined, requestId);
-    if (!assertOwnership(req, job)) return jsonError(res, 403, "FORBIDDEN", "Forbidden", undefined, requestId);
+const csvStack = [requireLandlord, rateLimit({ windowMs: 60_000, max: 20 })];
 
-    const obj = job.csvObject;
-    if (!obj?.bucket || !obj?.path) {
-      return jsonError(res, 404, "NOT_FOUND", "CSV artifact not found for this job", undefined, requestId);
-    }
+router.head("/:jobId/download/csv", ...csvStack, async (req, res) => {
+  const requestId = req.requestId;
+  const job = await loadJob(req);
+  if (!job) return jsonError(res, 404, "NOT_FOUND", "Import job not found", undefined, requestId);
+  if (!assertOwnership(req, job)) return jsonError(res, 403, "FORBIDDEN", "Forbidden", undefined, requestId);
 
-    const contentType = obj.contentType || "text/csv";
-    const filename = obj.originalName || "import.csv";
-
-    res.setHeader("Content-Type", contentType);
-    res.setHeader("Content-Disposition", `attachment; filename="${filename.replace(/"/g, "")}"`);
-    res.setHeader("x-request-id", requestId || "");
-
-    const stream = getFileReadStream({ bucket: obj.bucket, path: obj.path });
-
-    stream.on("error", (e: any) => {
-      console.error("[download/csv] stream error", { requestId, e: e?.message });
-      if (!res.headersSent) {
-        return jsonError(res, 500, "INTERNAL", "Download failed", undefined, requestId);
-      }
-      try {
-        res.end();
-      } catch {
-        /* ignore */
-      }
-    });
-
-    // const redactCols = String(process.env.CSV_REDACT_COLUMNS || "")
-    //   .split(",")
-    //   .map((s) => s.trim())
-    //   .filter(Boolean);
-    // if (redactCols.length) return stream.pipe(redactCsvColumns(redactCols)).pipe(res);
-
-    return stream.pipe(res);
+  const obj = job.csvObject;
+  if (!obj?.bucket || !obj?.path) {
+    return jsonError(res, 404, "NOT_FOUND", "CSV artifact not found for this job", undefined, requestId);
   }
-);
 
-router.get(
-  "/:jobId/download/report",
-  requireLandlord,
-  rateLimit({ windowMs: 60_000, max: 60 }),
-  async (req, res) => {
-    const requestId = req.requestId;
-    const job = await loadJob(req);
-    if (!job) return jsonError(res, 404, "NOT_FOUND", "Import job not found", undefined, requestId);
-    if (!assertOwnership(req, job)) return jsonError(res, 403, "FORBIDDEN", "Forbidden", undefined, requestId);
+  return handleArtifactDownload({
+    req,
+    res,
+    kind: "csv",
+    obj: {
+      bucket: obj.bucket,
+      path: obj.path,
+      contentType: obj.contentType || "text/csv",
+      filename: obj.originalName || "import.csv",
+    },
+  });
+});
 
-    const obj = job.reportObject;
-    if (!obj?.bucket || !obj?.path) {
-      return jsonError(res, 404, "NOT_FOUND", "Report artifact not found for this job", undefined, requestId);
-    }
+router.get("/:jobId/download/csv", ...csvStack, async (req, res) => {
+  const requestId = req.requestId;
+  const job = await loadJob(req);
+  if (!job) return jsonError(res, 404, "NOT_FOUND", "Import job not found", undefined, requestId);
+  if (!assertOwnership(req, job)) return jsonError(res, 403, "FORBIDDEN", "Forbidden", undefined, requestId);
 
-    res.setHeader("Content-Type", obj.contentType || "application/json");
-    res.setHeader("Content-Disposition", `attachment; filename="import-report-${job.id}.json"`);
-    res.setHeader("x-request-id", requestId || "");
-
-    const stream = getFileReadStream({ bucket: obj.bucket, path: obj.path });
-
-    stream.on("error", (e: any) => {
-      console.error("[download/report] stream error", { requestId, e: e?.message });
-      if (!res.headersSent) {
-        return jsonError(res, 500, "INTERNAL", "Download failed", undefined, requestId);
-      }
-      try {
-        res.end();
-      } catch {
-        /* ignore */
-      }
-    });
-
-    return stream.pipe(res);
+  const obj = job.csvObject;
+  if (!obj?.bucket || !obj?.path) {
+    return jsonError(res, 404, "NOT_FOUND", "CSV artifact not found for this job", undefined, requestId);
   }
-);
+
+  return handleArtifactDownload({
+    req,
+    res,
+    kind: "csv",
+    obj: {
+      bucket: obj.bucket,
+      path: obj.path,
+      contentType: obj.contentType || "text/csv",
+      filename: obj.originalName || "import.csv",
+    },
+  });
+});
+
+const reportStack = [requireLandlord, rateLimit({ windowMs: 60_000, max: 60 })];
+
+router.head("/:jobId/download/report", ...reportStack, async (req, res) => {
+  const requestId = req.requestId;
+  const job = await loadJob(req);
+  if (!job) return jsonError(res, 404, "NOT_FOUND", "Import job not found", undefined, requestId);
+  if (!assertOwnership(req, job)) return jsonError(res, 403, "FORBIDDEN", "Forbidden", undefined, requestId);
+
+  const obj = job.reportObject;
+  if (!obj?.bucket || !obj?.path) {
+    return jsonError(res, 404, "NOT_FOUND", "Report artifact not found for this job", undefined, requestId);
+  }
+
+  return handleArtifactDownload({
+    req,
+    res,
+    kind: "report",
+    obj: {
+      bucket: obj.bucket,
+      path: obj.path,
+      contentType: obj.contentType || "application/json",
+      filename: `import-report-${job.id}.json`,
+    },
+  });
+});
+
+router.get("/:jobId/download/report", ...reportStack, async (req, res) => {
+  const requestId = req.requestId;
+  const job = await loadJob(req);
+  if (!job) return jsonError(res, 404, "NOT_FOUND", "Import job not found", undefined, requestId);
+  if (!assertOwnership(req, job)) return jsonError(res, 403, "FORBIDDEN", "Forbidden", undefined, requestId);
+
+  const obj = job.reportObject;
+  if (!obj?.bucket || !obj?.path) {
+    return jsonError(res, 404, "NOT_FOUND", "Report artifact not found for this job", undefined, requestId);
+  }
+
+  return handleArtifactDownload({
+    req,
+    res,
+    kind: "report",
+    obj: {
+      bucket: obj.bucket,
+      path: obj.path,
+      contentType: obj.contentType || "application/json",
+      filename: `import-report-${job.id}.json`,
+    },
+  });
+});
 
 export default router;
