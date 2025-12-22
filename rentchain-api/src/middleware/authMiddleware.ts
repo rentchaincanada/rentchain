@@ -5,6 +5,7 @@ import { JWT_SECRET } from "../config/authConfig";
 import type { Account } from "../types/account";
 import type { Usage } from "../types/account";
 import { DEV_DEFAULT_PLAN } from "../config/devFlags";
+import { jsonError } from "../lib/httpResponse";
 
 export interface AuthenticatedUser {
   id: string;
@@ -58,9 +59,12 @@ export function authenticateJwt(
 
   const authHeader = req.headers.authorization;
 
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
+  if (!authHeader) {
+    return next();
+  }
+
+  if (!authHeader.startsWith("Bearer ")) {
+    return jsonError(res, 401, "UNAUTHORIZED", "Unauthorized", undefined, req.requestId);
   }
 
   const token = authHeader.slice("Bearer ".length).trim();
@@ -70,8 +74,7 @@ export function authenticateJwt(
     const { sub, email, role, landlordId, plan } = decoded as any;
 
     if (!sub || !email) {
-      res.status(401).json({ error: "Unauthorized" });
-      return;
+      return jsonError(res, 401, "UNAUTHORIZED", "Unauthorized", undefined, req.requestId);
     }
 
     req.user = {
@@ -85,6 +88,6 @@ export function authenticateJwt(
     next();
   } catch (err) {
     console.error("[authenticateJwt] verification failed", err);
-    res.status(401).json({ error: "Unauthorized" });
+    jsonError(res, 401, "UNAUTHORIZED", "Unauthorized", undefined, req.requestId);
   }
 }
