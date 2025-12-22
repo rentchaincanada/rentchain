@@ -98,6 +98,15 @@ router.head("/:jobId/download/report", ...reportStack, async (req, res) => {
       contentType: obj.contentType || "application/json",
       filename: `import-report-${job.id}.json`,
     },
+    gzipObj: job.reportGzipObject
+      ? {
+          bucket: job.reportGzipObject.bucket,
+          path: job.reportGzipObject.path,
+          contentType: job.reportGzipObject.contentType || "application/json",
+          filename: `import-report-${job.id}.json`,
+        }
+      : undefined,
+    integrity: { sha256: job.reportSha256 },
   });
 });
 

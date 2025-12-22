@@ -15,6 +15,8 @@ import { db, FieldValue } from "../config/firebase";
 import { unitDocId } from "../imports/unitId";
 import { uploadCsv } from "../middleware/uploadCsv";
 import { uploadBufferToGcs } from "../lib/gcs";
+import { gzipSync } from "zlib";
+import { sha256Hex } from "../lib/hash";
 
 const router = Router({ mergeParams: true });
 
@@ -406,7 +408,11 @@ router.post(
       }
 
       const reportJson = Buffer.from(JSON.stringify(result.report, null, 2), "utf8");
+      const reportSha256 = sha256Hex(reportJson);
+      const reportGz = gzipSync(reportJson, { level: 9 });
+
       const reportPath = `imports/${landlordId}/${propertyId}/${now}__${keyPart}__report.json`;
+      const reportGzPath = `imports/${landlordId}/${propertyId}/${now}__${keyPart}__report.json.gz`;
 
       const reportObj = await uploadBufferToGcs({
         path: reportPath,
@@ -421,8 +427,29 @@ router.post(
         },
       });
 
+      const reportGzObj = await uploadBufferToGcs({
+        path: reportGzPath,
+        contentType: "application/json",
+        buffer: reportGz,
+        metadata: {
+          landlordId,
+          propertyId,
+          mode,
+          idempotencyKey: idempotencyKey || "",
+          requestId: requestId || "",
+          contentEncoding: "gzip",
+        },
+      });
+
       if (jobRef) {
-        await jobRef.set({ reportObject: { ...reportObj, contentType: "application/json" } }, { merge: true });
+        await jobRef.set(
+          {
+            reportObject: { ...reportObj, contentType: "application/json" },
+            reportGzipObject: { ...reportGzObj, contentType: "application/json" },
+            reportSha256,
+          },
+          { merge: true }
+        );
       }
 
       return res.status(result.httpStatus).json({
