@@ -25,6 +25,10 @@ export async function validateLandlordCredentials(
   password: string
 ): Promise<LandlordUser | null> {
   const fb = await firebaseSignInWithPassword(email, password);
+  console.log("[auth] firebase signInWithPassword result", {
+    ok: !!fb,
+    email: fb?.email,
+  });
   if (!fb) return null;
 
   const ref = db.collection("landlords").doc(fb.uid);

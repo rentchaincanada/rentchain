@@ -152,6 +152,7 @@ router.post("/login", async (req, res) => {
   }
 
   try {
+    console.log("[auth/login] hit", { email, passwordLoginEnabled });
     if (process.env.NODE_ENV !== "production") {
       if (email === DEMO_LANDLORD_EMAIL && password === "demo") {
         const rawPlan =
