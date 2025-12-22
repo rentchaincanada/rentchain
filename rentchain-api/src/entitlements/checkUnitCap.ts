@@ -1,8 +1,8 @@
-import { PLANS } from "./plans";
+import { PLANS, Plan } from "./plans";
 import { getUsage } from "./usageDoc";
 
 export async function assertCanAddUnits(req: any, landlordId: string, addCount: number) {
-  const planKey = (req.plan?.key || req.plan || req.user?.plan || "starter") as keyof typeof PLANS;
+  const planKey = (req.plan?.key || req.plan || req.user?.plan || "starter") as Plan;
   const limits = PLANS[planKey]?.limits || PLANS.starter.limits;
   const usage = await getUsage(landlordId);
 

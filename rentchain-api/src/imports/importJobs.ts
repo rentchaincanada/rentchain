@@ -15,6 +15,8 @@ export type ImportJob = {
   errorCount: number;
   createdAt: any;
   updatedAt: any;
+  csvObject?: { bucket?: string; path?: string; contentType?: string; originalName?: string; bytes?: number };
+  reportObject?: { bucket?: string; path?: string; contentType?: string };
 };
 
 export function importJobId(landlordId: string, propertyId: string, key: string) {
