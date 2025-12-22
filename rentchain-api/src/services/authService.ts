@@ -24,40 +24,58 @@ export async function validateLandlordCredentials(
   email: string,
   password: string
 ): Promise<LandlordUser | null> {
+  console.log("[auth/validate] start", { email });
+
   const fb = await firebaseSignInWithPassword(email, password);
-  console.log("[auth] firebase signInWithPassword result", {
-    ok: !!fb,
-    email: fb?.email,
-  });
-  if (!fb) return null;
 
-  const ref = db.collection("landlords").doc(fb.uid);
-  const snap = await ref.get();
-
-  if (!snap.exists) {
-    const createdAt = new Date().toISOString();
-    const landlord: LandlordUser = {
-      id: fb.uid,
-      landlordId: fb.uid,
-      email: fb.email,
-      role: "landlord",
-      plan: "starter",
-      screeningCredits: 0,
-    };
-    await ref.set({ ...landlord, createdAt }, { merge: true });
-    return landlord;
+  if (!fb) {
+    console.warn("[auth/validate] firebase sign-in failed");
+    return null;
   }
 
-  const data = snap.data() as any;
-  const landlord: LandlordUser = {
-    id: data?.id || fb.uid,
-    landlordId: data?.landlordId || fb.uid,
-    email: data?.email || fb.email,
-    role: data?.role || "landlord",
-    plan: data?.plan || "starter",
-    screeningCredits: data?.screeningCredits ?? 0,
-  };
-  return landlord;
+  console.log("[auth/validate] firebase ok", {
+    uid: fb.uid,
+    email: fb.email,
+  });
+
+  try {
+    const ref = db.collection("landlords").doc(fb.uid);
+    const snap = await ref.get();
+
+    if (!snap.exists) {
+      console.log("[auth/validate] landlord doc missing — creating", {
+        uid: fb.uid,
+      });
+
+      const createdAt = new Date().toISOString();
+      const landlord: LandlordUser = {
+        id: fb.uid,
+        landlordId: fb.uid,
+        email: fb.email,
+        role: "landlord",
+        plan: "starter",
+        screeningCredits: 0,
+      };
+
+      await ref.set({ ...landlord, createdAt }, { merge: true });
+      return landlord;
+    }
+
+    console.log("[auth/validate] landlord doc found");
+
+    const data = snap.data() as any;
+    return {
+      id: data?.id || fb.uid,
+      landlordId: data?.landlordId || fb.uid,
+      email: data?.email || fb.email,
+      role: data?.role || "landlord",
+      plan: data?.plan || "starter",
+      screeningCredits: data?.screeningCredits ?? 0,
+    };
+  } catch (err: any) {
+    console.error("[auth/validate] firestore error", err?.message || err);
+    return null;
+  }
 }
 
 export function generateJwtForLandlord(
