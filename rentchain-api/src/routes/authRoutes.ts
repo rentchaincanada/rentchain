@@ -145,6 +145,7 @@ router.post("/login", async (req, res) => {
     email?: string;
     password?: string;
   };
+  const passwordLoginEnabled = process.env.PASSWORD_LOGIN_ENABLED === "true";
 
   if (!email || !password) {
     return res.status(400).json({ code: "MISSING_CREDENTIALS" });
@@ -185,10 +186,37 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ code: "INVALID_CREDENTIALS" });
     }
 
-    // Production login not wired yet
-    return res.status(501).json({
-      error: "not_implemented",
-      message: "Production login not configured.",
+    if (!passwordLoginEnabled) {
+      return res.status(503).json({
+        error: "password_login_disabled",
+        message:
+          "Password login is disabled. Set PASSWORD_LOGIN_ENABLED=true to allow credentials login.",
+      });
+    }
+
+    const validUser = await validateLandlordCredentials(email, password);
+    if (!validUser) {
+      return res.status(401).json({ code: "INVALID_CREDENTIALS" });
+    }
+
+    const plan = resolvePlan(validUser.plan || "starter");
+    const user = ensureLandlordEntry({
+      id: validUser.id,
+      email: validUser.email,
+      role: validUser.role || "landlord",
+      landlordId: validUser.landlordId || validUser.id,
+      plan,
+    } as any);
+
+    const token = generateJwtForLandlord({ ...user, plan } as any);
+    const profile = ensureLandlordProfile(user.id, user.email);
+
+    return res.status(200).json({
+      token,
+      user: {
+        ...user,
+        screeningCredits: profile?.screeningCredits ?? 0,
+      },
     });
   } catch (err: any) {
     console.error("[auth/login] error", err);
