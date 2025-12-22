@@ -1,15 +1,34 @@
-export function errorHandler(err: any, _req: any, res: any, _next: any) {
-  const status = err?.statusCode || err?.status || 500;
-  const body = err?.body;
+import type { Request, Response, NextFunction } from "express";
+import { ApiError } from "../lib/httpErrors";
+import { jsonError } from "../lib/httpResponse";
 
-  if (body) {
-    return res.status(status).json(body);
+export function notFoundHandler(req: Request, res: Response) {
+  return jsonError(res, 404, "NOT_FOUND", "Not Found", undefined, req.requestId);
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function errorHandler(err: any, req: Request, res: Response, _next: NextFunction) {
+  if (res.headersSent) return;
+
+  const requestId = req.requestId;
+
+  if (err instanceof ApiError) {
+    const message = err.expose ? err.message : "Internal Server Error";
+    return jsonError(res, err.status, err.code, message, err.details, requestId);
   }
 
-  // Legacy facade 501 or generic errors
-  res.status(status).json({
-    error: err?.error || "INTERNAL_ERROR",
-    message: err?.message || "Internal Server Error",
-    code: err?.code || "INTERNAL_ERROR",
-  });
+  if (err?.name === "ZodError") {
+    return jsonError(
+      res,
+      400,
+      "VALIDATION_ERROR",
+      "Invalid request payload",
+      err.flatten?.() ?? err,
+      requestId
+    );
+  }
+
+  console.error("[errorHandler]", { requestId, message: err?.message, stack: err?.stack });
+
+  return jsonError(res, 500, "INTERNAL", "Internal Server Error", undefined, requestId);
 }

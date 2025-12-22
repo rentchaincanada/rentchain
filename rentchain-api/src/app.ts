@@ -1,18 +1,16 @@
 // Backend: rentchain-api/src/app.ts
-import express, {
-  Application,
-  Request,
-  Response,
-  NextFunction,
-} from "express";
+import express, { Application, Request, Response, NextFunction } from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
-import { errorHandler } from "./middleware/errorHandler";
+import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
 import { requestBreadcrumbs, getCrumbs } from "./middleware/requestBreadcrumbs";
 import { mountSafeRoutes } from "./app.routes";
 import { mountDevRoutes } from "./app.routes.dev";
 import { mountRouteMap } from "./routes/devRouteMap";
 import publicRoutes from "./routes/publicRoutes";
+import { requestContext } from "./middleware/requestContext";
+import "./types/auth";
+import "./types/http";
 import "./types/auth";
 
 const app: Application = express();
@@ -52,6 +50,7 @@ app.use(
   })
 );
 app.use(cookieParser());
+app.use(requestContext);
 
 // Dev tooling routes should not be blocked by auth
 /**
@@ -81,9 +80,7 @@ process.on("unhandledRejection", (reason) => {
 /**
  * Simple 404 handler
  */
-app.use((req: Request, res: Response) => {
-  res.status(404).json({ message: "Not found" });
-});
+app.use(notFoundHandler);
 
 /**
  * Generic error handler
