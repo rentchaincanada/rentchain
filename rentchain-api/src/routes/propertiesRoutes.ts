@@ -1,7 +1,7 @@
 // rentchain-api/src/routes/propertiesRoutes.ts
 import { Router } from "express";
 import { requireCapability } from "../entitlements/entitlements.middleware";
-import { enforcePropertyCap } from "../entitlements/enforceCaps";
+import { enforcePropertyCap, enforceUnitCap } from "../entitlements/limits.middleware";
 import { db } from "../config/firebase";
 
 const router = Router();
@@ -57,6 +57,7 @@ router.get("/", async (req: any, res) => {
 router.post(
   "/",
   requireCapability("properties.create"),
+  enforcePropertyCap,
   async (req: any, res) => {
     const landlordId = req.user?.landlordId || req.user?.id;
     if (!landlordId) {
@@ -67,36 +68,6 @@ router.post(
     if (process.env.NODE_ENV !== "production") {
       console.log("[POST /api/properties] landlordId=", landlordId);
       console.log("[POST /api/properties] plan=", plan);
-    }
-
-    // Count persisted properties for cap enforcement (Firestore-only)
-    let currentPropertyCount = 0;
-    try {
-      const snap = await db
-        .collection("properties")
-        .where("landlordId", "==", landlordId)
-        .get();
-      currentPropertyCount = snap.size;
-    } catch (err: any) {
-      console.error("[POST /api/properties] failed to count properties", err);
-      return res.status(500).json({
-        error: "db_failed",
-        message: "Failed to count properties",
-      });
-    }
-
-    try {
-      await enforcePropertyCap({ plan, currentPropertyCount });
-    } catch (err: any) {
-      // enforcePropertyCap may throw a structured error with statusCode/body
-      if (err?.statusCode && err?.body) {
-        return res.status(err.statusCode).json(err.body);
-      }
-      console.error("[POST /api/properties] cap enforcement error", err);
-      return res.status(400).json({
-        error: "cap_failed",
-        message: err?.message || "Property cap enforcement failed",
-      });
     }
 
     const { address, nickname, unitCount, totalUnits, units } = req.body ?? {};
@@ -143,6 +114,7 @@ router.post(
 router.post(
   "/:propertyId/units",
   requireCapability("units.create"),
+  enforceUnitCap,
   async (req: any, res) => {
     const landlordId = req.user?.landlordId || req.user?.id;
     if (!landlordId) {
