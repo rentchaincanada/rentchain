@@ -16,12 +16,14 @@ import { requireCapability } from "./entitlements/entitlements.middleware";
 import stubPlatformRoutes from "./routes/stubPlatformRoutes";
 import { authenticateJwt } from "./middleware/authMiddleware";
 import propertiesRoutes from "./routes/propertiesRoutes";
+import authMeRoutes from "./routes/authMeRoutes";
 
 export function mountSafeRoutes(app: Application) {
   // ensure auth is decoded and plan is resolved before hitting guarded routes
   app.use(authenticateJwt);
   app.use(attachPlan());
   app.use("/api/auth", authRoutes);
+  app.use("/api/auth", authMeRoutes);
   app.use("/api/account", accountRoutes);
   app.use("/api/onboarding", onboardingRoutes);
   app.use("/api/events", eventsRoutes);

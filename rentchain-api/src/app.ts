@@ -13,6 +13,7 @@ import { mountSafeRoutes } from "./app.routes";
 import { mountDevRoutes } from "./app.routes.dev";
 import { mountRouteMap } from "./routes/devRouteMap";
 import publicRoutes from "./routes/publicRoutes";
+import "./types/auth";
 
 const app: Application = express();
 app.set("etag", false);
