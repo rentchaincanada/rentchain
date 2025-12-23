@@ -1,0 +1,35 @@
+steps:
+  # Build Docker image from rentchain-api folder
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      [
+        'build',
+        '-t',
+        'us-central1-docker.pkg.dev/$PROJECT_ID/rentchain/rentchain-landlord-api:$SHORT_SHA',
+        '-t',
+        'us-central1-docker.pkg.dev/$PROJECT_ID/rentchain/rentchain-landlord-api:latest',
+        './rentchain-api'
+      ]
+
+  # Push both tags
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'us-central1-docker.pkg.dev/$PROJECT_ID/rentchain/rentchain-landlord-api:$SHORT_SHA']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'us-central1-docker.pkg.dev/$PROJECT_ID/rentchain/rentchain-landlord-api:latest']
+
+  # Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      [
+        'run', 'deploy', 'rentchain-landlord-api',
+        '--image', 'us-central1-docker.pkg.dev/$PROJECT_ID/rentchain/rentchain-landlord-api:$SHORT_SHA',
+        '--region', 'us-central1',
+        '--platform', 'managed',
+        '--allow-unauthenticated'
+      ]
+
+images:
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/rentchain/rentchain-landlord-api:$SHORT_SHA'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/rentchain/rentchain-landlord-api:latest'
