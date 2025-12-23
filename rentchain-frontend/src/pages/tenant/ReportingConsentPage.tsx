@@ -4,9 +4,7 @@ import {
   grantTenantReportingConsent,
   revokeTenantReportingConsent,
 } from "../../api/reportingConsentApi";
-import { useTenantOutletContext } from "./TenantLayout";
 import { useSearchParams } from "react-router-dom";
-import { useAuth } from "../../context/useAuth";
 
 const cardStyle: React.CSSProperties = {
   background: "rgba(17,24,39,0.85)",
@@ -18,12 +16,10 @@ const cardStyle: React.CSSProperties = {
 };
 
 export const ReportingConsentPage: React.FC = () => {
-  const { profile } = useTenantOutletContext();
-  const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const [status, setStatus] = useState<string>("pending");
   const [error, setError] = useState<string | null>(null);
-  const landlordId = searchParams.get("landlordId") || user?.landlordId || "";
+  const landlordId = searchParams.get("landlordId") || "";
 
   useEffect(() => {
     getTenantReportingConsent()
@@ -67,7 +63,9 @@ export const ReportingConsentPage: React.FC = () => {
         Data shared: rent charges, payment dates, and late indicators. No credit score is shown here.
       </div>
       {!landlordId ? (
-        <div style={{ marginTop: 10, color: "#fca5a5" }}>Missing landlord context.</div>
+        <div style={{ marginTop: 10, color: "#fca5a5" }}>
+          Missing landlord context. Please use the invite link from your landlord.
+        </div>
       ) : null}
       <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
         <button
