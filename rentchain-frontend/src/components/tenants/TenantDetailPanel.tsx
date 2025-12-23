@@ -9,6 +9,13 @@ import type {
   TenantLedgerEntry,
 } from "../../api/tenantDetail";
 import { recordPayment, deletePayment } from "@/api/paymentsApi";
+import { createRentCharge, recordRentChargePayment } from "@/api/rentChargesApi";
+import { fetchCreditHistory, downloadCreditHistory } from "@/api/creditHistoryApi";
+import {
+  inviteTenantForReporting,
+  queueReporting,
+  getReportingStatus,
+} from "@/api/reportingConsentApi";
 import { downloadTenantReport } from "@/api/tenantsApi";
 import { PaymentEditModal } from "../payments/PaymentEditModal";
 import { useToast } from "../ui/ToastProvider";
@@ -138,6 +145,9 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
   const [timelineLoading, setTimelineLoading] = useState(false);
   const [timelineError, setTimelineError] = useState<string | null>(null);
   const { showToast } = useToast();
+  const [creditHistory, setCreditHistory] = useState<any | null>(null);
+  const [creditError, setCreditError] = useState<string | null>(null);
+  const [reportingStatus, setReportingStatus] = useState<any | null>(null);
 
   useEffect(() => {
     setPayments(arr(bundlePayments));
@@ -639,6 +649,99 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
         message: "Failed to record payment",
         description:
           err instanceof Error ? err.message : "Please try again shortly.",
+        variant: "error",
+      });
+    }
+  };
+
+  const handleIssueRentCharge = async () => {
+    if (!tenantId) return;
+    const defaultAmount = monthlyRent != null ? String(monthlyRent) : "";
+    const amountStr = window.prompt("Charge amount", defaultAmount);
+    if (amountStr === null) return;
+    const amountNum = Number(amountStr);
+    if (!amountNum || Number.isNaN(amountNum) || amountNum <= 0) {
+      showToast({ message: "Invalid amount", description: "Enter a positive number.", variant: "warning" });
+      return;
+    }
+    const due = window.prompt("Due date (YYYY-MM-DD)", new Date().toISOString().slice(0, 10));
+    if (due === null) return;
+    const period = window.prompt("Period (e.g., 2026-01)", due?.slice(0, 7));
+    const confirm = window.confirm(
+      "Issue this rent charge? This will appear in the tenant portal."
+    );
+    if (!confirm) return;
+    try {
+      await createRentCharge({
+        tenantId,
+        leaseId: lease?.leaseId || lease?.tenantId || tenantId,
+        amount: amountNum,
+        dueDate: due,
+        period: period || undefined,
+        propertyId: lease?.propertyId as any,
+        unitId: (lease as any)?.unitId,
+      });
+      showToast({
+        message: "Rent charge issued",
+        description: "Charge visible in tenant portal.",
+        variant: "success",
+      });
+    } catch (err: any) {
+      showToast({
+        message: "Failed to issue charge",
+        description: err?.message || "Please try again.",
+        variant: "error",
+      });
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!tenantId) return;
+    fetchCreditHistory(tenantId)
+      .then((data) => {
+        if (!cancelled) setCreditHistory(data);
+      })
+      .catch((err) => {
+        if (!cancelled) setCreditError(err?.message || "Failed to load credit history");
+      });
+    getReportingStatus(tenantId)
+      .then((data) => {
+        if (!cancelled) setReportingStatus(data);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantId]);
+
+  const handleRecordChargePayment = async () => {
+    if (!tenantId) return;
+    const chargeId = window.prompt("Rent charge ID to credit");
+    if (!chargeId) return;
+    const amountStr = window.prompt("Payment amount", monthlyRent ? String(monthlyRent) : "0");
+    if (amountStr === null) return;
+    const amountNum = Number(amountStr);
+    if (!amountNum || Number.isNaN(amountNum) || amountNum <= 0) {
+      showToast({ message: "Invalid amount", description: "Enter a positive number.", variant: "warning" });
+      return;
+    }
+    const paidDate = window.prompt("Paid date (YYYY-MM-DD)", new Date().toISOString().slice(0, 10));
+    if (paidDate === null) return;
+    const method = window.prompt("Method (cash, etransfer, cheque, other)", "etransfer") || "other";
+    const confirm = window.confirm("Record this payment against the rent charge?");
+    if (!confirm) return;
+    try {
+      await recordRentChargePayment(chargeId, { amount: amountNum, paidAt: paidDate, method });
+      showToast({
+        message: "Payment recorded",
+        description: "Charge updated and ledger recorded.",
+        variant: "success",
+      });
+    } catch (err: any) {
+      showToast({
+        message: "Failed to record payment",
+        description: err?.message || "Please try again.",
         variant: "error",
       });
     }
@@ -1642,6 +1745,113 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
       {/* Tenant activity (audit feed) */}
       <TenantActivityPanel tenantId={tenant?.id} />
 
+      {/* Credit Reporting Readiness */}
+      <div
+        style={{
+          marginTop: 12,
+          padding: spacing.md,
+          borderRadius: radius.md,
+          border: `1px solid ${colors.border}`,
+          background: colors.panel,
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.sm }}>
+          <div>
+            <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 0.08, color: text.muted }}>
+              Credit Reporting Readiness
+            </div>
+            <div style={{ fontWeight: 700, color: text.primary }}>Rental history export</div>
+            <div style={{ fontSize: 12, color: text.subtle, marginTop: 4 }}>
+              This rental history is prepared for reporting compatibility. It has not been submitted to any credit bureau.
+            </div>
+          </div>
+          <div>
+            {(() => {
+              const periods = creditHistory?.periods || [];
+              const noDataCount = periods.filter((p: any) => p.status === "no_data").length;
+              const status =
+                periods.length >= 6 && noDataCount === 0
+                  ? { label: "Reportable", bg: "rgba(34,197,94,0.14)", color: "#bbf7d0" }
+                  : periods.length < 3
+                  ? { label: "Insufficient history", bg: "rgba(148,163,184,0.16)", color: "#cbd5e1" }
+                  : { label: "Incomplete data", bg: "rgba(234,179,8,0.16)", color: "#fef08a" };
+              return (
+                <span
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 12,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    background: status.bg,
+                    color: status.color,
+                  }}
+                >
+                  {status.label}
+                </span>
+              );
+            })()}
+          </div>
+        </div>
+        {creditError ? (
+          <div style={{ color: colors.danger }}>{creditError}</div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8 }}>
+            <div>
+              <div style={{ color: text.muted, fontSize: 12 }}>On-time months</div>
+              <div style={{ fontWeight: 700, color: text.primary }}>
+                {creditHistory?.periods?.filter((p: any) => p.status === "on_time").length ?? 0}
+              </div>
+            </div>
+            <div>
+              <div style={{ color: text.muted, fontSize: 12 }}>Late (1-29 / 30-59 / 60+)</div>
+              <div style={{ fontWeight: 700, color: text.primary }}>
+                {(creditHistory?.periods || []).filter((p: any) => p.status === "late_1_29").length}/
+                {(creditHistory?.periods || []).filter((p: any) => p.status === "late_30_59").length}/
+                {(creditHistory?.periods || []).filter((p: any) => p.status === "late_60_plus").length}
+              </div>
+            </div>
+            <div>
+              <div style={{ color: text.muted, fontSize: 12 }}>Missed (unpaid)</div>
+              <div style={{ fontWeight: 700, color: text.primary }}>
+                {(creditHistory?.periods || []).filter((p: any) => p.status === "unpaid").length}
+              </div>
+            </div>
+          </div>
+        )}
+        <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={() => tenantId && downloadCreditHistory(tenantId, "csv").catch((e) => setCreditError(e.message))}
+            style={{
+              padding: "8px 12px",
+              borderRadius: radius.md,
+              border: `1px solid ${colors.border}`,
+              background: colors.card,
+              color: text.primary,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            Download credit history (CSV)
+          </button>
+          <button
+            type="button"
+            onClick={() => tenantId && downloadCreditHistory(tenantId, "json").catch((e) => setCreditError(e.message))}
+            style={{
+              padding: "8px 12px",
+              borderRadius: radius.md,
+              border: `1px solid ${colors.border}`,
+              background: colors.card,
+              color: text.primary,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            Download credit history (JSON)
+          </button>
+        </div>
+      </div>
+
       {/* View in ledger link */}
       <div
         style={{
@@ -1668,6 +1878,40 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
           }}
         >
           Mark as collected
+        </button>
+        <button
+          type="button"
+          onClick={handleIssueRentCharge}
+          style={{
+            fontSize: "0.85rem",
+            padding: "0.45rem 0.95rem",
+            borderRadius: radius.md,
+            border: `1px solid ${colors.border}`,
+            background: colors.card,
+            color: text.primary,
+            fontWeight: 700,
+            cursor: "pointer",
+            boxShadow: shadows.sm,
+          }}
+        >
+          Issue rent charge
+        </button>
+        <button
+          type="button"
+          onClick={handleRecordChargePayment}
+          style={{
+            fontSize: "0.85rem",
+            padding: "0.45rem 0.95rem",
+            borderRadius: radius.md,
+            border: `1px solid ${colors.border}`,
+            background: colors.card,
+            color: text.primary,
+            fontWeight: 700,
+            cursor: "pointer",
+            boxShadow: shadows.sm,
+          }}
+        >
+          Record charge payment
         </button>
         <button
           type="button"

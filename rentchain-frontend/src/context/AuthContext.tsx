@@ -17,6 +17,9 @@ import {
 export interface AuthUser {
   id: string;
   email: string;
+  role?: string;
+  tenantId?: string;
+  leaseId?: string;
   screeningCredits?: number;
   plan?: string;
 }

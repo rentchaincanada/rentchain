@@ -6,7 +6,15 @@ export type LedgerEventType =
   | "payment_updated"
   | "payment_deleted"
   | "screening_credit_used"
-  | "charge_created";
+  | "charge_created"
+  | "charge_issued"
+  | "charge_confirmed"
+  | "payment_recorded"
+  | "reporting_consent_granted"
+  | "reporting_consent_revoked"
+  | "reporting_queued"
+  | "reporting_submitted"
+  | "reporting_failed";
 
 export interface LedgerEvent {
   id: string;
@@ -21,6 +29,7 @@ export interface LedgerEvent {
   };
   method?: string | null;
   notes?: string | null;
+  meta?: Record<string, any>;
 }
 
 const LEDGER_EVENTS: LedgerEvent[] = [];
@@ -45,6 +54,7 @@ export interface LedgerEventCreateInput {
   };
   method?: string | null;
   notes?: string | null;
+  meta?: Record<string, any>;
 }
 
 export function createLedgerEvent(
@@ -60,6 +70,7 @@ export function createLedgerEvent(
     reference: input.reference,
     method: input.method ?? null,
     notes: input.notes ?? null,
+    meta: input.meta,
   };
   LEDGER_EVENTS.push(event);
   return event;

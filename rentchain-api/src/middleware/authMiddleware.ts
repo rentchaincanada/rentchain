@@ -10,8 +10,10 @@ import { jsonError } from "../lib/httpResponse";
 export interface AuthenticatedUser {
   id: string;
   email: string;
-  role: "landlord";
+  role: "landlord" | "admin" | "tenant";
   landlordId?: string;
+  tenantId?: string;
+  leaseId?: string;
   plan?: string;
 }
 
@@ -71,7 +73,7 @@ export function authenticateJwt(
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as jwt.JwtPayload;
-    const { sub, email, role, landlordId, plan } = decoded as any;
+    const { sub, email, role, landlordId, tenantId, leaseId, plan } = decoded as any;
 
     if (!sub || !email) {
       return jsonError(res, 401, "UNAUTHORIZED", "Unauthorized", undefined, req.requestId);
@@ -81,7 +83,9 @@ export function authenticateJwt(
       id: String(sub),
       email: String(email),
       role: (role as AuthenticatedUser["role"]) || "landlord",
-      landlordId: landlordId || String(sub),
+      landlordId: landlordId || (role === "landlord" || role === "admin" ? String(sub) : undefined),
+      tenantId: tenantId || undefined,
+      leaseId: leaseId || undefined,
       plan: plan ?? "starter",
     };
 

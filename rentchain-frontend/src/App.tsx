@@ -22,6 +22,13 @@ import PricingPage from "./pages/PricingPage";
 import BillingPage from "./pages/BillingPage";
 import TenantPortalIssuePage from "./pages/TenantPortalIssuePage";
 import { DebugPanel } from "./components/DebugPanel";
+import { TenantLayout } from "./pages/tenant/TenantLayout";
+import TenantDashboardPage from "./pages/tenant/TenantDashboardPage";
+import TenantPaymentsPage from "./pages/tenant/TenantPaymentsPage";
+import TenantLedgerPage from "./pages/tenant/TenantLedgerPage";
+import TenantDocumentsPage from "./pages/tenant/TenantDocumentsPage";
+import ReportingConsentPage from "./pages/tenant/ReportingConsentPage";
+import { RequireTenant } from "./components/auth/RequireTenant";
 
 const LedgerPage = lazy(() => import("./pages/LedgerPage"));
 const BlockchainPage = lazy(() => import("./pages/BlockchainPage"));
@@ -40,6 +47,7 @@ function App() {
         <Route path="/" element={<ComingSoonPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/app/login" element={<LoginPage />} />
+        <Route path="/tenant/login" element={<LoginPage />} />
         <Route path="/2fa" element={<TwoFactorPage />} />
         <Route path="/pricing" element={<PricingPage />} />
 
@@ -162,6 +170,21 @@ function App() {
         <Route path="/cosign/:applicationId" element={<CosignPage />} />
         <Route path="/apply" element={<ApplicantApplyPage />} />
         <Route path="/tenant/issue" element={<TenantPortalIssuePage />} />
+        <Route
+          path="/tenant"
+          element={
+            <RequireTenant>
+              <TenantLayout />
+            </RequireTenant>
+          }
+        >
+          <Route index element={<Navigate to="dashboard" replace />} />
+          <Route path="dashboard" element={<TenantDashboardPage />} />
+          <Route path="payments" element={<TenantPaymentsPage />} />
+          <Route path="ledger" element={<TenantLedgerPage />} />
+          <Route path="documents" element={<TenantDocumentsPage />} />
+          <Route path="reporting-consent" element={<ReportingConsentPage />} />
+        </Route>
         {applicantApplyRedirects.map((path) => (
           <Route
             key={path}

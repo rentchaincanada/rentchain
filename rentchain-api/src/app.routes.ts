@@ -21,17 +21,46 @@ import { routeSource } from "./middleware/routeSource";
 import unitImportRoutes from "./routes/unitImportRoutes";
 import importJobsRoutes from "./routes/importJobsRoutes";
 import importDownloadRoutes from "./routes/importDownloadRoutes";
+import tenantPortalRoutes from "./routes/tenantPortalRoutes";
+import landlordRentChargeRoutes from "./routes/landlordRentChargeRoutes";
+import landlordCreditHistoryRoutes from "./routes/landlordCreditHistoryRoutes";
+import landlordReportingRoutes from "./routes/landlordReportingRoutes";
+import tenantReportingRoutes from "./routes/tenantReportingRoutes";
+import adminReportingRoutes from "./routes/adminReportingRoutes";
+import internalReportingRoutes from "./routes/internalReportingRoutes";
+import landlordReportingShadowRoutes from "./routes/landlordReportingShadowRoutes";
 
 export function mountSafeRoutes(app: Application) {
   // ensure auth is decoded and plan is resolved before hitting guarded routes
   app.use(authenticateJwt);
   app.use(attachPlan());
+
+  // Prevent tenant-role tokens from calling landlord routes. Only allow /api/tenant (and health/auth me).
+  app.use((req, res, next) => {
+    const user: any = (req as any).user;
+    const path = req.path || req.originalUrl || "";
+    if (user?.role === "tenant") {
+      if (path.startsWith("/api/tenant") || path.startsWith("/health") || path.startsWith("/api/auth/me")) {
+        return next();
+      }
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    return next();
+  });
   app.use("/api/auth", routeSource("authRoutes.ts"), authRoutes);
   app.use("/api/auth", routeSource("authMeRoutes.ts"), authMeRoutes);
   app.use("/api/account", routeSource("accountRoutes.ts"), accountRoutes);
   app.use("/api/onboarding", routeSource("onboardingRoutes.ts"), onboardingRoutes);
   app.use("/api/events", routeSource("eventsRoutes.ts"), eventsRoutes);
   app.use("/api/me", routeSource("meRoutes.ts"), meRoutes);
+  app.use("/api/landlord/rent-charges", routeSource("landlordRentChargeRoutes.ts"), landlordRentChargeRoutes);
+  app.use("/api/landlord", routeSource("landlordCreditHistoryRoutes.ts"), landlordCreditHistoryRoutes);
+  app.use("/api/landlord", routeSource("landlordReportingRoutes.ts"), landlordReportingRoutes);
+  app.use("/api/landlord", routeSource("landlordReportingShadowRoutes.ts"), landlordReportingShadowRoutes);
+  app.use("/api/tenant", routeSource("tenantPortalRoutes.ts"), tenantPortalRoutes);
+  app.use("/api/tenant/reporting", routeSource("tenantReportingRoutes.ts"), tenantReportingRoutes);
+  app.use("/api/admin", routeSource("adminReportingRoutes.ts"), adminReportingRoutes);
+  app.use("/api/internal/reporting", routeSource("internalReportingRoutes.ts"), internalReportingRoutes);
   app.use("/api/properties", routeSource("propertiesRoutes.ts"), propertiesRoutes);
   app.use(
     "/api/properties/:propertyId/units",

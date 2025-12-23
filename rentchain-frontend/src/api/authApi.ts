@@ -7,6 +7,8 @@ export interface AuthUser {
   email: string;
   screeningCredits?: number;
   role?: string;
+  tenantId?: string;
+  leaseId?: string;
   permissions?: string[];
   plan?: string;
 }
@@ -173,29 +175,41 @@ export async function getCurrentUser(token: string): Promise<MeResponse> {
 
 export async function restoreSession(): Promise<{ user: any | null }> {
   try {
-    const res = await apiFetch<any>("me");
-    if (res && typeof res === "object") {
-      if ("user" in res) {
-        return { user: (res as any).user ?? null };
-      }
+    // Prefer auth/me which returns the decoded token payload
+    const authMe = await apiFetch<{ ok?: boolean; user?: AuthUser }>("auth/me");
+    if (authMe?.user) {
+      return { user: authMe.user };
+    }
+  } catch (e: any) {
+    // fall through to /me fallback
+  }
 
-      const landlordId = (res as any).landlordId || (res as any).id;
-      const email = (res as any).email;
-      if (landlordId || email) {
-        return {
-          user: {
-            id: String(landlordId ?? ""),
-            email: String(email ?? ""),
-            screeningCredits: 0,
-          },
-        };
-      }
+  const res = await apiFetch<any>("me");
+  if (res && typeof res === "object") {
+    if ("user" in res) {
+      return { user: (res as any).user ?? null };
     }
 
-    return { user: null };
-  } catch (e: any) {
-    throw e;
+    const landlordId = (res as any).landlordId || (res as any).id;
+    const email = (res as any).email;
+    const role = (res as any).role;
+    const tenantId = (res as any).tenantId;
+    const leaseId = (res as any).leaseId;
+    if (landlordId || email || tenantId) {
+      return {
+        user: {
+          id: String(landlordId ?? tenantId ?? ""),
+          email: String(email ?? ""),
+          role,
+          tenantId: tenantId ?? undefined,
+          leaseId: leaseId ?? undefined,
+          screeningCredits: 0,
+        },
+      };
+    }
   }
+
+  return { user: null };
 }
 
 export async function logout(token?: string): Promise<void> {
