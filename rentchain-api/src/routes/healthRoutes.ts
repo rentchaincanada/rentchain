@@ -5,7 +5,13 @@ import { db } from "../config/firebase";
 const router = express.Router();
 
 router.get("/", (_req, res) => {
-  res.json({ ok: true, service: "rentchain-api" });
+  res.json({
+    status: "ok",
+    service: "rentchain-api",
+    releaseSha: process.env.RELEASE_SHA || "unknown",
+    reportingEnabled: process.env.REPORTING_ENABLED === "true",
+    reportingDryRun: process.env.REPORTING_DRY_RUN === "true",
+  });
 });
 
 router.get("/version", (_req, res) => {
