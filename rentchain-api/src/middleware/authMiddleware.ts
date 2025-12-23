@@ -37,7 +37,17 @@ export function authenticateJwt(
   }
   const url = req.originalUrl || "";
 
-  if (url === "/health" || url.startsWith("/auth/")) {
+  if (url === "/health") {
+    return res.json({
+      ok: true,
+      service: "rentchain-api",
+      releaseSha: process.env.RELEASE_SHA || "unknown",
+      reportingEnabled: process.env.REPORTING_ENABLED === "true",
+      reportingDryRun: process.env.REPORTING_DRY_RUN === "true",
+    });
+  }
+
+  if (url.startsWith("/auth/")) {
     return next();
   }
 
