@@ -6,7 +6,7 @@ const router = express.Router();
 
 router.get("/", (_req, res) => {
   res.json({
-    status: "ok",
+    ok: true,
     service: "rentchain-api",
     releaseSha: process.env.RELEASE_SHA || "unknown",
     reportingEnabled: process.env.REPORTING_ENABLED === "true",
