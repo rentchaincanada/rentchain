@@ -18,6 +18,7 @@ export interface AuthUser {
   id: string;
   email: string;
   role?: string;
+  landlordId?: string;
   tenantId?: string;
   leaseId?: string;
   screeningCredits?: number;

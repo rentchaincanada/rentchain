@@ -20,7 +20,6 @@ import ScreeningSuccessPage from "./pages/ScreeningSuccessPage";
 import ScreeningCancelPage from "./pages/ScreeningCancelPage";
 import PricingPage from "./pages/PricingPage";
 import BillingPage from "./pages/BillingPage";
-import TenantPortalIssuePage from "./pages/TenantPortalIssuePage";
 import { DebugPanel } from "./components/DebugPanel";
 import { TenantLayout } from "./pages/tenant/TenantLayout";
 import TenantDashboardPage from "./pages/tenant/TenantDashboardPage";
@@ -169,7 +168,6 @@ function App() {
         />
         <Route path="/cosign/:applicationId" element={<CosignPage />} />
         <Route path="/apply" element={<ApplicantApplyPage />} />
-        <Route path="/tenant/issue" element={<TenantPortalIssuePage />} />
         <Route
           path="/tenant"
           element={

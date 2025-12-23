@@ -7,6 +7,7 @@ export interface AuthUser {
   email: string;
   screeningCredits?: number;
   role?: string;
+  landlordId?: string;
   tenantId?: string;
   leaseId?: string;
   permissions?: string[];

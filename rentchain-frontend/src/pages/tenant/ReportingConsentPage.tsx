@@ -5,6 +5,8 @@ import {
   revokeTenantReportingConsent,
 } from "../../api/reportingConsentApi";
 import { useTenantOutletContext } from "./TenantLayout";
+import { useSearchParams } from "react-router-dom";
+import { useAuth } from "../../context/useAuth";
 
 const cardStyle: React.CSSProperties = {
   background: "rgba(17,24,39,0.85)",
@@ -17,9 +19,11 @@ const cardStyle: React.CSSProperties = {
 
 export const ReportingConsentPage: React.FC = () => {
   const { profile } = useTenantOutletContext();
+  const { user } = useAuth();
+  const [searchParams] = useSearchParams();
   const [status, setStatus] = useState<string>("pending");
   const [error, setError] = useState<string | null>(null);
-  const landlordId = profile?.landlordId || "";
+  const landlordId = searchParams.get("landlordId") || user?.landlordId || "";
 
   useEffect(() => {
     getTenantReportingConsent()
@@ -62,10 +66,14 @@ export const ReportingConsentPage: React.FC = () => {
         Your landlord is requesting consent to share your rental payment history for credit reporting.
         Data shared: rent charges, payment dates, and late indicators. No credit score is shown here.
       </div>
+      {!landlordId ? (
+        <div style={{ marginTop: 10, color: "#fca5a5" }}>Missing landlord context.</div>
+      ) : null}
       <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
         <button
           type="button"
           onClick={async () => {
+            if (!landlordId) return;
             try {
               await grantTenantReportingConsent(landlordId);
               setStatus("granted");
@@ -74,6 +82,7 @@ export const ReportingConsentPage: React.FC = () => {
               setError(err?.message || "Failed to grant consent");
             }
           }}
+          disabled={!landlordId}
           style={{
             padding: "8px 12px",
             borderRadius: 10,
@@ -81,7 +90,7 @@ export const ReportingConsentPage: React.FC = () => {
             background: "rgba(59,130,246,0.12)",
             color: "#bfdbfe",
             fontWeight: 700,
-            cursor: "pointer",
+            cursor: !landlordId ? "not-allowed" : "pointer",
           }}
         >
           Grant consent
@@ -89,6 +98,7 @@ export const ReportingConsentPage: React.FC = () => {
         <button
           type="button"
           onClick={async () => {
+            if (!landlordId) return;
             try {
               await revokeTenantReportingConsent(landlordId);
               setStatus("revoked");
@@ -97,6 +107,7 @@ export const ReportingConsentPage: React.FC = () => {
               setError(err?.message || "Failed to revoke consent");
             }
           }}
+          disabled={!landlordId}
           style={{
             padding: "8px 12px",
             borderRadius: 10,
@@ -104,7 +115,7 @@ export const ReportingConsentPage: React.FC = () => {
             background: "rgba(248,113,113,0.12)",
             color: "#fecaca",
             fontWeight: 700,
-            cursor: "pointer",
+            cursor: !landlordId ? "not-allowed" : "pointer",
           }}
         >
           Revoke consent
