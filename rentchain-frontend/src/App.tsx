@@ -11,6 +11,7 @@ import ApplyPage from "./pages/ApplyPage";
 import ApplicantApplyPage from "./pages/ApplicantApplyPage";
 import CosignPage from "./pages/CosignPage";
 import LoginPage from "./pages/LoginPage";
+import TenantLoginPage from "./pages/TenantLoginPage";
 import ComingSoonPage from "./pages/ComingSoonPage";
 import { TwoFactorPage } from "./pages/TwoFactorPage";
 import { AccountSecurityPage } from "./pages/AccountSecurityPage";
@@ -46,7 +47,7 @@ function App() {
         <Route path="/" element={<ComingSoonPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/app/login" element={<LoginPage />} />
-        <Route path="/tenant/login" element={<LoginPage />} />
+        <Route path="/tenant/login" element={<TenantLoginPage />} />
         <Route path="/2fa" element={<TwoFactorPage />} />
         <Route path="/pricing" element={<PricingPage />} />
 

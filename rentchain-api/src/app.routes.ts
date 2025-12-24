@@ -29,6 +29,7 @@ import tenantReportingRoutes from "./routes/tenantReportingRoutes";
 import adminReportingRoutes from "./routes/adminReportingRoutes";
 import internalReportingRoutes from "./routes/internalReportingRoutes";
 import landlordReportingShadowRoutes from "./routes/landlordReportingShadowRoutes";
+import tenantAuthRoutes from "./routes/tenantAuthRoutes";
 import devMintRoutes from "./routes/devMintRoutes";
 
 export function mountSafeRoutes(app: Application) {
@@ -58,6 +59,7 @@ export function mountSafeRoutes(app: Application) {
   app.use("/api/landlord", routeSource("landlordCreditHistoryRoutes.ts"), landlordCreditHistoryRoutes);
   app.use("/api/landlord", routeSource("landlordReportingRoutes.ts"), landlordReportingRoutes);
   app.use("/api/landlord", routeSource("landlordReportingShadowRoutes.ts"), landlordReportingShadowRoutes);
+  app.use("/api/tenant/auth", routeSource("tenantAuthRoutes.ts"), tenantAuthRoutes);
   app.use("/api/tenant", routeSource("tenantPortalRoutes.ts"), tenantPortalRoutes);
   app.use("/api/tenant/reporting", routeSource("tenantReportingRoutes.ts"), tenantReportingRoutes);
   app.use("/api/admin", routeSource("adminReportingRoutes.ts"), adminReportingRoutes);
