@@ -1,5 +1,5 @@
 import { Router } from "express";
-import jwt from "jsonwebtoken";
+import jwt, { type Secret, type SignOptions } from "jsonwebtoken";
 import { JWT_EXPIRES_IN, JWT_SECRET } from "../config/authConfig";
 import { db } from "../config/firebase";
 
@@ -38,7 +38,9 @@ router.post("/mint-tenant-token", async (req, res) => {
   };
   if (email) payload.email = String(email);
 
-  const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+  const secret: Secret = JWT_SECRET;
+  const expiresIn = (JWT_EXPIRES_IN as SignOptions["expiresIn"]) || "2h";
+  const token = jwt.sign(payload, secret, { expiresIn });
   return res.json({ ok: true, token });
 });
 

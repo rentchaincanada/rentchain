@@ -1,6 +1,6 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
+import jwt, { type Secret, type SignOptions } from "jsonwebtoken";
 import { db } from "../config/firebase";
 import { JWT_EXPIRES_IN, JWT_SECRET } from "../config/authConfig";
 
@@ -32,16 +32,15 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    const token = jwt.sign(
-      {
-        sub: tenantId,
-        role: "tenant",
-        tenantId,
-        email: tenant.email || email,
-      },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRES_IN }
-    );
+    const payload = {
+      sub: tenantId,
+      role: "tenant",
+      tenantId,
+      email: tenant.email || email,
+    };
+    const secret: Secret = JWT_SECRET;
+    const expiresIn = (JWT_EXPIRES_IN as SignOptions["expiresIn"]) || "2h";
+    const token = jwt.sign(payload, secret, { expiresIn });
 
     return res.json({ ok: true, token });
   } catch (err) {
