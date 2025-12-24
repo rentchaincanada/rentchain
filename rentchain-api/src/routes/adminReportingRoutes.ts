@@ -166,7 +166,7 @@ router.get("/reporting/micro-live/eligible", async (req, res) => {
   const allow = getPilotLandlordAllowlist();
 
   let query: FirebaseFirestore.Query = db.collection("reportingSubmissions");
-  query = query.where("status", "in", ["validated", "submitted"]);
+  query = query.where("status", "in", ["validated", "submitted", "queued", "failed_retryable"]);
   if (landlordIdFilter) query = query.where("landlordId", "==", landlordIdFilter);
   if (tenantIdFilter) query = query.where("tenantId", "==", tenantIdFilter);
   query = query.orderBy("createdAt", "desc").limit(limit);
@@ -186,8 +186,10 @@ router.get("/reporting/micro-live/eligible", async (req, res) => {
     payloadVersion: s.payloadVersion,
     status: s.status,
     dryRun: !!s.dryRun,
+    attempts: s.attempts ?? 0,
     createdAt: s.createdAt,
     lastError: s.lastError ?? null,
+    liveApprovedAt: s.liveApprovedAt ?? null,
   }));
 
   return res.json({ ok: true, submissions: safe });
@@ -211,6 +213,7 @@ router.post("/reporting/micro-live/approve", async (req: any, res) => {
   await ref.update({
     liveApprovedAt: now,
     liveApprovedBy: req.user?.email || req.user?.id || "admin",
+    updatedAt: now,
   });
   return res.json({
     ok: true,
@@ -231,7 +234,7 @@ router.post("/reporting/micro-live/submit", async (req: any, res) => {
 
   const cfg = await getReportingRuntimeConfig();
   if (!cfg.enabled) return res.status(503).json({ error: "Reporting paused", paused: true });
-  if (cfg.dryRun) return res.status(409).json({ error: "Live reporting disabled in Phase 3.2A. Set REPORTING_DRY_RUN=false." });
+  if (cfg.dryRun) return res.status(409).json({ error: "Live submit disabled; set REPORTING_DRY_RUN=false for micro-live." });
 
   const ref = db.collection("reportingSubmissions").doc(submissionId);
   const snap = await ref.get();
@@ -241,7 +244,7 @@ router.post("/reporting/micro-live/submit", async (req: any, res) => {
   if (["accepted", "rejected", "failed_final"].includes(data.status)) {
     return res.json({ ok: true, noop: true, status: data.status });
   }
-  if (!["validated", "submitted", "queued"].includes(data.status)) {
+  if (!["validated", "submitted", "queued", "failed_retryable"].includes(data.status)) {
     return res.status(409).json({ error: "Not eligible for live submit", status: data.status });
   }
   if (!data.liveApprovedAt) {
@@ -274,6 +277,7 @@ router.post("/reporting/micro-live/submit", async (req: any, res) => {
     status: "processing",
     processingStartedAt: new Date().toISOString(),
     processingLockId: lockId,
+    updatedAt: new Date().toISOString(),
   });
 
   const maxAttempts = cfg.maxAttempts || 3;
@@ -315,7 +319,7 @@ router.post("/reporting/micro-live/submit", async (req: any, res) => {
       reference: { kind: "reportingSubmission", id: submissionId },
       meta: { submissionId, period: data.period, providerKey: data.providerKey, consentId },
     });
-    const result = await provider.submit(payload);
+    const result = data.providerKey === "mock" ? { status: "accepted", message: "mock accepted" } : await provider.submit(payload);
     const status =
       result.status === "accepted"
         ? "accepted"
@@ -342,6 +346,7 @@ router.post("/reporting/micro-live/submit", async (req: any, res) => {
         payloadHash,
         creditHistoryHash: creditHash,
       },
+      updatedAt: new Date().toISOString(),
     };
     await ref.update(update);
 
