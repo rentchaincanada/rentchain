@@ -39,6 +39,8 @@ import publicWaitlistRoutes from "./routes/publicWaitlistRoutes";
 import publicInviteRoutes from "./routes/publicInviteRoutes";
 import adminInviteWaveRoutes from "./routes/adminInviteWaveRoutes";
 import adminMicroLiveRoutes from "./routes/adminMicroLiveRoutes";
+import microLiveStatusRoutes from "./routes/microLiveStatusRoutes";
+import adminMicroLiveMetricsRoutes from "./routes/adminMicroLiveMetricsRoutes";
 
 export function mountSafeRoutes(app: Application) {
   // ensure auth is decoded and plan is resolved before hitting guarded routes
@@ -67,6 +69,7 @@ export function mountSafeRoutes(app: Application) {
   app.use("/api/landlord", routeSource("landlordCreditHistoryRoutes.ts"), landlordCreditHistoryRoutes);
   app.use("/api/landlord", routeSource("landlordReportingRoutes.ts"), landlordReportingRoutes);
   app.use("/api/landlord", routeSource("landlordReportingShadowRoutes.ts"), landlordReportingShadowRoutes);
+  app.use("/api/landlord", routeSource("microLiveStatusRoutes.ts"), microLiveStatusRoutes);
   app.use("/api/tenant/auth", routeSource("tenantAuthRoutes.ts"), tenantAuthRoutes);
   app.use("/api/tenant", routeSource("tenantPortalRoutes.ts"), tenantPortalRoutes);
   app.use("/api/tenant/reporting", routeSource("tenantReportingRoutes.ts"), tenantReportingRoutes);
@@ -76,6 +79,7 @@ export function mountSafeRoutes(app: Application) {
   app.use("/api/admin/diag", routeSource("adminConsentDiagRoutes.ts"), adminConsentDiagRoutes);
   app.use("/api/admin", routeSource("adminInviteWaveRoutes.ts"), adminInviteWaveRoutes);
   app.use("/api/admin", routeSource("adminMicroLiveRoutes.ts"), adminMicroLiveRoutes);
+  app.use("/api/admin", routeSource("adminMicroLiveMetricsRoutes.ts"), adminMicroLiveMetricsRoutes);
   app.use("/api/internal/reporting", routeSource("internalReportingRoutes.ts"), internalReportingRoutes);
   app.use("/api/dev", routeSource("devMintRoutes.ts"), devMintRoutes);
   app.use("/api/dev", routeSource("devDiagRoutes.ts"), devDiagRoutes);

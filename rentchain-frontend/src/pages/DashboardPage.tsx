@@ -23,6 +23,7 @@ import { fetchMe } from "../api/meApi";
 import { fetchAccountLimits, type AccountLimits } from "../api/accountApi";
 import { setOnboardingStep } from "../api/onboardingApi";
 import { useToast } from "../components/ui/ToastProvider";
+import MicroLiveActivationPanel from "../components/MicroLiveActivationPanel";
 
 const DashboardPage: React.FC = () => {
   const { data, loading, error, refresh } = useBlockchainVerify();
@@ -367,6 +368,8 @@ const DashboardPage: React.FC = () => {
         <Card elevated>
           <DashboardKpiStrip />
         </Card>
+
+        <MicroLiveActivationPanel />
 
         <SoftLaunchChecklist
           hasProperty={false}

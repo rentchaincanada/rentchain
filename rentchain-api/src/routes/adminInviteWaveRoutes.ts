@@ -4,6 +4,7 @@ import sgMail from "@sendgrid/mail";
 import { db } from "../config/firebase";
 import { requireAuth } from "../middleware/requireAuth";
 import { requireRole } from "../middleware/requireRole";
+import { incrementCounter } from "../services/telemetryService";
 
 const router = Router();
 
@@ -182,6 +183,7 @@ router.post("/waitlist/invite-wave", requireAuth, requireRole(["landlord", "admi
 
         await sgMail.send(msg);
         await inviteRef.set({ status: "sent", sentAt: nowMs(), inviteUrl }, { merge: true });
+        await incrementCounter({ name: "waitlist_invite_sent", dims: { campaign }, amount: 1 });
 
         results.push({ id: w.id, email, inviteId, inviteUrl, sent: true });
 

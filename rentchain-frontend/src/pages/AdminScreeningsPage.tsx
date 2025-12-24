@@ -12,6 +12,7 @@ import {
 } from "../api/adminScreeningsApi";
 import { getProviderStatus, setFeatureFlag, ProviderStatus } from "../api/providerStatusApi";
 import { colors, spacing, text, radius } from "../styles/tokens";
+import AdminMicroLiveCard from "../components/admin/AdminMicroLiveCard";
 
 const AdminScreeningsPage: React.FC = () => {
   if (import.meta.env.PROD) {
@@ -146,6 +147,7 @@ const AdminScreeningsPage: React.FC = () => {
             </Button>
           </div>
         </div>
+        <AdminMicroLiveCard />
         {providerStatus && (
           <Card elevated>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing.sm }}>

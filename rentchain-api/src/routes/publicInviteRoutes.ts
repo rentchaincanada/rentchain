@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { db } from "../config/firebase";
+import { incrementCounter } from "../services/telemetryService";
 
 const router = Router();
 
@@ -94,7 +95,7 @@ router.post("/invites/:inviteId/accept", async (req, res) => {
 
     const invRef = db.collection("waitlist_invites").doc(inviteId);
 
-    const result = await db.runTransaction(async (tx: any) => {
+  const result = await db.runTransaction(async (tx: any) => {
       const invSnap = await tx.get(invRef);
       if (!invSnap.exists) {
         return { ok: false, code: 404, error: "Invite not found" };
@@ -178,6 +179,8 @@ router.post("/invites/:inviteId/accept", async (req, res) => {
     if (!result.ok) {
       return res.status((result as any).code).json({ ok: false, error: (result as any).error });
     }
+
+    await incrementCounter({ name: "waitlist_invite_accept", dims: { inviteId }, amount: 1 });
 
     return res.json({ ok: true, ...(result as any) });
   } catch (err: any) {
