@@ -2,6 +2,7 @@ import { Router } from "express";
 import crypto from "crypto";
 import { db } from "../config/firebase";
 import sgMail from "@sendgrid/mail";
+import { incrementCounter } from "../services/telemetryService";
 
 const router = Router();
 
@@ -21,7 +22,7 @@ router.post("/waitlist", async (req, res) => {
     const email = normEmail(emailRaw);
 
     if (!email || !email.includes("@") || email.length > 254) {
-      return res.status(400).json({ ok: false, error: "Invalid email" });
+      return res.status(400).json({ ok: false, error: "Invalid email", emailed: false });
     }
 
     const id = sha256(email);
@@ -42,28 +43,40 @@ router.post("/waitlist", async (req, res) => {
     const apiKey = process.env.SENDGRID_API_KEY;
     const from = process.env.SENDGRID_FROM_EMAIL;
     const appUrl = process.env.PUBLIC_APP_URL || "";
+    let emailed = false;
+
     if (apiKey && from) {
-      sgMail.setApiKey(apiKey);
+      try {
+        sgMail.setApiKey(apiKey);
 
-      const subject = "You're on the RentChain waitlist";
-      const text =
-        `Thanks${nameRaw ? `, ${nameRaw}` : ""} - you're on the RentChain waitlist.\n\n` +
-        "We'll email you when Micro-Live invites open.\n" +
-        (appUrl ? `\nRentChain: ${appUrl}\n` : "") +
-        `\nIf you didn't request this, ignore this email.\n`;
+        const subject = "You're on the RentChain waitlist";
+        const text =
+          `Thanks${nameRaw ? `, ${nameRaw}` : ""} - you're on the RentChain waitlist.\n\n` +
+          "We'll email you when Micro-Live invites open.\n" +
+          (appUrl ? `\nRentChain: ${appUrl}\n` : "") +
+          `\nIf you didn't request this, ignore this email.\n`;
 
-      await sgMail.send({
-        to: email,
-        from,
-        subject,
-        text,
-      });
+        await sgMail.send({
+          to: email,
+          from,
+          subject,
+          text,
+        });
+
+        emailed = true;
+      } catch (e: any) {
+        console.error("[waitlist] sendgrid failed", e?.message || e);
+        // keep request successful; just report emailed=false
+      }
+    } else {
+      console.warn("[waitlist] sendgrid not configured (missing env vars)");
     }
 
-    return res.json({ ok: true });
+    return res.json({ ok: true, emailed });
   } catch (err: any) {
     console.error("[POST /api/public/waitlist] error", err?.message || err);
-    return res.status(500).json({ ok: false, error: "Server error" });
+    await incrementCounter({ name: "waitlist_invite_failed", dims: { reason: "server_error" }, amount: 1 });
+    return res.status(500).json({ ok: false, error: "Server error", emailed: false });
   }
 });
 
