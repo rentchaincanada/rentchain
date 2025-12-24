@@ -33,6 +33,7 @@ import tenantAuthRoutes from "./routes/tenantAuthRoutes";
 import devMintRoutes from "./routes/devMintRoutes";
 import devDiagRoutes from "./routes/devDiagRoutes";
 import adminDiagRoutes from "./routes/adminDiagRoutes";
+import adminTenantToolsRoutes from "./routes/adminTenantToolsRoutes";
 
 export function mountSafeRoutes(app: Application) {
   // ensure auth is decoded and plan is resolved before hitting guarded routes
@@ -65,6 +66,7 @@ export function mountSafeRoutes(app: Application) {
   app.use("/api/tenant", routeSource("tenantPortalRoutes.ts"), tenantPortalRoutes);
   app.use("/api/tenant/reporting", routeSource("tenantReportingRoutes.ts"), tenantReportingRoutes);
   app.use("/api/admin", routeSource("adminReportingRoutes.ts"), adminReportingRoutes);
+  app.use("/api/admin/tenants", routeSource("adminTenantToolsRoutes.ts"), adminTenantToolsRoutes);
   app.use("/api/admin/diag", routeSource("adminDiagRoutes.ts"), adminDiagRoutes);
   app.use("/api/internal/reporting", routeSource("internalReportingRoutes.ts"), internalReportingRoutes);
   app.use("/api/dev", routeSource("devMintRoutes.ts"), devMintRoutes);
