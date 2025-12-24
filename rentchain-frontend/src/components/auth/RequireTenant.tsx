@@ -5,6 +5,10 @@ import { useAuth } from "../../context/useAuth";
 export const RequireTenant: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, isLoading } = useAuth();
   const location = useLocation();
+  const token =
+    sessionStorage.getItem("rentchain_token") ||
+    localStorage.getItem("rentchain_token") ||
+    null;
 
   if (isLoading) {
     return (
@@ -27,8 +31,12 @@ export const RequireTenant: React.FC<{ children: React.ReactNode }> = ({ childre
     );
   }
 
-  if (!user || user.role !== "tenant") {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+  if (!token) {
+    return <Navigate to="/tenant/login" state={{ from: location }} replace />;
+  }
+
+  if (user && user.role !== "tenant") {
+    return <Navigate to="/tenant/login" state={{ from: location }} replace />;
   }
 
   return <>{children}</>;
