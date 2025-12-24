@@ -29,6 +29,7 @@ import TenantLedgerPage from "./pages/tenant/TenantLedgerPage";
 import TenantDocumentsPage from "./pages/tenant/TenantDocumentsPage";
 import ReportingConsentPage from "./pages/tenant/ReportingConsentPage";
 import { RequireTenant } from "./components/auth/RequireTenant";
+import MicroLiveInvitePage from "./pages/MicroLiveInvitePage";
 
 const LedgerPage = lazy(() => import("./pages/LedgerPage"));
 const BlockchainPage = lazy(() => import("./pages/BlockchainPage"));
@@ -50,6 +51,7 @@ function App() {
         <Route path="/tenant/login" element={<TenantLoginPage />} />
         <Route path="/2fa" element={<TwoFactorPage />} />
         <Route path="/pricing" element={<PricingPage />} />
+        <Route path="/micro-live" element={<MicroLiveInvitePage />} />
 
         <Route
           path="/dashboard"

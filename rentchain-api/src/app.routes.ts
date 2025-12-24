@@ -35,6 +35,10 @@ import devDiagRoutes from "./routes/devDiagRoutes";
 import adminDiagRoutes from "./routes/adminDiagRoutes";
 import adminTenantToolsRoutes from "./routes/adminTenantToolsRoutes";
 import adminConsentDiagRoutes from "./routes/adminConsentDiagRoutes";
+import publicWaitlistRoutes from "./routes/publicWaitlistRoutes";
+import publicInviteRoutes from "./routes/publicInviteRoutes";
+import adminInviteWaveRoutes from "./routes/adminInviteWaveRoutes";
+import adminMicroLiveRoutes from "./routes/adminMicroLiveRoutes";
 
 export function mountSafeRoutes(app: Application) {
   // ensure auth is decoded and plan is resolved before hitting guarded routes
@@ -70,9 +74,13 @@ export function mountSafeRoutes(app: Application) {
   app.use("/api/admin/tenants", routeSource("adminTenantToolsRoutes.ts"), adminTenantToolsRoutes);
   app.use("/api/admin/diag", routeSource("adminDiagRoutes.ts"), adminDiagRoutes);
   app.use("/api/admin/diag", routeSource("adminConsentDiagRoutes.ts"), adminConsentDiagRoutes);
+  app.use("/api/admin", routeSource("adminInviteWaveRoutes.ts"), adminInviteWaveRoutes);
+  app.use("/api/admin", routeSource("adminMicroLiveRoutes.ts"), adminMicroLiveRoutes);
   app.use("/api/internal/reporting", routeSource("internalReportingRoutes.ts"), internalReportingRoutes);
   app.use("/api/dev", routeSource("devMintRoutes.ts"), devMintRoutes);
   app.use("/api/dev", routeSource("devDiagRoutes.ts"), devDiagRoutes);
+  app.use("/api/public", routeSource("publicWaitlistRoutes.ts"), publicWaitlistRoutes);
+  app.use("/api/public", routeSource("publicInviteRoutes.ts"), publicInviteRoutes);
   app.use("/api/properties", routeSource("propertiesRoutes.ts"), propertiesRoutes);
   app.use(
     "/api/properties/:propertyId/units",

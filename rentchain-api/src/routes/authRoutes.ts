@@ -22,6 +22,7 @@ import {
 import { setPlan } from "../services/accountService";
 import { resolvePlan } from "../entitlements/plans";
 import { z } from "zod";
+import { maybeGrantMicroLiveFromLead } from "../services/microLiveGrant";
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
@@ -204,6 +205,13 @@ router.post("/login", async (req, res) => {
 
     const token = generateJwtForLandlord({ ...user, plan } as any);
 
+    try {
+      const landlordId = user.landlordId || user.id;
+      await maybeGrantMicroLiveFromLead(user.email, landlordId);
+    } catch (e: any) {
+      console.warn("[micro-live] grant attempt failed (non-blocking)", e?.message || e);
+    }
+
     return res.status(200).json({
       ok: true,
       token,
@@ -262,6 +270,12 @@ router.post("/login/demo", async (_req, res) => {
 
   const token = generateJwtForLandlord({ ...user, plan: demoPlan } as any, "7d");
   const profile = ensureLandlordProfile(user.id, user.email);
+
+  try {
+    await maybeGrantMicroLiveFromLead(user.email, user.landlordId || user.id);
+  } catch (e: any) {
+    console.warn("[micro-live] grant attempt failed (non-blocking)", e?.message || e);
+  }
 
   return res.json({
     token,
