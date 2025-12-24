@@ -16,8 +16,7 @@ async function fetchConsent(tenantId: string, landlordId: string) {
     .where("tenantId", "==", tenantId)
     .where("landlordId", "==", landlordId)
     .where("status", "==", "granted")
-    .orderBy("createdAt", "desc")
-    .limit(1)
+    .limit(5)
     .get();
   if (!grantedSnap.empty) {
     return { id: grantedSnap.docs[0].id, ...(grantedSnap.docs[0].data() as any) };
@@ -27,8 +26,7 @@ async function fetchConsent(tenantId: string, landlordId: string) {
     .where("tenantId", "==", tenantId)
     .where("landlordId", "==", landlordId)
     .where("status", "==", "pending")
-    .orderBy("createdAt", "desc")
-    .limit(1)
+    .limit(5)
     .get();
   if (!pendingSnap.empty) {
     return { id: pendingSnap.docs[0].id, ...(pendingSnap.docs[0].data() as any) };
