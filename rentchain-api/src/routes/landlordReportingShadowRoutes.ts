@@ -10,15 +10,19 @@ const router = Router();
 router.use(requireRole("landlord"));
 
 async function fetchConsent(tenantId: string, landlordId: string) {
-  // Prefer granted if exists, otherwise pending
   const grantedSnap = await db
     .collection("reportingConsents")
     .where("tenantId", "==", tenantId)
     .where("landlordId", "==", landlordId)
     .where("status", "==", "granted")
-    .limit(5)
+    .limit(1)
     .get();
   if (!grantedSnap.empty) {
+    console.log("[shadow consent] granted found", {
+      tenantId,
+      landlordId,
+      grantedCount: grantedSnap.size,
+    });
     return { id: grantedSnap.docs[0].id, ...(grantedSnap.docs[0].data() as any) };
   }
   const pendingSnap = await db
@@ -26,8 +30,13 @@ async function fetchConsent(tenantId: string, landlordId: string) {
     .where("tenantId", "==", tenantId)
     .where("landlordId", "==", landlordId)
     .where("status", "==", "pending")
-    .limit(5)
+    .limit(1)
     .get();
+  console.log("[shadow consent] no granted", {
+    tenantId,
+    landlordId,
+    pending: !pendingSnap.empty,
+  });
   if (!pendingSnap.empty) {
     return { id: pendingSnap.docs[0].id, ...(pendingSnap.docs[0].data() as any) };
   }
