@@ -35,6 +35,35 @@ router.post("/consent/grant", async (req: any, res) => {
 
   try {
     const now = new Date().toISOString();
+    const pendingSnap = await db
+      .collection("reportingConsents")
+      .where("tenantId", "==", tenantId)
+      .where("landlordId", "==", landlordId)
+      .where("status", "==", "pending")
+      .orderBy("createdAt", "desc")
+      .limit(1)
+      .get();
+
+    if (!pendingSnap.empty) {
+      const ref = pendingSnap.docs[0].ref;
+      await ref.update({
+        status: "granted",
+        grantedAt: now,
+        method: req.body?.method || "portal_checkbox",
+        ipHash: req.body?.ipHash ?? null,
+        userAgent: req.headers["user-agent"] || null,
+      });
+      createLedgerEvent({
+        tenantId,
+        landlordId,
+        type: "reporting_consent_granted",
+        amountDelta: 0,
+        occurredAt: now,
+        notes: "Tenant granted credit reporting consent",
+      });
+      return res.json({ status: "granted", consentId: ref.id });
+    }
+
     const consent = {
       tenantId,
       landlordId,
@@ -47,7 +76,7 @@ router.post("/consent/grant", async (req: any, res) => {
       userAgent: req.headers["user-agent"] || null,
       createdAt: now,
     };
-    await db.collection("reportingConsents").add(consent);
+    const docRef = await db.collection("reportingConsents").add(consent);
     createLedgerEvent({
       tenantId,
       landlordId,
@@ -56,7 +85,7 @@ router.post("/consent/grant", async (req: any, res) => {
       occurredAt: now,
       notes: "Tenant granted credit reporting consent",
     });
-    return res.json({ status: "granted" });
+    return res.json({ status: "granted", consentId: docRef.id, note: "no pending consent found; created new" });
   } catch (err) {
     console.error("[tenantReportingRoutes] grant error", err);
     return res.status(500).json({ error: "Failed to grant consent" });

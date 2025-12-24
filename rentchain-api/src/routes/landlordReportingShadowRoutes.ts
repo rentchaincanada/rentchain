@@ -10,14 +10,30 @@ const router = Router();
 router.use(requireRole("landlord"));
 
 async function fetchConsent(tenantId: string, landlordId: string) {
-  const snap = await db
+  // Prefer granted if exists, otherwise pending
+  const grantedSnap = await db
     .collection("reportingConsents")
     .where("tenantId", "==", tenantId)
     .where("landlordId", "==", landlordId)
+    .where("status", "==", "granted")
+    .orderBy("createdAt", "desc")
     .limit(1)
     .get();
-  if (snap.empty) return null;
-  return { id: snap.docs[0].id, ...(snap.docs[0].data() as any) };
+  if (!grantedSnap.empty) {
+    return { id: grantedSnap.docs[0].id, ...(grantedSnap.docs[0].data() as any) };
+  }
+  const pendingSnap = await db
+    .collection("reportingConsents")
+    .where("tenantId", "==", tenantId)
+    .where("landlordId", "==", landlordId)
+    .where("status", "==", "pending")
+    .orderBy("createdAt", "desc")
+    .limit(1)
+    .get();
+  if (!pendingSnap.empty) {
+    return { id: pendingSnap.docs[0].id, ...(pendingSnap.docs[0].data() as any) };
+  }
+  return null;
 }
 
 function checkPilotAllowlist(landlordId: string): boolean {
