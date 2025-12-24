@@ -20,6 +20,7 @@ export interface AuthenticatedUser {
 export interface AuthenticatedRequest extends Request {
   user?: AuthenticatedUser;
   account?: Account;
+  requestId?: string;
   integrity?: {
     ok: boolean;
     before?: Usage;
@@ -38,13 +39,14 @@ export function authenticateJwt(
   const url = req.originalUrl || "";
 
   if (url === "/health") {
-    return res.json({
+    res.json({
       ok: true,
       service: "rentchain-api",
       releaseSha: process.env.RELEASE_SHA || "unknown",
       reportingEnabled: process.env.REPORTING_ENABLED === "true",
       reportingDryRun: process.env.REPORTING_DRY_RUN === "true",
     });
+    return;
   }
 
   if (url.startsWith("/auth/")) {
@@ -76,7 +78,8 @@ export function authenticateJwt(
   }
 
   if (!authHeader.startsWith("Bearer ")) {
-    return jsonError(res, 401, "UNAUTHORIZED", "Unauthorized", undefined, req.requestId);
+    jsonError(res, 401, "UNAUTHORIZED", "Unauthorized", undefined, req.requestId);
+    return;
   }
 
   const token = authHeader.slice("Bearer ".length).trim();
@@ -86,7 +89,8 @@ export function authenticateJwt(
     const { sub, email, role, landlordId, tenantId, leaseId, plan } = decoded as any;
 
     if (!sub || !email) {
-      return jsonError(res, 401, "UNAUTHORIZED", "Unauthorized", undefined, req.requestId);
+      jsonError(res, 401, "UNAUTHORIZED", "Unauthorized", undefined, req.requestId);
+      return;
     }
 
     req.user = {

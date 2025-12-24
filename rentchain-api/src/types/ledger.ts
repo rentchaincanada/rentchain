@@ -3,6 +3,11 @@
 export type LedgerEventType =
   | "RentPaymentRecorded"
   | "RentPaymentAIInsightGenerated"
+  | "reporting_submitted"
+  | "reporting_accepted"
+  | "reporting_rejected"
+  | "reporting_failed"
+  | "reporting_queued"
   // add more as you define them:
   | string;
 

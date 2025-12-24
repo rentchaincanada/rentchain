@@ -6,8 +6,9 @@
   },
   "files": [
     "src/index.build.ts",
-    "src/app.build.ts"
+    "src/app.build.ts",
+    "src/types/express.d.ts"
   ],
-  "include": [],
+  "include": ["src/**/*.d.ts"],
   "exclude": []
 }

@@ -6,6 +6,7 @@ type RuntimeConfig = {
   reportingPaused: boolean;
   dryRun: boolean;
   maxAttempts: number;
+  allowedProviders: string[];
   source: "env" | "firestore" | "env+firestore";
   updatedAt?: string;
 };
@@ -61,6 +62,7 @@ export async function getReportingRuntimeConfig(options?: { bypassCache?: boolea
     reportingPaused: !!docPaused || !envEnabled,
     dryRun: envCfg.dryRun,
     maxAttempts: envCfg.maxAttempts,
+    allowedProviders: envCfg.allowedProviders || [],
     source,
     updatedAt: doc?.updatedAt,
   };

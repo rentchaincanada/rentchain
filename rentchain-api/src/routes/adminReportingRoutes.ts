@@ -97,7 +97,7 @@ router.get("/reporting/metrics", async (req, res) => {
 router.post("/reporting/retry", async (req, res) => {
   const submissionId = req.body?.submissionId;
   if (!submissionId) return res.status(400).json({ error: "submissionId required" });
-  const cfg = getReportingConfig();
+  const cfg = await getReportingRuntimeConfig();
   const ref = db.collection("reportingSubmissions").doc(submissionId);
   const snap = await ref.get();
   if (!snap.exists) return res.status(404).json({ error: "not found" });

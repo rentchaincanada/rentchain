@@ -14,6 +14,8 @@ export type LedgerEventType =
   | "reporting_consent_revoked"
   | "reporting_queued"
   | "reporting_submitted"
+  | "reporting_accepted"
+  | "reporting_rejected"
   | "reporting_failed";
 
 export interface LedgerEvent {
@@ -142,8 +144,8 @@ export function getLedgerSummaryForTenant(tenantId: string): {
       if (!lastPaymentDate) {
         lastPaymentDate = event.occurredAt;
       } else {
-        const current = Date.parse(lastPaymentDate) || 0;
-        const candidate = Date.parse(event.occurredAt) || 0;
+        const current = lastPaymentDate ? Date.parse(lastPaymentDate) || 0 : 0;
+        const candidate = event.occurredAt ? Date.parse(event.occurredAt) || 0 : 0;
         if (candidate > current) {
           lastPaymentDate = event.occurredAt;
         }
@@ -184,8 +186,8 @@ export function toLedgerEntries(events: LedgerEvent[]): TenantLedgerEntry[] {
   });
 
   return entries.sort((a, b) => {
-    const da = Date.parse(a.date) || 0;
-    const db = Date.parse(b.date) || 0;
+    const da = a.date ? Date.parse(a.date) || 0 : 0;
+    const db = b.date ? Date.parse(b.date) || 0 : 0;
     return db - da;
   });
 }
