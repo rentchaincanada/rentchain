@@ -43,6 +43,10 @@ import microLiveStatusRoutes from "./routes/microLiveStatusRoutes";
 import adminMicroLiveMetricsRoutes from "./routes/adminMicroLiveMetricsRoutes";
 
 export function mountSafeRoutes(app: Application) {
+  // Public routes first (no auth/plan)
+  app.use("/api/public", routeSource("publicWaitlistRoutes.ts"), publicWaitlistRoutes);
+  app.use("/api/public", routeSource("publicInviteRoutes.ts"), publicInviteRoutes);
+
   // ensure auth is decoded and plan is resolved before hitting guarded routes
   app.use(authenticateJwt);
   app.use(attachPlan());
@@ -83,8 +87,6 @@ export function mountSafeRoutes(app: Application) {
   app.use("/api/internal/reporting", routeSource("internalReportingRoutes.ts"), internalReportingRoutes);
   app.use("/api/dev", routeSource("devMintRoutes.ts"), devMintRoutes);
   app.use("/api/dev", routeSource("devDiagRoutes.ts"), devDiagRoutes);
-  app.use("/api/public", routeSource("publicWaitlistRoutes.ts"), publicWaitlistRoutes);
-  app.use("/api/public", routeSource("publicInviteRoutes.ts"), publicInviteRoutes);
   app.use("/api/properties", routeSource("propertiesRoutes.ts"), propertiesRoutes);
   app.use(
     "/api/properties/:propertyId/units",

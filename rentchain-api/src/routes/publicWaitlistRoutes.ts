@@ -67,4 +67,6 @@ router.post("/waitlist", async (req, res) => {
   }
 });
 
+router.get("/waitlist/_ping", (_req, res) => res.json({ ok: true, route: "waitlist" }));
+
 export default router;
