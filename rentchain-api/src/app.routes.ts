@@ -111,3 +111,6 @@ export function mountSafeRoutes(app: Application) {
   // minimal ai placeholder router
   app.use("/api/ai", routeSource("aiRoutes.ts"), requireCapability("ai.insights"), aiRoutes);
 }
+
+// Alias for clarity in callers that expect an explicit app routes mount.
+export const mountAppRoutes = mountSafeRoutes;
