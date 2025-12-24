@@ -29,6 +29,7 @@ import tenantReportingRoutes from "./routes/tenantReportingRoutes";
 import adminReportingRoutes from "./routes/adminReportingRoutes";
 import internalReportingRoutes from "./routes/internalReportingRoutes";
 import landlordReportingShadowRoutes from "./routes/landlordReportingShadowRoutes";
+import devMintRoutes from "./routes/devMintRoutes";
 
 export function mountSafeRoutes(app: Application) {
   // ensure auth is decoded and plan is resolved before hitting guarded routes
@@ -61,6 +62,7 @@ export function mountSafeRoutes(app: Application) {
   app.use("/api/tenant/reporting", routeSource("tenantReportingRoutes.ts"), tenantReportingRoutes);
   app.use("/api/admin", routeSource("adminReportingRoutes.ts"), adminReportingRoutes);
   app.use("/api/internal/reporting", routeSource("internalReportingRoutes.ts"), internalReportingRoutes);
+  app.use("/api/dev", routeSource("devMintRoutes.ts"), devMintRoutes);
   app.use("/api/properties", routeSource("propertiesRoutes.ts"), propertiesRoutes);
   app.use(
     "/api/properties/:propertyId/units",
