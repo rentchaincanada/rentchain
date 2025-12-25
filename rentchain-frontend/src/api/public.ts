@@ -10,5 +10,5 @@ export async function joinWaitlist(payload: { email: string; name?: string }) {
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error((data as any)?.error || "Request failed");
-  return data as { ok: true; already: boolean };
+  return data as { ok: true; emailed?: boolean; already?: boolean };
 }
