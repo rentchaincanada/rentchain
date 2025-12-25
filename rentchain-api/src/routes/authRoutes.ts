@@ -272,7 +272,7 @@ router.post("/login/demo", async (_req, res) => {
   const profile = ensureLandlordProfile(user.id, user.email);
 
   try {
-    await maybeGrantMicroLiveFromLead(user.email, user.landlordId || user.id);
+    await maybeGrantMicroLiveFromLead(user.email, user.id);
   } catch (e: any) {
     console.warn("[micro-live] grant attempt failed (non-blocking)", e?.message || e);
   }
