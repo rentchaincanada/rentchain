@@ -206,10 +206,10 @@ router.post("/login", async (req, res) => {
     const token = generateJwtForLandlord({ ...user, plan } as any);
 
     try {
-      const landlordId = user.landlordId || user.id;
+      const landlordId = user.id;
       await maybeGrantMicroLiveFromLead(user.email, landlordId);
-    } catch (e: any) {
-      console.warn("[micro-live] grant attempt failed (non-blocking)", e?.message || e);
+    } catch (e) {
+      console.warn("[micro-live] grant attempt failed (non-blocking)", (e as any)?.message || e);
     }
 
     return res.status(200).json({
