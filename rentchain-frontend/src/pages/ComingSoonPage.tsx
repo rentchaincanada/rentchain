@@ -15,7 +15,9 @@ export default function ComingSoonPage() {
       const r = await joinWaitlist({ email, name: name || undefined });
       setStatus({
         ok: true,
-        msg: r.already ? "You’re already on the list ✅" : "You’re on the list ✅",
+        msg: r.emailed
+          ? "✅ Check your inbox — you're on the waitlist."
+          : "✅ You're on the waitlist. Email may take a moment.",
       });
       setEmail("");
       setName("");
