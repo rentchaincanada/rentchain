@@ -42,6 +42,7 @@ import adminMicroLiveRoutes from "./routes/adminMicroLiveRoutes";
 import microLiveStatusRoutes from "./routes/microLiveStatusRoutes";
 import adminMicroLiveMetricsRoutes from "./routes/adminMicroLiveMetricsRoutes";
 import adminWave0Routes from "./routes/adminWave0Routes";
+import adminEmailDiagRoutes from "./routes/adminEmailDiagRoutes";
 
 export function mountSafeRoutes(app: Application) {
   // Public routes first (no auth/plan)
@@ -94,6 +95,7 @@ export function mountSafeRoutes(app: Application) {
   app.use("/api/admin", routeSource("adminMicroLiveRoutes.ts"), adminMicroLiveRoutes);
   app.use("/api/admin", routeSource("adminMicroLiveMetricsRoutes.ts"), adminMicroLiveMetricsRoutes);
   app.use("/api/admin", routeSource("adminWave0Routes.ts"), adminWave0Routes);
+  app.use("/api/admin", routeSource("adminEmailDiagRoutes.ts"), adminEmailDiagRoutes);
   app.use("/api/internal/reporting", routeSource("internalReportingRoutes.ts"), internalReportingRoutes);
   app.use("/api/dev", routeSource("devMintRoutes.ts"), devMintRoutes);
   app.use("/api/dev", routeSource("devDiagRoutes.ts"), devDiagRoutes);
