@@ -46,6 +46,14 @@ export function mountSafeRoutes(app: Application) {
   // Public routes first (no auth/plan)
   app.use("/api/public", routeSource("publicWaitlistRoutes.ts"), publicWaitlistRoutes);
   app.use("/api/public", routeSource("publicInviteRoutes.ts"), publicInviteRoutes);
+  app.post("/api/waitlist", async (req, res, next) => {
+    req.url = "/waitlist";
+    return (publicWaitlistRoutes as any)(req, res, next);
+  });
+  app.get("/api/waitlist/_ping", async (req, res, next) => {
+    req.url = "/waitlist/_ping";
+    return (publicWaitlistRoutes as any)(req, res, next);
+  });
 
   // ensure auth is decoded and plan is resolved before hitting guarded routes
   app.use(authenticateJwt);
