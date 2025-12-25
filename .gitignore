@@ -4,3 +4,9 @@
 **/.env
 **/.env.*
 .DS_Store
+
+# secrets
+*.env
+sendgrid.env
+rentchain-api/sendgrid.env
+
