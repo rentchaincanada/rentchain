@@ -45,31 +45,27 @@ router.post("/waitlist", async (req, res) => {
     const appUrl = process.env.PUBLIC_APP_URL || "";
     let emailed = false;
 
+    const subject = "You're on the RentChain waitlist";
+    const text =
+      `Thanks${nameRaw ? `, ${nameRaw}` : ""} - you're on the RentChain waitlist.\n\n` +
+      "We'll email you when Micro-Live invites open.\n" +
+      (appUrl ? `\nRentChain: ${appUrl}\n` : "") +
+      `\nIf you didn't request this, ignore this email.\n`;
+
     if (apiKey && from) {
       try {
         sgMail.setApiKey(apiKey);
-
-        const subject = "You're on the RentChain waitlist";
-        const text =
-          `Thanks${nameRaw ? `, ${nameRaw}` : ""} - you're on the RentChain waitlist.\n\n` +
-          "We'll email you when Micro-Live invites open.\n" +
-          (appUrl ? `\nRentChain: ${appUrl}\n` : "") +
-          `\nIf you didn't request this, ignore this email.\n`;
-
-        await sgMail.send({
-          to: email,
-          from,
-          subject,
-          text,
-        });
-
+        await sgMail.send({ to: email, from, subject, text });
         emailed = true;
       } catch (e: any) {
-        console.error("[waitlist] sendgrid failed", e?.message || e);
-        // keep request successful; just report emailed=false
+        console.error("[waitlist] sendgrid error", {
+          message: e?.message,
+          statusCode: e?.code || e?.response?.statusCode,
+          body: e?.response?.body,
+        });
       }
     } else {
-      console.warn("[waitlist] sendgrid not configured (missing env vars)");
+      console.warn("[waitlist] sendgrid env missing", { hasKey: Boolean(apiKey), hasFrom: Boolean(from) });
     }
 
     return res.json({ ok: true, emailed });
