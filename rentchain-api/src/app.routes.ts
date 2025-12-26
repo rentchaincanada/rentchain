@@ -47,6 +47,7 @@ import landlordImpersonationRoutes from "./routes/landlordImpersonationRoutes";
 import { blockImpersonationWrites } from "./middleware/blockImpersonationWrites";
 import landlordBillingRoutes from "./routes/landlordBillingRoutes";
 import adminBillingRoutes from "./routes/adminBillingRoutes";
+import adminWaitlistInvitesLookupRoutes from "./routes/adminWaitlistInvitesLookupRoutes";
 
 export function mountSafeRoutes(app: Application) {
   // Public routes first (no auth/plan)
@@ -105,6 +106,7 @@ export function mountSafeRoutes(app: Application) {
   app.use("/api/admin", routeSource("adminWave0Routes.ts"), adminWave0Routes);
   app.use("/api/admin", routeSource("adminEmailDiagRoutes.ts"), adminEmailDiagRoutes);
   app.use("/api/admin", routeSource("adminBillingRoutes.ts"), adminBillingRoutes);
+  app.use("/api/admin", routeSource("adminWaitlistInvitesLookupRoutes.ts"), adminWaitlistInvitesLookupRoutes);
   app.use("/api/internal/reporting", routeSource("internalReportingRoutes.ts"), internalReportingRoutes);
   app.use("/api/dev", routeSource("devMintRoutes.ts"), devMintRoutes);
   app.use("/api/dev", routeSource("devDiagRoutes.ts"), devDiagRoutes);
