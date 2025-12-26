@@ -1,0 +1,30 @@
+[33med28931[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Tenant file updates
+[33m38f5fdb[m Update TenantLayout.tsx
+[33m951c475[m Update TenantLayout.tsx
+[33m979b63e[m waitlisttracking update code
+[33m29b79f8[m Update publicWaitlistRoutes.ts
+[33me0259d6[m waitlist changes
+[33m7f4ca48[m allowlist by sub OR email
+[33mddbb7cb[m require admin
+[33m9eec895[m email invite list
+[33mbf40005[m[33m ([m[1;33mtag: [m[1;33mphase-3.2-stable[m[33m, [m[1;31morigin/release/phase-2.0-to-3.2[m[33m, [m[1;32mrelease/phase-2.0-to-3.2[m[33m)[m billing routes
+[33m35f5810[m tenant layout
+[33ma751ced[m tenant login
+[33me486b58[m Update publicWaitlistRoutes.ts
+[33m8056ce4[m chore: remove sendgrid env from repo and ignore secrets
+[33mddf205e[m route mounts
+[33ma45a7c0[m 5 ACCOUNT SET UP
+[33mfeedea0[m public and coming soon page
+[33m81ba7ef[m Update public.ts
+[33md9afdad[m Update public.ts
+[33m7fa6716[m Update app.routes.ts
+[33mf58d006[m Update public.ts
+[33m4979e72[m Update authRoutes.ts
+[33me585dfc[m Update authRoutes.ts
+[33mfe6ef5f[m chore: sync lockfile
+[33m4430a9c[m Update package-lock.json
+[33m59d7e52[m Update publicWaitlistRoutes.ts
+[33m3619db4[m routea
+[33mc913699[m Update app.routes.ts
+[33m6717e7d[m waitlist 2'
+[33mc799c16[m waitlist
