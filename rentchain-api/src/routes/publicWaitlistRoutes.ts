@@ -62,6 +62,9 @@ router.post("/waitlist", async (req, res) => {
             clickTracking: { enable: false, enableText: false },
             openTracking: { enable: false },
           },
+          mailSettings: {
+            footer: { enable: false },
+          },
         });
         emailed = true;
       } catch (e: any) {
