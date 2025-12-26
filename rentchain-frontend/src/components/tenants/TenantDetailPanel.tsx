@@ -658,7 +658,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
     if (!tenantId) return;
     try {
       const resp = await impersonateTenant(tenantId);
-      const url = `/tenant?impersonationToken=${encodeURIComponent(resp.token)}`;
+      const url = `/tenant/dashboard?impersonationToken=${encodeURIComponent(resp.token)}`;
       window.open(url, "_blank", "noopener");
       showToast({
         title: "Impersonation token issued",

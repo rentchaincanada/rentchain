@@ -1,7 +1,9 @@
 import { API_BASE_URL, API_HOST } from "../api/config";
 
 export function getAuthToken(): string | null {
+  if (typeof window === "undefined") return null;
   return (
+    sessionStorage.getItem("rentchain_tenant_token") ||
     sessionStorage.getItem("rentchain_token") ||
     localStorage.getItem("rentchain_token") ||
     sessionStorage.getItem("token") ||
