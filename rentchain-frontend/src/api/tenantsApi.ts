@@ -34,3 +34,10 @@ export async function downloadTenantReport(tenantId: string): Promise<void> {
   link.remove();
   window.URL.revokeObjectURL(url);
 }
+
+export async function impersonateTenant(tenantId: string): Promise<{ ok: boolean; token: string; tenantId: string; exp?: number }> {
+  const res = await apiFetch(`/landlord/tenants/${tenantId}/impersonate`, { method: "POST" });
+  const data = await res.json();
+  if (!res.ok || !data?.ok) throw new Error(data?.error || "Failed to impersonate tenant");
+  return data;
+}

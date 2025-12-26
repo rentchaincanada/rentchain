@@ -23,6 +23,8 @@ export interface AuthUser {
   leaseId?: string;
   screeningCredits?: number;
   plan?: string;
+  actorRole?: string | null;
+  actorLandlordId?: string | null;
 }
 
 export interface AuthContextValue {
@@ -47,12 +49,32 @@ export interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 const TOKEN_STORAGE_KEY = "rentchain_token";
+const TENANT_TOKEN_KEY = "rentchain_tenant_token";
 
 interface AuthProviderProps {
   children: React.ReactNode;
 }
 
 function getStoredToken() {
+  if (typeof window === "undefined") return null;
+
+  const params = new URLSearchParams(window.location.search);
+  const impersonationToken = params.get("impersonationToken");
+  if (impersonationToken) {
+    window.sessionStorage.setItem(TENANT_TOKEN_KEY, impersonationToken);
+    params.delete("impersonationToken");
+    const next = params.toString();
+    const hash = window.location.hash || "";
+    window.history.replaceState(
+      {},
+      "",
+      `${window.location.pathname}${next ? `?${next}` : ""}${hash}`
+    );
+  }
+
+  const tenantToken = window.sessionStorage.getItem(TENANT_TOKEN_KEY);
+  if (tenantToken) return tenantToken;
+
   const sessionToken = window.sessionStorage.getItem(TOKEN_STORAGE_KEY);
   if (sessionToken) return sessionToken;
 
@@ -73,6 +95,7 @@ function storeToken(token: string) {
 
 function clearStoredToken() {
   window.sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+  window.sessionStorage.removeItem(TENANT_TOKEN_KEY);
   window.localStorage.removeItem(TOKEN_STORAGE_KEY);
 }
 

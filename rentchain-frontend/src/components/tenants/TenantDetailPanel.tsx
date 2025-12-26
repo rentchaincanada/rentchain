@@ -16,7 +16,7 @@ import {
   queueReporting,
   getReportingStatus,
 } from "@/api/reportingConsentApi";
-import { downloadTenantReport } from "@/api/tenantsApi";
+import { downloadTenantReport, impersonateTenant } from "@/api/tenantsApi";
 import { PaymentEditModal } from "../payments/PaymentEditModal";
 import { useToast } from "../ui/ToastProvider";
 import { TenantActivityPanel } from "./TenantActivityPanel";
@@ -649,6 +649,26 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
         message: "Failed to record payment",
         description:
           err instanceof Error ? err.message : "Please try again shortly.",
+        variant: "error",
+      });
+    }
+  };
+
+  const handleImpersonateTenant = async () => {
+    if (!tenantId) return;
+    try {
+      const resp = await impersonateTenant(tenantId);
+      const url = `/tenant?impersonationToken=${encodeURIComponent(resp.token)}`;
+      window.open(url, "_blank", "noopener");
+      showToast({
+        title: "Impersonation token issued",
+        description: "Opened tenant portal in a new tab.",
+        variant: "success",
+      });
+    } catch (err: any) {
+      showToast({
+        title: "Failed to impersonate tenant",
+        description: err?.message || "Could not open tenant portal as this tenant.",
         variant: "error",
       });
     }
@@ -1928,6 +1948,22 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
           }}
         >
           View all ledger events →
+        </button>
+        <button
+          type="button"
+          onClick={handleImpersonateTenant}
+          style={{
+            fontSize: "0.8rem",
+            padding: "0.4rem 0.85rem",
+            borderRadius: radius.pill,
+            border: `1px solid ${colors.border}`,
+            background: colors.card,
+            color: text.primary,
+            cursor: "pointer",
+            boxShadow: shadows.sm,
+          }}
+        >
+          View as tenant
         </button>
       </div>
 

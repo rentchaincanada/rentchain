@@ -6,6 +6,7 @@ export const RequireTenant: React.FC<{ children: React.ReactNode }> = ({ childre
   const { user, isLoading } = useAuth();
   const location = useLocation();
   const token =
+    sessionStorage.getItem("rentchain_tenant_token") ||
     sessionStorage.getItem("rentchain_token") ||
     localStorage.getItem("rentchain_token") ||
     null;

@@ -43,6 +43,8 @@ import microLiveStatusRoutes from "./routes/microLiveStatusRoutes";
 import adminMicroLiveMetricsRoutes from "./routes/adminMicroLiveMetricsRoutes";
 import adminWave0Routes from "./routes/adminWave0Routes";
 import adminEmailDiagRoutes from "./routes/adminEmailDiagRoutes";
+import landlordImpersonationRoutes from "./routes/landlordImpersonationRoutes";
+import { blockImpersonationWrites } from "./middleware/blockImpersonationWrites";
 
 export function mountSafeRoutes(app: Application) {
   // Public routes first (no auth/plan)
@@ -60,6 +62,8 @@ export function mountSafeRoutes(app: Application) {
   // ensure auth is decoded and plan is resolved before hitting guarded routes
   app.use(authenticateJwt);
   app.use(attachPlan());
+  app.use("/api/tenant", blockImpersonationWrites);
+  app.use("/api/tenant/reporting", blockImpersonationWrites);
 
   // Prevent tenant-role tokens from calling landlord routes. Only allow /api/tenant (and health/auth me).
   app.use((req, res, next) => {
@@ -84,6 +88,7 @@ export function mountSafeRoutes(app: Application) {
   app.use("/api/landlord", routeSource("landlordReportingRoutes.ts"), landlordReportingRoutes);
   app.use("/api/landlord", routeSource("landlordReportingShadowRoutes.ts"), landlordReportingShadowRoutes);
   app.use("/api/landlord", routeSource("microLiveStatusRoutes.ts"), microLiveStatusRoutes);
+  app.use("/api/landlord", routeSource("landlordImpersonationRoutes.ts"), landlordImpersonationRoutes);
   app.use("/api/tenant/auth", routeSource("tenantAuthRoutes.ts"), tenantAuthRoutes);
   app.use("/api/tenant", routeSource("tenantPortalRoutes.ts"), tenantPortalRoutes);
   app.use("/api/tenant/reporting", routeSource("tenantReportingRoutes.ts"), tenantReportingRoutes);

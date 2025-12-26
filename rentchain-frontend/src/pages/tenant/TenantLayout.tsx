@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { NavLink, Outlet, useLocation, useOutletContext } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate, useOutletContext } from "react-router-dom";
 import { getTenantLease, getTenantMe, TenantLease, TenantProfile } from "../../api/tenantPortalApi";
+import { useAuth } from "../../context/useAuth";
 
 export type TenantOutletContext = {
   profile: TenantProfile | null;
@@ -47,6 +48,8 @@ export const TenantLayout: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -65,6 +68,20 @@ export const TenantLayout: React.FC = () => {
   useEffect(() => {
     void fetchData();
   }, [fetchData]);
+
+  const isImpersonation =
+    user?.actorRole === "landlord" ||
+    (typeof window !== "undefined" &&
+      !!window.sessionStorage.getItem("rentchain_tenant_token") &&
+      user?.role === "tenant");
+
+  const exitImpersonation = useCallback(() => {
+    if (typeof window !== "undefined") {
+      window.sessionStorage.removeItem("rentchain_tenant_token");
+    }
+    navigate("/tenants");
+    void logout();
+  }, [navigate, logout]);
 
   const navItems = [
     { to: "/tenant/dashboard", label: "Dashboard" },
@@ -136,6 +153,39 @@ export const TenantLayout: React.FC = () => {
         {error ? (
           <div style={{ ...cardStyle, color: "#fca5a5", borderColor: "rgba(248,113,113,0.35)" }}>
             {error}
+          </div>
+        ) : null}
+
+        {isImpersonation ? (
+          <div
+            style={{
+              ...cardStyle,
+              borderColor: "rgba(59,130,246,0.45)",
+              background: "rgba(59,130,246,0.1)",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 12,
+            }}
+          >
+            <div style={{ fontSize: 13, color: "#bfdbfe", fontWeight: 700 }}>
+              Impersonating tenant — read-only view.
+            </div>
+            <button
+              type: "button"
+              onClick={exitImpersonation}
+              style={{
+                padding: "8px 10px",
+                borderRadius: 10,
+                border: "1px solid rgba(255,255,255,0.35)",
+                background: "transparent",
+                color: "#e5e7eb",
+                cursor: "pointer",
+                fontWeight: 700,
+              }}
+            >
+              Exit
+            </button>
           </div>
         ) : null}
 

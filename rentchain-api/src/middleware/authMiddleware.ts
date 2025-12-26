@@ -15,6 +15,8 @@ export interface AuthenticatedUser {
   tenantId?: string;
   leaseId?: string;
   plan?: string;
+  actorRole?: string | null;
+  actorLandlordId?: string | null;
 }
 
 export interface AuthenticatedRequest extends Request {
@@ -86,7 +88,7 @@ export function authenticateJwt(
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as jwt.JwtPayload;
-    const { sub, email, role, landlordId, tenantId, leaseId, plan } = decoded as any;
+    const { sub, email, role, landlordId, tenantId, leaseId, plan, actorRole, actorLandlordId } = decoded as any;
 
     if (!sub || !email) {
       jsonError(res, 401, "UNAUTHORIZED", "Unauthorized", undefined, req.requestId);
@@ -101,6 +103,8 @@ export function authenticateJwt(
       tenantId: tenantId || undefined,
       leaseId: leaseId || undefined,
       plan: plan ?? "starter",
+      actorRole: actorRole ?? null,
+      actorLandlordId: actorLandlordId ?? null,
     };
 
     next();
