@@ -25,7 +25,7 @@ jobs:
     - name: 'notify vercel'
   uses: 'vercel/repository-dispatch/actions/status@v1'
   with:
-    name: Vercel - rentchain: smoke
+    name: Vercel - rentchain: api: smoke
 
       - name: Install
         run: npm ci
