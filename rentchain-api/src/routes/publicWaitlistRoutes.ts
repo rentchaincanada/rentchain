@@ -42,15 +42,13 @@ router.post("/waitlist", async (req, res) => {
 
     const apiKey = process.env.SENDGRID_API_KEY;
     const from = process.env.SENDGRID_FROM_EMAIL;
-    const appUrl = process.env.PUBLIC_APP_URL || "";
     let emailed = false;
 
     const subject = "You're on the RentChain waitlist";
     const text =
       `Thanks${nameRaw ? `, ${nameRaw}` : ""} - you're on the RentChain waitlist.\n\n` +
-      "We'll email you when Micro-Live invites open.\n" +
-      (appUrl ? `\nRentChain: ${appUrl}\n` : "") +
-      `\nIf you didn't request this, ignore this email.\n`;
+      "We'll email you when Micro-Live invites open.\n\n" +
+      "If you didn't request this, ignore this email.\n";
 
     if (apiKey && from) {
       try {
