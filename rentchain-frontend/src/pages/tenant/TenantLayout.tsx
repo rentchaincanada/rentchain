@@ -37,8 +37,8 @@ const navLinkBase: React.CSSProperties = {
 };
 
 function propertyLine(lease: TenantLease | null) {
-  if (!lease) return "Fetching propertyâ€¦";
-  const unit = lease.unitNumber ? ` Â· Unit ${lease.unitNumber}` : "";
+  if (!lease) return "Fetching property...";
+  const unit = lease.unitNumber ? ` - Unit ${lease.unitNumber}` : "";
   return `${lease.propertyName || "Your property"}${unit}`;
 }
 
@@ -169,10 +169,10 @@ export const TenantLayout: React.FC = () => {
             }}
           >
             <div style={{ fontSize: 13, color: "#bfdbfe", fontWeight: 700 }}>
-              Impersonating tenant — read-only view.
+              Impersonating tenant - read-only view.
             </div>
             <button
-              type: "button"
+              type="button"
               onClick={exitImpersonation}
               style={{
                 padding: "8px 10px",
@@ -190,7 +190,7 @@ export const TenantLayout: React.FC = () => {
         ) : null}
 
         {isLoading ? (
-          <div style={{ ...cardStyle, textAlign: "center", color: "#cbd5e1" }}>Loading tenant data…</div>
+          <div style={{ ...cardStyle, textAlign: "center", color: "#cbd5e1" }}>Loading tenant data...</div>
         ) : (
           <Outlet context={{ profile, lease, refresh: fetchData }} />
         )}
@@ -202,10 +202,3 @@ export const TenantLayout: React.FC = () => {
 export function useTenantOutletContext(): TenantOutletContext {
   return useOutletContext<TenantOutletContext>();
 }
-
-
-
-
-
-
-
