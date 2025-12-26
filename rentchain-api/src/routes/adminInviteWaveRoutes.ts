@@ -181,7 +181,13 @@ router.post("/waitlist/invite-wave", requireAuth, requireRole(["landlord", "admi
           fromEmail: fromEmail as string,
         });
 
-        await sgMail.send(msg);
+        await sgMail.send({
+          ...msg,
+          trackingSettings: {
+            clickTracking: { enable: false, enableText: false },
+            openTracking: { enable: false },
+          },
+        });
         await inviteRef.set({ status: "sent", sentAt: nowMs(), inviteUrl }, { merge: true });
         await incrementCounter({ name: "waitlist_invite_sent", dims: { campaign }, amount: 1 });
 

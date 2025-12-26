@@ -55,7 +55,16 @@ router.post("/waitlist", async (req, res) => {
     if (apiKey && from) {
       try {
         sgMail.setApiKey(apiKey);
-        await sgMail.send({ to: email, from, subject, text });
+        await sgMail.send({
+          to: email,
+          from,
+          subject,
+          text,
+          trackingSettings: {
+            clickTracking: { enable: false, enableText: false },
+            openTracking: { enable: false },
+          },
+        });
         emailed = true;
       } catch (e: any) {
         console.error("[waitlist] sendgrid error", {
