@@ -117,7 +117,7 @@ export const TenantLayout: React.FC = () => {
             </div>
           </div>
           <div style={{ color: "#9ca3af", fontSize: 12, fontWeight: 600, textTransform: "uppercase" }}>
-            Read-only access Â· Secure view of your lease, payments, and ledger
+            Read-only access - Secure view of your lease, payments, and ledger
           </div>
         </header>
 
@@ -169,7 +169,7 @@ export const TenantLayout: React.FC = () => {
             }}
           >
             <div style={{ fontSize: 13, color: "#bfdbfe", fontWeight: 700 }}>
-              Impersonating tenant â€” read-only view.
+              Impersonating tenant — read-only view.
             </div>
             <button
               type: "button"
@@ -190,7 +190,7 @@ export const TenantLayout: React.FC = () => {
         ) : null}
 
         {isLoading ? (
-          <div style={{ ...cardStyle, textAlign: "center", color: "#cbd5e1" }}>Loading tenant dataâ€¦</div>
+          <div style={{ ...cardStyle, textAlign: "center", color: "#cbd5e1" }}>Loading tenant data…</div>
         ) : (
           <Outlet context={{ profile, lease, refresh: fetchData }} />
         )}
@@ -202,3 +202,10 @@ export const TenantLayout: React.FC = () => {
 export function useTenantOutletContext(): TenantOutletContext {
   return useOutletContext<TenantOutletContext>();
 }
+
+
+
+
+
+
+
