@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { getTenantLedger, TenantLedgerEntry } from "../../api/tenantPortalApi";
-import { useTenantOutletContext } from "./TenantLayout";
+import { useTenantOutletContext } from "./TenantLayout.clean";
 
 const cardStyle: React.CSSProperties = {
   background: "rgba(17, 24, 39, 0.8)",

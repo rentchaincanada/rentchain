@@ -22,7 +22,7 @@ import ScreeningCancelPage from "./pages/ScreeningCancelPage";
 import PricingPage from "./pages/PricingPage";
 import BillingPage from "./pages/BillingPage";
 import { DebugPanel } from "./components/DebugPanel";
-import { TenantLayout } from "./pages/tenant/TenantLayout";
+import { TenantLayout } from "./pages/tenant/TenantLayout.clean";
 import TenantDashboardPage from "./pages/tenant/TenantDashboardPage";
 import TenantPaymentsPage from "./pages/tenant/TenantPaymentsPage";
 import TenantLedgerPage from "./pages/tenant/TenantLedgerPage";

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useTenantOutletContext } from "./TenantLayout";
+import { useTenantOutletContext } from "./TenantLayout.clean";
 import {
   getTenantPaymentsSummary,
   getTenantRentCharges,
