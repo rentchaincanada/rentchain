@@ -22,6 +22,11 @@ jobs:
           cache: 'npm'
           cache-dependency-path: rentchain-api/package-lock.json
 
+    - name: 'notify vercel'
+  uses: 'vercel/repository-dispatch/actions/status@v1'
+  with:
+    name: Vercel - rentchain: smoke
+
       - name: Install
         run: npm ci
 
