@@ -1,0 +1,3 @@
+
+# Ensure GitHub Actions workflows are checked out as LF and without weird conversions
+.github/workflows/*.yml text eol=lf
