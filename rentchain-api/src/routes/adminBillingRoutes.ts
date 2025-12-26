@@ -1,7 +1,6 @@
 import { Router } from "express";
 import admin from "firebase-admin";
-import { requireAuth } from "../middleware/requireAuth";
-import { requireRole } from "../middleware/requireRole";
+import { requireAdmin } from "../middleware/requireAdmin";
 import { getUsage } from "../services/billingUsage";
 import { db } from "../config/firebase";
 
@@ -17,7 +16,7 @@ function billingPreviewEnabled() {
   return String(process.env.BILLING_PREVIEW_ENABLED || "false").toLowerCase() === "true";
 }
 
-router.use(requireAuth, requireRole(["landlord", "admin"]));
+router.use(requireAdmin);
 
 router.post("/billing/invoices/draft", async (req: any, res) => {
   if (!billingPreviewEnabled()) return res.status(403).json({ ok: false, error: "Billing preview disabled" });

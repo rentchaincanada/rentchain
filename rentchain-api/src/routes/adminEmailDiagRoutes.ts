@@ -1,11 +1,10 @@
 import { Router } from "express";
 import sgMail from "@sendgrid/mail";
-import { requireAuth } from "../middleware/requireAuth";
-import { requireRole } from "../middleware/requireRole";
+import { requireAdmin } from "../middleware/requireAdmin";
 
 const router = Router();
 
-router.get("/diag/email", requireAuth, requireRole(["landlord", "admin"]), async (_req: any, res) => {
+router.get("/diag/email", requireAdmin, async (_req: any, res) => {
   const apiKey = process.env.SENDGRID_API_KEY;
   const from = process.env.SENDGRID_FROM_EMAIL;
 
@@ -17,7 +16,7 @@ router.get("/diag/email", requireAuth, requireRole(["landlord", "admin"]), async
   });
 });
 
-router.post("/diag/email/send-test", requireAuth, requireRole(["landlord", "admin"]), async (req: any, res) => {
+router.post("/diag/email/send-test", requireAdmin, async (req: any, res) => {
   const apiKey = process.env.SENDGRID_API_KEY;
   const from = process.env.SENDGRID_FROM_EMAIL;
   const to = String(req.body?.to || "").trim();

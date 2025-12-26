@@ -1,7 +1,6 @@
 import { Router } from "express";
 import crypto from "crypto";
-import { requireAuth } from "../middleware/requireAuth";
-import { requireRole } from "../middleware/requireRole";
+import { requireAdmin } from "../middleware/requireAdmin";
 import { db } from "../config/firebase";
 import { incrementCounter, logEvent } from "../services/telemetryService";
 
@@ -20,7 +19,7 @@ function envTrue(key: string) {
   return v === "true" || v === "1" || v === "yes";
 }
 
-router.post("/micro-live/wave0/send", requireAuth, requireRole(["landlord", "admin"]), async (req: any, res) => {
+router.post("/micro-live/wave0/send", requireAdmin, async (req: any, res) => {
   if (!envTrue("MICRO_LIVE_WAVE0_ENABLED")) {
     return res.status(403).json({ ok: false, error: "Wave 0 disabled" });
   }
