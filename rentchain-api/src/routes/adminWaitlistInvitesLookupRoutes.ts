@@ -1,12 +1,11 @@
 import { Router } from "express";
 import { db } from "../config/firebase";
-import { requireAuth } from "../middleware/requireAuth";
-import { requireRole } from "../middleware/requireRole";
+import { requireAdmin } from "../middleware/requireAdmin";
 
 const router = Router();
 
 // GET /api/admin/waitlist/invites?email=...&campaign=...
-router.get("/waitlist/invites", requireAuth, requireRole(["landlord", "admin"]), async (req: any, res) => {
+router.get("/waitlist/invites", requireAdmin, async (req: any, res) => {
   try {
     const email = String(req.query?.email || "").trim().toLowerCase();
     const campaign = req.query?.campaign ? String(req.query.campaign).trim() : "";
