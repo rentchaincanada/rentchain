@@ -5,6 +5,8 @@ import { Card, Section, Button } from "../components/ui/Ui";
 import { fetchBillingHistory, type BillingRecord } from "../api/billingApi";
 import { spacing, text, colors, radius } from "../styles/tokens";
 import { SUPPORT_EMAIL } from "../config/support";
+import { BillingPreviewCard } from "../components/billing/BillingPreviewCard";
+import { fetchBillingUsage } from "../api/billingPreviewApi";
 
 const formatAmount = (amountCents: number, currency: string) => {
   const amount = (amountCents || 0) / 100;
@@ -16,13 +18,15 @@ const BillingPage: React.FC = () => {
   const [records, setRecords] = useState<BillingRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [usage, setUsage] = useState<any | null>(null);
 
   const load = async () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await fetchBillingHistory();
-      setRecords(data);
+      const [history, usageResp] = await Promise.all([fetchBillingHistory(), fetchBillingUsage()]);
+      setRecords(history);
+      setUsage(usageResp);
     } catch (err: any) {
       setError(err?.message || "Failed to load billing history.");
     } finally {
@@ -50,6 +54,8 @@ const BillingPage: React.FC = () => {
             </Button>
           </div>
         </Card>
+
+        <BillingPreviewCard usage={usage} />
 
         <Card>
           {loading ? (

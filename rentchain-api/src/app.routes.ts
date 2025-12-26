@@ -45,6 +45,8 @@ import adminWave0Routes from "./routes/adminWave0Routes";
 import adminEmailDiagRoutes from "./routes/adminEmailDiagRoutes";
 import landlordImpersonationRoutes from "./routes/landlordImpersonationRoutes";
 import { blockImpersonationWrites } from "./middleware/blockImpersonationWrites";
+import landlordBillingRoutes from "./routes/landlordBillingRoutes";
+import adminBillingRoutes from "./routes/adminBillingRoutes";
 
 export function mountSafeRoutes(app: Application) {
   // Public routes first (no auth/plan)
@@ -89,6 +91,7 @@ export function mountSafeRoutes(app: Application) {
   app.use("/api/landlord", routeSource("landlordReportingShadowRoutes.ts"), landlordReportingShadowRoutes);
   app.use("/api/landlord", routeSource("microLiveStatusRoutes.ts"), microLiveStatusRoutes);
   app.use("/api/landlord", routeSource("landlordImpersonationRoutes.ts"), landlordImpersonationRoutes);
+  app.use("/api/landlord", routeSource("landlordBillingRoutes.ts"), landlordBillingRoutes);
   app.use("/api/tenant/auth", routeSource("tenantAuthRoutes.ts"), tenantAuthRoutes);
   app.use("/api/tenant", routeSource("tenantPortalRoutes.ts"), tenantPortalRoutes);
   app.use("/api/tenant/reporting", routeSource("tenantReportingRoutes.ts"), tenantReportingRoutes);
@@ -101,6 +104,7 @@ export function mountSafeRoutes(app: Application) {
   app.use("/api/admin", routeSource("adminMicroLiveMetricsRoutes.ts"), adminMicroLiveMetricsRoutes);
   app.use("/api/admin", routeSource("adminWave0Routes.ts"), adminWave0Routes);
   app.use("/api/admin", routeSource("adminEmailDiagRoutes.ts"), adminEmailDiagRoutes);
+  app.use("/api/admin", routeSource("adminBillingRoutes.ts"), adminBillingRoutes);
   app.use("/api/internal/reporting", routeSource("internalReportingRoutes.ts"), internalReportingRoutes);
   app.use("/api/dev", routeSource("devMintRoutes.ts"), devMintRoutes);
   app.use("/api/dev", routeSource("devDiagRoutes.ts"), devDiagRoutes);
