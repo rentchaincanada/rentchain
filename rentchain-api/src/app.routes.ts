@@ -13,7 +13,6 @@ import upgradeIntentRoutes from "./routes/upgradeIntentRoutes";
 import aiRoutes from "./routes/ai";
 import { attachPlan } from "./entitlements/planResolver.middleware";
 import { requireCapability } from "./entitlements/entitlements.middleware";
-import stubPlatformRoutes from "./routes/stubPlatformRoutes";
 import { authenticateJwt } from "./middleware/authMiddleware";
 import propertiesRoutes from "./routes/propertiesRoutes";
 import authMeRoutes from "./routes/authMeRoutes";
@@ -143,7 +142,16 @@ export function mountSafeRoutes(app: Application) {
   );
 
   // mount stubs last to backfill missing endpoints only
-  app.use("/api", routeSource("stubPlatformRoutes.ts"), stubPlatformRoutes);
+  if (process.env.NODE_ENV !== "production") {
+    try {
+      // Lazy require to avoid build-time missing module issues
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const stubPlatformRoutes = require("./routes/stubPlatformRoutes").default;
+      app.use("/api", routeSource("stubPlatformRoutes.ts"), stubPlatformRoutes);
+    } catch (e) {
+      // ignore missing stub routes in production build
+    }
+  }
 
   // minimal ai placeholder router
   app.use("/api/ai", routeSource("aiRoutes.ts"), requireCapability("ai.insights"), aiRoutes);
