@@ -1,6 +1,13 @@
 import { apiJson } from "@/lib/apiClient";
 import type { PortfolioAiSummary, PortfolioSnapshot } from "../types/models";
 
+const warned: Record<string, boolean> = {};
+function warnOnce(key: string, message: string) {
+  if (warned[key]) return;
+  warned[key] = true;
+  console.warn(message);
+}
+
 export interface DashboardOverviewKpis {
   monthlyRent: number;
   occupancyRate: number;
@@ -11,7 +18,26 @@ export interface DashboardOverviewKpis {
 }
 
 export async function fetchDashboardOverview(): Promise<DashboardOverviewKpis> {
-  return apiJson<DashboardOverviewKpis>("/dashboard/overview");
+  try {
+    return await apiJson<DashboardOverviewKpis>("/dashboard/overview");
+  } catch (err: any) {
+    if (String(err?.message ?? "").includes("404")) {
+      warnOnce(
+        "dashboard:overview",
+        "[dashboard] /dashboard/overview missing; returning fallback KPIs"
+      );
+      const now = new Date().toISOString();
+      return {
+        monthlyRent: 0,
+        occupancyRate: 0,
+        latePayments: 0,
+        portfolioValue: 0,
+        generatedAt: now,
+        status: "missing_endpoint",
+      };
+    }
+    throw err;
+  }
 }
 
 export interface DashboardKpis {
@@ -44,6 +70,10 @@ export async function fetchDashboardOverviewForInsights(): Promise<DashboardOver
     return await apiJson<DashboardOverviewForInsights>("/dashboard/overview");
   } catch (err: any) {
     if (String(err?.message ?? "").includes("404")) {
+      warnOnce(
+        "dashboard:overview-insights",
+        "[dashboard] /dashboard/overview missing; returning fallback insights payload"
+      );
       return {
         kpis: {
           totalProperties: 0,
@@ -73,6 +103,10 @@ export async function fetchPortfolioAiSummary(): Promise<PortfolioAiResponse> {
   } catch (err: any) {
     const status = err?.status ?? err?.payload?.status ?? err?.body?.status;
     if (status === 403 || status === 404) {
+      warnOnce(
+        "dashboard:ai-summary",
+        "[dashboard] /dashboard/ai-summary missing; returning fallback AI summary"
+      );
       return {
         generatedAt: new Date().toISOString(),
         snapshot: { properties: [], tenants: [], units: [] } as any,
@@ -126,10 +160,14 @@ export async function fetchAiPortfolioSummary(): Promise<AiPortfolioSummary> {
     return await apiJson<AiPortfolioSummary>("/dashboard/ai-portfolio-summary");
   } catch (err: any) {
     if (String(err?.message ?? "").includes("404")) {
+      warnOnce(
+        "dashboard:ai-portfolio",
+        "[dashboard] /dashboard/ai-portfolio-summary missing; returning fallback AI portfolio summary"
+      );
       return {
         summary: "",
         healthScore: 0,
-        timeframeLabel: "—",
+        timeframeLabel: "",
         kpis: {
           occupancyRate: 0,
           monthlyRentRoll: 0,
@@ -153,6 +191,10 @@ export async function fetchPortfolioSummary(): Promise<PortfolioSummaryResponse>
     return data?.summary ?? data;
   } catch (err: any) {
     if (String(err?.message ?? "").includes("404")) {
+      warnOnce(
+        "dashboard:portfolio-summary",
+        "[dashboard] /dashboard/portfolio-summary missing; returning fallback portfolio summary"
+      );
       return {
         kpis: {
           totalProperties: 0,
