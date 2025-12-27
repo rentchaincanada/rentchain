@@ -3,27 +3,30 @@ import express from "express";
 const router = express.Router();
 
 /**
- * GET /api/dashboard/ai-insights
- * Temporary stub — returns empty insights
+ * GET /api/dashboard/overview
+ * Minimal KPIs (placeholder/zeroed for now)
  */
-router.get("/ai-insights", (_req, res) => {
+router.get("/overview", (_req, res) => {
   res.json({
-    items: [],
-    generatedAt: new Date().toISOString(),
-    status: "stub",
+    ok: true,
+    monthRent: 0,
+    occupancyRate: 0,
+    latePayments: 0,
+    portfolioValue: 0,
+    updatedAt: new Date().toISOString(),
   });
 });
 
 /**
  * GET /api/dashboard/ai-portfolio-summary
- * Temporary stub — returns empty portfolio summary
+ * Deterministic placeholder summary
  */
 router.get("/ai-portfolio-summary", (_req, res) => {
   res.json({
-    summary: null,
-    items: [],
-    generatedAt: new Date().toISOString(),
-    status: "stub",
+    ok: true,
+    summary: "Portfolio summary not available yet. This is a placeholder response.",
+    flags: [],
+    updatedAt: new Date().toISOString(),
   });
 });
 
@@ -59,15 +62,12 @@ router.post("/ai-summary", (_req, res) => {
 });
 
 /**
- * GET /api/dashboard/overview
- * Temporary stub — returns zeroed KPI metrics
+ * GET /api/dashboard/ai-insights
+ * Temporary stub — returns empty insights
  */
-router.get("/overview", (_req, res) => {
+router.get("/ai-insights", (_req, res) => {
   res.json({
-    monthlyRent: 0,
-    occupancyRate: 0,
-    latePayments: 0,
-    portfolioValue: 0,
+    items: [],
     generatedAt: new Date().toISOString(),
     status: "stub",
   });

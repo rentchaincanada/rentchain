@@ -2,6 +2,7 @@
 const http = require("http");
 
 const BASE = process.env.SMOKE_BASE || "http://localhost:3000";
+const unauthTargets = ["/api/dashboard/overview", "/api/dashboard/ai-portfolio-summary"];
 
 async function hit(path) {
   return new Promise((resolve, reject) => {
@@ -25,6 +26,14 @@ async function main() {
       process.exit(1);
     }
     console.log(`[smoke] ${t} ok: ${res.status}`);
+  }
+  for (const t of unauthTargets) {
+    const res = await hit(t);
+    if (res.status !== 401 && res.status !== 403) {
+      console.error(`[smoke] ${t} expected auth rejection, got ${res.status}`);
+      process.exit(1);
+    }
+    console.log(`[smoke] ${t} auth gate ok: ${res.status}`);
   }
   console.log("[smoke] all checks passed");
 }
