@@ -19,17 +19,6 @@ export interface AuthenticatedUser {
   actorLandlordId?: string | null;
 }
 
-export interface AuthenticatedRequest extends Request {
-  user?: AuthenticatedUser;
-  account?: Account;
-  requestId?: string;
-  integrity?: {
-    ok: boolean;
-    before?: Usage;
-    after?: Usage;
-  };
-}
-
 export const authenticateJwt: RequestHandler = (req, res, next): void => {
   if (req.path.startsWith("/api/auth/") || req.path === "/api/health") {
     return next();
