@@ -1,6 +1,12 @@
 {
   "routes": [
-    { "src": "^/health$", "dest": "https://rentchain-landlord-api-915921057662.us-central1.run.app/health" },
-    { "src": "^/api/(.*)$", "dest": "https://rentchain-landlord-api-915921057662.us-central1.run.app/api/$1" }
+    {
+      "src": "^/health$",
+      "dest": "https://rentchain-landlord-api-915921057662.us-central1.run.app/health"
+    },
+    {
+      "src": "^/api/(.*)$",
+      "dest": "https://rentchain-landlord-api-915921057662.us-central1.run.app/api/$1"
+    }
   ]
 }
