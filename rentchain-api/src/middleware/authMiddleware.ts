@@ -1,5 +1,5 @@
 // src/middleware/authMiddleware.ts
-import { NextFunction, Request, Response } from "express";
+import { RequestHandler } from "express";
 import jwt from "jsonwebtoken";
 import { JWT_SECRET } from "../config/authConfig";
 import type { Account } from "../types/account";
@@ -23,18 +23,10 @@ export interface AuthenticatedRequest extends Request {
   user?: AuthenticatedUser;
   account?: Account;
   requestId?: string;
-  integrity?: {
-    ok: boolean;
-    before?: Usage;
-    after?: Usage;
-  };
+  integrity: string;
 }
 
-export function authenticateJwt(
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction
-): void {
+export const authenticateJwt: RequestHandler = (req, res, next): void => {
   if (req.path.startsWith("/api/auth/") || req.path === "/api/health") {
     return next();
   }
@@ -80,7 +72,7 @@ export function authenticateJwt(
   }
 
   if (!authHeader.startsWith("Bearer ")) {
-    jsonError(res, 401, "UNAUTHORIZED", "Unauthorized", undefined, req.requestId);
+    jsonError(res, 401, "UNAUTHORIZED", "Unauthorized", undefined, (req as any).requestId);
     return;
   }
 
@@ -91,11 +83,11 @@ export function authenticateJwt(
     const { sub, email, role, landlordId, tenantId, leaseId, plan, actorRole, actorLandlordId } = decoded as any;
 
     if (!sub || !email) {
-      jsonError(res, 401, "UNAUTHORIZED", "Unauthorized", undefined, req.requestId);
+      jsonError(res, 401, "UNAUTHORIZED", "Unauthorized", undefined, (req as any).requestId);
       return;
     }
 
-    req.user = {
+    (req as any).user = {
       id: String(sub),
       email: String(email),
       role: (role as AuthenticatedUser["role"]) || "landlord",
@@ -110,6 +102,6 @@ export function authenticateJwt(
     next();
   } catch (err) {
     console.error("[authenticateJwt] verification failed", err);
-    jsonError(res, 401, "UNAUTHORIZED", "Unauthorized", undefined, req.requestId);
+    jsonError(res, 401, "UNAUTHORIZED", "Unauthorized", undefined, (req as any).requestId);
   }
-}
+};

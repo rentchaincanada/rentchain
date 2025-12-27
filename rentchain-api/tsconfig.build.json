@@ -4,11 +4,10 @@
     "noEmitOnError": false,
     "skipLibCheck": true
   },
-  "files": [
+  "include": [
     "src/index.build.ts",
     "src/app.build.ts",
-    "src/types/express.d.ts"
+    "src/types/**/*.d.ts"
   ],
-  "include": ["src/**/*.d.ts"],
   "exclude": []
 }

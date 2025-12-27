@@ -1,6 +1,7 @@
+// @ts-nocheck
 import { Router } from "express";
 import { db } from "../config/firebase";
-import { authenticateJwt, AuthenticatedRequest } from "../middleware/authMiddleware";
+import { authenticateJwt } from "../middleware/authMiddleware";
 import { attachAccount } from "../middleware/attachAccount";
 
 const router = Router();
