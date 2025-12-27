@@ -1,12 +1,6 @@
 {
-  "rewrites": [
-    {
-      "source": "/health",
-      "destination": "https://rentchain-landlord-api-915921057662.us-central1.run.app/health"
-    },
-    {
-      "source": "/api/:path*",
-      "destination": "https://rentchain-landlord-api-915921057662.us-central1.run.app/api/:path*"
-    }
+  "routes": [
+    { "src": "^/health$", "dest": "https://rentchain-landlord-api-915921057662.us-central1.run.app/health" },
+    { "src": "^/api/(.*)$", "dest": "https://rentchain-landlord-api-915921057662.us-central1.run.app/api/$1" }
   ]
 }
