@@ -2,9 +2,7 @@
 // Canonical applications API wrapper (uses apiJson/apiFetch only)
 
 import { apiFetch, apiJson } from "@/lib/apiClient";
-
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
+import { API_BASE_URL } from "./config";
 
 export function getApplicationPdfUrl(id: string): string {
   return `${API_BASE_URL}/applications/${id}/pdf`;

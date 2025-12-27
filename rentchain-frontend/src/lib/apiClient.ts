@@ -1,4 +1,4 @@
-import { API_BASE_URL, API_HOST } from "../api/config";
+import API_BASE from "../config/apiBase";
 
 export function getAuthToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -25,12 +25,12 @@ export function clearAuthToken() {
 
 export function resolveApiUrl(input: string) {
   const s = String(input || "").trim();
+  const base = (API_BASE || "").replace(/\/$/, "");
 
-  if (!s) return API_BASE_URL;
+  if (!s) return base;
   if (/^https?:\/\//i.test(s)) return s;
-  if (s.startsWith("/api/")) return `${API_HOST}${s}`;
-  if (s.startsWith("/")) return `${API_BASE_URL}${s}`;
-  return `${API_BASE_URL}/${s}`;
+  if (s.startsWith("/")) return `${base}${s}`;
+  return `${base}/${s}`;
 }
 
 export async function apiFetch(path: string, init: RequestInit = {}) {

@@ -1,7 +1,8 @@
 // FRONTEND: rentchain-frontend/src/services/leaseApi.ts
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
+import API_BASE from "../config/apiBase";
+
+const API_BASE_URL = API_BASE.replace(/\/$/, "");
 
 export type LeaseStatus = "active" | "ended" | "pending";
 

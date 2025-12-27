@@ -1,8 +1,8 @@
 // src/api/screeningApi.ts
 import { withAuthHeaders } from "./httpClient";
+import API_BASE from "../config/apiBase";
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
+const API_BASE_URL = `${API_BASE.replace(/\/$/, "")}/api`;
 
 export type ScreeningStatus =
   | "requested"

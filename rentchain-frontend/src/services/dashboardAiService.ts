@@ -2,8 +2,9 @@
 // src/services/dashboardAiService.ts
 
 // Prefer Vite-style env var if available, otherwise fall back to localhost
-const API_BASE_URL =
-  (import.meta as any).env?.VITE_API_BASE_URL || "http://localhost:3000";
+import API_BASE from "../config/apiBase";
+
+const API_BASE_URL = API_BASE.replace(/\/$/, "");
 
 function authHeaders() {
   const token =

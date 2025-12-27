@@ -4,9 +4,9 @@ import type {
   TenantDetailsModel,
   TenantPaymentHistoryItem,
 } from "../components/tenants/TenantDetails";
+import API_BASE from "../config/apiBase";
 
-const API_BASE =
-  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000/api";
+const API_BASE_URL = `${API_BASE.replace(/\/$/, "")}/api`;
 
 export interface TenantDetailsResponse {
   tenantId: string;
@@ -25,7 +25,7 @@ export interface TenantDetailsResponse {
 export const fetchTenantDetails = async (
   tenantId: string
 ): Promise<Partial<TenantDetailsModel>> => {
-  const res = await fetch(`${API_BASE}/tenant/${tenantId}/details`);
+  const res = await fetch(`${API_BASE_URL}/tenant/${tenantId}/details`);
 
   if (!res.ok) {
     console.error("Failed to fetch tenant details", res.status);

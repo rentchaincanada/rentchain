@@ -1,4 +1,4 @@
-import { API_BASE } from "../config/apiBase";
+import API_BASE from "../config/apiBase";
 
 /**
  * API origin, e.g. https://api.rentchain.ai (no trailing slash)

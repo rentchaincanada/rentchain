@@ -21,6 +21,7 @@ import { PaymentEditModal } from "../payments/PaymentEditModal";
 import { useToast } from "../ui/ToastProvider";
 import { TenantActivityPanel } from "./TenantActivityPanel";
 import { useSubscription } from "../../context/SubscriptionContext";
+import API_BASE from "../../config/apiBase";
 import { colors, radius, spacing, text, shadows } from "../../styles/tokens";
 import {
   fetchTenantLedgerSummary,
@@ -92,6 +93,8 @@ interface LayoutProps {
   bundle: TenantView;
   tenantId: string;
 }
+
+const API_BASE_URL = API_BASE.replace(/\/$/, "");
 
 const riskColorMap: Record<string, string> = {
   Low: "rgba(34,197,94,0.12)",
@@ -202,8 +205,6 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
   }, [tenantId]);
 
   const refreshTenantLedger = async (id: string) => {
-    const API_BASE_URL =
-      import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
     const res = await fetch(
       `${API_BASE_URL}/api/tenants/${encodeURIComponent(id)}/ledger`
     );
