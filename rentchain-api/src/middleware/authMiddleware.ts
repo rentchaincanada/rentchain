@@ -2,33 +2,7 @@
 import type { RequestHandler } from "express";
 import jwt from "jsonwebtoken";
 import { JWT_SECRET } from "../config/authConfig";
-import type { Account } from "../types/account";
-import type { Usage } from "../types/account";
-import { DEV_DEFAULT_PLAN } from "../config/devFlags";
 import { jsonError } from "../lib/httpResponse";
-
-export interface AuthenticatedUser {
-  id: string;
-  email: string;
-  role: "landlord" | "admin" | "tenant";
-  landlordId?: string;
-  tenantId?: string;
-  leaseId?: string;
-  plan?: string;
-  actorRole?: string | null;
-  actorLandlordId?: string | null;
-}
-
-export interface AuthenticatedRequest extends Request {
-  user?: AuthenticatedUser;
-  account?: Account;
-  requestId?: string;
-  integrity?: {
-    ok: boolean;
-    before?: Usage;
-    after?: Usage;
-  };
-}
 
 export const authenticateJwt: RequestHandler = (req, res, next): void => {
   if (req.path.startsWith("/api/auth/") || req.path === "/api/health") {
@@ -94,7 +68,7 @@ export const authenticateJwt: RequestHandler = (req, res, next): void => {
     (req as any).user = {
       id: String(sub),
       email: String(email),
-      role: (role as AuthenticatedUser["role"]) || "landlord",
+      role: (role as any) || "landlord",
       landlordId: landlordId || (role === "landlord" || role === "admin" ? String(sub) : undefined),
       tenantId: tenantId || undefined,
       leaseId: leaseId || undefined,

@@ -1,9 +1,8 @@
 import { Response, NextFunction } from "express";
-import { AuthenticatedRequest } from "./authMiddleware";
 import { Entitlements } from "../types/account";
 
 export function requireFeature<K extends keyof Entitlements>(key: K) {
-  return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  return (req: any, res: Response, next: NextFunction) => {
     const ent = req.account?.entitlements;
     if (!ent) return res.status(500).json({ error: "Account not loaded" });
 
@@ -27,9 +26,9 @@ export function requireFeature<K extends keyof Entitlements>(key: K) {
 
 export function requireLimit(
   limitKey: "propertiesMax" | "unitsMax" | "usersMax",
-  current: (req: AuthenticatedRequest) => number
+  current: (req: any) => number
 ) {
-  return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  return (req: any, res: Response, next: NextFunction) => {
     const ent = req.account?.entitlements;
     if (!ent) return res.status(500).json({ error: "Account not loaded" });
 

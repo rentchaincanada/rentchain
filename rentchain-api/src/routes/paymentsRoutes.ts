@@ -8,7 +8,6 @@ import {
 } from "../services/paymentsService";
 import { leaseService } from "../services/leaseService";
 import { recordPaymentEvent } from "../services/ledgerEventsService";
-import { AuthenticatedRequest } from "../middleware/authMiddleware";
 
 const router = Router();
 
@@ -36,7 +35,7 @@ router.get("/payments", (req: Request, res: Response) => {
 });
 
 // POST /api/payments
-router.post("/payments", (req: AuthenticatedRequest, res: Response) => {
+router.post("/payments", (req: any, res: Response) => {
   const body = req.body as Partial<CreatePaymentPayload>;
   if (!body.tenantId || typeof body.amount !== "number" || !body.paidAt || !body.method) {
     return res.status(400).json({ error: "tenantId, amount, paidAt, and method are required" });
@@ -52,7 +51,7 @@ router.post("/payments", (req: AuthenticatedRequest, res: Response) => {
   });
 
   recordPaymentEvent({
-    landlordId: req.user?.id,
+    landlordId: (req as any).user?.id,
     type: "payment_created",
     tenantId: payment.tenantId,
     amountDelta: payment.amount,
@@ -65,7 +64,7 @@ router.post("/payments", (req: AuthenticatedRequest, res: Response) => {
 });
 
 // POST /api/payments/record (alias for quick entry)
-router.post("/payments/record", (req: AuthenticatedRequest, res: Response) => {
+router.post("/payments/record", (req: any, res: Response) => {
   const body = req.body as Partial<CreatePaymentPayload>;
   if (!body.tenantId || typeof body.amount !== "number" || !body.paidAt || !body.method) {
     return res.status(400).json({ error: "tenantId, amount, paidAt, and method are required" });
@@ -81,7 +80,7 @@ router.post("/payments/record", (req: AuthenticatedRequest, res: Response) => {
   });
 
   recordPaymentEvent({
-    landlordId: req.user?.id,
+    landlordId: (req as any).user?.id,
     type: "payment_created",
     tenantId: payment.tenantId,
     amountDelta: payment.amount,
@@ -133,7 +132,7 @@ router.get("/payments/property/:propertyId/monthly", (req: Request, res: Respons
 });
 
 // PUT /api/payments/:paymentId
-router.put("/payments/:paymentId", (req: AuthenticatedRequest, res: Response) => {
+router.put("/payments/:paymentId", (req: any, res: Response) => {
   const { paymentId } = req.params;
   const { amount, notes } = req.body as Partial<Payment>;
 
@@ -154,7 +153,7 @@ router.put("/payments/:paymentId", (req: AuthenticatedRequest, res: Response) =>
   const delta = updatedAmount - existing.amount;
   if (delta !== 0) {
     recordPaymentEvent({
-      landlordId: req.user?.id,
+      landlordId: (req as any).user?.id,
       type: "payment_updated",
       tenantId: existing.tenantId,
       amountDelta: delta,
@@ -168,7 +167,7 @@ router.put("/payments/:paymentId", (req: AuthenticatedRequest, res: Response) =>
 });
 
 // DELETE /api/payments/:paymentId
-router.delete("/payments/:paymentId", (req: AuthenticatedRequest, res: Response) => {
+router.delete("/payments/:paymentId", (req: any, res: Response) => {
   const { paymentId } = req.params;
   if (!paymentId) {
     return res.status(400).json({ error: "paymentId is required" });
@@ -180,7 +179,7 @@ router.delete("/payments/:paymentId", (req: AuthenticatedRequest, res: Response)
   }
 
   recordPaymentEvent({
-    landlordId: req.user?.id,
+    landlordId: (req as any).user?.id,
     type: "payment_deleted",
     tenantId: existing.tenantId,
     amountDelta: -Math.abs(existing.amount),
