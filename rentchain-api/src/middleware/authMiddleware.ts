@@ -1,5 +1,5 @@
 // src/middleware/authMiddleware.ts
-import { RequestHandler } from "express";
+import type { RequestHandler } from "express";
 import jwt from "jsonwebtoken";
 import { JWT_SECRET } from "../config/authConfig";
 import type { Account } from "../types/account";
@@ -23,7 +23,11 @@ export interface AuthenticatedRequest extends Request {
   user?: AuthenticatedUser;
   account?: Account;
   requestId?: string;
-  integrity: string;
+  integrity?: {
+    ok: boolean;
+    before?: Usage;
+    after?: Usage;
+  };
 }
 
 export const authenticateJwt: RequestHandler = (req, res, next): void => {
