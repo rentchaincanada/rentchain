@@ -48,7 +48,7 @@ import { blockImpersonationWrites } from "./middleware/blockImpersonationWrites"
 import landlordBillingRoutes from "./routes/landlordBillingRoutes";
 import adminBillingRoutes from "./routes/adminBillingRoutes";
 import adminWaitlistInvitesLookupRoutes from "./routes/adminWaitlistInvitesLookupRoutes";
-import dashboardAiRoutes from "./routes/dashboardAiRoutes";
+import dashboardRoutes from "./routes/dashboardRoutes";
 
 export function mountSafeRoutes(app: Application) {
   // Public routes first (no auth/plan)
@@ -108,7 +108,7 @@ export function mountSafeRoutes(app: Application) {
   app.use("/api/admin", routeSource("adminEmailDiagRoutes.ts"), adminEmailDiagRoutes);
   app.use("/api/admin", routeSource("adminBillingRoutes.ts"), adminBillingRoutes);
   app.use("/api/admin", routeSource("adminWaitlistInvitesLookupRoutes.ts"), adminWaitlistInvitesLookupRoutes);
-  app.use("/api/dashboard", routeSource("dashboardAiRoutes.ts"), dashboardAiRoutes);
+  app.use("/api/dashboard", routeSource("dashboardRoutes.ts"), dashboardRoutes);
   app.use("/api/internal/reporting", routeSource("internalReportingRoutes.ts"), internalReportingRoutes);
   app.use("/api/dev", routeSource("devMintRoutes.ts"), devMintRoutes);
   app.use("/api/dev", routeSource("devDiagRoutes.ts"), devDiagRoutes);
