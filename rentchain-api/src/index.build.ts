@@ -1,7 +1,7 @@
-import { app } from "./app.build";
+import app from "./app";
 
-const port = process.env.PORT ? Number(process.env.PORT) : 3000;
+const PORT = Number(process.env.PORT || 8080);
 
-app.listen(port, () => {
-  console.log(`rentchain-api (build-safe) listening on port ${port}`);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`rentchain-api build-safe listening on port ${PORT}`);
 });
