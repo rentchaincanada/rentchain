@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import API_BASE from "../config/apiBase";
 
 export type TenantInvoice = {
   id: string;
@@ -56,12 +57,8 @@ export function useTenantLedger(tenantId: string | null): UseTenantLedgerResult 
         setLoading(true);
         setError(null);
 
-        const API_BASE_URL =
-          import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
-
-        const res = await fetch(
-          `${API_BASE_URL}/api/tenants/${tenantId}/ledger`
-        );
+        const base = API_BASE.replace(/\/$/, "");
+        const res = await fetch(`${base}/api/tenants/${tenantId}/ledger`);
 
         if (!res.ok) {
           throw new Error(`HTTP ${res.status}`);

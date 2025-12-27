@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import API_BASE from "../config/apiBase";
 
 export type TenantPayment = {
   id: string;
@@ -36,12 +37,8 @@ export function useTenantPayments(tenantId: string | null): UseTenantPaymentsRes
         setLoading(true);
         setError(null);
 
-        const API_BASE_URL =
-          import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
-
-        const res = await fetch(
-          `${API_BASE_URL}/api/tenants/${tenantId}/payments`
-        );
+        const base = API_BASE.replace(/\/$/, "");
+        const res = await fetch(`${base}/api/tenants/${tenantId}/payments`);
 
         if (!res.ok) {
           throw new Error(`HTTP ${res.status}`);

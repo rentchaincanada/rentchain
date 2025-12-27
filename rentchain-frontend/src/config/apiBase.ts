@@ -1,20 +1,11 @@
-const fromEnv =
-  (import.meta as any).env?.VITE_API_URL ||
-  (import.meta as any).env?.VITE_API_BASE_URL ||
-  "";
+const envBase = (import.meta as any).env?.VITE_API_BASE?.trim() || "";
+const fallbackProd = "https://rentchain-landlord-api-915921057662.us-central1.run.app";
+const fallbackDev = "http://localhost:3000";
 
-const devFallback = "http://localhost:3000";
+export const API_BASE = (envBase || (import.meta.env.DEV ? fallbackDev : fallbackProd)).replace(/\/$/, "");
 
-export const API_BASE = String(
-  fromEnv || (import.meta.env.DEV ? devFallback : "")
-).replace(/\/$/, "");
-
-let warnedMissingApiBase = false;
-if (!API_BASE && !import.meta.env.DEV && !warnedMissingApiBase) {
-  console.warn(
-    "[RentChain] API_BASE not set in production. Set VITE_API_URL to your API origin."
-  );
-  warnedMissingApiBase = true;
+if (import.meta.env.DEV && !envBase) {
+  console.warn("[RentChain] VITE_API_BASE not set; defaulting to localhost:3000");
 }
 
-export const API_BASE_URL = API_BASE ? `${API_BASE}/api` : "";
+export default API_BASE;

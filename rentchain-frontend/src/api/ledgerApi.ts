@@ -23,6 +23,22 @@ export interface LedgerEntry {
   unit: string | null;
 }
 
+export interface LedgerEvent {
+  id: string;
+  type?: string;
+  createdAt?: string;
+  date?: string | null;
+  amount?: number;
+  method?: string | null;
+  notes?: string | null;
+  tenantId?: string;
+  tenantName?: string;
+  propertyName?: string;
+  unit?: string | null;
+  runningBalance?: number;
+  label?: string;
+}
+
 /**
  * GET /ledger
  */
@@ -55,4 +71,30 @@ export async function fetchTenantLedgerSummary(
 
 export async function fetchTenantLedger(tenantId: string) {
   return apiJson<any>(`/ledger?tenantId=${encodeURIComponent(tenantId)}`);
+}
+
+/**
+ * GET /events with optional filters (tenantId/propertyId) and limit.
+ */
+export async function fetchLedgerEvents(opts: {
+  tenantId?: string | null;
+  propertyId?: string | null;
+  limit?: number;
+}): Promise<LedgerEvent[]> {
+  const params = new URLSearchParams();
+  if (opts.limit) params.set("limit", String(opts.limit));
+  if (opts.tenantId) params.set("tenantId", opts.tenantId);
+  if (opts.propertyId) params.set("propertyId", opts.propertyId);
+  const query = params.toString();
+  const data = await apiJson<any>(`/events${query ? `?${query}` : ""}`);
+  const items: LedgerEvent[] = Array.isArray(data?.items)
+    ? data.items
+    : Array.isArray(data)
+    ? data
+    : [];
+  return [...items].sort((a, b) => {
+    const da = Date.parse(a.createdAt || a.date || "") || 0;
+    const db = Date.parse(b.createdAt || b.date || "") || 0;
+    return db - da;
+  });
 }

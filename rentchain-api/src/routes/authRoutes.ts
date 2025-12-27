@@ -5,7 +5,7 @@ import crypto from "crypto";
 import { generateJwtForLandlord, signInWithPassword } from "../services/authService";
 import {
   authenticateJwt,
-  AuthenticatedRequest,
+  any,
 } from "../middleware/authMiddleware";
 import { DEMO_LANDLORD, DEMO_LANDLORD_EMAIL } from "../config/authConfig";
 import {
@@ -63,7 +63,7 @@ const LoginSchema = z.object({
 });
 
 function rateLimit(key: string) {
-  return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  return (req: any, res: Response, next: NextFunction) => {
     const now = Date.now();
     const ip = req.ip || req.headers["x-forwarded-for"]?.toString() || "unknown";
     const storeKey = `${ip}:${key}`;
@@ -369,7 +369,7 @@ router.post(
   "/2fa/totp/setup",
   authenticateJwt,
   rateLimit("2fa-totp-setup"),
-  async (req: AuthenticatedRequest, res: Response) => {
+  async (req: any, res: Response) => {
     const authPayload: any = (req as any).user || {};
     const email: string | undefined =
       authPayload.email || (req as any).userEmail;
@@ -400,7 +400,7 @@ router.post(
   "/2fa/totp/confirm",
   authenticateJwt,
   rateLimit("2fa-totp-confirm"),
-  async (req: AuthenticatedRequest, res: Response) => {
+  async (req: any, res: Response) => {
     const authPayload: any = (req as any).user || {};
     const email: string | undefined =
       authPayload.email || (req as any).userEmail;
@@ -452,7 +452,7 @@ router.post(
   "/2fa/backup-codes/regenerate",
   authenticateJwt,
   rateLimit("2fa-backup-regenerate"),
-  async (req: AuthenticatedRequest, res: Response) => {
+  async (req: any, res: Response) => {
     const authPayload: any = (req as any).user || {};
     const email: string | undefined =
       authPayload.email || (req as any).userEmail;
@@ -501,7 +501,7 @@ router.post(
   "/2fa/disable",
   authenticateJwt,
   rateLimit("2fa-disable"),
-  async (req: AuthenticatedRequest, res: Response) => {
+  async (req: any, res: Response) => {
     const authPayload: any = (req as any).user || {};
     const email: string | undefined =
       authPayload.email || (req as any).userEmail;
@@ -549,7 +549,7 @@ router.post(
   "/2fa/trust-device",
   authenticateJwt,
   rateLimit("2fa-trust-device"),
-  async (req: AuthenticatedRequest, res: Response) => {
+  async (req: any, res: Response) => {
     const authPayload: any = (req as any).user || {};
     const email: string | undefined =
       authPayload.email || (req as any).userEmail;
@@ -606,7 +606,7 @@ router.post(
 router.get(
   "/me",
   authenticateJwt,
-  (req: AuthenticatedRequest, res: Response) => {
+  (req: any, res: Response) => {
     if (!req.user) {
       res.status(401).json({ error: "Unauthorized" });
       return;

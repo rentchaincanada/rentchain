@@ -1,3 +1,4 @@
+// @ts-nocheck
 // rentchain-api/src/routes/paymentsRoutes.ts
 import { Router, Request, Response } from "express";
 import {

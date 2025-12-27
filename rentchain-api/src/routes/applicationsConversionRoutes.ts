@@ -1,12 +1,11 @@
 import { Router } from "express";
-import { AuthenticatedRequest } from "../middleware/authMiddleware";
 import { convertApplicationToTenant } from "../services/applicationConversionService";
 
 const router = Router();
 
 router.post(
   "/applications/:applicationId/convert",
-  async (req: AuthenticatedRequest, res) => {
+  async (req, res) => {
     try {
       if (!req.user?.id) {
         return res.status(401).json({ error: "Unauthorized" });

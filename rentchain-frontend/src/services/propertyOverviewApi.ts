@@ -1,5 +1,7 @@
 // src/services/propertyOverviewApi.ts
 
+import API_BASE from "../config/apiBase";
+
 export type RiskLevel = "Low" | "Medium" | "High" | "Unknown";
 
 export interface PropertySummary {
@@ -7,6 +9,8 @@ export interface PropertySummary {
   name: string;
   address: string;
 }
+
+const API_BASE_URL = API_BASE.replace(/\/$/, "");
 
 export async function fetchProperties(): Promise<PropertySummary[]> {
   const res = await fetch(`${API_BASE_URL}/properties`);
@@ -62,10 +66,6 @@ export interface PropertyOverviewResponse {
   units: PropertyOverviewUnit[];
   maintenanceSummary: MaintenanceSummary;
 }
-
-// ✅ Frontend only talks to backend via HTTP
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 
 export async function fetchPropertyOverview(
   propertyId: string

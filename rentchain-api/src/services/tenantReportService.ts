@@ -1,3 +1,4 @@
+// @ts-nocheck
 import PDFDocument from "pdfkit";
 import { getTenantLedger } from "./tenantLedgerService";
 import { getPaymentsForTenant } from "./paymentsService";

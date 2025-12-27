@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>RentChain Health</title>
+    <meta name="robots" content="noindex,nofollow" />
+  </head>
+  <body>
+    <pre id="out">Checking…</pre>
+    <script>
+      (async () => {
+        const out = document.getElementById('out');
+        try {
+          const r = await fetch('https://rentchain-landlord-api-915921057662.us-central1.run.app/health', {
+            cache: 'no-store',
+            headers: { 'accept': 'application/json' }
+          });
+          const text = await r.text();
+          out.textContent = text;
+        } catch (e) {
+          out.textContent = 'health check failed: ' + (e?.message || String(e));
+        }
+      })();
+    </script>
+  </body>
+</html>

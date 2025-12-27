@@ -48,6 +48,12 @@ import { blockImpersonationWrites } from "./middleware/blockImpersonationWrites"
 import landlordBillingRoutes from "./routes/landlordBillingRoutes";
 import adminBillingRoutes from "./routes/adminBillingRoutes";
 import adminWaitlistInvitesLookupRoutes from "./routes/adminWaitlistInvitesLookupRoutes";
+import dashboardRoutes from "./routes/dashboardRoutes";
+import tenantDetailsRoutes from "./routes/tenantDetailsRoutes";
+import paymentsRoutes from "./routes/paymentsRoutes";
+import applicationsRoutes from "./routes/applicationsRoutes";
+import leaseRoutes from "./routes/leaseRoutes";
+import tenantOnboardRoutes from "./routes/tenantOnboardRoutes";
 
 export function mountSafeRoutes(app: Application) {
   // Public routes first (no auth/plan)
@@ -93,6 +99,11 @@ export function mountSafeRoutes(app: Application) {
   app.use("/api/landlord", routeSource("microLiveStatusRoutes.ts"), microLiveStatusRoutes);
   app.use("/api/landlord", routeSource("landlordImpersonationRoutes.ts"), landlordImpersonationRoutes);
   app.use("/api/landlord", routeSource("landlordBillingRoutes.ts"), landlordBillingRoutes);
+  app.use("/api", routeSource("tenantDetailsRoutes.ts"), tenantDetailsRoutes);
+  app.use("/api", routeSource("paymentsRoutes.ts"), paymentsRoutes);
+  app.use("/api", routeSource("applicationsRoutes.ts"), applicationsRoutes);
+  app.use("/api/leases", routeSource("leaseRoutes.ts"), leaseRoutes);
+  app.use("/api", routeSource("tenantOnboardRoutes.ts"), tenantOnboardRoutes);
   app.use("/api/tenant/auth", routeSource("tenantAuthRoutes.ts"), tenantAuthRoutes);
   app.use("/api/tenant", routeSource("tenantPortalRoutes.ts"), tenantPortalRoutes);
   app.use("/api/tenant/reporting", routeSource("tenantReportingRoutes.ts"), tenantReportingRoutes);
@@ -107,6 +118,7 @@ export function mountSafeRoutes(app: Application) {
   app.use("/api/admin", routeSource("adminEmailDiagRoutes.ts"), adminEmailDiagRoutes);
   app.use("/api/admin", routeSource("adminBillingRoutes.ts"), adminBillingRoutes);
   app.use("/api/admin", routeSource("adminWaitlistInvitesLookupRoutes.ts"), adminWaitlistInvitesLookupRoutes);
+  app.use("/api/dashboard", routeSource("dashboardRoutes.ts"), dashboardRoutes);
   app.use("/api/internal/reporting", routeSource("internalReportingRoutes.ts"), internalReportingRoutes);
   app.use("/api/dev", routeSource("devMintRoutes.ts"), devMintRoutes);
   app.use("/api/dev", routeSource("devDiagRoutes.ts"), devDiagRoutes);
