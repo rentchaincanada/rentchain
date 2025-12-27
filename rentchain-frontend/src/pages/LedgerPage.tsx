@@ -1,17 +1,17 @@
-// @ts-nocheck
 // rentchain-frontend/src/pages/LedgerPage.tsx
-import React, { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { TopNav } from "../components/layout/TopNav";
-import { fetchTenantLedger, TenantLedgerEntry } from "../api/ledgerApi";
+import { fetchLedgerEvents, LedgerEvent } from "../api/ledgerApi";
 import { useToast } from "../components/ui/ToastProvider";
 
 const LedgerPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const tenantId = searchParams.get("tenantId");
+  const navigate = useNavigate();
   const { showToast } = useToast();
 
-  const [entries, setEntries] = useState<TenantLedgerEntry[]>([]);
+  const [entries, setEntries] = useState<LedgerEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -19,27 +19,23 @@ const LedgerPage: React.FC = () => {
     let cancelled = false;
 
     const load = async () => {
-      if (!tenantId) {
-        setEntries([]);
-        setError(null);
-        return;
-      }
-
       try {
         setLoading(true);
         setError(null);
-        const data = await fetchTenantLedger(tenantId);
+        const data = await fetchLedgerEvents({
+          tenantId: tenantId || undefined,
+          limit: 100,
+        });
         if (!cancelled) {
           setEntries(data);
         }
       } catch (err) {
-        console.error("[LedgerPage] Failed to load tenant ledger", err);
+        console.error("[LedgerPage] Failed to load ledger", err);
         if (!cancelled) {
-          setError("Failed to load tenant ledger");
+          setError("Failed to load ledger");
           showToast({
             message: "Failed to load ledger",
-            description:
-              "An error occurred while loading this tenant’s ledger entries.",
+            description: "An error occurred while loading ledger entries.",
             variant: "error",
           });
         }
@@ -56,6 +52,59 @@ const LedgerPage: React.FC = () => {
       cancelled = true;
     };
   }, [tenantId, showToast]);
+
+  const filterChip = useMemo(() => {
+    if (!tenantId) return null;
+    const shortId =
+      tenantId.length > 8
+        ? `${tenantId.slice(0, 4)}…${tenantId.slice(-3)}`
+        : tenantId;
+    return (
+      <div
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "6px 10px",
+          borderRadius: 12,
+          background: "rgba(59,130,246,0.12)",
+          color: "#bfdbfe",
+          border: "1px solid rgba(59,130,246,0.35)",
+          fontSize: 12,
+          fontWeight: 700,
+        }}
+      >
+        <span>Filtered: Tenant {shortId}</span>
+        <button
+          type="button"
+          onClick={() => navigate("/ledger")}
+          style={{
+            background: "transparent",
+            border: "1px solid rgba(59,130,246,0.45)",
+            color: "#bfdbfe",
+            borderRadius: 10,
+            padding: "4px 8px",
+            cursor: "pointer",
+            fontWeight: 700,
+          }}
+        >
+          Clear filter
+        </button>
+      </div>
+    );
+  }, [tenantId, navigate]);
+
+  const emptyMessage = tenantId
+    ? "No ledger events for this tenant yet."
+    : "No ledger events yet.";
+
+  const sortedEntries = useMemo(() => {
+    return [...entries].sort((a, b) => {
+      const da = Date.parse(a.createdAt || a.date || "") || 0;
+      const db = Date.parse(b.createdAt || b.date || "") || 0;
+      return db - da;
+    });
+  }, [entries]);
 
   return (
     <div className="app-root">
@@ -80,17 +129,9 @@ const LedgerPage: React.FC = () => {
             Ledger
           </h1>
 
-          {!tenantId ? (
-            <div
-              style={{
-                fontSize: 13,
-                color: "#9ca3af",
-              }}
-            >
-              No tenant selected. Open a tenant profile and click “View all
-              ledger events →” to see their full ledger here.
-            </div>
-          ) : loading ? (
+          {filterChip}
+
+          {loading ? (
             <div
               style={{
                 fontSize: 13,
@@ -108,14 +149,14 @@ const LedgerPage: React.FC = () => {
             >
               {error}
             </div>
-          ) : entries.length === 0 ? (
+          ) : sortedEntries.length === 0 ? (
             <div
               style={{
                 fontSize: 13,
                 color: "#9ca3af",
               }}
             >
-              No ledger entries found for this tenant.
+              {emptyMessage}
             </div>
           ) : (
             <div
@@ -128,7 +169,7 @@ const LedgerPage: React.FC = () => {
                 overflowY: "auto",
               }}
             >
-              {entries.map((entry) => (
+              {sortedEntries.map((entry) => (
                 <div
                   key={entry.id}
                   style={{
@@ -147,7 +188,8 @@ const LedgerPage: React.FC = () => {
                         color: "#e5e7eb",
                       }}
                     >
-                      {entry.date} · {entry.type}
+                      {(entry.createdAt || entry.date || "").toString()} •{" "}
+                      {entry.type || "entry"}
                     </div>
                     {entry.label && (
                       <div
@@ -188,7 +230,7 @@ const LedgerPage: React.FC = () => {
                       }}
                     >
                       {entry.type === "payment" ? "+" : ""}
-                      ${Number(entry.amount).toFixed(2)}
+                      ${Number(entry.amount ?? 0).toFixed(2)}
                     </div>
                     {typeof entry.runningBalance === "number" && (
                       <div
