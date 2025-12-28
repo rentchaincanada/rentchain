@@ -1,6 +1,5 @@
 import { Response, NextFunction } from "express";
 import { db } from "../config/firebase";
-import { AuthenticatedRequest } from "./authMiddleware";
 import { setUsage } from "../services/accountService";
 import type { LimitType } from "../utils/planLimits";
 import { limitError, wouldExceed } from "../utils/planLimits";
@@ -12,11 +11,11 @@ type LimitConfig = {
   /**
    * Returns the delta (how many new resources will be created).
    */
-  delta: (req: AuthenticatedRequest) => number | Promise<number>;
+  delta: (req: any) => number | Promise<number>;
 };
 
 export function PlanLimits(configs: LimitConfig[]): RequestHandler {
-  return async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  return async (req: any, res: Response, next: NextFunction) => {
     const account = req.account;
     if (!account) return res.status(500).json({ error: "Account not loaded" });
 
@@ -78,11 +77,7 @@ export function PlanLimits(configs: LimitConfig[]): RequestHandler {
   };
 }
 
-export async function computeUsageFromFirestore(
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction
-) {
+export async function computeUsageFromFirestore(req: any, res: Response, next: NextFunction) {
   try {
     const landlordId = req.user?.landlordId || req.user?.id;
     if (!landlordId) return res.status(401).json({ error: "Unauthorized" });
@@ -240,11 +235,7 @@ async function getScreeningsThisMonthCount(params: { landlordId: string }): Prom
   }
 }
 
-export function enforcePropertyCreateCap(
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction
-) {
+export function enforcePropertyCreateCap(req: any, res: Response, next: NextFunction) {
   const ent = req.account?.entitlements;
   const usage = req.account?.usage;
   const plan = req.account?.plan || req.user?.plan || "starter";
@@ -268,11 +259,7 @@ export function enforcePropertyCreateCap(
   return next();
 }
 
-export function enforceUnitsCreateCap(
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction
-) {
+export function enforceUnitsCreateCap(req: any, res: Response, next: NextFunction) {
   const account = req.account;
   if (!account) return res.status(500).json({ error: "Account not loaded" });
 

@@ -3,10 +3,7 @@ import { Router, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { generateJwtForLandlord, signInWithPassword } from "../services/authService";
-import {
-  authenticateJwt,
-  any,
-} from "../middleware/authMiddleware";
+import { authenticateJwt } from "../middleware/authMiddleware";
 import { DEMO_LANDLORD, DEMO_LANDLORD_EMAIL } from "../config/authConfig";
 import {
   generateTotpSecret,
@@ -169,7 +166,8 @@ router.post("/login", async (req, res) => {
 
   const email = String(parsed.data.email || "").trim().toLowerCase();
   const password = String(parsed.data.password || "");
-  const passwordLoginEnabled = process.env.PASSWORD_LOGIN_ENABLED === "true";
+  const passwordLoginEnabled =
+    (process.env.PASSWORD_LOGIN_ENABLED || "true").toString().trim().toLowerCase() === "true";
 
   try {
     console.log("[auth/login] hit", { email, passwordLoginEnabled });

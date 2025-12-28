@@ -1,7 +1,6 @@
 // @ts-nocheck
 // rentchain-api/src/routes/applicationsRoutes.ts
 import { Router, Request, Response } from "express";
-import PDFDocument from "pdfkit";
 import { convertApplicationToTenant } from "../services/applicationConversionService";
 import type { Application, ApplicationStatus } from "../types/applications";
 import {
@@ -96,8 +95,22 @@ interface NewApplicationPayload {
   creditConsent: boolean;
 }
 
-function streamApplicationPdf(app: Application, res: Response) {
-  const doc = new PDFDocument({ margin: 50 });
+async function streamApplicationPdf(app: Application, res: Response) {
+  let PDF: any;
+  try {
+    const mod: any = await import("pdfkit");
+    PDF = mod?.default ?? mod;
+  } catch (err: any) {
+    console.error("[applications/pdf] pdfkit missing", err?.message || err);
+    res.status(501).json({
+      ok: false,
+      code: "PDFKIT_MISSING",
+      message: "PDF generation temporarily unavailable",
+    });
+    return;
+  }
+
+  const doc = new PDF({ margin: 50 });
 
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader(
@@ -376,7 +389,7 @@ router.get("/applications", (_req, res) => {
 /**
  * GET /api/applications/:id/pdf
  */
-router.get("/applications/:id/pdf", (req, res) => {
+router.get("/applications/:id/pdf", async (req, res) => {
   const { id } = req.params;
   const app = getApplicationById(id);
 
@@ -385,7 +398,7 @@ router.get("/applications/:id/pdf", (req, res) => {
   }
 
   try {
-    streamApplicationPdf(app, res);
+    await streamApplicationPdf(app, res);
   } catch (err: any) {
     console.error("[GET /api/applications/:id/pdf] error:", err);
     if (!res.headersSent) {

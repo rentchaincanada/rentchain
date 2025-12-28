@@ -1,5 +1,4 @@
 // @ts-nocheck
-import PDFDocument from "pdfkit";
 import { getTenantLedger } from "./tenantLedgerService";
 import { getPaymentsForTenant } from "./paymentsService";
 import { getTenantDetailBundle } from "./tenantDetailsService";
@@ -31,6 +30,21 @@ export type TenantReportData = {
   payments: any[];
   ledgerEntries: any[];
 };
+
+let PDFDocument: any | null = null;
+
+async function loadPDFKit() {
+  if (PDFDocument) return PDFDocument;
+  try {
+    const mod: any = await import("pdfkit");
+    PDFDocument = mod?.default ?? mod;
+    return PDFDocument;
+  } catch (err) {
+    const e: any = new Error("PDFKIT_MISSING");
+    e.cause = err;
+    throw e;
+  }
+}
 
 const parseDate = (value: any): Date | null => {
   if (!value) return null;
@@ -165,9 +179,10 @@ export async function buildTenantReportData(
 export async function generateTenantReportPdfBuffer(
   tenantId: string
 ): Promise<Buffer> {
+  const PDF = await loadPDFKit();
   const data = await buildTenantReportData(tenantId);
 
-  const doc = new PDFDocument({
+  const doc = new PDF({
     size: "A4",
     margin: 40,
   });

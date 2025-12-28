@@ -1,9 +1,8 @@
 import { Response, NextFunction } from "express";
-import { AuthenticatedRequest } from "./authMiddleware";
 import { getOrCreateAccount } from "../services/accountService";
 
 export async function attachAccount(
-  req: AuthenticatedRequest,
+  req: any,
   res: Response,
   next: NextFunction
 ) {

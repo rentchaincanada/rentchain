@@ -4,14 +4,21 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
 import { requestBreadcrumbs, getCrumbs } from "./middleware/requestBreadcrumbs";
-import { mountSafeRoutes } from "./app.routes";
-import { mountDevRoutes } from "./app.routes.dev";
-import { mountRouteMap } from "./routes/devRouteMap";
 import publicRoutes from "./routes/publicRoutes";
 import { requestContext } from "./middleware/requestContext";
 import { routeSource } from "./middleware/routeSource";
 import "./types/auth";
 import "./types/http";
+import { authenticateJwt } from "./middleware/authMiddleware";
+import authRoutes from "./routes/authRoutes";
+import tenantDetailsRoutes from "./routes/tenantDetailsRoutes";
+import paymentsRoutes from "./routes/paymentsRoutes";
+import applicationsRoutes from "./routes/applicationsRoutes";
+import leaseRoutes from "./routes/leaseRoutes";
+import tenantOnboardRoutes from "./routes/tenantOnboardRoutes";
+import eventsRoutes from "./routes/eventsRoutes";
+import dashboardRoutes from "./routes/dashboardRoutes";
+import healthRoutes from "./routes/healthRoutes";
 
 const app: Application = express();
 app.set("etag", false);
@@ -44,17 +51,27 @@ app.use(requestContext);
  * Route registration
  */
 app.use("/api", routeSource("publicRoutes.ts"), publicRoutes);
+app.use("/api/auth", routeSource("authRoutes.ts"), authRoutes);
 
-// Always mount safe routes
-mountSafeRoutes(app);
+// Decode auth for protected routes
+app.use(authenticateJwt);
 
-// Dev/legacy routes only outside production
-if (process.env.NODE_ENV !== "production") {
-  app.use(routeSource("app.routes.dev.ts"));
-  mountDevRoutes(app);
-  app.use(routeSource("devRouteMap.ts"));
-  mountRouteMap(app);
-}
+// Core API mounts
+app.use("/health", routeSource("healthRoutes.ts"), healthRoutes);
+app.get("/api/me", (req, res) => {
+  res.setHeader("x-route-source", "app.ts:/api/me");
+  if (!req.user) {
+    return res.status(401).json({ ok: false, error: "Unauthorized" });
+  }
+  return res.json({ ok: true, user: req.user });
+});
+app.use("/api", routeSource("tenantDetailsRoutes.ts"), tenantDetailsRoutes);
+app.use("/api", routeSource("paymentsRoutes.ts"), paymentsRoutes);
+app.use("/api", routeSource("applicationsRoutes.ts"), applicationsRoutes);
+app.use("/api/leases", routeSource("leaseRoutes.ts"), leaseRoutes);
+app.use("/api", routeSource("tenantOnboardRoutes.ts"), tenantOnboardRoutes);
+app.use("/api/events", routeSource("eventsRoutes.ts"), eventsRoutes);
+app.use("/api/dashboard", routeSource("dashboardRoutes.ts"), dashboardRoutes);
 
 process.on("uncaughtException", (err) => {
   console.error("[uncaughtException]", err);

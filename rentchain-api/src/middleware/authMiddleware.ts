@@ -2,9 +2,6 @@
 import type { RequestHandler } from "express";
 import jwt from "jsonwebtoken";
 import { JWT_SECRET } from "../config/authConfig";
-import type { Account } from "../types/account";
-import type { Usage } from "../types/account";
-import { DEV_DEFAULT_PLAN } from "../config/devFlags";
 import { jsonError } from "../lib/httpResponse";
 
 export interface AuthenticatedUser {
@@ -20,11 +17,14 @@ export interface AuthenticatedUser {
 }
 
 export const authenticateJwt: RequestHandler = (req, res, next): void => {
+  // Allow auth routes and health to be public
   if (req.path.startsWith("/api/auth/") || req.path === "/api/health") {
     return next();
   }
+
   const url = req.originalUrl || "";
 
+  // Legacy /health (keep)
   if (url === "/health") {
     res.json({
       ok: true,
@@ -36,18 +36,22 @@ export const authenticateJwt: RequestHandler = (req, res, next): void => {
     return;
   }
 
+  // Legacy /auth/* passthrough (keep for compatibility)
   if (url.startsWith("/auth/")) {
     return next();
   }
 
+  // Dev-only routes
   if (process.env.NODE_ENV !== "production" && url.startsWith("/api/dev/")) {
     return next();
   }
 
+  // CORS preflight
   if (req.method === "OPTIONS") {
     return next();
   }
 
+  // Tenant portal dev bypass (existing behavior)
   const isTenantPortalDev =
     process.env.TENANT_PORTAL_DEV === "1" &&
     String(req.header("x-tenant-portal") || "") === "1" &&
@@ -60,6 +64,7 @@ export const authenticateJwt: RequestHandler = (req, res, next): void => {
 
   const authHeader = req.headers.authorization;
 
+  // If no auth header, continue (routes can enforce auth explicitly)
   if (!authHeader) {
     return next();
   }
@@ -73,7 +78,8 @@ export const authenticateJwt: RequestHandler = (req, res, next): void => {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as jwt.JwtPayload;
-    const { sub, email, role, landlordId, tenantId, leaseId, plan, actorRole, actorLandlordId } = decoded as any;
+    const { sub, email, role, landlordId, tenantId, leaseId, plan, actorRole, actorLandlordId } =
+      decoded as any;
 
     if (!sub || !email) {
       jsonError(res, 401, "UNAUTHORIZED", "Unauthorized", undefined, (req as any).requestId);
@@ -83,7 +89,7 @@ export const authenticateJwt: RequestHandler = (req, res, next): void => {
     (req as any).user = {
       id: String(sub),
       email: String(email),
-      role: (role as AuthenticatedUser["role"]) || "landlord",
+      role: (role as any) || "landlord",
       landlordId: landlordId || (role === "landlord" || role === "admin" ? String(sub) : undefined),
       tenantId: tenantId || undefined,
       leaseId: leaseId || undefined,

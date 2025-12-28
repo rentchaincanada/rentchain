@@ -1,7 +1,6 @@
 import { Response, NextFunction } from "express";
 import { db } from "../config/firebase";
 import { ENTITLEMENTS, PlanTier } from "../config/entitlements";
-import { AuthenticatedRequest } from "./authMiddleware";
 
 async function countResource(resource: string, landlordId: string): Promise<number> {
   switch (resource) {
@@ -54,7 +53,7 @@ async function countResource(resource: string, landlordId: string): Promise<numb
 }
 
 export function requireEntitlement(resource: "properties" | "units" | "tenants" | "leases") {
-  return async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  return async (req: any, res: Response, next: NextFunction) => {
     try {
       const landlordId = req.user?.id;
       if (!landlordId) return res.status(401).json({ error: "Unauthorized" });

@@ -1,7 +1,6 @@
 // src/routes/screeningRoutes.ts
 // @ts-nocheck
 import { Router, Response } from "express";
-import PDFDocument from "pdfkit";
 import { authenticateJwt } from "../middleware/authMiddleware";
 import {
   getApplicationById,
@@ -333,7 +332,7 @@ router.get(
 
 router.get(
   "/screenings/:id/report.pdf",
-  (req: AuthenticatedRequest, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response) => {
     const { id } = req.params;
     const screeningRequest = getScreeningRequestById(id);
 
@@ -352,7 +351,20 @@ router.get(
       ? propertyService.getById(application.propertyId)
       : undefined;
 
-    const doc = new PDFDocument({ margin: 50 });
+    let PDF: any;
+    try {
+      const mod: any = await import("pdfkit");
+      PDF = mod?.default ?? mod;
+    } catch (err: any) {
+      console.error("[screenings/:id/report.pdf] pdfkit missing", err?.message || err);
+      return res.status(501).json({
+        ok: false,
+        code: "PDFKIT_MISSING",
+        message: "PDF generation temporarily unavailable",
+      });
+    }
+
+    const doc = new PDF({ margin: 50 });
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
