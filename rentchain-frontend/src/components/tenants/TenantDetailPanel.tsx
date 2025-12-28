@@ -32,6 +32,9 @@ import type { ReputationTimelineEvent } from "../../types/models";
 import { arr, num, str } from "../../utils/safe";
 import type { TenantView } from "@/types/tenantView";
 import { toTenantView } from "@/adapters/tenantViewAdapter";
+import { useLedgerV2 } from "@/hooks/useLedgerV2";
+import { LedgerTimeline } from "../ledger/LedgerTimeline";
+import { LedgerEventDrawer } from "../ledger/LedgerEventDrawer";
 
 interface TenantDetailPanelProps {
   tenantId: string | null;
@@ -151,6 +154,12 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
   const [creditHistory, setCreditHistory] = useState<any | null>(null);
   const [creditError, setCreditError] = useState<string | null>(null);
   const [reportingStatus, setReportingStatus] = useState<any | null>(null);
+  const { items: ledgerV2Items, loading: ledgerV2Loading, error: ledgerV2Error, refresh: refreshLedgerV2 } =
+    useLedgerV2({
+      tenantId,
+      limit: 10,
+    });
+  const [selectedLedgerId, setSelectedLedgerId] = useState<string | null>(null);
 
   useEffect(() => {
     setPayments(arr(bundlePayments));
@@ -1762,6 +1771,71 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
           </div>
         )}
       </div>
+
+      {/* Tenant activity (audit feed) */}
+
+      {/* Tenant timeline (Ledger V2) */}
+      <div
+        style={{
+          marginTop: 12,
+          padding: spacing.md,
+          borderRadius: radius.md,
+          border: `1px solid ${colors.border}`,
+          background: colors.panel,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: spacing.sm,
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontSize: 12,
+                textTransform: "uppercase",
+                letterSpacing: 0.08,
+                color: text.muted,
+              }}
+            >
+              Tenant Timeline
+            </div>
+            <div style={{ fontWeight: 700, color: text.primary }}>Recent activity</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => refreshLedgerV2()}
+            style={{
+              padding: "8px 10px",
+              borderRadius: radius.md,
+              border: `1px solid ${colors.border}`,
+              background: colors.card,
+              cursor: ledgerV2Loading ? "not-allowed" : "pointer",
+            }}
+            disabled={ledgerV2Loading}
+          >
+            {ledgerV2Loading ? "Loading…" : "Refresh"}
+          </button>
+        </div>
+        {ledgerV2Error ? (
+          <div style={{ color: colors.danger, fontSize: 13 }}>{ledgerV2Error}</div>
+        ) : ledgerV2Loading ? (
+          <div style={{ fontSize: 13, color: text.muted }}>Loading timeline…</div>
+        ) : (
+          <LedgerTimeline
+            items={ledgerV2Items}
+            emptyText="No activity yet"
+            onSelect={(id) => setSelectedLedgerId(id)}
+          />
+        )}
+      </div>
+
+      {selectedLedgerId ? (
+        <LedgerEventDrawer eventId={selectedLedgerId} onClose={() => setSelectedLedgerId(null)} />
+      ) : null}
 
       {/* Tenant activity (audit feed) */}
       <TenantActivityPanel tenantId={tenant?.id} />
