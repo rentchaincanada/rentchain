@@ -1,6 +1,5 @@
 {
-  "routes": [
-    { "src": "^/health$", "dest": "/api/health" },
-    { "src": "^/api/(.*)$", "dest": "https://rentchain-landlord-api-915921057662.us-central1.run.app/api/$1" }
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
