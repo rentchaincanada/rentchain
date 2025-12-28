@@ -24,13 +24,16 @@ export function clearAuthToken() {
 }
 
 export function resolveApiUrl(input: string) {
-  const s = String(input || "").trim();
+  const sRaw = String(input || "").trim();
   const base = (API_BASE || "").replace(/\/$/, "");
 
-  if (!s) return base;
-  if (/^https?:\/\//i.test(s)) return s;
-  if (s.startsWith("/")) return `${base}${s}`;
-  return `${base}/${s}`;
+  if (!sRaw) return base;
+  if (/^https?:\/\//i.test(sRaw)) return sRaw;
+
+  const [pathPart, queryPart] = sRaw.split("?");
+  const path = pathPart.startsWith("/") ? pathPart : `/${pathPart}`;
+  const normalized = path.startsWith("/api/") ? path : `/api${path}`;
+  return `${base}${normalized}${queryPart ? `?${queryPart}` : ""}`;
 }
 
 export async function apiFetch(path: string, init: RequestInit = {}) {
