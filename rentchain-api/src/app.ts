@@ -19,6 +19,7 @@ import tenantOnboardRoutes from "./routes/tenantOnboardRoutes";
 import eventsRoutes from "./routes/eventsRoutes";
 import dashboardRoutes from "./routes/dashboardRoutes";
 import healthRoutes from "./routes/healthRoutes";
+import ledgerV2Routes from "./routes/ledgerV2Routes";
 
 const app: Application = express();
 app.set("etag", false);
@@ -72,6 +73,7 @@ app.use("/api/leases", routeSource("leaseRoutes.ts"), leaseRoutes);
 app.use("/api", routeSource("tenantOnboardRoutes.ts"), tenantOnboardRoutes);
 app.use("/api/events", routeSource("eventsRoutes.ts"), eventsRoutes);
 app.use("/api/dashboard", routeSource("dashboardRoutes.ts"), dashboardRoutes);
+app.use("/api/ledger-v2", routeSource("ledgerV2Routes.ts"), ledgerV2Routes);
 
 process.on("uncaughtException", (err) => {
   console.error("[uncaughtException]", err);

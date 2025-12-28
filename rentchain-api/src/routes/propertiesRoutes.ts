@@ -107,6 +107,21 @@ router.post(
       });
 
       const property = { id: propertyRef.id, ...propertyBase };
+      try {
+        const { emitLedgerEventV2 } = await import(
+          "../services/ledgerEventsFirestoreService"
+        );
+        await emitLedgerEventV2({
+          landlordId,
+          eventType: "PROPERTY_CREATED",
+          title: "Property created",
+          propertyId: propertyRef.id,
+          actor: { type: "LANDLORD", userId: landlordId, email: req.user?.email },
+          occurredAt: Date.now(),
+        });
+      } catch (e) {
+        console.warn("[ledger-v2] failed to emit property event", (e as any)?.message || e);
+      }
       return res.status(201).json(property);
     } catch (err: any) {
       console.error("[POST /api/properties] failed to write", err);

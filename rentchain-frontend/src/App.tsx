@@ -32,6 +32,7 @@ import { RequireTenant } from "./components/auth/RequireTenant";
 import MicroLiveInvitePage from "./pages/MicroLiveInvitePage";
 
 const LedgerPage = lazy(() => import("./pages/LedgerPage"));
+const LedgerV2Page = lazy(() => import("./pages/LedgerV2Page"));
 const BlockchainPage = lazy(() => import("./pages/BlockchainPage"));
 const AdminScreeningsPage = lazy(() => import("./pages/AdminScreeningsPage"));
 
@@ -149,6 +150,16 @@ function App() {
             }
           />
         ) : null}
+        <Route
+          path="/ledger-v2"
+          element={
+            <RequireAuth>
+              <Suspense fallback={null}>
+                <LedgerV2Page />
+              </Suspense>
+            </RequireAuth>
+          }
+        />
         {import.meta.env.DEV ? (
           <Route
             path="/blockchain"
