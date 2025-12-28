@@ -84,12 +84,12 @@ router.get("/tenants/:tenantId/report", async (req, res) => {
     );
     res.send(buffer);
   } catch (err) {
-    const code = (err as any)?.code;
-    if (code === "PDF_REPORTING_DEP_MISSING") {
+    const code = (err as any)?.message || (err as any)?.code;
+    if (code === "PDFKIT_MISSING") {
       return res.status(501).json({
         ok: false,
         code: "PDF_REPORTING_DISABLED",
-        message: "PDF reporting temporarily unavailable",
+        message: "PDF reporting is temporarily unavailable on this deployment.",
       });
     }
     console.error("[GET /tenants/:tenantId/report] error", err);

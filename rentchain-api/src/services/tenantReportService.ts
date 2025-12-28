@@ -31,6 +31,21 @@ export type TenantReportData = {
   ledgerEntries: any[];
 };
 
+let PDFDocument: any | null = null;
+
+async function loadPDFKit() {
+  if (PDFDocument) return PDFDocument;
+  try {
+    const mod: any = await import("pdfkit");
+    PDFDocument = mod?.default ?? mod;
+    return PDFDocument;
+  } catch (err) {
+    const e: any = new Error("PDFKIT_MISSING");
+    e.cause = err;
+    throw e;
+  }
+}
+
 const parseDate = (value: any): Date | null => {
   if (!value) return null;
   if (value instanceof Date) return value;
@@ -164,18 +179,10 @@ export async function buildTenantReportData(
 export async function generateTenantReportPdfBuffer(
   tenantId: string
 ): Promise<Buffer> {
-  let PDFDocument: any;
-  try {
-    PDFDocument = (await import("pdfkit")).default;
-  } catch (err) {
-    const e: any = new Error("PDF_REPORTING_DEP_MISSING");
-    e.code = "PDF_REPORTING_DEP_MISSING";
-    throw e;
-  }
-
+  const PDF = await loadPDFKit();
   const data = await buildTenantReportData(tenantId);
 
-  const doc = new PDFDocument({
+  const doc = new PDF({
     size: "A4",
     margin: 40,
   });
