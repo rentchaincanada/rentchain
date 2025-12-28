@@ -1,4 +1,5 @@
 import { db } from "../config/firebase";
+import { computeLedgerEventHashV1 } from "../utils/ledgerHash";
 
 export type LedgerEventV2Type =
   | "PROPERTY_CREATED"
@@ -32,6 +33,9 @@ export interface LedgerEventV2 {
   };
   tags?: string[];
   metadata?: Record<string, any>;
+  prevHash?: string | null;
+  hash?: string;
+  hashVersion?: number;
 }
 
 const COLLECTION = "ledgerEventsV2";
@@ -74,7 +78,27 @@ export async function emitLedgerEventV2(
     actor: input.actor || { type: "SYSTEM" },
     tags: input.tags || [],
     metadata: input.metadata || {},
+    prevHash: null,
+    hash: undefined,
+    hashVersion: undefined,
   };
+
+  try {
+    const prevSnap = await db
+      .collection(COLLECTION)
+      .where("landlordId", "==", input.landlordId)
+      .orderBy("occurredAt", "desc")
+      .limit(1)
+      .get();
+    const prev = prevSnap.empty ? null : (prevSnap.docs[0].data() as LedgerEventV2);
+    const prevHash = prev?.hash ?? null;
+    const computedHash = computeLedgerEventHashV1({ ...payload, prevHash }, prevHash);
+    payload.prevHash = prevHash;
+    payload.hash = computedHash;
+    payload.hashVersion = 1;
+  } catch (err) {
+    console.warn("[ledger-v2] hash computation failed (fail-open)", (err as any)?.message || err);
+  }
 
   const ref = db.collection(COLLECTION).doc();
   await ref.set({ ...payload, id: ref.id });
