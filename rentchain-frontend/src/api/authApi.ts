@@ -83,7 +83,7 @@ export async function login(
   const headers = new Headers(opts.headers || {});
   headers.set("Content-Type", "application/json");
 
-  const res = await apiJson<LoginResponse>("auth/login", {
+  const res = await apiJson<LoginResponse>("/api/auth/login", {
     method: "POST",
     ...opts,
     headers,
@@ -108,7 +108,7 @@ export async function verifyTwoFactorCode(
   method: string,
   code: string
 ): Promise<TwoFaVerifyResponse> {
-  const res = await apiFetch<TwoFaVerifyResponse>("auth/2fa/verify", {
+  const res = await apiFetch<TwoFaVerifyResponse>("/api/auth/2fa/verify", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ pendingToken, method, code }),
@@ -118,7 +118,7 @@ export async function verifyTwoFactorCode(
 }
 
 export async function startTotpSetup(): Promise<TotpSetupResponse> {
-  const response = await apiFetch<TotpSetupResponse>("auth/2fa/totp/setup", {
+  const response = await apiFetch<TotpSetupResponse>("/api/auth/2fa/totp/setup", {
     method: "POST",
     token: getAuthToken() ?? undefined,
   });
@@ -126,7 +126,7 @@ export async function startTotpSetup(): Promise<TotpSetupResponse> {
 }
 
 export async function confirmTotpSetup(code: string): Promise<TotpConfirmResponse> {
-  const response = await apiFetch<TotpConfirmResponse>("auth/2fa/totp/confirm", {
+  const response = await apiFetch<TotpConfirmResponse>("/api/auth/2fa/totp/confirm", {
     method: "POST",
     token: getAuthToken() ?? undefined,
     headers: { "Content-Type": "application/json" },
@@ -137,7 +137,7 @@ export async function confirmTotpSetup(code: string): Promise<TotpConfirmRespons
 }
 
 export async function regenerateBackupCodes(code: string): Promise<BackupCodesRegenerateResponse> {
-  return apiFetch<BackupCodesRegenerateResponse>("auth/2fa/backup-codes/regenerate", {
+  return apiFetch<BackupCodesRegenerateResponse>("/api/auth/2fa/backup-codes/regenerate", {
     method: "POST",
     token: getAuthToken() ?? undefined,
     headers: { "Content-Type": "application/json" },
@@ -146,7 +146,7 @@ export async function regenerateBackupCodes(code: string): Promise<BackupCodesRe
 }
 
 export async function trustDevice(code: string, deviceName?: string): Promise<TrustDeviceResponse> {
-  return apiFetch<TrustDeviceResponse>("auth/2fa/trust-device", {
+  return apiFetch<TrustDeviceResponse>("/api/auth/2fa/trust-device", {
     method: "POST",
     token: getAuthToken() ?? undefined,
     headers: { "Content-Type": "application/json" },
@@ -155,7 +155,7 @@ export async function trustDevice(code: string, deviceName?: string): Promise<Tr
 }
 
 export async function disable2fa(code: string): Promise<Disable2faResponse> {
-  return apiFetch<Disable2faResponse>("auth/2fa/disable", {
+  return apiFetch<Disable2faResponse>("/api/auth/2fa/disable", {
     method: "POST",
     token: getAuthToken() ?? undefined,
     headers: { "Content-Type": "application/json" },
@@ -164,7 +164,7 @@ export async function disable2fa(code: string): Promise<Disable2faResponse> {
 }
 
 export async function getCurrentUser(token: string): Promise<MeResponse> {
-  const res = await fetch(resolveApiUrl("auth/me"), {
+  const res = await fetch(resolveApiUrl("/api/auth/me"), {
     method: "GET",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -177,7 +177,7 @@ export async function getCurrentUser(token: string): Promise<MeResponse> {
 export async function restoreSession(): Promise<{ user: any | null }> {
   try {
     // Prefer auth/me which returns the decoded token payload
-    const authMe = await apiFetch<{ ok?: boolean; user?: AuthUser }>("auth/me");
+    const authMe = await apiFetch<{ ok?: boolean; user?: AuthUser }>("/api/auth/me");
     if (authMe?.user) {
       return { user: authMe.user };
     }
@@ -214,7 +214,7 @@ export async function restoreSession(): Promise<{ user: any | null }> {
 }
 
 export async function logout(token?: string): Promise<void> {
-  await apiJson("auth/logout", {
+  await apiJson("/api/auth/logout", {
     method: "POST",
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   });
