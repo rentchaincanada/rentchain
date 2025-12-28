@@ -84,10 +84,16 @@ router.get("/tenants/:tenantId/report", async (req, res) => {
     );
     res.send(buffer);
   } catch (err) {
+    const code = (err as any)?.code;
+    if (code === "PDF_REPORTING_DEP_MISSING") {
+      return res.status(501).json({
+        ok: false,
+        code: "PDF_REPORTING_DISABLED",
+        message: "PDF reporting temporarily unavailable",
+      });
+    }
     console.error("[GET /tenants/:tenantId/report] error", err);
-    res
-      .status(500)
-      .json({ error: "Failed to generate tenant report" });
+    res.status(500).json({ error: "Failed to generate tenant report" });
   }
 });
 

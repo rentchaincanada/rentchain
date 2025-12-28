@@ -1,5 +1,4 @@
 // @ts-nocheck
-import PDFDocument from "pdfkit";
 import { getTenantLedger } from "./tenantLedgerService";
 import { getPaymentsForTenant } from "./paymentsService";
 import { getTenantDetailBundle } from "./tenantDetailsService";
@@ -165,6 +164,15 @@ export async function buildTenantReportData(
 export async function generateTenantReportPdfBuffer(
   tenantId: string
 ): Promise<Buffer> {
+  let PDFDocument: any;
+  try {
+    PDFDocument = (await import("pdfkit")).default;
+  } catch (err) {
+    const e: any = new Error("PDF_REPORTING_DEP_MISSING");
+    e.code = "PDF_REPORTING_DEP_MISSING";
+    throw e;
+  }
+
   const data = await buildTenantReportData(tenantId);
 
   const doc = new PDFDocument({
