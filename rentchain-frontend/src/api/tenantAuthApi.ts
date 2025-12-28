@@ -1,7 +1,7 @@
 import { resolveApiUrl } from "../lib/apiClient";
 
 export async function tenantLogin(email: string, password: string): Promise<{ token: string }> {
-  const res = await fetch(resolveApiUrl("/tenant/auth/login"), {
+  const res = await fetch(resolveApiUrl("/api/auth/login"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
