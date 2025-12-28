@@ -24,6 +24,9 @@ import { fetchAccountLimits, type AccountLimits } from "../api/accountApi";
 import { setOnboardingStep } from "../api/onboardingApi";
 import { useToast } from "../components/ui/ToastProvider";
 import MicroLiveActivationPanel from "../components/MicroLiveActivationPanel";
+import { useLedgerV2 } from "../hooks/useLedgerV2";
+import { LedgerTimeline } from "../components/ledger/LedgerTimeline";
+import { LedgerEventDrawer } from "../components/ledger/LedgerEventDrawer";
 
 const DashboardPage: React.FC = () => {
   const { data, loading, error, refresh } = useBlockchainVerify();
@@ -31,6 +34,13 @@ const DashboardPage: React.FC = () => {
   const [me, setMe] = useState<any | null>(null);
   const [limits, setLimits] = useState<AccountLimits | null>(null);
   const [onboarding, setOnboarding] = useState<any | null>(null);
+  const {
+    items: ledgerItems,
+    loading: ledgerLoading,
+    error: ledgerError,
+    refresh: refreshLedger,
+  } = useLedgerV2({ limit: 10 });
+  const [selectedLedgerId, setSelectedLedgerId] = useState<string | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingSeen, setOnboardingSeen] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
@@ -369,6 +379,22 @@ const DashboardPage: React.FC = () => {
           <DashboardKpiStrip />
         </Card>
 
+        <Section title="Recent Ledger Activity">
+          <Card>
+            {ledgerError ? (
+              <p style={{ color: "red" }}>{ledgerError}</p>
+            ) : ledgerLoading ? (
+              <p>Loading timeline…</p>
+            ) : (
+              <LedgerTimeline
+                items={ledgerItems}
+                emptyText="No recent ledger activity"
+                onSelect={(id) => setSelectedLedgerId(id)}
+              />
+            )}
+          </Card>
+        </Section>
+
         <MicroLiveActivationPanel />
 
         <SoftLaunchChecklist
@@ -431,16 +457,20 @@ const DashboardPage: React.FC = () => {
           <Section>
             <DashboardApplicationsChart />
           </Section>
-          <Section>
-            <DashboardActivityPanel />
-          </Section>
-        </div>
+        <Section>
+          <DashboardActivityPanel />
+        </Section>
       </div>
+    </div>
 
-      <OnboardingWizard
-        open={showOnboarding}
-        onClose={handleCloseOnboarding}
-        onLaunchAddProperty={handleLaunchAddPropertyFromWizard}
+    {selectedLedgerId ? (
+      <LedgerEventDrawer eventId={selectedLedgerId} onClose={() => setSelectedLedgerId(null)} />
+    ) : null}
+
+    <OnboardingWizard
+      open={showOnboarding}
+      onClose={handleCloseOnboarding}
+      onLaunchAddProperty={handleLaunchAddPropertyFromWizard}
       />
     </MacShell>
   );

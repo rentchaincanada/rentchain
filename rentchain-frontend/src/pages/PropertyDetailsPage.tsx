@@ -2,6 +2,9 @@ import React, { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import "./PropertyDetailsPage.css";
 import { getAuthToken, resolveApiUrl } from "../lib/apiClient";
+import { useLedgerV2 } from "../hooks/useLedgerV2";
+import { LedgerTimeline } from "../components/ledger/LedgerTimeline";
+import { LedgerEventDrawer } from "../components/ledger/LedgerEventDrawer";
 
 type PropertyOverview = {
   propertyId: string;
@@ -165,6 +168,9 @@ export const PropertyDetailsPage: React.FC = () => {
   const [property, setProperty] = useState<PropertyOverview | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const { items: ledgerItems, loading: ledgerLoading, error: ledgerError, refresh: refreshLedger } =
+    useLedgerV2({ propertyId: propertyId || undefined, limit: 10 });
+  const [selectedLedgerId, setSelectedLedgerId] = useState<string | null>(null);
 
   const units = getMockUnitsForProperty(propertyId);
 
@@ -324,6 +330,31 @@ export const PropertyDetailsPage: React.FC = () => {
             </table>
           </div>
         )}
+      </section>
+
+      <section className="property-page__section">
+        <h2 className="property-page__section-title">Property Timeline</h2>
+        <p className="property-page__section-subtitle">
+          Recent ledger activity for this property.
+        </p>
+        {ledgerError ? (
+          <div className="property-page__placeholder">
+            <p style={{ color: "red" }}>{ledgerError}</p>
+          </div>
+        ) : ledgerLoading ? (
+          <div className="property-page__placeholder">
+            <p>Loading timeline…</p>
+          </div>
+        ) : (
+          <LedgerTimeline
+            items={ledgerItems}
+            emptyText="No activity yet"
+            onSelect={(id) => setSelectedLedgerId(id)}
+          />
+        )}
+        {selectedLedgerId ? (
+          <LedgerEventDrawer eventId={selectedLedgerId} onClose={() => setSelectedLedgerId(null)} />
+        ) : null}
       </section>
 
       <section className="property-page__section">
