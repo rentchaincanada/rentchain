@@ -10,6 +10,7 @@ import { routeSource } from "./middleware/routeSource";
 import "./types/auth";
 import "./types/http";
 import { authenticateJwt } from "./middleware/authMiddleware";
+import authRoutes from "./routes/authRoutes";
 import tenantDetailsRoutes from "./routes/tenantDetailsRoutes";
 import paymentsRoutes from "./routes/paymentsRoutes";
 import applicationsRoutes from "./routes/applicationsRoutes";
@@ -50,6 +51,7 @@ app.use(requestContext);
  * Route registration
  */
 app.use("/api", routeSource("publicRoutes.ts"), publicRoutes);
+app.use("/api/auth", routeSource("authRoutes.ts"), authRoutes);
 
 // Decode auth for protected routes
 app.use(authenticateJwt);
