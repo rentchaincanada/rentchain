@@ -18,6 +18,7 @@ import tenantOnboardRoutes from "./routes/tenantOnboardRoutes";
 import eventsRoutes from "./routes/eventsRoutes";
 import dashboardRoutes from "./routes/dashboardRoutes";
 import healthRoutes from "./routes/healthRoutes";
+import meRoutes from "./routes/meRoutes";
 
 const app: Application = express();
 app.set("etag", false);
@@ -56,6 +57,7 @@ app.use(authenticateJwt);
 
 // Core API mounts
 app.use("/health", routeSource("healthRoutes.ts"), healthRoutes);
+app.use("/api", routeSource("meRoutes.ts"), meRoutes);
 app.use("/api", routeSource("tenantDetailsRoutes.ts"), tenantDetailsRoutes);
 app.use("/api", routeSource("paymentsRoutes.ts"), paymentsRoutes);
 app.use("/api", routeSource("applicationsRoutes.ts"), applicationsRoutes);

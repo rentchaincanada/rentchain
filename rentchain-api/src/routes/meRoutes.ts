@@ -1,17 +1,15 @@
-import express from "express";
+// rentchain-api/src/routes/meRoutes.ts
+import { Router, Response } from "express";
+import { authenticateJwt } from "../middleware/authMiddleware";
 
-const router = express.Router();
+const router = Router();
 
-router.get("/", async (req: any, res) => {
-  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-  res.setHeader("Pragma", "no-cache");
-  res.setHeader("Expires", "0");
-  res.json({
-    landlordId: req.user?.landlordId || req.user?.id,
-    email: req.user?.email,
-    role: req.user?.role,
-    plan: req.user?.plan || "starter",
-  });
+router.get("/me", authenticateJwt, (req, res: Response) => {
+  res.setHeader("x-route-source", "meRoutes.ts");
+  if (!req.user) {
+    return res.status(401).json({ ok: false, error: "Unauthorized" });
+  }
+  return res.json({ ok: true, user: req.user ?? null });
 });
 
 export default router;
