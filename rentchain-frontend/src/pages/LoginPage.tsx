@@ -195,6 +195,5 @@ export const LoginPage: React.FC = () => {
     </div>
   );
 };
-<div style={{opacity:0.6,fontSize:12}}>build: 2025-12-28-a</div>
 
 export default LoginPage;
