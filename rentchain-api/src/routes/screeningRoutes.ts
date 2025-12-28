@@ -43,20 +43,6 @@ import { requireFeature } from "../middleware/entitlements";
 
 const router = Router();
 
-let PDFDocument: any | null = null;
-async function loadPDFKit() {
-  if (PDFDocument) return PDFDocument;
-  try {
-    const mod: any = await import("pdfkit");
-    PDFDocument = mod?.default ?? mod;
-    return PDFDocument;
-  } catch (err) {
-    const e: any = new Error("PDFKIT_MISSING");
-    e.cause = err;
-    throw e;
-  }
-}
-
 router.use(authenticateJwt, attachAccount, requireFeature("screening"));
 
 router.get("/screenings/config", (_req, res: Response) => {
@@ -367,7 +353,8 @@ router.get(
 
     let PDF: any;
     try {
-      PDF = await loadPDFKit();
+      const mod: any = await import("pdfkit");
+      PDF = mod?.default ?? mod;
     } catch (err: any) {
       console.error("[screenings/:id/report.pdf] pdfkit missing", err?.message || err);
       return res.status(501).json({

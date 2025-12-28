@@ -28,20 +28,6 @@ import {
 
 const router = Router();
 
-let PDFDocument: any | null = null;
-async function loadPDFKit() {
-  if (PDFDocument) return PDFDocument;
-  try {
-    const mod: any = await import("pdfkit");
-    PDFDocument = mod?.default ?? mod;
-    return PDFDocument;
-  } catch (err) {
-    const e: any = new Error("PDFKIT_MISSING");
-    e.cause = err;
-    throw e;
-  }
-}
-
 type RiskLevel = Application["riskLevel"];
 type ApplicantAddress = NonNullable<Application["primaryAddress"]>;
 type CoApplicantSummary = NonNullable<Application["coApplicant"]>;
@@ -112,7 +98,8 @@ interface NewApplicationPayload {
 async function streamApplicationPdf(app: Application, res: Response) {
   let PDF: any;
   try {
-    PDF = await loadPDFKit();
+    const mod: any = await import("pdfkit");
+    PDF = mod?.default ?? mod;
   } catch (err: any) {
     console.error("[applications/pdf] pdfkit missing", err?.message || err);
     res.status(501).json({
