@@ -46,3 +46,4 @@ app.get("/api/_build", (_req, res) => {
     time: new Date().toISOString(),
   });
 });
+console.log("[BOOT] app.build mounted", { svc: process.env.K_SERVICE, rev: process.env.K_REVISION });
