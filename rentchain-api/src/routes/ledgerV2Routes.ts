@@ -9,6 +9,10 @@ import { computeLedgerEventHashV1 } from "../utils/ledgerHash";
 
 const router = Router();
 router.use(authenticateJwt);
+router.use((req, _res, next) => {
+  console.log("[ledgerV2Routes] hit", req.method, req.path);
+  next();
+});
 
 router.get("/", async (req: any, res) => {
   res.setHeader("x-route-source", "ledgerV2Routes");

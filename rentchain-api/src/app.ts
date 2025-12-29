@@ -52,7 +52,7 @@ app.use(requestContext);
  * Route registration
  */
 app.use("/api", routeSource("publicRoutes.ts"), publicRoutes);
-app.use("/api/auth", routeSource("authRoutes.ts"), authRoutes);
+app.use("/api/auth", authRoutes);
 
 // Decode auth for protected routes
 app.use(authenticateJwt);
@@ -78,13 +78,13 @@ app.get("/api/_build", (req, res) => {
   });
 });
 
-app.use("/api", routeSource("tenantDetailsRoutes.ts"), tenantDetailsRoutes);
-app.use("/api", routeSource("paymentsRoutes.ts"), paymentsRoutes);
-app.use("/api", routeSource("applicationsRoutes.ts"), applicationsRoutes);
-app.use("/api/leases", routeSource("leaseRoutes.ts"), leaseRoutes);
-app.use("/api", routeSource("tenantOnboardRoutes.ts"), tenantOnboardRoutes);
-app.use("/api/events", routeSource("eventsRoutes.ts"), eventsRoutes);
-app.use("/api/dashboard", routeSource("dashboardRoutes.ts"), dashboardRoutes);
+app.use("/api", tenantDetailsRoutes);
+app.use("/api", paymentsRoutes);
+app.use("/api", applicationsRoutes);
+app.use("/api/leases", leaseRoutes);
+app.use("/api", tenantOnboardRoutes);
+app.use("/api/events", eventsRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 
 process.on("uncaughtException", (err) => {
   console.error("[uncaughtException]", err);
