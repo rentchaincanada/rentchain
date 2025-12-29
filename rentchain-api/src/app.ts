@@ -53,9 +53,18 @@ app.use(requestContext);
  */
 app.use("/api", routeSource("publicRoutes.ts"), publicRoutes);
 app.use("/api/auth", routeSource("authRoutes.ts"), authRoutes);
+console.log("[BOOT] mounting /api/ledger-v2");
+app.use("/api/ledger-v2", routeSource("ledgerV2Routes.ts"), ledgerV2Routes);
 
 // Decode auth for protected routes
 app.use(authenticateJwt);
+app.use((req, res, next) => {
+  if (req.path.startsWith("/api/ledger-v2")) {
+    console.log("[TRACE] hit app middleware for", req.method, req.path);
+  }
+  next();
+});
+
 app.use("/api/ledger-v2", routeSource("ledgerV2Routes.ts"), ledgerV2Routes);
 
 // Core API mounts
