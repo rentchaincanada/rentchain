@@ -56,6 +56,7 @@ app.use("/api/auth", routeSource("authRoutes.ts"), authRoutes);
 
 // Decode auth for protected routes
 app.use(authenticateJwt);
+app.use("/api/ledger-v2", routeSource("ledgerV2Routes.ts"), ledgerV2Routes);
 
 // Core API mounts
 app.use("/health", routeSource("healthRoutes.ts"), healthRoutes);
@@ -83,7 +84,6 @@ app.use("/api/leases", routeSource("leaseRoutes.ts"), leaseRoutes);
 app.use("/api", routeSource("tenantOnboardRoutes.ts"), tenantOnboardRoutes);
 app.use("/api/events", routeSource("eventsRoutes.ts"), eventsRoutes);
 app.use("/api/dashboard", routeSource("dashboardRoutes.ts"), dashboardRoutes);
-app.use("/api/ledger-v2", routeSource("ledgerV2Routes.ts"), ledgerV2Routes);
 
 process.on("uncaughtException", (err) => {
   console.error("[uncaughtException]", err);
