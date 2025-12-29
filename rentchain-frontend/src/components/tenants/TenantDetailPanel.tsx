@@ -35,6 +35,7 @@ import { toTenantView } from "@/adapters/tenantViewAdapter";
 import { useLedgerV2 } from "@/hooks/useLedgerV2";
 import { LedgerTimeline } from "../ledger/LedgerTimeline";
 import { LedgerEventDrawer } from "../ledger/LedgerEventDrawer";
+import { createTenantHistoryShare } from "@/api/tenantHistoryShare";
 
 interface TenantDetailPanelProps {
   tenantId: string | null;
@@ -160,6 +161,10 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
       limit: 10,
     });
   const [selectedLedgerId, setSelectedLedgerId] = useState<string | null>(null);
+  const [shareLink, setShareLink] = useState<string | null>(null);
+  const [shareExpiresAt, setShareExpiresAt] = useState<number | null>(null);
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareError, setShareError] = useState<string | null>(null);
 
   useEffect(() => {
     setPayments(arr(bundlePayments));
@@ -346,6 +351,49 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
           "An error occurred while generating the tenant report. Please try again.",
         variant: "error",
       });
+    }
+  };
+
+  const handleShareHistory = async () => {
+    if (!tenant?.id) return;
+    setShareLoading(true);
+    setShareError(null);
+    try {
+      const resp = await createTenantHistoryShare(tenant.id, 7);
+      setShareLink(resp.url);
+      setShareExpiresAt(resp.expiresAt);
+      try {
+        if (navigator?.clipboard && resp.url) {
+          await navigator.clipboard.writeText(resp.url);
+          showToast({
+            title: "Share link copied",
+            description: "Tenant history link copied to clipboard.",
+            variant: "success",
+          });
+        } else {
+          showToast({
+            title: "Share link created",
+            description: "Copy the link to share the tenant history.",
+            variant: "success",
+          });
+        }
+      } catch {
+        showToast({
+          title: "Share link created",
+          description: "Copy the link to share the tenant history.",
+          variant: "success",
+        });
+      }
+    } catch (err: any) {
+      const msg = err?.message || "Failed to create share link";
+      setShareError(msg);
+      showToast({
+        title: "Share failed",
+        description: msg,
+        variant: "error",
+      });
+    } finally {
+      setShareLoading(false);
     }
   };
 
@@ -981,6 +1029,64 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
           }
         />
         <DetailField label="Status" value={tenant.status ?? "—"} />
+      </div>
+
+      {/* Tenant history share */}
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: spacing.xs,
+          alignItems: "center",
+        }}
+      >
+        <button
+          type="button"
+          onClick={handleShareHistory}
+          disabled={shareLoading}
+          style={{
+            borderRadius: radius.pill,
+            border: `1px solid ${colors.border}`,
+            padding: "6px 10px",
+            background: colors.panel,
+            color: text.primary,
+            fontSize: 12,
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            cursor: shareLoading ? "not-allowed" : "pointer",
+            boxShadow: shadows.sm,
+            opacity: shareLoading ? 0.7 : 1,
+          }}
+        >
+          {shareLoading ? "Creating link..." : "Share tenant history"}
+        </button>
+        {shareLink && (
+          <div
+            style={{
+              fontSize: 11,
+              color: text.muted,
+              maxWidth: 360,
+              wordBreak: "break-all",
+              border: `1px solid ${colors.border}`,
+              padding: "6px 8px",
+              borderRadius: radius.sm,
+              background: colors.panel,
+            }}
+          >
+            <div style={{ marginBottom: 4 }}>
+              Link ready (expires{" "}
+              {shareExpiresAt
+                ? new Date(shareExpiresAt).toLocaleDateString()
+                : "soon"}
+              )
+            </div>
+            <div>{shareLink}</div>
+          </div>
+        )}
+        {shareError && (
+          <div style={{ fontSize: 11, color: "#dc2626" }}>{shareError}</div>
+        )}
       </div>
 
       {/* Tenant balance summary strip */}

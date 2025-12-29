@@ -17,6 +17,9 @@ import eventsRoutes from "./routes/eventsRoutes";
 import dashboardRoutes from "./routes/dashboardRoutes";
 import healthRoutes from "./routes/healthRoutes";
 import ledgerV2Routes from "./routes/ledgerV2Routes";
+import tenantHistoryShareRoutes, {
+  publicRouter as tenantHistorySharePublicRouter,
+} from "./routes/tenantHistoryShareRoutes";
 
 export const app = express();
 app.set("etag", false);
@@ -30,6 +33,7 @@ app.use("/health", healthRoutes);
 
 // Public + Auth (MUST be before authenticateJwt)
 app.use("/api", routeSource("publicRoutes.ts"), publicRoutes);
+app.use("/api/public", tenantHistorySharePublicRouter);
 app.use("/api/auth", routeSource("authRoutes.ts"), authRoutes);
 
 // Auth decode (non-blocking if header missing)
@@ -37,6 +41,7 @@ app.use(authenticateJwt);
 
 // Ledger V2 (after auth decode)
 app.use("/api/ledger-v2", routeSource("ledgerV2Routes.ts"), ledgerV2Routes);
+app.use("/api/tenant-history", tenantHistoryShareRoutes);
 
 // Core APIs
 app.use("/api", tenantDetailsRoutes);
