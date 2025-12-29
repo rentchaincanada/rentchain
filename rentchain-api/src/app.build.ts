@@ -20,6 +20,10 @@ import ledgerV2Routes from "./routes/ledgerV2Routes";
 import tenantHistoryShareRoutes, {
   publicRouter as tenantHistorySharePublicRouter,
 } from "./routes/tenantHistoryShareRoutes";
+import propertiesRoutes from "./routes/propertiesRoutes";
+import accountRoutes from "./routes/accountRoutes";
+import onboardingRoutes from "./routes/onboardingRoutes";
+import billingRoutes from "./routes/billingRoutes";
 
 export const app = express();
 app.set("etag", false);
@@ -39,6 +43,15 @@ app.use("/api/auth", routeSource("authRoutes.ts"), authRoutes);
 // Auth decode (non-blocking if header missing)
 app.use(authenticateJwt);
 
+// Current user info
+app.get("/api/me", (req: any, res) => {
+  res.setHeader("x-route-source", "app.build.ts:/api/me");
+  if (!req.user) {
+    return res.status(401).json({ ok: false, error: "Unauthorized" });
+  }
+  return res.json({ ok: true, user: req.user });
+});
+
 // Ledger V2 (after auth decode)
 app.use("/api/ledger-v2", routeSource("ledgerV2Routes.ts"), ledgerV2Routes);
 app.use("/api/tenant-history", tenantHistoryShareRoutes);
@@ -51,6 +64,10 @@ app.use("/api/leases", leaseRoutes);
 app.use("/api", tenantOnboardRoutes);
 app.use("/api/events", eventsRoutes);
 app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/properties", propertiesRoutes);
+app.use("/api/account", accountRoutes);
+app.use("/api/onboarding", onboardingRoutes);
+app.use("/api/billing", billingRoutes);
 app.post("/api/_echo", (req, res) => {
   res.setHeader("x-route-source", "app.build.ts:/api/_echo");
   return res.json({ ok: true, method: "POST", body: req.body ?? null });
