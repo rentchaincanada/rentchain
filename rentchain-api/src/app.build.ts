@@ -11,6 +11,9 @@ import dashboardRoutes from "./routes/dashboardRoutes";
 import healthRoutes from "./routes/healthRoutes";
 import ledgerV2Routes from "./routes/ledgerV2Routes";
 import { routeSource } from "./middleware/routeSource";
+import publicRoutes from "./routes/publicRoutes";
+import authRoutes from "./routes/authRoutes";
+import { notFoundHandler, errorHandler } from "./middleware/errorHandler";
 
 export const app = express();
 app.set("etag", false);
@@ -20,6 +23,10 @@ app.use(express.json({ limit: "2mb" }));
 
 // Health
 app.use("/health", healthRoutes);
+
+// Public + auth (before auth decode)
+app.use("/api", routeSource("publicRoutes.ts"), publicRoutes);
+app.use("/api/auth", routeSource("authRoutes.ts"), authRoutes);
 
 // Auth decode (non-blocking if header missing)
 app.use(authenticateJwt);
@@ -46,4 +53,7 @@ app.get("/api/_build", (_req, res) => {
     time: new Date().toISOString(),
   });
 });
+
+app.use(notFoundHandler);
+app.use(errorHandler);
 console.log("[BOOT] app.build mounted", { svc: process.env.K_SERVICE, rev: process.env.K_REVISION });
