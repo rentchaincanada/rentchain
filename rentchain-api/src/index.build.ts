@@ -2,7 +2,7 @@ console.log("[BOOT] index.build starting");
 process.on("uncaughtException", (e) => console.error("[FATAL] uncaughtException", e));
 process.on("unhandledRejection", (e) => console.error("[FATAL] unhandledRejection", e));
 
-import app from "./app";
+import { app } from "./app.build";
 
 const PORT = Number(process.env.PORT || 8080);
 
