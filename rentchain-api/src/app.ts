@@ -66,6 +66,16 @@ app.get("/api/me", (req, res) => {
   }
   return res.json({ ok: true, user: req.user });
 });
+app.get("/api/_build", (req, res) => {
+  res.setHeader("x-route-source", "app.ts:/api/_build");
+  return res.json({
+    ok: true,
+    service: process.env.K_SERVICE || null,
+    revision: process.env.K_REVISION || null,
+    time: new Date().toISOString(),
+  });
+});
+
 app.use("/api", routeSource("tenantDetailsRoutes.ts"), tenantDetailsRoutes);
 app.use("/api", routeSource("paymentsRoutes.ts"), paymentsRoutes);
 app.use("/api", routeSource("applicationsRoutes.ts"), applicationsRoutes);
