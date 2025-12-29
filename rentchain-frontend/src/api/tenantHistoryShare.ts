@@ -4,6 +4,7 @@ export type TenantHistoryShareResponse = {
   ok: boolean;
   shareId: string;
   url: string;
+  pdfUrl?: string;
   expiresAt: number;
 };
 

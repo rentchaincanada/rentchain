@@ -162,6 +162,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
     });
   const [selectedLedgerId, setSelectedLedgerId] = useState<string | null>(null);
   const [shareLink, setShareLink] = useState<string | null>(null);
+  const [sharePdfLink, setSharePdfLink] = useState<string | null>(null);
   const [shareExpiresAt, setShareExpiresAt] = useState<number | null>(null);
   const [shareLoading, setShareLoading] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
@@ -361,6 +362,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
     try {
       const resp = await createTenantHistoryShare(tenant.id, 7);
       setShareLink(resp.url);
+      setSharePdfLink(resp.pdfUrl || null);
       setShareExpiresAt(resp.expiresAt);
       try {
         if (navigator?.clipboard && resp.url) {
@@ -1035,38 +1037,128 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
       <div
         style={{
           display: "flex",
-          flexWrap: "wrap",
+          flexDirection: "column",
           gap: spacing.xs,
-          alignItems: "center",
         }}
       >
-        <button
-          type="button"
-          onClick={handleShareHistory}
-          disabled={shareLoading}
+        <div
           style={{
-            borderRadius: radius.pill,
-            border: `1px solid ${colors.border}`,
-            padding: "6px 10px",
-            background: colors.panel,
-            color: text.primary,
-            fontSize: 12,
             display: "flex",
+            flexWrap: "wrap",
+            gap: spacing.xs,
             alignItems: "center",
-            gap: 6,
-            cursor: shareLoading ? "not-allowed" : "pointer",
-            boxShadow: shadows.sm,
-            opacity: shareLoading ? 0.7 : 1,
           }}
         >
-          {shareLoading ? "Creating link..." : "Share tenant history"}
-        </button>
+          <button
+            type="button"
+            onClick={handleShareHistory}
+            disabled={shareLoading}
+            style={{
+              borderRadius: radius.pill,
+              border: `1px solid ${colors.border}`,
+              padding: "6px 10px",
+              background: colors.panel,
+              color: text.primary,
+              fontSize: 12,
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              cursor: shareLoading ? "not-allowed" : "pointer",
+              boxShadow: shadows.sm,
+              opacity: shareLoading ? 0.7 : 1,
+            }}
+          >
+            {shareLoading ? "Creating link..." : "Share tenant history"}
+          </button>
+          {shareLink && (
+            <>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (shareLink && navigator?.clipboard) {
+                    await navigator.clipboard.writeText(shareLink);
+                    showToast({
+                      title: "Link copied",
+                      description: "JSON link copied to clipboard.",
+                      variant: "success",
+                    });
+                  }
+                }}
+                style={{
+                  borderRadius: radius.pill,
+                  border: `1px solid ${colors.border}`,
+                  padding: "6px 10px",
+                  background: colors.panel,
+                  color: text.primary,
+                  fontSize: 12,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  cursor: "pointer",
+                }}
+              >
+                Copy JSON link
+              </button>
+              {sharePdfLink && (
+                <>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (sharePdfLink && navigator?.clipboard) {
+                        await navigator.clipboard.writeText(sharePdfLink);
+                        showToast({
+                          title: "Link copied",
+                          description: "PDF link copied to clipboard.",
+                          variant: "success",
+                        });
+                      }
+                    }}
+                    style={{
+                      borderRadius: radius.pill,
+                      border: `1px solid ${colors.border}`,
+                      padding: "6px 10px",
+                      background: colors.panel,
+                      color: text.primary,
+                      fontSize: 12,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Copy PDF link
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (sharePdfLink) window.open(sharePdfLink, "_blank");
+                    }}
+                    style={{
+                      borderRadius: radius.pill,
+                      border: `1px solid ${colors.border}`,
+                      padding: "6px 10px",
+                      background: colors.panel,
+                      color: text.primary,
+                      fontSize: 12,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Open PDF
+                  </button>
+                </>
+              )}
+            </>
+          )}
+        </div>
         {shareLink && (
           <div
             style={{
               fontSize: 11,
               color: text.muted,
-              maxWidth: 360,
+              maxWidth: 480,
               wordBreak: "break-all",
               border: `1px solid ${colors.border}`,
               padding: "6px 8px",
@@ -1082,6 +1174,9 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
               )
             </div>
             <div>{shareLink}</div>
+            {sharePdfLink && (
+              <div style={{ marginTop: 6 }}>PDF: {sharePdfLink}</div>
+            )}
           </div>
         )}
         {shareError && (
