@@ -46,6 +46,10 @@ app.use("/api/leases", leaseRoutes);
 app.use("/api", tenantOnboardRoutes);
 app.use("/api/events", eventsRoutes);
 app.use("/api/dashboard", dashboardRoutes);
+app.post("/api/_echo", (req, res) => {
+  res.setHeader("x-route-source", "app.build.ts:/api/_echo");
+  return res.json({ ok: true, method: "POST", body: req.body ?? null });
+});
 
 // Build stamp
 app.get("/api/_build", (_req, res) => {
