@@ -62,6 +62,17 @@ app.get("/api/_build", (_req, res) => {
   });
 });
 
+// Echo for POST reachability
+app.post("/api/_echo", (req, res) => {
+  res.setHeader("x-route-source", "app.build.ts:/api/_echo");
+  return res.json({
+    ok: true,
+    method: req.method,
+    path: req.path,
+    body: req.body ?? null,
+  });
+});
+
 // JSON 404 + error
 app.use(notFoundHandler);
 app.use(errorHandler);
