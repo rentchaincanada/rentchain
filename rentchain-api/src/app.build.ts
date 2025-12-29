@@ -1,6 +1,13 @@
 import express from "express";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import { authenticateJwt } from "./middleware/authMiddleware";
+import { routeSource } from "./middleware/routeSource";
+import { notFoundHandler, errorHandler } from "./middleware/errorHandler";
+
+import publicRoutes from "./routes/publicRoutes";
+import authRoutes from "./routes/authRoutes";
+
 import tenantDetailsRoutes from "./routes/tenantDetailsRoutes";
 import paymentsRoutes from "./routes/paymentsRoutes";
 import applicationsRoutes from "./routes/applicationsRoutes";
@@ -10,27 +17,25 @@ import eventsRoutes from "./routes/eventsRoutes";
 import dashboardRoutes from "./routes/dashboardRoutes";
 import healthRoutes from "./routes/healthRoutes";
 import ledgerV2Routes from "./routes/ledgerV2Routes";
-import { routeSource } from "./middleware/routeSource";
-import publicRoutes from "./routes/publicRoutes";
-import authRoutes from "./routes/authRoutes";
-import { notFoundHandler, errorHandler } from "./middleware/errorHandler";
 
 export const app = express();
 app.set("etag", false);
 
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: "2mb" }));
+app.use(cookieParser());
 
 // Health
 app.use("/health", healthRoutes);
 
-// Public + auth (before auth decode)
+// Public + Auth (MUST be before authenticateJwt)
 app.use("/api", routeSource("publicRoutes.ts"), publicRoutes);
 app.use("/api/auth", routeSource("authRoutes.ts"), authRoutes);
 
 // Auth decode (non-blocking if header missing)
 app.use(authenticateJwt);
-// Ledger V2 (after auth)
+
+// Ledger V2 (after auth decode)
 app.use("/api/ledger-v2", routeSource("ledgerV2Routes.ts"), ledgerV2Routes);
 
 // Core APIs
@@ -42,8 +47,7 @@ app.use("/api", tenantOnboardRoutes);
 app.use("/api/events", eventsRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 
-// Fallback health
-app.get("/api/health", (_req, res) => res.json({ ok: true }));
+// Build stamp
 app.get("/api/_build", (_req, res) => {
   res.setHeader("x-route-source", "app.build.ts:/api/_build");
   return res.json({
@@ -54,6 +58,6 @@ app.get("/api/_build", (_req, res) => {
   });
 });
 
+// JSON 404 + error
 app.use(notFoundHandler);
 app.use(errorHandler);
-console.log("[BOOT] app.build mounted", { svc: process.env.K_SERVICE, rev: process.env.K_REVISION });
