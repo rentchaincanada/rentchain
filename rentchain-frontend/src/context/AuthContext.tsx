@@ -23,6 +23,74 @@ const PUBLIC_ROUTE_ALLOWLIST = [
   "/terms",
   "/privacy",
 ];
+const getStoredToken = (): string | null => {
+  if (typeof window === "undefined") return null;
+
+  const raw =
+    sessionStorage.getItem("rentchain_token") ||
+    localStorage.getItem("rentchain_token");
+
+  const t = (raw ?? "").trim();
+
+  // treat these as "no token"
+  if (!t || t === "null" || t === "undefined") return null;
+
+  // basic JWT shape check: 3 dot-separated parts
+  const parts = t.split(".");
+  if (parts.length !== 3) return null;
+
+  return t;
+};
+
+const isPublicPath = (path: string) =>
+  path === "/" ||
+  path.startsWith("/join-waitlist") ||
+  path.startsWith("/pricing") ||
+  path.startsWith("/login") ||
+  path.startsWith("/signup");
+
+const runRestore = async () => {
+  const path = typeof window !== "undefined" ? window.location.pathname : "/";
+  const isPublic = isPublicPath(path);
+  const token = getStoredToken();
+
+  // No valid token: logged-out visitor => NO /api/me call, NO redirect
+  if (!token) {
+    setUser(null);
+    setToken(null);
+    setIsLoading(false);
+    return;
+  }
+
+  try {
+    const me = await apiRestoreSession();
+    setUser(me?.user ?? null);
+  } catch (e: any) {
+    const msg = String(e?.message ?? "").toLowerCase();
+    const isUnauthorized = msg.includes("unauthorized") || msg.includes("401");
+
+    setUser(null);
+    setToken(null);
+    const clearStoredToken = () => {
+  sessionStorage.removeItem("rentchain_token");
+  localStorage.removeItem("rentchain_token");
+};
+
+    // redirect only if token existed AND route is protected
+    if (isUnauthorized && !isPublic && typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      params.set("reason", "expired");
+      window.location.href = `/login?${params.toString()}`;
+      return;
+    }
+
+    if (!isUnauthorized) console.error("Failed to restore auth session", e);
+  } finally {
+    setIsLoading(false);
+  }
+};
+
+void runRestore();
 
 export interface AuthUser {
   id: string;
