@@ -142,7 +142,7 @@ export async function listLedgerEventsV2(params: ListParams) {
     q = q.where("eventType", "==", eventType);
   }
 
-  const finalLimit = Math.min(Math.max(Number(limit) || 50, 1), 200);
+  const finalLimit = Math.min(Math.max(Number(limit) || 50, 1), 50);
   q = q.limit(finalLimit);
 
   const snap = await q.get();

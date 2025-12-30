@@ -20,21 +20,32 @@ router.get("/", async (req: any, res) => {
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
 
   const limitRaw = Number(req.query?.limit ?? 50);
-  const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 200) : 50;
+  const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 50) : 50;
   const cursor = req.query?.cursor ? Number(req.query.cursor) : undefined;
   const propertyId = req.query?.propertyId ? String(req.query.propertyId) : undefined;
   const tenantId = req.query?.tenantId ? String(req.query.tenantId) : undefined;
   const eventType = req.query?.eventType ? String(req.query.eventType) : undefined;
 
-  const result = await listLedgerEventsV2({
-    landlordId,
-    limit,
-    cursor,
-    propertyId,
-    tenantId,
-    eventType,
-  });
-  return res.json({ ok: true, ...result });
+  try {
+    const timeoutMs = 5000;
+    const result = await Promise.race([
+      listLedgerEventsV2({
+        landlordId,
+        limit,
+        cursor,
+        propertyId,
+        tenantId,
+        eventType,
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("TIMEOUT")), timeoutMs)),
+    ]);
+    return res.json({ ok: true, ...(result as any) });
+  } catch (err: any) {
+    if (err?.message === "TIMEOUT") {
+      return res.status(504).json({ ok: false, error: "Request timed out" });
+    }
+    return res.status(500).json({ ok: false, error: "Failed to load ledger" });
+  }
 });
 
 router.get("/:id", async (req: any, res) => {
