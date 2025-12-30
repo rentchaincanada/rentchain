@@ -14,7 +14,10 @@ export type BillingRecord = {
 };
 
 export async function fetchBillingHistory(): Promise<BillingRecord[]> {
-  return apiJson<BillingRecord[]>("/billing");
+  const data = await apiJson<any>("/billing");
+  if (Array.isArray(data)) return data as BillingRecord[];
+  if (Array.isArray(data?.items)) return data.items as BillingRecord[];
+  return [];
 }
 
 export interface SubscriptionStatus {

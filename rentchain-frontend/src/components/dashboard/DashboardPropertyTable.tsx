@@ -5,6 +5,7 @@ import {
   DashboardProperty,
 } from "../../services/dashboardPropertiesService";
 import { TopNav } from "../components/layout/TopNav";
+import { safeLocaleNumber } from "@/utils/format";
 type DashboardPropertyTableProps = {
   // Optional: parent can still pass properties explicitly
   properties?: DashboardProperty[];
@@ -101,9 +102,7 @@ export function DashboardPropertyTable({
                   <td>{p.occupiedUnits ?? "-"}</td>
                   <td>{occupancy != null ? `${occupancy}%` : "-"}</td>
                   <td>
-                    {p.avgRent != null
-                      ? `$${p.avgRent.toLocaleString()}`
-                      : "-"}
+                    {p.avgRent != null ? `$${safeLocaleNumber(p.avgRent)}` : "-"}
                   </td>
                   <td>{p.risk ?? "-"}</td>
                 </tr>
