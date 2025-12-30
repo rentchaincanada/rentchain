@@ -48,16 +48,6 @@ router.get("/", async (req: any, res) => {
   }
 });
 
-router.get("/:id", async (req: any, res) => {
-  res.setHeader("x-route-source", "ledgerV2Routes");
-  const landlordId = req.user?.landlordId || req.user?.id;
-  if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
-  const id = String(req.params.id || "");
-  const item = await getLedgerEventV2(id, landlordId);
-  if (!item) return res.status(404).json({ ok: false, error: "Not found" });
-  return res.json({ ok: true, item });
-});
-
 router.post("/", async (req: any, res) => {
   res.setHeader("x-route-source", "ledgerV2Routes");
   const landlordId = req.user?.landlordId || req.user?.id;
@@ -131,6 +121,16 @@ router.get("/verify", async (req: any, res) => {
   }
 
   return res.json({ ok: true, checked: events.length });
+});
+
+router.get("/:id", async (req: any, res) => {
+  res.setHeader("x-route-source", "ledgerV2Routes");
+  const landlordId = req.user?.landlordId || req.user?.id;
+  if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+  const id = String(req.params.id || "");
+  const item = await getLedgerEventV2(id, landlordId);
+  if (!item) return res.status(404).json({ ok: false, error: "Not found" });
+  return res.json({ ok: true, item });
 });
 
 export default router;
