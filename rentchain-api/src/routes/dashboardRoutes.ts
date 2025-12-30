@@ -40,32 +40,18 @@ router.get("/ai-portfolio-summary", authenticateJwt, (_req, res) => {
 
 /**
  * POST /api/dashboard/ai-summary
- * Temporary stub — returns empty summary/metrics
+ * Simple stubbed summary for now
  */
-router.post("/ai-summary", authenticateJwt, (_req, res) => {
+router.post("/ai-summary", authenticateJwt, (req: any, res) => {
+  const landlordId = req.user?.landlordId || req.user?.id;
+  if (!landlordId) {
+    return res.status(401).json({ ok: false, error: "Unauthorized" });
+  }
+
   res.json({
-    summary: null,
-    metrics: {
-      portfolioValue: 0,
-      monthlyRent: 0,
-      occupancyRate: 0,
-      latePayments: 0,
-    },
-    snapshot: {
-      monthlyRent: 0,
-      occupancyRate: 0,
-      latePayments: 0,
-      portfolioValue: 0,
-    },
-    aiSummary: {
-      healthScore: 0,
-      timeframeLabel: "Last 30 days",
-      highlights: [],
-      risks: [],
-      actions: [],
-    },
-    generatedAt: new Date().toISOString(),
-    status: "stub",
+    ok: true,
+    summary: "Portfolio stable. No critical arrears. Two leases expiring soon.",
+    bullets: ["Occupancy steady", "Monitor overdue items", "Plan renewals"],
   });
 });
 

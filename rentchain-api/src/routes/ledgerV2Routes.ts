@@ -74,7 +74,7 @@ router.post("/", async (req: any, res) => {
     summary: summary ? String(summary) : undefined,
     propertyId: propertyId ? String(propertyId) : undefined,
     tenantId: tenantId ? String(tenantId) : undefined,
-    occurredAt: occurredAt ? Number(occurredAt) : undefined,
+    occurredAt: occurredAt ?? Date.now()
     actor: {
       type: "LANDLORD",
       userId: req.user?.id,
