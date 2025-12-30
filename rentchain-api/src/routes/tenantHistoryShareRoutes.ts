@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { authenticateJwt } from "../middleware/authMiddleware";
 import { db } from "../config/firebase";
 import { listLedgerEventsV2 } from "../services/ledgerEventsFirestoreService";
+import { computeTenantSignals } from "../services/tenantSignalsService";
 
 const COLLECTION = "tenantHistoryShares";
 const MAX_EVENTS = 200;
@@ -141,6 +142,8 @@ async function loadSharePayload(shareId: string, token: string) {
     paymentId: ev.paymentId,
   }));
 
+  const signals = computeTenantSignals(ledgerResult.items || [], tenantId, landlordId);
+
   return {
     status: 200 as const,
     data: {
@@ -156,6 +159,7 @@ async function loadSharePayload(shareId: string, token: string) {
         unit: tenantData?.unit || null,
       },
       events,
+      signals,
     },
   };
 }
@@ -181,6 +185,7 @@ publicRouter.get("/tenant-history/:shareId", async (req, res) => {
     events: result.data.events,
     generatedAt: Date.now(),
     expiresAt: result.data.shareDoc.expiresAt || null,
+    signals: result.data.signals,
   });
 });
 
@@ -239,6 +244,17 @@ publicRouter.get("/tenant-history/:shareId.pdf", async (req, res) => {
     );
   }
   doc.moveDown(1);
+
+  if (result.data.signals) {
+    const s = result.data.signals;
+    doc.fontSize(12).fillColor("#000").text("Signals", { underline: true });
+    doc.fontSize(10).moveDown(0.3);
+    doc.text(`Risk Level: ${s.riskLevel}`);
+    doc.text(
+      `Late: ${s.latePaymentsCount} | NSF: ${s.nsfCount} | Missed: ${s.missedPaymentsCount} | Notices: ${s.evictionNoticeCount} | Positive: ${s.positiveNotesCount}`
+    );
+    doc.moveDown(1);
+  }
 
   doc.fontSize(12).text("Timeline", { underline: true });
   doc.moveDown(0.3);

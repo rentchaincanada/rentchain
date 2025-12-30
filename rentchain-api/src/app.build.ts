@@ -24,6 +24,7 @@ import propertiesRoutes from "./routes/propertiesRoutes";
 import accountRoutes from "./routes/accountRoutes";
 import onboardingRoutes from "./routes/onboardingRoutes";
 import billingRoutes from "./routes/billingRoutes";
+import tenantSignalsRoutes from "./routes/tenantSignalsRoutes";
 
 export const app = express();
 app.set("etag", false);
@@ -59,6 +60,7 @@ app.get("/api/me", (req: any, res) => {
 // Ledger V2 (after auth decode)
 app.use("/api/ledger-v2", routeSource("ledgerV2Routes.ts"), ledgerV2Routes);
 app.use("/api/tenant-history", tenantHistoryShareRoutes);
+app.use("/api", tenantSignalsRoutes);
 
 // Core APIs
 app.use("/api", tenantDetailsRoutes);

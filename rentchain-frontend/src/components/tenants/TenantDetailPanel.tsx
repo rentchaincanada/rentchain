@@ -36,6 +36,7 @@ import { useLedgerV2 } from "@/hooks/useLedgerV2";
 import { LedgerTimeline } from "../ledger/LedgerTimeline";
 import { LedgerEventDrawer } from "../ledger/LedgerEventDrawer";
 import { createTenantHistoryShare } from "@/api/tenantHistoryShare";
+import { getTenantSignals, TenantSignals } from "@/api/tenantSignals";
 
 interface TenantDetailPanelProps {
   tenantId: string | null;
@@ -101,12 +102,18 @@ interface LayoutProps {
 const API_BASE_URL = API_BASE.replace(/\/$/, "");
 
 const riskColorMap: Record<string, string> = {
+  LOW: "rgba(34,197,94,0.12)",
+  MEDIUM: "rgba(234,179,8,0.14)",
+  HIGH: "rgba(239,68,68,0.14)",
   Low: "rgba(34,197,94,0.12)",
   Medium: "rgba(234,179,8,0.14)",
   High: "rgba(239,68,68,0.14)",
 };
 
 const riskBorderMap: Record<string, string> = {
+  LOW: "1px solid rgba(34,197,94,0.5)",
+  MEDIUM: "1px solid rgba(234,179,8,0.55)",
+  HIGH: "1px solid rgba(239,68,68,0.55)",
   Low: "1px solid rgba(34,197,94,0.5)",
   Medium: "1px solid rgba(234,179,8,0.55)",
   High: "1px solid rgba(239,68,68,0.55)",
@@ -166,10 +173,36 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
   const [shareExpiresAt, setShareExpiresAt] = useState<number | null>(null);
   const [shareLoading, setShareLoading] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
+  const [signals, setSignals] = useState<TenantSignals | null>(null);
+  const [signalsLoading, setSignalsLoading] = useState(false);
+  const [signalsError, setSignalsError] = useState<string | null>(null);
 
   useEffect(() => {
     setPayments(arr(bundlePayments));
   }, [bundlePayments]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!tenantId) return;
+    setSignalsLoading(true);
+    setSignalsError(null);
+    getTenantSignals(tenantId)
+      .then((resp) => {
+        if (cancelled) return;
+        setSignals(resp?.signals ?? null);
+      })
+      .catch((err: any) => {
+        if (cancelled) return;
+        setSignals(null);
+        setSignalsError(err?.message || "Failed to load signals");
+      })
+      .finally(() => {
+        if (!cancelled) setSignalsLoading(false);
+      });
+    return () => {
+        cancelled = true;
+    };
+  }, [tenantId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -290,7 +323,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
     };
   }, [safeLedgerEntries, ledgerWithBalance, ledgerSummary, ledgerSummaryState, tenantId, balance]);
 
-  const riskLevel = tenant.riskLevel || "Unknown";
+  const riskLevel = (signals?.riskLevel as string) || tenant.riskLevel || "Unknown";
   const riskBg = riskColorMap[riskLevel] || "rgba(148,163,184,0.18)";
   const riskBorder =
     riskBorderMap[riskLevel] || "1px solid rgba(148,163,184,0.6)";
@@ -1181,6 +1214,43 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
         )}
         {shareError && (
           <div style={{ fontSize: 11, color: "#dc2626" }}>{shareError}</div>
+        )}
+      </div>
+
+      {/* Signals */}
+      <div
+        style={{
+          border: `1px solid ${colors.border}`,
+          borderRadius: radius.md,
+          padding: spacing.sm,
+          background: colors.panel,
+          display: "grid",
+          gap: spacing.xs,
+        }}
+      >
+        <div style={{ fontWeight: 700, fontSize: 13 }}>Signals</div>
+        {signalsLoading ? (
+          <div style={{ fontSize: 12, color: text.muted }}>Loading signals…</div>
+        ) : signalsError ? (
+          <div style={{ fontSize: 12, color: "#dc2626" }}>{signalsError}</div>
+        ) : signals ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+              gap: spacing.xs,
+              fontSize: 12,
+            }}
+          >
+            <div>Risk: {signals.riskLevel}</div>
+            <div>Late: {signals.latePaymentsCount}</div>
+            <div>NSF: {signals.nsfCount}</div>
+            <div>Missed: {signals.missedPaymentsCount}</div>
+            <div>Notices: {signals.evictionNoticeCount}</div>
+            <div>Positive: {signals.positiveNotesCount}</div>
+          </div>
+        ) : (
+          <div style={{ fontSize: 12, color: text.muted }}>No signals yet.</div>
         )}
       </div>
 
