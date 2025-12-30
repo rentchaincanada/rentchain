@@ -1,0 +1,29 @@
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+
+  .rc-print-area,
+  .rc-print-area * {
+    visibility: visible !important;
+  }
+
+  .rc-print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 24px;
+    background: white;
+  }
+
+  .rc-print-clean {
+    box-shadow: none !important;
+    border-color: #e5e7eb !important;
+  }
+
+  .rc-avoid-break {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}

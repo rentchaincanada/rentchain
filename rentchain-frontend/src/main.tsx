@@ -4,6 +4,7 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import "./index.css";
+import "./styles/print.css";
 import { ToastProvider } from "./components/ui/ToastProvider";
 import { SubscriptionProvider } from "./context/SubscriptionContext";
 import { AuthProvider } from "./context/AuthContext";

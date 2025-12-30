@@ -25,6 +25,8 @@ import tenantHistoryShareRoutes, {
 } from "./routes/tenantHistoryShareRoutes";
 import tenantSignalsRoutes from "./routes/tenantSignalsRoutes";
 import reportingRoutes from "./routes/reportingRoutes";
+import tenantInvitesRoutes from "./routes/tenantInvitesRoutes";
+import tenantPortalRoutes from "./routes/tenantPortalRoutes";
 
 const app: Application = express();
 app.set("etag", false);
@@ -67,6 +69,8 @@ app.use("/api/ledger-v2", routeSource("ledgerV2Routes.ts"), ledgerV2Routes);
 app.use("/api/tenant-history", tenantHistoryShareRoutes);
 app.use("/api", tenantSignalsRoutes);
 app.use("/api/reporting", reportingRoutes);
+app.use("/api/tenant-invites", tenantInvitesRoutes);
+app.use("/api/tenant", tenantPortalRoutes);
 
 // Core API mounts
 app.use("/health", routeSource("healthRoutes.ts"), healthRoutes);

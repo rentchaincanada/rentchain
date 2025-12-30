@@ -1,5 +1,5 @@
 import React from "react";
-import { Card } from "../ui/Ui";
+import { Card, Button } from "../ui/Ui";
 
 export function BoardSnapshotDrawer({
   open,
@@ -40,79 +40,96 @@ export function BoardSnapshotDrawer({
         }}
       >
         Monthly Operations Snapshot
-        <button
-          onClick={onClose}
-          style={{
-            border: "1px solid #e5e7eb",
-            borderRadius: 8,
-            padding: "6px 8px",
-            background: "#fff",
-            cursor: "pointer",
-          }}
-        >
-          Close
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Button onClick={() => window.print()}>Export PDF</Button>
+          <Button
+            style={{ border: "1px solid #e5e7eb", background: "#fff", color: "#111827" }}
+            onClick={onClose}
+          >
+            Close
+          </Button>
+        </div>
+      </div>
+      <div style={{ padding: 12, color: "#6b7280" }} className="no-print">
+        Export uses print-to-PDF (Save as PDF).
       </div>
       <div style={{ overflow: "auto", padding: 16, flex: 1 }}>
-        <section style={{ marginBottom: 16 }}>
-          <div style={{ fontWeight: 700, marginBottom: 8 }}>Portfolio KPIs</div>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-              gap: 10,
-            }}
-          >
-            <KPI label="Rent Collected" value={`$${snapshot.rentCollected}`} />
-            <KPI label="Outstanding Arrears" value={`$${snapshot.arrears}`} />
-            <KPI label="Occupancy Rate" value={`${snapshot.occupancy}%`} />
-            <KPI label="Active Tenants" value={snapshot.activeTenants} />
-          </div>
-        </section>
+        <div className="rc-print-area">
+          <div style={{ display: "grid", gap: 16 }}>
+            <header className="rc-avoid-break">
+              <div style={{ fontSize: 22, fontWeight: 700 }}>RentChain</div>
+              <div style={{ fontSize: 14, color: "#6b7280" }}>
+                Monthly Operations Snapshot
+              </div>
+              <div style={{ fontSize: 12, color: "#6b7280" }}>
+                Generated: {new Date().toLocaleString()}
+              </div>
+            </header>
 
-        <section style={{ marginBottom: 16 }}>
-          <div style={{ fontWeight: 700, marginBottom: 8 }}>Alerts</div>
-          {snapshot.alerts && snapshot.alerts.length > 0 ? (
-            <div style={{ display: "grid", gap: 6 }}>
-              {snapshot.alerts.map((a: string, i: number) => (
+            <section
+              className="rc-avoid-break rc-print-clean"
+              style={{ border: "1px solid #e5e7eb", borderRadius: 10, padding: 12 }}
+            >
+              <h3 style={{ fontWeight: 700, marginBottom: 8 }}>Portfolio KPIs</h3>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                  gap: 10,
+                }}
+              >
+                <KPI label="Rent Collected" value={`$${snapshot.rentCollected}`} />
+                <KPI label="Outstanding Arrears" value={`$${snapshot.arrears}`} />
+                <KPI label="Occupancy Rate" value={`${snapshot.occupancy}%`} />
+                <KPI label="Active Tenants" value={snapshot.activeTenants} />
+              </div>
+            </section>
+
+            <section
+              className="rc-avoid-break rc-print-clean"
+              style={{ border: "1px solid #e5e7eb", borderRadius: 10, padding: 12 }}
+            >
+              <h3 style={{ fontWeight: 700, marginBottom: 8 }}>Alerts</h3>
+              {snapshot.alerts && snapshot.alerts.length > 0 ? (
+                <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 6 }}>
+                  {snapshot.alerts.map((a: string, i: number) => (
+                    <li key={i} style={{ fontSize: 12 }}>
+                      {a}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
                 <div
-                  key={i}
                   style={{
                     padding: "6px 8px",
                     borderRadius: 8,
-                    border: "1px solid #fecdd3",
-                    background: "#fef2f2",
-                    color: "#b91c1c",
+                    border: "1px solid #bbf7d0",
+                    background: "#f0fdf4",
+                    color: "#166534",
                     fontSize: 12,
+                    fontWeight: 700,
                   }}
                 >
-                  {a}
+                  No critical issues
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div
-              style={{
-                padding: "6px 8px",
-                borderRadius: 8,
-                border: "1px solid #bbf7d0",
-                background: "#f0fdf4",
-                color: "#166534",
-                fontSize: 12,
-                fontWeight: 700,
-              }}
-            >
-              No critical issues
-            </div>
-          )}
-        </section>
+              )}
+            </section>
 
-        <section>
-          <div style={{ fontWeight: 700, marginBottom: 8 }}>AI Summary</div>
-          <Card style={{ padding: 12, fontSize: 13 }}>
-            {snapshot.aiSummary || "Summary not available."}
-          </Card>
-        </section>
+            <section
+              className="rc-avoid-break rc-print-clean"
+              style={{ border: "1px solid #e5e7eb", borderRadius: 10, padding: 12 }}
+            >
+              <h3 style={{ fontWeight: 700, marginBottom: 8 }}>AI Summary</h3>
+              <Card style={{ padding: 12, fontSize: 13, boxShadow: "none" }}>
+                {snapshot.aiSummary || "Summary not available."}
+              </Card>
+            </section>
+
+            <footer style={{ fontSize: 12, color: "#6b7280" }}>
+              Confidential — generated by RentChain.
+            </footer>
+          </div>
+        </div>
       </div>
     </div>
   );

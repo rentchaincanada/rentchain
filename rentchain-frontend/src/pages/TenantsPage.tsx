@@ -8,6 +8,7 @@ import { MacShell } from "../components/layout/MacShell";
 import { fetchTenants } from "@/api/tenantsApi";
 import { spacing, radius, colors, text } from "../styles/tokens";
 import { Card, Section, Input } from "../components/ui/Ui";
+import { InviteTenantModal } from "../components/tenants/InviteTenantModal";
 
 export const TenantsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -18,6 +19,7 @@ export const TenantsPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [inviteOpen, setInviteOpen] = useState(false);
 
   const selectedTenantIdFromUrl = searchParams.get("tenantId");
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(
@@ -97,11 +99,27 @@ export const TenantsPage: React.FC = () => {
         style={{ display: "flex", flexDirection: "column", gap: spacing.lg }}
       >
         <Card elevated>
-          <h1 style={{ margin: 0, fontSize: "1.4rem", fontWeight: 700 }}>
-            Tenants
-          </h1>
-          <div style={{ marginTop: 4, color: text.muted, fontSize: "0.95rem" }}>
-            Manage tenant records, ledgers, and unit occupancy.
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div>
+              <h1 style={{ margin: 0, fontSize: "1.4rem", fontWeight: 700 }}>
+                Tenants
+              </h1>
+              <div style={{ marginTop: 4, color: text.muted, fontSize: "0.95rem" }}>
+                Manage tenant records, ledgers, and unit occupancy.
+              </div>
+            </div>
+            <button
+              onClick={() => setInviteOpen(true)}
+              style={{
+                padding: "8px 12px",
+                borderRadius: radius.sm,
+                border: `1px solid ${colors.border}`,
+                background: colors.panel,
+                cursor: "pointer",
+              }}
+            >
+              Invite tenant
+            </button>
           </div>
         </Card>
 
@@ -259,12 +277,13 @@ export const TenantsPage: React.FC = () => {
               <TenantLeasePanel tenantId={tenantExists ? selectedTenantId : null} />
             </Section>
 
-            <Section>
-              <TenantPaymentsPanel tenantId={tenantExists ? selectedTenantId : null} />
-            </Section>
-          </div>
-        </Card>
-      </div>
-    </MacShell>
-  );
+          <Section>
+            <TenantPaymentsPanel tenantId={tenantExists ? selectedTenantId : null} />
+          </Section>
+        </div>
+      </Card>
+    </div>
+    <InviteTenantModal open={inviteOpen} onClose={() => setInviteOpen(false)} />
+  </MacShell>
+);
 };
