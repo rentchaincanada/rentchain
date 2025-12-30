@@ -181,7 +181,12 @@ export async function restoreSession(): Promise<{ user: any | null }> {
       sessionStorage.getItem("rentchain_token") ||
       localStorage.getItem("rentchain_token");
     const t = (raw ?? "").trim();
-    if (!t || t === "null" || t === "undefined") {
+    if (
+      !t ||
+      t === "null" ||
+      t === "undefined" ||
+      t.split(".").length !== 3
+    ) {
       return { user: null };
     }
   }
