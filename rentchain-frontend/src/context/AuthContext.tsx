@@ -115,6 +115,7 @@ function storeToken(token: string) {
 }
 
 function clearStoredToken() {
+  if (typeof window === "undefined") return;
   window.sessionStorage.removeItem(TOKEN_STORAGE_KEY);
   window.sessionStorage.removeItem(TENANT_TOKEN_KEY);
   window.localStorage.removeItem(TOKEN_STORAGE_KEY);
