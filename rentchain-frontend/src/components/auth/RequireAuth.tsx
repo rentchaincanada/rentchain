@@ -8,7 +8,7 @@ interface RequireAuthProps {
 }
 
 export const RequireAuth: React.FC<RequireAuthProps> = ({ children }) => {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, token } = useAuth();
   const location = useLocation();
 
   if (isLoading) {
@@ -33,7 +33,8 @@ export const RequireAuth: React.FC<RequireAuthProps> = ({ children }) => {
   }
 
   if (!user) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    const reason = token ? "?reason=expired" : "";
+    return <Navigate to={`/login${reason}`} state={{ from: location }} replace />;
   }
 
   return <>{children}</>;
