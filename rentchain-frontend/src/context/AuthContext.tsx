@@ -14,6 +14,16 @@ import {
   restoreSession as apiRestoreSession,
 } from "../api/authApi";
 
+const PUBLIC_ROUTE_ALLOWLIST = [
+  "/",
+  "/join-waitlist",
+  "/pricing",
+  "/login",
+  "/signup",
+  "/terms",
+  "/privacy",
+];
+
 export interface AuthUser {
   id: string;
   email: string;
@@ -117,6 +127,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // On initial mount, attempt to restore session from localStorage token
   useEffect(() => {
+    const pathname =
+      typeof window !== "undefined" ? window.location.pathname : "";
+    const isPublic = PUBLIC_ROUTE_ALLOWLIST.includes(pathname);
     const storedToken = getStoredToken();
 
     if (!storedToken) {
@@ -125,6 +138,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
 
     setToken(storedToken);
+
+    // Do not call /api/me on public routes; treat as logged-out view
+    if (isPublic) {
+      setIsLoading(false);
+      return;
+    }
 
     const runRestore = async () => {
       try {
