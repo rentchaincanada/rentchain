@@ -90,8 +90,8 @@ router.get("/verify", async (req: any, res) => {
   const landlordId = req.user?.landlordId || req.user?.id;
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
 
-  const limitRaw = Number(req.query?.limit ?? 200);
-  const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 500) : 200;
+  const limitRaw = Number(req.query?.limit ?? 100);
+  const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 200) : 100;
 
   const result = await listLedgerEventsV2({ landlordId, limit });
   const eventsDesc = result.items || [];
