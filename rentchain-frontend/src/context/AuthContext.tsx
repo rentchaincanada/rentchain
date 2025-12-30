@@ -132,7 +132,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const isPublic = PUBLIC_ROUTE_ALLOWLIST.includes(pathname);
     const storedToken = getStoredToken();
 
+    // No token: stay logged out, skip /api/me on public routes, and don't redirect
     if (!storedToken) {
+      setUser(null);
+      setToken(null);
       setIsLoading(false);
       return;
     }
@@ -159,6 +162,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
         setToken(null);
         clearStoredToken();
+        // redirect only on protected routes
+        if (!isPublic && typeof window !== "undefined") {
+          const params = new URLSearchParams(window.location.search);
+          params.set("reason", "expired");
+          window.location.href = `/login?${params.toString()}`;
+        }
       } finally {
         setIsLoading(false);
       }
