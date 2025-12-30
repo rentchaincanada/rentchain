@@ -171,7 +171,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
       try {
         const me = await apiRestoreSession();
-        setUser(me?.user ?? null);
+        if (!me?.user) {
+          setUser(null);
+          setToken(null);
+          clearStoredToken();
+          setIsLoading(false);
+          return;
+        }
+        setUser(me.user);
       } catch (e: any) {
         const msg = String(e?.message ?? "");
         if (msg.toLowerCase().includes("unauthorized") || msg.includes("401")) {
