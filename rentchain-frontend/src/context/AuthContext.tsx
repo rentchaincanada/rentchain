@@ -148,65 +148,33 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       return;
     }
 
-    const isPublicPath = (path: string) => {
-  // keep this list small and explicit
-  return (
-    path === "/" ||
-    path.startsWith("/join-waitlist") ||
-    path.startsWith("/pricing") ||
-    path.startsWith("/login") ||
-    path.startsWith("/signup")
-  );
-};
+    const runRestore = async () => {
+      try {
+        const me = await apiRestoreSession();
+        setUser(me?.user ?? null);
+      } catch (e: any) {
+        const msg = String(e?.message ?? "");
+        if (msg.toLowerCase().includes("unauthorized") || msg.includes("401")) {
+          setUser(null);
+        } else {
+          console.error("Failed to restore auth session", e);
+          setUser(null);
+        }
+        setToken(null);
+        clearStoredToken();
+        // redirect only on protected routes
+        if (!isPublic && typeof window !== "undefined") {
+          const params = new URLSearchParams(window.location.search);
+          params.set("reason", "expired");
+          window.location.href = `/login?${params.toString()}`;
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-const runRestore = async () => {
-  // IMPORTANT: decide public/protected + token existence up front
-  const path = typeof window !== "undefined" ? window.location.pathname : "/";
-  const isPublic = isPublicPath(path);
-
-  const storedToken =
-    (typeof window !== "undefined" && sessionStorage.getItem("rentchain_token")) ||
-    (typeof window !== "undefined" && localStorage.getItem("rentchain_token")) ||
-    null;
-
-  // If no token, this is a normal logged-out visitor.
-  // Do NOT call /api/me and do NOT redirect.
-  if (!storedToken) {
-    setUser(null);
-    setToken(null);
-    setIsLoading(false);
-    return;
-  }
-
-  try {
-    const me = await apiRestoreSession();
-    setUser(me?.user ?? null);
-  } catch (e: any) {
-    const msg = String(e?.message ?? "").toLowerCase();
-    const isUnauthorized = msg.includes("unauthorized") || msg.includes("401");
-
-    setUser(null);
-    setToken(null);
-    clearStoredToken();
-
-    // Only redirect on protected routes AND only when a token existed (expired/invalid session)
-    if (isUnauthorized && !isPublic && typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      params.set("reason", "expired");
-      window.location.href = `/login?${params.toString()}`;
-      return;
-    }
-
-    // Non-401 errors: log but do not force redirect loops
-    if (!isUnauthorized) {
-      console.error("Failed to restore auth session", e);
-    }
-  } finally {
-    setIsLoading(false);
-  }
-};
-
-void runRestore();
+    void runRestore();
+  }, []);
 
   const login = useCallback(
     async (
