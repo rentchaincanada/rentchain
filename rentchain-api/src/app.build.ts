@@ -28,6 +28,7 @@ import tenantSignalsRoutes from "./routes/tenantSignalsRoutes";
 import reportingRoutes from "./routes/reportingRoutes";
 import tenantInvitesRoutes from "./routes/tenantInvitesRoutes";
 import tenantPortalRoutes from "./routes/tenantPortalRoutes";
+import stubsRoutes from "./routes/stubsRoutes";
 
 export const app = express();
 app.set("etag", false);
@@ -67,6 +68,7 @@ app.use("/api", tenantSignalsRoutes);
 app.use("/api/reporting", reportingRoutes);
 app.use("/api/tenant-invites", tenantInvitesRoutes);
 app.use("/api/tenant", tenantPortalRoutes);
+app.use("/api", stubsRoutes);
 
 // Core APIs
 app.use("/api", tenantDetailsRoutes);
