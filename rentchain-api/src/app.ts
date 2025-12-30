@@ -38,7 +38,7 @@ app.set("etag", false);
 app.use(requestBreadcrumbs);
 app.use(
   cors({
-    origin: true,
+    origin: ["https://www.rentchain.ai", "http://localhost:5173", "http://localhost:3000"],
     credentials: true,
   })
 );
