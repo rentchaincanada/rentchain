@@ -175,6 +175,17 @@ export async function getCurrentUser(token: string): Promise<MeResponse> {
 }
 
 export async function restoreSession(): Promise<{ user: any | null }> {
+  // Fast path: if no token stored, skip any network calls
+  if (typeof window !== "undefined") {
+    const raw =
+      sessionStorage.getItem("rentchain_token") ||
+      localStorage.getItem("rentchain_token");
+    const t = (raw ?? "").trim();
+    if (!t || t === "null" || t === "undefined") {
+      return { user: null };
+    }
+  }
+
   try {
     // Prefer auth/me which returns the decoded token payload
     const authMe = await apiFetch<{ ok?: boolean; user?: AuthUser }>("/api/auth/me");
