@@ -23,11 +23,9 @@ interface PropertyDetailPanelProps {
   onRefresh?: () => Promise<void> | void;
 }
 
-const formatCurrency = (value: number): string =>
-  `$${value.toLocaleString(undefined, {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  })}`;
+import { safeLocaleNumber } from "@/utils/format";
+
+const formatCurrency = (value: number): string => `$${safeLocaleNumber(value)}`;
 
 const formatDate = (iso: string): string => {
   const d = new Date(iso);

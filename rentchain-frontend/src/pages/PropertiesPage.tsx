@@ -7,6 +7,7 @@ import { fetchProperties, Property } from "../api/propertiesApi";
 import { PropertyActivityPanel } from "../components/property/PropertyActivityPanel";
 import { PropertyDetailPanel } from "../components/properties/PropertyDetailPanel";
 import { spacing, radius, shadows, colors, text } from "../styles/tokens";
+import { safeLocaleDate } from "../utils/format";
 import { Card, Section, Button } from "../components/ui/Ui";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -999,7 +1000,7 @@ const PropertiesPage: React.FC = () => {
                           {req.issueType} · {req.location}
                         </div>
                         <div style={{ fontSize: 12, color: text.muted }}>
-                          {new Date(req.reportedAt).toLocaleString()}
+                          {safeLocaleDate(req.reportedAt)}
                         </div>
                       </div>
                       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -1143,16 +1144,16 @@ const ActionRequestModal: React.FC<ActionRequestModalProps> = ({
             {request.description}
           </div>
           <div style={{ color: text.muted, fontSize: 12 }}>
-            Reported: {new Date(request.reportedAt).toLocaleString()}
+            Reported: {safeLocaleDate(request.reportedAt)}
           </div>
           {request.acknowledgedAt && (
             <div style={{ color: text.muted, fontSize: 12 }}>
-              Acknowledged: {new Date(request.acknowledgedAt).toLocaleString()}
+              Acknowledged: {safeLocaleDate(request.acknowledgedAt)}
             </div>
           )}
           {request.resolvedAt && (
             <div style={{ color: text.muted, fontSize: 12 }}>
-              Resolved: {new Date(request.resolvedAt).toLocaleString()}
+              Resolved: {safeLocaleDate(request.resolvedAt)}
             </div>
           )}
           <div>
