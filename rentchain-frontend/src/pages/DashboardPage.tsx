@@ -477,16 +477,14 @@ const DashboardPage: React.FC = () => {
           </Section>
         </div>
       </div>
-    </div>
+      {selectedLedgerId ? (
+        <LedgerEventDrawer eventId={selectedLedgerId} onClose={() => setSelectedLedgerId(null)} />
+      ) : null}
 
-    {selectedLedgerId ? (
-      <LedgerEventDrawer eventId={selectedLedgerId} onClose={() => setSelectedLedgerId(null)} />
-    ) : null}
-
-    <OnboardingWizard
-      open={showOnboarding}
-      onClose={handleCloseOnboarding}
-      onLaunchAddProperty={handleLaunchAddPropertyFromWizard}
+      <OnboardingWizard
+        open={showOnboarding}
+        onClose={handleCloseOnboarding}
+        onLaunchAddProperty={handleLaunchAddPropertyFromWizard}
       />
     </MacShell>
   );
