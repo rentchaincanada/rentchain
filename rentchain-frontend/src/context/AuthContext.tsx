@@ -65,6 +65,17 @@ interface AuthProviderProps {
   children: React.ReactNode;
 }
 
+const readTokenSafe = () => {
+  if (typeof window === "undefined") return null;
+  const raw =
+    sessionStorage.getItem("rentchain_token") ||
+    localStorage.getItem("rentchain_token");
+  const t = (raw ?? "").trim();
+  if (!t || t === "null" || t === "undefined") return null;
+  if (t.split(".").length !== 3) return null; // basic JWT shape
+  return t;
+};
+
 function getStoredToken() {
   if (typeof window === "undefined") return null;
 
@@ -149,6 +160,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
 
     const runRestore = async () => {
+      const token = readTokenSafe();
+      if (!token) {
+        setUser(null);
+        setToken(null);
+        setIsLoading(false);
+        return;
+      }
       try {
         const me = await apiRestoreSession();
         setUser(me?.user ?? null);
