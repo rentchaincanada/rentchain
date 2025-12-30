@@ -27,6 +27,9 @@ import MicroLiveActivationPanel from "../components/MicroLiveActivationPanel";
 import { useLedgerV2 } from "../hooks/useLedgerV2";
 import { LedgerTimeline } from "../components/ledger/LedgerTimeline";
 import { LedgerEventDrawer } from "../components/ledger/LedgerEventDrawer";
+import { BoardSnapshotButton } from "../components/dashboard/BoardSnapshotButton";
+import { BoardSnapshotDrawer } from "../components/dashboard/BoardSnapshotDrawer";
+import { fetchMonthlySnapshot } from "../api/reporting";
 
 const DashboardPage: React.FC = () => {
   const { data, loading, error, refresh } = useBlockchainVerify();
@@ -46,6 +49,9 @@ const DashboardPage: React.FC = () => {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem("rentchain_onboarding_seen") === "true";
   });
+  const [snapshotOpen, setSnapshotOpen] = useState(false);
+  const [snapshot, setSnapshot] = useState<any | null>(null);
+  const [snapshotError, setSnapshotError] = useState<string | null>(null);
   const navigate = useNavigate();
   const { showToast } = useToast();
   const limitsResp: any = limits ?? null;
@@ -71,6 +77,22 @@ const DashboardPage: React.FC = () => {
 
   const handleLaunchAddPropertyFromWizard = () => {
     navigate("/properties?openAddProperty=1");
+  };
+  const handleOpenSnapshot = async () => {
+    try {
+      setSnapshotError(null);
+      const res = await fetchMonthlySnapshot();
+      setSnapshot(res);
+      setSnapshotOpen(true);
+    } catch (e: any) {
+      const msg = e?.message || "Failed to load snapshot";
+      setSnapshotError(msg);
+      showToast({
+        message: "Snapshot failed",
+        description: msg,
+        variant: "error",
+      });
+    }
   };
 
   useEffect(() => {
@@ -264,6 +286,10 @@ const DashboardPage: React.FC = () => {
             >
               {usageIntegrityChip.label}
             </div>
+          ) : null}
+          <BoardSnapshotButton onClick={handleOpenSnapshot} />
+          {snapshotError ? (
+            <div style={{ color: "#dc2626", fontSize: 12 }}>{snapshotError}</div>
           ) : null}
         </div>
         {onboarding?.completed && (
@@ -480,6 +506,12 @@ const DashboardPage: React.FC = () => {
       {selectedLedgerId ? (
         <LedgerEventDrawer eventId={selectedLedgerId} onClose={() => setSelectedLedgerId(null)} />
       ) : null}
+
+      <BoardSnapshotDrawer
+        open={snapshotOpen}
+        onClose={() => setSnapshotOpen(false)}
+        snapshot={snapshot}
+      />
 
       <OnboardingWizard
         open={showOnboarding}
