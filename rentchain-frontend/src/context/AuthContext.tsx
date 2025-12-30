@@ -143,9 +143,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       typeof window !== "undefined" ? window.location.pathname : "";
     const isPublic = PUBLIC_ROUTE_ALLOWLIST.includes(pathname);
     const storedToken = getStoredToken();
+    const hasToken = Boolean(storedToken);
 
     // No token: stay logged out, skip /api/me on public routes, and don't redirect
-    if (!storedToken) {
+    if (!hasToken) {
       setUser(null);
       setToken(null);
       setIsLoading(false);
@@ -181,8 +182,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
         setToken(null);
         clearStoredToken();
-        // redirect only on protected routes
-        if (!isPublic && typeof window !== "undefined") {
+        // redirect only on protected routes when a token actually existed
+        if (!isPublic && hasToken && typeof window !== "undefined") {
           const params = new URLSearchParams(window.location.search);
           params.set("reason", "expired");
           window.location.href = `/login?${params.toString()}`;
