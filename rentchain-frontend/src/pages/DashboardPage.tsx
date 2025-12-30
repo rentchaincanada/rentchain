@@ -488,6 +488,5 @@ const DashboardPage: React.FC = () => {
       />
     </MacShell>
   );
-};
 
 export default DashboardPage;
