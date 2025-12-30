@@ -19,6 +19,7 @@ router.get("/", async (req: any, res) => {
   const landlordId = req.user?.landlordId || req.user?.id;
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
 
+  const started = Date.now();
   const limitRaw = Number(req.query?.limit ?? 50);
   const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 50) : 50;
   const cursor = req.query?.cursor ? Number(req.query.cursor) : undefined;
@@ -39,12 +40,21 @@ router.get("/", async (req: any, res) => {
       }),
       new Promise((_, reject) => setTimeout(() => reject(new Error("TIMEOUT")), timeoutMs)),
     ]);
+    const ms = Date.now() - started;
+    res.setHeader("x-duration-ms", String(ms));
     return res.json({ ok: true, ...(result as any) });
   } catch (err: any) {
+    const ms = Date.now() - started;
+    console.error("[ledgerV2Routes] list error", { ms, err: err?.message, stack: err?.stack });
     if (err?.message === "TIMEOUT") {
       return res.status(504).json({ ok: false, error: "Request timed out" });
     }
-    return res.status(500).json({ ok: false, error: "Failed to load ledger" });
+    return res.status(500).json({
+      ok: false,
+      error: "Failed to load ledger",
+      code: (err as any)?.code || undefined,
+      message: err?.message || undefined,
+    });
   }
 });
 

@@ -126,28 +126,26 @@ export async function listLedgerEventsV2(params: ListParams) {
 
   let q: FirebaseFirestore.Query = db
     .collection(COLLECTION)
-    .where("landlordId", "==", landlordId)
-    .orderBy("occurredAt", "desc");
+    .where("landlordId", "==", landlordId);
 
-  if (cursor) {
-    q = q.where("occurredAt", "<", cursor);
-  }
-  if (propertyId) {
-    q = q.where("propertyId", "==", propertyId);
-  }
-  if (tenantId) {
-    q = q.where("tenantId", "==", tenantId);
-  }
-  if (eventType) {
-    q = q.where("eventType", "==", eventType);
+  if (propertyId) q = q.where("propertyId", "==", propertyId);
+  if (tenantId) q = q.where("tenantId", "==", tenantId);
+  if (eventType) q = q.where("eventType", "==", eventType);
+
+  // deterministic order for pagination
+  q = q.orderBy("occurredAt", "desc");
+
+  if (Number.isFinite(cursor)) {
+    q = q.startAfter(Number(cursor));
   }
 
   const finalLimit = Math.min(Math.max(Number(limit) || 50, 1), 50);
   q = q.limit(finalLimit);
 
   const snap = await q.get();
-  const items = snap.docs.map((d) => d.data() as LedgerEventV2);
-  const nextCursor = snap.size === finalLimit ? items[items.length - 1]?.occurredAt : undefined;
+  const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as LedgerEventV2[];
+  const nextCursor =
+    items.length > 0 ? Number(items[items.length - 1].occurredAt || 0) || undefined : undefined;
   return { items, nextCursor };
 }
 
