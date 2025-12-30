@@ -414,15 +414,30 @@ const DashboardPage: React.FC = () => {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "2fr 1.1fr",
+            gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
             gap: spacing.lg,
             alignItems: "stretch",
           }}
         >
-          <Card elevated style={{ height: "100%" }}>
+          <Card
+            elevated
+            style={{
+              height: "100%",
+              minWidth: 0,
+              maxHeight: 520,
+              overflow: "auto",
+            }}
+          >
             <DashboardPropertyTable />
           </Card>
-          <div style={{ display: "flex", flexDirection: "column", gap: spacing.md }}>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: spacing.md,
+              minWidth: 0,
+            }}
+          >
             <Section>
               <DashboardAlertsPanel />
             </Section>
@@ -435,14 +450,14 @@ const DashboardPage: React.FC = () => {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "minmax(0, 1.2fr) minmax(0, 1fr)",
+            gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
             gap: spacing.lg,
           }}
         >
-          <Section>
+          <Section style={{ minWidth: 0 }}>
             <DashboardRentCollectionChart />
           </Section>
-          <Section>
+          <Section style={{ minWidth: 0 }}>
             <DashboardPaymentBreakdownChart />
           </Section>
         </div>
@@ -450,16 +465,17 @@ const DashboardPage: React.FC = () => {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "minmax(0, 1.2fr) minmax(0, 1fr)",
+            gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
             gap: spacing.lg,
           }}
         >
-          <Section>
+          <Section style={{ minWidth: 0 }}>
             <DashboardApplicationsChart />
           </Section>
-        <Section>
-          <DashboardActivityPanel />
-        </Section>
+          <Section style={{ minWidth: 0 }}>
+            <DashboardActivityPanel />
+          </Section>
+        </div>
       </div>
     </div>
 
