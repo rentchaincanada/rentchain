@@ -26,6 +26,7 @@ import tenantHistoryShareRoutes, {
 } from "./routes/tenantHistoryShareRoutes";
 import tenantSignalsRoutes from "./routes/tenantSignalsRoutes";
 import reportingRoutes from "./routes/reportingRoutes";
+import capabilitiesRoutes from "./routes/capabilitiesRoutes";
 import tenantInvitesRoutes from "./routes/tenantInvitesRoutes";
 import tenantPortalRoutes from "./routes/tenantPortalRoutes";
 import stubsRoutes from "./routes/stubsRoutes";
@@ -69,6 +70,7 @@ app.use("/api/api", (req, res) => {
 app.use("/api", routeSource("publicRoutes.ts"), publicRoutes);
 app.use("/api/public", tenantHistorySharePublicRouter);
 app.use("/api/auth", authRoutes);
+app.use("/api/capabilities", routeSource("capabilitiesRoutes.ts"), capabilitiesRoutes);
 
 // Decode auth for protected routes
 app.use(authenticateJwt);

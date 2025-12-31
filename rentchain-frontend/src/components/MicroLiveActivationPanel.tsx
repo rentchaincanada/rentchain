@@ -1,13 +1,20 @@
 import React, { useEffect, useState } from "react";
 import { completeMicroLiveStep, fetchMicroLiveStatus, type MicroLiveStatus } from "../api/microLive";
+import { useCapabilities } from "@/hooks/useCapabilities";
 
 export default function MicroLiveActivationPanel() {
   const [status, setStatus] = useState<MicroLiveStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const { features } = useCapabilities();
 
   async function load() {
+    if (!features.microLive) {
+      setStatus(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setErr(null);
     try {
@@ -22,7 +29,8 @@ export default function MicroLiveActivationPanel() {
 
   useEffect(() => {
     load();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [features.microLive]);
 
   async function onMark(stepKey: string) {
     try {

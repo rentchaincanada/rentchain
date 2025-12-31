@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import { db } from "../firebase";
+import sgMail from "@sendgrid/mail";
 
 const router = Router();
 
@@ -89,6 +90,32 @@ router.post("/waitlist", async (req: Request, res: Response) => {
       source: String(req.body?.source || "landing"),
       utm: req.body?.utm || null,
     });
+
+    const SENDGRID_KEY = process.env.SENDGRID_API_KEY;
+    const FROM = process.env.WAITLIST_FROM_EMAIL || "no-reply@rentchain.ai";
+
+    if (SENDGRID_KEY) {
+      try {
+        sgMail.setApiKey(SENDGRID_KEY);
+        await sgMail.send({
+          to: email,
+          from: FROM,
+          subject: "You’re on the RentChain waitlist",
+          text:
+            "Thanks for joining the RentChain waitlist. We’ll reach out for private onboarding shortly.",
+          html: `
+            <div style="font-family:Arial,sans-serif;line-height:1.5">
+              <h2>You're on the list ✅</h2>
+              <p>Thanks for joining the RentChain waitlist.</p>
+              <p>We'll contact you shortly for private onboarding.</p>
+              <p style="color:#666;font-size:12px">RentChain</p>
+            </div>
+          `,
+        });
+      } catch (e: any) {
+        console.error("[waitlist] sendgrid error", e?.message || e);
+      }
+    }
 
     return res.json({ ok: true, already: false });
   } catch (e: any) {
