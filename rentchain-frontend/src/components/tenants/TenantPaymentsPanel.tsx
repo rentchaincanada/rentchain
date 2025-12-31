@@ -1,9 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Lease, getLeasesForTenant } from "../../api/leasesApi";
-import {
-  Payment,
-  getTenantMonthlyPayments,
-} from "../../api/paymentsApi";
+import { Payment, getTenantMonthlyPayments } from "../../api/paymentsApi";
+import { safeNumber } from "@/utils/format";
 
 interface TenantPaymentsPanelProps {
   tenantId: string | null;
@@ -94,7 +92,7 @@ export const TenantPaymentsPanel: React.FC<TenantPaymentsPanelProps> = ({
 
   const formatMoney = (value: number | null) => {
     if (value == null) return "—";
-    return `$${value.toLocaleString(undefined, {
+    return `$${safeNumber(value, {
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     })}`;
@@ -271,3 +269,4 @@ export const TenantPaymentsPanel: React.FC<TenantPaymentsPanelProps> = ({
     </div>
   );
 };
+
