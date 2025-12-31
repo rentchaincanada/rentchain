@@ -37,10 +37,15 @@ export function resolveApiUrl(input: string) {
 }
 
 export async function apiFetch(path: string, init: RequestInit = {}) {
-  // Remove accidental double-prefixing
-  const clean = path.replace(/^\/api\/api\//, "/api/").replace(/^api\/api\//, "api/");
-  const stripApi = clean.startsWith("/api/") ? clean.slice(4) : clean;
-  const url = `/api${stripApi.startsWith("/") ? "" : "/"}${stripApi}`;
+  // 1) normalize accidental double /api/api
+  let p = String(path || "");
+  p = p.replace(/^\/api\/api\//, "/api/").replace(/^api\/api\//, "api/");
+
+  // 2) allow callers to pass either "/api/xxx" or "/xxx"
+  if (!(p.startsWith("http://") || p.startsWith("https://"))) {
+    const stripApi = p.startsWith("/api/") ? p.slice(4) : p; // remove leading "/api"
+    p = `/api${stripApi.startsWith("/") ? "" : "/"}${stripApi}`;
+  }
 
   const token = getAuthToken();
   const headers = new Headers(init.headers || {});
@@ -52,7 +57,7 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   }
-  const res = await fetch(url, { ...init, headers, credentials: "include" });
+  const res = await fetch(p, { ...init, headers, credentials: "include" });
 
   const ct = res.headers.get("content-type") || "";
   const isJson = ct.includes("application/json");
