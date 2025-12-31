@@ -20,6 +20,7 @@ import eventsRoutes from "./routes/eventsRoutes";
 import dashboardRoutes from "./routes/dashboardRoutes";
 import healthRoutes from "./routes/healthRoutes";
 import ledgerV2Routes from "./routes/ledgerV2Routes";
+import landlordMicroLiveRoutes from "./routes/landlordMicroLiveRoutes";
 import tenantHistoryShareRoutes, {
   publicRouter as tenantHistorySharePublicRouter,
 } from "./routes/tenantHistoryShareRoutes";
@@ -110,6 +111,7 @@ app.use("/api/leases", leaseRoutes);
 app.use("/api", tenantOnboardRoutes);
 app.use("/api/events", eventsRoutes);
 app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/landlord", landlordMicroLiveRoutes);
 
 process.on("uncaughtException", (err) => {
   console.error("[uncaughtException]", err);
