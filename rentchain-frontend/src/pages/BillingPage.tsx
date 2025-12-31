@@ -7,7 +7,7 @@ import { spacing, text, colors, radius } from "../styles/tokens";
 import { SUPPORT_EMAIL } from "../config/support";
 import { BillingPreviewCard } from "../components/billing/BillingPreviewCard";
 import { fetchBillingUsage } from "../api/billingPreviewApi";
-import { asArray } from "../utils/asArray";
+import { asArray } from "../lib/asArray";
 
 const formatAmount = (amountCents: number, currency: string) => {
   const amount = (amountCents || 0) / 100;
