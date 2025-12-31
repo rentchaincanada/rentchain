@@ -1,12 +1,12 @@
 {
-  "rewrites": [
+  "routes": [
     {
-      "source": "/api/:path*",
-      "destination": "https://rentchain-landlord-api-915921057662.us-central1.run.app/api/:path*"
+      "src": "^/api/(.*)$",
+      "dest": "https://rentchain-landlord-api-915921057662.us-central1.run.app/api/$1"
     },
     {
-      "source": "/(.*)",
-      "destination": "/"
+      "src": "^(?!/api/).*$",
+      "dest": "/"
     }
   ]
 }

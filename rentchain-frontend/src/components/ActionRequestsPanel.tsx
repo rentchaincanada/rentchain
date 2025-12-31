@@ -6,6 +6,7 @@ import {
   type ActionRequest,
 } from "../api/actionRequestsApi";
 import { fixActionForRequest } from "../services/actionRequestFixRouter";
+import { asArray } from "../lib/asArray";
 
 export function ActionRequestsPanel({
   propertyId,
@@ -52,7 +53,7 @@ export function ActionRequestsPanel({
     setErr(null);
     try {
       const res = await fetchActionRequests(propertyId);
-      const list = res.actionRequests ?? [];
+      const list = asArray<ActionRequest>(res?.actionRequests ?? res);
       setItems(list);
       onCountChange?.(list.filter((x) => x.status !== "resolved").length);
     } catch (e: any) {
