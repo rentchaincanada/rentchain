@@ -37,6 +37,12 @@ app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: "2mb" }));
 app.use(cookieParser());
 
+// Redirect accidental double /api/api/... to /api/...
+app.use("/api/api", (req, res) => {
+  const fixed = "/api" + req.url;
+  return res.redirect(307, fixed);
+});
+
 // Health
 app.use("/health", healthRoutes);
 

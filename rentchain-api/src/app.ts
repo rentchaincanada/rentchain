@@ -55,6 +55,12 @@ app.use(
 app.use(cookieParser());
 app.use(requestContext);
 
+// Redirect accidental double /api/api/... to /api/...
+app.use("/api/api", (req, res) => {
+  const fixed = "/api" + req.url;
+  return res.redirect(307, fixed);
+});
+
 // Dev tooling routes should not be blocked by auth
 /**
  * Route registration
