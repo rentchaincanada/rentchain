@@ -20,6 +20,7 @@ import { ActionRequestsPanel } from "../components/ActionRequestsPanel";
 import { fetchActionRequestCounts } from "../api/actionRequestCountsApi";
 import { ActionCenterDrawer } from "../components/action-center/ActionCenterDrawer";
 import { fetchMonthlyOpsSnapshot } from "../api/actionSnapshotApi";
+import { asArray } from "../lib/asArray";
 import { fetchMe } from "../api/meApi";
 import { fetchAccountLimits, type AccountLimits } from "../api/accountApi";
 import { arr, num, str } from "@/utils/safe";
@@ -243,7 +244,7 @@ const PropertiesPage: React.FC = () => {
           propertyId,
           status: actionFilter === "all" ? undefined : actionFilter,
         });
-        setActionRequests(items);
+        setActionRequests(asArray(items));
         const openId = opts?.openId;
         if (openId) {
           const match = items.find((r) => r.id === openId);
