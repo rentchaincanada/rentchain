@@ -377,7 +377,15 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
         description: "Tenant payment history report has been saved as a PDF.",
         variant: "success",
       });
-    } catch (err) {
+    } catch (err: any) {
+      const msg = err?.message || "";
+      if (msg.includes("PDF_REPORTING_DISABLED")) {
+        showToast({
+          title: "Coming soon",
+          description: "Tenant reports are coming soon.",
+        });
+        return;
+      }
       console.error("[TenantDetailPanel] Failed to download report", err);
       showToast({
         title: "Failed to download report",

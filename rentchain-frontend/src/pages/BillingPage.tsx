@@ -7,6 +7,7 @@ import { spacing, text, colors, radius } from "../styles/tokens";
 import { SUPPORT_EMAIL } from "../config/support";
 import { BillingPreviewCard } from "../components/billing/BillingPreviewCard";
 import { fetchBillingUsage } from "../api/billingPreviewApi";
+import { asArray } from "../utils/asArray";
 
 const formatAmount = (amountCents: number, currency: string) => {
   const amount = (amountCents || 0) / 100;
@@ -25,7 +26,7 @@ const BillingPage: React.FC = () => {
       setLoading(true);
       setError(null);
       const [history, usageResp] = await Promise.all([fetchBillingHistory(), fetchBillingUsage()]);
-      setRecords(history);
+      setRecords(asArray(history));
       setUsage(usageResp);
     } catch (err: any) {
       setError(err?.message || "Failed to load billing history.");
