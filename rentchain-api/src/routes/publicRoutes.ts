@@ -3,6 +3,16 @@ import { db } from "../firebase";
 
 const router = Router();
 
+router.get("/health", (_req, res) => {
+  res.setHeader("x-route-source", "publicRoutes.ts");
+  res.json({ ok: true, service: "rentchain-api", ts: Date.now() });
+});
+
+router.get("/ready", (_req, res) => {
+  res.setHeader("x-route-source", "publicRoutes.ts");
+  res.json({ ok: true, ready: true, ts: Date.now() });
+});
+
 // In-memory rate limit (MVP ok)
 const bucket = new Map<string, { count: number; resetAt: number }>();
 const WINDOW_MS = 10 * 60 * 1000;
