@@ -37,6 +37,7 @@ app.set("etag", false);
 
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: "2mb" }));
+app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 // Redirect accidental double /api/api/... to /api/...

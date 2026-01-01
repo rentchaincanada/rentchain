@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { db } from "../firebase";
-import sgMail from "@sendgrid/mail";
+import { sendWaitlistConfirmation } from "../services/emailService";
 
 const router = Router();
 
@@ -77,6 +77,13 @@ router.post("/waitlist", async (req: Request, res: Response) => {
     const snap = await ref.get();
 
     if (snap.exists) {
+      // Optionally resend confirmation
+      const emailSend = await sendWaitlistConfirmation({ to: email, name });
+      if (!emailSend.ok) {
+        console.warn("[POST /api/waitlist] resend failed:", emailSend.error);
+      } else {
+        console.log("[POST /api/waitlist] resend sent:", email);
+      }
       return res.json({ ok: true, already: true });
     }
 
@@ -91,30 +98,11 @@ router.post("/waitlist", async (req: Request, res: Response) => {
       utm: req.body?.utm || null,
     });
 
-    const SENDGRID_KEY = process.env.SENDGRID_API_KEY;
-    const FROM = process.env.WAITLIST_FROM_EMAIL || "no-reply@rentchain.ai";
-
-    if (SENDGRID_KEY) {
-      try {
-        sgMail.setApiKey(SENDGRID_KEY);
-        await sgMail.send({
-          to: email,
-          from: FROM,
-          subject: "You’re on the RentChain waitlist",
-          text:
-            "Thanks for joining the RentChain waitlist. We’ll reach out for private onboarding shortly.",
-          html: `
-            <div style="font-family:Arial,sans-serif;line-height:1.5">
-              <h2>You're on the list ✅</h2>
-              <p>Thanks for joining the RentChain waitlist.</p>
-              <p>We'll contact you shortly for private onboarding.</p>
-              <p style="color:#666;font-size:12px">RentChain</p>
-            </div>
-          `,
-        });
-      } catch (e: any) {
-        console.error("[waitlist] sendgrid error", e?.message || e);
-      }
+    const emailSend = await sendWaitlistConfirmation({ to: email, name });
+    if (!emailSend.ok) {
+      console.warn("[POST /api/waitlist] confirmation email not sent:", emailSend.error);
+    } else {
+      console.log("[POST /api/waitlist] confirmation email sent:", email);
     }
 
     return res.json({ ok: true, already: false });
@@ -122,6 +110,16 @@ router.post("/waitlist", async (req: Request, res: Response) => {
     console.error("[POST /api/waitlist] error", e);
     return res.status(500).json({ ok: false, error: "Server error" });
   }
+});
+
+// Optional test endpoint for email verification (no auth guard; limit exposure if needed)
+router.post("/waitlist/test-email", async (req: any, res) => {
+  const to = String(req.body?.email || "").trim();
+  if (!to) return res.status(400).json({ ok: false, error: "email required" });
+
+  const name = String(req.body?.name || "Test").trim();
+  const result = await sendWaitlistConfirmation({ to, name });
+  return res.json({ ok: result.ok, error: (result as any).error || null });
 });
 
 export default router;
