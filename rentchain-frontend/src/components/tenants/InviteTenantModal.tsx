@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { Button } from "../ui/Ui";
-import { apiFetch } from "../../lib/apiClient";
 
 interface Props {
   open: boolean;
@@ -30,7 +29,12 @@ export const InviteTenantModal: React.FC<Props> = ({
     setInviteUrl("");
     setLoading(true);
     try {
-      const res: any = await apiFetch("/api/tenant-invites", {
+      const landlordToken =
+        sessionStorage.getItem("rentchain_token") ||
+        sessionStorage.getItem("rentchain_token_legacy") ||
+        "";
+
+      const res = await fetch("/api/tenant-invites", {
         method: "POST",
         body: JSON.stringify({
           tenantEmail,
@@ -39,8 +43,18 @@ export const InviteTenantModal: React.FC<Props> = ({
           unitId: defaultUnitId,
           leaseId: defaultLeaseId,
         }),
+        headers: {
+          "Content-Type": "application/json",
+          ...(landlordToken ? { Authorization: `Bearer ${landlordToken}` } : {}),
+        },
       });
-      setInviteUrl(res.inviteUrl);
+
+      const data: any = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Failed to generate invite");
+      }
+
+      setInviteUrl(data.inviteUrl);
     } catch (e: any) {
       setErr(e?.message || "Failed to generate invite");
     } finally {
