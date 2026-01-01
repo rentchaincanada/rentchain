@@ -1,5 +1,5 @@
 import { Router } from "express";
-import bcrypt from "bcryptjs";
+import admin from "firebase-admin";
 import { db } from "../config/firebase";
 
 const router = Router();
@@ -12,9 +12,13 @@ function requireBootstrapKey(req: any, res: any, next: any) {
   next();
 }
 
-// POST /api/admin/bootstrap/set-password
-// body: { email, password, role?, plan? }
-// Creates user if missing; resets password hash if exists.
+/**
+ * POST /api/admin/bootstrap/set-password
+ * body: { email, password, role?, plan? }
+ *
+ * Creates/updates Firebase Auth (email/password), then upserts landlord profile in Firestore.
+ * This aligns with /auth/login using signInWithPassword().
+ */
 router.post("/bootstrap/set-password", requireBootstrapKey, async (req: any, res) => {
   const email = String(req.body?.email || "").trim().toLowerCase();
   const password = String(req.body?.password || "");
@@ -25,43 +29,64 @@ router.post("/bootstrap/set-password", requireBootstrapKey, async (req: any, res
     return res.status(400).json({ ok: false, error: "email+password required (min 8 chars)" });
   }
 
-  const saltRounds = Number(process.env.BCRYPT_SALT_ROUNDS || 10);
-  const passwordHash = await bcrypt.hash(password, saltRounds);
+  try {
+    // 1) Ensure Firebase Auth user exists & has this password
+    let userRecord: admin.auth.UserRecord | null = null;
 
-  // Update the collection name to match your auth system.
-  // Common options: "users", "authUsers", "landlords"
-  const usersCol = db.collection("users");
+    try {
+      userRecord = await admin.auth().getUserByEmail(email);
+      await admin.auth().updateUser(userRecord.uid, { password, disabled: false });
+    } catch (e: any) {
+      const code = String(e?.code || "");
+      if (code.includes("auth/user-not-found")) {
+        userRecord = await admin.auth().createUser({
+          email,
+          password,
+          emailVerified: true,
+          disabled: false,
+        });
+      } else {
+        throw e;
+      }
+    }
 
-  // Find by email (if you store users by docId=emailKey, simplify accordingly)
-  const snap = await usersCol.where("email", "==", email).limit(1).get();
+    if (!userRecord) {
+      return res.status(500).json({ ok: false, error: "Failed to create/update Firebase Auth user" });
+    }
 
-  if (!snap.empty) {
-    const doc = snap.docs[0];
-    await doc.ref.set(
+    const uid = userRecord.uid;
+
+    // 2) Upsert landlord profile so getOrCreateLandlordProfile resolves cleanly
+    const landlordsCol = db.collection("landlords");
+    const ref = landlordsCol.doc(uid);
+
+    await ref.set(
       {
+        id: uid,
+        landlordId: uid,
         email,
-        passwordHash,
         role,
         plan,
         updatedAt: Date.now(),
+        createdAt: admin.firestore.FieldValue.serverTimestamp?.() ?? Date.now(),
       },
       { merge: true }
     );
-    return res.json({ ok: true, action: "updated", id: doc.id, email });
+
+    return res.json({
+      ok: true,
+      uid,
+      email,
+      role,
+      plan,
+      action: "firebase-auth-password-set + landlord-profile-upserted",
+    });
+  } catch (err: any) {
+    console.error("[admin/bootstrap/set-password] error", err);
+    return res
+      .status(500)
+      .json({ ok: false, error: "Internal", detail: String(err?.message || err) });
   }
-
-  // Create new user
-  const ref = usersCol.doc();
-  await ref.set({
-    email,
-    passwordHash,
-    role,
-    plan,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-  });
-
-  return res.json({ ok: true, action: "created", id: ref.id, email });
 });
 
 router.get("/health", (_req, res) => {
