@@ -29,8 +29,7 @@ import { MobileTabBar } from "./components/layout/MobileTabBar";
 import TenantPortalComingSoon from "./pages/tenant/TenantPortalComingSoon";
 import TenantDashboardPageV2 from "./pages/tenant/TenantDashboardPage.v2";
 
-const TENANT_PORTAL_ENABLED =
-  String(import.meta.env.VITE_TENANT_PORTAL_ENABLED || "false").trim().toLowerCase() === "true";
+const TENANT_PORTAL_ENABLED = import.meta.env.VITE_TENANT_PORTAL_ENABLED === "true";
 
 const LedgerPage = lazy(() => import("./pages/LedgerPage"));
 const LedgerV2Page = lazy(() => import("./pages/LedgerV2Page"));
