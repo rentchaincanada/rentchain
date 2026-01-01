@@ -25,9 +25,34 @@ function requireBootstrapEnabled(_req: any, res: any, next: any) {
   next();
 }
 
+const allowedIps = String(process.env.ADMIN_BOOTSTRAP_IP_ALLOWLIST || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+function getClientIp(req: any) {
+  const xff = String(req.headers["x-forwarded-for"] || "");
+  const first = xff.split(",")[0].trim();
+  return first || req.ip || "";
+}
+
+function requireBootstrapIp(req: any, res: any, next: any) {
+  if (!allowedIps.length) return next();
+  const ip = getClientIp(req);
+  if (!allowedIps.includes(ip)) {
+    return res.status(403).json({ ok: false, error: "Forbidden" });
+  }
+  next();
+}
+
 // POST /api/admin/bootstrap/set-password
 // body: { email, password, role?, plan? }
-router.post("/bootstrap/set-password", requireBootstrapEnabled, requireBootstrapKey, async (req: any, res) => {
+router.post(
+  "/bootstrap/set-password",
+  requireBootstrapEnabled,
+  requireBootstrapIp,
+  requireBootstrapKey,
+  async (req: any, res) => {
   const email = String(req.body?.email || "").trim().toLowerCase();
   const password = String(req.body?.password || "");
   const role = String(req.body?.role || "landlord");
@@ -84,7 +109,8 @@ router.post("/bootstrap/set-password", requireBootstrapEnabled, requireBootstrap
       .status(500)
       .json({ ok: false, error: "Internal", detail: String(err?.message || err) });
   }
-});
+  }
+);
 
 router.get("/health", (_req, res) => {
   res.setHeader("x-route-source", "adminBootstrapRoutes");
