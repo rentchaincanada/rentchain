@@ -31,6 +31,7 @@ import ReportingConsentPage from "./pages/tenant/ReportingConsentPage";
 import { RequireTenant } from "./components/auth/RequireTenant";
 import MicroLiveInvitePage from "./pages/MicroLiveInvitePage";
 import TenantInviteRedeem from "./tenant/TenantInviteRedeem";
+import { MobileTabBar } from "./components/layout/MobileTabBar";
 
 const LedgerPage = lazy(() => import("./pages/LedgerPage"));
 const LedgerV2Page = lazy(() => import("./pages/LedgerV2Page"));
@@ -211,6 +212,7 @@ function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       {import.meta.env.DEV ? <DebugPanel /> : null}
+      <MobileTabBar />
     </>
   );
 }

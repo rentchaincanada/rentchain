@@ -28,6 +28,7 @@ import { useUpgrade } from "../context/UpgradeContext";
 import { setOnboardingStep } from "../api/onboardingApi";
 import { addUnitsManual, type UnitInput } from "../api/unitsApi";
 import { useToast } from "../components/ui/ToastProvider";
+import { useIsMobile } from "@/hooks/useIsMobile";
 
 const PropertiesPage: React.FC = () => {
   const [properties, setProperties] = useState<Property[]>([]);
@@ -59,6 +60,7 @@ const PropertiesPage: React.FC = () => {
   const [limits, setLimits] = useState<AccountLimits | null>(null);
   const { openUpgrade } = useUpgrade();
   const { showToast } = useToast();
+  const isMobile = useIsMobile();
   const plan = me?.plan ?? "starter"; // limits.plan is informational; do not override authenticated plan
   const maxProperties = limits?.entitlements?.propertiesMax ?? Infinity;
   const maxUnits = limits?.entitlements?.unitsMax ?? Infinity;

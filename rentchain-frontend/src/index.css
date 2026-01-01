@@ -39,3 +39,63 @@ button {
 button {
   cursor: pointer;
 }
+
+:root {
+  --rc-safe-top: env(safe-area-inset-top);
+  --rc-safe-right: env(safe-area-inset-right);
+  --rc-safe-bottom: env(safe-area-inset-bottom);
+  --rc-safe-left: env(safe-area-inset-left);
+}
+
+.rc-safe {
+  padding-top: var(--rc-safe-top);
+  padding-right: var(--rc-safe-right);
+  padding-bottom: var(--rc-safe-bottom);
+  padding-left: var(--rc-safe-left);
+}
+
+button,
+a {
+  touch-action: manipulation;
+}
+
+button,
+.tap {
+  min-height: 44px;
+}
+
+.rc-mobile-tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: none;
+  gap: 6px;
+  padding: 10px;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  background: #fff;
+  z-index: 50;
+}
+
+.rc-tab {
+  flex: 1;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  background: #fff;
+  font-size: 12px;
+  padding: 10px 8px;
+}
+
+.rc-tab.active {
+  border-color: rgba(0, 0, 0, 0.18);
+  font-weight: 600;
+}
+
+@media (max-width: 820px) {
+  .rc-mobile-tabbar {
+    display: flex;
+  }
+  .rc-page {
+    padding-bottom: 78px;
+  }
+}
