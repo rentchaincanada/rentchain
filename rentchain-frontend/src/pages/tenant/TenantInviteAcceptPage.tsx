@@ -98,12 +98,12 @@ export default function TenantInviteAcceptPage() {
         throw new Error(data?.error || "Failed to redeem invite.");
       }
 
-      const jwt = data?.token || data?.jwt || data?.tenantToken;
+      const jwt = data?.tenantToken || data?.token || data?.jwt;
       if (!jwt) {
         throw new Error("Redeem succeeded but no tenant token returned.");
       }
 
-      setTenantToken(jwt);
+      sessionStorage.setItem("rentchain_tenant_token", jwt);
       setOkMsg("Invite accepted. Redirecting to tenant portal…");
       window.location.href = "/tenant";
     } catch (e: any) {
