@@ -81,7 +81,7 @@ app.use("/api/reporting", reportingRoutes);
 app.use("/api/tenant-invites", tenantInvitesRoutes);
 app.use("/api/tenant", tenantPortalRoutes);
 app.use("/api", stubsRoutes);
-app.use("/api/admin", adminBootstrapRoutes);
+app.use("/api/admin", routeSource("adminBootstrapRoutes"), adminBootstrapRoutes);
 
 // Core APIs
 app.use("/api", tenantDetailsRoutes);

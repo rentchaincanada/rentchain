@@ -1,78 +1,67 @@
 import { Router } from "express";
+import bcrypt from "bcryptjs";
 import { db } from "../config/firebase";
-import { signInWithPassword } from "../services/authService";
 
 const router = Router();
-const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY;
 
-async function firebaseSignUp(email: string, password: string) {
-  if (!FIREBASE_API_KEY) return { ok: false, error: "FIREBASE_API_KEY missing" };
-  const url = `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${FIREBASE_API_KEY}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password, returnSecureToken: true }),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    return { ok: false, status: res.status, error: text };
-  }
-  const data: any = await res.json();
-  return { ok: true, uid: data.localId as string };
-}
-
-router.post("/bootstrap-landlord", async (req, res) => {
+function requireBootstrapKey(req: any, res: any, next: any) {
   const key = String(req.headers["x-admin-key"] || "");
-  if (key !== process.env.ADMIN_BOOTSTRAP_KEY) {
+  if (!process.env.ADMIN_BOOTSTRAP_KEY || key !== process.env.ADMIN_BOOTSTRAP_KEY) {
     return res.status(403).json({ ok: false, error: "Forbidden" });
   }
+  next();
+}
 
+// POST /api/admin/bootstrap/set-password
+// body: { email, password, role?, plan? }
+// Creates user if missing; resets password hash if exists.
+router.post("/bootstrap/set-password", requireBootstrapKey, async (req: any, res) => {
   const email = String(req.body?.email || "").trim().toLowerCase();
   const password = String(req.body?.password || "");
+  const role = String(req.body?.role || "landlord");
   const plan = String(req.body?.plan || "starter");
 
-  if (!email || !password) {
-    return res.status(400).json({ ok: false, error: "email+password required" });
+  if (!email || !password || password.length < 8) {
+    return res.status(400).json({ ok: false, error: "email+password required (min 8 chars)" });
   }
 
-  let uid: string | null = null;
-  let created = false;
+  const saltRounds = Number(process.env.BCRYPT_SALT_ROUNDS || 10);
+  const passwordHash = await bcrypt.hash(password, saltRounds);
 
-  // Try to sign up; if already exists, fall back to sign-in to validate password.
-  const signup = await firebaseSignUp(email, password);
-  if (signup.ok && signup.uid) {
-    uid = signup.uid;
-    created = true;
-  } else if (String(signup.error || "").includes("EMAIL_EXISTS")) {
-    const existing = await signInWithPassword(email, password);
-    if (!existing) {
-      return res.status(409).json({ ok: false, error: "Email exists but password invalid" });
-    }
-    uid = existing.uid;
-  } else if (!signup.ok) {
-    return res.status(500).json({ ok: false, error: signup.error || "Signup failed" });
+  // Update the collection name to match your auth system.
+  // Common options: "users", "authUsers", "landlords"
+  const usersCol = db.collection("users");
+
+  // Find by email (if you store users by docId=emailKey, simplify accordingly)
+  const snap = await usersCol.where("email", "==", email).limit(1).get();
+
+  if (!snap.empty) {
+    const doc = snap.docs[0];
+    await doc.ref.set(
+      {
+        email,
+        passwordHash,
+        role,
+        plan,
+        updatedAt: Date.now(),
+      },
+      { merge: true }
+    );
+    return res.json({ ok: true, action: "updated", id: doc.id, email });
   }
 
-  if (!uid) {
-    return res.status(500).json({ ok: false, error: "Could not resolve uid" });
-  }
+  // Create new user
+  const ref = usersCol.doc();
+  await ref.set({
+    email,
+    passwordHash,
+    role,
+    plan,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  });
 
-  const landlordDoc = db.collection("landlords").doc(uid);
-  await landlordDoc.set(
-    {
-      id: uid,
-      landlordId: uid,
-      email,
-      role: "landlord",
-      plan,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      screeningCredits: 0,
-    },
-    { merge: true }
-  );
-
-  return res.json({ ok: true, landlordId: uid, created, plan });
+  return res.json({ ok: true, action: "created", id: ref.id, email });
 });
 
 export default router;
