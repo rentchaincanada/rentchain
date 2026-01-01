@@ -12,9 +12,22 @@ function requireBootstrapKey(req: any, res: any, next: any) {
   next();
 }
 
+function requireBootstrapEnabled(_req: any, res: any, next: any) {
+  const enabled =
+    String(process.env.ADMIN_BOOTSTRAP_ENABLED || "")
+      .trim()
+      .toLowerCase() === "true";
+  const isProd = String(process.env.NODE_ENV || "").toLowerCase() === "production";
+
+  if (isProd && !enabled) {
+    return res.status(404).json({ ok: false });
+  }
+  next();
+}
+
 // POST /api/admin/bootstrap/set-password
 // body: { email, password, role?, plan? }
-router.post("/bootstrap/set-password", requireBootstrapKey, async (req: any, res) => {
+router.post("/bootstrap/set-password", requireBootstrapEnabled, requireBootstrapKey, async (req: any, res) => {
   const email = String(req.body?.email || "").trim().toLowerCase();
   const password = String(req.body?.password || "");
   const role = String(req.body?.role || "landlord");
