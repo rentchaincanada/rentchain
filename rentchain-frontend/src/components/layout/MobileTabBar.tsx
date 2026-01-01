@@ -1,12 +1,13 @@
 
 import { useLocation, useNavigate } from "react-router-dom";
+import { LayoutDashboard, Building2, Users, ScrollText, User } from "lucide-react";
 
 const tabs = [
-  { path: "/dashboard", label: "Dashboard" },
-  { path: "/properties", label: "Properties" },
-  { path: "/tenants", label: "Tenants" },
-  { path: "/ledger", label: "Ledger" },
-  { path: "/account", label: "Account" },
+  { path: "/dashboard", label: "Home", Icon: LayoutDashboard },
+  { path: "/properties", label: "Props", Icon: Building2 },
+  { path: "/tenants", label: "Tenants", Icon: Users },
+  { path: "/ledger", label: "Ledger", Icon: ScrollText },
+  { path: "/account", label: "Account", Icon: User },
 ];
 
 export function MobileTabBar() {
@@ -14,17 +15,18 @@ export function MobileTabBar() {
   const loc = useLocation();
 
   return (
-    <nav className="rc-mobile-tabbar" aria-label="Primary navigation">
-      {tabs.map((t) => {
-        const active = loc.pathname.startsWith(t.path);
+    <nav className="rc-mobile-tabbar" aria-label="Primary">
+      {tabs.map(({ path, label, Icon }) => {
+        const active = loc.pathname.startsWith(path);
         return (
           <button
-            key={t.path}
+            key={path}
             className={`rc-tab ${active ? "active" : ""}`}
-            onClick={() => nav(t.path)}
+            onClick={() => nav(path)}
             type="button"
           >
-            {t.label}
+            <Icon size={18} />
+            <span className="rc-tab-label">{label}</span>
           </button>
         );
       })}
