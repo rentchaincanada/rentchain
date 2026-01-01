@@ -69,6 +69,11 @@ app.use("/api/api", (req, res) => {
  * Route registration
  */
 app.use("/api", routeSource("publicRoutes.ts"), publicRoutes);
+// Alias legacy/public waitlist path to canonical /api/waitlist
+app.post("/api/public/waitlist", (req, res, next) => {
+  req.url = "/waitlist";
+  next();
+});
 app.use("/api/public", tenantHistorySharePublicRouter);
 app.use("/api/auth", authRoutes);
 app.use("/api/capabilities", routeSource("capabilitiesRoutes.ts"), capabilitiesRoutes);
