@@ -241,6 +241,33 @@ router.post("/login", async (req, res) => {
   }
 });
 
+router.get("/health", (req, res) => {
+  const loginEnabled =
+    (process.env.AUTH_LOGIN_ENABLED || process.env.PASSWORD_LOGIN_ENABLED || "true")
+      .toString()
+      .toLowerCase() === "true";
+  const passwordLoginEnabled =
+    (process.env.PASSWORD_LOGIN_ENABLED || "true").toString().trim().toLowerCase() === "true";
+  const hasFirebaseKey = Boolean(process.env.FIREBASE_API_KEY);
+
+  res.setHeader("x-route-source", "authRoutes:/health");
+  if (!hasFirebaseKey) {
+    return res.status(500).json({
+      ok: false,
+      error: "FIREBASE_API_KEY missing",
+      loginEnabled,
+      passwordLoginEnabled,
+    });
+  }
+
+  return res.json({
+    ok: true,
+    loginEnabled,
+    passwordLoginEnabled,
+    hasFirebaseKey,
+  });
+});
+
 router.post("/login/demo", async (_req, res) => {
   if (process.env.NODE_ENV === "production") {
     return res.status(404).end();
