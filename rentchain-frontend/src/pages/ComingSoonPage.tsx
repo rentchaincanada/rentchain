@@ -13,6 +13,9 @@ export default function ComingSoonPage() {
     setLoading(true);
     try {
       const r = await joinWaitlist({ email, name: name || undefined });
+      if (!r?.ok) {
+        throw new Error("waitlist_failed");
+      }
       setStatus({
         ok: true,
         msg: r.emailed
@@ -21,8 +24,11 @@ export default function ComingSoonPage() {
       });
       setEmail("");
       setName("");
-    } catch (err: any) {
-      setStatus({ ok: false, msg: err?.message || "Request failed" });
+    } catch (_err: any) {
+      setStatus({
+        ok: false,
+        msg: "❌ Waitlist failed. Please try again.",
+      });
     } finally {
       setLoading(false);
     }
