@@ -111,7 +111,8 @@ export async function signInWithPassword(
     return null;
   }
 
-  console.log("[auth] using FIREBASE_API_KEY", FIREBASE_API_KEY?.slice(0, 8));
+  // Helpful: confirm we're using some key without exposing full value
+  console.log("[auth] FIREBASE_API_KEY prefix", FIREBASE_API_KEY.slice(0, 8));
 
   const url = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`;
   const res = await fetch(url, {
@@ -121,8 +122,13 @@ export async function signInWithPassword(
   });
 
   if (!res.ok) {
-    const err = await res.text().catch(() => "");
-    console.warn("[auth] firebase signInWithPassword failed", res.status, err);
+    const errJson =
+      (await res.json().catch(async () => ({ raw: await res.text().catch(() => "") }))) || {};
+    console.warn("[auth] firebase signInWithPassword failed", {
+      status: res.status,
+      email,
+      error: errJson,
+    });
     return null;
   }
 
