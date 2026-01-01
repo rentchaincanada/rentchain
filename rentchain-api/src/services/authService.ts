@@ -111,6 +111,8 @@ export async function signInWithPassword(
     return null;
   }
 
+  console.log("[auth] using FIREBASE_API_KEY", FIREBASE_API_KEY?.slice(0, 8));
+
   const url = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`;
   const res = await fetch(url, {
     method: "POST",
