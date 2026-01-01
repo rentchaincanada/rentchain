@@ -12,13 +12,8 @@ function requireBootstrapKey(req: any, res: any, next: any) {
   next();
 }
 
-/**
- * POST /api/admin/bootstrap/set-password
- * body: { email, password, role?, plan? }
- *
- * Creates/updates Firebase Auth (email/password), then upserts landlord profile in Firestore.
- * This aligns with /auth/login using signInWithPassword().
- */
+// POST /api/admin/bootstrap/set-password
+// body: { email, password, role?, plan? }
 router.post("/bootstrap/set-password", requireBootstrapKey, async (req: any, res) => {
   const email = String(req.body?.email || "").trim().toLowerCase();
   const password = String(req.body?.password || "");
@@ -30,59 +25,48 @@ router.post("/bootstrap/set-password", requireBootstrapKey, async (req: any, res
   }
 
   try {
-    // 1) Ensure Firebase Auth user exists & has this password
-    let userRecord: admin.auth.UserRecord | null = null;
-
+    // 1) Create/update Firebase Auth user (THIS is what /login uses)
+    let user: admin.auth.UserRecord;
     try {
-      userRecord = await admin.auth().getUserByEmail(email);
-      await admin.auth().updateUser(userRecord.uid, { password, disabled: false });
+      user = await admin.auth().getUserByEmail(email);
+      user = await admin.auth().updateUser(user.uid, { password, disabled: false });
     } catch (e: any) {
-      const code = String(e?.code || "");
-      if (code.includes("auth/user-not-found")) {
-        userRecord = await admin.auth().createUser({
+      if (String(e?.code || "").includes("auth/user-not-found")) {
+        user = await admin.auth().createUser({
           email,
           password,
-          emailVerified: true,
           disabled: false,
+          emailVerified: true, // optional
         });
       } else {
         throw e;
       }
     }
 
-    if (!userRecord) {
-      return res.status(500).json({ ok: false, error: "Failed to create/update Firebase Auth user" });
-    }
-
-    const uid = userRecord.uid;
-
-    // 2) Upsert landlord profile so getOrCreateLandlordProfile resolves cleanly
-    const landlordsCol = db.collection("landlords");
-    const ref = landlordsCol.doc(uid);
-
-    await ref.set(
+    // 2) Upsert landlord profile doc to match your downstream flow
+    await db.collection("landlords").doc(user.uid).set(
       {
-        id: uid,
-        landlordId: uid,
+        id: user.uid,
+        landlordId: user.uid,
         email,
         role,
         plan,
         updatedAt: Date.now(),
-        createdAt: admin.firestore.FieldValue.serverTimestamp?.() ?? Date.now(),
+        createdAt: Date.now(),
       },
       { merge: true }
     );
 
     return res.json({
       ok: true,
-      uid,
+      uid: user.uid,
       email,
       role,
       plan,
-      action: "firebase-auth-password-set + landlord-profile-upserted",
+      action: "firebase-auth-password-set",
     });
   } catch (err: any) {
-    console.error("[admin/bootstrap/set-password] error", err);
+    console.error("[admin/bootstrap] set-password error", err);
     return res
       .status(500)
       .json({ ok: false, error: "Internal", detail: String(err?.message || err) });
