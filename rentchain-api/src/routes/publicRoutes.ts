@@ -112,6 +112,11 @@ router.post("/waitlist", async (req: Request, res: Response) => {
   }
 });
 
+// Backwards-compatible alias
+router.post("/public/waitlist", async (req: Request, res: Response) => {
+  return router.handle(req, res);
+});
+
 // Optional test endpoint for email verification (no auth guard; limit exposure if needed)
 router.post("/waitlist/test-email", async (req: any, res) => {
   const to = String(req.body?.email || "").trim();

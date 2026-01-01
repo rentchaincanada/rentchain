@@ -73,6 +73,8 @@ app.post("/api/public/waitlist", (req, res, next) => {
   req.url = "/waitlist";
   next();
 });
+// Mount public routes under both /api and /api/public for compatibility
+app.use("/api/public", routeSource("publicRoutes.ts"), publicRoutes);
 app.use("/api", routeSource("publicRoutes.ts"), publicRoutes);
 app.use("/api/public", tenantHistorySharePublicRouter);
 app.use("/api/auth", authRoutes);

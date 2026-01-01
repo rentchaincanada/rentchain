@@ -51,6 +51,7 @@ app.use("/health", healthRoutes);
 
 // Public + Auth (MUST be before authenticateJwt)
 app.use("/api", routeSource("publicRoutes.ts"), publicRoutes);
+app.use("/api/public", routeSource("publicRoutes.ts"), publicRoutes);
 app.use("/api/public", tenantHistorySharePublicRouter);
 app.use("/api/auth", routeSource("authRoutes.ts"), authRoutes);
 app.use("/api/capabilities", routeSource("capabilitiesRoutes.ts"), capabilitiesRoutes);
