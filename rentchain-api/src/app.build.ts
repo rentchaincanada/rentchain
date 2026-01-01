@@ -31,6 +31,7 @@ import reportingRoutes from "./routes/reportingRoutes";
 import tenantInvitesRoutes from "./routes/tenantInvitesRoutes";
 import tenantPortalRoutes from "./routes/tenantPortalRoutes";
 import stubsRoutes from "./routes/stubsRoutes";
+import adminBootstrapRoutes from "./routes/adminBootstrapRoutes";
 
 export const app = express();
 app.set("etag", false);
@@ -80,6 +81,7 @@ app.use("/api/reporting", reportingRoutes);
 app.use("/api/tenant-invites", tenantInvitesRoutes);
 app.use("/api/tenant", tenantPortalRoutes);
 app.use("/api", stubsRoutes);
+app.use("/api/admin", adminBootstrapRoutes);
 
 // Core APIs
 app.use("/api", tenantDetailsRoutes);

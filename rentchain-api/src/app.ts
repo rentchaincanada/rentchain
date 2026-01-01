@@ -30,6 +30,7 @@ import capabilitiesRoutes from "./routes/capabilitiesRoutes";
 import tenantInvitesRoutes from "./routes/tenantInvitesRoutes";
 import tenantPortalRoutes from "./routes/tenantPortalRoutes";
 import stubsRoutes from "./routes/stubsRoutes";
+import adminBootstrapRoutes from "./routes/adminBootstrapRoutes";
 
 const app: Application = express();
 app.set("etag", false);
@@ -90,6 +91,7 @@ app.use("/api/reporting", reportingRoutes);
 app.use("/api/tenant-invites", tenantInvitesRoutes);
 app.use("/api/tenant", tenantPortalRoutes);
 app.use("/api", stubsRoutes);
+app.use("/api/admin", adminBootstrapRoutes);
 
 // Core API mounts
 app.use("/health", routeSource("healthRoutes.ts"), healthRoutes);
