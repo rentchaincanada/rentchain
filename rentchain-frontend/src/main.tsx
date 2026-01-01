@@ -16,6 +16,7 @@ import { API_BASE_URL } from "./api/config";
 const originalFetch = window.fetch.bind(window);
 // Legacy global (DO NOT REMOVE until all fetch() calls are migrated)
 (window as any).API_BASE_URL = API_BASE_URL;
+(window as any).__tenantFlag = import.meta.env.VITE_TENANT_PORTAL_ENABLED;
 
 window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
   const initHeaders = new Headers(
