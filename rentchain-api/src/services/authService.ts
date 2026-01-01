@@ -107,8 +107,7 @@ export async function signInWithPassword(
   password: string
 ): Promise<{ uid: string; email: string } | null> {
   if (!FIREBASE_API_KEY) {
-    console.error("[auth] FIREBASE_API_KEY missing");
-    return null;
+    throw new Error("FIREBASE_API_KEY_NOT_CONFIGURED");
   }
 
   // Helpful: confirm we're using some key without exposing full value
