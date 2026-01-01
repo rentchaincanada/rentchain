@@ -170,6 +170,10 @@ router.post("/login", async (req, res) => {
     (process.env.PASSWORD_LOGIN_ENABLED || "true").toString().trim().toLowerCase() === "true";
 
   try {
+    console.log("[auth/login] flags", {
+      AUTH_LOGIN_ENABLED: process.env.AUTH_LOGIN_ENABLED,
+      PASSWORD_LOGIN_ENABLED: process.env.PASSWORD_LOGIN_ENABLED,
+    });
     console.log("[auth/login] hit", { email, passwordLoginEnabled });
     console.log("[auth/login] request", {
       email,
