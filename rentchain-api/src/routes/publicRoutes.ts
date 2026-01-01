@@ -47,7 +47,7 @@ function emailKey(email: string) {
     .slice(0, 180);
 }
 
-router.post("/waitlist", async (req: Request, res: Response) => {
+async function handleWaitlist(req: Request, res: Response) {
   try {
     const ip =
       (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
@@ -110,9 +110,9 @@ router.post("/waitlist", async (req: Request, res: Response) => {
     console.error("[POST /api/waitlist] error", e);
     return res.status(500).json({ ok: false, error: "Server error" });
   }
-});
+}
 
-// Backwards-compatible alias
+router.post("/waitlist", handleWaitlist);
 router.post("/public/waitlist", handleWaitlist);
 
 // Optional test endpoint for email verification (no auth guard; limit exposure if needed)
