@@ -11,7 +11,7 @@ import ApplyPage from "./pages/ApplyPage";
 import ApplicantApplyPage from "./pages/ApplicantApplyPage";
 import CosignPage from "./pages/CosignPage";
 import LoginPage from "./pages/LoginPage";
-import TenantLoginPage from "./pages/TenantLoginPage";
+import TenantLoginPageV2 from "./pages/tenant/TenantLoginPage.v2";
 import ComingSoonPage from "./pages/ComingSoonPage";
 import { TwoFactorPage } from "./pages/TwoFactorPage";
 import { AccountSecurityPage } from "./pages/AccountSecurityPage";
@@ -22,16 +22,15 @@ import ScreeningCancelPage from "./pages/ScreeningCancelPage";
 import PricingPage from "./pages/PricingPage";
 import BillingPage from "./pages/BillingPage";
 import { DebugPanel } from "./components/DebugPanel";
-import { TenantLayout } from "./pages/tenant/TenantLayout.clean";
-import TenantDashboardPage from "./pages/tenant/TenantDashboardPage";
-import TenantPaymentsPage from "./pages/tenant/TenantPaymentsPage";
-import TenantLedgerPage from "./pages/tenant/TenantLedgerPage";
-import TenantDocumentsPage from "./pages/tenant/TenantDocumentsPage";
-import ReportingConsentPage from "./pages/tenant/ReportingConsentPage";
-import { RequireTenant } from "./components/auth/RequireTenant";
 import MicroLiveInvitePage from "./pages/MicroLiveInvitePage";
 import TenantInviteRedeem from "./tenant/TenantInviteRedeem";
+import TenantInviteAcceptPage from "./pages/tenant/TenantInviteAcceptPage";
 import { MobileTabBar } from "./components/layout/MobileTabBar";
+import TenantPortalComingSoon from "./pages/tenant/TenantPortalComingSoon";
+import TenantDashboardPageV2 from "./pages/tenant/TenantDashboardPage.v2";
+
+const TENANT_PORTAL_ENABLED =
+  String(import.meta.env.VITE_TENANT_PORTAL_ENABLED || "false").trim().toLowerCase() === "true";
 
 const LedgerPage = lazy(() => import("./pages/LedgerPage"));
 const LedgerV2Page = lazy(() => import("./pages/LedgerV2Page"));
@@ -51,11 +50,19 @@ function App() {
         <Route path="/" element={<ComingSoonPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/app/login" element={<LoginPage />} />
-        <Route path="/tenant/login" element={<TenantLoginPage />} />
+        <Route
+          path="/tenant/login"
+          element={TENANT_PORTAL_ENABLED ? <TenantLoginPageV2 /> : <TenantPortalComingSoon />}
+        />
         <Route path="/2fa" element={<TwoFactorPage />} />
         <Route path="/pricing" element={<PricingPage />} />
         <Route path="/micro-live" element={<MicroLiveInvitePage />} />
-        <Route path="/tenant/invite/:token" element={<TenantInviteRedeem />} />
+        <Route
+          path="/tenant/invite/:token"
+          element={
+            TENANT_PORTAL_ENABLED ? <TenantInviteAcceptPage /> : <TenantInviteRedeem />
+          }
+        />
 
         <Route
           path="/dashboard"
@@ -188,18 +195,13 @@ function App() {
         <Route
           path="/tenant"
           element={
-            <RequireTenant>
-              <TenantLayout />
-            </RequireTenant>
+            TENANT_PORTAL_ENABLED ? (
+              <TenantDashboardPageV2 />
+            ) : (
+              <TenantPortalComingSoon />
+            )
           }
-        >
-          <Route index element={<Navigate to="dashboard" replace />} />
-          <Route path="dashboard" element={<TenantDashboardPage />} />
-          <Route path="payments" element={<TenantPaymentsPage />} />
-          <Route path="ledger" element={<TenantLedgerPage />} />
-          <Route path="documents" element={<TenantDocumentsPage />} />
-          <Route path="reporting-consent" element={<ReportingConsentPage />} />
-        </Route>
+        />
         {applicantApplyRedirects.map((path) => (
           <Route
             key={path}
