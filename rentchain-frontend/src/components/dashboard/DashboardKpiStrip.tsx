@@ -8,6 +8,7 @@ import {
 } from "@/api/dashboardApi";
 import { useToast } from "../ui/ToastProvider";
 import { colors, spacing, radius, shadows, text } from "../../styles/tokens";
+import { safeNumber as fmtNumber } from "@/utils/format";
 
 interface DashboardKpiStripProps {
   overview?: DashboardOverview | null;
@@ -141,7 +142,7 @@ export function DashboardKpiStrip({ overview: overviewProp }: DashboardKpiStripP
 
   const formatMoney = (value: number | null) => {
     if (value === null) return "—";
-    return `$${value.toLocaleString()}`;
+    return `$${fmtNumber(value)}`;
   };
 
   const formatPercent = (value: number | null) => {
@@ -309,3 +310,4 @@ export function DashboardKpiStrip({ overview: overviewProp }: DashboardKpiStripP
 }
 
 export default DashboardKpiStrip;
+
