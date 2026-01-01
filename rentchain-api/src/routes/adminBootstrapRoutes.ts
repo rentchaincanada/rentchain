@@ -64,4 +64,9 @@ router.post("/bootstrap/set-password", requireBootstrapKey, async (req: any, res
   return res.json({ ok: true, action: "created", id: ref.id, email });
 });
 
+router.get("/health", (_req, res) => {
+  res.setHeader("x-route-source", "adminBootstrapRoutes");
+  res.json({ ok: true });
+});
+
 export default router;
