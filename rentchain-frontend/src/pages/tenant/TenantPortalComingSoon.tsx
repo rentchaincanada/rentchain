@@ -28,6 +28,9 @@ export default function TenantPortalComingSoon() {
         <div style={{ opacity: 0.75 }}>
           We’re preparing the tenant experience. Please check back later or contact your landlord for details.
         </div>
+        <div style={{ opacity: 0.6, fontSize: 12, marginTop: 8 }}>
+          VITE_TENANT_PORTAL_ENABLED: {String(import.meta.env.VITE_TENANT_PORTAL_ENABLED)}
+        </div>
       </div>
     </div>
   );
