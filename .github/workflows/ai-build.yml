@@ -17,7 +17,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: "npm"
+          # Explicitly disable cache to avoid monorepo cache collisions; enable later if desired.
+          cache: ""
 
       # FRONTEND
       - name: Install + build frontend
