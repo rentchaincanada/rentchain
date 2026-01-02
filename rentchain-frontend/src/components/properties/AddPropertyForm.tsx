@@ -9,7 +9,7 @@ import { colors, radius, text } from "../../styles/tokens";
 import { useUpgrade } from "../../context/UpgradeContext";
 import { handleEntitlementError } from "../../hooks/useEntitlementGuard";
 import { setOnboardingStep } from "../../api/onboardingApi";
-import { useToast } from "../ui/ToastProvider";
+import { useToast } from "@/components/ui/ToastProvider";
 
 interface AddPropertyFormProps {
   onCreated?: (property: Property) => void;
@@ -57,7 +57,7 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
   const [successText, setSuccessText] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(true);
   const { openUpgrade } = useUpgrade();
-  const { toast } = useToast();
+  const { showToast } = useToast();
   const inputStyle: React.CSSProperties = {
     padding: "8px 10px",
     borderRadius: radius.md,
@@ -285,8 +285,8 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
         if (existingId) {
           setSuccessText(null);
           setErrorText(null);
-          toast({
-            title: "Property already exists",
+          showToast({
+            message: "Property already exists",
             description: "Opening existing property.",
             variant: "success",
           });
@@ -318,7 +318,13 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
       } else if (handleEntitlementError(err, openUpgrade)) {
         // handled
       } else {
-        setErrorText(err?.message || "Failed to create property.");
+        const msg = err?.message || "Failed to create property.";
+        setErrorText(msg);
+        showToast({
+          message: "Failed to create property",
+          description: msg,
+          variant: "error",
+        });
       }
     } finally {
       setIsSubmitting(false);
