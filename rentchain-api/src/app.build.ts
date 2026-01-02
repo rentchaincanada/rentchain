@@ -31,6 +31,7 @@ import reportingRoutes from "./routes/reportingRoutes";
 import tenantInvitesRoutes from "./routes/tenantInvitesRoutes";
 import tenantPortalRoutes from "./routes/tenantPortalRoutes";
 import tenantInviteAliasesRoutes from "./routes/tenantInviteAliasesRoutes";
+import tenantEventsRoutes from "./routes/tenantEventsRoutes";
 import stubsRoutes from "./routes/stubsRoutes";
 import adminBootstrapRoutes from "./routes/adminBootstrapRoutes";
 
@@ -82,6 +83,7 @@ app.use("/api/reporting", reportingRoutes);
 app.use("/api/tenant-invites", tenantInvitesRoutes);
 app.use("/api/tenant", tenantPortalRoutes);
 app.use("/api", routeSource("tenantInviteAliasesRoutes"), tenantInviteAliasesRoutes);
+app.use("/api", routeSource("tenantEventsRoutes"), tenantEventsRoutes);
 app.use("/api", stubsRoutes);
 app.use("/api/admin", routeSource("adminBootstrapRoutes"), adminBootstrapRoutes);
 

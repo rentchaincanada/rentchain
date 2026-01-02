@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { clearTenantToken, getTenantToken } from "../../lib/tenantAuth";
 import { tenantLedger, tenantLease, tenantMe, tenantPayments } from "../../api/tenantApi";
+import { TenantReputationTimeline } from "../../components/tenant/TenantReputationTimeline";
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -163,6 +164,8 @@ export default function TenantDashboardPageV2() {
           <div style={{ opacity: 0.75 }}>No ledger entries yet.</div>
         )}
       </Card>
+
+      <TenantReputationTimeline />
 
       <div style={{ fontSize: 13, opacity: 0.7 }}>
         Need help? <Link to="mailto:hello@rentchain.ai">Contact support</Link>

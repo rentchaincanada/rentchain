@@ -112,3 +112,71 @@ button,
     padding-bottom: calc(84px + env(safe-area-inset-bottom));
   }
 }
+
+/* Timeline hooks (Tenant reputation, generic use) */
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.timelineRow {
+  display: grid;
+  grid-template-columns: 14px 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.timelineDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  margin-top: 6px;
+  opacity: 0.9;
+}
+
+.sev-positive {
+  background: currentColor;
+}
+.sev-neutral {
+  background: currentColor;
+  opacity: 0.6;
+}
+.sev-negative {
+  background: currentColor;
+}
+
+.timelineTop {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.timelineTitle {
+  font-weight: 600;
+}
+
+.timelineDate {
+  opacity: 0.7;
+  font-size: 0.9em;
+}
+
+.timelineDesc {
+  margin-top: 4px;
+  opacity: 0.9;
+}
+
+.timelineMeta {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.pill {
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  font-size: 12px;
+  opacity: 0.9;
+}
