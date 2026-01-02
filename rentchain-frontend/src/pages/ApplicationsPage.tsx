@@ -93,6 +93,39 @@ const mapEventsToTimeline = (
     actor: (event.actor as any) || undefined,
   }));
 
+// --- Print helpers (keep lightweight, no deps) ---
+function fmtDate(d: Date) {
+  try {
+    return d.toLocaleString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return d.toISOString();
+  }
+}
+
+function getApplicantName(app: any) {
+  return (
+    app?.fullName ||
+    app?.applicantName ||
+    app?.name ||
+    [app?.firstName, app?.lastName].filter(Boolean).join(" ") ||
+    "-"
+  );
+}
+
+function getApplicantEmail(app: any) {
+  return app?.email || app?.applicantEmail || app?.contactEmail || "-";
+}
+
+function getApplicantPhone(app: any) {
+  return app?.phone || app?.phoneNumber || app?.contactPhone || "-";
+}
+
 const ApplicationsPage: React.FC = () => {
   const { user } = useAuth();
   const [applications, setApplications] = useState<Application[]>([]);
@@ -500,6 +533,15 @@ const handlePrintApplication = (application: Application) => {
                 Review, filter, and advance applicants through your pipeline.
               </div>
             </div>
+            <div style={{ display: "flex", gap: spacing.sm, alignItems: "center" }}>
+              <Button
+                variant="secondary"
+                onClick={() => window.print()}
+                title="Print a PDF summary of applications"
+              >
+                Print PDF
+              </Button>
+            </div>
           </div>
         </Card>
 
@@ -894,6 +936,59 @@ const handlePrintApplication = (application: Application) => {
               </div>
             )}
           </Section>
+        </div>
+      </div>
+
+      {/* PRINT ONLY: Applications Summary */}
+      <div className="print-only">
+        <div className="printHeader">
+          <div className="printTitle">Applications Summary</div>
+          <div className="printMeta">
+            <div>
+              <strong>Total applications:</strong>{" "}
+              {Array.isArray(applications) ? applications.length : 0}
+            </div>
+            <div>
+              <strong>Generated:</strong> {fmtDate(new Date())}
+            </div>
+          </div>
+        </div>
+
+        <table className="printTable">
+          <thead>
+            <tr>
+              <th style={{ textAlign: "left" }}>Name</th>
+              <th style={{ textAlign: "left" }}>Email</th>
+              <th style={{ textAlign: "left" }}>Phone</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(Array.isArray(applications) ? applications : []).map((app: any) => (
+              <tr
+                key={
+                  app?.id ||
+                  `${getApplicantEmail(app)}-${getApplicantPhone(app)}-${getApplicantName(app)}`
+                }
+              >
+                <td>{getApplicantName(app)}</td>
+                <td>{getApplicantEmail(app)}</td>
+                <td>{getApplicantPhone(app)}</td>
+              </tr>
+            ))}
+            {!applications || applications.length === 0 ? (
+              <tr>
+                <td colSpan={3} style={{ opacity: 0.75 }}>
+                  No applications found.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+
+        <div className="printFooter">
+          <div style={{ opacity: 0.7 }}>
+            RentChain • Internal use • {new Date().getFullYear()}
+          </div>
         </div>
       </div>
 

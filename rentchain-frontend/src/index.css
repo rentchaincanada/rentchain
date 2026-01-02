@@ -180,3 +180,64 @@ button,
   font-size: 12px;
   opacity: 0.9;
 }
+
+/* Print summary (applications) */
+.print-only {
+  display: none;
+}
+
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+
+  .print-only,
+  .print-only * {
+    visibility: visible !important;
+  }
+
+  .print-only {
+    display: block !important;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 24px;
+  }
+
+  @page {
+    margin: 12mm;
+  }
+}
+
+.printHeader {
+  margin-bottom: 16px;
+}
+.printTitle {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.printMeta {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.printTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.printTable th,
+.printTable td {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.15);
+  padding: 8px 6px;
+  vertical-align: top;
+  text-align: left;
+}
+
+.printFooter {
+  margin-top: 14px;
+}
