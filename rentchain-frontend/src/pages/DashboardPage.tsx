@@ -30,6 +30,7 @@ import { LedgerEventDrawer } from "../components/ledger/LedgerEventDrawer";
 import { BoardSnapshotButton } from "../components/dashboard/BoardSnapshotButton";
 import { BoardSnapshotDrawer } from "../components/dashboard/BoardSnapshotDrawer";
 import { fetchMonthlySnapshot } from "../api/reporting";
+import { apiFetch } from "../api/http";
 
 function fmtDate(d: Date) {
   try {
@@ -116,9 +117,23 @@ const DashboardPage: React.FC = () => {
   const rentOutstandingCents = safeNum((usageObj as any)?.rentOutstandingCents);
   const onTimePct = safeNum((usageObj as any)?.rentOnTimePct);
 
-  // If you later load real arrays, replace these placeholders.
-  const propertiesArr: any[] = [];
-  const applicationsArr: any[] | null = null;
+  // Best-effort arrays if already available; fall back to empty.
+  const propertiesArr: any[] =
+    (typeof (limitsResp as any)?.properties !== "undefined" && Array.isArray((limitsResp as any)?.properties)
+      ? (limitsResp as any).properties
+      : null) ||
+    (Array.isArray((limitsResp as any)?.data?.properties) ? (limitsResp as any).data.properties : null) ||
+    (Array.isArray((globalThis as any).__DASH_PROPERTIES__) ? (globalThis as any).__DASH_PROPERTIES__ : null) ||
+    [];
+
+  const applicationsArr: any[] | null =
+    (typeof (limitsResp as any)?.applications !== "undefined" &&
+    Array.isArray((limitsResp as any)?.applications)
+      ? (limitsResp as any).applications
+      : null) ||
+    (Array.isArray((limitsResp as any)?.data?.applications) ? (limitsResp as any).data.applications : null) ||
+    (Array.isArray((globalThis as any).__DASH_APPLICATIONS__) ? (globalThis as any).__DASH_APPLICATIONS__ : null) ||
+    null;
   const appsApproved = countByStatus(applicationsArr, "approved");
   const appsPending = countByStatus(applicationsArr, "pending");
   const appsRejected = countByStatus(applicationsArr, "rejected");
@@ -179,9 +194,25 @@ const DashboardPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    fetchAccountLimits()
-      .then(setLimits)
-      .catch(() => setLimits(null));
+    (async () => {
+      try {
+        const baseLimits = await fetchAccountLimits();
+        let mergedUsage = baseLimits?.usage ?? baseLimits?.integrity?.after ?? {};
+        try {
+          const breakdownResp: any = await apiFetch("/landlord/usage/breakdown");
+          const breakdownUsage = breakdownResp?.usage ?? null;
+          mergedUsage = {
+            ...(baseLimits?.usage ?? baseLimits?.integrity?.after ?? {}),
+            ...(breakdownUsage ?? {}),
+          };
+        } catch {
+          // ignore breakdown failures; keep base usage only
+        }
+        setLimits({ ...(baseLimits as any), usage: mergedUsage });
+      } catch {
+        setLimits(null);
+      }
+    })();
   }, []);
 
   useEffect(() => {

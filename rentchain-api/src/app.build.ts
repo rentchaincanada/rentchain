@@ -34,6 +34,7 @@ import tenantInviteAliasesRoutes from "./routes/tenantInviteAliasesRoutes";
 import tenantEventsRoutes from "./routes/tenantEventsRoutes";
 import stubsRoutes from "./routes/stubsRoutes";
 import adminBootstrapRoutes from "./routes/adminBootstrapRoutes";
+import usageBreakdownRoutes from "./routes/usageBreakdownRoutes";
 
 export const app = express();
 app.set("etag", false);
@@ -84,6 +85,7 @@ app.use("/api/tenant-invites", tenantInvitesRoutes);
 app.use("/api/tenant", tenantPortalRoutes);
 app.use("/api", routeSource("tenantInviteAliasesRoutes"), tenantInviteAliasesRoutes);
 app.use("/api", routeSource("tenantEventsRoutes"), tenantEventsRoutes);
+app.use("/api", routeSource("usageBreakdownRoutes.ts"), usageBreakdownRoutes);
 app.use("/api", stubsRoutes);
 app.use("/api/admin", routeSource("adminBootstrapRoutes"), adminBootstrapRoutes);
 
