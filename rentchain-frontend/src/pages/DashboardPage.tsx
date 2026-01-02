@@ -200,7 +200,11 @@ const DashboardPage: React.FC = () => {
         const baseLimits = await fetchAccountLimits();
         let mergedUsage = baseLimits?.usage ?? baseLimits?.integrity?.after ?? {};
         try {
-          const breakdownResp: any = await apiFetch("/api/landlord/usage/breakdown");
+          const token =
+            sessionStorage.getItem("rentchain_token") ||
+            localStorage.getItem("rentchain_token") ||
+            undefined;
+          const breakdownResp: any = await apiFetch("/api/landlord/usage/breakdown", { token });
           const breakdownUsage = breakdownResp?.usage ?? null;
           mergedUsage = {
             ...(baseLimits?.usage ?? baseLimits?.integrity?.after ?? {}),
