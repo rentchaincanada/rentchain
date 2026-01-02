@@ -9,6 +9,7 @@ import { colors, radius, text } from "../../styles/tokens";
 import { useUpgrade } from "../../context/UpgradeContext";
 import { handleEntitlementError } from "../../hooks/useEntitlementGuard";
 import { setOnboardingStep } from "../../api/onboardingApi";
+import { useToast } from "@/components/ui/use-toast";
 
 interface AddPropertyFormProps {
   onCreated?: (property: Property) => void;
@@ -56,6 +57,7 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
   const [successText, setSuccessText] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(true);
   const { openUpgrade } = useUpgrade();
+  const { toast } = useToast();
   const inputStyle: React.CSSProperties = {
     padding: "8px 10px",
     borderRadius: radius.md,
@@ -283,11 +285,11 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
         if (existingId) {
           setSuccessText(null);
           setErrorText(null);
-          showToast?.({
+          toast({
             title: "Property already exists",
             description: "Opening existing property.",
             variant: "success",
-          } as any);
+          });
           // navigate available via window for now; if you have navigate hook, prefer that
           window.location.href = `/properties/${existingId}`;
           return;
