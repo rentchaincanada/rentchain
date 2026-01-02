@@ -20,19 +20,9 @@ export async function fetchTenants(): Promise<TenantApiModel[]> {
   return [];
 }
 
-export async function downloadTenantReport(tenantId: string): Promise<void> {
-  const res = await apiFetch(`/tenants/${tenantId}/report`, { method: "GET" });
-  if (!res.ok) throw new Error("Failed to download tenant report");
-
-  const blob = await res.blob();
-  const url = window.URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `tenant-report-${tenantId}.pdf`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.URL.revokeObjectURL(url);
+export async function downloadTenantReport(tenantId: string): Promise<any> {
+  // Uses landlord-protected JSON endpoint; backend currently returns JSON report.
+  return apiFetch(`/api/tenants/${tenantId}/report`, { method: "GET" });
 }
 
 export async function impersonateTenant(tenantId: string): Promise<{ ok: boolean; token: string; tenantId: string; exp?: number }> {

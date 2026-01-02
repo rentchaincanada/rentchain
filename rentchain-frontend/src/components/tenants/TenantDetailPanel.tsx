@@ -371,15 +371,29 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
   const handleDownloadReport = async () => {
     if (!tenant?.id) return;
     try {
-      await downloadTenantReport(tenant.id);
+      const report = await downloadTenantReport(tenant.id);
+
+      // If the endpoint returns JSON, save it as a .json file until PDF is ready.
+      if (report && typeof report === "object") {
+        const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `tenant-report-${tenant.id}.json`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      }
+
       showToast({
         title: "Report downloaded",
-        description: "Tenant payment history report has been saved as a PDF.",
+        description: "Tenant report has been saved.",
         variant: "success",
       });
     } catch (err: any) {
-      const msg = err?.message || "";
-      if (msg.includes("PDF_REPORTING_DISABLED")) {
+      const msg = String(err?.message || "");
+      if (msg.includes("PDF_REPORTING_DISABLED") || msg.includes("Not Implemented") || msg.includes("501")) {
         showToast({
           title: "Coming soon",
           description: "Tenant reports are coming soon.",

@@ -270,3 +270,20 @@ button,
 .printFooter {
   margin-top: 14px;
 }
+
+/* Print mode selection for applications */
+@media print {
+  .print-only { display: none !important; }
+  body[data-print-mode="summary"] .print-only-summary { display: block !important; }
+  body[data-print-mode="application"] .print-only-application { display: block !important; }
+
+  body * { visibility: hidden !important; }
+  .print-only, .print-only * { visibility: visible !important; }
+  .print-only {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 24px;
+  }
+}

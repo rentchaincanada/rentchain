@@ -150,6 +150,7 @@ const ApplicationsPage: React.FC = () => {
   const [runScreeningNow, setRunScreeningNow] = useState<boolean>(
     () => (user?.screeningCredits ?? 0) > 0
   );
+  const [printMode, setPrintMode] = useState<"summary" | "application">("summary");
   const canRun = Boolean(
     user &&
       (user.role === "landlord" ||
@@ -494,13 +495,24 @@ const nextStepMessage = (reqs: ReturnType<typeof screeningRequirementsFor>) => {
     }
   };
 
-const handlePrintApplication = (application: Application) => {
+  const handlePrintApplication = (application: Application) => {
+    setPrintMode("application");
     setPrintTarget(application);
     window.setTimeout(() => {
       window.print();
-      window.setTimeout(() => setPrintTarget(null), 250);
+      window.setTimeout(() => {
+        setPrintTarget(null);
+        setPrintMode("summary");
+      }, 250);
     }, 30);
   };
+
+  useEffect(() => {
+    document.body.setAttribute("data-print-mode", printMode);
+    return () => {
+      document.body.removeAttribute("data-print-mode");
+    };
+  }, [printMode]);
 
   if (!features.hasApplications) {
     return (
@@ -536,7 +548,11 @@ const handlePrintApplication = (application: Application) => {
             <div style={{ display: "flex", gap: spacing.sm, alignItems: "center" }}>
               <Button
                 variant="secondary"
-                onClick={() => window.print()}
+                onClick={() => {
+                  setPrintMode("summary");
+                  setPrintTarget(null);
+                  window.setTimeout(() => window.print(), 30);
+                }}
                 title="Print a PDF summary of applications"
               >
                 Print PDF
@@ -940,7 +956,7 @@ const handlePrintApplication = (application: Application) => {
       </div>
 
       {/* PRINT ONLY: Applications Summary */}
-      <div className="print-only">
+      <div className="print-only print-only-summary">
         <div className="printHeader">
           <div className="printTitle">Applications Summary</div>
           <div className="printMeta">
@@ -992,11 +1008,68 @@ const handlePrintApplication = (application: Application) => {
         </div>
       </div>
 
-      {printTarget && (
-        <div aria-hidden style={{ position: "absolute", top: -9999 }}>
-          <PrintApplicationView application={printTarget} />
+      {/* PRINT ONLY: Single Application Detail */}
+      <div className="print-only print-only-application">
+        <div className="printHeader">
+          <div className="printTitle">Application Details</div>
+          <div className="printMeta">
+            <div>
+              <strong>Generated:</strong> {fmtDate(new Date())}
+            </div>
+          </div>
         </div>
-      )}
+
+        <table className="printTable">
+          <tbody>
+            <tr>
+              <th style={{ width: 180 }}>Name</th>
+              <td>{printTarget ? getApplicantName(printTarget) : "-"}</td>
+            </tr>
+            <tr>
+              <th>Email</th>
+              <td>{printTarget ? getApplicantEmail(printTarget) : "-"}</td>
+            </tr>
+            <tr>
+              <th>Phone</th>
+              <td>{printTarget ? getApplicantPhone(printTarget) : "-"}</td>
+            </tr>
+            <tr>
+              <th>Status</th>
+              <td>
+                {printTarget ? (printTarget as any)?.status ?? (printTarget as any)?.state ?? "-" : "-"}
+              </td>
+            </tr>
+            <tr>
+              <th>Property</th>
+              <td>
+                {printTarget
+                  ? (printTarget as any)?.propertyName ??
+                    (printTarget as any)?.propertyAddress ??
+                    "-"
+                  : "-"}
+              </td>
+            </tr>
+            <tr>
+              <th>Unit</th>
+              <td>{printTarget ? (printTarget as any)?.unitNumber ?? "-" : "-"}</td>
+            </tr>
+            <tr>
+              <th>Submitted</th>
+              <td>
+                {printTarget
+                  ? (printTarget as any)?.createdAt
+                    ? String((printTarget as any)?.createdAt)
+                    : "-"
+                  : "-"}
+              </td>
+            </tr>
+            <tr>
+              <th>Notes</th>
+              <td>{printTarget ? (printTarget as any)?.notes ?? "-" : "-"}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
       <ScreeningDetailModal
         screeningId={activeScreeningId}
         open={screeningModalOpen}
