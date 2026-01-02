@@ -31,6 +31,20 @@ import { BoardSnapshotButton } from "../components/dashboard/BoardSnapshotButton
 import { BoardSnapshotDrawer } from "../components/dashboard/BoardSnapshotDrawer";
 import { fetchMonthlySnapshot } from "../api/reporting";
 
+function fmtDate(d: Date) {
+  try {
+    return d.toLocaleString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return d.toISOString();
+  }
+}
+
 const DashboardPage: React.FC = () => {
   const { data, loading, error, refresh } = useBlockchainVerify();
   const { user } = useAuth();
@@ -61,6 +75,8 @@ const DashboardPage: React.FC = () => {
 
   const unitsCount = usageObj?.units ?? 0;
   const propertiesCount = usageObj?.properties ?? 0;
+  const tenantsCount = (usageObj as any)?.tenants ?? me?.tenantCount ?? "—";
+  const applicationsCount = (usageObj as any)?.applications ?? "—";
 
   const unitsMax = limitsObj?.maxUnits ?? 0;
   const propertiesMax = limitsObj?.maxProperties ?? 0;
@@ -287,6 +303,14 @@ const DashboardPage: React.FC = () => {
               {usageIntegrityChip.label}
             </div>
           ) : null}
+          <Button
+            variant="secondary"
+            onClick={() => window.print()}
+            title="Print board-ready monthly snapshot"
+            style={{ padding: "6px 10px" }}
+          >
+            Board Snapshot (PDF)
+          </Button>
           <BoardSnapshotButton onClick={handleOpenSnapshot} />
           {snapshotError ? (
             <div style={{ color: "#dc2626", fontSize: 12 }}>{snapshotError}</div>
@@ -503,6 +527,87 @@ const DashboardPage: React.FC = () => {
           </Section>
         </div>
       </div>
+
+      {/* PRINT ONLY: Board snapshot */}
+      <div className="print-only">
+        <div className="printHeader">
+          <div className="printTitle">RentChain — Monthly Operations Snapshot</div>
+          <div className="printMeta">
+            <div>
+              <strong>Period:</strong>{" "}
+              {new Date().toLocaleString(undefined, { month: "long", year: "numeric" })}
+            </div>
+            <div>
+              <strong>Generated:</strong> {fmtDate(new Date())}
+            </div>
+          </div>
+        </div>
+
+        <div className="printKpis">
+          <div>
+            <strong>Properties</strong>
+            <div>{propertiesCount ?? "—"}</div>
+          </div>
+          <div>
+            <strong>Units</strong>
+            <div>{unitsCount ?? "—"}</div>
+          </div>
+          <div>
+            <strong>Active Tenants</strong>
+            <div>{tenantsCount ?? "—"}</div>
+          </div>
+          <div>
+            <strong>Applications</strong>
+            <div>{applicationsCount ?? "—"}</div>
+          </div>
+        </div>
+
+        <h3>Properties Summary</h3>
+        <table className="printTable">
+          <thead>
+            <tr>
+              <th>Property</th>
+              <th>Units</th>
+              <th>Occupied</th>
+              <th>Vacant</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td colSpan={4} style={{ opacity: 0.7 }}>
+                Detailed property data not available in this snapshot.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>Applications Summary</h3>
+        <table className="printTable">
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th>Count</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Submitted</td>
+              <td>{applicationsCount ?? "—"}</td>
+            </tr>
+            <tr>
+              <td>Approved</td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <td>Pending</td>
+              <td>—</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div className="printFooter">Internal — Board / Management Use Only</div>
+      </div>
+
       {selectedLedgerId ? (
         <LedgerEventDrawer eventId={selectedLedgerId} onClose={() => setSelectedLedgerId(null)} />
       ) : null}
