@@ -20,9 +20,9 @@ async function countSnap(q: Query<DocumentData>) {
 async function sumFieldCents(q: Query<DocumentData>, field: string) {
   const snap = await q.get();
   let sum = 0;
-  snap.forEach((doc: any) => {
-    const v = (doc.data() as any)?.[field];
-    const n = Number(v);
+  snap.forEach((doc) => {
+    const data = doc.data() as Record<string, any>;
+    const n = Number(data?.[field]);
     if (Number.isFinite(n)) sum += n;
   });
   return sum;
