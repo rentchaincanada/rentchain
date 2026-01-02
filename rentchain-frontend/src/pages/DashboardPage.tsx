@@ -1,4 +1,4 @@
-// rentchain-frontend/src/pages/DashboardPage.tsx
+﻿// rentchain-frontend/src/pages/DashboardPage.tsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { MacShell } from "../components/layout/MacShell";
@@ -45,6 +45,35 @@ function fmtDate(d: Date) {
   }
 }
 
+const safeNum = (v: any): number | null => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+const pickPropertyLabel = (p: any) =>
+  p?.name || p?.label || p?.title || p?.address || p?.street || p?.propertyName || "—";
+
+const pickUnitCount = (p: any) =>
+  safeNum(p?.unitCount) ??
+  safeNum(p?.unitsCount) ??
+  safeNum(p?.totalUnits) ??
+  safeNum(p?.units?.length) ??
+  null;
+
+const pickOccupiedCount = (p: any) =>
+  safeNum(p?.occupiedUnits) ??
+  safeNum(p?.occupiedCount) ??
+  safeNum(p?.leasesActive) ??
+  safeNum(p?.activeLeases) ??
+  null;
+
+const normStatus = (s: any) => String(s || "").trim().toLowerCase();
+
+const countByStatus = (apps: any[] | null, target: string) => {
+  if (!apps) return null;
+  return apps.filter((a) => normStatus(a?.status ?? a?.state ?? a?.stage) === target).length;
+};
+
 const DashboardPage: React.FC = () => {
   const { data, loading, error, refresh } = useBlockchainVerify();
   const { user } = useAuth();
@@ -77,6 +106,32 @@ const DashboardPage: React.FC = () => {
   const propertiesCount = usageObj?.properties ?? 0;
   const tenantsCount = (usageObj as any)?.tenants ?? me?.tenantCount ?? "—";
   const applicationsCount = (usageObj as any)?.applications ?? "—";
+  const occupiedUnits = safeNum((usageObj as any)?.occupiedUnits);
+  const vacantUnits =
+    safeNum((usageObj as any)?.vacantUnits) ??
+    (occupiedUnits != null ? Math.max(unitsCount - occupiedUnits, 0) : null);
+  const occupancyPct =
+    occupiedUnits != null && unitsCount > 0 ? Math.round((occupiedUnits / unitsCount) * 100) : null;
+  const rentCollectedCents = safeNum((usageObj as any)?.rentCollectedCents);
+  const rentOutstandingCents = safeNum((usageObj as any)?.rentOutstandingCents);
+  const onTimePct = safeNum((usageObj as any)?.rentOnTimePct);
+
+  // If you later load real arrays, replace these placeholders.
+  const propertiesArr: any[] = [];
+  const applicationsArr: any[] | null = null;
+  const appsApproved = countByStatus(applicationsArr, "approved");
+  const appsPending = countByStatus(applicationsArr, "pending");
+  const appsRejected = countByStatus(applicationsArr, "rejected");
+
+  const fmtMoney = (cents: any) => {
+    const n = safeNum(cents);
+    if (n == null) return "—";
+    try {
+      return new Intl.NumberFormat(undefined, { style: "currency", currency: "CAD" }).format(n / 100);
+    } catch {
+      return `$${(n / 100).toFixed(2)}`;
+    }
+  };
 
   const unitsMax = limitsObj?.maxUnits ?? 0;
   const propertiesMax = limitsObj?.maxProperties ?? 0;
@@ -544,25 +599,44 @@ const DashboardPage: React.FC = () => {
         </div>
 
         <div className="printKpis">
-          <div>
-            <strong>Properties</strong>
-            <div>{propertiesCount ?? "—"}</div>
+          <div className="printKpi">
+            <div className="printKpiLabel">Properties</div>
+            <div className="printKpiValue">{propertiesCount ?? "—"}</div>
           </div>
-          <div>
-            <strong>Units</strong>
-            <div>{unitsCount ?? "—"}</div>
+          <div className="printKpi">
+            <div className="printKpiLabel">Units</div>
+            <div className="printKpiValue">{unitsCount ?? "—"}</div>
           </div>
-          <div>
-            <strong>Active Tenants</strong>
-            <div>{tenantsCount ?? "—"}</div>
+          <div className="printKpi">
+            <div className="printKpiLabel">Active Tenants</div>
+            <div className="printKpiValue">{tenantsCount ?? "—"}</div>
           </div>
-          <div>
-            <strong>Applications</strong>
-            <div>{applicationsCount ?? "—"}</div>
+          <div className="printKpi">
+            <div className="printKpiLabel">Applications</div>
+            <div className="printKpiValue">{applicationsCount ?? "—"}</div>
           </div>
         </div>
 
-        <h3>Properties Summary</h3>
+        <div className="printKpis">
+          <div className="printKpi">
+            <div className="printKpiLabel">Occupied Units</div>
+            <div className="printKpiValue">{occupiedUnits ?? "—"}</div>
+          </div>
+          <div className="printKpi">
+            <div className="printKpiLabel">Vacant Units</div>
+            <div className="printKpiValue">{vacantUnits ?? "—"}</div>
+          </div>
+          <div className="printKpi">
+            <div className="printKpiLabel">Occupancy</div>
+            <div className="printKpiValue">{occupancyPct != null ? `${occupancyPct}%` : "—"}</div>
+          </div>
+          <div className="printKpi">
+            <div className="printKpiLabel">On-time Rent</div>
+            <div className="printKpiValue">{onTimePct != null ? `${onTimePct}%` : "—"}</div>
+          </div>
+        </div>
+
+        <h3 className="printH3">Properties Summary</h3>
         <table className="printTable">
           <thead>
             <tr>
@@ -573,15 +647,55 @@ const DashboardPage: React.FC = () => {
             </tr>
           </thead>
           <tbody>
+            {propertiesArr.length ? (
+              propertiesArr.map((p: any) => {
+                const total = pickUnitCount(p);
+                const occ = pickOccupiedCount(p);
+                const vac = typeof total === "number" && typeof occ === "number" ? Math.max(total - occ, 0) : null;
+                return (
+                  <tr key={p?.id || pickPropertyLabel(p)}>
+                    <td>{pickPropertyLabel(p)}</td>
+                    <td>{total ?? "—"}</td>
+                    <td>{occ ?? "—"}</td>
+                    <td>{vac ?? "—"}</td>
+                  </tr>
+                );
+              })
+            ) : (
+              <tr>
+                <td colSpan={4} style={{ opacity: 0.7 }}>
+                  No properties found.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+
+        <h3 className="printH3">Rent Collection (Month)</h3>
+        <table className="printTable">
+          <thead>
             <tr>
-              <td colSpan={4} style={{ opacity: 0.7 }}>
-                Detailed property data not available in this snapshot.
-              </td>
+              <th>Metric</th>
+              <th>Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Collected</td>
+              <td>{fmtMoney(rentCollectedCents)}</td>
+            </tr>
+            <tr>
+              <td>Outstanding</td>
+              <td>{fmtMoney(rentOutstandingCents)}</td>
+            </tr>
+            <tr>
+              <td>On-time %</td>
+              <td>{onTimePct != null ? `${onTimePct}%` : "—"}</td>
             </tr>
           </tbody>
         </table>
 
-        <h3>Applications Summary</h3>
+        <h3 className="printH3">Applications Funnel</h3>
         <table className="printTable">
           <thead>
             <tr>
@@ -592,27 +706,25 @@ const DashboardPage: React.FC = () => {
           <tbody>
             <tr>
               <td>Submitted</td>
-              <td>{applicationsCount ?? "—"}</td>
+              <td>{applicationsArr ? applicationsArr.length : applicationsCount ?? "—"}</td>
             </tr>
             <tr>
               <td>Approved</td>
-              <td>—</td>
+              <td>{appsApproved ?? "—"}</td>
             </tr>
             <tr>
               <td>Pending</td>
-              <td>—</td>
+              <td>{appsPending ?? "—"}</td>
+            </tr>
+            <tr>
+              <td>Rejected</td>
+              <td>{appsRejected ?? "—"}</td>
             </tr>
           </tbody>
         </table>
 
         <div className="printFooter">Internal — Board / Management Use Only</div>
-      </div>
-
-      {selectedLedgerId ? (
-        <LedgerEventDrawer eventId={selectedLedgerId} onClose={() => setSelectedLedgerId(null)} />
-      ) : null}
-
-      <BoardSnapshotDrawer
+      </div><BoardSnapshotDrawer
         open={snapshotOpen}
         onClose={() => setSnapshotOpen(false)}
         snapshot={snapshot}
