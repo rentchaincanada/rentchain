@@ -224,6 +224,35 @@ button,
   margin-bottom: 12px;
 }
 
+.printKpis {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.printKpi {
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  padding: 10px;
+  border-radius: 10px;
+}
+
+.printKpiLabel {
+  font-size: 12px;
+  opacity: 0.75;
+  margin-bottom: 6px;
+}
+
+.printKpiValue {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.printH3 {
+  margin: 14px 0 8px;
+  font-size: 14px;
+}
+
 .printTable {
   width: 100%;
   border-collapse: collapse;
