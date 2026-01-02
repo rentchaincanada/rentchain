@@ -1,5 +1,5 @@
 import { Router } from "express";
-import type { FirebaseFirestore } from "firebase-admin";
+import type { Query, DocumentData } from "firebase-admin/firestore";
 import { db } from "../config/firebase";
 import { requireAuth } from "../middleware/requireAuth";
 import { requireLandlord } from "../middleware/requireLandlord";
@@ -12,15 +12,15 @@ function monthRange(d = new Date()) {
   return { start, end };
 }
 
-async function countSnap(q: FirebaseFirestore.Query) {
+async function countSnap(q: Query<DocumentData>) {
   const snap = await q.get();
   return snap.size;
 }
 
-async function sumFieldCents(q: FirebaseFirestore.Query, field: string) {
+async function sumFieldCents(q: Query<DocumentData>, field: string) {
   const snap = await q.get();
   let sum = 0;
-  snap.forEach((doc) => {
+  snap.forEach((doc: any) => {
     const v = (doc.data() as any)?.[field];
     const n = Number(v);
     if (Number.isFinite(n)) sum += n;
