@@ -36,6 +36,7 @@ import stubsRoutes from "./routes/stubsRoutes";
 import adminBootstrapRoutes from "./routes/adminBootstrapRoutes";
 import usageBreakdownRoutes from "./routes/usageBreakdownRoutes";
 import tenantReportRoutes from "./routes/tenantReportRoutes";
+import tenantReportPdfRoutes from "./routes/tenantReportPdfRoutes";
 import impersonationRoutes from "./routes/impersonationRoutes";
 
 export const app = express();
@@ -89,6 +90,7 @@ app.use("/api", routeSource("tenantInviteAliasesRoutes"), tenantInviteAliasesRou
 app.use("/api", routeSource("tenantEventsRoutes"), tenantEventsRoutes);
 app.use("/api", routeSource("usageBreakdownRoutes.ts"), usageBreakdownRoutes);
 app.use("/api", routeSource("tenantReportRoutes.ts"), tenantReportRoutes);
+app.use("/api", routeSource("tenantReportPdfRoutes.ts"), tenantReportPdfRoutes);
 app.use("/api", routeSource("impersonationRoutes.ts"), impersonationRoutes);
 app.use("/api", stubsRoutes);
 app.use("/api/admin", routeSource("adminBootstrapRoutes"), adminBootstrapRoutes);
