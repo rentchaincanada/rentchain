@@ -15,7 +15,7 @@ function normalize(value: any) {
 }
 
 function makeAddressKey(body: any) {
-  const street = normalize(body?.street || body?.address1 || body?.address || "");
+  const street = normalize(body?.street || body?.address1 || body?.address || body?.addressLine1 || "");
   const city = normalize(body?.city || "");
   const province = normalize(body?.province || body?.state || "");
   const postal = normalize(body?.postalCode || body?.zip || "");

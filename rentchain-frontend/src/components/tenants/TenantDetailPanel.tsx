@@ -2208,8 +2208,21 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
         )}
         <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button
-            type="button"
-            onClick={() => tenantId && downloadCreditHistory(tenantId, "csv").catch((e) => setCreditError(e.message))}
+          type="button"
+          onClick={() => {
+            if (!tenantId) return;
+            downloadCreditHistory(tenantId, "csv").catch((e) => {
+              const msg = String(e?.message || "");
+              if (msg.includes("501") || msg.includes("CREDIT_HISTORY_DISABLED")) {
+                showToast({
+                  title: "Coming soon",
+                  description: "Credit history export is coming soon.",
+                });
+                return;
+              }
+              setCreditError(e.message || msg);
+            });
+          }}
             style={{
               padding: "8px 12px",
               borderRadius: radius.md,
@@ -2224,7 +2237,20 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
           </button>
           <button
             type="button"
-            onClick={() => tenantId && downloadCreditHistory(tenantId, "json").catch((e) => setCreditError(e.message))}
+            onClick={() => {
+              if (!tenantId) return;
+              downloadCreditHistory(tenantId, "json").catch((e) => {
+                const msg = String(e?.message || "");
+                if (msg.includes("501") || msg.includes("CREDIT_HISTORY_DISABLED")) {
+                  showToast({
+                    title: "Coming soon",
+                    description: "Credit history export is coming soon.",
+                  });
+                  return;
+                }
+                setCreditError(e.message || msg);
+              });
+            }}
             style={{
               padding: "8px 12px",
               borderRadius: radius.md,
@@ -2314,8 +2340,9 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
             cursor: "pointer",
             boxShadow: shadows.sm,
           }}
+          onClick={handleViewInLedger}
         >
-                    View all ledger events ?
+                    View all ledger events →
         </button>
         <button
           type="button"

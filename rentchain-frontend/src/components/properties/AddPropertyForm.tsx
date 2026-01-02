@@ -273,6 +273,29 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
     } catch (err: any) {
       const status = err?.response?.status;
       const code = err?.response?.data?.code;
+      const existingId =
+        err?.response?.data?.existingId ||
+        err?.response?.data?.existingID ||
+        err?.response?.data?.propertyId ||
+        null;
+
+      if (status === 409 || code === "PROPERTY_EXISTS") {
+        if (existingId) {
+          setSuccessText(null);
+          setErrorText(null);
+          showToast?.({
+            title: "Property already exists",
+            description: "Opening existing property.",
+            variant: "success",
+          } as any);
+          // navigate available via window for now; if you have navigate hook, prefer that
+          window.location.href = `/properties/${existingId}`;
+          return;
+        }
+        setErrorText("A property with this address already exists.");
+        return;
+      }
+
       if (status === 402 && code === "ENTITLEMENT_LIMIT_REACHED") {
         const resource =
           err?.response?.data?.limit?.key ||
