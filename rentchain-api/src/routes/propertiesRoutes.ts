@@ -6,6 +6,22 @@ import { db, FieldValue } from "../config/firebase";
 
 const router = Router();
 
+function normalize(value: any) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/[^\w\s]/g, "");
+}
+
+function makeAddressKey(body: any) {
+  const street = normalize(body?.street || body?.address1 || body?.address || "");
+  const city = normalize(body?.city || "");
+  const province = normalize(body?.province || body?.state || "");
+  const postal = normalize(body?.postalCode || body?.zip || "");
+  return [street, city, province, postal].filter(Boolean).join("|");
+}
+
 /**
  * GET /api/properties
  * Returns properties for the authenticated landlord.
@@ -72,6 +88,7 @@ router.post(
 
     const { address, nickname, unitCount, totalUnits, units } = req.body ?? {};
     const createdAt = new Date().toISOString();
+    const addressKey = makeAddressKey(req.body);
 
     const resolvedUnitCount =
       typeof unitCount === "number"
@@ -82,6 +99,28 @@ router.post(
         ? units.length
         : 0;
 
+    if (addressKey) {
+      try {
+        const dupSnap = await db
+          .collection("properties")
+          .where("landlordId", "==", landlordId)
+          .where("addressKey", "==", addressKey)
+          .limit(1)
+          .get();
+        if (!dupSnap.empty) {
+          const existingId = dupSnap.docs[0].id;
+          return res.status(409).json({
+            ok: false,
+            code: "PROPERTY_EXISTS",
+            message: "Property already exists",
+            existingId,
+          });
+        }
+      } catch (e) {
+        console.warn("[POST /api/properties] duplicate check failed", (e as any)?.message || e);
+      }
+    }
+
     const propertyRef = db.collection("properties").doc();
     const propertyBase = {
       landlordId,
@@ -89,6 +128,7 @@ router.post(
       nickname: nickname || "",
       unitCount: resolvedUnitCount,
       createdAt,
+      addressKey: addressKey || null,
     };
 
     try {

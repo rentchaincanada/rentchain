@@ -44,7 +44,11 @@ router.get("/tenants/:tenantId/credit-history/export", async (req: any, res) => 
   const allowed = await verifyTenantOwnership(tenantId, landlordId);
   if (!allowed) return res.status(403).json({ error: "Forbidden" });
 
-  const format = (req.query.format as string) || "json";
+  const format = ((req.query.format as string) || "json").toLowerCase();
+
+  if (format !== "json" && format !== "csv") {
+    return res.status(400).json({ ok: false, code: "BAD_FORMAT", message: "format must be json or csv" });
+  }
 
   try {
     const history = await getTenantCreditHistory({ tenantId, landlordId });
@@ -88,7 +92,9 @@ router.get("/tenants/:tenantId/credit-history/export", async (req: any, res) => 
     return res.json(history);
   } catch (err) {
     console.error("[landlordCreditHistoryRoutes] export error", err);
-    return res.status(500).json({ error: "Failed to export credit history" });
+    return res
+      .status(501)
+      .json({ ok: false, code: "CREDIT_HISTORY_DISABLED", message: "Credit history export is coming soon." });
   }
 });
 

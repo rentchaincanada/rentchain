@@ -2315,7 +2315,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
             boxShadow: shadows.sm,
           }}
         >
-          View all ledger events →
+                    View all ledger events ?
         </button>
         <button
           type="button"
