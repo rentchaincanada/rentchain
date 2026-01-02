@@ -51,7 +51,7 @@ router.post("/", authenticateJwt, requireLandlord, async (req: any, res) => {
 });
 
 router.post("/redeem", async (req: any, res) => {
-  const { token } = req.body || {};
+  const token = String(req.body?.token || req.body?.inviteId || "").trim();
   if (!token) return res.status(400).json({ ok: false, error: "token_required" });
 
   const ref = db.collection("tenantInvites").doc(token);
