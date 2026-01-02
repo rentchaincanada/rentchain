@@ -2,11 +2,36 @@ options:
   logging: CLOUD_LOGGING_ONLY
 
 steps:
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  # Debug environment snapshot
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: "bash"
+    args:
+      - "-lc"
+      - |
+        set -euxo pipefail
+        echo "==== ENV (first 120) ===="
+        env | sort | sed -n '1,120p'
+        echo "==== PWD/FILES ===="
+        pwd
+        ls -la
+
+  # Install deps + build (fail fast on TS errors)
+  - name: "node:20"
+    entrypoint: "bash"
+    args:
+      - "-lc"
+      - |
+        set -euxo pipefail
+        npm ci
+        npm run build
+
+  # Deploy to Cloud Run (no quiet flags; let output surface)
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     entrypoint: bash
     args:
       - -c
       - |
+        set -euxo pipefail
         gcloud run deploy rentchain-landlord-api \
           --source ./rentchain-api \
           --region us-central1 \
