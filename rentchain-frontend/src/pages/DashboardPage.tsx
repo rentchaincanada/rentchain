@@ -194,12 +194,13 @@ const DashboardPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       try {
         const baseLimits = await fetchAccountLimits();
         let mergedUsage = baseLimits?.usage ?? baseLimits?.integrity?.after ?? {};
         try {
-          const breakdownResp: any = await apiFetch("/landlord/usage/breakdown");
+          const breakdownResp: any = await apiFetch("/api/landlord/usage/breakdown");
           const breakdownUsage = breakdownResp?.usage ?? null;
           mergedUsage = {
             ...(baseLimits?.usage ?? baseLimits?.integrity?.after ?? {}),
@@ -208,12 +209,17 @@ const DashboardPage: React.FC = () => {
         } catch {
           // ignore breakdown failures; keep base usage only
         }
-        setLimits({ ...(baseLimits as any), usage: mergedUsage });
+        if (!cancelled) {
+          setLimits({ ...(baseLimits as any), usage: mergedUsage });
+        }
       } catch {
-        setLimits(null);
+        if (!cancelled) setLimits(null);
       }
     })();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [me?.id, user?.id, me?.landlordId, user?.landlordId]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
