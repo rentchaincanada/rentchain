@@ -9,7 +9,7 @@ import { colors, radius, text } from "../../styles/tokens";
 import { useUpgrade } from "../../context/UpgradeContext";
 import { handleEntitlementError } from "../../hooks/useEntitlementGuard";
 import { setOnboardingStep } from "../../api/onboardingApi";
-import { useToast } from "../ui/use-toast";
+import { useToast } from "../ui/ToastProvider";
 
 interface AddPropertyFormProps {
   onCreated?: (property: Property) => void;
