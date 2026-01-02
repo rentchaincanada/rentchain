@@ -485,11 +485,20 @@ const nextStepMessage = (reqs: ReturnType<typeof screeningRequirementsFor>) => {
       navigate(`/tenants?tenantId=${encodeURIComponent(result.tenantId)}`);
     } catch (err: any) {
       console.error("[ApplicationsPage] Failed to convert application", err);
-      showToast({
-        message: "Conversion failed",
-        description: err?.message || "Unable to convert this application to a tenant.",
-        variant: "error",
-      });
+      const msg = String(err?.message || "");
+      if (msg.includes("404") || msg.toLowerCase().includes("not found")) {
+        showToast({
+          message: "Application not found",
+          description: "This application may have been deleted or already converted.",
+          variant: "error",
+        });
+      } else {
+        showToast({
+          message: "Conversion failed",
+          description: err?.message || "Unable to convert this application to a tenant.",
+          variant: "error",
+        });
+      }
     } finally {
       setIsConverting(false);
     }

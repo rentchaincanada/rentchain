@@ -1042,8 +1042,8 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
               boxShadow: shadows.sm,
             }}
           >
-            <span>📄</span>
-            <span>Download report (PDF)</span>
+            <span role="img" aria-label="file">??</span>
+            <span>Download report (JSON)</span>
           </button>
         </div>
       </div>
