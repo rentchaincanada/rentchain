@@ -1,8 +1,8 @@
-name: ai-build
+name: "build"
 
 on:
   push:
-    branches: ["main"]
+    branches: [main]
   pull_request:
 
 jobs:
@@ -10,26 +10,24 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Use Node 20
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: "20"
-          # Explicitly disable cache to avoid monorepo cache collisions; enable later if desired.
-          cache: ""
+          cache: "npm"
+          cache-dependency-path: |
+            rentchain-api/package-lock.json
+            rentchain-frontend/package-lock.json
 
-      # FRONTEND
       - name: Install + build frontend
         working-directory: rentchain-frontend
         run: |
-          npm install
+          npm ci
           npm run build
 
-      # API
       - name: Install + build api
         working-directory: rentchain-api
         run: |
-          npm install
+          npm ci
           npm run build
