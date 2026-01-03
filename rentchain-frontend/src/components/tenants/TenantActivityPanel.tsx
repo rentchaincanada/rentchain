@@ -1,68 +1,68 @@
-// @ts-nocheck
 import React, { useEffect, useState } from "react";
-import type { AuditEvent } from "../../types/events";
-import { fetchTenantEvents } from "../../api/eventsApi";
+import { colors, radius, text } from "../../styles/tokens";
+import { listTenantEvents, type TenantEvent } from "../../api/tenantEvents";
 
-interface TenantActivityPanelProps {
+type Props = {
   tenantId: string | null | undefined;
+};
+
+function toMillis(ts: any): number | null {
+  if (ts == null) return null;
+  if (typeof ts === "number") return ts;
+  if (typeof ts?.toMillis === "function") return ts.toMillis();
+  if (typeof ts?.seconds === "number") return ts.seconds * 1000;
+  const d = new Date(ts);
+  return Number.isNaN(d.getTime()) ? null : d.getTime();
 }
 
-export const TenantActivityPanel: React.FC<TenantActivityPanelProps> = ({
-  tenantId,
-}) => {
-  const [events, setEvents] = useState<AuditEvent[]>([]);
+export const TenantActivityPanel: React.FC<Props> = ({ tenantId }) => {
+  const [items, setItems] = useState<TenantEvent[]>([]);
+  const [nextCursor, setNextCursor] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-
+  async function load(initial = false) {
     if (!tenantId) {
-      setEvents([]);
+      setItems([]);
+      setNextCursor(null);
       setError(null);
       return;
     }
 
-    const load = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const data = await fetchTenantEvents(tenantId, 25);
-        if (!cancelled) {
-          setEvents(data);
-        }
-      } catch (err) {
-        console.error("[TenantActivityPanel] Failed to load events", err);
-        if (!cancelled) {
-          setError("Failed to load tenant activity");
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+    setLoading(true);
+    setError(null);
+    try {
+      const resp = await listTenantEvents({
+        tenantId,
+        limit: 25,
+        cursor: initial ? undefined : nextCursor ?? undefined,
+      });
+      const newItems = resp?.items || [];
+      setItems((prev) => (initial ? newItems : [...prev, ...newItems]));
+      setNextCursor(resp?.nextCursor ?? null);
+    } catch (e: any) {
+      setError(e?.message || "Failed to load tenant activity");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      await load(true);
+      if (cancelled) {
+        setItems([]);
+        setNextCursor(null);
       }
-    };
-
-    load();
-
+    })();
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId]);
 
-  const formatTimestamp = (ts: string) => {
-    const d = new Date(ts);
-    if (Number.isNaN(d.getTime())) return ts;
-    return d.toLocaleString();
-  };
-
-  const severityColor = (kind: AuditEvent["kind"]) => {
-    if (kind === "tenant.payment_deleted") return "#ef4444";
-    if (kind === "tenant.payment_edited") return "#eab308";
-    if (kind === "application.converted_to_tenant") return "#22c55e";
-    if (kind === "application.status_changed") return "#38bdf8";
-    return "#9ca3af";
-  };
+  const canLoadMore = !!nextCursor && !loading;
 
   return (
     <div
@@ -70,8 +70,8 @@ export const TenantActivityPanel: React.FC<TenantActivityPanelProps> = ({
         marginTop: 12,
         borderRadius: 16,
         padding: 12,
-        backgroundColor: "rgba(15,23,42,0.95)",
-        border: "1px solid rgba(31,41,55,1)",
+        backgroundColor: colors.panel,
+        border: `1px solid ${colors.border}`,
         display: "flex",
         flexDirection: "column",
         gap: 8,
@@ -83,57 +83,40 @@ export const TenantActivityPanel: React.FC<TenantActivityPanelProps> = ({
           fontSize: 12,
           textTransform: "uppercase",
           letterSpacing: 0.08,
-          color: "#9ca3af",
+          color: text.muted,
           marginBottom: 2,
           display: "flex",
           justifyContent: "space-between",
         }}
       >
         <span>Tenant activity</span>
-        <span
+        <button
+          type="button"
+          onClick={() => load(true)}
+          disabled={loading}
           style={{
-            fontSize: 11,
-            color: "#6b7280",
+            border: "none",
+            background: "none",
+            color: text.muted,
+            cursor: loading ? "not-allowed" : "pointer",
+            padding: 0,
+            fontSize: 12,
           }}
         >
-          Audit feed for this tenant
-        </span>
+          Refresh
+        </button>
       </div>
 
       {tenantId == null ? (
-        <div
-          style={{
-            fontSize: 13,
-            color: "#6b7280",
-          }}
-        >
+        <div style={{ fontSize: 13, color: text.muted }}>
           Select a tenant to see their activity.
         </div>
-      ) : loading ? (
-        <div
-          style={{
-            fontSize: 13,
-            color: "#9ca3af",
-          }}
-        >
-          Loading activity…
-        </div>
+      ) : loading && items.length === 0 ? (
+        <div style={{ fontSize: 13, color: text.muted }}>Loading activity…</div>
       ) : error ? (
-        <div
-          style={{
-            fontSize: 13,
-            color: "#f97316",
-          }}
-        >
-          {error}
-        </div>
-      ) : events.length === 0 ? (
-        <div
-          style={{
-            fontSize: 13,
-            color: "#6b7280",
-          }}
-        >
+        <div style={{ fontSize: 13, color: "#f97316" }}>{error}</div>
+      ) : items.length === 0 ? (
+        <div style={{ fontSize: 13, color: text.muted }}>
           No recent activity recorded for this tenant.
         </div>
       ) : (
@@ -142,15 +125,17 @@ export const TenantActivityPanel: React.FC<TenantActivityPanelProps> = ({
             display: "flex",
             flexDirection: "column",
             gap: 6,
-            maxHeight: 220,
+            maxHeight: 260,
             overflowY: "auto",
           }}
         >
-          {events.map((evt, idx) => {
-            const key = evt.id || `${evt.entityType}-${evt.entityId}-${idx}`;
+          {items.map((evt) => {
+            const created = toMillis(evt.createdAt);
+            const when = created ? new Date(created).toLocaleString() : "";
+
             return (
               <div
-                key={key}
+                key={evt.id}
                 style={{
                   display: "flex",
                   gap: 8,
@@ -163,8 +148,8 @@ export const TenantActivityPanel: React.FC<TenantActivityPanelProps> = ({
                     width: 8,
                     height: 8,
                     borderRadius: "999px",
-                    backgroundColor: severityColor(evt.kind),
-                    boxShadow: "0 0 0 3px rgba(15,23,42,0.7)",
+                    backgroundColor: text.primary,
+                    opacity: 0.7,
                     flexShrink: 0,
                   }}
                 />
@@ -173,8 +158,8 @@ export const TenantActivityPanel: React.FC<TenantActivityPanelProps> = ({
                     flex: 1,
                     borderRadius: 10,
                     padding: "6px 8px",
-                    backgroundColor: "rgba(15,23,42,1)",
-                    border: "1px solid rgba(55,65,81,0.9)",
+                    backgroundColor: colors.card,
+                    border: `1px solid ${colors.border}`,
                     display: "flex",
                     justifyContent: "space-between",
                     gap: 8,
@@ -183,31 +168,32 @@ export const TenantActivityPanel: React.FC<TenantActivityPanelProps> = ({
                   <div>
                     <div
                       style={{
-                        fontWeight: 500,
-                        color: "#e5e7eb",
+                        fontWeight: 600,
+                        color: text.primary,
                         marginBottom: 2,
                       }}
                     >
-                      {evt.summary}
+                      {evt.title || evt.type}
                     </div>
-                    {evt.detail && (
-                      <div
-                        style={{
-                          color: "#9ca3af",
-                        }}
-                      >
-                        {evt.detail}
-                      </div>
-                    )}
+                    {evt.description ? (
+                      <div style={{ color: text.muted }}>{evt.description}</div>
+                    ) : null}
+                    <div style={{ fontSize: 11, color: text.muted }}>
+                      {evt.type}
+                      {typeof evt.amountCents === "number"
+                        ? ` • ${(evt.amountCents / 100).toFixed(2)} ${evt.currency || ""}`.trim()
+                        : ""}
+                      {typeof evt.daysLate === "number" ? ` • ${evt.daysLate} days late` : ""}
+                    </div>
                   </div>
                   <div
                     style={{
                       fontSize: 11,
-                      color: "#6b7280",
+                      color: text.muted,
                       whiteSpace: "nowrap",
                     }}
                   >
-                    {formatTimestamp(evt.timestamp)}
+                    {when}
                   </div>
                 </div>
               </div>
@@ -215,6 +201,25 @@ export const TenantActivityPanel: React.FC<TenantActivityPanelProps> = ({
           })}
         </div>
       )}
+
+      {canLoadMore ? (
+        <button
+          type="button"
+          onClick={() => load(false)}
+          disabled={loading}
+          style={{
+            alignSelf: "flex-start",
+            borderRadius: radius.pill,
+            border: `1px solid ${colors.border}`,
+            background: colors.card,
+            color: text.primary,
+            padding: "6px 10px",
+            cursor: loading ? "not-allowed" : "pointer",
+          }}
+        >
+          Load more
+        </button>
+      ) : null}
     </div>
   );
 };

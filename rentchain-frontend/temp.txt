@@ -1,16 +1,15 @@
 import React from "react";
 import { getMyTenantEvents, type TenantEvent } from "../../api/tenantEvents";
 
-function formatMoney(amountCents?: number | null, currency?: string | null) {
-  const n = Number(amountCents);
-  if (!Number.isFinite(n)) return null;
+function formatMoney(amountCents?: number, currency?: string) {
+  if (!amountCents) return null;
   try {
     return new Intl.NumberFormat(undefined, {
       style: "currency",
       currency: currency || "CAD",
-    }).format(n / 100);
+    }).format(amountCents / 100);
   } catch {
-    return `$${(n / 100).toFixed(2)} ${currency || ""}`.trim();
+    return `$${(amountCents / 100).toFixed(2)} ${currency || ""}`.trim();
   }
 }
 
