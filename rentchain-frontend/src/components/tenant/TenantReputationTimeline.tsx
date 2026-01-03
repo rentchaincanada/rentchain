@@ -1,7 +1,8 @@
-import React from "react";
+﻿import React from "react";
 import {
   listTenantEvents,
   getTenantSignals,
+  getTenantScore,
   type TenantEvent,
 } from "../../api/tenantEvents";
 
@@ -182,6 +183,9 @@ export function TenantReputationTimeline({ tenantId }: { tenantId: string }) {
   const [signalsError, setSignalsError] = React.useState<string | null>(null);
   const [signals, setSignals] = React.useState<any>(null);
 
+  const [scoreLoading, setScoreLoading] = React.useState(false);
+  const [score, setScore] = React.useState<{ scoreV1: number; tierV1: string; reasons: string[] } | null>(null);
+
   async function load(initial = false) {
     if (!tenantId) return;
 
@@ -220,9 +224,23 @@ export function TenantReputationTimeline({ tenantId }: { tenantId: string }) {
     }
   }
 
+  async function loadScore() {
+    if (!tenantId) return;
+    setScoreLoading(true);
+    try {
+      const resp = await getTenantScore(tenantId);
+      setScore({ scoreV1: resp.scoreV1, tierV1: resp.tierV1, reasons: resp.reasons || [] });
+    } catch {
+      setScore(null);
+    } finally {
+      setScoreLoading(false);
+    }
+  }
+
   React.useEffect(() => {
     load(true);
     loadSignals();
+    loadScore();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId]);
 
@@ -258,8 +276,9 @@ export function TenantReputationTimeline({ tenantId }: { tenantId: string }) {
             onClick={() => {
               load(true);
               loadSignals();
+              loadScore();
             }}
-            disabled={loading || signalsLoading}
+            disabled={loading || signalsLoading || scoreLoading}
             style={{
               padding: "8px 10px",
               borderRadius: 12,
@@ -275,45 +294,103 @@ export function TenantReputationTimeline({ tenantId }: { tenantId: string }) {
         </div>
       </div>
 
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-        {signalsLoading ? (
-          chip("Loading signals…")
-        ) : signalsError ? (
-          chip("Signals unavailable")
-        ) : signals ? (
-          <>
-            <span
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 8,
-                padding: "6px 10px",
-                borderRadius: 999,
-                border: "1px solid #E5E7EB",
-                background: "#FFFFFF",
-                fontSize: 12,
-                fontWeight: 800,
-                userSelect: "none",
-                whiteSpace: "nowrap",
-              }}
-              title="Risk tier"
-            >
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          {signalsLoading ? (
+            chip("Loading signals…")
+          ) : signalsError ? (
+            chip("Signals unavailable")
+          ) : signals ? (
+            <>
               <span
                 style={{
-                  width: 8,
-                  height: 8,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "6px 10px",
                   borderRadius: 999,
-                  background: tierDotColor(signals.riskTier),
+                  border: "1px solid #E5E7EB",
+                  background: "#FFFFFF",
+                  fontSize: 12,
+                  fontWeight: 800,
+                  userSelect: "none",
+                  whiteSpace: "nowrap",
                 }}
-              />
-              {tierLabel(signals.riskTier)}
+                title="Risk tier"
+              >
+                <span
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: 999,
+                    background: tierDotColor(signals.riskTier),
+                  }}
+                />
+                {tierLabel(signals.riskTier)}
+              </span>
+              {chip(`On-time streak: ${signals.onTimeStreak}`)}
+              {chip(`Late (90d): ${signals.lateCount90d}`)}
+              {chip(`Paid (90d): ${signals.rentPaid90d}`)}
+              {chip(`Notices (12m): ${signals.notices12m}`)}
+            </>
+          ) : null}
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "6px 10px",
+              borderRadius: 999,
+              border: "1px solid #E5E7EB",
+              background: "#FFFFFF",
+              fontSize: 12,
+              fontWeight: 900,
+              whiteSpace: "nowrap",
+              userSelect: "none",
+            }}
+            title="Score v1 (transparent rules)"
+          >
+            <span style={{ opacity: 0.7 }}>Score</span>
+            <span style={{ fontSize: 14 }}>
+              {scoreLoading ? "…" : score?.scoreV1 ?? "—"}
             </span>
-            {chip(`On-time streak: ${signals.onTimeStreak}`)}
-            {chip(`Late (90d): ${signals.lateCount90d}`)}
-            {chip(`Paid (90d): ${signals.rentPaid90d}`)}
-            {chip(`Notices (12m): ${signals.notices12m}`)}
-          </>
-        ) : null}
+            <span style={{ opacity: 0.7 }}>
+              {scoreLoading ? "" : score?.tierV1 ? `(${score.tierV1})` : ""}
+            </span>
+          </span>
+
+          {score?.reasons?.length ? (
+            <div
+              style={{
+                padding: 10,
+                borderRadius: 14,
+                border: "1px solid #EEF2F7",
+                background: "#F8FAFC",
+                fontSize: 12,
+              }}
+            >
+              <div style={{ fontWeight: 900, marginBottom: 6, opacity: 0.9 }}>Why this score</div>
+              <ul
+                style={{
+                  margin: 0,
+                  paddingLeft: 18,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 4,
+                }}
+              >
+                {score.reasons.slice(0, 5).map((r, idx) => (
+                  <li key={idx} style={{ opacity: 0.9 }}>
+                    {r}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
       </div>
 
       {error ? (

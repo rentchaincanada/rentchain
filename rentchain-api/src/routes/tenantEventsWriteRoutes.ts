@@ -89,6 +89,14 @@ function getLandlordId(req: any) {
   return req.user?.landlordId || req.user?.id || null;
 }
 
+function toMillis(ts: any): number | null {
+  if (!ts) return null;
+  if (typeof ts === "number") return ts;
+  if (typeof ts?.toMillis === "function") return ts.toMillis();
+  if (typeof ts?.seconds === "number") return ts.seconds * 1000;
+  return null;
+}
+
 /**
  * POST /api/tenant-events
  * Body:
@@ -279,5 +287,100 @@ router.get("/tenant-events/recent", requireAuth, requireLandlord, async (req: an
   } catch (err: any) {
     console.error("[tenant-events GET /tenant-events/recent] error", err);
     return res.status(500).json({ error: "Failed to load recent tenant events" });
+  }
+});
+
+/**
+ * GET /api/tenant-events/score?tenantId=...
+ * Computes transparent score v1 from tenantEvents.
+ */
+router.get("/tenant-events/score", requireAuth, requireLandlord, async (req: any, res) => {
+  res.setHeader("x-route-source", "tenantEventsWriteRoutes");
+
+  const landlordId = getLandlordId(req);
+  if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+
+  const tenantId = String(req.query?.tenantId || "").trim();
+  if (!tenantId) return res.status(400).json({ ok: false, error: "Missing tenantId" });
+
+  try {
+    const snap = await db
+      .collection("tenantEvents")
+      .where("landlordId", "==", landlordId)
+      .where("tenantId", "==", tenantId)
+      .orderBy("createdAt", "desc")
+      .limit(300)
+      .get();
+
+    const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+
+    const now = Date.now();
+    const days = (n: number) => n * 24 * 60 * 60 * 1000;
+
+    const lastEventAt = items.length ? toMillis(items[0]?.createdAt) : null;
+    const within = (ms: number | null, windowMs: number) =>
+      typeof ms === "number" && ms >= now - windowMs;
+
+    const lateCount90d = items.filter((e) => within(toMillis(e.createdAt), days(90)) && e.type === "RENT_LATE").length;
+    const rentPaid90d = items.filter((e) => within(toMillis(e.createdAt), days(90)) && e.type === "RENT_PAID").length;
+    const notices12m = items.filter((e) => within(toMillis(e.createdAt), days(365)) && e.type === "NOTICE_SERVED").length;
+
+    let onTimeStreak = 0;
+    for (const e of items) {
+      if (e.type === "RENT_PAID") onTimeStreak += 1;
+      else if (e.type === "RENT_LATE" || e.type === "NOTICE_SERVED") break;
+    }
+
+    if (items.length === 0) {
+      return res.json({
+        ok: true,
+        tenantId,
+        lastEventAt: null,
+        scoreV1: 70,
+        tierV1: "watch",
+        reasons: ["No history yet — defaulted to baseline score"],
+        signals: { lateCount90d: 0, rentPaid90d: 0, notices12m: 0, onTimeStreak: 0 },
+      });
+    }
+
+    let score = 100;
+    const reasons: string[] = [];
+
+    const latePenalty = lateCount90d * 15;
+    if (latePenalty) reasons.push(`-${latePenalty} late payments in last 90 days (${lateCount90d}×15)`);
+    score -= latePenalty;
+
+    const noticePenalty = notices12m * 20;
+    if (noticePenalty) reasons.push(`-${noticePenalty} notices in last 12 months (${notices12m}×20)`);
+    score -= noticePenalty;
+
+    let bonus = 0;
+    if (onTimeStreak >= 6) bonus = 5;
+    else if (onTimeStreak >= 3) bonus = 2;
+    if (bonus) reasons.push(`+${bonus} on-time streak bonus (streak=${onTimeStreak})`);
+    score += bonus;
+
+    if (lastEventAt && lastEventAt < now - days(180)) {
+      score -= 8;
+      reasons.push("-8 stale activity (last event >180 days ago)");
+    }
+
+    score = Math.max(0, Math.min(100, Math.round(score)));
+
+    const tierV1 =
+      score >= 90 ? "excellent" : score >= 80 ? "good" : score >= 65 ? "watch" : "risk";
+
+    return res.json({
+      ok: true,
+      tenantId,
+      lastEventAt,
+      scoreV1: score,
+      tierV1,
+      reasons,
+      signals: { lateCount90d, rentPaid90d, notices12m, onTimeStreak },
+    });
+  } catch (err: any) {
+    console.error("[tenant-events GET /tenant-events/score] error", err);
+    return res.status(500).json({ ok: false, error: "Failed to compute score" });
   }
 });

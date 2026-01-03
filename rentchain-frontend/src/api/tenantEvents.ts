@@ -90,3 +90,24 @@ export async function getTenantSignals(tenantId: string) {
   qs.set("tenantId", tenantId);
   return apiFetch<TenantSignalsResponse>(`/api/tenant-events/signals?${qs.toString()}`);
 }
+
+export type TenantScoreResponse = {
+  ok: boolean;
+  tenantId: string;
+  lastEventAt: any;
+  scoreV1: number;
+  tierV1: "excellent" | "good" | "watch" | "risk";
+  reasons: string[];
+  signals: {
+    lateCount90d: number;
+    rentPaid90d: number;
+    notices12m: number;
+    onTimeStreak: number;
+  };
+};
+
+export async function getTenantScore(tenantId: string) {
+  const qs = new URLSearchParams();
+  qs.set("tenantId", tenantId);
+  return apiFetch<TenantScoreResponse>(`/api/tenant-events/score?${qs.toString()}`);
+}
