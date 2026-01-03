@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { Timestamp } from "firebase-admin/firestore";
 import { db, FieldValue } from "../config/firebase";
 import { requireAuth } from "../middleware/requireAuth";
 import { requireLandlord } from "../middleware/requireLandlord";
@@ -67,6 +68,25 @@ function clampMoneyCents(n: any): number | undefined {
   const i = Math.trunc(v);
   if (i < 0) return undefined;
   return Math.min(i, 50_000_000);
+}
+
+function parseLimit(raw: any, fallback = 50) {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.min(Math.max(n, 1), 200);
+}
+
+function parseCursor(raw: any): Timestamp | null {
+  if (!raw) return null;
+  const asNum = Number(raw);
+  if (Number.isFinite(asNum) && asNum > 0) return Timestamp.fromMillis(asNum);
+  const asDate = new Date(String(raw));
+  if (!isNaN(asDate.getTime())) return Timestamp.fromDate(asDate);
+  return null;
+}
+
+function getLandlordId(req: any) {
+  return req.user?.landlordId || req.user?.id || null;
 }
 
 /**
@@ -191,3 +211,73 @@ router.post("/tenant-events", requireAuth, requireLandlord, async (req: any, res
 });
 
 export default router;
+
+/**
+ * GET /api/tenant-events?tenantId=...&limit=...&cursor=...
+ * Landlord-scoped tenant timeline
+ */
+router.get("/tenant-events", requireAuth, requireLandlord, async (req: any, res) => {
+  res.setHeader("x-route-source", "tenantEventsWriteRoutes");
+  const landlordId = getLandlordId(req);
+  if (!landlordId) return res.status(401).json({ error: "Unauthorized" });
+
+  const tenantId = String(req.query?.tenantId || "").trim();
+  if (!tenantId) {
+    return res.status(400).json({ error: "tenantId is required" });
+  }
+
+  const limit = parseLimit(req.query?.limit, 50);
+  const cursorTs = parseCursor(req.query?.cursor);
+
+  try {
+    let q = db
+      .collection("tenantEvents")
+      .where("landlordId", "==", landlordId)
+      .where("tenantId", "==", tenantId)
+      .orderBy("createdAt", "desc")
+      .limit(limit);
+
+    if (cursorTs) {
+      q = q.startAfter(cursorTs) as any;
+    }
+
+    const snap = await q.get();
+    const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+    const nextCursor =
+      items.length > 0 && items[items.length - 1]?.createdAt?.toMillis
+        ? items[items.length - 1].createdAt.toMillis()
+        : null;
+
+    return res.json({ ok: true, items, nextCursor });
+  } catch (err: any) {
+    console.error("[tenant-events GET /tenant-events] error", err);
+    return res.status(500).json({ error: "Failed to load tenant events" });
+  }
+});
+
+/**
+ * GET /api/tenant-events/recent?limit=...
+ * Landlord-wide feed (dashboard)
+ */
+router.get("/tenant-events/recent", requireAuth, requireLandlord, async (req: any, res) => {
+  res.setHeader("x-route-source", "tenantEventsWriteRoutes");
+  const landlordId = getLandlordId(req);
+  if (!landlordId) return res.status(401).json({ error: "Unauthorized" });
+
+  const limit = parseLimit(req.query?.limit, 25);
+
+  try {
+    const snap = await db
+      .collection("tenantEvents")
+      .where("landlordId", "==", landlordId)
+      .orderBy("createdAt", "desc")
+      .limit(limit)
+      .get();
+
+    const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+    return res.json({ ok: true, items });
+  } catch (err: any) {
+    console.error("[tenant-events GET /tenant-events/recent] error", err);
+    return res.status(500).json({ error: "Failed to load recent tenant events" });
+  }
+});
