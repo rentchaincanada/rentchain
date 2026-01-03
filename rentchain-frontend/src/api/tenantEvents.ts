@@ -111,3 +111,26 @@ export async function getTenantScore(tenantId: string) {
   qs.set("tenantId", tenantId);
   return apiFetch<TenantScoreResponse>(`/api/tenant-events/score?${qs.toString()}`);
 }
+
+export type TenantSummary = {
+  landlordId: string;
+  tenantId: string;
+  lastEventAt: any;
+  signals: {
+    lateCount90d: number;
+    rentPaid90d: number;
+    notices12m: number;
+    onTimeStreak: number;
+    riskTier: "low" | "medium" | "high" | "neutral";
+  };
+  scoreV1: number;
+  tierV1: "excellent" | "good" | "watch" | "risk";
+  reasons: string[];
+  updatedAt: any;
+};
+
+export async function getTenantSummary(tenantId: string) {
+  const qs = new URLSearchParams();
+  qs.set("tenantId", tenantId);
+  return apiFetch<{ ok: boolean; item: TenantSummary; computed?: boolean }>(`/api/tenant-summaries?${qs.toString()}`);
+}

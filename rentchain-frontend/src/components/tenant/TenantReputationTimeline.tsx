@@ -1,10 +1,10 @@
 ﻿import React from "react";
 import {
   listTenantEvents,
-  getTenantSignals,
-  getTenantScore,
+  getTenantSummary,
   type TenantEvent,
 } from "../../api/tenantEvents";
+import { TenantScorePill } from "./TenantScorePill";
 
 function toMillis(ts: any): number | null {
   if (!ts) return null;
@@ -179,12 +179,8 @@ export function TenantReputationTimeline({ tenantId }: { tenantId: string }) {
   const [items, setItems] = React.useState<TenantEvent[]>([]);
   const [nextCursor, setNextCursor] = React.useState<any>(null);
 
-  const [signalsLoading, setSignalsLoading] = React.useState(false);
-  const [signalsError, setSignalsError] = React.useState<string | null>(null);
-  const [signals, setSignals] = React.useState<any>(null);
-
-  const [scoreLoading, setScoreLoading] = React.useState(false);
-  const [score, setScore] = React.useState<{ scoreV1: number; tierV1: string; reasons: string[] } | null>(null);
+  const [summaryLoading, setSummaryLoading] = React.useState(false);
+  const [summary, setSummary] = React.useState<any>(null);
 
   async function load(initial = false) {
     if (!tenantId) return;
@@ -209,42 +205,31 @@ export function TenantReputationTimeline({ tenantId }: { tenantId: string }) {
     }
   }
 
-  async function loadSignals() {
+  async function loadSummary() {
     if (!tenantId) return;
-    setSignalsLoading(true);
-    setSignalsError(null);
+    setSummaryLoading(true);
     try {
-      const resp = await getTenantSignals(tenantId);
-      setSignals(resp?.signals || null);
-    } catch (e: any) {
-      setSignalsError(e?.message || "Failed to load signals");
-      setSignals(null);
-    } finally {
-      setSignalsLoading(false);
-    }
-  }
-
-  async function loadScore() {
-    if (!tenantId) return;
-    setScoreLoading(true);
-    try {
-      const resp = await getTenantScore(tenantId);
-      setScore({ scoreV1: resp.scoreV1, tierV1: resp.tierV1, reasons: resp.reasons || [] });
+      const resp = await getTenantSummary(tenantId);
+      setSummary(resp?.item || null);
     } catch {
-      setScore(null);
+      setSummary(null);
     } finally {
-      setScoreLoading(false);
+      setSummaryLoading(false);
     }
   }
 
   React.useEffect(() => {
     load(true);
-    loadSignals();
-    loadScore();
+    loadSummary();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId]);
 
   const canLoadMore = !!nextCursor && !loading;
+  const score = typeof summary?.scoreV1 === "number" ? summary.scoreV1 : null;
+  const tier = summary?.tierV1 || null;
+  const sig = summary?.signals || null;
+  const lastUpdatedMs = toMillis(summary?.updatedAt);
+  const updatedLabel = lastUpdatedMs ? `Updated ${formatWhen(lastUpdatedMs)}` : "";
 
   return (
     <div
@@ -262,109 +247,61 @@ export function TenantReputationTimeline({ tenantId }: { tenantId: string }) {
         style={{
           display: "flex",
           justifyContent: "space-between",
-          alignItems: "center",
+          alignItems: "flex-start",
           gap: 12,
         }}
       >
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          <div style={{ fontWeight: 800, fontSize: 14 }}>Reputation Timeline</div>
-          <div style={{ fontSize: 12, opacity: 0.75 }}>Append-only tenant record • landlord-scoped</div>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button
-            type="button"
-            onClick={() => {
-              load(true);
-              loadSignals();
-              loadScore();
-            }}
-            disabled={loading || signalsLoading || scoreLoading}
-            style={{
-              padding: "8px 10px",
-              borderRadius: 12,
-              border: "1px solid #E5E7EB",
-              background: "#FFFFFF",
-              cursor: loading ? "default" : "pointer",
-              opacity: loading ? 0.65 : 1,
-              fontWeight: 700,
-            }}
-          >
-            Refresh
-          </button>
-        </div>
-      </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <div style={{ fontWeight: 900, fontSize: 14 }}>Reputation Timeline</div>
+          <div style={{ fontSize: 12, opacity: 0.75 }}>
+            Snapshot-backed • append-only record {updatedLabel ? `• ${updatedLabel}` : ""}
+          </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          {signalsLoading ? (
-            chip("Loading signals…")
-          ) : signalsError ? (
-            chip("Signals unavailable")
-          ) : signals ? (
-            <>
-              <span
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
-                  padding: "6px 10px",
-                  borderRadius: 999,
-                  border: "1px solid #E5E7EB",
-                  background: "#FFFFFF",
-                  fontSize: 12,
-                  fontWeight: 800,
-                  userSelect: "none",
-                  whiteSpace: "nowrap",
-                }}
-                title="Risk tier"
-              >
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 6, alignItems: "center" }}>
+            <TenantScorePill score={summaryLoading ? null : score} tier={summaryLoading ? null : tier} />
+
+            {summaryLoading ? chip("Loading summary…") : null}
+
+            {!summaryLoading && sig ? (
+              <>
                 <span
                   style={{
-                    width: 8,
-                    height: 8,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "6px 10px",
                     borderRadius: 999,
-                    background: tierDotColor(signals.riskTier),
+                    border: "1px solid #E5E7EB",
+                    background: "#FFFFFF",
+                    fontSize: 12,
+                    fontWeight: 800,
+                    userSelect: "none",
+                    whiteSpace: "nowrap",
                   }}
-                />
-                {tierLabel(signals.riskTier)}
-              </span>
-              {chip(`On-time streak: ${signals.onTimeStreak}`)}
-              {chip(`Late (90d): ${signals.lateCount90d}`)}
-              {chip(`Paid (90d): ${signals.rentPaid90d}`)}
-              {chip(`Notices (12m): ${signals.notices12m}`)}
-            </>
-          ) : null}
-        </div>
+                  title="Risk tier"
+                >
+                  <span
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: 999,
+                      background: tierDotColor(sig.riskTier),
+                    }}
+                  />
+                  {tierLabel(sig.riskTier)}
+                </span>
+                {chip(`On-time streak: ${sig.onTimeStreak}`)}
+                {chip(`Late (90d): ${sig.lateCount90d}`)}
+                {chip(`Paid (90d): ${sig.rentPaid90d}`)}
+                {chip(`Notices (12m): ${sig.notices12m}`)}
+              </>
+            ) : null}
+          </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <span
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 8,
-              padding: "6px 10px",
-              borderRadius: 999,
-              border: "1px solid #E5E7EB",
-              background: "#FFFFFF",
-              fontSize: 12,
-              fontWeight: 900,
-              whiteSpace: "nowrap",
-              userSelect: "none",
-            }}
-            title="Score v1 (transparent rules)"
-          >
-            <span style={{ opacity: 0.7 }}>Score</span>
-            <span style={{ fontSize: 14 }}>
-              {scoreLoading ? "…" : score?.scoreV1 ?? "—"}
-            </span>
-            <span style={{ opacity: 0.7 }}>
-              {scoreLoading ? "" : score?.tierV1 ? `(${score.tierV1})` : ""}
-            </span>
-          </span>
-
-          {score?.reasons?.length ? (
+          {!summaryLoading && summary?.reasons?.length ? (
             <div
               style={{
+                marginTop: 6,
                 padding: 10,
                 borderRadius: 14,
                 border: "1px solid #EEF2F7",
@@ -382,7 +319,7 @@ export function TenantReputationTimeline({ tenantId }: { tenantId: string }) {
                   gap: 4,
                 }}
               >
-                {score.reasons.slice(0, 5).map((r, idx) => (
+                {summary.reasons.slice(0, 5).map((r: string, idx: number) => (
                   <li key={idx} style={{ opacity: 0.9 }}>
                     {r}
                   </li>
@@ -391,8 +328,29 @@ export function TenantReputationTimeline({ tenantId }: { tenantId: string }) {
             </div>
           ) : null}
         </div>
-      </div>
 
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            type="button"
+            onClick={() => {
+              load(true);
+              loadSummary();
+            }}
+            disabled={loading || summaryLoading}
+            style={{
+              padding: "8px 10px",
+              borderRadius: 12,
+              border: "1px solid #E5E7EB",
+              background: "#FFFFFF",
+              cursor: loading || summaryLoading ? "default" : "pointer",
+              opacity: loading || summaryLoading ? 0.65 : 1,
+              fontWeight: 800,
+            }}
+          >
+            Refresh
+          </button>
+        </div>
+      </div>
       {error ? (
         <div
           style={{
@@ -538,3 +496,10 @@ export function TenantReputationTimeline({ tenantId }: { tenantId: string }) {
 }
 
 export default TenantReputationTimeline;
+
+
+
+
+
+
+
