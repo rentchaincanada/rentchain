@@ -155,12 +155,11 @@ function computeScoreV1(input: {
 
   if (!hasHistory) {
     const scoreV1 = 70;
-    const tierV1: TierV1 =
-      scoreV1 >= 90 ? "excellent" : scoreV1 >= 80 ? "good" : scoreV1 >= 65 ? "watch" : "risk";
+    const tierV1: TierV1 = scoreV1 >= 90 ? "excellent" : scoreV1 >= 80 ? "good" : scoreV1 >= 65 ? "watch" : "risk";
     return {
       scoreV1,
       tierV1,
-      reasons: ["No history yet â€” defaulted to baseline score"],
+      reasons: ["No history yet — defaulted to baseline score"],
     };
   }
 
@@ -168,11 +167,11 @@ function computeScoreV1(input: {
   const reasons: string[] = [];
 
   const latePenalty = signals.lateCount90d * 15;
-  if (latePenalty) reasons.push(`-${latePenalty} late payments in last 90 days (${signals.lateCount90d}Ã—15)`);
+  if (latePenalty) reasons.push(`-${latePenalty} late payments in last 90 days (${signals.lateCount90d}×15)`);
   score -= latePenalty;
 
   const noticePenalty = signals.notices12m * 20;
-  if (noticePenalty) reasons.push(`-${noticePenalty} notices in last 12 months (${signals.notices12m}Ã—20)`);
+  if (noticePenalty) reasons.push(`-${noticePenalty} notices in last 12 months (${signals.notices12m}×20)`);
   score -= noticePenalty;
 
   let bonus = 0;
@@ -487,3 +486,47 @@ router.get("/tenant-summaries", requireAuth, requireLandlord, async (req: any, r
 });
 
 export default router;
+
+
+
+
+
+/**
+ * POST /api/tenant-summaries/batch
+ * Landlord-scoped batch fetch of tenant summaries (no compute-on-miss)
+ */
+router.post("/tenant-summaries/batch", requireAuth, requireLandlord, async (req: any, res) => {
+  res.setHeader("x-route-source", "tenantEventsWriteRoutes");
+
+  const landlordId = getLandlordId(req);
+  if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+
+  const tenantIdsRaw = req.body?.tenantIds;
+  const tenantIds: string[] = Array.isArray(tenantIdsRaw)
+    ? tenantIdsRaw.map((x: any) => String(x || "").trim()).filter(Boolean)
+    : [];
+
+  if (tenantIds.length === 0) {
+    return res.status(400).json({ ok: false, error: "tenantIds must be a non-empty array" });
+  }
+  if (tenantIds.length > 100) {
+    return res.status(400).json({ ok: false, error: "tenantIds max 100" });
+  }
+
+  try {
+    const refs = tenantIds.map((tid) => db.collection("tenantSummaries").doc(`${landlordId}__${tid}`));
+    const snaps = await (db as any).getAll(...refs);
+
+    const itemsByTenantId: Record<string, any> = {};
+    for (let i = 0; i < tenantIds.length; i++) {
+      const tid = tenantIds[i];
+      const snap = snaps[i];
+      itemsByTenantId[tid] = snap?.exists ? { id: snap.id, ...(snap.data() as any) } : null;
+    }
+
+    return res.json({ ok: true, itemsByTenantId });
+  } catch (err: any) {
+    console.error("[tenant-summaries batch] error", err);
+    return res.status(500).json({ ok: false, error: "Failed to batch load tenant summaries" });
+  }
+});

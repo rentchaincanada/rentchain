@@ -9,6 +9,8 @@ import { fetchTenants } from "@/api/tenantsApi";
 import { spacing, radius, colors, text } from "../styles/tokens";
 import { Card, Section, Input } from "../components/ui/Ui";
 import { InviteTenantModal } from "../components/tenants/InviteTenantModal";
+import { TenantScorePill } from "../components/tenant/TenantScorePill";
+import { hydrateTenantSummariesBatch, getCachedTenantSummary } from "../lib/tenantSummaryCache";
 
 export const TenantsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -92,8 +94,17 @@ export const TenantsPage: React.FC = () => {
     });
   }, [tenants, searchQuery]);
 
+  const visibleTenantIds = useMemo(
+    () => (filteredTenants || []).slice(0, 50).map((t) => t.id).filter(Boolean),
+    [filteredTenants]
+  );
+
+  useEffect(() => {
+    void hydrateTenantSummariesBatch(visibleTenantIds);
+  }, [visibleTenantIds]);
+
   return (
-    <MacShell title="RentChain · Tenants">
+    <MacShell title="RentChain - Tenants">
       <div
         className="page-content"
         style={{ display: "flex", flexDirection: "column", gap: spacing.lg }}
@@ -135,14 +146,14 @@ export const TenantsPage: React.FC = () => {
           <div style={{ display: "flex", flexDirection: "column", gap: spacing.sm, minHeight: 0 }}>
             <Input
               type="text"
-              placeholder="Search by name, property, unit…"
+              placeholder="Search by name, property, unit"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{ borderRadius: radius.pill }}
             />
 
             {loading ? (
-              <div style={{ fontSize: 13, color: text.muted }}>Loading tenants…</div>
+              <div style={{ fontSize: 13, color: text.muted }}>Loading tenants�</div>
             ) : error ? (
               <div style={{ fontSize: 13, color: colors.danger }}>{error}</div>
             ) : filteredTenants.length === 0 ? (
@@ -159,6 +170,7 @@ export const TenantsPage: React.FC = () => {
               >
                 {filteredTenants.map((tenant: any) => {
                   const isSelected = tenant.id === selectedTenantId;
+                  const summary = getCachedTenantSummary(tenant.id);
                   return (
                     <button
                       key={tenant.id}
@@ -168,19 +180,15 @@ export const TenantsPage: React.FC = () => {
                         width: "100%",
                         textAlign: "left",
                         border: "1px solid",
-                        borderColor: isSelected
-                          ? colors.accent
-                          : colors.border,
-                        background: isSelected
-                          ? "rgba(96,165,250,0.08)"
-                          : colors.card,
+                        borderColor: isSelected ? colors.accent : colors.border,
+                        background: isSelected ? "rgba(96,165,250,0.08)" : colors.card,
                         borderRadius: radius.md,
                         padding: "10px 12px",
                         color: text.primary,
                         cursor: "pointer",
                         display: "flex",
                         flexDirection: "column",
-                        gap: 2,
+                        gap: 6,
                         transition: "background 120ms ease, border-color 120ms ease",
                       }}
                       onMouseEnter={(e) => {
@@ -196,10 +204,15 @@ export const TenantsPage: React.FC = () => {
                         {tenant.name || tenant.fullName || "Unnamed tenant"}
                       </span>
                       <span style={{ fontSize: 11, color: text.muted }}>
-                        {(tenant.propertyName || tenant.propertyId || "Property") +
-                          " · " +
-                          (tenant.unitLabel || tenant.unit || "")}
+                        {(tenant.propertyName || tenant.propertyId || "Property") + " - " + (tenant.unitLabel || tenant.unit || "") }
                       </span>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <TenantScorePill
+                          compact
+                          score={summary?.scoreV1 ?? null}
+                          tier={summary?.tierV1 ?? null}
+                        />
+                      </div>
                     </button>
                   );
                 })}
@@ -233,7 +246,7 @@ export const TenantsPage: React.FC = () => {
                 >
                   <div style={{ fontWeight: 600 }}>Tenant not found.</div>
                   <div style={{ color: text.muted }}>
-                    The tenant you’re looking for could not be loaded.
+                    The tenant you're looking for could not be loaded.
                   </div>
                   <div style={{ display: "flex", gap: 8 }}>
                     <button
@@ -277,13 +290,23 @@ export const TenantsPage: React.FC = () => {
               <TenantLeasePanel tenantId={tenantExists ? selectedTenantId : null} />
             </Section>
 
-          <Section>
-            <TenantPaymentsPanel tenantId={tenantExists ? selectedTenantId : null} />
-          </Section>
-        </div>
-      </Card>
-    </div>
-    <InviteTenantModal open={inviteOpen} onClose={() => setInviteOpen(false)} />
-  </MacShell>
-);
+            <Section>
+              <TenantPaymentsPanel tenantId={tenantExists ? selectedTenantId : null} />
+            </Section>
+          </div>
+        </Card>
+      </div>
+      <InviteTenantModal open={inviteOpen} onClose={() => setInviteOpen(false)} />
+    </MacShell>
+  );
 };
+
+
+
+
+
+
+
+
+
+

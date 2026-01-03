@@ -1,6 +1,8 @@
-import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 import { listRecentTenantEvents, type TenantEvent } from "../../api/tenantEvents";
-import { colors, text, radius } from "../../styles/tokens";
+import { hydrateTenantSummariesBatch, getCachedTenantSummary } from "../../lib/tenantSummaryCache";
+import { TenantScorePill } from "../tenant/TenantScorePill";
+import { colors, text } from "../../styles/tokens";
 
 function toMillis(ts: any): number | null {
   if (!ts) return null;
@@ -22,6 +24,12 @@ export const DashboardActivityPanel: React.FC = () => {
       setError(null);
       const data = await listRecentTenantEvents(25);
       setEvents(data?.items || []);
+      const ids = (data?.items || [])
+        .map((e: any) => e?.tenantId)
+        .filter(Boolean);
+      if (ids.length) {
+        void hydrateTenantSummariesBatch(ids);
+      }
     } catch (err: any) {
       console.error("[DashboardActivityPanel] Failed to load events", err);
       setError(err?.message || "Failed to load recent activity");
@@ -102,6 +110,7 @@ export const DashboardActivityPanel: React.FC = () => {
         >
           {events.map((evt) => {
             const key = evt.id || `${evt.type}-${evt.tenantId}-${evt.occurredAt}`;
+            const summary = evt.tenantId ? getCachedTenantSummary(evt.tenantId) : null;
             return (
               <div
                 key={key}
@@ -125,8 +134,17 @@ export const DashboardActivityPanel: React.FC = () => {
                   ) : null}
                   <div style={{ fontSize: 11, color: text.muted }}>{evt.type}</div>
                 </div>
-                <div style={{ fontSize: 11, color: text.muted, whiteSpace: "nowrap" }}>
-                  {formatTimestamp(evt.createdAt)}
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                  <div style={{ fontSize: 11, color: text.muted, whiteSpace: "nowrap" }}>
+                    {formatTimestamp(evt.createdAt)}
+                  </div>
+                  {evt.tenantId ? (
+                    <TenantScorePill
+                      compact
+                      score={summary?.scoreV1 ?? null}
+                      tier={summary?.tierV1 ?? null}
+                    />
+                  ) : null}
                 </div>
               </div>
             );
