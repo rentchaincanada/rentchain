@@ -1,5 +1,9 @@
-﻿import React from "react";
-import { listTenantEvents, type TenantEvent } from "../../api/tenantEvents";
+import React from "react";
+import {
+  listTenantEvents,
+  getTenantSignals,
+  type TenantEvent,
+} from "../../api/tenantEvents";
 
 function toMillis(ts: any): number | null {
   if (!ts) return null;
@@ -154,11 +158,29 @@ function skeletonRow(key: string) {
   );
 }
 
+function tierLabel(tier: string) {
+  if (tier === "low") return "Low risk";
+  if (tier === "medium") return "Medium risk";
+  if (tier === "high") return "High risk";
+  return "Neutral";
+}
+
+function tierDotColor(tier: string) {
+  if (tier === "low") return "#16A34A";
+  if (tier === "medium") return "#F59E0B";
+  if (tier === "high") return "#DC2626";
+  return "#6B7280";
+}
+
 export function TenantReputationTimeline({ tenantId }: { tenantId: string }) {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [items, setItems] = React.useState<TenantEvent[]>([]);
   const [nextCursor, setNextCursor] = React.useState<any>(null);
+
+  const [signalsLoading, setSignalsLoading] = React.useState(false);
+  const [signalsError, setSignalsError] = React.useState<string | null>(null);
+  const [signals, setSignals] = React.useState<any>(null);
 
   async function load(initial = false) {
     if (!tenantId) return;
@@ -183,8 +205,24 @@ export function TenantReputationTimeline({ tenantId }: { tenantId: string }) {
     }
   }
 
+  async function loadSignals() {
+    if (!tenantId) return;
+    setSignalsLoading(true);
+    setSignalsError(null);
+    try {
+      const resp = await getTenantSignals(tenantId);
+      setSignals(resp?.signals || null);
+    } catch (e: any) {
+      setSignalsError(e?.message || "Failed to load signals");
+      setSignals(null);
+    } finally {
+      setSignalsLoading(false);
+    }
+  }
+
   React.useEffect(() => {
     load(true);
+    loadSignals();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId]);
 
@@ -212,15 +250,16 @@ export function TenantReputationTimeline({ tenantId }: { tenantId: string }) {
       >
         <div style={{ display: "flex", flexDirection: "column" }}>
           <div style={{ fontWeight: 800, fontSize: 14 }}>Reputation Timeline</div>
-          <div style={{ fontSize: 12, opacity: 0.75 }}>
-            Append-only tenant record • landlord-scoped
-          </div>
+          <div style={{ fontSize: 12, opacity: 0.75 }}>Append-only tenant record • landlord-scoped</div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button
             type="button"
-            onClick={() => load(true)}
-            disabled={loading}
+            onClick={() => {
+              load(true);
+              loadSignals();
+            }}
+            disabled={loading || signalsLoading}
             style={{
               padding: "8px 10px",
               borderRadius: 12,
@@ -234,6 +273,47 @@ export function TenantReputationTimeline({ tenantId }: { tenantId: string }) {
             Refresh
           </button>
         </div>
+      </div>
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        {signalsLoading ? (
+          chip("Loading signals…")
+        ) : signalsError ? (
+          chip("Signals unavailable")
+        ) : signals ? (
+          <>
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "6px 10px",
+                borderRadius: 999,
+                border: "1px solid #E5E7EB",
+                background: "#FFFFFF",
+                fontSize: 12,
+                fontWeight: 800,
+                userSelect: "none",
+                whiteSpace: "nowrap",
+              }}
+              title="Risk tier"
+            >
+              <span
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: 999,
+                  background: tierDotColor(signals.riskTier),
+                }}
+              />
+              {tierLabel(signals.riskTier)}
+            </span>
+            {chip(`On-time streak: ${signals.onTimeStreak}`)}
+            {chip(`Late (90d): ${signals.lateCount90d}`)}
+            {chip(`Paid (90d): ${signals.rentPaid90d}`)}
+            {chip(`Notices (12m): ${signals.notices12m}`)}
+          </>
+        ) : null}
       </div>
 
       {error ? (
@@ -330,7 +410,9 @@ export function TenantReputationTimeline({ tenantId }: { tenantId: string }) {
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
                   <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                     <div style={{ fontWeight: 900, fontSize: 13 }}>{title}</div>
-                    {ev.description ? <div style={{ opacity: 0.85, fontSize: 13 }}>{ev.description}</div> : null}
+                    {ev.description ? (
+                      <div style={{ opacity: 0.85, fontSize: 13 }}>{ev.description}</div>
+                    ) : null}
                   </div>
 
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
@@ -350,7 +432,9 @@ export function TenantReputationTimeline({ tenantId }: { tenantId: string }) {
       </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-        <div style={{ fontSize: 12, opacity: 0.7 }}>Showing {items.length} event{items.length === 1 ? "" : "s"}</div>
+        <div style={{ fontSize: 12, opacity: 0.7 }}>
+          Showing {items.length} event{items.length === 1 ? "" : "s"}
+        </div>
         {canLoadMore ? (
           <button
             type="button"
@@ -377,7 +461,3 @@ export function TenantReputationTimeline({ tenantId }: { tenantId: string }) {
 }
 
 export default TenantReputationTimeline;
-
-
-
-

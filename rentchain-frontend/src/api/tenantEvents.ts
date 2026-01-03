@@ -71,3 +71,22 @@ export async function getMyTenantEvents(limit = 50) {
 
   return (await res.json()) as { ok: boolean; items: TenantEvent[] };
 }
+
+export type TenantSignalsResponse = {
+  ok: boolean;
+  tenantId: string;
+  lastEventAt: any;
+  signals: {
+    lateCount90d: number;
+    rentPaid90d: number;
+    notices12m: number;
+    onTimeStreak: number;
+    riskTier: "low" | "medium" | "high" | "neutral";
+  };
+};
+
+export async function getTenantSignals(tenantId: string) {
+  const qs = new URLSearchParams();
+  qs.set("tenantId", tenantId);
+  return apiFetch<TenantSignalsResponse>(`/api/tenant-events/signals?${qs.toString()}`);
+}
