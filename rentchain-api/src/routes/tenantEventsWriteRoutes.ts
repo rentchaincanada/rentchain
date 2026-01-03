@@ -14,6 +14,8 @@ type EventType =
   | "LEASE_ENDED";
 
 type Severity = "positive" | "neutral" | "negative";
+type RiskTier = "low" | "medium" | "high" | "neutral";
+type TierV1 = "excellent" | "good" | "watch" | "risk";
 
 const ALLOWED_TYPES: EventType[] = [
   "LEASE_STARTED",
@@ -32,7 +34,6 @@ function inferSeverity(type: EventType): Severity {
     case "NOTICE_SERVED":
       return "negative";
     case "LEASE_ENDED":
-      return "neutral";
     default:
       return "neutral";
   }
@@ -97,22 +98,140 @@ function toMillis(ts: any): number | null {
   return null;
 }
 
+function computeSignalsFromEvents(items: any[]) {
+  const now = Date.now();
+  const days = (n: number) => n * 24 * 60 * 60 * 1000;
+  const isWithin = (ms: number | null, windowMs: number) =>
+    typeof ms === "number" && ms >= now - windowMs;
+
+  const lastEventAt = items.length ? toMillis(items[0]?.createdAt) : null;
+
+  const lateCount90d = items.filter((e) => {
+    const ms = toMillis(e.createdAt);
+    return e.type === "RENT_LATE" && isWithin(ms, days(90));
+  }).length;
+
+  const rentPaid90d = items.filter((e) => {
+    const ms = toMillis(e.createdAt);
+    return e.type === "RENT_PAID" && isWithin(ms, days(90));
+  }).length;
+
+  const notices12m = items.filter((e) => {
+    const ms = toMillis(e.createdAt);
+    return e.type === "NOTICE_SERVED" && isWithin(ms, days(365));
+  }).length;
+
+  let onTimeStreak = 0;
+  for (const e of items) {
+    if (e.type === "RENT_PAID") onTimeStreak += 1;
+    else if (e.type === "RENT_LATE" || e.type === "NOTICE_SERVED") break;
+  }
+
+  const riskTier: RiskTier =
+    notices12m >= 2
+      ? "high"
+      : lateCount90d >= 2
+      ? "high"
+      : lateCount90d === 1
+      ? "medium"
+      : rentPaid90d >= 2
+      ? "low"
+      : "neutral";
+
+  return {
+    lastEventAt,
+    signals: { lateCount90d, rentPaid90d, notices12m, onTimeStreak, riskTier },
+  };
+}
+
+function computeScoreV1(input: {
+  lastEventAt: number | null;
+  signals: { lateCount90d: number; rentPaid90d: number; notices12m: number; onTimeStreak: number; riskTier: RiskTier };
+  hasHistory: boolean;
+}) {
+  const { lastEventAt, signals, hasHistory } = input;
+  const now = Date.now();
+  const days = (n: number) => n * 24 * 60 * 60 * 1000;
+
+  if (!hasHistory) {
+    const scoreV1 = 70;
+    const tierV1: TierV1 =
+      scoreV1 >= 90 ? "excellent" : scoreV1 >= 80 ? "good" : scoreV1 >= 65 ? "watch" : "risk";
+    return {
+      scoreV1,
+      tierV1,
+      reasons: ["No history yet — defaulted to baseline score"],
+    };
+  }
+
+  let score = 100;
+  const reasons: string[] = [];
+
+  const latePenalty = signals.lateCount90d * 15;
+  if (latePenalty) reasons.push(`-${latePenalty} late payments in last 90 days (${signals.lateCount90d}×15)`);
+  score -= latePenalty;
+
+  const noticePenalty = signals.notices12m * 20;
+  if (noticePenalty) reasons.push(`-${noticePenalty} notices in last 12 months (${signals.notices12m}×20)`);
+  score -= noticePenalty;
+
+  let bonus = 0;
+  if (signals.onTimeStreak >= 6) bonus = 5;
+  else if (signals.onTimeStreak >= 3) bonus = 2;
+  if (bonus) reasons.push(`+${bonus} on-time streak bonus (streak=${signals.onTimeStreak})`);
+  score += bonus;
+
+  if (lastEventAt && lastEventAt < now - days(180)) {
+    score -= 8;
+    reasons.push("-8 stale activity (last event >180 days ago)");
+  }
+
+  score = Math.max(0, Math.min(100, Math.round(score)));
+
+  const tierV1: TierV1 = score >= 90 ? "excellent" : score >= 80 ? "good" : score >= 65 ? "watch" : "risk";
+
+  return { scoreV1: score, tierV1, reasons };
+}
+
+async function recomputeTenantSnapshot(params: { landlordId: string; tenantId: string }) {
+  const { landlordId, tenantId } = params;
+
+  const snap = await db
+    .collection("tenantEvents")
+    .where("landlordId", "==", landlordId)
+    .where("tenantId", "==", tenantId)
+    .orderBy("createdAt", "desc")
+    .limit(300)
+    .get();
+
+  const items = snap.docs.map((d: any) => ({ id: d.id, ...(d.data() as any) }));
+
+  const { lastEventAt, signals } = computeSignalsFromEvents(items);
+  const { scoreV1, tierV1, reasons } = computeScoreV1({
+    lastEventAt,
+    signals,
+    hasHistory: items.length > 0,
+  });
+
+  const docId = `${landlordId}__${tenantId}`;
+  const payload = {
+    landlordId,
+    tenantId,
+    lastEventAt: lastEventAt || null,
+    signals,
+    scoreV1,
+    tierV1,
+    reasons,
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+
+  await db.collection("tenantSummaries").doc(docId).set(payload, { merge: true });
+
+  return payload;
+}
+
 /**
  * POST /api/tenant-events
- * Body:
- * {
- *   tenantId: string,
- *   type: EventType,
- *   occurredAt?: string|number (optional; defaults to now),
- *   title?: string,
- *   description?: string,
- *   propertyId?: string,
- *   unitId?: string,
- *   amountCents?: number,
- *   currency?: string,
- *   daysLate?: number,
- *   noticeType?: string
- * }
  */
 router.post("/tenant-events", requireAuth, requireLandlord, async (req: any, res) => {
   res.setHeader("x-route-source", "tenantEventsWriteRoutes");
@@ -134,7 +253,6 @@ router.post("/tenant-events", requireAuth, requireLandlord, async (req: any, res
     });
   }
 
-  // Ensure tenant belongs to landlord
   const tSnap = await db.collection("tenants").doc(tenantId).get();
   if (!tSnap.exists) return res.status(404).json({ ok: false, error: "Tenant not found" });
   const tenant = tSnap.data() as any;
@@ -142,7 +260,6 @@ router.post("/tenant-events", requireAuth, requireLandlord, async (req: any, res
     return res.status(403).json({ ok: false, error: "Forbidden" });
   }
 
-  // occurredAt default now
   let occurredAtDate = new Date();
   const rawOccurredAt = req.body?.occurredAt;
   if (rawOccurredAt != null && rawOccurredAt !== "") {
@@ -205,11 +322,16 @@ router.post("/tenant-events", requireAuth, requireLandlord, async (req: any, res
     daysLate,
     noticeType,
 
-    // anchoring placeholders
     anchorStatus: "none",
   };
 
   const ref = await db.collection("tenantEvents").add(doc);
+
+  try {
+    await recomputeTenantSnapshot({ landlordId, tenantId });
+  } catch (err) {
+    console.warn("[tenant-events] failed to recompute tenant summary", err);
+  }
 
   return res.json({
     ok: true,
@@ -217,8 +339,6 @@ router.post("/tenant-events", requireAuth, requireLandlord, async (req: any, res
     item: { id: ref.id, ...doc, createdAt: undefined },
   });
 });
-
-export default router;
 
 /**
  * GET /api/tenant-events?tenantId=...&limit=...&cursor=...
@@ -314,73 +434,56 @@ router.get("/tenant-events/score", requireAuth, requireLandlord, async (req: any
 
     const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
 
-    const now = Date.now();
-    const days = (n: number) => n * 24 * 60 * 60 * 1000;
-
-    const lastEventAt = items.length ? toMillis(items[0]?.createdAt) : null;
-    const within = (ms: number | null, windowMs: number) =>
-      typeof ms === "number" && ms >= now - windowMs;
-
-    const lateCount90d = items.filter((e) => within(toMillis(e.createdAt), days(90)) && e.type === "RENT_LATE").length;
-    const rentPaid90d = items.filter((e) => within(toMillis(e.createdAt), days(90)) && e.type === "RENT_PAID").length;
-    const notices12m = items.filter((e) => within(toMillis(e.createdAt), days(365)) && e.type === "NOTICE_SERVED").length;
-
-    let onTimeStreak = 0;
-    for (const e of items) {
-      if (e.type === "RENT_PAID") onTimeStreak += 1;
-      else if (e.type === "RENT_LATE" || e.type === "NOTICE_SERVED") break;
-    }
-
-    if (items.length === 0) {
-      return res.json({
-        ok: true,
-        tenantId,
-        lastEventAt: null,
-        scoreV1: 70,
-        tierV1: "watch",
-        reasons: ["No history yet — defaulted to baseline score"],
-        signals: { lateCount90d: 0, rentPaid90d: 0, notices12m: 0, onTimeStreak: 0 },
-      });
-    }
-
-    let score = 100;
-    const reasons: string[] = [];
-
-    const latePenalty = lateCount90d * 15;
-    if (latePenalty) reasons.push(`-${latePenalty} late payments in last 90 days (${lateCount90d}×15)`);
-    score -= latePenalty;
-
-    const noticePenalty = notices12m * 20;
-    if (noticePenalty) reasons.push(`-${noticePenalty} notices in last 12 months (${notices12m}×20)`);
-    score -= noticePenalty;
-
-    let bonus = 0;
-    if (onTimeStreak >= 6) bonus = 5;
-    else if (onTimeStreak >= 3) bonus = 2;
-    if (bonus) reasons.push(`+${bonus} on-time streak bonus (streak=${onTimeStreak})`);
-    score += bonus;
-
-    if (lastEventAt && lastEventAt < now - days(180)) {
-      score -= 8;
-      reasons.push("-8 stale activity (last event >180 days ago)");
-    }
-
-    score = Math.max(0, Math.min(100, Math.round(score)));
-
-    const tierV1 =
-      score >= 90 ? "excellent" : score >= 80 ? "good" : score >= 65 ? "watch" : "risk";
+    const { lastEventAt, signals } = computeSignalsFromEvents(items);
+    const { scoreV1, tierV1, reasons } = computeScoreV1({
+      lastEventAt,
+      signals,
+      hasHistory: items.length > 0,
+    });
 
     return res.json({
       ok: true,
       tenantId,
       lastEventAt,
-      scoreV1: score,
+      scoreV1,
       tierV1,
       reasons,
-      signals: { lateCount90d, rentPaid90d, notices12m, onTimeStreak },
+      signals,
     });
   } catch (err: any) {
     console.error("[tenant-events GET /tenant-events/score] error", err);
     return res.status(500).json({ ok: false, error: "Failed to compute score" });
   }
 });
+
+/**
+ * GET /api/tenant-summaries?tenantId=...
+ * Landlord-scoped snapshot fetch
+ */
+router.get("/tenant-summaries", requireAuth, requireLandlord, async (req: any, res) => {
+  res.setHeader("x-route-source", "tenantEventsWriteRoutes");
+
+  const landlordId = getLandlordId(req);
+  if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+
+  const tenantId = String(req.query?.tenantId || "").trim();
+  if (!tenantId) return res.status(400).json({ ok: false, error: "Missing tenantId" });
+
+  try {
+    const docId = `${landlordId}__${tenantId}`;
+    const ref = db.collection("tenantSummaries").doc(docId);
+    const snap = await ref.get();
+
+    if (!snap.exists) {
+      const computed = await recomputeTenantSnapshot({ landlordId, tenantId });
+      return res.json({ ok: true, item: computed, computed: true });
+    }
+
+    return res.json({ ok: true, item: { id: snap.id, ...(snap.data() as any) } });
+  } catch (err: any) {
+    console.error("[tenant-summaries GET] error", err);
+    return res.status(500).json({ ok: false, error: "Failed to load tenant summary" });
+  }
+});
+
+export default router;
