@@ -165,7 +165,7 @@ export default function TenantDashboardPageV2() {
         )}
       </Card>
 
-      <TenantReputationTimeline />
+      <TenantReputationTimeline tenantId={me?.id || ""} />
 
       <div style={{ fontSize: 13, opacity: 0.7 }}>
         Need help? <Link to="mailto:hello@rentchain.ai">Contact support</Link>
