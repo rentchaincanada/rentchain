@@ -30,7 +30,6 @@ export async function createTenantEvent(input: CreateTenantEventInput) {
   return apiFetch("/api/tenant-events", {
     method: "POST",
     token,
-    body: input,
+    body: JSON.stringify(input),
   });
 }
-

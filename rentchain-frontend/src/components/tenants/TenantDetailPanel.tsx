@@ -254,19 +254,19 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
                 type="button"
                 onClick={() => setRecordOpen(true)}
                 style={{
-                  borderRadius: radius.pill,
-                  border: `1px solid ${colors.border}`,
-                  padding: "6px 10px",
-                  background: colors.primary,
-                  color: "white",
-                  fontSize: 12,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  cursor: "pointer",
-                  boxShadow: shadows.sm,
-                }}
-              >
+                borderRadius: radius.pill,
+                border: `1px solid ${colors.border}`,
+                padding: "6px 10px",
+                background: colors.accent,
+                color: "white",
+                fontSize: 12,
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                cursor: "pointer",
+                boxShadow: shadows.sm,
+              }}
+            >
                 <span role="img" aria-label="plus">
                   ＋
                 </span>
@@ -386,7 +386,6 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
         </div>
         <LedgerTimeline
           items={ledgerItems || []}
-          loading={false}
           onSelect={(id) => setSelectedLedgerId(id)}
           emptyText="No ledger events yet for this tenant."
         />

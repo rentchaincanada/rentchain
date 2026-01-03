@@ -375,7 +375,7 @@ export const RecordTenantEventModal: React.FC<Props> = ({
               style={{
                 borderRadius: radius.pill,
                 border: `1px solid ${colors.border}`,
-                background: colors.primary,
+                background: colors.accent,
                 color: "white",
                 padding: "8px 14px",
                 cursor: "pointer",
@@ -391,4 +391,3 @@ export const RecordTenantEventModal: React.FC<Props> = ({
     </div>
   );
 };
-
