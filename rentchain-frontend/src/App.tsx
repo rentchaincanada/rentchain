@@ -28,6 +28,7 @@ import TenantInviteAcceptPage from "./pages/tenant/TenantInviteAcceptPage";
 import { MobileTabBar } from "./components/layout/MobileTabBar";
 import TenantPortalComingSoon from "./pages/tenant/TenantPortalComingSoon";
 import TenantDashboardPageV2 from "./pages/tenant/TenantDashboardPage.v2";
+import MonthlyOpsReportPage from "./pages/reports/MonthlyOpsReportPage";
 
 const TENANT_PORTAL_ENABLED = import.meta.env.VITE_TENANT_PORTAL_ENABLED === "true";
 
@@ -68,6 +69,14 @@ function App() {
           element={
             <RequireAuth>
               <DashboardPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/reports/monthly-ops"
+          element={
+            <RequireAuth>
+              <MonthlyOpsReportPage />
             </RequireAuth>
           }
         />
