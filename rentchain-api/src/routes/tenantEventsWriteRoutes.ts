@@ -159,7 +159,7 @@ function computeScoreV1(input: {
     return {
       scoreV1,
       tierV1,
-      reasons: ["No history yet — defaulted to baseline score"],
+      reasons: ["No history yet ï¿½ defaulted to baseline score"],
     };
   }
 
@@ -167,11 +167,11 @@ function computeScoreV1(input: {
   const reasons: string[] = [];
 
   const latePenalty = signals.lateCount90d * 15;
-  if (latePenalty) reasons.push(`-${latePenalty} late payments in last 90 days (${signals.lateCount90d}×15)`);
+  if (latePenalty) reasons.push(`-${latePenalty} late payments in last 90 days (${signals.lateCount90d}ï¿½15)`);
   score -= latePenalty;
 
   const noticePenalty = signals.notices12m * 20;
-  if (noticePenalty) reasons.push(`-${noticePenalty} notices in last 12 months (${signals.notices12m}×20)`);
+  if (noticePenalty) reasons.push(`-${noticePenalty} notices in last 12 months (${signals.notices12m}ï¿½20)`);
   score -= noticePenalty;
 
   let bonus = 0;
@@ -455,6 +455,116 @@ router.get("/tenant-events/score", requireAuth, requireLandlord, async (req: any
   }
 });
 
+/**
+ * MISSION 7.1 â€” Monthly Ops Snapshot (landlord-scoped)
+ *
+ * GET /api/ops/monthly-snapshot?windowDays=30&topN=5
+ *
+ * Reads from tenantSummaries for speed.
+ */
+router.get("/ops/monthly-snapshot", requireAuth, requireLandlord, async (req: any, res) => {
+  res.setHeader("x-route-source", "tenantEventsWriteRoutes");
+
+  const landlordId = getLandlordId(req);
+  if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+
+  const clampInt = (n: any, min: number, max: number, fallback: number) => {
+    const v = Number(n);
+    if (!Number.isFinite(v)) return fallback;
+    return Math.min(max, Math.max(min, Math.floor(v)));
+  };
+
+  const windowDays = clampInt(req.query?.windowDays, 7, 365, 30);
+  const topN = clampInt(req.query?.topN, 3, 25, 5);
+  const now = Date.now();
+  const cutoffMs = now - windowDays * 24 * 60 * 60 * 1000;
+
+  const toMillisLocal = (ts: any): number | null => {
+    if (!ts) return null;
+    if (typeof ts === "number") return ts;
+    if (typeof ts?.toMillis === "function") return ts.toMillis();
+    if (typeof ts?.seconds === "number") return ts.seconds * 1000;
+    return null;
+  };
+
+  try {
+    const snap = await db
+      .collection("tenantSummaries")
+      .where("landlordId", "==", landlordId)
+      .limit(2000)
+      .get();
+
+    const items = snap.docs.map((d: any) => ({ id: d.id, ...(d.data() as any) })) as any[];
+
+    const active = items.filter((s) => {
+      const last = toMillisLocal(s.lastEventAt);
+      return typeof last === "number" && last >= cutoffMs;
+    });
+
+    const population = active.length ? active : items;
+
+    let sumScore = 0;
+    let withScore = 0;
+
+    const tierCounts: any = { excellent: 0, good: 0, watch: 0, risk: 0 };
+
+    let totalLate90d = 0;
+    let totalNotices12m = 0;
+    let totalPaid90d = 0;
+
+    for (const s of population) {
+      const score = typeof s.scoreV1 === "number" ? s.scoreV1 : null;
+      if (score !== null) {
+        sumScore += score;
+        withScore += 1;
+      }
+      const tier = s.tierV1;
+      if (tier && tierCounts[tier] !== undefined) tierCounts[tier] += 1;
+
+      const sig = s.signals || {};
+      if (typeof sig.lateCount90d === "number") totalLate90d += sig.lateCount90d;
+      if (typeof sig.notices12m === "number") totalNotices12m += sig.notices12m;
+      if (typeof sig.rentPaid90d === "number") totalPaid90d += sig.rentPaid90d;
+    }
+
+    const avgScore = withScore ? Math.round((sumScore / withScore) * 10) / 10 : null;
+
+    const topRisk = population
+      .filter((s) => typeof s.scoreV1 === "number")
+      .sort((a, b) => (a.scoreV1 as number) - (b.scoreV1 as number))
+      .slice(0, topN)
+      .map((s) => ({
+        tenantId: s.tenantId,
+        scoreV1: s.scoreV1,
+        tierV1: s.tierV1,
+        lastEventAt: s.lastEventAt || null,
+        signals: s.signals || null,
+      }));
+
+    const totalTenants = population.length;
+    const atRiskCount = (tierCounts.watch || 0) + (tierCounts.risk || 0);
+
+    return res.json({
+      ok: true,
+      windowDays,
+      usingActiveWindow: active.length > 0,
+      totals: {
+        totalTenants,
+        avgScore,
+        atRiskCount,
+        tierCounts,
+        totalLate90d,
+        totalPaid90d,
+        totalNotices12m,
+      },
+      topRisk,
+      generatedAt: now,
+    });
+  } catch (err: any) {
+    console.error("[ops monthly snapshot] error:", err);
+    return res.status(500).json({ ok: false, error: "Failed to build monthly snapshot" });
+  }
+});
 /**
  * GET /api/tenant-summaries?tenantId=...
  * Landlord-scoped snapshot fetch

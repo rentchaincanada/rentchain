@@ -31,6 +31,7 @@ import { BoardSnapshotButton } from "../components/dashboard/BoardSnapshotButton
 import { BoardSnapshotDrawer } from "../components/dashboard/BoardSnapshotDrawer";
 import { fetchMonthlySnapshot } from "../api/reporting";
 import { apiFetch } from "../api/http";
+import MonthlyOpsSnapshotPanel from "../components/dashboard/MonthlyOpsSnapshotPanel";
 
 function fmtDate(d: Date) {
   try {
@@ -584,6 +585,9 @@ const DashboardPage: React.FC = () => {
               minWidth: 0,
             }}
           >
+            <Section>
+              <MonthlyOpsSnapshotPanel />
+            </Section>
             <Section>
               <DashboardAlertsPanel />
             </Section>
