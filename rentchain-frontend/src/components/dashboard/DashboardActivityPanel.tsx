@@ -1,63 +1,45 @@
-// @ts-nocheck
 import React, { useEffect, useState } from "react";
-import type { AuditEvent } from "../../types/events";
-import { fetchRecentEvents } from "../../api/eventsApi";
+import { listRecentTenantEvents, type TenantEvent } from "../../api/tenantEvents";
+import { colors, text, radius } from "../../styles/tokens";
+
+function toMillis(ts: any): number | null {
+  if (!ts) return null;
+  if (typeof ts === "number") return ts;
+  if (typeof ts?.toMillis === "function") return ts.toMillis();
+  if (typeof ts?.seconds === "number") return ts.seconds * 1000;
+  const d = new Date(ts);
+  return Number.isNaN(d.getTime()) ? null : d.getTime();
+}
 
 export const DashboardActivityPanel: React.FC = () => {
-  const [events, setEvents] = useState<AuditEvent[]>([]);
+  const [events, setEvents] = useState<TenantEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    const load = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const data = await fetchRecentEvents(20);
-        if (!cancelled) {
-          setEvents(data);
-        }
-      } catch (err) {
-        console.error("[DashboardActivityPanel] Failed to load events", err);
-        if (!cancelled) {
-          setError("Failed to load recent activity");
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-
-    load();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const formatTimestamp = (ts: string) => {
-    const d = new Date(ts);
-    if (Number.isNaN(d.getTime())) return ts;
-    return d.toLocaleString();
+  const load = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await listRecentTenantEvents(25);
+      setEvents(data?.items || []);
+    } catch (err: any) {
+      console.error("[DashboardActivityPanel] Failed to load events", err);
+      setError(err?.message || "Failed to load recent activity");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const formatEntityLabel = (evt: AuditEvent) => {
-    if (evt.entityType === "tenant" && evt.tenantId) {
-      return `Tenant ${evt.tenantId}`;
-    }
-    if (evt.entityType === "property" && evt.propertyId) {
-      return `Property ${evt.propertyId}`;
-    }
-    if (evt.entityType === "application" && evt.applicationId) {
-      return `Application ${evt.applicationId}`;
-    }
-    if (evt.entityType === "payment" && evt.paymentId) {
-      return `Payment ${evt.paymentId}`;
-    }
-    return evt.entityType;
+  useEffect(() => {
+    load();
+  }, []);
+
+  const formatTimestamp = (ts: any) => {
+    const ms = toMillis(ts);
+    if (!ms) return "";
+    const d = new Date(ms);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleString();
   };
 
   return (
@@ -65,8 +47,8 @@ export const DashboardActivityPanel: React.FC = () => {
       style={{
         borderRadius: 16,
         padding: 14,
-        backgroundColor: "rgba(15,23,42,0.95)",
-        border: "1px solid rgba(31,41,55,1)",
+        backgroundColor: colors.panel,
+        border: `1px solid ${colors.border}`,
         display: "flex",
         flexDirection: "column",
         gap: 8,
@@ -78,50 +60,36 @@ export const DashboardActivityPanel: React.FC = () => {
           fontSize: 12,
           textTransform: "uppercase",
           letterSpacing: 0.08,
-          color: "#9ca3af",
+          color: text.muted,
           marginBottom: 4,
           display: "flex",
           justifyContent: "space-between",
         }}
       >
         <span>Recent activity</span>
-        <span
+        <button
+          type="button"
+          onClick={load}
+          disabled={loading}
           style={{
+            border: "none",
+            background: "none",
+            color: text.muted,
+            cursor: loading ? "not-allowed" : "pointer",
             fontSize: 11,
-            color: "#6b7280",
+            padding: 0,
           }}
         >
-          Live audit feed
-        </span>
+          Refresh
+        </button>
       </div>
 
       {loading ? (
-        <div
-          style={{
-            fontSize: 13,
-            color: "#9ca3af",
-          }}
-        >
-          Loading…
-        </div>
+        <div style={{ fontSize: 13, color: text.muted }}>Loading…</div>
       ) : error ? (
-        <div
-          style={{
-            fontSize: 13,
-            color: "#f97316",
-          }}
-        >
-          {error}
-        </div>
+        <div style={{ fontSize: 13, color: "#f97316" }}>{error}</div>
       ) : events.length === 0 ? (
-        <div
-          style={{
-            fontSize: 13,
-            color: "#6b7280",
-          }}
-        >
-          No recent activity recorded yet.
-        </div>
+        <div style={{ fontSize: 13, color: text.muted }}>No recent activity recorded yet.</div>
       ) : (
         <div
           style={{
@@ -132,61 +100,35 @@ export const DashboardActivityPanel: React.FC = () => {
             overflowY: "auto",
           }}
         >
-          {events.map((evt, idx) => {
-            const key = evt.id || `${evt.entityType}-${evt.entityId}-${idx}`;
+          {events.map((evt) => {
+            const key = evt.id || `${evt.type}-${evt.tenantId}-${evt.occurredAt}`;
             return (
-            <div
-              key={key}
-              style={{
-                borderRadius: 10,
-                padding: "6px 8px",
-                backgroundColor: "rgba(15,23,42,1)",
-                border: "1px solid rgba(55,65,81,0.9)",
-                fontSize: 12,
-                display: "flex",
-                justifyContent: "space-between",
-                gap: 8,
-              }}
-            >
-              <div>
-                <div
-                  style={{
-                    fontWeight: 500,
-                    color: "#e5e7eb",
-                    marginBottom: 2,
-                  }}
-                >
-                  {evt.summary}
-                </div>
-                {evt.detail && (
-                  <div
-                    style={{
-                      color: "#9ca3af",
-                      marginBottom: 2,
-                    }}
-                  >
-                    {evt.detail}
-                  </div>
-                )}
-                <div
-                  style={{
-                    fontSize: 11,
-                    color: "#6b7280",
-                  }}
-                >
-                  {formatEntityLabel(evt)}
-                </div>
-              </div>
               <div
+                key={key}
                 style={{
-                  fontSize: 11,
-                  color: "#6b7280",
-                  whiteSpace: "nowrap",
+                  borderRadius: 10,
+                  padding: "6px 8px",
+                  backgroundColor: colors.card,
+                  border: `1px solid ${colors.border}`,
+                  fontSize: 12,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 8,
                 }}
               >
-                {formatTimestamp(evt.timestamp)}
+                <div>
+                  <div style={{ fontWeight: 500, color: text.primary, marginBottom: 2 }}>
+                    {evt.title || evt.type}
+                  </div>
+                  {evt.description ? (
+                    <div style={{ color: text.muted, marginBottom: 2 }}>{evt.description}</div>
+                  ) : null}
+                  <div style={{ fontSize: 11, color: text.muted }}>{evt.type}</div>
+                </div>
+                <div style={{ fontSize: 11, color: text.muted, whiteSpace: "nowrap" }}>
+                  {formatTimestamp(evt.createdAt)}
+                </div>
               </div>
-            </div>
             );
           })}
         </div>
