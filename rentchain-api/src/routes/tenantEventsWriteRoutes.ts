@@ -597,6 +597,9 @@ router.get("/tenant-summaries", requireAuth, requireLandlord, async (req: any, r
 
 export default router;
 
+// Export helpers for reuse (e.g., application -> tenant conversion)
+export { recomputeTenantSnapshot };
+
 
 
 

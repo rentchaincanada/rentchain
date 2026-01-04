@@ -14,6 +14,7 @@ import authRoutes from "./routes/authRoutes";
 import tenantDetailsRoutes from "./routes/tenantDetailsRoutes";
 import paymentsRoutes from "./routes/paymentsRoutes";
 import applicationsRoutes from "./routes/applicationsRoutes";
+import applicationsConversionRoutes from "./routes/applicationsConversionRoutes";
 import leaseRoutes from "./routes/leaseRoutes";
 import tenantOnboardRoutes from "./routes/tenantOnboardRoutes";
 import eventsRoutes from "./routes/eventsRoutes";
@@ -133,6 +134,7 @@ app.get("/api/_build", (req, res) => {
 app.use("/api", tenantDetailsRoutes);
 app.use("/api", paymentsRoutes);
 app.use("/api", applicationsRoutes);
+app.use("/api", routeSource("applicationsConversionRoutes.ts"), applicationsConversionRoutes);
 app.use("/api/leases", leaseRoutes);
 app.use("/api", tenantOnboardRoutes);
 app.use("/api/events", eventsRoutes);
