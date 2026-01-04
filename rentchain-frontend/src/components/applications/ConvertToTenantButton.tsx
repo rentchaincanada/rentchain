@@ -1,7 +1,7 @@
 import React from "react";
 import { convertApplicationToTenant } from "../../api/applicationConversion";
 
-const TENANT_PATH = (tenantId: string) => `/tenants/${tenantId}`;
+const TENANT_PATH = (tenantId: string) => `/tenants?tenantId=${encodeURIComponent(tenantId)}`;
 
 function backdrop(): React.CSSProperties {
   return {
@@ -55,7 +55,9 @@ export function ConvertToTenantButton({
 
   function goToTenant(tenantId: string) {
     if (!tenantId) return;
-    window.location.assign(TENANT_PATH(tenantId));
+    const url = new URL(window.location.origin + "/tenants");
+    url.searchParams.set("tenantId", tenantId);
+    window.location.assign(url.toString());
   }
 
   function handleClick() {
