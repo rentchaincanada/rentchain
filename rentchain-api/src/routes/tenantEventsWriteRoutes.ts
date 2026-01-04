@@ -388,6 +388,11 @@ router.get("/tenant-events", requireAuth, requireLandlord, async (req: any, res)
  */
 router.get("/tenant-events/recent", requireAuth, requireLandlord, async (req: any, res) => {
   res.setHeader("x-route-source", "tenantEventsWriteRoutes");
+  res.setHeader("x-debug-reached", "tenant-events-recent");
+
+  if (String(req.query?.debug) === "1") {
+    return res.json({ ok: true, debug: true, user: req.user || null });
+  }
   try {
     const landlordId = req.user?.landlordId || req.user?.id;
     if (!landlordId || typeof landlordId !== "string" || !landlordId.trim()) {
