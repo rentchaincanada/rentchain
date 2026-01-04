@@ -1,6 +1,9 @@
 // @ts-nocheck
 import crypto from "crypto";
-import { getApplicationById, saveApplication } from "./applicationsService";
+import {
+  getApplicationByIdAsync,
+  saveApplicationAsync,
+} from "./applicationsService";
 import { addConvertedTenant } from "./tenantDetailsService";
 import { propertyService } from "./propertyService";
 import { runScreeningWithCredits } from "./screeningsService";
@@ -16,7 +19,7 @@ export async function convertApplicationToTenant(params: {
   screening?: { screeningId: string; status: string };
   alreadyConverted: boolean;
 }> {
-  const application = await getApplicationById(params.applicationId);
+  const application = await getApplicationByIdAsync(params.applicationId);
   if (!application) {
     throw new Error("Application not found");
   }
@@ -124,7 +127,7 @@ export async function convertApplicationToTenant(params: {
     }
   }
 
-  await saveApplication(updated);
+  await saveApplicationAsync(updated);
 
   await logAuditEvent({
     landlordId: params.landlordId,

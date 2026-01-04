@@ -1,4 +1,5 @@
 import type { Application, ApplicationStatus } from "../types/applications";
+import { db, FieldValue } from "../config/firebase";
 import { recordAuditEvent } from "./auditEventService";
 
 // In-memory stub store; replace with real persistence when ready.
@@ -182,4 +183,24 @@ export async function updateApplicationStatus(
   }
 
   return saved;
+}
+
+export async function getApplicationByIdAsync(id: string): Promise<Application | null> {
+  const snap = await db.collection("applications").doc(id).get();
+  if (!snap.exists) return null;
+  return { id: snap.id, ...(snap.data() as any) } as Application;
+}
+
+export async function saveApplicationAsync(updated: Application): Promise<Application> {
+  const id = String(updated?.id || "").trim();
+  if (!id) throw new Error("saveApplication: missing application id");
+
+  const payload: any = {
+    ...updated,
+    updatedAt: updated.updatedAt || new Date().toISOString(),
+    updatedAtServer: FieldValue.serverTimestamp(),
+  };
+
+  await db.collection("applications").doc(id).set(payload, { merge: true });
+  return payload;
 }

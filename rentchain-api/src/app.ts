@@ -103,7 +103,9 @@ app.use("/api", routeSource("tenantEventsRoutes"), tenantEventsRoutes);
 app.use("/api", routeSource("tenantEventsWriteRoutes"), tenantEventsWriteRoutes);
 app.use("/api", routeSource("usageBreakdownRoutes.ts"), usageBreakdownRoutes);
 app.use("/api", routeSource("tenantReportRoutes.ts"), tenantReportRoutes);
-app.use("/api", routeSource("impersonationRoutes.ts"), impersonationRoutes);
+app.use("/api", applicationsRoutes);
+app.use("/api", routeSource("applicationsConversionRoutes.ts"), applicationsConversionRoutes);
+app.use("/api/impersonation", routeSource("impersonationRoutes.ts"), impersonationRoutes);
 app.use("/api", routeSource("tenantReportPdfRoutes.ts"), tenantReportPdfRoutes);
 app.use("/api", stubsRoutes);
 app.use("/api/admin", routeSource("adminBootstrapRoutes"), adminBootstrapRoutes);
@@ -133,8 +135,6 @@ app.get("/api/_build", (req, res) => {
 
 app.use("/api", tenantDetailsRoutes);
 app.use("/api", paymentsRoutes);
-app.use("/api", applicationsRoutes);
-app.use("/api", routeSource("applicationsConversionRoutes.ts"), applicationsConversionRoutes);
 app.use("/api/leases", leaseRoutes);
 app.use("/api", tenantOnboardRoutes);
 app.use("/api/events", eventsRoutes);
