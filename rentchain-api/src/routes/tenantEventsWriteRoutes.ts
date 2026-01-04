@@ -388,12 +388,14 @@ router.get("/tenant-events", requireAuth, requireLandlord, async (req: any, res)
  */
 router.get("/tenant-events/recent", requireAuth, requireLandlord, async (req: any, res) => {
   res.setHeader("x-route-source", "tenantEventsWriteRoutes");
-  const landlordId = getLandlordId(req);
-  if (!landlordId) return res.status(401).json({ error: "Unauthorized" });
-
-  const limit = parseLimit(req.query?.limit, 25);
-
   try {
+    const landlordId = req.user?.landlordId || req.user?.id;
+    if (!landlordId || typeof landlordId !== "string" || !landlordId.trim()) {
+      return res.status(401).json({ ok: false, error: "Unauthorized" });
+    }
+
+    const limit = parseLimit(req.query?.limit, 25);
+
     const snap = await db
       .collection("tenantEvents")
       .where("landlordId", "==", landlordId)
@@ -404,21 +406,8 @@ router.get("/tenant-events/recent", requireAuth, requireLandlord, async (req: an
     const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
     return res.json({ ok: true, items });
   } catch (err: any) {
-    console.error("[tenant-events GET /tenant-events/recent] error:", {
-      message: err?.message,
-      code: err?.code,
-      details: err?.details,
-      stack: err?.stack,
-    });
-
-    const msg = String(err?.message || "");
-    const isIndex = msg.toLowerCase().includes("requires an index");
-
-    return res.status(500).json({
-      ok: false,
-      error: "Failed to load recent tenant events",
-      hint: isIndex ? "firestore_index_required" : undefined,
-    });
+    console.error("[tenant-events recent] error:", err?.message, err?.stack || err);
+    return res.status(500).json({ ok: false, error: "Failed to load recent tenant events" });
   }
 });
 
