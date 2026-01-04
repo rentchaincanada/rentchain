@@ -404,8 +404,21 @@ router.get("/tenant-events/recent", requireAuth, requireLandlord, async (req: an
     const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
     return res.json({ ok: true, items });
   } catch (err: any) {
-    console.error("[tenant-events GET /tenant-events/recent] error", err);
-    return res.status(500).json({ error: "Failed to load recent tenant events" });
+    console.error("[tenant-events GET /tenant-events/recent] error:", {
+      message: err?.message,
+      code: err?.code,
+      details: err?.details,
+      stack: err?.stack,
+    });
+
+    const msg = String(err?.message || "");
+    const isIndex = msg.toLowerCase().includes("requires an index");
+
+    return res.status(500).json({
+      ok: false,
+      error: "Failed to load recent tenant events",
+      hint: isIndex ? "firestore_index_required" : undefined,
+    });
   }
 });
 
