@@ -5,7 +5,7 @@ import { recomputeTenantSnapshot } from "./tenantEventsWriteRoutes";
 const router = Router();
 
 router.post(
-  "/applications/:applicationId/convert-to-tenant",
+  "/:applicationId/convert-to-tenant",
   async (req: any, res) => {
     res.setHeader("x-route-source", "applicationsConversionRoutes");
 

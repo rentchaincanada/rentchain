@@ -104,7 +104,7 @@ app.use("/api", routeSource("tenantEventsWriteRoutes"), tenantEventsWriteRoutes)
 app.use("/api", routeSource("usageBreakdownRoutes.ts"), usageBreakdownRoutes);
 app.use("/api", routeSource("tenantReportRoutes.ts"), tenantReportRoutes);
 app.use("/api", applicationsRoutes);
-app.use("/api", routeSource("applicationsConversionRoutes.ts"), applicationsConversionRoutes);
+app.use("/api/applications", routeSource("applicationsConversionRoutes.ts"), applicationsConversionRoutes);
 app.use("/api/impersonation", routeSource("impersonationRoutes.ts"), impersonationRoutes);
 app.use("/api", routeSource("tenantReportPdfRoutes.ts"), tenantReportPdfRoutes);
 app.use("/api", stubsRoutes);
@@ -164,4 +164,3 @@ app.use(errorHandler);
 export default app;
 // src/app.build.ts
 // build stamp: 2025-12-29TXX:YY
-
