@@ -151,6 +151,10 @@ process.on("unhandledRejection", (reason) => {
   console.error("[breadcrumbs]", JSON.stringify(getCrumbs(), null, 2));
 });
 
+app.all("/api/__debug/routes", (req, res) => {
+  res.json({ ok: true, msg: "debug live" });
+});
+
 /**
  * Simple 404 handler
  */
