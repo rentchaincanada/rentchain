@@ -16,7 +16,7 @@ export async function convertApplicationToTenant(params: {
   screening?: { screeningId: string; status: string };
   alreadyConverted: boolean;
 }> {
-  const application = getApplicationById(params.applicationId);
+  const application = await getApplicationById(params.applicationId);
   if (!application) {
     throw new Error("Application not found");
   }
@@ -124,7 +124,7 @@ export async function convertApplicationToTenant(params: {
     }
   }
 
-  saveApplication(updated);
+  await saveApplication(updated);
 
   await logAuditEvent({
     landlordId: params.landlordId,
