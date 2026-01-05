@@ -76,7 +76,8 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
     if (!pendingFile || !property?.id) return;
     try {
       setIsImporting(true);
-      const result = await importUnitsCsv(property.id, pendingFile);
+      const csvText = await readFileText(pendingFile);
+      const result = await importUnitsCsv(property.id, csvText);
 
       const created = result?.createdCount ?? result?.created ?? 0;
       const updated = result?.updatedCount ?? result?.updated ?? 0;
@@ -93,6 +94,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
 
       setPreviewOpen(false);
       setPendingFile(null);
+      setPendingFilename("");
       setImportMessage(
         result?.message ||
           `Created ${created}, updated ${updated}, skipped ${skipped}${
@@ -125,7 +127,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
     } finally {
       setIsImporting(false);
     }
-  }, [navigate, onRefresh, pendingFile, property?.id, showToast]);
+  }, [navigate, onRefresh, pendingFile, property?.id, readFileText, showToast]);
   const setLeasesLoadingStates = (loading: boolean, error: string | null) => {
     setIsLeasesLoading(loading);
     setLeasesError(error);
