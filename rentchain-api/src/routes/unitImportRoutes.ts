@@ -17,6 +17,8 @@ import { uploadCsv } from "../middleware/uploadCsv";
 import { uploadBufferToGcs } from "../lib/gcs";
 import { gzipSync } from "zlib";
 import { sha256Hex } from "../lib/hash";
+import { PLANS } from "../config/plans";
+import { getLandlordPlan } from "../lib/getLandlordPlan";
 
 const router = Router({ mergeParams: true });
 
@@ -149,6 +151,38 @@ async function runUnitImport(opts: {
         issues: issues.slice(0, 200),
       },
       report: { ok: false, mode, summary, issues },
+    };
+  }
+
+  // Plan: Starter cap on total units (existing + incoming)
+  const planKey = getLandlordPlan(opts.user);
+  const limits = PLANS[planKey];
+  const existingUnitsSnap = await db
+    .collection("units")
+    .where("landlordId", "==", landlordId)
+    .get();
+  const existingCount = existingUnitsSnap.size;
+  const incomingCount = parsed.candidates.length;
+  if (existingCount + incomingCount > limits.maxUnits) {
+    const body = {
+      error: "PLAN_LIMIT",
+      message: "Starter plan allows up to 10 units total",
+      limit: limits.maxUnits,
+      existing: existingCount,
+      attempted: incomingCount,
+      limitType: "units",
+    };
+    if (jobRef) {
+      await failImportJob(jobRef, {
+        totalRows: parsed.totalRows,
+        attemptedValid: parsed.candidates.length,
+        errorCount: issues.length,
+      });
+    }
+    return {
+      httpStatus: 403,
+      body,
+      report: { ok: false, mode, summary, issues, limit: body },
     };
   }
 

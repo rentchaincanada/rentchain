@@ -1,6 +1,7 @@
 import React from "react";
 import { NotifyMeModal } from "./NotifyMeModal";
 import { useAuth } from "../../context/useAuth";
+import { useNavigate } from "react-router-dom";
 
 export type UpgradeReason =
   | "propertiesMax"
@@ -25,6 +26,7 @@ export function UpgradeModal({
   if (!open) return null;
 
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [notifyOpen, setNotifyOpen] = React.useState(false);
   const [notifyPlan, setNotifyPlan] = React.useState<"core" | "pro" | "elite">("core");
 
@@ -32,23 +34,23 @@ export function UpgradeModal({
 
   const reasonCopy: Record<UpgradeReason, { title: string; body: string }> = {
     propertiesMax: {
-      title: "Property limit reached",
-      body: "Your Starter plan allows up to a limited number of properties. Upgrade to unlock more.",
+      title: "Upgrade required",
+      body: "Starter plan allows only 1 property. Upgrade to add more.",
     },
     unitsMax: {
-      title: "Unit limit reached",
-      body: "You’ve reached the unit limit on Starter. Core and above support larger portfolios.",
+      title: "Upgrade required",
+      body: "Starter plan allows up to 10 units total. Upgrade to add more.",
     },
     screening: {
-      title: "Screening upgrade required",
-      body: "Tenant screening is available on Starter with limits. Upgrade to unlock automation and higher volumes.",
+      title: "Upgrade required",
+      body: "Tenant screening is limited on Starter. Upgrade to unlock automation and higher volumes.",
     },
     exports: {
-      title: "Export upgrade required",
+      title: "Upgrade required",
       body: "Advanced exports are available on higher plans.",
     },
     automation: {
-      title: "Automation upgrade required",
+      title: "Upgrade required",
       body: "Automated workflows unlock in Core and above.",
     },
   };
@@ -104,9 +106,9 @@ export function UpgradeModal({
             style={{
               marginTop: 24,
               display: "flex",
-              justifyContent: "space-between",
+              justifyContent: "flex-end",
               alignItems: "center",
-              gap: 12,
+              gap: 10,
             }}
           >
             <button
@@ -120,31 +122,11 @@ export function UpgradeModal({
                 fontWeight: 800,
               }}
             >
-              Maybe later
+              Not now
             </button>
 
             <button
-              onClick={() => {
-                setNotifyPlan("core");
-                setNotifyOpen(true);
-              }}
-              style={{
-                padding: "10px 14px",
-                borderRadius: 12,
-                border: "1px solid rgba(148,163,184,0.35)",
-                background: "transparent",
-                cursor: "pointer",
-                fontWeight: 900,
-              }}
-              title="Get early access updates"
-            >
-              Notify me
-            </button>
-
-            <button
-              onClick={() => {
-                window.location.href = "/pricing";
-              }}
+              onClick={() => navigate("/pricing")}
               style={{
                 padding: "10px 16px",
                 borderRadius: 12,
@@ -153,6 +135,7 @@ export function UpgradeModal({
                 color: "#2563eb",
                 cursor: "pointer",
                 fontWeight: 900,
+                boxShadow: "0 10px 30px rgba(37,99,235,0.2)",
               }}
             >
               View plans

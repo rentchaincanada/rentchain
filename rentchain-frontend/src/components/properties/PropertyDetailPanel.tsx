@@ -17,6 +17,7 @@ import { UnitsCsvPreviewModal } from "./UnitsCsvPreviewModal";
 import { parseCsvPreview } from "../../utils/csvPreview";
 import { useToast } from "../ui/ToastProvider";
 import { setOnboardingStep } from "../../api/onboardingApi";
+import { PLANS } from "../../config/plans";
 
 interface PropertyDetailPanelProps {
   property: Property | null;
@@ -235,8 +236,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
       ? units.length
       : (property as any)?.unitCount ?? 0;
   const plan = me?.plan ?? "starter";
-  const maxUnits =
-    plan === "starter" ? 10 : plan === "core" ? 50 : plan === "pro" ? 250 : Infinity;
+  const maxUnits = PLANS.starter.maxUnits;
   const canImport = unitCount < maxUnits;
   const totalRentConfigured = units.reduce(
     (sum, u) =>

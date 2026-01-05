@@ -29,6 +29,7 @@ import { setOnboardingStep } from "../api/onboardingApi";
 import { addUnitsManual, type UnitInput } from "../api/unitsApi";
 import { useToast } from "../components/ui/ToastProvider";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import { PLANS } from "../config/plans";
 
 const PropertiesPage: React.FC = () => {
   const [properties, setProperties] = useState<Property[]>([]);
@@ -62,9 +63,9 @@ const PropertiesPage: React.FC = () => {
   const { showToast } = useToast();
   const isMobile = useIsMobile();
   const plan = me?.plan ?? "starter"; // limits.plan is informational; do not override authenticated plan
-  const maxProperties = limits?.entitlements?.propertiesMax ?? Infinity;
-  const maxUnits = limits?.entitlements?.unitsMax ?? Infinity;
-  const currentProperties = limits?.usage?.properties ?? (properties?.length ?? 0);
+  const maxProperties = PLANS.starter.maxProperties;
+  const maxUnits = PLANS.starter.maxUnits;
+  const currentProperties = properties?.length ?? 0;
   const canAddProperty = currentProperties < maxProperties;
   const totalOpenAcrossPortfolio = useMemo(
     () => Object.values(actionCounts || {}).reduce((a, b) => a + (b || 0), 0),

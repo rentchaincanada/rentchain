@@ -39,8 +39,11 @@ export function UpgradeProvider({ children }: { children: React.ReactNode }) {
       const limitType = detail.limitType;
       const planDetail = detail.plan;
       const max = detail.max;
+      const message = detail.message;
       const body =
-        limitType === "units"
+        message
+          ? message
+          : limitType === "units"
           ? `Starter allows up to ${max ?? "your plan limit"} total units across your portfolio.`
           : limitType === "properties"
           ? `Starter allows up to ${max ?? "your plan limit"} properties.`

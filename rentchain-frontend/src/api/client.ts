@@ -20,6 +20,22 @@ api.interceptors.response.use(
   (res) => res,
   (err) => {
     const status = err?.response?.status;
+    const data = err?.response?.data;
+    if (status === 403 && data?.error === "PLAN_LIMIT") {
+      try {
+        window.dispatchEvent(
+          new CustomEvent("upgrade:plan-limit", {
+            detail: {
+              limitType: data?.limitType,
+              max: data?.limit,
+              message: data?.message,
+            },
+          })
+        );
+      } catch {
+        // no-op
+      }
+    }
     if (status === 401) {
       sessionStorage.removeItem("rentchain_token");
       localStorage.removeItem("rentchain_token");
