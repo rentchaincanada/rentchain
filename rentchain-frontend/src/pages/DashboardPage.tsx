@@ -105,8 +105,8 @@ const DashboardPage: React.FC = () => {
   const usageObj = limitsResp?.usage ?? limitsResp?.integrity?.after ?? {};
   const displayPlan = me?.plan ?? user?.plan ?? "starter"; // limits.plan is informational; do not override authenticated plan
   const planKeyRaw = (displayPlan ?? "starter").toString();
-  const planKey = planKeyRaw.trim().toLowerCase() as keyof typeof PLANS;
-  const planLimits = PLANS[planKey] ?? PLANS.starter;
+  const planKey = planKeyRaw.trim().toLowerCase();
+  const planLimits = (PLANS as any)[planKey] ?? PLANS.starter;
 
   const unitsCount = usageObj?.units ?? 0;
   const propertiesCount = usageObj?.properties ?? 0;
@@ -153,14 +153,8 @@ const DashboardPage: React.FC = () => {
     }
   };
 
-  const unitsMax =
-    planLimits?.maxUnits ??
-    (typeof limitsObj?.maxUnits === "number" ? limitsObj.maxUnits : undefined) ??
-    PLANS.starter.maxUnits;
-  const propertiesMax =
-    planLimits?.maxProperties ??
-    (typeof limitsObj?.maxProperties === "number" ? limitsObj.maxProperties : undefined) ??
-    PLANS.starter.maxProperties;
+  const unitsMax = planLimits.maxUnits;
+  const propertiesMax = planLimits.maxProperties;
 
   const handleOpenOnboarding = () => {
     setShowOnboarding(true);

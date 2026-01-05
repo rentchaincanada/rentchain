@@ -444,7 +444,7 @@ const PropertiesPage: React.FC = () => {
                 const propsUsed = usage?.properties ?? 0;
                 const unitsUsed = usage?.units ?? 0;
                 const propsMax = limitsObj?.maxProperties ?? limitsObj?.propertiesMax ?? 0;
-                const unitsMax = limitsObj?.maxUnits ?? limitsObj?.unitsMax ?? 0;
+                const unitsMax = maxUnits;
                 const tooltip = `Plan ${plan} • Properties ${propsUsed}/${propsMax} • Units ${unitsUsed}/${unitsMax}`;
                 return typeof tooltip === "string" ? tooltip : undefined;
               })()}
@@ -453,10 +453,10 @@ const PropertiesPage: React.FC = () => {
                 {plan}
               </span>
               <span>
-                Props: {(limits as any)?.usage?.properties ?? 0}/{(limits as any)?.entitlements?.propertiesMax ?? 0}
+                Props: {(limits as any)?.usage?.properties ?? 0}/{maxProperties}
               </span>
               <span>
-                Units: {(limits as any)?.usage?.units ?? 0}/{(limits as any)?.entitlements?.unitsMax ?? 0}
+                Units: {(limits as any)?.usage?.units ?? 0}/{maxUnits}
               </span>
             </div>
           ) : null}
