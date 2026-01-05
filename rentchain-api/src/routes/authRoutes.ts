@@ -150,6 +150,8 @@ function validateCodeWithBackup(
 ensureLandlordEntry({ ...DEMO_LANDLORD });
 
 router.post("/login", async (req, res) => {
+  const requestId = (req as any).requestId || `req-${Math.random().toString(36).slice(2, 8)}`;
+  (req as any).requestId = requestId;
   const loginEnabled =
     (process.env.AUTH_LOGIN_ENABLED || process.env.PASSWORD_LOGIN_ENABLED || "true")
       .toString()
@@ -240,8 +242,17 @@ router.post("/login", async (req, res) => {
       // fall through to generic error
     }
 
-    console.error("[auth/login]", err);
-    return jsonError(res, 500, "INTERNAL", "Login failed", { detail: String(err?.message ?? err) }, (req as any).requestId);
+    console.error("[auth/login] failed", {
+      requestId,
+      message: err?.message,
+      stack: err?.stack,
+    });
+    return res.status(500).json({
+      ok: false,
+      code: "INTERNAL",
+      error: "Login failed",
+      requestId,
+    });
   }
 });
 
