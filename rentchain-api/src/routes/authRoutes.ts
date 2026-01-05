@@ -246,6 +246,7 @@ router.post("/login", async (req, res) => {
       requestId,
       message: err?.message,
       stack: err?.stack,
+      email: (req as any)?.body?.email,
     });
     return res.status(500).json({
       ok: false,
