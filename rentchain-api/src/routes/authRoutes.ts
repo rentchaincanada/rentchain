@@ -152,6 +152,7 @@ ensureLandlordEntry({ ...DEMO_LANDLORD });
 router.post("/login", async (req, res) => {
   const requestId = (req as any).requestId || `req-${Math.random().toString(36).slice(2, 8)}`;
   (req as any).requestId = requestId;
+  res.setHeader("x-auth-login-rev", "debug-step-detail-v1");
   const loginEnabled =
     (process.env.AUTH_LOGIN_ENABLED || process.env.PASSWORD_LOGIN_ENABLED || "true")
       .toString()
