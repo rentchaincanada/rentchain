@@ -6,6 +6,7 @@ export interface TenantProfile {
   email?: string | null;
   phone?: string | null;
   status?: string | null;
+  landlordId?: string | null;
   createdAt?: string | null;
 }
 
@@ -116,4 +117,19 @@ export async function confirmTenantRentCharge(id: string): Promise<{ ok: boolean
   return apiFetch<{ ok: boolean; confirmedAt?: string }>(`tenant/rent-charges/${encodeURIComponent(id)}/confirm`, {
     method: "POST",
   });
+}
+
+export type TenantIssuePayload = {
+  category: string;
+  subject: string;
+  message: string;
+  tenantId?: string;
+  unitId?: string;
+  attachments?: any[];
+};
+
+export async function submitTenantIssue(payload: TenantIssuePayload): Promise<{ ok: boolean; stub?: boolean }> {
+  // If/when a backend endpoint exists, replace this with a real call.
+  // For now, return a stubbed success so tenant portal can compile and function.
+  return { ok: true, stub: true, ...payload };
 }
