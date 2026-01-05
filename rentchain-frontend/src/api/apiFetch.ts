@@ -1,5 +1,45 @@
 import { API_BASE_URL } from "./config";
 
+function dispatchPlanLimit(detail: any) {
+  try {
+    window.dispatchEvent(new CustomEvent("upgrade:plan-limit", { detail }));
+  } catch {
+    // no-op
+  }
+}
+
+function normalizePlanLimit(payload: any, status: number) {
+  const raw = payload ?? {};
+  if (status === 403 && raw?.error === "PLAN_LIMIT") {
+    return {
+      message: raw?.message || "Plan limit reached.",
+      limitType: raw?.limitType,
+      limit: raw?.limit,
+      existing: raw?.existing,
+      attempted: raw?.attempted,
+      plan: raw?.plan,
+      raw,
+    };
+  }
+  if (status === 409 && raw?.code === "LIMIT_REACHED") {
+    const d = raw?.details || {};
+    return {
+      message: raw?.error || "Plan limit reached.",
+      limitType: raw?.limitType || "units",
+      limit: d?.limit,
+      existing: d?.current,
+      attempted: d?.adding,
+      plan: d?.plan,
+      raw,
+    };
+  }
+  const msg = String(raw?.message || raw?.error || "");
+  if ((status === 403 || status === 409) && /plan limit/i.test(msg)) {
+    return { message: msg || "Plan limit reached.", raw };
+  }
+  return null;
+}
+
 export async function apiFetch<T = any>(
   path: string,
   init: RequestInit = {}
@@ -35,16 +75,9 @@ export async function apiFetch<T = any>(
   }
 
   if (!res.ok) {
-    if (res.status === 403 && data?.error === "PLAN_LIMIT") {
-      window.dispatchEvent(
-        new CustomEvent("upgrade:plan-limit", {
-          detail: {
-            limitType: data?.limitType,
-            max: data?.limit,
-            message: data?.message,
-          },
-        })
-      );
+    const detail = normalizePlanLimit(data, res.status);
+    if (detail) {
+      dispatchPlanLimit(detail);
     }
     const msg = data?.message || data?.error || text || `apiFetch ${res.status}`;
     throw new Error(msg);
