@@ -161,6 +161,17 @@ router.post("/login", async (req, res) => {
     return jsonError(res, 403, "Login disabled", "LOGIN_DISABLED");
   }
 
+  if (!process.env.FIREBASE_API_KEY) {
+    return jsonError(
+      res,
+      501,
+      "Login provider not configured",
+      "NOT_CONFIGURED",
+      { missing: ["FIREBASE_API_KEY"] },
+      requestId
+    );
+  }
+
   const parsed = LoginSchema.safeParse(req.body ?? {});
   if (!parsed.success) {
     return jsonError(res, 400, "Invalid request payload", "BAD_REQUEST", parsed.error.flatten());
