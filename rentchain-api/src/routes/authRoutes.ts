@@ -198,16 +198,21 @@ router.post("/login", async (req, res) => {
       return jsonError(res, 403, "Login disabled", "LOGIN_DISABLED");
     }
 
+    let step = "start";
+
+    step = "firebase_signin";
     const fb = await signInWithPassword(email, password);
     if (!fb) {
       return jsonError(res, 401, "Unauthorized", "INVALID_CREDENTIALS");
     }
 
+    step = "profile_get_or_create";
     const profile = await getOrCreateLandlordProfile({
       uid: fb.uid,
       email: fb.email,
     });
 
+    step = "ensure_user";
     const plan = resolvePlan((profile as any)?.plan || "starter");
     const user = ensureLandlordEntry({
       id: (profile as any)?.id || fb.uid,
@@ -218,8 +223,10 @@ router.post("/login", async (req, res) => {
       screeningCredits: (profile as any)?.screeningCredits,
     } as any);
 
+    step = "jwt_sign";
     const token = generateJwtForLandlord({ ...user, plan } as any);
 
+    step = "micro_live_grant";
     try {
       const landlordId = user.id;
       await maybeGrantMicroLiveFromLead(user.email, landlordId);
@@ -255,7 +262,9 @@ router.post("/login", async (req, res) => {
 
     console.error("[auth/login] failed", {
       requestId,
+      step,
       message: err?.message,
+      code: err?.code,
       stack: err?.stack,
       email: (req as any)?.body?.email,
     });
@@ -263,8 +272,10 @@ router.post("/login", async (req, res) => {
       ok: false,
       code: "INTERNAL",
       error: "Login failed",
-      detail: String(err?.message || "unknown"),
       requestId,
+      step,
+      detail: String(err?.message || ""),
+      errCode: String(err?.code || ""),
     });
   }
 });
