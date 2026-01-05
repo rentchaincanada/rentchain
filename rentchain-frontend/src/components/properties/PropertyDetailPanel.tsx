@@ -89,7 +89,8 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
         });
         return;
       }
-      const result = await importUnitsCsv(property.id, csvText, "partial");
+      const idempotencyKey = `${property.id}:${pendingFilename}:${pendingFile.size}:${pendingFile.lastModified}`;
+      const result = await importUnitsCsv(property.id, csvText, "partial", idempotencyKey);
 
       const created = result?.createdCount ?? result?.created ?? 0;
       const updated = result?.updatedCount ?? result?.updated ?? 0;
