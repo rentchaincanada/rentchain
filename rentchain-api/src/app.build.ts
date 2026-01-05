@@ -40,6 +40,8 @@ import usageBreakdownRoutes from "./routes/usageBreakdownRoutes";
 import tenantReportRoutes from "./routes/tenantReportRoutes";
 import tenantReportPdfRoutes from "./routes/tenantReportPdfRoutes";
 import impersonationRoutes from "./routes/impersonationRoutes";
+import unitImportRoutes from "./routes/unitImportRoutes";
+import actionRequestsRecomputeRoutes from "./routes/actionRequestsRecomputeRoutes";
 
 export const app = express();
 app.set("etag", false);
@@ -97,6 +99,8 @@ app.use("/api", routeSource("tenantReportPdfRoutes.ts"), tenantReportPdfRoutes);
 app.use("/api", applicationsRoutes);
 app.use("/api/applications", routeSource("applicationsConversionRoutes.ts"), applicationsConversionRoutes);
 app.use("/api/impersonation", routeSource("impersonationRoutes.ts"), impersonationRoutes);
+app.use("/api/properties/:propertyId/units", routeSource("unitImportRoutes.ts"), unitImportRoutes);
+app.use("/api/action-requests", routeSource("actionRequestsRecomputeRoutes.ts"), actionRequestsRecomputeRoutes);
 app.use("/api", stubsRoutes);
 app.use("/api/admin", routeSource("adminBootstrapRoutes"), adminBootstrapRoutes);
 
@@ -112,6 +116,7 @@ app.use("/api/properties", propertiesRoutes);
 app.use("/api/account", accountRoutes);
 app.use("/api/onboarding", onboardingRoutes);
 app.use("/api/billing", billingRoutes);
+console.log("[routes] /api/properties, /api/properties/:propertyId/units, /api/action-requests, /api/applications");
 app.post("/api/_echo", (req, res) => {
   res.setHeader("x-route-source", "app.build.ts:/api/_echo");
   return res.json({ ok: true, method: "POST", body: req.body ?? null });

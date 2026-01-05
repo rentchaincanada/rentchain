@@ -3,6 +3,7 @@ import { ApiError } from "../lib/httpErrors";
 import { jsonError } from "../lib/httpResponse";
 
 export function notFoundHandler(req: Request, res: Response) {
+  res.setHeader("x-route-source", "not-found");
   return jsonError(res, 404, "NOT_FOUND", "Not Found", undefined, req.requestId);
 }
 
