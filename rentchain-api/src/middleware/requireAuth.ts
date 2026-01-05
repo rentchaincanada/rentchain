@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import type { Role, Permission } from "../auth/rbac";
 import { verifyAuthToken, type JwtClaimsV1 } from "../auth/jwt";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 
 type HydratedUser = {
   id: string;
