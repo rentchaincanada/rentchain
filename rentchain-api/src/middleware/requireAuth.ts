@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
-import type { Role, Permission } from "../auth/rbac";
 import { verifyAuthToken, type JwtClaimsV1 } from "../auth/jwt";
+import type { Role, Permission } from "../auth/rbac";
 import { db } from "../firebase";
 
 type HydratedUser = {
@@ -20,10 +20,12 @@ function getBearerToken(req: any): string | null {
   return m?.[1] ?? null;
 }
 
-export async function requireAuth(req: Request, res: Response, next: NextFunction) {
+export async function requireAuth(req: any, res: any, next: any) {
   try {
     const token = getBearerToken(req);
-    if (!token) return res.status(401).json({ error: "Unauthorized: token required" });
+    if (!token) {
+      return res.status(401).json({ ok: false, error: "Missing bearer token" });
+    }
 
     const claims: JwtClaimsV1 = verifyAuthToken(token);
 
@@ -39,47 +41,41 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
     const hydrate = String(process.env.AUTH_HYDRATE_FROM_DB || "").toLowerCase() === "true";
     if (!hydrate) {
-      (req as any).user = baseUser;
+      req.user = baseUser;
       return next();
     }
 
     const snap = await db.collection("users").doc(baseUser.id).get();
     if (!snap.exists) {
-      return res.status(401).json({ error: "Unauthorized" });
+      return res.status(401).json({ ok: false, error: "User not found" });
     }
 
     const u = snap.data() as any;
 
     if (u?.disabled === true) {
-      return res.status(403).json({ error: "Account disabled" });
+      return res.status(403).json({ ok: false, error: "Account disabled" });
     }
 
-    const dbLandlordId = u?.landlordId as string | undefined;
-    const dbTenantId = u?.tenantId as string | undefined;
-
-    if (dbLandlordId && baseUser.landlordId && dbLandlordId !== baseUser.landlordId) {
-      return res.status(403).json({ error: "Scope mismatch (landlordId)" });
+    if (u?.landlordId && baseUser.landlordId && u.landlordId !== baseUser.landlordId) {
+      return res.status(403).json({ ok: false, error: "Landlord scope mismatch" });
     }
 
-    if (dbTenantId && baseUser.tenantId && dbTenantId !== baseUser.tenantId) {
-      return res.status(403).json({ error: "Scope mismatch (tenantId)" });
+    if (u?.tenantId && baseUser.tenantId && u.tenantId !== baseUser.tenantId) {
+      return res.status(403).json({ ok: false, error: "Tenant scope mismatch" });
     }
 
-    const hydrated: HydratedUser = {
+    req.user = {
       id: baseUser.id,
-      email: u?.email ?? baseUser.email,
-      role: (u?.role ?? baseUser.role) as Role,
-      landlordId: dbLandlordId ?? baseUser.landlordId,
-      tenantId: dbTenantId ?? baseUser.tenantId,
-      permissions: Array.isArray(u?.permissions) ? (u.permissions as Permission[]) : baseUser.permissions,
-      revokedPermissions: Array.isArray(u?.revokedPermissions)
-        ? (u?.revokedPermissions as Permission[])
-        : baseUser.revokedPermissions,
+      email: u.email ?? baseUser.email,
+      role: (u.role ?? baseUser.role) as Role,
+      landlordId: u.landlordId ?? baseUser.landlordId,
+      tenantId: u.tenantId ?? baseUser.tenantId,
+      permissions: Array.isArray(u.permissions) ? u.permissions : baseUser.permissions,
+      revokedPermissions: Array.isArray(u.revokedPermissions) ? u.revokedPermissions : baseUser.revokedPermissions,
     };
 
-    (req as any).user = hydrated;
-    return next();
-  } catch (_err) {
-    return res.status(401).json({ error: "Invalid or expired token" });
+    next();
+  } catch {
+    return res.status(401).json({ ok: false, error: "Invalid or expired token" });
   }
 }
