@@ -37,7 +37,8 @@ export const TopNav: React.FC = () => {
   const { plan, setPlan } = useSubscription();
   const { user, logout } = useAuth();
   const [me, setMe] = useState<any>(null);
-  const planValue = String(me?.plan ?? plan ?? "starter").trim().toLowerCase();
+  const planValue = String(plan ?? "starter").trim().toLowerCase();
+  const displayedPlan = String(me?.plan ?? "starter").trim().toLowerCase();
 
   useEffect(() => {
     let alive = true;
@@ -265,29 +266,34 @@ export const TopNav: React.FC = () => {
           style={{
             display: "flex",
             alignItems: "center",
-            gap: 8,
+            gap: 12,
           }}
         >
-          <span style={{ color: "#cbd5f5", fontSize: 12 }}>Plan</span>
-          <select
-            value={planValue}
-            onChange={(e) => setPlan(e.target.value as any)}
-            style={{
-              borderRadius: radius.pill,
-              border: `1px solid ${colors.border}`,
-              backgroundColor: colors.panel,
-              color: text.primary,
-              fontSize: 12,
-              padding: "4px 10px",
-              outline: "none",
-              cursor: "pointer",
-            }}
-          >
-            <option value="starter">{planLabel("starter")}</option>
-            <option value="core">{planLabel("core")}</option>
-            <option value="pro">{planLabel("pro")}</option>
-            <option value="elite">{planLabel("elite")}</option>
-          </select>
+          <span style={{ color: "#cbd5f5", fontSize: 12 }}>
+            Plan: {planLabel(displayedPlan)}
+          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ color: "#cbd5f5", fontSize: 12 }}>Demo plan</span>
+            <select
+              value={planValue}
+              onChange={(e) => setPlan(e.target.value as any)}
+              style={{
+                borderRadius: radius.pill,
+                border: `1px solid ${colors.border}`,
+                backgroundColor: colors.panel,
+                color: text.primary,
+                fontSize: 12,
+                padding: "4px 10px",
+                outline: "none",
+                cursor: "pointer",
+              }}
+            >
+              <option value="starter">{planLabel("starter")}</option>
+              <option value="core">{planLabel("core")}</option>
+              <option value="pro">{planLabel("pro")}</option>
+              <option value="elite">{planLabel("elite")}</option>
+            </select>
+          </div>
         </div>
 
         {user ? (
