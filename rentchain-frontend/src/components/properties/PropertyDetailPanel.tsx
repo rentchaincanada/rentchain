@@ -77,6 +77,18 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
     try {
       setIsImporting(true);
       const csvText = await readFileText(pendingFile);
+      console.log("[units-import] file=", pendingFile?.name, pendingFile?.size, pendingFile?.type);
+      console.log("[units-import] csvText.len=", csvText?.length);
+      console.log("[units-import] csvText.head=", String(csvText ?? "").slice(0, 120));
+
+      if (!csvText || !String(csvText).trim()) {
+        showToast({
+          message: "CSV import failed",
+          description: "CSV file appears empty or unreadable.",
+          variant: "error",
+        });
+        return;
+      }
       const result = await importUnitsCsv(property.id, csvText);
 
       const created = result?.createdCount ?? result?.created ?? 0;
