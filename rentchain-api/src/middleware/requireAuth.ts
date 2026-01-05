@@ -54,15 +54,26 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       return res.status(403).json({ error: "Account disabled" });
     }
 
+    const dbLandlordId = u?.landlordId as string | undefined;
+    const dbTenantId = u?.tenantId as string | undefined;
+
+    if (dbLandlordId && baseUser.landlordId && dbLandlordId !== baseUser.landlordId) {
+      return res.status(403).json({ error: "Scope mismatch (landlordId)" });
+    }
+
+    if (dbTenantId && baseUser.tenantId && dbTenantId !== baseUser.tenantId) {
+      return res.status(403).json({ error: "Scope mismatch (tenantId)" });
+    }
+
     const hydrated: HydratedUser = {
       id: baseUser.id,
       email: u?.email ?? baseUser.email,
       role: (u?.role ?? baseUser.role) as Role,
-      landlordId: u?.landlordId ?? baseUser.landlordId,
-      tenantId: u?.tenantId ?? baseUser.tenantId,
+      landlordId: dbLandlordId ?? baseUser.landlordId,
+      tenantId: dbTenantId ?? baseUser.tenantId,
       permissions: Array.isArray(u?.permissions) ? (u.permissions as Permission[]) : baseUser.permissions,
       revokedPermissions: Array.isArray(u?.revokedPermissions)
-        ? (u.revokedPermissions as Permission[])
+        ? (u?.revokedPermissions as Permission[])
         : baseUser.revokedPermissions,
     };
 
