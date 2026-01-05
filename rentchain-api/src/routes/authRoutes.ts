@@ -263,6 +263,7 @@ router.post("/login", async (req, res) => {
       ok: false,
       code: "INTERNAL",
       error: "Login failed",
+      detail: String(err?.message || "unknown"),
       requestId,
     });
   }
