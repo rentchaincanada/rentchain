@@ -39,6 +39,7 @@ import usageBreakdownRoutes from "./routes/usageBreakdownRoutes";
 import tenantReportRoutes from "./routes/tenantReportRoutes";
 import impersonationRoutes from "./routes/impersonationRoutes";
 import tenantReportPdfRoutes from "./routes/tenantReportPdfRoutes";
+import adminDemoRoutes from "./routes/adminDemoRoutes";
 
 const app: Application = express();
 app.set("etag", false);
@@ -109,6 +110,7 @@ app.use("/api/impersonation", routeSource("impersonationRoutes.ts"), impersonati
 app.use("/api", routeSource("tenantReportPdfRoutes.ts"), tenantReportPdfRoutes);
 app.use("/api", stubsRoutes);
 app.use("/api/admin", routeSource("adminBootstrapRoutes"), adminBootstrapRoutes);
+app.use("/api/admin/demo", routeSource("adminDemoRoutes.ts"), adminDemoRoutes);
 
 // Core API mounts
 app.use("/health", routeSource("healthRoutes.ts"), healthRoutes);

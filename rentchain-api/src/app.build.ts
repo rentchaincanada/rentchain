@@ -43,6 +43,7 @@ import impersonationRoutes from "./routes/impersonationRoutes";
 import unitImportRoutes from "./routes/unitImportRoutes";
 import actionRequestsRecomputeRoutes from "./routes/actionRequestsRecomputeRoutes";
 import actionRequestsRoutes from "./routes/actionRequestsRoutes";
+import adminDemoRoutes from "./routes/adminDemoRoutes";
 
 export const app = express();
 app.set("etag", false);
@@ -103,6 +104,7 @@ app.use("/api/impersonation", routeSource("impersonationRoutes.ts"), impersonati
 app.use("/api/properties/:propertyId/units", routeSource("unitImportRoutes.ts"), unitImportRoutes);
 app.use("/api/action-requests", routeSource("actionRequestsRoutes.ts"), actionRequestsRoutes);
 app.use("/api/action-requests", routeSource("actionRequestsRecomputeRoutes.ts"), actionRequestsRecomputeRoutes);
+app.use("/api/admin/demo", routeSource("adminDemoRoutes.ts"), adminDemoRoutes);
 app.use("/api", stubsRoutes);
 app.use("/api/admin", routeSource("adminBootstrapRoutes"), adminBootstrapRoutes);
 
