@@ -37,6 +37,7 @@ export const TopNav: React.FC = () => {
   const { plan, setPlan } = useSubscription();
   const { user, logout } = useAuth();
   const [me, setMe] = useState<any>(null);
+  const planValue = String(me?.plan ?? plan ?? "starter").trim().toLowerCase();
 
   useEffect(() => {
     let alive = true;
@@ -269,7 +270,7 @@ export const TopNav: React.FC = () => {
         >
           <span style={{ color: "#cbd5f5", fontSize: 12 }}>Plan</span>
           <select
-            value={me?.plan ?? plan}
+            value={planValue}
             onChange={(e) => setPlan(e.target.value as any)}
             style={{
               borderRadius: radius.pill,

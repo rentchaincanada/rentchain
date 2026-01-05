@@ -63,8 +63,10 @@ const PropertiesPage: React.FC = () => {
   const { showToast } = useToast();
   const isMobile = useIsMobile();
   const plan = me?.plan ?? "starter"; // limits.plan is informational; do not override authenticated plan
-  const maxProperties = PLANS.starter.maxProperties;
-  const maxUnits = PLANS.starter.maxUnits;
+  const planKey = String(plan ?? "starter").trim().toLowerCase();
+  const planLimits = (PLANS as any)[planKey] ?? PLANS.starter;
+  const maxProperties = planLimits.maxProperties;
+  const maxUnits = planLimits.maxUnits;
   const currentProperties = properties?.length ?? 0;
   const canAddProperty = currentProperties < maxProperties;
   const totalOpenAcrossPortfolio = useMemo(
@@ -440,11 +442,10 @@ const PropertiesPage: React.FC = () => {
               }}
               title={(() => {
                 const usage = (limits as any)?.usage ?? {};
-                const limitsObj = (limits as any)?.limits ?? (limits as any)?.entitlements ?? {};
                 const propsUsed = usage?.properties ?? 0;
                 const unitsUsed = usage?.units ?? 0;
-                const propsMax = limitsObj?.maxProperties ?? limitsObj?.propertiesMax ?? 0;
-                const unitsMax = maxUnits;
+                const propsMax = planLimits.maxProperties;
+                const unitsMax = planLimits.maxUnits;
                 const tooltip = `Plan ${plan} • Properties ${propsUsed}/${propsMax} • Units ${unitsUsed}/${unitsMax}`;
                 return typeof tooltip === "string" ? tooltip : undefined;
               })()}
@@ -453,10 +454,10 @@ const PropertiesPage: React.FC = () => {
                 {plan}
               </span>
               <span>
-                Props: {(limits as any)?.usage?.properties ?? 0}/{maxProperties}
+                Props: {(limits as any)?.usage?.properties ?? 0}/{planLimits.maxProperties}
               </span>
               <span>
-                Units: {(limits as any)?.usage?.units ?? 0}/{maxUnits}
+                Units: {(limits as any)?.usage?.units ?? 0}/{planLimits.maxUnits}
               </span>
             </div>
           ) : null}
