@@ -224,20 +224,24 @@ router.post("/login", async (req, res) => {
       },
     });
   } catch (err: any) {
-    const msg = String(err?.message || "");
-    const code = String(err?.code || "");
-    const looksLikeAuthFailure =
-      code.includes("auth/") ||
-      code === "UNAUTHORIZED" ||
-      code === "INVALID_CREDENTIALS" ||
-      /invalid|expired|revoked|credential|password|token|unauthorized/i.test(msg);
+    try {
+      const msg = String(err?.message || "");
+      const code = String(err?.code || "");
+      const looksLikeAuthFailure =
+        code.includes("auth/") ||
+        code === "UNAUTHORIZED" ||
+        code === "INVALID_CREDENTIALS" ||
+        /invalid|expired|revoked|credential|password|token|unauthorized/i.test(msg);
 
-    if (looksLikeAuthFailure) {
-      return jsonError(res, 401, "Unauthorized", "UNAUTHORIZED");
+      if (looksLikeAuthFailure) {
+        return jsonError(res, 401, "Unauthorized", "UNAUTHORIZED");
+      }
+    } catch {
+      // fall through to generic error
     }
 
-    console.error("[auth/login] error", err);
-    return jsonError(res, 500, "Internal Server Error", "INTERNAL");
+    console.error("[auth/login]", err);
+    return jsonError(res, 500, "INTERNAL", "Login failed", { detail: String(err?.message ?? err) }, (req as any).requestId);
   }
 });
 
