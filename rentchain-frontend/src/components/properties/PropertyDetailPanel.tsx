@@ -91,61 +91,64 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
       }
       const idempotencyKey = `${property.id}:${pendingFile.name}:${pendingFile.size}:${pendingFile.lastModified}`;
       const result = await importUnitsCsv(property.id, csvText, "partial", idempotencyKey);
-
       const created = result?.createdCount ?? result?.created ?? 0;
       const updated = result?.updatedCount ?? result?.updated ?? 0;
       const skipped = result?.skippedCount ?? result?.skipped ?? 0;
       const errCount = Array.isArray(result?.errors) ? result.errors.length : 0;
-
       showToast({
-        message: "CSV import complete",
-        description: `Created ${created}, updated ${updated}, skipped ${skipped}${
-          errCount ? ` • ${errCount} error(s)` : ""
+        message: "Units imported",
+        description: `Created ${created} | Updated ${updated} | Skipped ${skipped}${
+          errCount ? ` | ${errCount} issue(s)` : ""
         }`,
         variant: errCount ? "warning" : "success",
       });
-
       setPreviewOpen(false);
       setPendingFile(null);
       setPendingFilename("");
       setImportMessage(
         result?.message ||
-          `Created ${created}, updated ${updated}, skipped ${skipped}${
-            errCount ? ` • ${errCount} error(s)` : ""
+          `Created ${created} | Updated ${updated} | Skipped ${skipped}${
+            errCount ? ` | ${errCount} issue(s)` : ""
           }`
       );
-
       if (onRefresh) {
         await onRefresh();
       }
-
       try {
         await setOnboardingStep("addUnits", true);
       } catch {
         // ignore onboarding errors
       }
-
-      showToast({
-        message: "Portfolio ready — dashboard is live.",
-        variant: "success",
-      });
-
-      navigate("/dashboard?onboarding=ready", { replace: true });
+      // stay on page; no additional navigation/toasts
     } catch (e: any) {
       const status = e?.response?.status;
-      const code = e?.response?.data?.code;
-      const errMsg = String(e?.response?.data?.error || e?.message || "");
-      if (
-        status === 403 ||
+      const data = e?.response?.data;
+      const code = data?.code;
+      const errMsg = String(data?.error || e?.message || "");
+      const isPlanLimit =
+        (status === 403 && data?.error === "PLAN_LIMIT") ||
         (status === 409 && code === "LIMIT_REACHED") ||
-        /plan limit/i.test(errMsg)
-      ) {
+        /plan limit/i.test(errMsg);
+
+      if (status === 403 && data?.error === "PLAN_LIMIT") {
+        showToast({
+          message: "Upgrade required",
+          description: `${data?.message || "Plan limit reached."} (You have ${
+            data?.existing ?? "-"
+          } of ${data?.limit ?? "-"} units).`,
+          variant: "warning",
+        });
+        return;
+      }
+
+      if (isPlanLimit) {
         // Upgrade modal is triggered globally; avoid duplicate error toast.
         return;
       }
+
       showToast({
-        message: "CSV import failed",
-        description: e?.message ?? "Import failed",
+        message: "Import unsuccessful",
+        description: e?.message ?? "Please try again.",
         variant: "error",
       });
     } finally {
