@@ -132,6 +132,17 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
 
       navigate("/dashboard?onboarding=ready", { replace: true });
     } catch (e: any) {
+      const status = e?.response?.status;
+      const code = e?.response?.data?.code;
+      const errMsg = String(e?.response?.data?.error || e?.message || "");
+      if (
+        status === 403 ||
+        (status === 409 && code === "LIMIT_REACHED") ||
+        /plan limit/i.test(errMsg)
+      ) {
+        // Upgrade modal is triggered globally; avoid duplicate error toast.
+        return;
+      }
       showToast({
         message: "CSV import failed",
         description: e?.message ?? "Import failed",
