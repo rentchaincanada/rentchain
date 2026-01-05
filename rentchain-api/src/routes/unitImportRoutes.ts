@@ -193,6 +193,7 @@ async function runUnitImport(opts: {
     wouldInsert
   );
   if (!cap.ok) {
+    const message = `Starter plan allows up to ${cap.limit} units total`;
     if (jobRef) {
       await failImportJob(jobRef, {
         totalRows: parsed.totalRows,
@@ -201,15 +202,23 @@ async function runUnitImport(opts: {
       });
     }
     return {
-      httpStatus: 409,
+      httpStatus: 403,
       body: {
         ok: false,
-        code: "LIMIT_REACHED",
-        error: "Plan limit reached: max units",
+        error: "PLAN_LIMIT",
+        message,
+        limit: cap.limit,
+        existing: cap.current,
+        attempted: cap.adding,
         requestId,
-        details: { plan: cap.plan, current: cap.current, adding: cap.adding, limit: cap.limit },
       },
-      report: { ok: false, mode, summary, issues, limit: cap },
+      report: {
+        ok: false,
+        mode,
+        summary,
+        issues,
+        limit: { limit: cap.limit, existing: cap.current, attempted: cap.adding, plan: cap.plan },
+      },
     };
   }
 
