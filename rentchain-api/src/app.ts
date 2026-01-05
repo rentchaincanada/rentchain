@@ -40,6 +40,7 @@ import tenantReportRoutes from "./routes/tenantReportRoutes";
 import impersonationRoutes from "./routes/impersonationRoutes";
 import tenantReportPdfRoutes from "./routes/tenantReportPdfRoutes";
 import adminDemoRoutes from "./routes/adminDemoRoutes";
+import authzRoutes from "./routes/authzRoutes";
 
 const app: Application = express();
 app.set("etag", false);
@@ -111,6 +112,7 @@ app.use("/api", routeSource("tenantReportPdfRoutes.ts"), tenantReportPdfRoutes);
 app.use("/api", stubsRoutes);
 app.use("/api/admin", routeSource("adminBootstrapRoutes"), adminBootstrapRoutes);
 app.use("/api/admin/demo", routeSource("adminDemoRoutes.ts"), adminDemoRoutes);
+app.use("/api", authzRoutes);
 
 // Core API mounts
 app.use("/health", routeSource("healthRoutes.ts"), healthRoutes);
