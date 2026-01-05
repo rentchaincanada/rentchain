@@ -32,6 +32,7 @@ import { BoardSnapshotDrawer } from "../components/dashboard/BoardSnapshotDrawer
 import { fetchMonthlySnapshot } from "../api/reporting";
 import { apiFetch } from "../api/http";
 import MonthlyOpsSnapshotPanel from "../components/dashboard/MonthlyOpsSnapshotPanel";
+import { PLANS } from "../config/plans";
 
 function fmtDate(d: Date) {
   try {
@@ -103,6 +104,9 @@ const DashboardPage: React.FC = () => {
   const limitsObj = limitsResp?.limits ?? limitsResp ?? {};
   const usageObj = limitsResp?.usage ?? limitsResp?.integrity?.after ?? {};
   const displayPlan = me?.plan ?? user?.plan ?? "starter"; // limits.plan is informational; do not override authenticated plan
+  const planKeyRaw = (displayPlan ?? "starter").toString();
+  const planKey = planKeyRaw.trim().toLowerCase() as keyof typeof PLANS;
+  const planLimits = PLANS[planKey] ?? PLANS.starter;
 
   const unitsCount = usageObj?.units ?? 0;
   const propertiesCount = usageObj?.properties ?? 0;
@@ -141,7 +145,7 @@ const DashboardPage: React.FC = () => {
 
   const fmtMoney = (cents: any) => {
     const n = safeNum(cents);
-    if (n == null) return "—";
+    if (n == null) return "-";
     try {
       return new Intl.NumberFormat(undefined, { style: "currency", currency: "CAD" }).format(n / 100);
     } catch {
@@ -149,8 +153,14 @@ const DashboardPage: React.FC = () => {
     }
   };
 
-  const unitsMax = limitsObj?.maxUnits ?? 0;
-  const propertiesMax = limitsObj?.maxProperties ?? 0;
+  const unitsMax =
+    planLimits?.maxUnits ??
+    (typeof limitsObj?.maxUnits === "number" ? limitsObj.maxUnits : undefined) ??
+    PLANS.starter.maxUnits;
+  const propertiesMax =
+    planLimits?.maxProperties ??
+    (typeof limitsObj?.maxProperties === "number" ? limitsObj.maxProperties : undefined) ??
+    PLANS.starter.maxProperties;
 
   const handleOpenOnboarding = () => {
     setShowOnboarding(true);
