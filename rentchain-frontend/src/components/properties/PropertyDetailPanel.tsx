@@ -89,7 +89,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
         });
         return;
       }
-      const result = await importUnitsCsv(property.id, csvText);
+      const result = await importUnitsCsv(property.id, csvText, "partial");
 
       const created = result?.createdCount ?? result?.created ?? 0;
       const updated = result?.updatedCount ?? result?.updated ?? 0;
