@@ -96,7 +96,26 @@ export function DashboardPropertyTable({
 
               return (
                 <tr key={p.id}>
-                  <td>{p.name}</td>
+                  <td>
+                    <span>{p.name}</span>
+                    {(p as any)?.isDemo ? (
+                      <span
+                        style={{
+                          marginLeft: 6,
+                          padding: "2px 6px",
+                          borderRadius: 999,
+                          background: "rgba(59,130,246,0.12)",
+                          color: "#1d4ed8",
+                          fontSize: 10,
+                          fontWeight: 700,
+                          textTransform: "uppercase",
+                          letterSpacing: 0.3,
+                        }}
+                      >
+                        Demo
+                      </span>
+                    ) : null}
+                  </td>
                   <td>{p.city}</td>
                   <td>{p.units}</td>
                   <td>{p.occupiedUnits ?? "-"}</td>
