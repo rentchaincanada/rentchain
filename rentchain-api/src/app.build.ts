@@ -45,6 +45,7 @@ import actionRequestsRecomputeRoutes from "./routes/actionRequestsRecomputeRoute
 import actionRequestsRoutes from "./routes/actionRequestsRoutes";
 import adminDemoRoutes from "./routes/adminDemoRoutes";
 import authzRoutes from "./routes/authzRoutes";
+import reportsExportRoutes from "./routes/reportsExportRoutes";
 
 export const app = express();
 app.set("etag", false);
@@ -107,6 +108,7 @@ app.use("/api/action-requests", routeSource("actionRequestsRoutes.ts"), actionRe
 app.use("/api/action-requests", routeSource("actionRequestsRecomputeRoutes.ts"), actionRequestsRecomputeRoutes);
 app.use("/api/admin/demo", routeSource("adminDemoRoutes.ts"), adminDemoRoutes);
 app.use("/api", authzRoutes);
+app.use("/api", reportsExportRoutes);
 app.use("/api", stubsRoutes);
 app.use("/api/admin", routeSource("adminBootstrapRoutes"), adminBootstrapRoutes);
 
