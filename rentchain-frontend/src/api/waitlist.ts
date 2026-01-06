@@ -1,5 +1,6 @@
 export async function joinWaitlist(email: string, name?: string) {
-  const res = await fetch("/api/waitlist", {
+  const url = `${window.location.origin}/api/waitlist`;
+  const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, name, source: "pricing" }),

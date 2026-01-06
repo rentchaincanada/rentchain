@@ -1,8 +1,7 @@
-import { resolveApiUrl } from "../lib/apiClient";
-
 export async function joinWaitlist(payload: { email: string; name?: string }) {
-  console.log("[joinWaitlist] posting to", resolveApiUrl("/api/waitlist"));
-  const res = await fetch(resolveApiUrl("/api/waitlist"), {
+  const url = `${window.location.origin}/api/waitlist`;
+  console.log("[joinWaitlist] posting to", url);
+  const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ...payload, source: "landing" }),
