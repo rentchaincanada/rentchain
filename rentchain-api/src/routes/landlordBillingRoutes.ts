@@ -1,12 +1,11 @@
 import { Router } from "express";
-import { requireRole } from "../middleware/requireRole";
 import { getUsage, currentPeriod } from "../services/billingUsage";
+import { requireAuth } from "../middleware/requireAuth";
+import { requirePermission } from "../middleware/requireAuthz";
 
 const router = Router();
 
-router.use(requireRole(["landlord", "admin"]));
-
-router.get("/billing/usage", async (req: any, res) => {
+router.get("/billing/usage", requireAuth, requirePermission("reports.view"), async (req: any, res) => {
   const landlordId = req.user?.landlordId || req.user?.id;
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
   const period = String(req.query?.period || currentPeriod());
