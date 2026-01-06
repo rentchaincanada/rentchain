@@ -26,7 +26,14 @@ function formatDate(ts: number | null): string {
 const DashboardPage: React.FC = () => {
   const { data, loading, error, refetch, lastUpdatedAt } = useDashboardSummary();
   const apiBase = debugApiBase();
-  const showDebug = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("debug") === "1";
+  const showDebug =
+    typeof window !== "undefined" && new URLSearchParams(window.location.search).get("debug") === "1";
+
+  React.useEffect(() => {
+    if (showDebug) {
+      console.log("[debug] apiBase", apiBase);
+    }
+  }, [showDebug, apiBase]);
 
   const kpis = data?.kpis;
   const actions = data?.actions ?? [];
@@ -101,7 +108,7 @@ const DashboardPage: React.FC = () => {
               API Base: {apiBase.normalized || "(relative)"}
             </div>
             <div style={{ color: text.muted, fontSize: 12 }}>
-              API Base Raw: {apiBase.raw || "(unset)"}
+              API Base Raw: {apiBase.raw ?? "(unset)"}
             </div>
           </Section>
         ) : null}
