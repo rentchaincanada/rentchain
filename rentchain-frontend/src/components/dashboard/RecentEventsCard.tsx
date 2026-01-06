@@ -6,6 +6,7 @@ type Props = {
   events: any[];
   loading?: boolean;
   onOpenLedger?: () => void;
+  openLedgerEnabled?: boolean;
 };
 
 function formatDate(value: any): string {
@@ -25,18 +26,19 @@ function formatDate(value: any): string {
   }
 }
 
-export function RecentEventsCard({ events, loading, onOpenLedger }: Props) {
+export function RecentEventsCard({ events, loading, onOpenLedger, openLedgerEnabled }: Props) {
   const skeletonRows = Array.from({ length: 8 });
   const list = Array.isArray(events) ? events.slice(0, 10) : [];
+  const canOpenLedger = Boolean(onOpenLedger) && openLedgerEnabled !== false;
 
   return (
     <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: spacing.sm }}>
         <div style={{ fontWeight: 800 }}>Recent Events</div>
         <Button
-          onClick={onOpenLedger}
-          disabled={!onOpenLedger}
-          title={onOpenLedger ? undefined : "Coming soon"}
+          onClick={canOpenLedger ? onOpenLedger : undefined}
+          disabled={!canOpenLedger}
+          title={canOpenLedger ? undefined : "Coming soon"}
         >
           Open ledger
         </Button>

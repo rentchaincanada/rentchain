@@ -1,5 +1,4 @@
 import React from "react";
-import { useNavigate } from "react-router-dom";
 import { MacShell } from "../components/layout/MacShell";
 import { Card, Section, Button } from "../components/ui/Ui";
 import { spacing, text, colors } from "../styles/tokens";
@@ -24,7 +23,6 @@ function formatDate(ts: number | null): string {
 }
 
 const DashboardPage: React.FC = () => {
-  const navigate = useNavigate();
   const { data, loading, error, refetch, lastUpdatedAt } = useDashboardSummary();
 
   const kpis = data?.kpis;
@@ -63,7 +61,7 @@ const DashboardPage: React.FC = () => {
             <div style={{ color: text.muted, marginBottom: 12 }}>
               Create your first property to start tracking tenants, rent, and records.
             </div>
-            <Button onClick={() => navigate("/properties")}>Create property</Button>
+            <Button onClick={() => { window.location.assign("/properties"); }}>Create property</Button>
           </Card>
         ) : null}
 
@@ -79,12 +77,12 @@ const DashboardPage: React.FC = () => {
           <ActionRequiredPanel
             items={actions}
             loading={loading}
-            onViewAll={() => navigate("/action-center")}
+            viewAllEnabled={false}
           />
           <RecentEventsCard
             events={events}
             loading={loading}
-            onOpenLedger={() => navigate("/ledger")}
+            openLedgerEnabled={false}
           />
         </div>
 
