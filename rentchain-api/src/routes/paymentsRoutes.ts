@@ -8,6 +8,8 @@ import {
 } from "../services/paymentsService";
 import { leaseService } from "../services/leaseService";
 import { recordPaymentEvent } from "../services/ledgerEventsService";
+import { requireAuth } from "../middleware/requireAuth";
+import { requirePermission } from "../middleware/requireAuthz";
 
 const router = Router();
 
@@ -35,7 +37,11 @@ router.get("/payments", (req: Request, res: Response) => {
 });
 
 // POST /api/payments
-router.post("/payments", (req: any, res: Response) => {
+router.post(
+  "/payments",
+  requireAuth,
+  requirePermission(["payments.record", "ledger.record"]),
+  (req: any, res: Response) => {
   const body = req.body as Partial<CreatePaymentPayload>;
   if (!body.tenantId || typeof body.amount !== "number" || !body.paidAt || !body.method) {
     return res.status(400).json({ error: "tenantId, amount, paidAt, and method are required" });
@@ -61,10 +67,15 @@ router.post("/payments", (req: any, res: Response) => {
   });
 
   return res.status(201).json(payment);
-});
+}
+);
 
 // POST /api/payments/record (alias for quick entry)
-router.post("/payments/record", (req: any, res: Response) => {
+router.post(
+  "/payments/record",
+  requireAuth,
+  requirePermission(["payments.record", "ledger.record"]),
+  (req: any, res: Response) => {
   const body = req.body as Partial<CreatePaymentPayload>;
   if (!body.tenantId || typeof body.amount !== "number" || !body.paidAt || !body.method) {
     return res.status(400).json({ error: "tenantId, amount, paidAt, and method are required" });
@@ -90,7 +101,8 @@ router.post("/payments/record", (req: any, res: Response) => {
   });
 
   return res.status(201).json(payment);
-});
+}
+);
 
 // GET /api/payments/tenant/:tenantId/monthly
 router.get("/payments/tenant/:tenantId/monthly", (req: Request, res: Response) => {
@@ -132,7 +144,7 @@ router.get("/payments/property/:propertyId/monthly", (req: Request, res: Respons
 });
 
 // PUT /api/payments/:paymentId
-router.put("/payments/:paymentId", (req: any, res: Response) => {
+router.put("/payments/:paymentId", requireAuth, requirePermission("payments.edit"), (req: any, res: Response) => {
   const { paymentId } = req.params;
   const { amount, notes } = req.body as Partial<Payment>;
 
@@ -167,7 +179,7 @@ router.put("/payments/:paymentId", (req: any, res: Response) => {
 });
 
 // DELETE /api/payments/:paymentId
-router.delete("/payments/:paymentId", (req: any, res: Response) => {
+router.delete("/payments/:paymentId", requireAuth, requirePermission("payments.edit"), (req: any, res: Response) => {
   const { paymentId } = req.params;
   if (!paymentId) {
     return res.status(400).json({ error: "paymentId is required" });
