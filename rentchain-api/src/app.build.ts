@@ -99,6 +99,7 @@ app.use("/api", routeSource("tenantInviteAliasesRoutes"), tenantInviteAliasesRou
 app.use("/api", routeSource("tenantEventsRoutes"), tenantEventsRoutes);
 app.use("/api", routeSource("tenantEventsWriteRoutes"), tenantEventsWriteRoutes);
 app.use("/api", routeSource("usageBreakdownRoutes.ts"), usageBreakdownRoutes);
+app.use("/api/properties", propertiesRoutes);
 app.use("/api", routeSource("tenantReportRoutes.ts"), tenantReportRoutes);
 app.use("/api", routeSource("tenantReportPdfRoutes.ts"), tenantReportPdfRoutes);
 app.use("/api", applicationsRoutes);
@@ -121,7 +122,6 @@ app.use("/api", tenantOnboardRoutes);
 app.use("/api/events", eventsRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/landlord", landlordMicroLiveRoutes);
-app.use("/api/properties", propertiesRoutes);
 app.use("/api/tenants", tenantsRoutes);
 app.use("/api/account", accountRoutes);
 app.use("/api/onboarding", onboardingRoutes);
@@ -132,6 +132,12 @@ console.log(
 app.post("/api/_echo", (req, res) => {
   res.setHeader("x-route-source", "app.build.ts:/api/_echo");
   return res.json({ ok: true, method: "POST", body: req.body ?? null });
+});
+
+// API 404 handler
+app.use("/api", (_req, res) => {
+  res.setHeader("x-route-source", "not-found");
+  return res.status(404).json({ ok: false, code: "NOT_FOUND", error: "Not Found" });
 });
 
 // Build stamp
