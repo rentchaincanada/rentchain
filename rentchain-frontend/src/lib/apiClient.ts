@@ -1,4 +1,6 @@
-import API_BASE from "../config/apiBase";
+import { getApiBaseUrl } from "../api/baseUrl";
+
+let warnedMisconfig = false;
 
 export function getAuthToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -25,7 +27,7 @@ export function clearAuthToken() {
 
 export function resolveApiUrl(input: string) {
   const sRaw = String(input || "").trim();
-  const base = (API_BASE || "").replace(/\/$/, "");
+  const base = (getApiBaseUrl() || "").replace(/\/$/, "");
 
   if (!sRaw) return base;
   if (/^https?:\/\//i.test(sRaw)) return sRaw;
@@ -33,7 +35,22 @@ export function resolveApiUrl(input: string) {
   const [pathPart, queryPart] = sRaw.split("?");
   const path = pathPart.startsWith("/") ? pathPart : `/${pathPart}`;
   const normalized = path.startsWith("/api/") ? path : `/api${path}`;
-  return `${base}${normalized}${queryPart ? `?${queryPart}` : ""}`;
+  const url = `${base}${normalized}${queryPart ? `?${queryPart}` : ""}`;
+
+  if (
+    !warnedMisconfig &&
+    import.meta.env.PROD &&
+    typeof window !== "undefined" &&
+    window.location.host.includes("rentchain.ai") &&
+    url.startsWith("https://www.rentchain.ai/api/")
+  ) {
+    warnedMisconfig = true;
+    console.warn(
+      "API base misconfigured: requests are hitting Vercel. Set VITE_API_BASE_URL to Cloud Run."
+    );
+  }
+
+  return url;
 }
 
 export async function apiFetch(path: string, init: RequestInit = {}) {
