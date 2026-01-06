@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { requireRole } from "../middleware/requireRole";
+import { requirePermission } from "../middleware/requireAuthz";
 import { db } from "../config/firebase";
 import { getReportingRuntimeConfig, getPilotLandlordAllowlist } from "../services/reporting/reportingConfig";
 import { getTenantCreditHistory } from "../services/tenantCreditProfileService";
@@ -23,7 +24,11 @@ async function fetchConsent(tenantId: string, landlordId: string) {
   return { id: snap.docs[0].id, ...(snap.docs[0].data() as any) };
 }
 
-router.post("/reporting/invite", async (req: any, res) => {
+router.post(
+  "/reporting/invite",
+  requireRole(["landlord", "admin"]),
+  requirePermission("users.invite"),
+  async (req: any, res) => {
   const tenantId = req.body?.tenantId;
   const landlordId = req.user?.landlordId || req.user?.id;
   if (!tenantId || !landlordId) return res.status(400).json({ error: "tenantId required" });
@@ -46,9 +51,14 @@ router.post("/reporting/invite", async (req: any, res) => {
     console.error("[landlordReportingRoutes] invite error", err);
     return res.status(500).json({ error: "Failed to invite for consent" });
   }
-});
+  }
+);
 
-router.get("/reporting/status", async (req: any, res) => {
+router.get(
+  "/reporting/status",
+  requireRole(["landlord", "admin"]),
+  requirePermission("reports.view"),
+  async (req: any, res) => {
   const tenantId = req.query.tenantId as string;
   const landlordId = req.user?.landlordId || req.user?.id;
   if (!tenantId || !landlordId) return res.status(400).json({ error: "tenantId required" });
@@ -72,9 +82,14 @@ router.get("/reporting/status", async (req: any, res) => {
     console.error("[landlordReportingRoutes] status error", err);
     return res.status(500).json({ error: "Failed to load status" });
   }
-});
+  }
+);
 
-router.post("/reporting/queue", async (req: any, res) => {
+router.post(
+  "/reporting/queue",
+  requireRole(["landlord", "admin"]),
+  requirePermission("reports.export"),
+  async (req: any, res) => {
   const tenantId = req.body?.tenantId;
   const months = Number(req.body?.months || 12);
   const providerKey = (req.body?.providerKey as string) || "mock";
@@ -153,6 +168,7 @@ router.post("/reporting/queue", async (req: any, res) => {
     console.error("[landlordReportingRoutes] queue error", err);
     return res.status(500).json({ error: "Failed to queue reporting" });
   }
-});
+  }
+);
 
 export default router;

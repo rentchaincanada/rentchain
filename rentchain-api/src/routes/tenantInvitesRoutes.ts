@@ -2,16 +2,10 @@ import { Router } from "express";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { db } from "../config/firebase";
-import { authenticateJwt } from "../middleware/authMiddleware";
+import { requireAuth } from "../middleware/requireAuth";
+import { requirePermission } from "../middleware/requireAuthz";
 
 const router = Router();
-
-function requireLandlord(req: any, res: any, next: any) {
-  if (!req.user || (req.user.role !== "landlord" && req.user.role !== "admin")) {
-    return res.status(403).json({ ok: false, error: "LANDLORD_ONLY" });
-  }
-  return next();
-}
 
 function signTenantJwt(payload: any) {
   const secret = process.env.JWT_SECRET;
@@ -19,36 +13,42 @@ function signTenantJwt(payload: any) {
   return jwt.sign(payload, secret, { expiresIn: "14d" });
 }
 
-router.post("/", authenticateJwt, requireLandlord, async (req: any, res) => {
-  const landlordId = req.user?.landlordId || req.user?.id;
-  const { tenantEmail, tenantName, propertyId, unitId, leaseId } = req.body || {};
+router.post(
+  "/",
+  requireAuth,
+  requirePermission("users.invite"),
+  async (req: any, res) => {
+    const landlordId = req.user?.landlordId || req.user?.id;
+    if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+    const { tenantEmail, tenantName, propertyId, unitId, leaseId } = req.body || {};
 
-  if (!tenantEmail) {
-    return res.status(400).json({ ok: false, error: "tenantEmail_required" });
+    if (!tenantEmail) {
+      return res.status(400).json({ ok: false, error: "tenantEmail_required" });
+    }
+
+    const token = crypto.randomBytes(24).toString("hex");
+    const now = Date.now();
+    const expiresAt = now + 1000 * 60 * 60 * 24 * 7;
+
+    await db.collection("tenantInvites").doc(token).set({
+      token,
+      landlordId,
+      tenantEmail,
+      tenantName: tenantName || null,
+      propertyId: propertyId || null,
+      unitId: unitId || null,
+      leaseId: leaseId || null,
+      status: "pending",
+      createdAt: now,
+      expiresAt,
+    });
+
+    const baseUrl = (process.env.PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
+    const inviteUrl = `${baseUrl}/tenant/invite/${token}`;
+
+    return res.json({ ok: true, token, inviteUrl, expiresAt });
   }
-
-  const token = crypto.randomBytes(24).toString("hex");
-  const now = Date.now();
-  const expiresAt = now + 1000 * 60 * 60 * 24 * 7;
-
-  await db.collection("tenantInvites").doc(token).set({
-    token,
-    landlordId,
-    tenantEmail,
-    tenantName: tenantName || null,
-    propertyId: propertyId || null,
-    unitId: unitId || null,
-    leaseId: leaseId || null,
-    status: "pending",
-    createdAt: now,
-    expiresAt,
-  });
-
-  const baseUrl = (process.env.PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
-  const inviteUrl = `${baseUrl}/tenant/invite/${token}`;
-
-  return res.json({ ok: true, token, inviteUrl, expiresAt });
-});
+);
 
 router.post("/redeem", async (req: any, res) => {
   const token = String(req.body?.token || req.body?.inviteId || "").trim();
