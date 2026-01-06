@@ -1,5 +1,6 @@
 import express from "express";
 import { authenticateJwt } from "../middleware/authMiddleware";
+import { requireAuth } from "../middleware/requireAuth";
 
 const router = express.Router();
 
@@ -65,6 +66,39 @@ router.get("/ai-insights", authenticateJwt, (_req, res) => {
     generatedAt: new Date().toISOString(),
     status: "stub",
   });
+});
+
+/**
+ * GET /api/dashboard/summary
+ * Aggregated dashboard snapshot (safe fallbacks)
+ */
+router.get("/summary", requireAuth, async (req: any, res) => {
+  const landlordId = req.user?.landlordId || req.user?.id;
+  if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+
+  const now = new Date();
+  const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+  const data = {
+    kpis: {
+      propertiesCount: 0,
+      unitsCount: 0,
+      tenantsCount: 0,
+      openActionsCount: 0,
+      delinquentCount: 0,
+    },
+    rent: {
+      month,
+      collectedCents: 0,
+      expectedCents: 0,
+      delinquentCents: 0,
+    },
+    actions: [] as any[],
+    properties: [] as any[],
+    events: [] as any[],
+  };
+
+  return res.json({ ok: true, data });
 });
 
 export default router;
