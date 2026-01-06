@@ -47,6 +47,7 @@ import adminDemoRoutes from "./routes/adminDemoRoutes";
 import authzRoutes from "./routes/authzRoutes";
 import reportsExportRoutes from "./routes/reportsExportRoutes";
 import tenantsRoutes from "./routes/tenants";
+import compatRoutes from "./routes/compatRoutes";
 
 export const app = express();
 app.set("etag", false);
@@ -93,6 +94,7 @@ app.use("/api/ledger-v2", routeSource("ledgerV2Routes.ts"), ledgerV2Routes);
 app.use("/api/tenant-history", tenantHistoryShareRoutes);
 app.use("/api", tenantSignalsRoutes);
 app.use("/api/reporting", reportingRoutes);
+app.use("/api", compatRoutes);
 app.use("/api/dashboard", routeSource("dashboardRoutes.ts"), dashboardRoutes);
 app.use("/api/tenant-invites", tenantInvitesRoutes);
 app.use("/api/tenant", tenantPortalRoutes);
