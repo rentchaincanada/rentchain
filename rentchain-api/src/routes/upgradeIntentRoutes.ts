@@ -2,6 +2,7 @@
 import { Router } from "express";
 import { db } from "../config/firebase";
 import { authenticateJwt } from "../middleware/authMiddleware";
+import { requirePermission } from "../middleware/requireAuthz";
 import { attachAccount } from "../middleware/attachAccount";
 
 const router = Router();
@@ -9,10 +10,11 @@ const router = Router();
 router.post(
   "/",
   authenticateJwt,
+  requirePermission("billing.manage"),
   attachAccount,
   async (req: AuthenticatedRequest, res) => {
     try {
-      const landlordId = req.user?.id;
+      const landlordId = (req.user as any)?.landlordId || (req.user as any)?.id;
       if (!landlordId) return res.status(401).json({ error: "Unauthorized" });
 
       const desiredPlan = String(req.body?.desiredPlan || "").toLowerCase();
