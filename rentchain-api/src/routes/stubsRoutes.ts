@@ -1,6 +1,12 @@
 import { Router } from "express";
 
 const r = Router();
+const STUBS_ENABLED = String(process.env.STUBS_ENABLED || "").toLowerCase() === "true";
+
+if (!STUBS_ENABLED) {
+  r.all("*", (_req, res) => res.status(404).json({ ok: false, error: "Not Found" }));
+  export default r;
+}
 
 // blockchain verify
 r.get("/blockchain/verify", (_req, res) =>
