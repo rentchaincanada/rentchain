@@ -42,27 +42,27 @@ export interface Property extends PropertyInput {
 export async function createProperty(
   payload: PropertyInput
 ): Promise<{ property: Property }> {
-  const res = await api.post("/properties", payload);
+  const res = await api.post("/api/properties", payload);
   const data = res.data;
   const property = (data as any)?.property ?? (data as any);
   return { property } as { property: Property };
 }
 
 export async function fetchProperties(): Promise<{ properties: Property[] }> {
-  const res = await api.get("/properties");
+  const res = await api.get("/api/properties");
   return res.data;
 }
 
 export async function fetchPropertyLedger(
   propertyId: string
 ): Promise<PropertyLedgerEntry[]> {
-  const res = await api.get(`/properties/${encodeURIComponent(propertyId)}/ledger`);
+  const res = await api.get(`/api/properties/${encodeURIComponent(propertyId)}/ledger`);
   return res.data as PropertyLedgerEntry[];
 }
 
 export async function importUnitsCsv(propertyId: string, csvText: string) {
   const res = await api.post(
-    `/properties/${propertyId}/units/import`,
+    `/api/properties/${propertyId}/units/import`,
     { csvText },
     { headers: { "Content-Type": "application/json" } }
   );

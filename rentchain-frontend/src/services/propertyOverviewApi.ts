@@ -1,6 +1,6 @@
 // src/services/propertyOverviewApi.ts
 
-import API_BASE from "../config/apiBase";
+import { getApiBaseUrl } from "../api/baseUrl";
 
 export type RiskLevel = "Low" | "Medium" | "High" | "Unknown";
 
@@ -10,10 +10,12 @@ export interface PropertySummary {
   address: string;
 }
 
-const API_BASE_URL = API_BASE.replace(/\/$/, "");
+const API_BASE_URL = getApiBaseUrl();
 
 export async function fetchProperties(): Promise<PropertySummary[]> {
-  const res = await fetch(`${API_BASE_URL}/properties`);
+  const base = API_BASE_URL;
+  const url = base ? `${base}/api/properties` : "/api/properties";
+  const res = await fetch(url);
 
   if (!res.ok) {
     throw new Error(
@@ -70,9 +72,11 @@ export interface PropertyOverviewResponse {
 export async function fetchPropertyOverview(
   propertyId: string
 ): Promise<PropertyOverviewResponse> {
-  const res = await fetch(
-    `${API_BASE_URL}/properties/${encodeURIComponent(propertyId)}/overview`
-  );
+  const base = API_BASE_URL;
+  const url = base
+    ? `${base}/api/properties/${encodeURIComponent(propertyId)}/overview`
+    : `/api/properties/${encodeURIComponent(propertyId)}/overview`;
+  const res = await fetch(url);
 
   if (!res.ok) {
     throw new Error(

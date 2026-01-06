@@ -6,12 +6,12 @@ export async function importUnitsCsv(
   mode: "dryRun" | "strict" | "partial" = "partial",
   idempotencyKey?: string
 ) {
-  console.log("[unitsImportApi] POST", `/properties/${propertyId}/units/import`, {
+  console.log("[unitsImportApi] POST", `/api/properties/${propertyId}/units/import`, {
     mode,
     hasCsvText: !!csvText,
   });
   const res = await api.post(
-    `/properties/${propertyId}/units/import`,
+    `/api/properties/${propertyId}/units/import`,
     { csvText, mode, idempotencyKey },
     { headers: { "Content-Type": "application/json" } }
   );
