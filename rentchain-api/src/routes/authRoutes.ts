@@ -170,8 +170,7 @@ router.post("/login", async (req, res) => {
       501,
       "Login provider not configured",
       "NOT_CONFIGURED",
-      { missing: ["FIREBASE_API_KEY"] },
-      requestId
+      { missing: ["FIREBASE_API_KEY"], requestId }
     );
   }
 
@@ -184,6 +183,8 @@ router.post("/login", async (req, res) => {
   const password = String(parsed.data.password || "");
   const passwordLoginEnabled =
     (process.env.PASSWORD_LOGIN_ENABLED || "true").toString().trim().toLowerCase() === "true";
+
+  let step = "start";
 
   try {
     console.log("[auth/login] flags", {
@@ -200,8 +201,6 @@ router.post("/login", async (req, res) => {
     if (!passwordLoginEnabled) {
       return jsonError(res, 403, "Login disabled", "LOGIN_DISABLED");
     }
-
-    let step = "start";
 
     step = "firebase_signin";
     const fb = await signInWithPassword(email, password);
