@@ -6,7 +6,7 @@ import { useDashboardSummary } from "../hooks/useDashboardSummary";
 import { KpiStrip } from "../components/dashboard/KpiStrip";
 import { ActionRequiredPanel } from "../components/dashboard/ActionRequiredPanel";
 import { RecentEventsCard } from "../components/dashboard/RecentEventsCard";
-import { getApiBaseUrl } from "@/api/baseUrl";
+import { debugApiBase } from "@/api/baseUrl";
 
 function formatDate(ts: number | null): string {
   if (!ts) return "—";
@@ -25,7 +25,7 @@ function formatDate(ts: number | null): string {
 
 const DashboardPage: React.FC = () => {
   const { data, loading, error, refetch, lastUpdatedAt } = useDashboardSummary();
-  const apiBase = getApiBaseUrl();
+  const apiBase = debugApiBase();
   const showDebug = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("debug") === "1";
 
   const kpis = data?.kpis;
@@ -98,7 +98,10 @@ const DashboardPage: React.FC = () => {
         {showDebug ? (
           <Section>
             <div style={{ color: text.muted, fontSize: 12 }}>
-              API Base: {apiBase || "(relative)"}
+              API Base: {apiBase.normalized || "(relative)"}
+            </div>
+            <div style={{ color: text.muted, fontSize: 12 }}>
+              API Base Raw: {apiBase.raw || "(unset)"}
             </div>
           </Section>
         ) : null}
