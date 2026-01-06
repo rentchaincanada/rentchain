@@ -228,14 +228,15 @@ router.post("/login", async (req, res) => {
     } as any);
 
     step = "jwt_sign";
+    const claimsUser = user as any;
     const token = signAuthToken(
       {
         sub: user.id,
         email: user.email,
-        role: user.role,
-        landlordId: user.landlordId,
-        permissions: (user as any).permissions ?? [],
-        revokedPermissions: (user as any).revokedPermissions ?? [],
+        role: claimsUser.role || "landlord",
+        landlordId: claimsUser.landlordId || user.id,
+        permissions: claimsUser.permissions ?? [],
+        revokedPermissions: claimsUser.revokedPermissions ?? [],
       },
       { expiresIn: "7d" }
     );
