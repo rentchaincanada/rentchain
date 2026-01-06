@@ -41,7 +41,13 @@ export async function requireAuth(req: any, res: any, next: any) {
 
     const hydrate = String(process.env.AUTH_HYDRATE_FROM_DB || "").toLowerCase() === "true";
     if (!hydrate) {
-      req.user = baseUser;
+      req.user = {
+        ...baseUser,
+        landlordId:
+          baseUser.role === "landlord" || baseUser.role === "admin"
+            ? baseUser.landlordId || baseUser.id
+            : baseUser.landlordId,
+      };
       return next();
     }
 
@@ -68,7 +74,11 @@ export async function requireAuth(req: any, res: any, next: any) {
       id: baseUser.id,
       email: u.email ?? baseUser.email,
       role: (u.role ?? baseUser.role) as Role,
-      landlordId: u.landlordId ?? baseUser.landlordId,
+      landlordId:
+        (u.landlordId ?? baseUser.landlordId) ||
+        ((u.role === "landlord" || u.role === "admin" || baseUser.role === "landlord" || baseUser.role === "admin")
+          ? baseUser.id
+          : undefined),
       tenantId: u.tenantId ?? baseUser.tenantId,
       permissions: Array.isArray(u.permissions) ? u.permissions : baseUser.permissions,
       revokedPermissions: Array.isArray(u.revokedPermissions) ? u.revokedPermissions : baseUser.revokedPermissions,
