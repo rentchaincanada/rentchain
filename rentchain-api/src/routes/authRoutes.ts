@@ -2,7 +2,7 @@
 import { Router, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
-import { generateJwtForLandlord, signInWithPassword } from "../services/authService";
+import { generateJwtForLandlord } from "../services/authService";
 import { authenticateJwt } from "../middleware/authMiddleware";
 import { DEMO_LANDLORD, DEMO_LANDLORD_EMAIL } from "../config/authConfig";
 import {
@@ -14,12 +14,14 @@ import {
 import {
   ensureLandlordProfile,
   getLandlordProfile,
-  getOrCreateLandlordProfile,
 } from "../services/landlordProfileService";
 import { setPlan } from "../services/accountService";
 import { resolvePlan } from "../entitlements/plans";
 import { z } from "zod";
 import { maybeGrantMicroLiveFromLead } from "../services/microLiveGrant";
+import { db } from "../firebase";
+import { verifyPassword } from "../utils/password";
+import { signAuthToken } from "../auth/jwt";
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
@@ -192,34 +194,54 @@ router.post("/login", async (req, res) => {
       return jsonError(res, 403, "Login disabled", "LOGIN_DISABLED");
     }
 
-    step = "firebase_signin";
-    const fb = await signInWithPassword(email, password);
-    if (!fb) {
+    step = "user_lookup";
+    const snap = await db.collection("users").where("email", "==", email).limit(1).get();
+    if (snap.empty) {
       return jsonError(res, 401, "Unauthorized", "INVALID_CREDENTIALS");
     }
 
-    step = "profile_get_or_create";
-    const profile = await getOrCreateLandlordProfile({
-      uid: fb.uid,
-      email: fb.email,
-    });
+    const userDoc = snap.docs[0];
+    const u = userDoc.data() as any;
 
-    step = "ensure_user";
-    const plan = resolvePlan((profile as any)?.plan || "starter");
+    if (u?.disabled === true) {
+      return jsonError(res, 403, "Account disabled", "ACCOUNT_DISABLED");
+    }
+
+    step = "password_verify";
+    const ok = await verifyPassword(password, String(u?.passwordHash || ""));
+    if (!ok) {
+      return jsonError(res, 401, "Unauthorized", "INVALID_CREDENTIALS");
+    }
+
+    step = "ensure_profile";
+    const plan = resolvePlan(String(u?.plan || "starter"));
+
     const user = ensureLandlordEntry({
-      id: (profile as any)?.id || fb.uid,
-      email: (profile as any)?.email || fb.email,
-      role: (profile as any)?.role || "landlord",
-      landlordId: (profile as any)?.landlordId || fb.uid,
+      id: userDoc.id,
+      email: u.email || email,
+      role: u.role || "landlord",
+      landlordId: u.landlordId || userDoc.id,
       plan,
-      screeningCredits: (profile as any)?.screeningCredits,
+      screeningCredits: u?.screeningCredits,
+      permissions: u?.permissions ?? [],
+      revokedPermissions: u?.revokedPermissions ?? [],
     } as any);
 
     step = "jwt_sign";
-    const token = generateJwtForLandlord({ ...user, plan } as any);
+    const token = signAuthToken(
+      {
+        sub: user.id,
+        email: user.email,
+        role: user.role,
+        landlordId: user.landlordId,
+        permissions: (user as any).permissions ?? [],
+        revokedPermissions: (user as any).revokedPermissions ?? [],
+      },
+      { expiresIn: "7d" }
+    );
 
-    step = "micro_live_grant";
     try {
+      step = "micro_live_grant";
       const landlordId = user.id;
       await maybeGrantMicroLiveFromLead(user.email, landlordId);
     } catch (e) {
@@ -231,8 +253,7 @@ router.post("/login", async (req, res) => {
       token,
       user: {
         ...user,
-        screeningCredits:
-          (profile as any)?.screeningCredits ?? (user as any)?.screeningCredits ?? 0,
+        screeningCredits: u?.screeningCredits ?? (user as any)?.screeningCredits ?? 0,
       },
     });
   } catch (err: any) {
