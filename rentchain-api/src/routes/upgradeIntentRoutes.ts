@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { Router } from "express";
 import { db } from "../config/firebase";
-import { authenticateJwt } from "../middleware/authMiddleware";
+import { requireAuth } from "../middleware/requireAuth";
 import { requirePermission } from "../middleware/requireAuthz";
 import { attachAccount } from "../middleware/attachAccount";
 
@@ -9,7 +9,7 @@ const router = Router();
 
 router.post(
   "/",
-  authenticateJwt,
+  requireAuth,
   requirePermission("billing.manage"),
   attachAccount,
   async (req: AuthenticatedRequest, res) => {
