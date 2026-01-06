@@ -1,4 +1,5 @@
 import { apiFetch, apiJson } from "@/lib/apiClient";
+import { apiGetJson } from "./http";
 
 export type BillingRecord = {
   id: string;
@@ -14,10 +15,16 @@ export type BillingRecord = {
 };
 
 export async function fetchBillingHistory(): Promise<BillingRecord[]> {
-  const data = await apiJson<any>("/billing");
-  if (Array.isArray(data)) return data as BillingRecord[];
-  if (Array.isArray(data?.items)) return data.items as BillingRecord[];
-  return [];
+  try {
+    const res = await apiGetJson<any>("/billing", { allowStatuses: [404, 501] });
+    if (!res.ok) return [];
+    const data = res.data;
+    if (Array.isArray(data)) return data as BillingRecord[];
+    if (Array.isArray(data?.items)) return data.items as BillingRecord[];
+    return [];
+  } catch {
+    return [];
+  }
 }
 
 export interface SubscriptionStatus {
@@ -26,8 +33,16 @@ export interface SubscriptionStatus {
 }
 
 export async function fetchSubscriptionStatus(): Promise<SubscriptionStatus> {
-  const data = await apiJson<any>("/billing/subscription-status");
-  return (data?.subscription ?? data) as SubscriptionStatus;
+  try {
+    const res = await apiGetJson<any>("/billing/subscription-status", { allowStatuses: [404, 501] });
+    if (!res.ok) {
+      return { planId: "free", status: "canceled" } as SubscriptionStatus;
+    }
+    const data = res.data;
+    return (data?.subscription ?? data) as SubscriptionStatus;
+  } catch {
+    return { planId: "free", status: "canceled" } as SubscriptionStatus;
+  }
 }
 
 export async function createCheckoutSession(): Promise<{ checkoutUrl: string }> {

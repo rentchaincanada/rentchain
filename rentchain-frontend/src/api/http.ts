@@ -40,3 +40,49 @@ export async function apiFetch<T>(
 }
 
 export const apiJson = apiFetch;
+
+type GetJsonOpts = {
+  signal?: AbortSignal;
+  allowStatuses?: number[];
+};
+
+export async function apiGetJson<T>(
+  path: string,
+  opts: GetJsonOpts = {}
+): Promise<{ ok: true; data: T } | { ok: false; status: number; error: string }> {
+  const allow = opts.allowStatuses ?? [404, 501];
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const res = await fetch(resolveApiUrl(normalizedPath), {
+    method: "GET",
+    signal: opts.signal,
+    headers: {
+      Accept: "application/json",
+      "X-Rentchain-ApiClient": "1",
+    },
+  });
+
+  const text = await res.text().catch(() => "");
+  let json: any = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    json = null;
+  }
+
+  if (res.ok) {
+    return { ok: true, data: (json as T) ?? ({} as T) };
+  }
+
+  if (allow.includes(res.status)) {
+    return {
+      ok: false,
+      status: res.status,
+      error: json?.error || json?.message || `Request failed (${res.status})`,
+    };
+  }
+
+  throw Object.assign(new Error(json?.message || `Request failed (${res.status})`), {
+    status: res.status,
+    body: json ?? { raw: text },
+  });
+}

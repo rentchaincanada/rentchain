@@ -1,4 +1,4 @@
-import { apiFetch } from "./http";
+import { apiGetJson } from "./http";
 
 export type AccountLimits = {
   status: string;
@@ -29,6 +29,19 @@ export type AccountLimits = {
   };
 };
 
-export async function fetchAccountLimits(token?: string): Promise<AccountLimits> {
-  return apiFetch<AccountLimits>("/account/limits", token ? { token } : undefined);
+export async function fetchAccountLimits(token?: string): Promise<AccountLimits | null> {
+  const res = await apiGetJson<AccountLimits>("/account/limits", {
+    allowStatuses: [404, 501],
+  });
+  if (res.ok) return res.data;
+  if (res.status === 404 || res.status === 501) {
+    return {
+      status: "unavailable",
+      plan: "starter",
+      limits: { maxProperties: 0, maxUnits: 0, screeningCreditsMonthly: 0 },
+      capabilities: {},
+      usage: { properties: 0, units: 0 },
+    };
+  }
+  return null;
 }
