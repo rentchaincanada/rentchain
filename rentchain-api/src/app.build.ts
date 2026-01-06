@@ -46,6 +46,7 @@ import actionRequestsRoutes from "./routes/actionRequestsRoutes";
 import adminDemoRoutes from "./routes/adminDemoRoutes";
 import authzRoutes from "./routes/authzRoutes";
 import reportsExportRoutes from "./routes/reportsExportRoutes";
+import tenantsRoutes from "./routes/tenants";
 
 export const app = express();
 app.set("etag", false);
@@ -121,6 +122,7 @@ app.use("/api/events", eventsRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/landlord", landlordMicroLiveRoutes);
 app.use("/api/properties", propertiesRoutes);
+app.use("/api/tenants", tenantsRoutes);
 app.use("/api/account", accountRoutes);
 app.use("/api/onboarding", onboardingRoutes);
 app.use("/api/billing", billingRoutes);

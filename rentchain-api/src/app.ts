@@ -42,6 +42,9 @@ import tenantReportPdfRoutes from "./routes/tenantReportPdfRoutes";
 import adminDemoRoutes from "./routes/adminDemoRoutes";
 import authzRoutes from "./routes/authzRoutes";
 import reportsExportRoutes from "./routes/reportsExportRoutes";
+import propertiesRoutes from "./routes/propertiesRoutes";
+import tenantsRoutes from "./routes/tenants";
+import accountRoutes from "./routes/accountRoutes";
 
 const app: Application = express();
 app.set("etag", false);
@@ -146,6 +149,9 @@ app.use("/api", tenantOnboardRoutes);
 app.use("/api/events", eventsRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/landlord", landlordMicroLiveRoutes);
+app.use("/api/properties", propertiesRoutes);
+app.use("/api/tenants", tenantsRoutes);
+app.use("/api/account", accountRoutes);
 
 process.on("uncaughtException", (err) => {
   console.error("[uncaughtException]", err);
