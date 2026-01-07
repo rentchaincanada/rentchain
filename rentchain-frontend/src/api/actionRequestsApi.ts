@@ -1,10 +1,5 @@
-import { withAuthHeaders } from "./httpClient";
 import { apiFetch } from "./apiFetch";
-import type {
-  ActionRequestStatus,
-  PropertyActionRequest,
-} from "../types/models";
-import { API_BASE_URL } from "./config";
+import type { ActionRequestStatus, PropertyActionRequest } from "../types/models";
 
 export type ActionRequest = {
   id: string;
@@ -31,63 +26,40 @@ export async function listActionRequests(params: {
   propertyId?: string;
   status?: ActionRequestStatus;
 }): Promise<PropertyActionRequest[]> {
-  const query: string[] = [];
-  if (params.propertyId) query.push(`propertyId=${encodeURIComponent(params.propertyId)}`);
-  if (params.status) query.push(`status=${encodeURIComponent(params.status)}`);
-  const url =
-    `${API_BASE_URL}/api/action-requests` +
-    (query.length ? `?${query.join("&")}` : "");
-
-  const res = await fetch(
-    url,
-    withAuthHeaders({
-      method: "GET",
-    })
+  const qs = new URLSearchParams();
+  if (params.propertyId) qs.set("propertyId", params.propertyId);
+  if (params.status) qs.set("status", params.status);
+  return apiFetch<PropertyActionRequest[]>(
+    `/action-requests${qs.toString() ? `?${qs.toString()}` : ""}`
   );
-
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data?.error || "Failed to load action requests");
-  }
-  return Array.isArray(data?.actionRequests) ? data.actionRequests : data || [];
 }
 
 export async function acknowledgeActionRequest(
   id: string,
   note?: string
 ): Promise<PropertyActionRequest> {
-  const res = await fetch(
-    `${API_BASE_URL}/api/action-requests/${encodeURIComponent(id)}/acknowledge`,
-    withAuthHeaders({
+  return apiFetch<PropertyActionRequest>(
+    `/action-requests/${encodeURIComponent(id)}/acknowledge`,
+    {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ note }),
-    })
+    }
   );
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data?.error || "Failed to acknowledge request");
-  }
-  return data as PropertyActionRequest;
 }
 
 export async function resolveActionRequest(
   id: string,
   note?: string
 ): Promise<PropertyActionRequest> {
-  const res = await fetch(
-    `${API_BASE_URL}/api/action-requests/${encodeURIComponent(id)}/resolve`,
-    withAuthHeaders({
+  return apiFetch<PropertyActionRequest>(
+    `/action-requests/${encodeURIComponent(id)}/resolve`,
+    {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ note }),
-    })
+    }
   );
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data?.error || "Failed to resolve request");
-  }
-  return data as PropertyActionRequest;
 }
 
 export async function fetchActionRequests(
@@ -95,14 +67,14 @@ export async function fetchActionRequests(
 ): Promise<{ actionRequests: ActionRequest[] }> {
   const q = encodeURIComponent(propertyId);
   return apiFetch<{ actionRequests: ActionRequest[] }>(
-    `/api/action-requests?propertyId=${q}`
+    `/action-requests?propertyId=${q}`
   );
 }
 
 export async function recomputeActionRequests(propertyId: string) {
   const q = encodeURIComponent(propertyId);
   return apiFetch<{ ok: boolean; result: any }>(
-    `/api/action-requests/recompute?propertyId=${q}`,
+    `/action-requests/recompute?propertyId=${q}`,
     { method: "POST" }
   );
 }
