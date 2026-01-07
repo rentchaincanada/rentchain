@@ -131,16 +131,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     useState<string | null>(null);
   const [twoFactorMethods, setTwoFactorMethods] = useState<string[]>([]);
 
-  useEffect(() => {
-    const stored = getStoredToken();
-    if (stored) {
-      setToken(stored);
-      setIsLoading(false);
-    }
-  }, []);
-
   // On initial mount, attempt to restore session from localStorage token
   useEffect(() => {
+    setIsLoading(true);
+    setReady(false);
+
     const pathname =
       typeof window !== "undefined" ? window.location.pathname : "";
     const isPublic = PUBLIC_ROUTE_ALLOWLIST.includes(pathname);
@@ -181,6 +176,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           setUser(null);
           setToken(null);
           clearStoredToken();
+          if (import.meta.env.DEV) {
+            console.warn("[auth] restore missing user payload");
+          }
           return;
         }
         setUser(me.user);
