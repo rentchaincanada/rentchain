@@ -54,22 +54,9 @@ export async function listRecentTenantEvents(limit = 25) {
 
 // Tenant-side helper (uses tenant token if available)
 export async function getMyTenantEvents(limit = 50) {
-  const token =
-    sessionStorage.getItem("rentchain_tenant_token") ||
-    sessionStorage.getItem("rentchain_token") ||
-    localStorage.getItem("rentchain_token") ||
-    "";
-
-  const res = await fetch(`/api/tenant/events?limit=${limit}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`getMyTenantEvents ${res.status}: ${text}`);
-  }
-
-  return (await res.json()) as { ok: boolean; items: TenantEvent[] };
+  return apiFetch<{ ok: boolean; items: TenantEvent[] }>(
+    `/api/tenant/events?limit=${encodeURIComponent(String(limit))}`
+  );
 }
 
 export type TenantSignalsResponse = {
