@@ -41,6 +41,7 @@ export interface AuthContextValue {
   user: AuthUser | null;
   token: string | null;
   isLoading: boolean;
+  ready: boolean;
   login: (
     email: string,
     password: string,
@@ -125,6 +126,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [ready, setReady] = useState<boolean>(false);
   const [twoFactorPendingToken, setTwoFactorPendingToken] =
     useState<string | null>(null);
   const [twoFactorMethods, setTwoFactorMethods] = useState<string[]>([]);
@@ -150,6 +152,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setUser(null);
       setToken(null);
       setIsLoading(false);
+      setReady(true);
       return;
     }
 
@@ -158,6 +161,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Do not call /api/me on public routes; treat as logged-out view
     if (isPublic) {
       setIsLoading(false);
+      setReady(true);
       return;
     }
 
@@ -167,6 +171,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setUser(null);
         setToken(null);
         setIsLoading(false);
+        setReady(true);
         return;
       }
       try {
@@ -197,6 +202,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
       } finally {
         setIsLoading(false);
+        setReady(true);
       }
     };
 
@@ -318,6 +324,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       user,
       token,
       isLoading,
+      ready,
       login,
       loginDemo,
       logout,
@@ -332,6 +339,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       user,
       token,
       isLoading,
+      ready,
       login,
       loginDemo,
       logout,

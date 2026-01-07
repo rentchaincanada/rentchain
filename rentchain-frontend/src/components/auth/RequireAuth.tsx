@@ -8,10 +8,10 @@ interface RequireAuthProps {
 }
 
 export const RequireAuth: React.FC<RequireAuthProps> = ({ children }) => {
-  const { user, isLoading, token } = useAuth();
+  const { user, isLoading, ready, token } = useAuth();
   const location = useLocation();
 
-  if (isLoading) {
+  if (isLoading || !ready) {
     return (
       <div
         style={{
