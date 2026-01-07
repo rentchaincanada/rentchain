@@ -4,4 +4,3 @@ console.warn(
   "[DEPRECATED API MODULE] import from payments.ts — use paymentsApi.ts instead"
 );
 export * from "./paymentsApi";
-
