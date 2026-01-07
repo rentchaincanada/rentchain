@@ -129,8 +129,13 @@ router.get("/waitlist/health", (_req, res) => {
   res.json({
     ok: true,
     runtime: "vercel",
-    sendgridConfigured: Boolean(process.env.SENDGRID_API_KEY),
-    fromSet: Boolean(process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM),
+    checks: {
+      SENDGRID_API_KEY: Boolean(process.env.SENDGRID_API_KEY),
+      SENDGRID_FROM_EMAIL: Boolean(process.env.SENDGRID_FROM_EMAIL),
+      SENDGRID_FROM: Boolean(process.env.SENDGRID_FROM),
+      FROM_EMAIL: Boolean(process.env.FROM_EMAIL),
+      SENDGRID_KEY: Boolean(process.env.SENDGRID_KEY),
+    },
   });
 });
 
