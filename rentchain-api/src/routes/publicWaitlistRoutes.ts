@@ -25,6 +25,14 @@ router.post("/waitlist", async (req, res) => {
       return res.status(400).json({ ok: false, error: "Invalid email", emailed: false });
     }
 
+    const maskEmail = (e: string) => {
+      const parts = e.split("@");
+      if (parts.length !== 2) return "***";
+      const [user, domain] = parts;
+      const maskedUser = user.length <= 1 ? "*" : `${user[0]}***`;
+      return `${maskedUser}@${domain}`;
+    };
+
     const id = sha256(email);
     const now = Date.now();
 
@@ -41,7 +49,16 @@ router.post("/waitlist", async (req, res) => {
     );
 
     const apiKey = process.env.SENDGRID_API_KEY;
-    const from = process.env.SENDGRID_FROM_EMAIL;
+    const from = process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM;
+    const hasKey = !!apiKey;
+    const hasFrom = !!from;
+    if (!hasKey || !hasFrom) {
+      console.error("[waitlist] sendgrid not configured", { hasKey, hasFrom });
+      return res
+        .status(500)
+        .json({ ok: false, error: "WAITLIST_EMAIL_NOT_CONFIGURED", emailed: false });
+    }
+
     let emailed = false;
 
     const subject = "You're on the RentChain waitlist";
@@ -50,32 +67,33 @@ router.post("/waitlist", async (req, res) => {
       "We'll email you when Micro-Live invites open.\n\n" +
       "If you didn't request this, ignore this email.\n";
 
-    if (apiKey && from) {
-      try {
-        sgMail.setApiKey(apiKey);
-        await sgMail.send({
-          to: email,
-          from,
-          subject,
-          text,
-          trackingSettings: {
-            clickTracking: { enable: false, enableText: false },
-            openTracking: { enable: false },
-          },
-          mailSettings: {
-            footer: { enable: false },
-          },
-        });
-        emailed = true;
-      } catch (e: any) {
-        console.error("[waitlist] sendgrid error", {
-          message: e?.message,
-          statusCode: e?.code || e?.response?.statusCode,
-          body: e?.response?.body,
-        });
-      }
-    } else {
-      console.warn("[waitlist] sendgrid env missing", { hasKey: Boolean(apiKey), hasFrom: Boolean(from) });
+    try {
+      sgMail.setApiKey(apiKey as string);
+      await sgMail.send({
+        to: email,
+        from: from as string,
+        subject,
+        text,
+        trackingSettings: {
+          clickTracking: { enable: false, enableText: false },
+          openTracking: { enable: false },
+        },
+        mailSettings: {
+          footer: { enable: false },
+        },
+      });
+      emailed = true;
+      console.info("[waitlist] email sent", { to: maskEmail(email), provider: "sendgrid" });
+    } catch (e: any) {
+      console.error("[waitlist] sendgrid send failed", {
+        to: maskEmail(email),
+        message: e?.message,
+        code: e?.code || e?.response?.statusCode,
+        body: e?.response?.body,
+      });
+      return res
+        .status(502)
+        .json({ ok: false, error: "WAITLIST_EMAIL_SEND_FAILED", emailed: false });
     }
 
     return res.json({ ok: true, emailed });
