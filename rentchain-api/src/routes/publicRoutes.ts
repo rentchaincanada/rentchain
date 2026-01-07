@@ -125,4 +125,13 @@ router.post("/waitlist/test-email", async (req: any, res) => {
   return res.json({ ok: result.ok, error: (result as any).error || null });
 });
 
+router.get("/waitlist/health", (_req, res) => {
+  res.json({
+    ok: true,
+    runtime: "vercel",
+    sendgridConfigured: Boolean(process.env.SENDGRID_API_KEY),
+    fromSet: Boolean(process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM),
+  });
+});
+
 export default router;
