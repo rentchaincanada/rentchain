@@ -70,36 +70,31 @@ router.get(
   requireAuth,
   requirePermission("users.invite"),
   async (req: any, res) => {
-    res.setHeader("x-route-source", "tenantInvitesRoutes");
-    const landlordId = req.user?.landlordId || req.user?.id;
-    if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+    res.setHeader("x-route-source", "tenantInvitesRoutes:getList");
 
     try {
+      const landlordId = req.user?.landlordId || req.user?.id;
+      if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+
+      const limitRaw = Number(req.query?.limit ?? 50);
+      const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 200) : 50;
+
       const snap = await db
         .collection("tenantInvites")
         .where("landlordId", "==", landlordId)
-        .orderBy("createdAt", "desc")
-        .limit(200)
+        .limit(limit)
         .get();
 
-      const items = snap.docs.map((d) => {
-        const data = d.data() as any;
-        return {
-          id: d.id,
-          token: data.token ?? d.id,
-          landlordId: data.landlordId,
-          propertyId: data.propertyId ?? null,
-          tenantEmail: data.tenantEmail ?? null,
-          tenantName: data.tenantName ?? null,
-          status: data.status ?? "pending",
-          createdAt: data.createdAt ?? null,
-          redeemedAt: data.redeemedAt ?? null,
-        };
-      });
+      const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
 
-      return res.json({ ok: true, items });
-    } catch (e: any) {
-      console.error("[tenant-invites list] error", e?.message || e);
+      const toMillis = (v: any) =>
+        v?.toMillis?.() ?? (typeof v === "number" ? v : Date.parse(v ?? "")) ?? 0;
+
+      items.sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt));
+
+      return res.json({ ok: true, invites: items });
+    } catch (err: any) {
+      console.error("[tenantInvitesRoutes:getList] error", err?.message || err, err);
       return res.status(500).json({ ok: false, error: "Failed to load invites" });
     }
   }
