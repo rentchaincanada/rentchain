@@ -88,4 +88,14 @@ router.post("/waitlist", async (req, res) => {
 
 router.get("/waitlist/_ping", (_req, res) => res.json({ ok: true, route: "waitlist" }));
 
+router.get("/waitlist/health", (_req, res) => {
+  const apiKey = process.env.SENDGRID_API_KEY;
+  const from = process.env.SENDGRID_FROM_EMAIL;
+  return res.json({
+    ok: true,
+    sendgridConfigured: Boolean(apiKey),
+    fromSet: Boolean(from),
+  });
+});
+
 export default router;
