@@ -151,6 +151,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (!hasToken) {
       setUser(null);
       setToken(null);
+      clearStoredToken();
       setIsLoading(false);
       setReady(true);
       return;
@@ -180,7 +181,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           setUser(null);
           setToken(null);
           clearStoredToken();
-          setIsLoading(false);
           return;
         }
         setUser(me.user);
@@ -194,12 +194,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
         setToken(null);
         clearStoredToken();
-        // redirect only on protected routes when a token actually existed
-        if (!isPublic && hasToken && typeof window !== "undefined") {
-          const params = new URLSearchParams(window.location.search);
-          params.set("reason", "expired");
-          window.location.href = `/login?${params.toString()}`;
-        }
       } finally {
         setIsLoading(false);
         setReady(true);
