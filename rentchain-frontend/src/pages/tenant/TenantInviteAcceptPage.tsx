@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { setTenantToken } from "../../lib/tenantAuth";
+import { storeToken } from "../../context/AuthContext";
 
 type InvitePreview = {
   ok: boolean;
@@ -103,8 +104,14 @@ export default function TenantInviteAcceptPage() {
         throw new Error("Redeem succeeded but no tenant token returned.");
       }
 
+      // store tenant token for portal access
       sessionStorage.setItem("rentchain_tenant_token", jwt);
-      setOkMsg("Invite accepted. Redirecting to tenant portal…");
+      try {
+        storeToken(jwt);
+      } catch {
+        // ignore if storeToken is unavailable in this bundle; sessionStorage is already set
+      }
+      setOkMsg("Invite accepted. Redirecting to tenant portal...");
       window.location.href = "/tenant";
     } catch (e: any) {
       setErr(String(e?.message || e));
@@ -122,12 +129,26 @@ export default function TenantInviteAcceptPage() {
         </p>
 
         <div style={{ marginTop: 12, padding: 12, borderRadius: 10, background: "rgba(0,0,0,0.03)" }}>
-          <div><b>Invite token:</b> {inviteToken || "-"}</div>
-          {preview?.email ? <div><b>Email:</b> {preview.email}</div> : null}
-          {(preview?.propertyId || preview?.unitId) ? (
+          <div>
+            <b>Invite token:</b> {inviteToken || "-"}
+          </div>
+          {preview?.email ? (
+            <div>
+              <b>Email:</b> {preview.email}
+            </div>
+          ) : null}
+          {preview?.propertyId || preview?.unitId ? (
             <div style={{ marginTop: 6, opacity: 0.85 }}>
-              {preview.propertyId ? <span><b>Property:</b> {preview.propertyId} </span> : null}
-              {preview.unitId ? <span style={{ marginLeft: 10 }}><b>Unit:</b> {preview.unitId}</span> : null}
+              {preview.propertyId ? (
+                <span>
+                  <b>Property:</b> {preview.propertyId}{" "}
+                </span>
+              ) : null}
+              {preview.unitId ? (
+                <span style={{ marginLeft: 10 }}>
+                  <b>Unit:</b> {preview.unitId}
+                </span>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -148,7 +169,7 @@ export default function TenantInviteAcceptPage() {
             <input
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
+              placeholder="********"
               type="password"
               style={{ padding: 10, borderRadius: 10, border: "1px solid rgba(0,0,0,0.15)" }}
             />
@@ -170,7 +191,7 @@ export default function TenantInviteAcceptPage() {
               cursor: busy ? "not-allowed" : "pointer",
             }}
           >
-            {busy ? "Accepting…" : "Accept Invite"}
+            {busy ? "Accepting..." : "Accept Invite"}
           </button>
 
           <div style={{ fontSize: 13, opacity: 0.75 }}>
