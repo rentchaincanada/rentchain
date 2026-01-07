@@ -105,6 +105,7 @@ export default function TenantInviteAcceptPage() {
       }
 
       // store tenant token for portal access
+      sessionStorage.setItem("rentchain_token", jwt);
       sessionStorage.setItem("rentchain_tenant_token", jwt);
       try {
         storeToken(jwt);
