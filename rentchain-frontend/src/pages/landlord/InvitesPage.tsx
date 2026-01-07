@@ -72,7 +72,6 @@ export default function InvitesPage() {
         tenantEmail,
         tenantName: tenantName || undefined,
       });
-      if (!res?.ok || !res?.token) throw new Error(res?.error || "Invite not created");
       const url = res.inviteUrl || deriveInviteUrl(res.token);
       setCreatedInviteUrl(url);
       // refresh list
@@ -83,6 +82,9 @@ export default function InvitesPage() {
       setTenantEmail("");
     } catch (e: any) {
       setCreateError(e?.message || "Failed to create invite");
+      if (typeof (window as any)?.toast?.error === "function") {
+        (window as any).toast.error(e?.message || "Failed to create invite");
+      }
     } finally {
       setCreating(false);
     }
