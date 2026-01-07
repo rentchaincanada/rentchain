@@ -1,9 +1,5 @@
 ﻿import React from "react";
-import {
-  listTenantEvents,
-  getTenantSummary,
-  type TenantEvent,
-} from "../../api/tenantEvents";
+import { getMyTenantEvents, getTenantSummary, type TenantEvent } from "../../api/tenantEvents";
 import { TenantScorePill } from "./TenantScorePill";
 
 function toMillis(ts: any): number | null {
@@ -189,15 +185,10 @@ export function TenantReputationTimeline({ tenantId }: { tenantId: string }) {
     setError(null);
 
     try {
-      const resp = await listTenantEvents({
-        tenantId,
-        limit: 25,
-        cursor: initial ? undefined : nextCursor ?? undefined,
-      });
-
-      const newItems = resp?.items || [];
-      setItems((prev) => (initial ? newItems : [...prev, ...newItems]));
-      setNextCursor(resp?.nextCursor ?? null);
+      const resp = await getMyTenantEvents(25);
+      const newItems = (resp as any)?.items || (resp as any)?.data?.items || [];
+      setItems(initial ? newItems : [...items, ...newItems]);
+      setNextCursor(null);
     } catch (e: any) {
       setError(e?.message || "Failed to load timeline");
     } finally {
