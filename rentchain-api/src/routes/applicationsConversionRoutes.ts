@@ -16,8 +16,14 @@ router.post(
         return res.status(401).json({ ok: false, error: "Unauthorized" });
       }
 
-      const { applicationId } = req.params;
+      const applicationId = String(req.params?.applicationId || "").trim();
+      if (!applicationId || applicationId === "a1") {
+        return res.status(400).json({ ok: false, error: "Invalid applicationId" });
+      }
+
       const runScreening = !!req.body?.runScreening;
+
+      console.log("[applications/convert] appId=", applicationId);
 
       const result = await convertApplicationToTenant({
         landlordId,
