@@ -179,18 +179,15 @@ export function TenantReputationTimeline({ tenantId }: { tenantId: string }) {
   const [summary, setSummary] = React.useState<any>(null);
 
   async function load(initial = false) {
-    if (!tenantId) return;
-
-    setLoading(true);
     setError(null);
-
+    setLoading(true);
     try {
       const resp = await getMyTenantEvents(25);
-      const newItems = (resp as any)?.items || (resp as any)?.data?.items || [];
-      setItems(initial ? newItems : [...items, ...newItems]);
+      const newItems = (resp as any)?.items ?? [];
+      setItems(newItems);
       setNextCursor(null);
     } catch (e: any) {
-      setError(e?.message || "Failed to load timeline");
+      setError(e?.message ?? "Couldn't load timeline");
     } finally {
       setLoading(false);
     }
