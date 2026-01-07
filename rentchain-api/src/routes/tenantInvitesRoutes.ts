@@ -18,11 +18,12 @@ router.post(
   requireAuth,
   requirePermission("users.invite"),
   async (req: any, res) => {
+    res.setHeader("x-route-source", "tenantInvitesRoutes");
     const landlordId = req.user?.landlordId || req.user?.id;
     if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
     const { tenantEmail, tenantName, propertyId, unitId, leaseId } = req.body || {};
 
-    if (!tenantEmail) {
+    if (!tenantEmail || !String(tenantEmail).includes("@")) {
       return res.status(400).json({ ok: false, error: "tenantEmail_required" });
     }
 
@@ -46,11 +47,66 @@ router.post(
     const baseUrl = (process.env.PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
     const inviteUrl = `${baseUrl}/tenant/invite/${token}`;
 
-    return res.json({ ok: true, token, inviteUrl, expiresAt });
+    return res.json({
+      ok: true,
+      token,
+      inviteUrl,
+      expiresAt,
+      invite: {
+        token,
+        inviteUrl,
+        status: "pending",
+        propertyId: propertyId || null,
+        tenantEmail,
+        tenantName: tenantName || null,
+        createdAt: now,
+      },
+    });
+  }
+);
+
+router.get(
+  "/",
+  requireAuth,
+  requirePermission("users.invite"),
+  async (req: any, res) => {
+    res.setHeader("x-route-source", "tenantInvitesRoutes");
+    const landlordId = req.user?.landlordId || req.user?.id;
+    if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+
+    try {
+      const snap = await db
+        .collection("tenantInvites")
+        .where("landlordId", "==", landlordId)
+        .orderBy("createdAt", "desc")
+        .limit(200)
+        .get();
+
+      const items = snap.docs.map((d) => {
+        const data = d.data() as any;
+        return {
+          id: d.id,
+          token: data.token ?? d.id,
+          landlordId: data.landlordId,
+          propertyId: data.propertyId ?? null,
+          tenantEmail: data.tenantEmail ?? null,
+          tenantName: data.tenantName ?? null,
+          status: data.status ?? "pending",
+          createdAt: data.createdAt ?? null,
+          redeemedAt: data.redeemedAt ?? null,
+        };
+      });
+
+      return res.json({ ok: true, items });
+    } catch (e: any) {
+      console.error("[tenant-invites list] error", e?.message || e);
+      return res.status(500).json({ ok: false, error: "Failed to load invites" });
+    }
   }
 );
 
 router.post("/redeem", async (req: any, res) => {
+  res.setHeader("x-route-source", "tenantInvitesRoutes");
   const token = String(req.body?.token || req.body?.inviteId || "").trim();
   if (!token) return res.status(400).json({ ok: false, error: "token_required" });
 

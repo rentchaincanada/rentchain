@@ -29,6 +29,7 @@ import { MobileTabBar } from "./components/layout/MobileTabBar";
 import TenantPortalComingSoon from "./pages/tenant/TenantPortalComingSoon";
 import TenantDashboardPageV2 from "./pages/tenant/TenantDashboardPage.v2";
 import MonthlyOpsReportPage from "./pages/reports/MonthlyOpsReportPage";
+import InvitesPage from "./pages/landlord/InvitesPage";
 
 const TENANT_PORTAL_ENABLED = import.meta.env.VITE_TENANT_PORTAL_ENABLED === "true";
 
@@ -175,6 +176,14 @@ function App() {
               <Suspense fallback={null}>
                 <LedgerV2Page />
               </Suspense>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/landlord/invites"
+          element={
+            <RequireAuth>
+              <InvitesPage />
             </RequireAuth>
           }
         />
