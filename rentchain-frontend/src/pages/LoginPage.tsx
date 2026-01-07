@@ -10,18 +10,32 @@ export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const searchParams = new URLSearchParams(location.search);
+  const rawNext = searchParams.get("next");
+  const expired = searchParams.get("reason") === "expired";
+
+  const nextPath = React.useMemo(() => {
+    if (!rawNext) return "/dashboard";
+    try {
+      const decoded = decodeURIComponent(rawNext);
+      if (decoded.startsWith("/")) return decoded;
+      return "/dashboard";
+    } catch {
+      return "/dashboard";
+    }
+  }, [rawNext]);
+
   const [email, setEmail] = useState("demo@rentchain.dev");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
-  const expired = new URLSearchParams(location.search).get("reason") === "expired";
 
   useEffect(() => {
     if (user && !isTwoFactorRequired) {
-      navigate("/dashboard", { replace: true });
+      navigate(nextPath, { replace: true });
     }
-  }, [user, isTwoFactorRequired, navigate]);
+  }, [user, isTwoFactorRequired, navigate, nextPath]);
 
   const handleDemoLogin = async () => {
     if (isSubmittingRef.current) return;
@@ -32,7 +46,7 @@ export const LoginPage: React.FC = () => {
 
     try {
       await loginDemo("core");
-      navigate("/dashboard", { replace: true });
+      navigate(nextPath, { replace: true });
     } catch (err: any) {
       setError(err?.message || "Demo login failed");
     } finally {
@@ -60,10 +74,7 @@ export const LoginPage: React.FC = () => {
         return;
       }
 
-      const redirectTo =
-        (location.state as { from?: { pathname?: string } } | undefined)?.from
-          ?.pathname || "/dashboard";
-      navigate(redirectTo, { replace: true });
+      navigate(nextPath, { replace: true });
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : "Invalid email or password";

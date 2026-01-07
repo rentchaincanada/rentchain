@@ -33,8 +33,11 @@ export const RequireAuth: React.FC<RequireAuthProps> = ({ children }) => {
   }
 
   if (!user) {
-    const reason = token ? "?reason=expired" : "";
-    return <Navigate to={`/login${reason}`} state={{ from: location }} replace />;
+    const current = `${location.pathname}${location.search || ""}`;
+    const params = new URLSearchParams();
+    params.set("next", current);
+    if (token) params.set("reason", "expired");
+    return <Navigate to={`/login?${params.toString()}`} replace />;
   }
 
   return <>{children}</>;
