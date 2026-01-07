@@ -40,7 +40,7 @@ export async function listTenantEvents(params: {
   }
 
   return apiFetch<{ ok: boolean; items: TenantEvent[]; nextCursor?: any }>(
-    `/api/tenant-events?${qs.toString()}`
+    `/tenant-events?${qs.toString()}`
   );
 }
 
@@ -48,7 +48,7 @@ export async function listRecentTenantEvents(limit = 25) {
   const qs = new URLSearchParams();
   qs.set("limit", String(limit));
   return apiFetch<{ ok: boolean; items: TenantEvent[] }>(
-    `/api/tenant-events/recent?${qs.toString()}`
+    `/tenant-events/recent?${qs.toString()}`
   );
 }
 
@@ -75,7 +75,7 @@ export type TenantSignalsResponse = {
 export async function getTenantSignals(tenantId: string) {
   const qs = new URLSearchParams();
   qs.set("tenantId", tenantId);
-  return apiFetch<TenantSignalsResponse>(`/api/tenant-events/signals?${qs.toString()}`);
+  return apiFetch<TenantSignalsResponse>(`/tenant-events/signals?${qs.toString()}`);
 }
 
 export type TenantScoreResponse = {
@@ -96,7 +96,7 @@ export type TenantScoreResponse = {
 export async function getTenantScore(tenantId: string) {
   const qs = new URLSearchParams();
   qs.set("tenantId", tenantId);
-  return apiFetch<TenantScoreResponse>(`/api/tenant-events/score?${qs.toString()}`);
+  return apiFetch<TenantScoreResponse>(`/tenant-events/score?${qs.toString()}`);
 }
 
 export type TenantSummary = {
@@ -119,5 +119,5 @@ export type TenantSummary = {
 export async function getTenantSummary(tenantId: string) {
   const qs = new URLSearchParams();
   qs.set("tenantId", tenantId);
-  return apiFetch<{ ok: boolean; item: TenantSummary; computed?: boolean }>(`/api/tenant-summaries?${qs.toString()}`);
+  return apiFetch<{ ok: boolean; item: TenantSummary; computed?: boolean }>(`/tenant-summaries?${qs.toString()}`);
 }

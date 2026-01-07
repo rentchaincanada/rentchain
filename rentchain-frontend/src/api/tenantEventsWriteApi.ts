@@ -27,7 +27,7 @@ export async function createTenantEvent(input: CreateTenantEventInput) {
     localStorage.getItem("rentchain_token") ||
     undefined;
 
-  return apiFetch("/api/tenant-events", {
+  return apiFetch("/tenant-events", {
     method: "POST",
     token,
     body: JSON.stringify(input),

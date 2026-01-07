@@ -48,9 +48,15 @@ export async function apiFetch<T = any>(
     sessionStorage.getItem("rentchain_token") ||
     localStorage.getItem("rentchain_token");
 
-  const url = path.startsWith("http")
-    ? path
-    : `${API_BASE_URL}${path.startsWith("/") ? "" : "/"}${path}`;
+  const normalizedPath = (() => {
+    if (path.startsWith("http")) return path;
+    if (path.startsWith("/api/")) return path;
+    return `/api${path.startsWith("/") ? "" : "/"}${path}`;
+  })();
+
+  const url = normalizedPath.startsWith("http")
+    ? normalizedPath
+    : `${API_BASE_URL}${normalizedPath.startsWith("/") ? "" : "/"}${normalizedPath}`;
 
   const headers: Record<string, string> = {
     ...(init.headers as any),
