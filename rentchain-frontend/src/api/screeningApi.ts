@@ -1,8 +1,5 @@
 // src/api/screeningApi.ts
-import { withAuthHeaders } from "./httpClient";
-import API_BASE from "../config/apiBase";
-
-const API_BASE_URL = `${API_BASE.replace(/\/$/, "")}/api`;
+import { apiFetch } from "./apiFetch";
 
 export type ScreeningStatus =
   | "requested"
@@ -75,91 +72,52 @@ async function handleResponse<T>(response: Response): Promise<T> {
 export async function requestScreening(
   applicationId: string
 ): Promise<ScreeningRequest> {
-  const init = withAuthHeaders({
+  const data = await apiFetch<ScreeningRequestResponse>(`/screenings/request`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ applicationId }),
   });
-
-  const res = await fetch(`${API_BASE_URL}/api/screenings/request`, init);
-  const data = await handleResponse<ScreeningRequestResponse>(res);
   return data.screeningRequest;
 }
 
 export async function runScreeningWithCredits(
   applicationId: string
 ): Promise<{ screeningRequest: ScreeningRequest; screeningCredits: number }> {
-  const init = withAuthHeaders({
+  const data = await apiFetch<{
+    screeningRequest: ScreeningRequest;
+    screeningCredits: number;
+  }>(`/screenings/run`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ applicationId }),
   });
-
-  const res = await fetch(`${API_BASE_URL}/api/screenings/run`, init);
-
-  if (res.status === 402) {
-    const json = await res.json().catch(() => ({}));
-    const err: any = new Error(
-      json?.message || "No screening credits available."
-    );
-    err.code = json?.error || "insufficient_credits";
-    err.screeningCredits = json?.screeningCredits;
-    throw err;
-  }
-
-  const data = await handleResponse<{
-    screeningRequest: ScreeningRequest;
-    screeningCredits: number;
-  }>(res);
   return data;
 }
 
 export async function fetchScreeningCredits(): Promise<ScreeningCreditsResponse> {
-  const init = withAuthHeaders({
-    method: "GET",
-  });
-  const res = await fetch(`${API_BASE_URL}/api/screenings/credits`, init);
-  return handleResponse<ScreeningCreditsResponse>(res);
+  return apiFetch<ScreeningCreditsResponse>(`/screenings/credits`);
 }
 
 export async function checkoutScreening(id: string): Promise<string> {
-  const init = withAuthHeaders({
-    method: "POST",
-  });
-
-  const res = await fetch(
-    `${API_BASE_URL}/api/screenings/${encodeURIComponent(id)}/checkout`,
-    init
+  const data = await apiFetch<{ url: string }>(
+    `/screenings/${encodeURIComponent(id)}/checkout`,
+    { method: "POST" }
   );
-  const data = await handleResponse<{ url: string }>(res);
   return data.url;
 }
 
 export async function getScreening(
   id: string
 ): Promise<ScreeningRequestResponse> {
-  const init = withAuthHeaders({
-    method: "GET",
-  });
-
-  const res = await fetch(
-    `${API_BASE_URL}/api/screenings/${encodeURIComponent(id)}`,
-    init
-  );
-  return handleResponse<ScreeningRequestResponse>(res);
+  return apiFetch<ScreeningRequestResponse>(`/screenings/${encodeURIComponent(id)}`);
 }
 
 export async function downloadScreeningPdf(
   id: string
 ): Promise<Blob> {
-  const init = withAuthHeaders({
+  const res = await fetch(`/api/screenings/${encodeURIComponent(id)}/report.pdf`, {
     method: "GET",
   });
-
-  const res = await fetch(
-    `${API_BASE_URL}/api/screenings/${encodeURIComponent(id)}/report.pdf`,
-    init
-  );
 
   if (!res.ok) {
     let message = `Failed to download screening PDF: ${res.status}`;

@@ -40,9 +40,11 @@ function normalizePlanLimit(payload: any, status: number) {
   return null;
 }
 
+export type ApiFetchInit = RequestInit & { allowStatuses?: number[] };
+
 export async function apiFetch<T = any>(
   path: string,
-  init: RequestInit = {}
+  init: ApiFetchInit = {}
 ): Promise<T> {
   const token =
     sessionStorage.getItem("rentchain_token") ||
@@ -58,8 +60,10 @@ export async function apiFetch<T = any>(
     ? normalizedPath
     : `${API_BASE_URL}${normalizedPath.startsWith("/") ? "" : "/"}${normalizedPath}`;
 
+  const { allowStatuses, ...fetchInit } = init;
+
   const headers: Record<string, string> = {
-    ...(init.headers as any),
+    ...(fetchInit.headers as any),
   };
 
   // Mark requests coming from our API helpers so the dev fetch-guard doesn't warn
@@ -68,7 +72,7 @@ export async function apiFetch<T = any>(
   if (token) headers.Authorization = `Bearer ${token}`;
 
   const res = await fetch(url, {
-    ...init,
+    ...fetchInit,
     headers,
   });
 
@@ -86,6 +90,9 @@ export async function apiFetch<T = any>(
       dispatchPlanLimit(detail);
     }
     const msg = data?.message || data?.error || text || `apiFetch ${res.status}`;
+    if (allowStatuses?.includes(res.status)) {
+      return (data as T) ?? (text as unknown as T);
+    }
     throw new Error(msg);
   }
 

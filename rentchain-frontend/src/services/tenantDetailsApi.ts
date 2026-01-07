@@ -4,9 +4,7 @@ import type {
   TenantDetailsModel,
   TenantPaymentHistoryItem,
 } from "../components/tenants/TenantDetails";
-import API_BASE from "../config/apiBase";
-
-const API_BASE_URL = `${API_BASE.replace(/\/$/, "")}/api`;
+import { apiFetch } from "../api/apiFetch";
 
 export interface TenantDetailsResponse {
   tenantId: string;
@@ -25,14 +23,7 @@ export interface TenantDetailsResponse {
 export const fetchTenantDetails = async (
   tenantId: string
 ): Promise<Partial<TenantDetailsModel>> => {
-  const res = await fetch(`${API_BASE_URL}/tenant/${tenantId}/details`);
-
-  if (!res.ok) {
-    console.error("Failed to fetch tenant details", res.status);
-    return {};
-  }
-
-  const data: TenantDetailsResponse = await res.json();
+  const data = await apiFetch<TenantDetailsResponse>(`/tenant/${encodeURIComponent(tenantId)}/details`);
 
   return {
     id: data.tenantId,

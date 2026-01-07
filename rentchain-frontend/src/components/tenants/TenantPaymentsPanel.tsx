@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Lease, getLeasesForTenant } from "../../api/leasesApi";
-import { Payment, getTenantMonthlyPayments } from "../../api/paymentsApi";
+import { Payment, getTenantMonthlyPayments } from "@/api/paymentsApi";
 import { safeNumber } from "@/utils/format";
 
 interface TenantPaymentsPanelProps {

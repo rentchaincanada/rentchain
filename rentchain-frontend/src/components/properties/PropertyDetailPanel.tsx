@@ -8,7 +8,7 @@ import {
 import {
   getPropertyMonthlyPayments,
   Payment,
-} from "../../api/paymentsApi";
+} from "@/api/paymentsApi";
 import { importUnitsCsv } from "../../api/unitsImportApi";
 import { fetchMe } from "../../api/meApi";
 import { useUpgrade } from "../../context/UpgradeContext";

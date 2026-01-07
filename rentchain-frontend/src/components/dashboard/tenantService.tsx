@@ -1,9 +1,3 @@
-// src/services/tenantService.ts
-
-import API_BASE from "../../config/apiBase";
-
-const API_BASE_URL = API_BASE.replace(/\/$/, "");
-
 export type TenantPaymentRow = {
   date: string;
   dueAmount: number;
@@ -29,19 +23,6 @@ export type TenantOverview = {
 export async function fetchTenantOverview(
   tenantId: string
 ): Promise<TenantOverview> {
-  const res = await fetch(`${API_BASE_URL}/tenants/${tenantId}/overview`, {
-    method: "GET",
-    headers: { "Content-Type": "application/json" },
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(
-      `Tenant overview API error ${res.status}: ${
-        text || res.statusText || "Unknown error"
-      }`
-    );
-  }
-
-  return (await res.json()) as TenantOverview;
+  const { apiFetch } = await import("../../api/apiFetch");
+  return apiFetch<TenantOverview>(`/tenants/${encodeURIComponent(tenantId)}/overview`);
 }
