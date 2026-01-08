@@ -21,9 +21,10 @@ function requireLandlord(req: any, res: any, next: any) {
 
 router.get("/tenant/events", authenticateJwt, requireTenant, async (req: any, res) => {
   res.setHeader("x-route-source", "tenantEventsRoutes");
-  const tenantId = req.user?.tenantId;
+  console.log("[GET /api/tenant/events] user=", req.user);
+  const tenantId = req.user?.tenantId || req.user?.id;
   const landlordId = req.user?.landlordId;
-  if (!tenantId || !landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+  if (!tenantId) return res.status(403).json({ ok: false, error: "Forbidden" });
 
   const limitRaw = Number(req.query?.limit ?? 50);
   const limit =

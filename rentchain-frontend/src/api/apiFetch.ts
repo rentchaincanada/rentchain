@@ -48,7 +48,9 @@ export async function apiFetch<T = any>(
 ): Promise<T> {
   const token =
     sessionStorage.getItem("rentchain_token") ||
-    localStorage.getItem("rentchain_token");
+    sessionStorage.getItem("rentchain_tenant_token") ||
+    localStorage.getItem("rentchain_token") ||
+    localStorage.getItem("rentchain_tenant_token");
 
   const normalizedPath = (() => {
     if (path.startsWith("http")) return path;

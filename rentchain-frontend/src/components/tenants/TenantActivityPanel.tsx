@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { colors, radius, text } from "../../styles/tokens";
-import { listTenantEvents, type TenantEvent } from "../../api/tenantEvents";
+import { getMyTenantEvents, type TenantEvent } from "../../api/tenantEvents";
 
 type Props = {
   tenantId: string | null | undefined;
@@ -32,14 +32,10 @@ export const TenantActivityPanel: React.FC<Props> = ({ tenantId }) => {
     setLoading(true);
     setError(null);
     try {
-      const resp = await listTenantEvents({
-        tenantId,
-        limit: 25,
-        cursor: initial ? undefined : nextCursor ?? undefined,
-      });
-      const newItems = resp?.items || [];
-      setItems((prev) => (initial ? newItems : [...prev, ...newItems]));
-      setNextCursor(resp?.nextCursor ?? null);
+      const resp = await getMyTenantEvents(25);
+      const newItems = (resp as any)?.items || [];
+      setItems(initial ? newItems : [...items, ...newItems]);
+      setNextCursor(null);
     } catch (e: any) {
       setError(e?.message || "Failed to load tenant activity");
     } finally {
