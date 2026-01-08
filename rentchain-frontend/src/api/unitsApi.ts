@@ -30,3 +30,40 @@ export async function fetchUnitsForProperty(propertyId: string) {
 
   return null;
 }
+
+export async function addUnitsManual(args: {
+  propertyId: string;
+  units: Array<{
+    label?: string;
+    unitNumber?: string;
+    bedrooms?: number;
+    bathrooms?: number;
+    sqft?: number;
+    rentCents?: number;
+    notes?: string;
+  }>;
+}) {
+  const { propertyId, units } = args;
+
+  try {
+    return await apiFetch(`/api/properties/${propertyId}/units`, {
+      method: "POST",
+      body: JSON.stringify({ units }),
+    } as any);
+  } catch (e: any) {
+    const msg = String(e?.message || "");
+    if (!msg.includes("404")) throw e;
+  }
+
+  try {
+    return await apiFetch(`/api/units`, {
+      method: "POST",
+      body: JSON.stringify({ propertyId, units }),
+    } as any);
+  } catch (e: any) {
+    const msg = String(e?.message || "");
+    if (!msg.includes("404")) throw e;
+  }
+
+  throw new Error("UNITS_CREATE_NOT_IMPLEMENTED");
+}
