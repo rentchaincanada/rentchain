@@ -68,6 +68,10 @@ const PropertiesPage: React.FC = () => {
   const maxProperties = planLimits.maxProperties;
   const maxUnits = planLimits.maxUnits;
   const currentProperties = properties?.length ?? 0;
+  const unitsUsed = (properties || []).reduce(
+    (sum, p) => sum + (p?.unitCount ?? (Array.isArray(p?.units) ? p.units.length : 0)),
+    0
+  );
   const canAddProperty = currentProperties < maxProperties;
   const totalOpenAcrossPortfolio = useMemo(
     () => Object.values(actionCounts || {}).reduce((a, b) => a + (b || 0), 0),
@@ -440,24 +444,16 @@ const PropertiesPage: React.FC = () => {
                 gap: 8,
                 alignItems: "center",
               }}
-              title={(() => {
-                const usage = (limits as any)?.usage ?? {};
-                const propsUsed = usage?.properties ?? 0;
-                const unitsUsed = usage?.units ?? 0;
-                const propsMax = planLimits.maxProperties;
-                const unitsMax = planLimits.maxUnits;
-                const tooltip = `Plan ${plan} • Properties ${propsUsed}/${propsMax} • Units ${unitsUsed}/${unitsMax}`;
-                return typeof tooltip === "string" ? tooltip : undefined;
-              })()}
+              title={`Plan ${plan} · Properties ${currentProperties}/${maxProperties} · Units ${unitsUsed}/${maxUnits}`}
             >
               <span style={{ fontWeight: 800, color: text.primary }}>
                 {plan}
               </span>
               <span>
-                Props: {(limits as any)?.usage?.properties ?? 0}/{planLimits.maxProperties}
+                Props: {currentProperties}/{planLimits.maxProperties}
               </span>
               <span>
-                Units: {(limits as any)?.usage?.units ?? 0}/{planLimits.maxUnits}
+                Units: {unitsUsed}/{planLimits.maxUnits}
               </span>
             </div>
           ) : null}
@@ -1427,3 +1423,5 @@ const UnitsModal = ({
 };
 
 export default PropertiesPage;
+
+

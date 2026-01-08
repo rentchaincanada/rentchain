@@ -241,7 +241,6 @@ export function TenantDetailPanel({
           </div>
         </div>
       ) : null}
-
     </div>
   );
 }

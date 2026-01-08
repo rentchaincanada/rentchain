@@ -37,8 +37,8 @@ export const TopNav: React.FC = () => {
   const { plan, setPlan } = useSubscription();
   const { user, logout } = useAuth();
   const [me, setMe] = useState<any>(null);
-  const planValue = String(plan ?? "starter").trim().toLowerCase();
   const displayedPlan = String(me?.plan ?? "starter").trim().toLowerCase();
+  const planValue = displayedPlan;
 
   useEffect(() => {
     let alive = true;
