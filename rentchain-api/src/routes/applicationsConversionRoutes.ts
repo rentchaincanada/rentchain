@@ -17,7 +17,7 @@ router.post(
       }
 
       const applicationId = String(req.params?.applicationId || "").trim();
-      if (!applicationId || applicationId === "a1") {
+      if (!applicationId || applicationId === "a1" || applicationId === "a2") {
         return res.status(400).json({ ok: false, error: "Invalid applicationId" });
       }
 
