@@ -1,5 +1,5 @@
 ﻿import React from "react";
-import { getMyTenantEvents, getTenantSummary, type TenantEvent } from "../../api/tenantEvents";
+import { getTenantEvents, type TenantEvent } from "../../api/tenantEventsTenantApi";
 import { TenantScorePill } from "./TenantScorePill";
 
 function toMillis(ts: any): number | null {
@@ -182,7 +182,7 @@ export function TenantReputationTimeline({ tenantId }: { tenantId: string }) {
     setError(null);
     setLoading(true);
     try {
-      const resp = await getMyTenantEvents(25);
+      const resp = await getTenantEvents(25);
       const newItems = (resp as any)?.items ?? [];
       setItems(newItems);
       setNextCursor(null);
@@ -242,13 +242,13 @@ export function TenantReputationTimeline({ tenantId }: { tenantId: string }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <div style={{ fontWeight: 900, fontSize: 14 }}>Reputation Timeline</div>
           <div style={{ fontSize: 12, opacity: 0.75 }}>
-            Snapshot-backed • append-only record {updatedLabel ? `• ${updatedLabel}` : ""}
+            Snapshot-backed  append-only record {updatedLabel ? ` ${updatedLabel}` : ""}
           </div>
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 6, alignItems: "center" }}>
             <TenantScorePill score={summaryLoading ? null : score} tier={summaryLoading ? null : tier} />
 
-            {summaryLoading ? chip("Loading summary…") : null}
+            {summaryLoading ? chip("Loading summary") : null}
 
             {!summaryLoading && sig ? (
               <>
@@ -484,6 +484,9 @@ export function TenantReputationTimeline({ tenantId }: { tenantId: string }) {
 }
 
 export default TenantReputationTimeline;
+
+
+
 
 
 
