@@ -9,7 +9,8 @@ const baseTabs = [
   { path: "/dashboard", label: "Home", Icon: LayoutDashboard },
   { path: "/properties", label: "Props", Icon: Building2 },
   { path: "/tenants", label: "Tenants", Icon: Users },
-  { path: "/ledger", label: "Ledger", Icon: ScrollText },
+  // Ledger route not shipped yet; hide tab to avoid 404
+  // { path: "/ledger", label: "Ledger", Icon: ScrollText },
   { path: "/account", label: "Account", Icon: User },
 ];
 
