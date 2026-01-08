@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { setTenantToken } from "../../lib/tenantAuth";
-import { storeToken } from "../../context/AuthContext";
 
 type InvitePreview = {
   ok: boolean;
@@ -108,9 +107,9 @@ export default function TenantInviteAcceptPage() {
       sessionStorage.setItem("rentchain_token", jwt);
       sessionStorage.setItem("rentchain_tenant_token", jwt);
       try {
-        storeToken(jwt);
+        localStorage.removeItem("rentchain_token");
       } catch {
-        // ignore if storeToken is unavailable in this bundle; sessionStorage is already set
+        // ignore
       }
       setOkMsg("Invite accepted. Redirecting to tenant portal...");
       window.location.href = "/tenant";
