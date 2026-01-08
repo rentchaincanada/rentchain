@@ -226,7 +226,7 @@ export function TenantDetailPanel({
                 }}
                 aria-label="Close"
               >
-                x
+                ×
               </button>
             </div>
 
@@ -241,6 +241,7 @@ export function TenantDetailPanel({
           </div>
         </div>
       ) : null}
+
     </div>
   );
 }
