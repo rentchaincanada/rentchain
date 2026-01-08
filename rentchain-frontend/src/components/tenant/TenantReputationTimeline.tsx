@@ -2,6 +2,7 @@ import React from "react";
 import { getTenantEvents, type TenantEvent } from "../../api/tenantEventsTenantApi";
 import { TenantScorePill } from "./TenantScorePill";
 
+// Helpers must remain at module scope
 const safeType = (t: any) => (typeof t === "string" && t.trim() ? t.trim() : "note");
 const safeStr = (v: any, fallback = "") => (typeof v === "string" ? v : fallback);
 
@@ -158,36 +159,18 @@ function skeletonRow(key: string) {
   );
 }
 
-function tierLabel(tier: string) {
-  if (tier === "low") return "Low risk";
-  if (tier === "medium") return "Medium risk";
-  if (tier === "high") return "High risk";
-  return "Neutral";
-}
-
-function tierDotColor(tier: string) {
-  if (tier === "low") return "#16A34A";
-  if (tier === "medium") return "#F59E0B";
-  if (tier === "high") return "#DC2626";
-  return "#6B7280";
-}
-
 export function TenantReputationTimeline({ tenantId }: { tenantId: string }) {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [items, setItems] = React.useState<TenantEvent[]>([]);
   const [nextCursor, setNextCursor] = React.useState<any>(null);
 
-  const  = React.useState(false);
-  const [summary, setSummary] = React.useState<any>(null);
-
   async function load(initial = false) {
     setError(null);
     setLoading(true);
     try {
-      const resp = await getTenantEvents(25);
-      const newItems = (resp as any)?.items ?? [];
-      setItems(newItems);
+      const evs = await getTenantEvents(25);
+      setItems(evs || []);
       setNextCursor(null);
     } catch (e: any) {
       setError(e?.message ?? "Couldn't load timeline");
@@ -196,31 +179,18 @@ export function TenantReputationTimeline({ tenantId }: { tenantId: string }) {
     }
   }
 
-  async function loadSummary() {
-    if (!tenantId) return;
-    setSummaryLoading(true);
-    try {
-      const resp = await (tenantId);
-      setSummary(resp?.item || null);
-    } catch {
-      setSummary(null);
-    } finally {
-      setSummaryLoading(false);
-    }
-  }
-
   React.useEffect(() => {
     load(true);
-    loadSummary();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId]);
 
   const canLoadMore = !!nextCursor && !loading;
-  const score = typeof summary?.scoreV1 === "number" ? summary.scoreV1 : null;
-  const tier = summary?.tierV1 || null;
-  const sig = summary?.signals || null;
-  const lastUpdatedMs = toMillis(summary?.updatedAt);
-  const updatedLabel = lastUpdatedMs ? `Updated ${formatWhen(lastUpdatedMs)}` : "";
+
+  // Score/tier not available without summaries; keep neutral placeholders
+  const score = null;
+  const tier = null;
+  const sig = null as any;
+  const updatedLabel = "";
 
   return (
     <div
@@ -245,79 +215,12 @@ export function TenantReputationTimeline({ tenantId }: { tenantId: string }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <div style={{ fontWeight: 900, fontSize: 14 }}>Reputation Timeline</div>
           <div style={{ fontSize: 12, opacity: 0.75 }}>
-            Snapshot-backed  append-only record {updatedLabel ? ` ${updatedLabel}` : ""}
+            Append-only record of tenant events {updatedLabel}
           </div>
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 6, alignItems: "center" }}>
-            <TenantScorePill score={summaryLoading ? null : score} tier={summaryLoading ? null : tier} />
-
-            {summaryLoading ? chip("Loading summary") : null}
-
-            {!summaryLoading && sig ? (
-              <>
-                <span
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 8,
-                    padding: "6px 10px",
-                    borderRadius: 999,
-                    border: "1px solid #E5E7EB",
-                    background: "#FFFFFF",
-                    fontSize: 12,
-                    fontWeight: 800,
-                    userSelect: "none",
-                    whiteSpace: "nowrap",
-                  }}
-                  title="Risk tier"
-                >
-                  <span
-                    style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: 999,
-                      background: tierDotColor(sig.riskTier),
-                    }}
-                  />
-                  {tierLabel(sig.riskTier)}
-                </span>
-                {chip(`On-time streak: ${sig.onTimeStreak}`)}
-                {chip(`Late (90d): ${sig.lateCount90d}`)}
-                {chip(`Paid (90d): ${sig.rentPaid90d}`)}
-                {chip(`Notices (12m): ${sig.notices12m}`)}
-              </>
-            ) : null}
+            <TenantScorePill score={score} tier={tier} />
           </div>
-
-          {!summaryLoading && summary?.reasons?.length ? (
-            <div
-              style={{
-                marginTop: 6,
-                padding: 10,
-                borderRadius: 14,
-                border: "1px solid #EEF2F7",
-                background: "#F8FAFC",
-                fontSize: 12,
-              }}
-            >
-              <div style={{ fontWeight: 900, marginBottom: 6, opacity: 0.9 }}>Why this score</div>
-              <ul
-                style={{
-                  margin: 0,
-                  paddingLeft: 18,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 4,
-                }}
-              >
-                {summary.reasons.slice(0, 5).map((r: string, idx: number) => (
-                  <li key={idx} style={{ opacity: 0.9 }}>
-                    {r}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
         </div>
 
         <div style={{ display: "flex", gap: 8 }}>
@@ -325,15 +228,15 @@ export function TenantReputationTimeline({ tenantId }: { tenantId: string }) {
             type="button"
             onClick={() => {
               load(true);
-              load(true);}
-            disabled={loading || summaryLoading}
+            }}
+            disabled={loading}
             style={{
               padding: "8px 10px",
               borderRadius: 12,
               border: "1px solid #E5E7EB",
               background: "#FFFFFF",
-              cursor: loading || summaryLoading ? "default" : "pointer",
-              opacity: loading || summaryLoading ? 0.65 : 1,
+              cursor: loading ? "default" : "pointer",
+              opacity: loading ? 0.65 : 1,
               fontWeight: 800,
             }}
           >
@@ -399,7 +302,7 @@ export function TenantReputationTimeline({ tenantId }: { tenantId: string }) {
           const chips: string[] = [];
           if (money) chips.push(money);
           if (typeof ev.daysLate === "number") chips.push(`${ev.daysLate} days late`);
-          if (ev.noticeType) chips.push(String(ev.noticeType));
+          if (ev.noticeType) chips.push(safeStr(ev.noticeType));
 
           const evType = safeType(ev.type);
           const title = (ev.title || "").trim() || evType.replaceAll("_", " ");
@@ -450,7 +353,9 @@ export function TenantReputationTimeline({ tenantId }: { tenantId: string }) {
                   </div>
                 </div>
 
-                {chips.length > 0 ? <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{chips.map((c) => chip(c))}</div> : null}
+                {chips.length > 0 ? (
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{chips.map((c) => chip(c))}</div>
+                ) : null}
               </div>
             </div>
           );
@@ -487,15 +392,3 @@ export function TenantReputationTimeline({ tenantId }: { tenantId: string }) {
 }
 
 export default TenantReputationTimeline;
-
-
-
-
-
-
-
-
-
-
-
-
