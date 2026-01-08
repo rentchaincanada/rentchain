@@ -34,12 +34,11 @@ export const TopNav: React.FC = () => {
       .then((res) => {
         if (!alive) return;
         setMe(res);
-        const p = res?.plan;
-        if (
-          DEMO_MODE &&
-          (p === "starter" || p === "core" || p === "pro" || p === "elite")
-        ) {
-          setPlan(p);
+        if (DEMO_MODE) {
+          const p = res?.plan;
+          if (p === "starter" || p === "core" || p === "pro" || p === "elite") {
+            setPlan(p);
+          }
         }
       })
       .catch(() => {
@@ -272,28 +271,30 @@ export const TopNav: React.FC = () => {
           <span style={{ color: "#cbd5f5", fontSize: 12 }}>
             Plan: {planLabel(displayedPlan)}
           </span>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ color: "#cbd5f5", fontSize: 12 }}>Demo plan</span>
-            <select
-              value={planValue}
-              onChange={(e) => setPlan(e.target.value as any)}
-              style={{
-                borderRadius: radius.pill,
-                border: `1px solid ${colors.border}`,
-                backgroundColor: colors.panel,
-                color: text.primary,
-                fontSize: 12,
-                padding: "4px 10px",
-                outline: "none",
-                cursor: "pointer",
-              }}
-            >
-              <option value="starter">{planLabel("starter")}</option>
-              <option value="core">{planLabel("core")}</option>
-              <option value="pro">{planLabel("pro")}</option>
-              <option value="elite">{planLabel("elite")}</option>
-            </select>
-          </div>
+          {DEMO_MODE ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ color: "#cbd5f5", fontSize: 12 }}>Demo plan</span>
+              <select
+                value={planValue}
+                onChange={(e) => setPlan(e.target.value as any)}
+                style={{
+                  borderRadius: radius.pill,
+                  border: `1px solid ${colors.border}`,
+                  backgroundColor: colors.panel,
+                  color: text.primary,
+                  fontSize: 12,
+                  padding: "4px 10px",
+                  outline: "none",
+                  cursor: "pointer",
+                }}
+              >
+                <option value="starter">{planLabel("starter")}</option>
+                <option value="core">{planLabel("core")}</option>
+                <option value="pro">{planLabel("pro")}</option>
+                <option value="elite">{planLabel("elite")}</option>
+              </select>
+            </div>
+          ) : null}
         </div>
 
         {user ? (
