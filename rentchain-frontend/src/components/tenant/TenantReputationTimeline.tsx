@@ -2,6 +2,9 @@
 import { getTenantEvents, type TenantEvent } from "../../api/tenantEventsTenantApi";
 import { TenantScorePill } from "./TenantScorePill";
 
+const safeType = (t: any) => (typeof t === "string" && t.trim() ? t.trim() : "note");
+const safeStr = (v: any, fallback = "") => (typeof v === "string" ? v : fallback);
+
 function toMillis(ts: any): number | null {
   if (!ts) return null;
   if (typeof ts === "number") return ts;
@@ -33,7 +36,7 @@ type Severity = "positive" | "neutral" | "negative";
 function inferSeverityFallback(ev: TenantEvent): Severity {
   const s = (ev as any)?.severity as Severity | undefined;
   if (s === "positive" || s === "neutral" || s === "negative") return s;
-  switch (ev.type) {
+  switch (safeType(ev.type)) {
     case "RENT_PAID":
     case "LEASE_STARTED":
       return "positive";
@@ -399,7 +402,8 @@ export function TenantReputationTimeline({ tenantId }: { tenantId: string }) {
           if (typeof ev.daysLate === "number") chips.push(`${ev.daysLate} days late`);
           if (ev.noticeType) chips.push(String(ev.noticeType));
 
-          const title = (ev.title || "").trim() || ev.type.replaceAll("_", " ");
+          const evType = safeType(ev.type);
+          const title = (ev.title || "").trim() || evType.replaceAll("_", " ");
 
           return (
             <div key={ev.id} style={{ display: "flex", gap: 12, position: "relative" }}>
@@ -442,7 +446,7 @@ export function TenantReputationTimeline({ tenantId }: { tenantId: string }) {
                     <div style={{ fontSize: 12, opacity: 0.75, whiteSpace: "nowrap" }}>{when}</div>
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
                       {severityBadge(sev)}
-                      {typePill(ev.type)}
+                      {typePill(evType)}
                     </div>
                   </div>
                 </div>

@@ -2,6 +2,8 @@ import { apiFetch } from "./apiFetch";
 
 export type TenantEvent = {
   id: string;
+
+  // core
   type?: string;
   title?: string;
   description?: string;
@@ -9,6 +11,13 @@ export type TenantEvent = {
   occurredAt?: any;
   createdAt?: any;
   source?: string;
+
+  // optional fields referenced by UI
+  daysLate?: number;
+  noticeType?: string;
+
+  // allow extra backend fields without TS breakage
+  [key: string]: any;
 };
 
 export async function getTenantEvents(limit = 25): Promise<TenantEvent[] | null> {
