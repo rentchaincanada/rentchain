@@ -26,7 +26,7 @@ export const TopNav: React.FC = () => {
   const [me, setMe] = useState<any>(null);
   const [limits, setLimits] = useState<any>(null);
   const displayedPlan = resolvePlanFrom({ me, limits });
-  const planValue = normalizePlan(plan);
+  const planValue = DEMO_MODE ? normalizePlan(plan) : displayedPlan;
 
   useEffect(() => {
     let alive = true;
@@ -35,7 +35,10 @@ export const TopNav: React.FC = () => {
         if (!alive) return;
         setMe(res);
         const p = res?.plan;
-        if (p === "starter" || p === "core" || p === "pro" || p === "elite") {
+        if (
+          DEMO_MODE &&
+          (p === "starter" || p === "core" || p === "pro" || p === "elite")
+        ) {
           setPlan(p);
         }
       })
