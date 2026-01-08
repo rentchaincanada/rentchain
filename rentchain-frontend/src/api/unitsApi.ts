@@ -1,18 +1,32 @@
-import { apiJson } from "../lib/apiClient";
+import { apiFetch } from "./apiFetch";
 
-export type UnitInput = {
-  unitNumber: string;
-  beds: number;
-  baths: number;
-  sqft: number;
-  marketRent: number;
-  status?: "vacant" | "occupied";
-};
+export async function fetchUnitsForProperty(propertyId: string) {
+  // Try common endpoints; return the first successful array
+  try {
+    const res: any = await apiFetch(`/api/properties/${propertyId}/units`, {
+      method: "GET",
+      allowStatuses: [404],
+      suppressToasts: true,
+    } as any);
+    if (Array.isArray(res)) return res;
+    if (Array.isArray(res?.items)) return res.items;
+  } catch (e: any) {
+    const msg = String(e?.message || "");
+    if (!msg.includes("404")) throw e;
+  }
 
-export function addUnitsManual(propertyId: string, units: UnitInput[]) {
-  return apiJson(`/properties/${propertyId}/units`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ units }),
-  });
+  try {
+    const res: any = await apiFetch(`/api/units?propertyId=${encodeURIComponent(propertyId)}`, {
+      method: "GET",
+      allowStatuses: [404],
+      suppressToasts: true,
+    } as any);
+    if (Array.isArray(res)) return res;
+    if (Array.isArray(res?.items)) return res.items;
+  } catch (e: any) {
+    const msg = String(e?.message || "");
+    if (!msg.includes("404")) throw e;
+  }
+
+  return null;
 }

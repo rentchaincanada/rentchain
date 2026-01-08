@@ -10,6 +10,7 @@ import {
   Payment,
 } from "@/api/paymentsApi";
 import { importUnitsCsv } from "../../api/unitsImportApi";
+import { fetchUnitsForProperty } from "../../api/unitsApi";
 import { fetchMe } from "../../api/meApi";
 import { useUpgrade } from "../../context/UpgradeContext";
 import { buildUnitsCsvTemplate, downloadTextFile } from "../../utils/csvTemplates";
@@ -62,11 +63,12 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   const [previewRows, setPreviewRows] = useState<string[][]>([]);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [pendingFilename, setPendingFilename] = useState<string>("");
+  const [units, setUnits] = useState<any[]>([]);
 
   const readFileText = useCallback((file: File) => {
     return new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result ?? ""));
+      reader.onload = () => resolve(String(reader.result ?? "--"));
       reader.onerror = () => reject(new Error("Failed to read file"));
       reader.readAsText(file);
     });
@@ -79,7 +81,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
       const csvText = await readFileText(pendingFile);
       console.log("[units-import] file=", pendingFile?.name, pendingFile?.size, pendingFile?.type);
       console.log("[units-import] csvText.len=", csvText?.length);
-      console.log("[units-import] csvText.head=", String(csvText ?? "").slice(0, 120));
+      console.log("[units-import] csvText.head=", String(csvText ?? "--").slice(0, 120));
 
       if (!csvText || !String(csvText).trim()) {
         showToast({
@@ -100,7 +102,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
         description: `Created ${created} | Updated ${updated} | Skipped ${skipped}${
           errCount ? ` | ${errCount} issue(s)` : ""
         }`,
-        variant: errCount ? "warning" : "success",
+        variant: errCount ? "--" : "success",
       });
       setPreviewOpen(false);
       setPendingFile(null);
@@ -134,8 +136,8 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
         showToast({
           message: "Upgrade required",
           description: `${data?.message || "Plan limit reached."} (You have ${
-            data?.existing ?? "-"
-          } of ${data?.limit ?? "-"} units).`,
+            data?.existing ?? "--"
+          } of ${data?.limit ?? "--"} units).`,
           variant: "warning",
         });
         return;
@@ -148,7 +150,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
 
       showToast({
         message: "Import unsuccessful",
-        description: e?.message ?? "Please try again.",
+        description: e?.message ?? "--",
         variant: "error",
       });
     } finally {
@@ -159,6 +161,52 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
     setIsLeasesLoading(loading);
     setLeasesError(error);
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    setUnits(property?.units || []);
+
+    const loadUnits = async () => {
+      const pid = property?.id;
+      if (!pid) {
+        setUnits([]);
+        return;
+      }
+      try {
+        const res = await fetchUnitsForProperty(pid);
+        if (cancelled) return;
+        if (Array.isArray(res) && res.length > 0) {
+          setUnits(res);
+          return;
+        }
+        const count = (property as any)?.unitCount ?? 0;
+        if (count > 0) {
+          setUnits(
+            Array.from({ length: count }, (_, i) => ({
+              id: `placeholder-${i}`,
+              unitNumber: String(i + 1),
+            }))
+          );
+        }
+      } catch (e) {
+        if (cancelled) return;
+        const count = (property as any)?.unitCount ?? 0;
+        if (count > 0) {
+          setUnits(
+            Array.from({ length: count }, (_, i) => ({
+              id: `placeholder-${i}`,
+              unitNumber: String(i + 1),
+            }))
+          );
+        }
+      }
+    };
+
+    void loadUnits();
+    return () => {
+      cancelled = true;
+    };
+  }, [property?.id, property?.units]);
 
   useEffect(() => {
     let cancelled = false;
@@ -259,12 +307,10 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
     };
   }, [propertyId]);
 
-  const units = property?.units || [];
+  
   const unitCount =
-    units.length > 0
-      ? units.length
-      : (property as any)?.unitCount ?? 0;
-  const plan = me?.plan ?? "starter";
+    units.length > 0 ? units.length : (property as any)?.unitCount ?? 0;
+  const plan = me?.plan ?? "--";
   const maxUnits = PLANS.starter.maxUnits;
   const canImport = unitCount < maxUnits;
   const totalRentConfigured = units.reduce(
@@ -346,7 +392,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             </button>
             <button
               type="button"
-              title={canImport ? "Add units (coming soon)" : "Upgrade to add units"}
+              title={canImport ? "--" : "Upgrade to add units"}
               disabled
               style={{
                 padding: "6px 10px",
@@ -363,7 +409,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
               type="button"
               title={
                 canImport
-                  ? "Upload CSV"
+                  ? "--"
                   : `Plan limit reached (${maxUnits} units). Upgrade to import.`
               }
               onClick={() => {
@@ -379,12 +425,12 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                 padding: "6px 10px",
                 borderRadius: 10,
                 border: "1px solid rgba(15,23,42,0.12)",
-                background: canImport ? "#0ea5e9" : "rgba(0,0,0,0.02)",
-                color: canImport ? "#fff" : "#6b7280",
-                cursor: canImport ? "pointer" : "not-allowed",
+                background: canImport ? "--" : "rgba(0,0,0,0.02)",
+                color: canImport ? "--" : "#6b7280",
+                cursor: canImport ? "--" : "not-allowed",
               }}
             >
-              {isImporting ? "Importing…" : "Upload CSV"}
+              {isImporting ? "--" : "Upload CSV"}
             </button>
             <button
               type="button"
@@ -492,7 +538,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
         >
           <div style={{ color: "#94a3b8", fontSize: "0.8rem" }}>Occupancy</div>
           <div style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.05rem" }}>
-            {unitCount === 0 ? "—" : `${occupancy.toFixed(0)}%`}
+            {unitCount === 0 ? "--" : `${occupancy.toFixed(0)}%`}
           </div>
         </div>
         <div
@@ -536,7 +582,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
         >
           <div style={{ color: "#94a3b8", fontSize: "0.8rem" }}>Collection</div>
           <div style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.05rem" }}>
-            {leaseRentRoll === 0 ? "—" : `${(collectionRate * 100).toFixed(0)}%`}
+            {leaseRentRoll === 0 ? "--" : `${(collectionRate * 100).toFixed(0)}%`}
           </div>
         </div>
       </div>
@@ -604,7 +650,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
               </tr>
             ) : (
               units.map((u, idx) => {
-                const unitNum = (u as any).unitNumber || "—";
+                const unitNum = (u as any).unitNumber || "--";
                 const isLeased = leasedUnitNumbers.has(unitNum);
                 return (
                   <tr
@@ -643,9 +689,9 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                           borderRadius: 999,
                           border: "1px solid rgba(148,163,184,0.35)",
                           background: isLeased
-                            ? "rgba(34,197,94,0.12)"
+                            ? "--"
                             : "rgba(248,113,113,0.08)",
-                          color: isLeased ? "#22c55e" : "#f87171",
+                          color: isLeased ? "--" : "#f87171",
                           fontSize: "0.8rem",
                         }}
                       >
@@ -654,10 +700,10 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                             width: 8,
                             height: 8,
                             borderRadius: "999px",
-                            backgroundColor: isLeased ? "#22c55e" : "#f87171",
+                            backgroundColor: isLeased ? "--" : "#f87171",
                           }}
                         />
-                        {isLeased ? "Leased" : "Vacant"}
+                        {isLeased ? "--" : "Vacant"}
                       </span>
                     </td>
                   </tr>
@@ -680,3 +726,6 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
     </>
   );
 };
+
+
+
