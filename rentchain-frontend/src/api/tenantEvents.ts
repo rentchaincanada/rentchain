@@ -116,12 +116,6 @@ export type TenantSummary = {
   updatedAt: any;
 };
 
-export async function getTenantSummary(tenantId: string) {
-  const qs = new URLSearchParams();
-  qs.set("tenantId", tenantId);
-  return apiFetch<{ ok: boolean; item: TenantSummary; computed?: boolean }>(`/tenant-summaries?${qs.toString()}`);
-}
-
 export async function createTenantEvent(payload: {
   tenantId: string;
   propertyId?: string;

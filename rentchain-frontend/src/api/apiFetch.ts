@@ -40,7 +40,7 @@ function normalizePlanLimit(payload: any, status: number) {
   return null;
 }
 
-export type ApiFetchInit = RequestInit & { allowStatuses?: number[] };
+export type ApiFetchInit = RequestInit & { allowStatuses?: number[]; allow404?: boolean; suppressToasts?: boolean };
 
 export async function apiFetch<T = any>(
   path: string,
@@ -62,7 +62,7 @@ export async function apiFetch<T = any>(
     ? normalizedPath
     : `${API_BASE_URL}${normalizedPath.startsWith("/") ? "" : "/"}${normalizedPath}`;
 
-  const { allowStatuses, ...fetchInit } = init;
+  const { allowStatuses, allow404, suppressToasts, ...fetchInit } = init;
 
   const headers: Record<string, string> = {
     ...(fetchInit.headers as any),
@@ -91,9 +91,15 @@ export async function apiFetch<T = any>(
     if (detail) {
       dispatchPlanLimit(detail);
     }
+    if (res.status === 404 && (allow404 || allowStatuses?.includes(404))) {
+      return null as T;
+    }
     const msg = data?.message || data?.error || text || `apiFetch ${res.status}`;
     if (allowStatuses?.includes(res.status)) {
       return (data as T) ?? (text as unknown as T);
+    }
+    if (!suppressToasts) {
+      // no-op placeholder: integrate toast system here if desired
     }
     throw new Error(msg);
   }

@@ -93,7 +93,7 @@ export async function getPropertyMonthlyPayments(
   const qs = new URLSearchParams({ year: String(year), month: String(month) });
   const data = await apiFetch<{ payments: Payment[]; total: number }>(
     `/payments/property/${encodeURIComponent(propertyId)}/monthly?${qs.toString()}`,
-    { allowStatuses: [404] }
+    { allowStatuses: [404], suppressToasts: true }
   );
   if (!data) return { payments: [], total: 0 };
   return data;

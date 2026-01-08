@@ -31,40 +31,10 @@ export async function hydrateTenantSummariesBatch(tenantIds: string[]) {
   const ids = Array.from(new Set(tenantIds.map((x) => String(x || '').trim()).filter(Boolean)));
   if (!ids.length) return;
 
-  // skip fresh cache
-  const need = ids.filter((id) => {
-    const entry = cache.get(key(id));
-    if (!entry) return true;
-    return Date.now() - entry.fetchedAt > CACHE_TTL_MS;
-  });
-
-  if (!need.length) return;
-
-  const reqKey = need.slice().sort().join(',');
-  if (inflight.has(reqKey)) return inflight.get(reqKey);
-
-  const p = (async () => {
-    try {
-      const resp = await apiFetch<{ ok: boolean; itemsByTenantId: Record<string, TenantSummary | null> }>(
-        "/api/tenant-summaries/batch",
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tenantIds: need }),
-        }
-      );
-
-      const items = resp?.itemsByTenantId || {};
-      for (const id of need) {
-        setCachedTenantSummary(id, items[id] ?? null);
-      }
-    } finally {
-      inflight.delete(reqKey);
-    }
-  })();
-
-  inflight.set(reqKey, p);
-  return p;
+  // temporarily disable remote fetch to avoid tenant-summaries 403s; fill cache with nulls
+  for (const id of ids) {
+    setCachedTenantSummary(id, null);
+  }
 }
 
 export function scoreDotColor(tier?: string | null) {
