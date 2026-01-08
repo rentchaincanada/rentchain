@@ -28,6 +28,7 @@ export const TenantDetailPanel: React.FC<TenantDetailPanelProps> = ({
 }) => {
   const [payments, setPayments] = useState<TenantPayment[]>([]);
   const [loadingPayments, setLoadingPayments] = useState(false);
+  const [showEventModal, setShowEventModal] = useState(false);
 
   // Select the active tenant
   const selectedTenant = useMemo(
@@ -78,6 +79,33 @@ export const TenantDetailPanel: React.FC<TenantDetailPanelProps> = ({
 
     loadPayments();
   }, [tenantId]);
+
+  async function refetchPayments() {
+    if (!tenantId) {
+      setPayments([]);
+      return;
+    }
+    try {
+      setLoadingPayments(true);
+      const url = `/payments?tenantId=${tenantId}`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        setPayments([]);
+        return;
+      }
+      const data = await res.json();
+      const paymentsData = Array.isArray(data)
+        ? data
+        : data && Array.isArray(data.payments)
+        ? data.payments
+        : [];
+      setPayments(paymentsData);
+    } catch {
+      setPayments([]);
+    } finally {
+      setLoadingPayments(false);
+    }
+  }
 
   // Loading state for tenant list
   if (loadingTenants) {
@@ -135,6 +163,22 @@ export const TenantDetailPanel: React.FC<TenantDetailPanelProps> = ({
       <p>
         <strong>Risk Level:</strong> {selectedTenant.riskLevel}
       </p>
+      <div style={{ marginTop: "0.5rem", marginBottom: "0.5rem" }}>
+        <button
+          type="button"
+          onClick={() => setShowEventModal(true)}
+          style={{
+            padding: "8px 12px",
+            borderRadius: 10,
+            border: "1px solid #e5e7eb",
+            background: "#111827",
+            color: "#fff",
+            cursor: "pointer",
+          }}
+        >
+          Record event
+        </button>
+      </div>
 
       {/* Recent Payments */}
       <div className="panel-section" style={{ marginTop: "1.5rem" }}>
@@ -190,7 +234,59 @@ export const TenantDetailPanel: React.FC<TenantDetailPanelProps> = ({
         )}
       </div>
     </div>
+      {showEventModal ? (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.4)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+            zIndex: 2000,
+          }}
+          onMouseDown={() => setShowEventModal(false)}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 12,
+              padding: 16,
+              width: "100%",
+              maxWidth: 480,
+              boxShadow: "0 20px 50px rgba(0,0,0,0.15)",
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <div style={{ fontWeight: 700 }}>Record tenant event</div>
+              <button
+                type="button"
+                onClick={() => setShowEventModal(false)}
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  cursor: "pointer",
+                  fontSize: 16,
+                }}
+              >
+                ×
+              </button>
+            </div>
+            <RecordTenantEventModal
+              tenantId={tenantId}
+              onSuccess={async () => {
+                setShowEventModal(false);
+                await refetchPayments();
+              }}
+              onClose={() => setShowEventModal(false)}
+            />
+          </div>
+        </div>
+      ) : null}
   );
 };
 
 export default TenantDetailPanel;
+import { RecordTenantEventModal } from "../tenant/RecordTenantEventModal";

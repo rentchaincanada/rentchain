@@ -121,3 +121,19 @@ export async function getTenantSummary(tenantId: string) {
   qs.set("tenantId", tenantId);
   return apiFetch<{ ok: boolean; item: TenantSummary; computed?: boolean }>(`/tenant-summaries?${qs.toString()}`);
 }
+
+export async function createTenantEvent(payload: {
+  tenantId: string;
+  propertyId?: string;
+  type: string;
+  title: string;
+  description?: string;
+  amount?: number;
+  occurredAt?: string;
+}) {
+  return apiFetch("/tenant-events", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}

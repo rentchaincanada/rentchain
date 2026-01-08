@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db } from "../config/firebase";
+import { db, FieldValue } from "../config/firebase";
 import { authenticateJwt } from "../middleware/authMiddleware";
 
 const router = Router();
@@ -18,6 +18,49 @@ function requireLandlord(req: any, res: any, next: any) {
   }
   next();
 }
+
+router.post("/tenant-events", authenticateJwt, requireLandlord, async (req: any, res: any) => {
+  res.setHeader("x-route-source", "tenantEventsRoutes");
+  try {
+    const landlordId = req.user?.landlordId || req.user?.id;
+    if (!landlordId) {
+      return res.status(401).json({ ok: false, error: "Unauthorized" });
+    }
+
+    const { tenantId, propertyId, type, title, description, amount, occurredAt } = req.body || {};
+
+    if (!tenantId || !String(type || "").trim() || !String(title || "").trim()) {
+      return res.status(400).json({
+        ok: false,
+        error: "tenantId, type, and title are required",
+      });
+    }
+
+    const occurredDate = new Date(occurredAt || Date.now());
+    const validOccurredAt = Number.isNaN(occurredDate.getTime()) ? new Date() : occurredDate;
+
+    const payload: any = {
+      tenantId: String(tenantId),
+      propertyId: propertyId || null,
+      landlordId,
+      type: String(type),
+      title: String(title),
+      description: description ? String(description) : "",
+      amount: typeof amount === "number" && Number.isFinite(amount) ? amount : null,
+      occurredAt: validOccurredAt,
+      createdAt: new Date(),
+      createdAtServer: FieldValue.serverTimestamp(),
+      createdBy: landlordId,
+      source: "landlord_manual",
+    };
+
+    const ref = await db.collection("tenantEvents").add(payload);
+    return res.json({ ok: true, eventId: ref.id });
+  } catch (err) {
+    console.error("[tenant-events POST] error", err);
+    return res.status(500).json({ ok: false, error: "Failed to record tenant event" });
+  }
+});
 
 router.get("/tenant/events", authenticateJwt, requireTenant, async (req: any, res) => {
   res.setHeader("x-route-source", "tenantEventsRoutes");
