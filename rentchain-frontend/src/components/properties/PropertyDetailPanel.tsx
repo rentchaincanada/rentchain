@@ -102,7 +102,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
         description: `Created ${created} | Updated ${updated} | Skipped ${skipped}${
           errCount ? ` | ${errCount} issue(s)` : ""
         }`,
-        variant: errCount ? "warning" : "success",
+        variant: errCount ? "warning" : undefined,
       });
       setPreviewOpen(false);
       setPendingFile(null);
