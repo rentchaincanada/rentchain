@@ -25,8 +25,7 @@ function formatMoney(n?: number | null) {
   return v.toLocaleString(undefined, { style: "currency", currency: "CAD" });
 }
 
-// Named export (for legacy imports)
-function TenantPaymentsPanel({ tenantId }: Props) {
+export function TenantPaymentsPanel({ tenantId }: Props) {
   const safeTenantId = tenantId ?? undefined;
 
   const now = new Date();
@@ -250,7 +249,3 @@ function TenantPaymentsPanel({ tenantId }: Props) {
     </div>
   );
 }
-
-// Default export (preferred import style)
-export { TenantPaymentsPanel };
-export default TenantPaymentsPanel;

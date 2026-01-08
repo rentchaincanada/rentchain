@@ -1,4 +1,4 @@
-// src/components/tenants/TenantDetailPanel.tsx
+// src/components/dashboard/TenantDetailPanel.tsx
 import React, { useEffect, useMemo, useState } from "react";
 import { RecordTenantEventModal } from "../tenant/RecordTenantEventModal";
 import { TenantRiskRow } from "../dashboard/TenantRiskTable";
@@ -98,8 +98,7 @@ export function TenantDetailPanel({
       <h2>Tenant details</h2>
 
       <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.75rem" }}>
-        Debug — tenantId: <code>{String(tenantId)}</code>, payments:{" "}
-        <code>{payments.length}</code>
+        Debug tenantId: <code>{String(tenantId)}</code>, payments: <code>{payments.length}</code>
       </p>
 
       <p>
@@ -182,28 +181,29 @@ export function TenantDetailPanel({
 
       {showEventModal ? (
         <div
+          role="dialog"
+          aria-modal="true"
+          onMouseDown={() => setShowEventModal(false)}
           style={{
             position: "fixed",
             inset: 0,
-            background: "rgba(0,0,0,0.4)",
+            background: "rgba(0,0,0,0.35)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             padding: 16,
-            zIndex: 2000,
+            zIndex: 1000,
           }}
-          onMouseDown={() => setShowEventModal(false)}
         >
           <div
+            onMouseDown={(e) => e.stopPropagation()}
             style={{
+              width: "min(560px, 100%)",
               background: "#fff",
               borderRadius: 12,
               padding: 16,
-              width: "100%",
-              maxWidth: 480,
-              boxShadow: "0 20px 50px rgba(0,0,0,0.15)",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
             }}
-            onMouseDown={(e) => e.stopPropagation()}
           >
             <div
               style={{
@@ -222,11 +222,14 @@ export function TenantDetailPanel({
                   background: "transparent",
                   cursor: "pointer",
                   fontSize: 16,
+                  lineHeight: "16px",
                 }}
+                aria-label="Close"
               >
-                ×
+                x
               </button>
             </div>
+
             <RecordTenantEventModal
               tenantId={tenantId}
               onSuccess={async () => {
