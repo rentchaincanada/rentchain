@@ -38,8 +38,8 @@ export function resolveApiUrl(input: string) {
   const url = `${base}${normalized}${queryPart ? `?${queryPart}` : ""}`;
 
   if (
+    import.meta.env.DEV &&
     !warnedMisconfig &&
-    import.meta.env.PROD &&
     typeof window !== "undefined" &&
     window.location.host.includes("rentchain.ai") &&
     url.startsWith("https://www.rentchain.ai/api/")

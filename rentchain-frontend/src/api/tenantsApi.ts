@@ -14,10 +14,18 @@ export interface TenantApiModel {
  * GET /tenants
  */
 export async function fetchTenants(): Promise<TenantApiModel[]> {
-  const data = await apiJson<any>("/tenants");
-  if (Array.isArray(data)) return data as TenantApiModel[];
-  if (Array.isArray(data?.tenants)) return data.tenants as TenantApiModel[];
-  return [];
+  try {
+    const data = await apiJson<any>("/tenants");
+    if (Array.isArray(data)) return data as TenantApiModel[];
+    if (Array.isArray(data?.tenants)) return data.tenants as TenantApiModel[];
+    return [];
+  } catch (err: any) {
+    const msg = String(err?.message || "");
+    if (msg.includes("404")) {
+      return [];
+    }
+    throw err;
+  }
 }
 
 export async function downloadTenantReport(tenantId: string): Promise<any> {
