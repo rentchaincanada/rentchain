@@ -64,7 +64,6 @@ router.post("/tenant-events", authenticateJwt, requireLandlord, async (req: any,
 
 router.get("/tenant/events", authenticateJwt, requireTenant, async (req: any, res) => {
   res.setHeader("x-route-source", "tenantEventsRoutes");
-  console.log("[tenant/events] start");
   try {
     const tenantId = req.user?.tenantId || req.user?.id;
     if (!tenantId) return res.status(403).json({ ok: false, error: "Forbidden" });
@@ -84,10 +83,8 @@ router.get("/tenant/events", authenticateJwt, requireTenant, async (req: any, re
       .get();
 
     const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
-    console.log("[tenant/events] done items=", items.length);
     return res.json({ ok: true, items });
   } catch (err) {
-    console.error("[tenant/events] error", err);
     return res.status(500).json({ ok: false, error: "Failed to load tenant events" });
   }
 });

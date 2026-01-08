@@ -26,7 +26,7 @@ function formatMoney(n?: number | null) {
 }
 
 // Named export (for legacy imports)
-export function TenantPaymentsPanel({ tenantId }: Props) {
+function TenantPaymentsPanel({ tenantId }: Props) {
   const safeTenantId = tenantId ?? undefined;
 
   const now = new Date();
@@ -252,4 +252,5 @@ export function TenantPaymentsPanel({ tenantId }: Props) {
 }
 
 // Default export (preferred import style)
+export { TenantPaymentsPanel };
 export default TenantPaymentsPanel;

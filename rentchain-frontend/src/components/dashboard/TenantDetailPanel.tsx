@@ -1,5 +1,6 @@
 // src/components/tenants/TenantDetailPanel.tsx
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { RecordTenantEventModal } from "../tenant/RecordTenantEventModal";
 import { TenantRiskRow } from "../dashboard/TenantRiskTable";
 import "../dashboard/Dashboard.css";
 
@@ -21,74 +22,28 @@ interface TenantPayment {
   method?: string;
 }
 
-export const TenantDetailPanel: React.FC<TenantDetailPanelProps> = ({
+export function TenantDetailPanel({
   tenantId,
   tenants,
   loadingTenants = false,
-}) => {
+}: TenantDetailPanelProps) {
   const [payments, setPayments] = useState<TenantPayment[]>([]);
   const [loadingPayments, setLoadingPayments] = useState(false);
   const [showEventModal, setShowEventModal] = useState(false);
 
-  // Select the active tenant
   const selectedTenant = useMemo(
     () => tenants.find((t) => t.id === tenantId) ?? null,
     [tenants, tenantId]
   );
 
-  // Load recent payments
-  useEffect(() => {
-    if (!tenantId) {
-      setPayments([]);
-      return;
-    }
-
-    const loadPayments = async () => {
-      try {
-        setLoadingPayments(true);
-
-        const url = `/payments?tenantId=${tenantId}`;
-        console.log("TenantDetailPanel fetching:", url);
-        const res = await fetch(url);
-
-        if (!res.ok) {
-          console.error("Failed to fetch payments", await res.text());
-          setPayments([]);
-          return;
-        }
-
-        const data = await res.json();
-
-        // Accept ANY backend shape:
-        // 1) Array of payments → [ ... ]
-        // 2) Wrapped response → { payments: [ ... ] }
-        const paymentsData = Array.isArray(data)
-          ? data
-          : data && Array.isArray(data.payments)
-          ? data.payments
-          : [];
-
-        setPayments(paymentsData);
-      } catch (err) {
-        console.error("Error loading payments", err);
-        setPayments([]);
-      } finally {
-        setLoadingPayments(false);
-      }
-    };
-
-    loadPayments();
-  }, [tenantId]);
-
-  async function refetchPayments() {
+  async function loadPayments() {
     if (!tenantId) {
       setPayments([]);
       return;
     }
     try {
       setLoadingPayments(true);
-      const url = `/payments?tenantId=${tenantId}`;
-      const res = await fetch(url);
+      const res = await fetch(`/payments?tenantId=${tenantId}`);
       if (!res.ok) {
         setPayments([]);
         return;
@@ -107,17 +62,19 @@ export const TenantDetailPanel: React.FC<TenantDetailPanelProps> = ({
     }
   }
 
-  // Loading state for tenant list
+  useEffect(() => {
+    void loadPayments();
+  }, [tenantId]);
+
   if (loadingTenants) {
     return (
       <div className="card tenant-detail-panel">
         <h2>Tenant details</h2>
-        <p className="subtle-loading">Loading tenants…</p>
+        <p className="subtle-loading">Loading tenants...</p>
       </div>
     );
   }
 
-  // No tenant selected yet
   if (!tenantId) {
     return (
       <div className="card tenant-detail-panel">
@@ -136,18 +93,15 @@ export const TenantDetailPanel: React.FC<TenantDetailPanelProps> = ({
     );
   }
 
-  // Successful render
   return (
     <div className="card tenant-detail-panel">
       <h2>Tenant details</h2>
 
-      {/* Tiny debug line directly in the UI */}
       <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.75rem" }}>
-        Debug – tenantId: <code>{String(tenantId)}</code>, payments:{" "}
+        Debug — tenantId: <code>{String(tenantId)}</code>, payments:{" "}
         <code>{payments.length}</code>
       </p>
 
-      {/* Basic tenant info */}
       <p>
         <strong>Name:</strong> {selectedTenant.name}
       </p>
@@ -163,6 +117,7 @@ export const TenantDetailPanel: React.FC<TenantDetailPanelProps> = ({
       <p>
         <strong>Risk Level:</strong> {selectedTenant.riskLevel}
       </p>
+
       <div style={{ marginTop: "0.5rem", marginBottom: "0.5rem" }}>
         <button
           type="button"
@@ -180,12 +135,11 @@ export const TenantDetailPanel: React.FC<TenantDetailPanelProps> = ({
         </button>
       </div>
 
-      {/* Recent Payments */}
       <div className="panel-section" style={{ marginTop: "1.5rem" }}>
         <h3 className="section-title">Recent Payments</h3>
 
         {loadingPayments ? (
-          <div className="loading">Loading payments…</div>
+          <div className="loading">Loading payments...</div>
         ) : payments.length === 0 ? (
           <div className="empty">No payments recorded</div>
         ) : (
@@ -202,16 +156,8 @@ export const TenantDetailPanel: React.FC<TenantDetailPanelProps> = ({
             <tbody>
               {payments.map((p) => (
                 <tr key={p.id}>
-                  <td>
-                    {p.paidAt
-                      ? new Date(p.paidAt).toLocaleDateString()
-                      : "-"}
-                  </td>
-                  <td>
-                    {typeof p.amount === "number"
-                      ? `$${p.amount.toLocaleString()}`
-                      : "-"}
-                  </td>
+                  <td>{p.paidAt ? new Date(p.paidAt).toLocaleDateString() : "-"}</td>
+                  <td>{typeof p.amount === "number" ? `$${p.amount.toLocaleString()}` : "-"}</td>
                   <td>{p.method || "-"}</td>
                   <td>
                     <span
@@ -233,7 +179,7 @@ export const TenantDetailPanel: React.FC<TenantDetailPanelProps> = ({
           </table>
         )}
       </div>
-    </div>
+
       {showEventModal ? (
         <div
           style={{
@@ -259,7 +205,14 @@ export const TenantDetailPanel: React.FC<TenantDetailPanelProps> = ({
             }}
             onMouseDown={(e) => e.stopPropagation()}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 8,
+              }}
+            >
               <div style={{ fontWeight: 700 }}>Record tenant event</div>
               <button
                 type="button"
@@ -278,15 +231,15 @@ export const TenantDetailPanel: React.FC<TenantDetailPanelProps> = ({
               tenantId={tenantId}
               onSuccess={async () => {
                 setShowEventModal(false);
-                await refetchPayments();
+                await loadPayments();
               }}
               onClose={() => setShowEventModal(false)}
             />
           </div>
         </div>
       ) : null}
+    </div>
   );
-};
+}
 
 export default TenantDetailPanel;
-import { RecordTenantEventModal } from "../tenant/RecordTenantEventModal";
