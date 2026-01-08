@@ -1,4 +1,4 @@
-// @ts-nocheck
+﻿// @ts-nocheck
 // src/pages/PropertiesPage.tsx
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { MacShell } from "../components/layout/MacShell";
@@ -30,6 +30,7 @@ import { addUnitsManual, type UnitInput } from "../api/unitsApi";
 import { useToast } from "../components/ui/ToastProvider";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { PLANS } from "../config/plans";
+import { resolvePlanFrom, normalizePlan } from "../lib/plan";
 
 const PropertiesPage: React.FC = () => {
   const [properties, setProperties] = useState<Property[]>([]);
@@ -62,8 +63,8 @@ const PropertiesPage: React.FC = () => {
   const { openUpgrade } = useUpgrade();
   const { showToast } = useToast();
   const isMobile = useIsMobile();
-  const plan = me?.plan ?? "starter"; // limits.plan is informational; do not override authenticated plan
-  const planKey = String(plan ?? "starter").trim().toLowerCase();
+  const plan = resolvePlanFrom({ me, limits });
+  const planKey = normalizePlan(plan);
   const planLimits = (PLANS as any)[planKey] ?? PLANS.starter;
   const maxProperties = planLimits.maxProperties;
   const maxUnits = planLimits.maxUnits;
@@ -311,7 +312,7 @@ const PropertiesPage: React.FC = () => {
       // ignore
     }
     showToast({
-      title: "Portfolio ready — dashboard is live.",
+      title: "Portfolio ready  dashboard is live.",
       variant: "success",
     });
     navigate("/dashboard?onboarding=ready", { replace: true });
@@ -352,7 +353,7 @@ const PropertiesPage: React.FC = () => {
       );
       await setOnboardingStep("addUnits", true).catch(() => {});
       showToast({
-        title: "Portfolio ready — dashboard is live.",
+        title: "Portfolio ready  dashboard is live.",
         variant: "success",
       });
       setIsUnitsModalOpen(false);
@@ -424,7 +425,7 @@ const PropertiesPage: React.FC = () => {
   };
 
   return (
-    <MacShell title="RentChain · Properties">
+    <MacShell title="RentChain Properties">
       <div
         className="page-content"
         style={{ display: "flex", flexDirection: "column", gap: spacing.lg }}
@@ -444,7 +445,7 @@ const PropertiesPage: React.FC = () => {
                 gap: 8,
                 alignItems: "center",
               }}
-              title={`Plan ${plan} · Properties ${currentProperties}/${maxProperties} · Units ${unitsUsed}/${maxUnits}`}
+              title={`Plan ${plan} - Properties ${currentProperties}/${maxProperties} - Units ${unitsUsed}/${maxUnits}`}
             >
               <span style={{ fontWeight: 800, color: text.primary }}>
                 {plan}
@@ -699,7 +700,7 @@ const PropertiesPage: React.FC = () => {
               {isLoadingProperties && (
                 <Card style={{ padding: spacing.sm, margin: 0 }}>
                   <div style={{ color: text.muted, fontSize: 13 }}>
-                    Loading properties…
+                    Loading properties
                   </div>
                 </Card>
               )}
@@ -763,7 +764,7 @@ const PropertiesPage: React.FC = () => {
                       <div
                         style={{ color: text.muted, fontSize: 12, marginTop: 4 }}
                       >
-                        Units: {unitCount} • Occupancy: {occupancyPct}%
+                        Units: {unitCount}  Occupancy: {occupancyPct}%
                         <span
                           style={{
                             marginLeft: 8,
@@ -831,7 +832,7 @@ const PropertiesPage: React.FC = () => {
                     marginBottom: spacing.sm,
                   }}
                 >
-                  <strong>Add Lease (stub)</strong> — wire this to your Add Lease flow.
+                  <strong>Add Lease (stub)</strong>  wire this to your Add Lease flow.
                 </div>
               ) : null}
               {openAddUnit ? (
@@ -845,7 +846,7 @@ const PropertiesPage: React.FC = () => {
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                     <div>
-                      <strong>Add Unit</strong> — create units manually.
+                      <strong>Add Unit</strong>  create units manually.
                     </div>
                     <Button
                       size="sm"
@@ -872,7 +873,7 @@ const PropertiesPage: React.FC = () => {
                     marginBottom: spacing.sm,
                   }}
                 >
-                  <strong>Edit Units (stub)</strong> — wire this to your Units edit flow.
+                  <strong>Edit Units (stub)</strong>  wire this to your Units edit flow.
                 </div>
               ) : null}
               {openEditProperty ? (
@@ -884,7 +885,7 @@ const PropertiesPage: React.FC = () => {
                     marginBottom: spacing.sm,
                   }}
                 >
-                  <strong>Edit Property (stub)</strong> — wire this to your Edit Property flow.
+                  <strong>Edit Property (stub)</strong>  wire this to your Edit Property flow.
                 </div>
               ) : null}
 
@@ -961,7 +962,7 @@ const PropertiesPage: React.FC = () => {
               </div>
               {actionRequestsLoading ? (
                 <div style={{ color: text.muted, fontSize: 13 }}>
-                  Loading requests…
+                  Loading requests
                 </div>
               ) : actionRequestsError ? (
                 <div style={{ color: colors.danger, fontSize: 13 }}>
@@ -998,7 +999,7 @@ const PropertiesPage: React.FC = () => {
                     >
                       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                         <div style={{ fontWeight: 600, fontSize: 13 }}>
-                          {req.issueType} · {req.location}
+                          {req.issueType}  {req.location}
                         </div>
                         <div style={{ fontSize: 12, color: text.muted }}>
                           {safeLocaleDate(req.reportedAt)}
@@ -1136,10 +1137,10 @@ const ActionRequestModal: React.FC<ActionRequestModalProps> = ({
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <div style={{ fontWeight: 600 }}>
-            {request.issueType} · {request.location}
+            {request.issueType}  {request.location}
           </div>
           <div style={{ color: text.muted, fontSize: 13 }}>
-            Severity: {request.severity} • Status: {request.status}
+            Severity: {request.severity}  Status: {request.status}
           </div>
           <div style={{ whiteSpace: "pre-wrap", color: text.primary }}>
             {request.description}
@@ -1413,7 +1414,7 @@ const UnitsModal = ({
                 opacity: saving ? 0.7 : 1,
               }}
             >
-              {saving ? "Saving…" : "Save units"}
+              {saving ? "Saving" : "Save units"}
             </button>
           </div>
         </div>
@@ -1423,5 +1424,13 @@ const UnitsModal = ({
 };
 
 export default PropertiesPage;
+
+
+
+
+
+
+
+
 
 

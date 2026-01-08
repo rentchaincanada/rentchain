@@ -5,6 +5,7 @@ import { DEMO_MODE } from "../../config/demo";
 import { useSubscription } from "../../context/SubscriptionContext";
 import { useAuth } from "../../context/useAuth";
 import { fetchMe } from "../../api/meApi";
+import { resolvePlanFrom, planLabel, normalizePlan } from "../../lib/plan";
 import {
   blur,
   radius,
@@ -16,29 +17,14 @@ import {
   effects,
 } from "../../styles/tokens";
 
-const planLabel = (p: string) => {
-  switch (p) {
-    case "starter":
-      return "Starter";
-    case "core":
-      return "Core";
-    case "pro":
-      return "Pro";
-    case "elite":
-      return "Elite";
-    default:
-      return p;
-  }
-};
-
 export const TopNav: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { plan, setPlan } = useSubscription();
   const { user, logout } = useAuth();
   const [me, setMe] = useState<any>(null);
-  const displayedPlan = String(me?.plan ?? "starter").trim().toLowerCase();
-  const planValue = displayedPlan;
+  const displayedPlan = resolvePlanFrom({ me });
+  const planValue = normalizePlan(plan);
 
   useEffect(() => {
     let alive = true;
