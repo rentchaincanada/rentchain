@@ -5,6 +5,7 @@ import { DEMO_MODE } from "../../config/demo";
 import { useSubscription } from "../../context/SubscriptionContext";
 import { useAuth } from "../../context/useAuth";
 import { fetchMe } from "../../api/meApi";
+import { fetchAccountLimits } from "../../api/accountApi";
 import { resolvePlanFrom, planLabel, normalizePlan } from "../../lib/plan";
 import {
   blur,
@@ -23,7 +24,8 @@ export const TopNav: React.FC = () => {
   const { plan, setPlan } = useSubscription();
   const { user, logout } = useAuth();
   const [me, setMe] = useState<any>(null);
-  const displayedPlan = resolvePlanFrom({ me });
+  const [limits, setLimits] = useState<any>(null);
+  const displayedPlan = resolvePlanFrom({ me, limits });
   const planValue = normalizePlan(plan);
 
   useEffect(() => {
@@ -40,6 +42,15 @@ export const TopNav: React.FC = () => {
       .catch(() => {
         if (!alive) return;
         setMe(null);
+      });
+    fetchAccountLimits()
+      .then((lim) => {
+        if (!alive) return;
+        setLimits(lim);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setLimits(null);
       });
     return () => {
         alive = false;
