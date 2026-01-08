@@ -2,34 +2,35 @@ import { apiFetch } from "./apiFetch";
 
 export type TenantEvent = {
   id: string;
-
-  // core
   type?: string;
   title?: string;
   description?: string;
-  amount?: number | null;
+
+  // Timeline expects these optional fields
+  amountCents?: number;
+  currency?: string;
+  daysLate?: number;
+  noticeType?: string;
+
   occurredAt?: any;
   createdAt?: any;
   source?: string;
 
-  // optional fields referenced by UI
-  daysLate?: number;
-  noticeType?: string;
-
-  // allow extra backend fields without TS breakage
   [key: string]: any;
 };
 
-export async function getTenantEvents(limit = 25): Promise<TenantEvent[] | null> {
-  const res = await apiFetch(
-    `/api/tenant/events?limit=${limit}`,
-    { method: "GET" },
-    { allow404: true, suppressToasts: true }
-  );
+export async function getTenantEvents(limit = 25): Promise<TenantEvent[]> {
+  try {
+    const res: any = await apiFetch(`/api/tenant/events?limit=${limit}`, { method: "GET" });
 
-  if (!res) return null;
-  if (Array.isArray(res)) return res as TenantEvent[];
-  if (Array.isArray((res as any).items)) return (res as any).items as TenantEvent[];
-  if (Array.isArray((res as any).events)) return (res as any).events as TenantEvent[];
-  return [];
+    if (!res) return [];
+    if (Array.isArray(res)) return res as TenantEvent[];
+    if (Array.isArray(res.items)) return res.items as TenantEvent[];
+    if (Array.isArray(res.events)) return res.events as TenantEvent[];
+    return [];
+  } catch (e: any) {
+    const msg = String(e?.message || "");
+    if (msg.includes("404")) return [];
+    return [];
+  }
 }

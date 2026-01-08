@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React from "react";
 import { getTenantEvents, type TenantEvent } from "../../api/tenantEventsTenantApi";
 import { TenantScorePill } from "./TenantScorePill";
 
@@ -178,7 +178,7 @@ export function TenantReputationTimeline({ tenantId }: { tenantId: string }) {
   const [items, setItems] = React.useState<TenantEvent[]>([]);
   const [nextCursor, setNextCursor] = React.useState<any>(null);
 
-  const [summaryLoading, setSummaryLoading] = React.useState(false);
+  const  = React.useState(false);
   const [summary, setSummary] = React.useState<any>(null);
 
   async function load(initial = false) {
@@ -200,7 +200,7 @@ export function TenantReputationTimeline({ tenantId }: { tenantId: string }) {
     if (!tenantId) return;
     setSummaryLoading(true);
     try {
-      const resp = await getTenantSummary(tenantId);
+      const resp = await (tenantId);
       setSummary(resp?.item || null);
     } catch {
       setSummary(null);
@@ -325,8 +325,7 @@ export function TenantReputationTimeline({ tenantId }: { tenantId: string }) {
             type="button"
             onClick={() => {
               load(true);
-              loadSummary();
-            }}
+              load(true);}
             disabled={loading || summaryLoading}
             style={{
               padding: "8px 10px",
@@ -488,6 +487,8 @@ export function TenantReputationTimeline({ tenantId }: { tenantId: string }) {
 }
 
 export default TenantReputationTimeline;
+
+
 
 
 
