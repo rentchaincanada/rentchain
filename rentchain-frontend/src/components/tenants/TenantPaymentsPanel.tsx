@@ -13,7 +13,7 @@ type Props = {
 };
 
 function formatDate(value?: string | number | null) {
-  if (value === null || value === undefined || value === "") return "—";
+  if (value === null || value === undefined || value === "") return "--";
   const d = new Date(value as any);
   const t = d.getTime();
   if (Number.isNaN(t)) return String(value);
@@ -25,7 +25,8 @@ function formatMoney(n?: number | null) {
   return v.toLocaleString(undefined, { style: "currency", currency: "CAD" });
 }
 
-export default function TenantPaymentsPanel({ tenantId }: Props) {
+// Named export (for legacy imports)
+export function TenantPaymentsPanel({ tenantId }: Props) {
   const safeTenantId = tenantId ?? undefined;
 
   const now = new Date();
@@ -38,7 +39,6 @@ export default function TenantPaymentsPanel({ tenantId }: Props) {
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [monthly, setMonthly] = useState<{ payments: Payment[]; total: number } | null>(null);
 
-  // Simple edit state
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editAmount, setEditAmount] = useState<string>("");
   const [editStatus, setEditStatus] = useState<string>("");
@@ -134,7 +134,7 @@ export default function TenantPaymentsPanel({ tenantId }: Props) {
         <div>
           <div style={{ fontWeight: 600 }}>Payments</div>
           <div style={{ fontSize: 12, opacity: 0.8 }}>
-            Last payment: {lastPayment ? formatDate((lastPayment as any).paidAt) : "—"}
+            Last payment: {lastPayment ? formatDate((lastPayment as any).paidAt) : "--"}
           </div>
         </div>
 
@@ -231,7 +231,7 @@ export default function TenantPaymentsPanel({ tenantId }: Props) {
                       {formatMoney(p.amount ?? p.total ?? 0)}
                     </td>
                     <td style={{ padding: "8px 6px", borderBottom: "1px solid #f3f3f3" }}>
-                      {String(p.status ?? "—")}
+                      {String(p.status ?? "--")}
                     </td>
                     <td style={{ padding: "8px 6px", borderBottom: "1px solid #f3f3f3" }}>
                       <button onClick={() => beginEdit(p)} disabled={busy} style={{ padding: "4px 8px" }}>
@@ -250,3 +250,6 @@ export default function TenantPaymentsPanel({ tenantId }: Props) {
     </div>
   );
 }
+
+// Default export (preferred import style)
+export default TenantPaymentsPanel;
