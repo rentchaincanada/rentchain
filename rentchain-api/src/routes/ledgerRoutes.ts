@@ -46,6 +46,11 @@ router.get("/", requireAuth, async (req: any, res) => {
 
     return res.json({ ok: true, items });
   } catch (err: any) {
+    console.error("[ledger GET] primary query error", {
+      message: err?.message,
+      stack: err?.stack,
+      code: err?.code,
+    });
     try {
       let q: FirebaseFirestore.Query = db.collection("ledgerEvents").where("landlordId", "==", landlordId);
       if (tenantId) {
@@ -61,15 +66,15 @@ router.get("/", requireAuth, async (req: any, res) => {
       }
       return res.json({ ok: true, items, note: "fallback_ts_order" });
     } catch (e: any) {
-      console.error("[ledger GET] error", {
+      console.error("[ledger GET] fallback error", {
         message: e?.message,
         stack: e?.stack,
         code: e?.code,
       });
-      const body =
-        process.env.NODE_ENV !== "production"
-          ? { ok: false, error: "Failed to load ledger", detail: String(e?.message || e) }
-          : { ok: false, error: "Failed to load ledger" };
+      const isProd = process.env.NODE_ENV === "production";
+      const body = isProd
+        ? { ok: false, error: "Failed to load ledger" }
+        : { ok: false, error: "Failed to load ledger", detail: String(e?.message || e) };
       return res.status(500).json(body);
     }
   }
@@ -115,10 +120,10 @@ router.post("/events", requireAuth, async (req: any, res) => {
       stack: err?.stack,
       code: err?.code,
     });
-    const body =
-      process.env.NODE_ENV !== "production"
-        ? { ok: false, error: "Failed to append ledger event", detail: String(err?.message || err) }
-        : { ok: false, error: "Failed to append ledger event" };
+    const isProd = process.env.NODE_ENV === "production";
+    const body = isProd
+      ? { ok: false, error: "Failed to append ledger event" }
+      : { ok: false, error: "Failed to append ledger event", detail: String(err?.message || err) };
     return res.status(500).json(body);
   }
 });
@@ -141,10 +146,10 @@ router.get("/verify", requireAuth, async (req: any, res) => {
       stack: err?.stack,
       code: err?.code,
     });
-    const body =
-      process.env.NODE_ENV !== "production"
-        ? { ok: false, error: "Failed to verify ledger", detail: String(err?.message || err) }
-        : { ok: false, error: "Failed to verify ledger" };
+    const isProd = process.env.NODE_ENV === "production";
+    const body = isProd
+      ? { ok: false, error: "Failed to verify ledger" }
+      : { ok: false, error: "Failed to verify ledger", detail: String(err?.message || err) };
     return res.status(500).json(body);
   }
 });
