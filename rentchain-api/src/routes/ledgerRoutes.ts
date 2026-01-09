@@ -28,55 +28,27 @@ router.get("/", requireAuth, async (req: any, res) => {
   const propertyId = req.query?.propertyId ? String(req.query.propertyId) : null;
 
   try {
-    let q: FirebaseFirestore.Query = db.collection("ledgerEvents").where("landlordId", "==", landlordId);
-    if (tenantId) {
-      q = q.where("tenantId", "==", tenantId);
-    } else if (propertyId) {
-      q = q.where("propertyId", "==", propertyId);
-    }
-    q = q.orderBy("seq", "desc").orderBy("ts", "desc");
-
-    const snap = await q.limit(limit).get();
+    const ref = db.collection("ledgerEvents").where("landlordId", "==", landlordId).limit(limit);
+    const snap = await ref.get();
     let items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
 
-    // Optional in-memory secondary filter if both params provided
-    if (tenantId && propertyId) {
-      items = items.filter((i) => i.propertyId === propertyId);
-    }
+    // Optional in-memory filters
+    if (tenantId) items = items.filter((i) => i.tenantId === tenantId);
+    if (propertyId) items = items.filter((i) => i.propertyId === propertyId);
+
+    // Sort by ts desc
+    items.sort((a, b) => (Number(b?.ts || 0) as any) - (Number(a?.ts || 0) as any));
 
     return res.json({ ok: true, items });
   } catch (err: any) {
-    console.error("[ledger GET] primary query error", {
+    console.error("[ledger] GET / failed", {
       message: err?.message,
-      stack: err?.stack,
       code: err?.code,
+      stack: err?.stack,
     });
-    try {
-      let q: FirebaseFirestore.Query = db.collection("ledgerEvents").where("landlordId", "==", landlordId);
-      if (tenantId) {
-        q = q.where("tenantId", "==", tenantId);
-      } else if (propertyId) {
-        q = q.where("propertyId", "==", propertyId);
-      }
-      q = q.orderBy("ts", "desc");
-      const snap = await q.limit(limit).get();
-      let items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
-      if (tenantId && propertyId) {
-        items = items.filter((i) => i.propertyId === propertyId);
-      }
-      return res.json({ ok: true, items, note: "fallback_ts_order" });
-    } catch (e: any) {
-      console.error("[ledger GET] fallback error", {
-        message: e?.message,
-        stack: e?.stack,
-        code: e?.code,
-      });
-      const isProd = process.env.NODE_ENV === "production";
-      const body = isProd
-        ? { ok: false, error: "Failed to load ledger" }
-        : { ok: false, error: "Failed to load ledger", detail: String(e?.message || e) };
-      return res.status(500).json(body);
-    }
+    return res
+      .status(500)
+      .json({ ok: false, error: "Failed to load ledger", detail: String(err?.message || err) });
   }
 });
 
