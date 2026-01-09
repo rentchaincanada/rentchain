@@ -48,6 +48,7 @@ import accountRoutes from "./routes/accountRoutes";
 import compatRoutes from "./routes/compatRoutes";
 import unitsRoutes from "./routes/unitsRoutes";
 import adminPropertiesRoutes from "./routes/adminPropertiesRoutes";
+import ledgerRoutes from "./routes/ledgerRoutes";
 
 const app: Application = express();
 app.set("etag", false);
@@ -106,6 +107,7 @@ app.use("/api/tenant-history", tenantHistoryShareRoutes);
 app.use("/api", tenantSignalsRoutes);
 app.use("/api/reporting", reportingRoutes);
 app.use("/api", compatRoutes);
+app.use("/api/ledger", ledgerRoutes);
 app.use("/api/dashboard", routeSource("dashboardRoutes.ts"), dashboardRoutes);
 app.use("/api/tenant-invites", tenantInvitesRoutes);
 app.use("/api", routeSource("unitsRoutes.ts"), unitsRoutes);

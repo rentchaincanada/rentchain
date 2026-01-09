@@ -50,6 +50,7 @@ import tenantsRoutes from "./routes/tenants";
 import compatRoutes from "./routes/compatRoutes";
 import unitsRoutes from "./routes/unitsRoutes";
 import adminPropertiesRoutes from "./routes/adminPropertiesRoutes";
+import ledgerRoutes from "./routes/ledgerRoutes";
 
 export const app = express();
 app.set("etag", false);
@@ -98,6 +99,7 @@ app.use("/api", tenantSignalsRoutes);
 app.use("/api/reporting", reportingRoutes);
 app.use("/api", compatRoutes);
 app.use("/api", routeSource("unitsRoutes.ts"), unitsRoutes);
+app.use("/api/ledger", ledgerRoutes);
 app.use("/api/dashboard", routeSource("dashboardRoutes.ts"), dashboardRoutes);
 app.use("/api/tenant-invites", tenantInvitesRoutes);
 app.use("/api/tenant", tenantPortalRoutes);
