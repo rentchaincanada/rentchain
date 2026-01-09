@@ -7,6 +7,8 @@ import { KpiStrip } from "../components/dashboard/KpiStrip";
 import { ActionRequiredPanel } from "../components/dashboard/ActionRequiredPanel";
 import { RecentEventsCard } from "../components/dashboard/RecentEventsCard";
 import { debugApiBase } from "@/api/baseUrl";
+import { fetchProperties } from "../api/propertiesApi";
+import { unitsForProperty } from "../lib/propertyCounts";
 
 function formatDate(ts: number | null): string {
   if (!ts) return "—";
@@ -28,6 +30,30 @@ const DashboardPage: React.FC = () => {
   const apiBase = debugApiBase();
   const showDebug =
     typeof window !== "undefined" && new URLSearchParams(window.location.search).get("debug") === "1";
+  const [properties, setProperties] = React.useState<any[]>([]);
+  const [propsLoading, setPropsLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    let alive = true;
+    const loadProps = async () => {
+      try {
+        setPropsLoading(true);
+        const res: any = await fetchProperties();
+        const list = Array.isArray(res?.properties)
+          ? res.properties
+          : Array.isArray(res) ? res : [];
+        if (alive) setProperties(list);
+      } catch {
+        if (alive) setProperties([]);
+      } finally {
+        if (alive) setPropsLoading(false);
+      }
+    };
+    void loadProps();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   React.useEffect(() => {
     if (showDebug) {
@@ -35,11 +61,19 @@ const DashboardPage: React.FC = () => {
     }
   }, [showDebug, apiBase]);
 
-  const kpis = data?.kpis;
+  const derivedPropertiesCount = properties.length;
+  const derivedUnitsCount = properties.reduce((sum, p) => sum + unitsForProperty(p), 0);
+  const kpis = {
+    propertiesCount: derivedPropertiesCount,
+    unitsCount: derivedUnitsCount,
+    tenantsCount: data?.kpis?.tenantsCount ?? 0,
+    openActionsCount: data?.kpis?.openActionsCount ?? 0,
+    delinquentCount: data?.kpis?.delinquentCount ?? 0,
+  };
   const actions = data?.actions ?? [];
   const events = data?.events ?? [];
 
-  const showEmptyCTA = !loading && !error && (kpis?.propertiesCount ?? 0) === 0;
+  const showEmptyCTA = !loading && !propsLoading && !error && (kpis?.propertiesCount ?? 0) === 0;
 
   return (
     <MacShell title="RentChain · Dashboard">
