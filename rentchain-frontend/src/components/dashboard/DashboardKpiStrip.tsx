@@ -91,8 +91,7 @@ export function DashboardKpiStrip({ overview: overviewProp }: DashboardKpiStripP
   };
 
   // totalProperties
-  const derivedTotalProperties = properties.length || 0;
-  let totalProperties = derivedTotalProperties;
+  let totalProperties = properties.length || 0;
 
   // totalUnits
   const derivedTotalUnits = properties.reduce((sum, p) => sum + unitsForProperty(p), 0);
