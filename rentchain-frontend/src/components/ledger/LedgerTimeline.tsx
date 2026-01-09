@@ -1,43 +1,119 @@
 import React from "react";
-import { LedgerEventTypeBadge } from "./LedgerEventTypeBadge";
-import type { LedgerEventV2 } from "../../api/ledgerV2";
+import type { LedgerEventStored } from "@/api/ledgerApi";
+import { IntegrityBadge } from "./IntegrityBadge";
 
-interface Props {
-  items: LedgerEventV2[];
-  onSelect?: (id: string) => void;
-  emptyText?: string;
+type Props = {
+  items: LedgerEventStored[];
+  compact?: boolean;
+};
+
+function formatTs(ts: number) {
+  if (!ts) return "Unknown";
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(ts));
+  } catch {
+    return new Date(ts).toISOString();
+  }
 }
 
-export const LedgerTimeline: React.FC<Props> = ({ items, onSelect, emptyText }) => {
-  if (!items.length) {
-    return <div style={{ padding: 8, color: "#6b7280" }}>{emptyText || "No activity yet."}</div>;
+function payloadPreview(ev: LedgerEventStored): string {
+  const p: any = ev.payload ?? {};
+  if (typeof p.amountCents === "number") {
+    const amt = (p.amountCents / 100).toLocaleString("en-CA", {
+      style: "currency",
+      currency: "CAD",
+    });
+    const period = p.period ? ` (${p.period})` : "";
+    return `${amt}${period}`;
+  }
+  if (p.title) return String(p.title);
+  try {
+    const s = JSON.stringify(p);
+    return s.length > 120 ? `${s.slice(0, 120)}…` : s;
+  } catch {
+    return String(p);
+  }
+}
+
+export function LedgerTimeline({ items, compact }: Props) {
+  if (!items || items.length === 0) {
+    return <div style={{ color: "#6b7280", fontSize: 14 }}>No ledger events yet.</div>;
   }
 
+  const sorted = [...items].sort((a, b) => (Number(b?.ts || 0) as any) - (Number(a?.ts || 0) as any));
+  const toRender = compact ? sorted.slice(0, 6) : sorted;
+
   return (
-    <div style={{ display: "grid", gap: 8 }}>
-      {items.map((it) => (
-        <div
-          key={it.id}
-          onClick={() => onSelect?.(it.id)}
-          style={{
-            padding: 10,
-            border: "1px solid #eee",
-            borderRadius: 8,
-            cursor: onSelect ? "pointer" : "default",
-          }}
-        >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div style={{ fontWeight: 700 }}>{it.title}</div>
-            <LedgerEventTypeBadge type={it.eventType} />
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {toRender.map((ev) => {
+        const [open, setOpen] = React.useState(false);
+        const preview = payloadPreview(ev);
+        const status = ev.integrity?.status ?? "unverified";
+        return (
+          <div
+            key={ev.id}
+            style={{
+              border: "1px solid rgba(148,163,184,0.35)",
+              borderRadius: 10,
+              padding: 12,
+              background: "rgba(255,255,255,0.8)",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <div style={{ fontWeight: 800, fontSize: 14 }}>{ev.type || "Event"}</div>
+                <div style={{ color: "#6b7280", fontSize: 12 }}>{formatTs(ev.ts)}</div>
+                <div style={{ color: "#111827", fontSize: 13 }}>{preview}</div>
+              </div>
+              <IntegrityBadge status={status as any} />
+            </div>
+
+            <div style={{ marginTop: 8 }}>
+              <button
+                type="button"
+                onClick={() => setOpen(!open)}
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  color: "#2563eb",
+                  cursor: "pointer",
+                  fontSize: 12,
+                  padding: 0,
+                }}
+              >
+                {open ? "Hide details" : "Show details"}
+              </button>
+            </div>
+
+            {open ? (
+              <div
+                style={{
+                  marginTop: 8,
+                  padding: 10,
+                  background: "rgba(148,163,184,0.08)",
+                  borderRadius: 8,
+                  fontFamily: "monospace",
+                  fontSize: 12,
+                  color: "#0f172a",
+                }}
+              >
+                <div>seq: {ev.seq}</div>
+                {ev.tenantId ? <div>tenantId: {ev.tenantId}</div> : null}
+                {ev.propertyId ? <div>propertyId: {ev.propertyId}</div> : null}
+                <div>hash: {ev.hash}</div>
+                <div>prevHash: {ev.prevHash ?? "null"}</div>
+                <div>payloadHash: {ev.payloadHash}</div>
+              </div>
+            ) : null}
           </div>
-          <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>
-            {new Date(it.occurredAt).toLocaleString()}
-          </div>
-          {it.summary ? (
-            <div style={{ fontSize: 13, color: "#374151", marginTop: 6 }}>{it.summary}</div>
-          ) : null}
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
-};
+}
