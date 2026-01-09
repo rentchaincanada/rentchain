@@ -316,7 +316,8 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
     units.length > 0 ? units.length : (property as any)?.unitCount ?? 0;
   const plan = me?.plan ?? "--";
   const maxUnits = PLANS.starter.maxUnits;
-  const canImport = unitCount < maxUnits;
+  const atUnitCap = unitCount >= maxUnits;
+  const canImport = !atUnitCap;
   const totalRentConfigured = units.reduce(
     (sum, u) =>
       sum + (typeof (u as any).rent === "number" ? (u as any).rent : 0),

@@ -91,13 +91,12 @@ export function DashboardKpiStrip({ overview: overviewProp }: DashboardKpiStripP
   };
 
   // totalProperties
-  let totalProperties =
-    safeNumber(k.totalProperties) ?? (properties.length || 0);
+  const derivedTotalProperties = properties.length || 0;
+  let totalProperties = derivedTotalProperties;
 
   // totalUnits
-  let totalUnits =
-    safeNumber(k.totalUnits) ??
-    properties.reduce((sum, p) => sum + unitsForProperty(p), 0);
+  const derivedTotalUnits = properties.reduce((sum, p) => sum + unitsForProperty(p), 0);
+  let totalUnits = derivedTotalUnits;
 
   // occupancyRate %
   let occupancyRate: number | null = null;
