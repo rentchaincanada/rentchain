@@ -320,7 +320,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   const planCfg = (PLANS as any)[planKey] ?? PLANS.starter;
   const maxUnits = Number(planCfg?.maxUnits ?? PLANS.starter.maxUnits);
   const atUnitCap = unitCount >= maxUnits;
-  const canAddUnits = !atUnitCap && Boolean(property);
+  const canImport = !atUnitCap;
   const totalRentConfigured = units.reduce(
     (sum, u) =>
       sum + (typeof (u as any).rent === "number" ? (u as any).rent : 0),
@@ -401,29 +401,27 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             <button
               type="button"
               title={
-                canAddUnits
-                  ? "Add units manually"
+                canImport
+                  ? "Use Upload CSV to add units"
                   : `Plan limit reached (${maxUnits} units). Upgrade to add more.`
               }
               onClick={() => {
-                if (!canAddUnits) {
+                if (!canImport) {
                   openUpgrade("unitsMax");
                   return;
                 }
-                showToast({
-                  message: "Manual units entry",
-                  description: "Coming soon. Use CSV upload for now.",
-                  variant: "info",
-                });
+                // No manual modal exists; direct to CSV flow (open file picker)
+                setImportMessage(null);
+                fileInputRef.current?.click();
               }}
               disabled={!property}
               style={{
                 padding: "6px 10px",
                 borderRadius: 10,
                 border: "1px solid rgba(15,23,42,0.12)",
-                background: canAddUnits ? "#fff" : "rgba(0,0,0,0.02)",
-                color: canAddUnits ? "#0f172a" : "#6b7280",
-                cursor: canAddUnits ? "pointer" : "not-allowed",
+                background: canImport ? "#fff" : "rgba(0,0,0,0.02)",
+                color: canImport ? "#111827" : "#6b7280",
+                cursor: canImport ? "pointer" : "not-allowed",
               }}
             >
               Add units
@@ -431,12 +429,12 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             <button
               type="button"
               title={
-                canAddUnits
+                canImport
                   ? "Upload units CSV"
                   : `Plan limit reached (${maxUnits} units). Upgrade to import.`
               }
               onClick={() => {
-                if (!canAddUnits) {
+                if (!canImport) {
                   openUpgrade("unitsMax");
                   return;
                 }
@@ -448,9 +446,9 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                 padding: "6px 10px",
                 borderRadius: 10,
                 border: "1px solid rgba(15,23,42,0.12)",
-                background: canAddUnits ? "#fff" : "rgba(0,0,0,0.02)",
-                color: canAddUnits ? "#0f172a" : "#6b7280",
-                cursor: canAddUnits ? "pointer" : "not-allowed",
+                background: canImport ? "#fff" : "rgba(0,0,0,0.02)",
+                color: canImport ? "#0f172a" : "#6b7280",
+                cursor: canImport ? "pointer" : "not-allowed",
               }}
             >
               {isImporting ? "Uploading…" : "Upload CSV"}
@@ -482,7 +480,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                 const file = e.target.files?.[0];
                 e.target.value = "";
                 if (!file || !property) return;
-                if (!canAddUnits) {
+                if (!canImport) {
                   openUpgrade("unitsMax");
                   return;
                 }
