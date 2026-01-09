@@ -161,14 +161,11 @@ app.use("/api/landlord", landlordMicroLiveRoutes);
 app.use("/api/tenants", tenantsRoutes);
 app.use("/api/account", accountRoutes);
 
-process.on("uncaughtException", (err) => {
-  console.error("[uncaughtException]", err);
-  console.error("[breadcrumbs]", JSON.stringify(getCrumbs(), null, 2));
-});
-
 process.on("unhandledRejection", (reason) => {
-  console.error("[unhandledRejection]", reason);
-  console.error("[breadcrumbs]", JSON.stringify(getCrumbs(), null, 2));
+  console.error("[FATAL] unhandledRejection", reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("[FATAL] uncaughtException", err);
 });
 
 app.all("/api/__debug/routes", (req, res) => {
@@ -179,6 +176,17 @@ app.all("/api/__debug/routes", (req, res) => {
 app.use("/api", (_req, res) => {
   res.setHeader("x-route-source", "not-found");
   return res.status(404).json({ ok: false, code: "NOT_FOUND", error: "Not Found" });
+});
+
+app.use((err: any, req: any, res: any, next: any) => {
+  console.error("[express] unhandled error", {
+    path: req?.originalUrl,
+    message: err?.message,
+    code: err?.code,
+    stack: err?.stack,
+  });
+  if (res.headersSent) return next(err);
+  res.status(500).json({ ok: false, error: "Internal server error" });
 });
 
 /**

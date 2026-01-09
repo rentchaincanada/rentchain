@@ -52,6 +52,13 @@ import unitsRoutes from "./routes/unitsRoutes";
 import adminPropertiesRoutes from "./routes/adminPropertiesRoutes";
 import ledgerRoutes from "./routes/ledgerRoutes";
 
+process.on("unhandledRejection", (reason) => {
+  console.error("[FATAL] unhandledRejection", reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("[FATAL] uncaughtException", err);
+});
+
 export const app = express();
 app.set("etag", false);
 
@@ -169,6 +176,17 @@ app.post("/api/_echo", (req, res) => {
     path: req.path,
     body: req.body ?? null,
   });
+});
+
+app.use((err: any, req: any, res: any, next: any) => {
+  console.error("[express] unhandled error", {
+    path: req?.originalUrl,
+    message: err?.message,
+    code: err?.code,
+    stack: err?.stack,
+  });
+  if (res.headersSent) return next(err);
+  res.status(500).json({ ok: false, error: "Internal server error" });
 });
 
 // JSON 404 + error
