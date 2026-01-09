@@ -49,6 +49,7 @@ import reportsExportRoutes from "./routes/reportsExportRoutes";
 import tenantsRoutes from "./routes/tenants";
 import compatRoutes from "./routes/compatRoutes";
 import unitsRoutes from "./routes/unitsRoutes";
+import adminPropertiesRoutes from "./routes/adminPropertiesRoutes";
 
 export const app = express();
 app.set("etag", false);
@@ -118,6 +119,7 @@ app.use("/api", authzRoutes);
 app.use("/api", reportsExportRoutes);
 app.use("/api", stubsRoutes);
 app.use("/api/admin", routeSource("adminBootstrapRoutes"), adminBootstrapRoutes);
+app.use("/api/admin", routeSource("adminPropertiesRoutes.ts"), adminPropertiesRoutes);
 
 // Core APIs
 app.use("/api", tenantDetailsRoutes);

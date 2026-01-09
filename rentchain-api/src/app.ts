@@ -47,6 +47,7 @@ import tenantsRoutes from "./routes/tenants";
 import accountRoutes from "./routes/accountRoutes";
 import compatRoutes from "./routes/compatRoutes";
 import unitsRoutes from "./routes/unitsRoutes";
+import adminPropertiesRoutes from "./routes/adminPropertiesRoutes";
 
 const app: Application = express();
 app.set("etag", false);
@@ -122,6 +123,7 @@ app.use("/api/tenant-report-pdf", routeSource("tenantReportPdfRoutes.ts"), tenan
 app.use("/api", stubsRoutes);
 app.use("/api/admin", routeSource("adminBootstrapRoutes"), adminBootstrapRoutes);
 app.use("/api/admin/demo", routeSource("adminDemoRoutes.ts"), adminDemoRoutes);
+app.use("/api/admin", routeSource("adminPropertiesRoutes.ts"), adminPropertiesRoutes);
 app.use("/api", authzRoutes);
 app.use("/api", reportsExportRoutes);
 

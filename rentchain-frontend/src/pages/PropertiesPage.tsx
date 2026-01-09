@@ -70,8 +70,8 @@ const PropertiesPage: React.FC = () => {
   const maxProperties = planLimits.maxProperties;
   const maxUnits = planLimits.maxUnits;
   const currentProperties = properties?.length ?? 0;
-  const limitsReady = Boolean(limits && typeof planLimits?.maxProperties === "number");
-  const atCap = limitsReady && currentProperties >= maxProperties;
+  const limitsReady = Boolean(limits && planLimits && typeof planLimits.maxProperties === "number");
+  const atCap = limitsReady ? currentProperties >= maxProperties : false;
   const canAddProperty = limitsReady && !atCap;
   const unitsUsed = useMemo(
     () => (properties || []).reduce((sum, p) => sum + unitsForProperty(p), 0),
