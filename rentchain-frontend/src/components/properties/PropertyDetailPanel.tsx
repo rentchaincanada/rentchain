@@ -410,7 +410,11 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                   openUpgrade("unitsMax");
                   return;
                 }
-                setIsUnitsModalOpen(true);
+                showToast({
+                  message: "Manual units entry",
+                  description: "Coming soon. Use CSV upload for now.",
+                  variant: "info",
+                });
               }}
               disabled={!property}
               style={{
@@ -478,7 +482,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                 const file = e.target.files?.[0];
                 e.target.value = "";
                 if (!file || !property) return;
-                if (!canImport) {
+                if (!canAddUnits) {
                   openUpgrade("unitsMax");
                   return;
                 }
