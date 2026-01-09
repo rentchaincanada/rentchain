@@ -29,6 +29,102 @@ type RunImportResult = {
   idempotentReplay?: boolean;
 };
 
+router.get("/", requireLandlord, async (req: any, res) => {
+  res.setHeader("x-route-source", "unitImportRoutes.ts");
+  try {
+    const landlordId = req.user?.landlordId || req.user?.id;
+    const propertyId = String(req.params?.propertyId || "");
+
+    if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+    if (!propertyId) return res.status(400).json({ ok: false, error: "Missing propertyId" });
+
+    const propSnap = await db.collection("properties").doc(propertyId).get();
+    if (!propSnap.exists) return res.status(404).json({ ok: false, error: "Property not found" });
+    const prop = propSnap.data() as any;
+    if (prop?.landlordId && prop.landlordId !== landlordId) {
+      return res.status(403).json({ ok: false, error: "Forbidden" });
+    }
+
+    // Prefer embedded units if present
+    if (Array.isArray(prop?.units)) {
+      return res.json({ ok: true, items: prop.units });
+    }
+
+    // Fallback to units collection if present
+    const snap = await db
+      .collection("units")
+      .where("landlordId", "==", landlordId)
+      .where("propertyId", "==", propertyId)
+      .get();
+
+    const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+    return res.json({ ok: true, items });
+  } catch (err: any) {
+    console.error("[unitImportRoutes GET units] error", err?.message || err);
+    return res.status(500).json({ ok: false, error: "Failed to load units" });
+  }
+});
+
+router.post("/", requireLandlord, async (req: any, res) => {
+  res.setHeader("x-route-source", "unitImportRoutes.ts");
+  try {
+    const landlordId = req.user?.landlordId || req.user?.id;
+    const propertyId = String(req.params?.propertyId || "");
+    if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+    if (!propertyId) return res.status(400).json({ ok: false, error: "Missing propertyId" });
+
+    const propRef = db.collection("properties").doc(propertyId);
+    const propSnap = await propRef.get();
+    if (!propSnap.exists) return res.status(404).json({ ok: false, error: "Property not found" });
+    const prop = propSnap.data() as any;
+    if (prop?.landlordId && prop.landlordId !== landlordId) {
+      return res.status(403).json({ ok: false, error: "Forbidden" });
+    }
+
+    const incoming = Array.isArray(req.body?.units) ? (req.body.units as any[]) : [];
+    if (!incoming.length) {
+      return res.status(400).json({ ok: false, error: "units array required" });
+    }
+
+    const existing = Array.isArray(prop?.units) ? [...prop.units] : [];
+    const byKey = new Map<string, any>();
+    for (const u of existing) {
+      const num = String(u?.unitNumber || u?.unit || "").trim();
+      if (num) byKey.set(num.toLowerCase(), u);
+    }
+
+    for (const raw of incoming) {
+      const unitNumber = String(raw?.unitNumber || raw?.unit || "").trim();
+      if (!unitNumber) continue;
+      const key = unitNumber.toLowerCase();
+      byKey.set(key, {
+        unitNumber,
+        rent: raw?.rent ?? raw?.marketRent ?? null,
+        bedrooms: raw?.bedrooms ?? raw?.beds ?? null,
+        bathrooms: raw?.bathrooms ?? raw?.baths ?? null,
+        sqft: raw?.sqft ?? null,
+        notes: raw?.notes ?? null,
+      });
+    }
+
+    const merged = Array.from(byKey.values());
+    await propRef.set(
+      {
+        units: merged,
+        unitCount: merged.length,
+        unitsCount: merged.length,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    return res.json({ ok: true, count: merged.length, items: merged });
+  } catch (err: any) {
+    console.error("[unitImportRoutes POST units] error", err?.message || err);
+    return res.status(500).json({ ok: false, error: "Failed to add units" });
+  }
+});
+
 async function runUnitImport(opts: {
   landlordId: string;
   propertyId: string;
