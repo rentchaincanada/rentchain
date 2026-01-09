@@ -61,8 +61,16 @@ router.get("/", requireAuth, async (req: any, res) => {
       }
       return res.json({ ok: true, items, note: "fallback_ts_order" });
     } catch (e: any) {
-      console.error("[ledger GET] error", e?.message || e);
-      return res.status(500).json({ ok: false, error: "Failed to load ledger" });
+      console.error("[ledger GET] error", {
+        message: e?.message,
+        stack: e?.stack,
+        code: e?.code,
+      });
+      const body =
+        process.env.NODE_ENV !== "production"
+          ? { ok: false, error: "Failed to load ledger", detail: String(e?.message || e) }
+          : { ok: false, error: "Failed to load ledger" };
+      return res.status(500).json(body);
     }
   }
 });
@@ -102,8 +110,16 @@ router.post("/events", requireAuth, async (req: any, res) => {
     });
     return res.json({ ok: true, item: event });
   } catch (err: any) {
-    console.error("[ledger POST /events] error", err?.message || err);
-    return res.status(500).json({ ok: false, error: "Failed to append ledger event" });
+    console.error("[ledger POST /events] error", {
+      message: err?.message,
+      stack: err?.stack,
+      code: err?.code,
+    });
+    const body =
+      process.env.NODE_ENV !== "production"
+        ? { ok: false, error: "Failed to append ledger event", detail: String(err?.message || err) }
+        : { ok: false, error: "Failed to append ledger event" };
+    return res.status(500).json(body);
   }
 });
 
@@ -120,8 +136,16 @@ router.get("/verify", requireAuth, async (req: any, res) => {
     const result = await verifyLedgerChain(landlordId, limit);
     return res.json({ ok: true, result });
   } catch (err: any) {
-    console.error("[ledger GET /verify] error", err?.message || err);
-    return res.status(500).json({ ok: false, error: "Failed to verify ledger" });
+    console.error("[ledger GET /verify] error", {
+      message: err?.message,
+      stack: err?.stack,
+      code: err?.code,
+    });
+    const body =
+      process.env.NODE_ENV !== "production"
+        ? { ok: false, error: "Failed to verify ledger", detail: String(err?.message || err) }
+        : { ok: false, error: "Failed to verify ledger" };
+    return res.status(500).json(body);
   }
 });
 
