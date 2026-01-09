@@ -313,11 +313,14 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
 
   
   const unitCount =
-    units.length > 0 ? units.length : (property as any)?.unitCount ?? 0;
-  const plan = me?.plan ?? "--";
-  const maxUnits = PLANS.starter.maxUnits;
+    Array.isArray(units) && units.length > 0
+      ? units.length
+      : Number((property as any)?.unitsCount ?? (property as any)?.unitCount ?? 0) || 0;
+  const planKey = String(me?.plan ?? "starter").trim().toLowerCase();
+  const planCfg = (PLANS as any)[planKey] ?? PLANS.starter;
+  const maxUnits = Number(planCfg?.maxUnits ?? PLANS.starter.maxUnits);
   const atUnitCap = unitCount >= maxUnits;
-  const canImport = !atUnitCap;
+  const canAddUnits = !atUnitCap && Boolean(property);
   const totalRentConfigured = units.reduce(
     (sum, u) =>
       sum + (typeof (u as any).rent === "number" ? (u as any).rent : 0),
@@ -397,15 +400,26 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             </button>
             <button
               type="button"
-              title={canImport ? "--" : "Upgrade to add units"}
-              disabled
+              title={
+                canAddUnits
+                  ? "Add units manually"
+                  : `Plan limit reached (${maxUnits} units). Upgrade to add more.`
+              }
+              onClick={() => {
+                if (!canAddUnits) {
+                  openUpgrade("unitsMax");
+                  return;
+                }
+                setIsUnitsModalOpen(true);
+              }}
+              disabled={!property}
               style={{
                 padding: "6px 10px",
                 borderRadius: 10,
                 border: "1px solid rgba(15,23,42,0.12)",
-                background: "rgba(0,0,0,0.02)",
-                color: "#6b7280",
-                cursor: "not-allowed",
+                background: canAddUnits ? "#fff" : "rgba(0,0,0,0.02)",
+                color: canAddUnits ? "#0f172a" : "#6b7280",
+                cursor: canAddUnits ? "pointer" : "not-allowed",
               }}
             >
               Add units
@@ -413,12 +427,12 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             <button
               type="button"
               title={
-                canImport
-                  ? "--"
+                canAddUnits
+                  ? "Upload units CSV"
                   : `Plan limit reached (${maxUnits} units). Upgrade to import.`
               }
               onClick={() => {
-                if (!canImport) {
+                if (!canAddUnits) {
                   openUpgrade("unitsMax");
                   return;
                 }
@@ -430,12 +444,12 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                 padding: "6px 10px",
                 borderRadius: 10,
                 border: "1px solid rgba(15,23,42,0.12)",
-                background: canImport ? "--" : "rgba(0,0,0,0.02)",
-                color: canImport ? "--" : "#6b7280",
-                cursor: canImport ? "--" : "not-allowed",
+                background: canAddUnits ? "#fff" : "rgba(0,0,0,0.02)",
+                color: canAddUnits ? "#0f172a" : "#6b7280",
+                cursor: canAddUnits ? "pointer" : "not-allowed",
               }}
             >
-              {isImporting ? "--" : "Upload CSV"}
+              {isImporting ? "Uploading…" : "Upload CSV"}
             </button>
             <button
               type="button"
