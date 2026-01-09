@@ -1,12 +1,12 @@
 // rentchain-frontend/src/components/tenants/TenantDetailPanel.tsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTenantDetail } from "../../hooks/useTenantDetail";
 import { downloadTenantReport } from "@/api/tenantsApi";
 import { getTenantSignals, type TenantSignals } from "@/api/tenantSignals";
-import { useLedgerV2 } from "@/hooks/useLedgerV2";
+import { fetchLedger } from "@/api/ledgerApi";
 import { LedgerTimeline } from "../ledger/LedgerTimeline";
-import { LedgerEventDrawer } from "../ledger/LedgerEventDrawer";
+import { VerifyLedgerButton } from "../ledger/VerifyLedgerButton";
 import { RecordTenantEventModal } from "./RecordTenantEventModal";
 import { useToast } from "../ui/ToastProvider";
 import { colors, radius, spacing, text, shadows } from "../../styles/tokens";
@@ -78,11 +78,10 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
   const tenant = bundle.tenant || bundle;
   const lease = bundle.lease;
 
-  const [selectedLedgerId, setSelectedLedgerId] = useState<string | null>(null);
-  const { items: ledgerItems, refresh: refreshLedger } = useLedgerV2({
-    tenantId,
-    limit: 10,
-  });
+  const [ledgerItems, setLedgerItems] = useState<any[]>([]);
+  const [ledgerLoading, setLedgerLoading] = useState(false);
+  const [ledgerError, setLedgerError] = useState<string | null>(null);
+  const cancelledRef = useRef(false);
 
   const [signals, setSignals] = useState<TenantSignals | null>(null);
   const [signalsError, setSignalsError] = useState<string | null>(null);
@@ -114,6 +113,32 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
   const handleViewInLedger = () => {
     navigate(`/ledger?tenantId=${tenantId}`);
   };
+
+  const loadLedger = React.useCallback(async () => {
+    if (!tenantId) {
+      setLedgerItems([]);
+      return;
+    }
+    setLedgerLoading(true);
+    setLedgerError(null);
+    try {
+      const items = await fetchLedger({ tenantId, limit: 50 });
+      if (!cancelledRef.current) setLedgerItems(items || []);
+    } catch (err: any) {
+      if (!cancelledRef.current) setLedgerError(err?.message || "Failed to load ledger");
+    } finally {
+      if (!cancelledRef.current) setLedgerLoading(false);
+    }
+  }, [tenantId]);
+
+  const cancelledRef = React.useRef(false);
+  useEffect(() => {
+    cancelledRef.current = false;
+    void loadLedger();
+    return () => {
+      cancelledRef.current = true;
+    };
+  }, [loadLedger]);
 
   const handleDownloadReport = async () => {
     try {
@@ -383,15 +408,15 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
           }}
         >
           <span>Ledger timeline</span>
+          <VerifyLedgerButton onVerified={() => void loadLedger()} />
         </div>
-        <LedgerTimeline
-          items={ledgerItems || []}
-          onSelect={(id) => setSelectedLedgerId(id)}
-          emptyText="No ledger events yet for this tenant."
-        />
-        {selectedLedgerId ? (
-          <LedgerEventDrawer eventId={selectedLedgerId} onClose={() => setSelectedLedgerId(null)} />
-        ) : null}
+        {ledgerLoading ? (
+          <div style={{ color: text.muted }}>Loading ledger...</div>
+        ) : ledgerError ? (
+          <div style={{ color: colors.danger, fontSize: "0.85rem" }}>{ledgerError}</div>
+        ) : (
+          <LedgerTimeline items={ledgerItems || []} compact />
+        )}
       </div>
 
       <RecordTenantEventModal
@@ -400,7 +425,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
         tenantName={tenant.fullName || tenant.name}
         onClose={() => setRecordOpen(false)}
         onCreated={() => {
-          refreshLedger?.();
+          void loadLedger();
           setRecordOpen(false);
         }}
       />
