@@ -39,9 +39,13 @@ const DashboardPage: React.FC = () => {
       try {
         setPropsLoading(true);
         const res: any = await fetchProperties();
-        const list = Array.isArray(res?.properties)
+        const list = Array.isArray(res?.items)
+          ? res.items
+          : Array.isArray(res?.properties)
           ? res.properties
-          : Array.isArray(res) ? res : [];
+          : Array.isArray(res)
+          ? res
+          : [];
         if (alive) setProperties(list);
       } catch {
         if (alive) setProperties([]);
