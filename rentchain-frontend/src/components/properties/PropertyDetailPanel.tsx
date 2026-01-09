@@ -64,6 +64,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [pendingFilename, setPendingFilename] = useState<string>("");
   const [units, setUnits] = useState<any[]>([]);
+  const [unitsLoading, setUnitsLoading] = useState(false);
 
   const readFileText = useCallback((file: File) => {
     return new Promise<string>((resolve, reject) => {
@@ -173,6 +174,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
         return;
       }
       try {
+        setUnitsLoading(true);
         const res = await fetchUnitsForProperty(pid);
         if (cancelled) return;
         if (Array.isArray(res) && res.length > 0) {
@@ -199,6 +201,8 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             }))
           );
         }
+      } finally {
+        if (!cancelled) setUnitsLoading(false);
       }
     };
 
@@ -636,6 +640,23 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
           </thead>
           <tbody>
             {(() => {
+              if (unitsLoading) {
+                return (
+              <tr>
+                <td
+                  colSpan={6}
+                  style={{
+                    padding: "12px",
+                    color: "#1f2937",
+                    textAlign: "center",
+                  }}
+                >
+                  Loading units...
+                </td>
+              </tr>
+                );
+              }
+
               const derivedUnits =
                 units.length === 0 && unitCount > 0
                   ? Array.from({ length: unitCount }, (_, i) => ({

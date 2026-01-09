@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { trackUpgradeIntent } from "../../api/upgradeIntentApi";
+import { joinWaitlist } from "../../api/waitlist";
 
 export function NotifyMeModal({
   open,
@@ -25,11 +25,9 @@ export function NotifyMeModal({
     setSaving(true);
     setErr(null);
     try {
-      await trackUpgradeIntent({
-        desiredPlan,
-        context,
-        email: email.trim() || undefined,
-      });
+      const trimmed = email.trim();
+      if (!trimmed) throw new Error("Email required");
+      await joinWaitlist(trimmed, `${context || "pricing"}:${desiredPlan}`);
       setDone(true);
     } catch (e: any) {
       setErr(e?.message ?? "Failed to save");

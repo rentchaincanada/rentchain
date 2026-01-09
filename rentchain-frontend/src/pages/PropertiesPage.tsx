@@ -31,6 +31,7 @@ import { useToast } from "../components/ui/ToastProvider";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { PLANS } from "../config/plans";
 import { resolvePlanFrom, normalizePlan } from "../lib/plan";
+import { unitsForProperty } from "../lib/propertyCounts";
 
 const PropertiesPage: React.FC = () => {
   const [properties, setProperties] = useState<Property[]>([]);
@@ -69,15 +70,16 @@ const PropertiesPage: React.FC = () => {
   const maxProperties = planLimits.maxProperties;
   const maxUnits = planLimits.maxUnits;
   const currentProperties = properties?.length ?? 0;
-  const unitsUsed = (properties || []).reduce(
-    (sum, p) => sum + (p?.unitCount ?? (Array.isArray(p?.units) ? p.units.length : 0)),
-    0
+  const limitsReady = Boolean(limits && typeof planLimits?.maxProperties === "number");
+  const atCap = limitsReady && currentProperties >= maxProperties;
+  const canAddProperty = limitsReady && !atCap;
+  const unitsUsed = useMemo(
+    () => (properties || []).reduce((sum, p) => sum + unitsForProperty(p), 0),
+    [properties]
   );
-  const canAddProperty = currentProperties < maxProperties;
-  const totalOpenAcrossPortfolio = useMemo(
-    () => Object.values(actionCounts || {}).reduce((a, b) => a + (b || 0), 0),
-    [actionCounts]
-  );
+  const totalOpenAcrossPortfolio = useMemo(() => Object.values(actionCounts || {}).reduce((a, b) => a + (b || 0), 0), [
+    actionCounts,
+  ]);
 
   const propertyLabelById = useMemo(() => {
     const out: Record<string, { name: string; subtitle?: string }> = {};
@@ -615,12 +617,20 @@ const PropertiesPage: React.FC = () => {
             Capture units, rents, and amenities. Newly added properties will show
             up in your list and rent roll below.
           </p>
-          {canAddProperty ? (
-            <AddPropertyForm
-              onCreated={handlePropertyCreated}
-              maxUnits={maxUnits}
-              plan={plan}
-            />
+          {!limitsReady ? (
+            <div
+              style={{
+                padding: 14,
+                borderRadius: 14,
+                background: "rgba(2,6,23,0.03)",
+                border: `1px solid ${colors.border}`,
+                color: text.muted,
+              }}
+            >
+              Loading plan limits...
+            </div>
+          ) : canAddProperty ? (
+            <AddPropertyForm onCreated={handlePropertyCreated} maxUnits={maxUnits} plan={plan} />
           ) : (
             <div
               style={{
