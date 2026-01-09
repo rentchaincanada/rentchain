@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { joinWaitlist } from "../../api/waitlist";
+import { joinWaitlist } from "../../api/waitlistApi";
 
 export function NotifyMeModal({
   open,
