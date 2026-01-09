@@ -27,7 +27,7 @@ export function NotifyMeModal({
     try {
       const trimmed = email.trim();
       if (!trimmed) throw new Error("Email required");
-      await joinWaitlist(trimmed, `${context || "pricing"}:${desiredPlan}`);
+      await joinWaitlist(trimmed, { plan: desiredPlan, context: context || "pricing" });
       setDone(true);
     } catch (e: any) {
       setErr(e?.message ?? "Failed to save");
