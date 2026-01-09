@@ -52,6 +52,15 @@ router.get("/", requireAuth, async (req: any, res) => {
   }
 });
 
+router.get("/ping", requireAuth, (req: any, res) => {
+  return res.json({
+    ok: true,
+    route: "ledgerRoutes",
+    role: req.user?.role || null,
+    landlordId: req.user?.landlordId || req.user?.id || null,
+  });
+});
+
 router.post("/events", requireAuth, async (req: any, res) => {
   const landlordId = getLandlordId(req);
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
@@ -87,16 +96,14 @@ router.post("/events", requireAuth, async (req: any, res) => {
     });
     return res.json({ ok: true, item: event });
   } catch (err: any) {
-    console.error("[ledger POST /events] error", {
+    console.error("[ledger] POST /events failed", {
       message: err?.message,
-      stack: err?.stack,
       code: err?.code,
+      stack: err?.stack,
     });
-    const isProd = process.env.NODE_ENV === "production";
-    const body = isProd
-      ? { ok: false, error: "Failed to append ledger event" }
-      : { ok: false, error: "Failed to append ledger event", detail: String(err?.message || err) };
-    return res.status(500).json(body);
+    return res
+      .status(500)
+      .json({ ok: false, error: "Failed to append ledger event", detail: String(err?.message || err) });
   }
 });
 
@@ -113,16 +120,14 @@ router.get("/verify", requireAuth, async (req: any, res) => {
     const result = await verifyLedgerChain(landlordId, limit);
     return res.json({ ok: true, result });
   } catch (err: any) {
-    console.error("[ledger GET /verify] error", {
+    console.error("[ledger] GET /verify failed", {
       message: err?.message,
-      stack: err?.stack,
       code: err?.code,
+      stack: err?.stack,
     });
-    const isProd = process.env.NODE_ENV === "production";
-    const body = isProd
-      ? { ok: false, error: "Failed to verify ledger" }
-      : { ok: false, error: "Failed to verify ledger", detail: String(err?.message || err) };
-    return res.status(500).json(body);
+    return res
+      .status(500)
+      .json({ ok: false, error: "Failed to verify ledger", detail: String(err?.message || err) });
   }
 });
 
