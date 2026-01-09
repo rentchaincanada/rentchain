@@ -48,7 +48,28 @@ router.get(
     const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
     items.sort((a, b) => String(a.unitNumber || "").localeCompare(String(b.unitNumber || "")));
 
-    return res.json({ ok: true, items });
+    const realCount = items.length;
+    try {
+      const propRef = db.collection("properties").doc(propertyId);
+      const propSnap = await propRef.get();
+      if (propSnap.exists) {
+        const current = Number((propSnap.data() as any)?.unitCount ?? 0) || 0;
+        if (current !== realCount) {
+          await propRef.set(
+            {
+              unitCount: realCount,
+              unitsCount: realCount,
+              updatedAt: FieldValue.serverTimestamp ? FieldValue.serverTimestamp() : new Date().toISOString(),
+            },
+            { merge: true }
+          );
+        }
+      }
+    } catch {
+      // ignore sync errors
+    }
+
+    return res.json({ ok: true, items, unitCount: realCount });
   }
 );
 
@@ -74,7 +95,28 @@ router.get("/units", authenticateJwt, requireLandlord, async (req: any, res) => 
   const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
   items.sort((a, b) => String(a.unitNumber || "").localeCompare(String(b.unitNumber || "")));
 
-  return res.json({ ok: true, items });
+  const realCount = items.length;
+  try {
+    const propRef = db.collection("properties").doc(propertyId);
+    const propSnap = await propRef.get();
+    if (propSnap.exists) {
+      const current = Number((propSnap.data() as any)?.unitCount ?? 0) || 0;
+      if (current !== realCount) {
+        await propRef.set(
+          {
+            unitCount: realCount,
+            unitsCount: realCount,
+            updatedAt: FieldValue.serverTimestamp ? FieldValue.serverTimestamp() : new Date().toISOString(),
+          },
+          { merge: true }
+        );
+      }
+    }
+  } catch {
+    // ignore sync errors
+  }
+
+  return res.json({ ok: true, items, unitCount: realCount });
 });
 
 router.post(
