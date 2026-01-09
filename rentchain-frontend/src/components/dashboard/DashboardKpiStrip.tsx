@@ -9,6 +9,7 @@ import {
 import { useToast } from "../ui/ToastProvider";
 import { colors, spacing, radius, shadows, text } from "../../styles/tokens";
 import { safeNumber as fmtNumber } from "@/utils/format";
+import { unitsForProperty } from "@/lib/propertyCounts";
 
 interface DashboardKpiStripProps {
   overview?: DashboardOverview | null;
@@ -96,10 +97,7 @@ export function DashboardKpiStrip({ overview: overviewProp }: DashboardKpiStripP
   // totalUnits
   let totalUnits =
     safeNumber(k.totalUnits) ??
-    properties.reduce((sum, p) => {
-      const units = safeNumber(p.units) ?? 0;
-      return sum + units;
-    }, 0);
+    properties.reduce((sum, p) => sum + unitsForProperty(p), 0);
 
   // occupancyRate %
   let occupancyRate: number | null = null;

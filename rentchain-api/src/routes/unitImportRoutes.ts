@@ -350,7 +350,11 @@ async function runUnitImport(opts: {
     .collection("properties")
     .doc(propertyId)
     .set(
-      { unitCount: FieldValue.increment(wouldInsert), updatedAt: FieldValue.serverTimestamp() },
+      {
+        unitCount: FieldValue.increment(wouldInsert),
+        unitsCount: FieldValue.increment(wouldInsert),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
       { merge: true }
     );
 
