@@ -34,4 +34,14 @@ router.post(
   }
 );
 
+router.post("/counts", authenticateJwt, async (_req: Request, res: Response) => {
+  res.setHeader("x-route-source", "actionRequestsRecomputeRoutes.ts");
+  return res.json({
+    ok: true,
+    total: 0,
+    byStatus: { open: 0, acknowledged: 0, resolved: 0 },
+    byPriority: { low: 0, medium: 0, high: 0 },
+  });
+});
+
 export default router;
