@@ -46,6 +46,7 @@ import propertiesRoutes from "./routes/propertiesRoutes";
 import tenantsRoutes from "./routes/tenants";
 import accountRoutes from "./routes/accountRoutes";
 import compatRoutes from "./routes/compatRoutes";
+import unitsRoutes from "./routes/unitsRoutes";
 
 const app: Application = express();
 app.set("etag", false);
@@ -106,6 +107,7 @@ app.use("/api/reporting", reportingRoutes);
 app.use("/api", compatRoutes);
 app.use("/api/dashboard", routeSource("dashboardRoutes.ts"), dashboardRoutes);
 app.use("/api/tenant-invites", tenantInvitesRoutes);
+app.use("/api", routeSource("unitsRoutes.ts"), unitsRoutes);
 app.use("/api/tenant", tenantPortalRoutes);
 app.use("/api", routeSource("tenantInviteAliasesRoutes"), tenantInviteAliasesRoutes);
 app.use("/api", routeSource("tenantEventsRoutes"), tenantEventsRoutes);

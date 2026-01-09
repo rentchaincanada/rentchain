@@ -635,7 +635,18 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             </tr>
           </thead>
           <tbody>
-            {units.length === 0 ? (
+            {(() => {
+              const derivedUnits =
+                units.length === 0 && unitCount > 0
+                  ? Array.from({ length: unitCount }, (_, i) => ({
+                      id: `placeholder-${i}`,
+                      unitNumber: String(i + 1),
+                    }))
+                  : [];
+              const displayedUnits = units.length > 0 ? units : derivedUnits;
+
+              if (displayedUnits.length === 0) {
+                return (
               <tr>
                 <td
                   colSpan={6}
@@ -648,8 +659,10 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                   No units recorded for this property yet.
                 </td>
               </tr>
-            ) : (
-              units.map((u, idx) => {
+                );
+              }
+
+              return displayedUnits.map((u, idx) => {
                 const unitNum = (u as any).unitNumber || "--";
                 const isLeased = leasedUnitNumbers.has(unitNum);
                 return (
@@ -708,8 +721,8 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                     </td>
                   </tr>
                 );
-              })
-            )}
+              });
+            })()}
           </tbody>
         </table>
       </div>
