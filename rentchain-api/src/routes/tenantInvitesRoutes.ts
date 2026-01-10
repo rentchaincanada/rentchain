@@ -27,6 +27,7 @@ router.post(
     if (!tenantEmail || !String(tenantEmail).includes("@")) {
       return res.status(400).json({ ok: false, error: "tenantEmail_required" });
     }
+    const toEmail = String(tenantEmail || "").trim().toLowerCase();
 
     const token = crypto.randomBytes(24).toString("hex");
     const now = Date.now();
@@ -74,7 +75,7 @@ router.post(
         `— RentChain`;
 
       await sgMail.send({
-        to: tenantEmail,
+        to: toEmail,
         from: from as string,
         subject,
         text,
