@@ -347,11 +347,23 @@ export const PropertyDetailsPage: React.FC = () => {
             <p>Loading timeline…</p>
           </div>
         ) : (
-          <LedgerTimeline
-            items={ledgerItems as unknown as LedgerEventStored[]}
-            emptyText="No activity yet"
-            onSelect={(id: string) => setSelectedLedgerId(id)}
-          />
+          (() => {
+            const timelineItems =
+              (ledgerItems as unknown as LedgerEventStored[]) || [];
+            if (timelineItems.length === 0) {
+              return (
+                <div className="property-page__placeholder">
+                  <p>No activity yet</p>
+                </div>
+              );
+            }
+            return (
+              <LedgerTimeline
+                items={timelineItems}
+                onSelect={(id: string) => setSelectedLedgerId(id)}
+              />
+            );
+          })()
         )}
         {selectedLedgerId ? (
           <LedgerEventDrawer eventId={selectedLedgerId} onClose={() => setSelectedLedgerId(null)} />
