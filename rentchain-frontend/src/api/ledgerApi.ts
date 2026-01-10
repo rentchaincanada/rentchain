@@ -21,7 +21,13 @@ export interface LedgerEventStored {
   source?: { route?: string; requestId?: string; ip?: string };
 }
 
-export async function fetchLedger(params: { limit?: number; tenantId?: string; propertyId?: string }): Promise<LedgerEventStored[]> {
+// Legacy aliases
+export type LedgerEntry = LedgerEventStored;
+export type LedgerEvent = LedgerEventStored;
+
+export async function fetchLedger(
+  params: { limit?: number; tenantId?: string; propertyId?: string } = {}
+): Promise<LedgerEventStored[]> {
   const search = new URLSearchParams();
   if (params?.limit) search.set("limit", String(params.limit));
   if (params?.tenantId) search.set("tenantId", params.tenantId);
@@ -34,6 +40,11 @@ export async function fetchLedger(params: { limit?: number; tenantId?: string; p
   if (res?.items && Array.isArray(res.items)) return res.items as LedgerEventStored[];
   if (res?.ok && Array.isArray(res?.items)) return res.items as LedgerEventStored[];
   return [];
+}
+
+// Legacy alias for backward compatibility
+export async function fetchLedgerEvents(params?: { limit?: number; tenantId?: string; propertyId?: string }) {
+  return fetchLedger(params || {});
 }
 
 export async function verifyLedger(limit = 500): Promise<{ ok: boolean; checked: number; brokenAt?: string; reason?: string }> {
