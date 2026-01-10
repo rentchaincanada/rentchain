@@ -56,11 +56,10 @@ export const InviteTenantModal: React.FC<Props> = ({
         setSuccessMsg("Invite created");
       }
     } catch (e: any) {
-      const msg = String(e?.message || "Failed to send invite");
-      if (
-        msg.includes("INVITE_EMAIL_SEND_FAILED") ||
-        msg.includes("SENDGRID")
-      ) {
+      const respDetail =
+        (e as any)?.response?.data?.detail || (e as any)?.response?.data?.error;
+      const msg = String(respDetail || e?.message || "Failed to send invite");
+      if (msg.includes("INVITE_EMAIL_SEND_FAILED") || msg.includes("SENDGRID")) {
         setErr("Invite could not be emailed. Please try again.");
       } else {
         setErr(msg);
@@ -199,7 +198,7 @@ export const InviteTenantModal: React.FC<Props> = ({
             Cancel
           </Button>
           <Button onClick={sendInvite} disabled={loading || !tenantEmail} style={{ padding: "8px 12px" }}>
-            {loading ? "Sending…" : "Send invite"}
+            {loading ? "Sending..." : "Send invite"}
           </Button>
         </div>
       </div>
