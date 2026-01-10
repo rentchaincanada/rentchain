@@ -94,7 +94,13 @@ router.post(
         console.error("[tenant-invites] email send failed", { message: e?.message, stack: e?.stack });
         return res
           .status(502)
-          .json({ ok: false, error: "INVITE_EMAIL_SEND_FAILED", detail: String(e?.message || e) });
+          .json({
+            ok: false,
+            error: "INVITE_EMAIL_SEND_FAILED",
+            code: "INVITE_EMAIL_SEND_FAILED",
+            hint: "Check SENDGRID_API_KEY and SENDGRID_FROM_EMAIL in Cloud Run env",
+            detail: String(e?.message || e),
+          });
       }
 
       return res.json({
