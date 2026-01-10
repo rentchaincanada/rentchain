@@ -30,6 +30,7 @@ export async function createTenantInvite(payload: {
     inviteUrl?: string;
     invite?: TenantInvite;
     expiresAt?: number;
+    emailed?: boolean;
   };
 }
 
