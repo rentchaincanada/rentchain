@@ -49,6 +49,7 @@ import compatRoutes from "./routes/compatRoutes";
 import unitsRoutes from "./routes/unitsRoutes";
 import adminPropertiesRoutes from "./routes/adminPropertiesRoutes";
 import ledgerRoutes from "./routes/ledgerRoutes";
+import landlordApplicationLinksRoutes from "./routes/landlordApplicationLinksRoutes";
 
 const app: Application = express();
 app.set("etag", false);
@@ -165,6 +166,7 @@ app.use("/api/leases", leaseRoutes);
 app.use("/api", tenantOnboardRoutes);
 app.use("/api/events", eventsRoutes);
 app.use("/api/landlord", landlordMicroLiveRoutes);
+app.use("/api/landlord", routeSource("landlordApplicationLinksRoutes.ts"), landlordApplicationLinksRoutes);
 app.use("/api/tenants", tenantsRoutes);
 app.use("/api/account", accountRoutes);
 

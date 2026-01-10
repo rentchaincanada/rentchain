@@ -16,6 +16,7 @@ import { useUpgrade } from "../../context/UpgradeContext";
 import { buildUnitsCsvTemplate, downloadTextFile } from "../../utils/csvTemplates";
 import { UnitsCsvPreviewModal } from "./UnitsCsvPreviewModal";
 import { UnitEditModal } from "./UnitEditModal";
+import { SendApplicationModal } from "./SendApplicationModal";
 import { parseCsvPreview } from "../../utils/csvPreview";
 import { useToast } from "../ui/ToastProvider";
 import { setOnboardingStep } from "../../api/onboardingApi";
@@ -67,6 +68,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   const [units, setUnits] = useState<any[]>([]);
   const [unitsLoading, setUnitsLoading] = useState(false);
   const [editingUnit, setEditingUnit] = useState<any | null>(null);
+  const [sendAppUnit, setSendAppUnit] = useState<any | null>(null);
 
   const readFileText = useCallback((file: File) => {
     return new Promise<string>((resolve, reject) => {
@@ -775,6 +777,23 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                       >
                         Edit
                       </button>
+                      {(u as any)?.id ? (
+                        <button
+                          type="button"
+                          onClick={() => setSendAppUnit(u)}
+                          style={{
+                            padding: "6px 10px",
+                            borderRadius: 8,
+                            border: "1px solid #e5e7eb",
+                            background: "#fff",
+                            cursor: "pointer",
+                            fontSize: "0.85rem",
+                            marginLeft: 8,
+                          }}
+                        >
+                          Send application
+                        </button>
+                      ) : null}
                     </td>
                   </tr>
                 );
@@ -791,6 +810,12 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
         onSaved={(updated) => {
           setUnits((prev) => prev.map((u) => (u?.id === updated?.id ? { ...u, ...updated } : u)));
         }}
+      />
+      <SendApplicationModal
+        open={!!sendAppUnit}
+        propertyId={property?.id || null}
+        unit={sendAppUnit}
+        onClose={() => setSendAppUnit(null)}
       />
       <UnitsCsvPreviewModal
         open={previewOpen}
