@@ -74,7 +74,7 @@ export default function InvitesPage() {
       });
       const url = res.inviteUrl || deriveInviteUrl(res.token);
       setCreatedInviteUrl(url);
-      const emailed = (res as any)?.emailed === true;
+      const emailed = res.emailed === true;
       const successMsg = emailed ? `Invite emailed to ${tenantEmail}` : "Invite created";
       if (typeof (window as any)?.toast?.success === "function") {
         (window as any).toast.success(successMsg);
