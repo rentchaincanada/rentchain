@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { apiFetch } from "../../api/apiFetch";
 import { Button } from "../ui/Ui";
 
 interface Props {
@@ -20,43 +21,50 @@ export const InviteTenantModal: React.FC<Props> = ({
   const [tenantName, setTenantName] = useState("");
   const [inviteUrl, setInviteUrl] = useState("");
   const [err, setErr] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
   const [loading, setLoading] = useState(false);
 
   if (!open) return null;
 
-  async function generate() {
+  async function sendInvite() {
     setErr("");
+    setSuccessMsg("");
     setInviteUrl("");
     setLoading(true);
     try {
-      const landlordToken =
-        sessionStorage.getItem("rentchain_token") ||
-        sessionStorage.getItem("rentchain_token_legacy") ||
-        "";
-
-      const res = await fetch("/api/tenant-invites", {
+      const data: any = await apiFetch("/api/tenant-invites", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           tenantEmail,
-          tenantName,
-          propertyId: defaultPropertyId,
-          unitId: defaultUnitId,
-          leaseId: defaultLeaseId,
+          tenantName: tenantName || null,
+          propertyId: defaultPropertyId || null,
+          unitId: defaultUnitId || null,
+          leaseId: defaultLeaseId || null,
         }),
-        headers: {
-          "Content-Type": "application/json",
-          ...(landlordToken ? { Authorization: `Bearer ${landlordToken}` } : {}),
-        },
       });
 
-      const data: any = await res.json().catch(() => ({}));
-      if (!res.ok || !data?.ok) {
-        throw new Error(data?.error || "Failed to generate invite");
+      if (!data?.ok) {
+        throw new Error(data?.error || "Failed to send invite");
       }
 
-      setInviteUrl(data.inviteUrl);
+      const url = data.inviteUrl || data.invite?.inviteUrl || "";
+      setInviteUrl(url);
+      if (data.emailed === true) {
+        setSuccessMsg(`Invite emailed to ${tenantEmail}`);
+      } else {
+        setSuccessMsg("Invite created");
+      }
     } catch (e: any) {
-      setErr(e?.message || "Failed to generate invite");
+      const msg = String(e?.message || "Failed to send invite");
+      if (
+        msg.includes("INVITE_EMAIL_SEND_FAILED") ||
+        msg.includes("SENDGRID")
+      ) {
+        setErr("Invite could not be emailed. Please try again.");
+      } else {
+        setErr(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -93,7 +101,7 @@ export const InviteTenantModal: React.FC<Props> = ({
         }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ fontWeight: 700 }}>Invite tenant (read-only)</div>
+          <div style={{ fontWeight: 700 }}>Invite tenant</div>
           <Button style={{ padding: "6px 10px" }} onClick={onClose}>
             Close
           </Button>
@@ -143,6 +151,21 @@ export const InviteTenantModal: React.FC<Props> = ({
           </div>
         )}
 
+        {successMsg && (
+          <div
+            style={{
+              padding: 10,
+              borderRadius: 8,
+              border: "1px solid #bbf7d0",
+              background: "#ecfdf3",
+              color: "#166534",
+              fontSize: 13,
+            }}
+          >
+            {successMsg}
+          </div>
+        )}
+
         {inviteUrl && (
           <div
             style={{
@@ -175,13 +198,9 @@ export const InviteTenantModal: React.FC<Props> = ({
           <Button onClick={onClose} style={{ padding: "8px 12px" }}>
             Cancel
           </Button>
-          <Button onClick={generate} disabled={loading || !tenantEmail} style={{ padding: "8px 12px" }}>
-            {loading ? "Generating…" : "Generate link"}
+          <Button onClick={sendInvite} disabled={loading || !tenantEmail} style={{ padding: "8px 12px" }}>
+            {loading ? "Sending…" : "Send invite"}
           </Button>
-        </div>
-
-        <div style={{ fontSize: 12, color: "#6b7280" }}>
-          Send this link to the tenant. Email automation will come later.
         </div>
       </div>
     </div>
