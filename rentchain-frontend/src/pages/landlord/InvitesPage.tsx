@@ -74,6 +74,9 @@ export default function InvitesPage() {
       });
       const url = res.inviteUrl || deriveInviteUrl(res.token);
       setCreatedInviteUrl(url);
+      if (res.emailed && typeof (window as any)?.toast?.success === "function") {
+        (window as any).toast.success(`Invite emailed to ${tenantEmail}`);
+      }
       // refresh list
       const listRes = await listTenantInvites();
       setInvites(listRes.items || []);
@@ -81,9 +84,13 @@ export default function InvitesPage() {
       setTenantName("");
       setTenantEmail("");
     } catch (e: any) {
-      setCreateError(e?.message || "Failed to create invite");
+      const msg = String(e?.message || "Failed to create invite");
+      setCreateError(msg);
+      const toastMsg = msg.includes("INVITE_EMAIL_SEND_FAILED")
+        ? "Invite could not be emailed. Please try again."
+        : msg;
       if (typeof (window as any)?.toast?.error === "function") {
-        (window as any).toast.error(e?.message || "Failed to create invite");
+        (window as any).toast.error(toastMsg);
       }
     } finally {
       setCreating(false);
