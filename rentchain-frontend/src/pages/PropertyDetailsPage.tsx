@@ -5,6 +5,7 @@ import { getAuthToken, resolveApiUrl } from "../lib/apiClient";
 import { useLedgerV2 } from "../hooks/useLedgerV2";
 import { LedgerTimeline } from "../components/ledger/LedgerTimeline";
 import { LedgerEventDrawer } from "../components/ledger/LedgerEventDrawer";
+import type { LedgerEventStored } from "@/api/ledgerApi";
 
 type PropertyOverview = {
   propertyId: string;
@@ -347,9 +348,9 @@ export const PropertyDetailsPage: React.FC = () => {
           </div>
         ) : (
           <LedgerTimeline
-            items={ledgerItems}
+            items={ledgerItems as unknown as LedgerEventStored[]}
             emptyText="No activity yet"
-            onSelect={(id) => setSelectedLedgerId(id)}
+            onSelect={(id: string) => setSelectedLedgerId(id)}
           />
         )}
         {selectedLedgerId ? (
