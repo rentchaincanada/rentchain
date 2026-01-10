@@ -19,102 +19,106 @@ router.post(
   requireAuth,
   requirePermission("users.invite"),
   async (req: any, res) => {
-    res.setHeader("x-route-source", "tenantInvitesRoutes");
-    const landlordId = req.user?.landlordId || req.user?.id;
-    if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
-    const { tenantEmail, tenantName, propertyId, unitId, leaseId } = req.body || {};
-
-    if (!tenantEmail || !String(tenantEmail).includes("@")) {
-      return res.status(400).json({ ok: false, error: "tenantEmail_required" });
-    }
-    const toEmail = String(tenantEmail || "").trim().toLowerCase();
-
-    const token = crypto.randomBytes(24).toString("hex");
-    const now = Date.now();
-    const expiresAt = now + 1000 * 60 * 60 * 24 * 7;
-
-    await db.collection("tenantInvites").doc(token).set({
-      token,
-      landlordId,
-      tenantEmail,
-      tenantName: tenantName || null,
-      propertyId: propertyId || null,
-      unitId: unitId || null,
-      leaseId: leaseId || null,
-      status: "pending",
-      createdAt: now,
-      expiresAt,
-    });
-
-    const baseUrl = (process.env.PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
-    const inviteUrl = `${baseUrl}/tenant/invite/${token}`;
-
-    // Send email invite if SendGrid is configured
-    const apiKey = process.env.SENDGRID_API_KEY;
-    const from = process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM;
-    if (!apiKey || !from) {
-      console.error("[tenantInvitesRoutes] sendgrid not configured", {
-        hasKey: !!apiKey,
-        hasFrom: !!from,
-      });
-      return res
-        .status(502)
-        .json({ ok: false, error: "INVITE_EMAIL_SEND_FAILED", detail: "SendGrid not configured" });
-    }
-
     try {
-      sgMail.setApiKey(apiKey as string);
-      const subject = "You're invited to RentChain";
-      const landlordEmail = req.user?.email ? String(req.user.email) : "A landlord";
-      const greet = tenantName ? `Hi ${tenantName},` : "Hi,";
-      const text =
-        `${greet}\n\n` +
-        `${landlordEmail} has invited you to join RentChain as a tenant.\n\n` +
-        `Open this link to accept your invite:\n${inviteUrl}\n\n` +
-        `Note: this link may expire. If you weren't expecting this, you can ignore this email.\n\n` +
-        `— RentChain`;
+      res.setHeader("x-route-source", "tenantInvitesRoutes");
+      const landlordId = req.user?.landlordId || req.user?.id;
+      if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+      const { tenantEmail, tenantName, propertyId, unitId, leaseId } = req.body || {};
 
-      await sgMail.send({
-        to: toEmail,
-        from: from as string,
-        subject,
-        text,
-        trackingSettings: {
-          clickTracking: { enable: false, enableText: false },
-          openTracking: { enable: false },
-        },
-        mailSettings: {
-          footer: { enable: false },
-        },
-      });
-    } catch (e: any) {
-      console.error("[tenantInvitesRoutes] send invite email failed", {
-        message: e?.message,
-        code: e?.code || e?.response?.statusCode,
-        body: e?.response?.body,
-        stack: e?.stack,
-      });
-      return res
-        .status(502)
-        .json({ ok: false, error: "INVITE_EMAIL_SEND_FAILED", detail: String(e?.message || e) });
-    }
+      if (!tenantEmail || !String(tenantEmail).includes("@")) {
+        return res.status(400).json({ ok: false, error: "tenantEmail_required" });
+      }
+      const toEmail = String(tenantEmail || "").trim().toLowerCase();
 
-    return res.json({
-      ok: true,
-      token,
-      inviteUrl,
-      expiresAt,
-      invite: {
+      const token = crypto.randomBytes(24).toString("hex");
+      const now = Date.now();
+      const expiresAt = now + 1000 * 60 * 60 * 24 * 7;
+
+      await db.collection("tenantInvites").doc(token).set({
         token,
-        inviteUrl,
-        status: "pending",
-        propertyId: propertyId || null,
+        landlordId,
         tenantEmail,
         tenantName: tenantName || null,
+        propertyId: propertyId || null,
+        unitId: unitId || null,
+        leaseId: leaseId || null,
+        status: "pending",
         createdAt: now,
-      },
-      emailed: true,
-    });
+        expiresAt,
+      });
+
+      const baseUrl = (process.env.PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
+      const inviteUrl = `${baseUrl}/tenant/invite/${token}`;
+
+      const apiKey = process.env.SENDGRID_API_KEY;
+      const from =
+        process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM || process.env.FROM_EMAIL;
+      if (!apiKey) return res.status(502).json({ ok: false, error: "SENDGRID_API_KEY_MISSING" });
+      if (!from) return res.status(502).json({ ok: false, error: "SENDGRID_FROM_EMAIL_MISSING" });
+
+      const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T> =>
+        Promise.race([
+          p,
+          new Promise<T>((_, rej) => setTimeout(() => rej(new Error(`SEND_TIMEOUT_${ms}MS`)), ms)),
+        ]);
+
+      try {
+        sgMail.setApiKey(apiKey as string);
+        const subject = "You're invited to RentChain";
+        const landlordEmail = req.user?.email ? String(req.user.email) : "A landlord";
+        const greet = tenantName ? `Hi ${tenantName},` : "Hi,";
+        const text =
+          `${greet}\n\n` +
+          `${landlordEmail} has invited you to join RentChain as a tenant.\n\n` +
+          `Open this link to accept your invite:\n${inviteUrl}\n\n` +
+          `Note: this link may expire. If you weren't expecting this, you can ignore this email.\n\n` +
+          `— RentChain`;
+
+        await withTimeout(
+          sgMail.send({
+            to: toEmail,
+            from: from as string,
+            subject,
+            text,
+            trackingSettings: {
+              clickTracking: { enable: false, enableText: false },
+              openTracking: { enable: false },
+            },
+            mailSettings: {
+              footer: { enable: false },
+            },
+          }),
+          8000
+        );
+      } catch (e: any) {
+        console.error("[tenant-invites] email send failed", { message: e?.message, stack: e?.stack });
+        return res
+          .status(502)
+          .json({ ok: false, error: "INVITE_EMAIL_SEND_FAILED", detail: String(e?.message || e) });
+      }
+
+      return res.json({
+        ok: true,
+        token,
+        inviteUrl,
+        expiresAt,
+        invite: {
+          token,
+          inviteUrl,
+          status: "pending",
+          propertyId: propertyId || null,
+          tenantEmail,
+          tenantName: tenantName || null,
+          createdAt: now,
+        },
+        emailed: true,
+      });
+    } catch (err: any) {
+      console.error("[tenant-invites] POST crashed", { message: err?.message, stack: err?.stack });
+      return res
+        .status(502)
+        .json({ ok: false, error: "INVITE_CREATE_FAILED", detail: String(err?.message || err) });
+    }
   }
 );
 
