@@ -19,13 +19,21 @@ router.get("/", requireAuth, async (req: any, res) => {
   const landlordId = getLandlordId(req);
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
 
-  if (req.user?.role === "tenant") {
-    return res.status(403).json({ ok: false, error: "Tenant ledger access not enabled yet" });
-  }
-
   const limit = parseLimit(req.query?.limit, 50, 200);
-  const tenantId = req.query?.tenantId ? String(req.query.tenantId) : null;
+  let tenantId = req.query?.tenantId ? String(req.query.tenantId) : null;
   const propertyId = req.query?.propertyId ? String(req.query.propertyId) : null;
+
+  if (req.user?.role === "tenant") {
+    const tenantIdFromUser = req.user?.tenantId ?? null;
+    if (!tenantIdFromUser) {
+      console.warn("[ledger] tenant request missing tenantId", {
+        userId: req.user?.id,
+        email: req.user?.email,
+      });
+      return res.status(403).json({ ok: false, error: "Tenant ledger not enabled (missing tenantId)" });
+    }
+    tenantId = tenantIdFromUser;
+  }
 
   try {
     const ref = db.collection("ledgerEvents").where("landlordId", "==", landlordId).limit(limit);

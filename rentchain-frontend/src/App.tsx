@@ -28,6 +28,7 @@ import TenantInviteAcceptPage from "./pages/tenant/TenantInviteAcceptPage";
 import { MobileTabBar } from "./components/layout/MobileTabBar";
 import TenantPortalComingSoon from "./pages/tenant/TenantPortalComingSoon";
 import TenantDashboardPageV2 from "./pages/tenant/TenantDashboardPage.v2";
+import TenantLedgerPage from "./pages/tenant/TenantLedgerPage";
 import MonthlyOpsReportPage from "./pages/reports/MonthlyOpsReportPage";
 import InvitesPage from "./pages/landlord/InvitesPage";
 
@@ -217,6 +218,12 @@ function App() {
             ) : (
               <TenantPortalComingSoon />
             )
+          }
+        />
+        <Route
+          path="/tenant/ledger"
+          element={
+            TENANT_PORTAL_ENABLED ? <TenantLedgerPage /> : <TenantPortalComingSoon />
           }
         />
         {applicantApplyRedirects.map((path) => (
