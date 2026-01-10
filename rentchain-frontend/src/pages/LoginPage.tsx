@@ -25,7 +25,8 @@ export const LoginPage: React.FC = () => {
     }
   }, [rawNext]);
 
-  const [email, setEmail] = useState("demo@rentchain.dev");
+  const defaultEmail = import.meta.env.DEV ? "demo@rentchain.dev" : "";
+  const [email, setEmail] = useState(defaultEmail);
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -143,7 +144,7 @@ export const LoginPage: React.FC = () => {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               onClick={(e) => e.stopPropagation()}
-              placeholder="demo@rentchain.dev"
+              placeholder="you@example.com"
               autoComplete="email"
               required
             />
