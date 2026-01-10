@@ -252,7 +252,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const loginDemo = useCallback(async (plan: string = "core") => {
     setIsLoading(true);
     try {
-      const response = await apiLogin("demo@rentchain.dev", "demo", {
+      const demoEmail = import.meta.env.DEV ? "demo@rentchain.dev" : "";
+      const response = await apiLogin(demoEmail, "demo", {
         headers: { "x-rentchain-plan": plan },
       });
 

@@ -98,7 +98,8 @@ export async function login(
 }
 
 export async function loginDemo(plan: string = "core"): Promise<LoginResponse> {
-  return login("demo@rentchain.dev", "demo", {
+  const demoEmail = import.meta.env.DEV ? "demo@rentchain.dev" : "";
+  return login(demoEmail, "demo", {
     headers: { "x-rentchain-plan": plan },
   });
 }
