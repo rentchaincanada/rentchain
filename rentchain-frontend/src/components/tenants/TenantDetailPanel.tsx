@@ -88,19 +88,19 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
   const [recordOpen, setRecordOpen] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
+    cancelledRef.current = false;
     setSignalsError(null);
     getTenantSignals(tenantId)
       .then((resp) => {
-        if (cancelled) return;
+        if (cancelledRef.current) return;
         setSignals(resp?.signals ?? null);
       })
       .catch((err: any) => {
-        if (cancelled) return;
+        if (cancelledRef.current) return;
         setSignalsError(err?.message || "Failed to load signals");
       });
     return () => {
-      cancelled = true;
+      cancelledRef.current = true;
     };
   }, [tenantId]);
 
@@ -131,7 +131,6 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
     }
   }, [tenantId]);
 
-  const cancelledRef = React.useRef(false);
   useEffect(() => {
     cancelledRef.current = false;
     void loadLedger();
