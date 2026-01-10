@@ -2,8 +2,40 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { TopNav } from "../components/layout/TopNav";
-import { fetchLedgerEvents, LedgerEvent } from "../api/ledgerApi";
+import { fetchLedgerEvents, type LedgerEventStored } from "../api/ledgerApi";
 import { useToast } from "../components/ui/ToastProvider";
+
+function getEventDate(e: LedgerEventStored): Date {
+  if (typeof e.ts === "number") return new Date(e.ts);
+  return new Date(0);
+}
+
+function getLabel(e: LedgerEventStored): string {
+  const p: any = e.payload ?? {};
+  if (p.title) return String(p.title);
+  if (p.noticeType) return String(p.noticeType);
+  return String(e.type || "EVENT");
+}
+
+function getNotes(e: LedgerEventStored): string {
+  const p: any = e.payload ?? {};
+  if (p.note) return String(p.note);
+  if (p.description) return String(p.description);
+  return "";
+}
+
+function getAmount(e: LedgerEventStored): number {
+  const p: any = e.payload ?? {};
+  if (typeof p.amountCents === "number") return p.amountCents / 100;
+  if (typeof p.amount === "number") return p.amount;
+  return 0;
+}
+
+function getRunningBalance(e: LedgerEventStored): number | null {
+  const p: any = e.payload ?? {};
+  if (typeof p.runningBalance === "number") return p.runningBalance;
+  return null;
+}
 
 const LedgerPage: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -11,7 +43,7 @@ const LedgerPage: React.FC = () => {
   const navigate = useNavigate();
   const { showToast } = useToast();
 
-  const [entries, setEntries] = useState<LedgerEvent[]>([]);
+  const [entries, setEntries] = useState<LedgerEventStored[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,7 +59,7 @@ const LedgerPage: React.FC = () => {
           limit: 100,
         });
         if (!cancelled) {
-          setEntries(data);
+          setEntries(Array.isArray(data) ? data : []);
         }
       } catch (err) {
         console.error("[LedgerPage] Failed to load ledger", err);
@@ -57,7 +89,7 @@ const LedgerPage: React.FC = () => {
     if (!tenantId) return null;
     const shortId =
       tenantId.length > 8
-        ? `${tenantId.slice(0, 4)}…${tenantId.slice(-3)}`
+        ? `${tenantId.slice(0, 4)}...${tenantId.slice(-3)}`
         : tenantId;
     return (
       <div
@@ -100,8 +132,8 @@ const LedgerPage: React.FC = () => {
 
   const sortedEntries = useMemo(() => {
     return [...entries].sort((a, b) => {
-      const da = Date.parse(a.createdAt || a.date || "") || 0;
-      const db = Date.parse(b.createdAt || b.date || "") || 0;
+      const da = getEventDate(a).getTime();
+      const db = getEventDate(b).getTime();
       return db - da;
     });
   }, [entries]);
@@ -138,7 +170,7 @@ const LedgerPage: React.FC = () => {
                 color: "#9ca3af",
               }}
             >
-              Loading ledger…
+              Loading ledger...
             </div>
           ) : error ? (
             <div
@@ -169,82 +201,92 @@ const LedgerPage: React.FC = () => {
                 overflowY: "auto",
               }}
             >
-              {sortedEntries.map((entry) => (
-                <div
-                  key={entry.id}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "flex-start",
-                    padding: "6px 8px",
-                    borderBottom: "1px solid rgba(31,41,55,1)",
-                    fontSize: 12,
-                  }}
-                >
-                  <div>
-                    <div
-                      style={{
-                        fontWeight: 500,
-                        color: "#e5e7eb",
-                      }}
-                    >
-                      {(entry.createdAt || entry.date || "").toString()} •{" "}
-                      {entry.type || "entry"}
-                    </div>
-                    {entry.label && (
-                      <div
-                        style={{
-                          color: "#9ca3af",
-                        }}
-                      >
-                        {entry.label}
-                      </div>
-                    )}
-                    {entry.notes && (
-                      <div
-                        style={{
-                          color: "#6b7280",
-                          fontSize: 11,
-                          marginTop: 2,
-                        }}
-                      >
-                        {entry.notes}
-                      </div>
-                    )}
-                  </div>
+              {sortedEntries.map((entry) => {
+                const dt = getEventDate(entry);
+                const label = getLabel(entry);
+                const notes = getNotes(entry);
+                const amount = getAmount(entry);
+                const running = getRunningBalance(entry);
+                const isPayment =
+                  entry.type === "payment" || entry.type === "PAYMENT_RECORDED";
+                const isCharge =
+                  entry.type === "charge" || entry.type === "RENT_CHARGED";
+
+                return (
                   <div
+                    key={entry.id}
                     style={{
-                      textAlign: "right",
-                      minWidth: 110,
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "flex-start",
+                      padding: "6px 8px",
+                      borderBottom: "1px solid rgba(31,41,55,1)",
+                      fontSize: 12,
                     }}
                   >
-                    <div
-                      style={{
-                        color:
-                          entry.type === "payment"
-                            ? "#22c55e"
-                            : entry.type === "charge"
-                            ? "#f97316"
-                            : "#e5e7eb",
-                        fontWeight: 500,
-                      }}
-                    >
-                      {entry.type === "payment" ? "+" : ""}
-                      ${Number(entry.amount ?? 0).toFixed(2)}
-                    </div>
-                    {typeof entry.runningBalance === "number" && (
+                    <div>
                       <div
                         style={{
-                          fontSize: 11,
-                          color: "#9ca3af",
+                          fontWeight: 500,
+                          color: "#e5e7eb",
                         }}
                       >
-                        Bal: ${Number(entry.runningBalance).toFixed(2)}
+                        {dt.toLocaleString()} — {entry.type || "entry"}
                       </div>
-                    )}
+                      {label ? (
+                        <div
+                          style={{
+                            color: "#9ca3af",
+                          }}
+                        >
+                          {label}
+                        </div>
+                      ) : null}
+                      {notes ? (
+                        <div
+                          style={{
+                            color: "#6b7280",
+                            fontSize: 11,
+                            marginTop: 2,
+                          }}
+                        >
+                          {notes}
+                        </div>
+                      ) : null}
+                    </div>
+                    <div
+                      style={{
+                        textAlign: "right",
+                        minWidth: 110,
+                      }}
+                    >
+                      <div
+                        style={{
+                          color: isPayment
+                            ? "#22c55e"
+                            : isCharge
+                            ? "#f97316"
+                            : "#e5e7eb",
+                          fontWeight: 500,
+                        }}
+                      >
+                        {isPayment ? "+" : ""}
+                        ${amount.toFixed(2)}
+                      </div>
+                      {running !== null ? (
+                        <div
+                          style={{
+                            fontSize: 11,
+                            color: "#9ca3af",
+                          }}
+                        >
+                          Bal: ${Number(running).toFixed(2)}
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
