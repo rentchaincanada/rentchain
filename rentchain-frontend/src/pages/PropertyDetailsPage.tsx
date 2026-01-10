@@ -4,7 +4,6 @@ import "./PropertyDetailsPage.css";
 import { getAuthToken, resolveApiUrl } from "../lib/apiClient";
 import { useLedgerV2 } from "../hooks/useLedgerV2";
 import { LedgerTimeline } from "../components/ledger/LedgerTimeline";
-import { LedgerEventDrawer } from "../components/ledger/LedgerEventDrawer";
 import type { LedgerEventStored } from "@/api/ledgerApi";
 
 type PropertyOverview = {
@@ -171,7 +170,6 @@ export const PropertyDetailsPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const { items: ledgerItems, loading: ledgerLoading, error: ledgerError, refresh: refreshLedger } =
     useLedgerV2({ propertyId: propertyId || undefined, limit: 10 });
-  const [selectedLedgerId, setSelectedLedgerId] = useState<string | null>(null);
 
   const units = getMockUnitsForProperty(propertyId);
 
@@ -353,21 +351,13 @@ export const PropertyDetailsPage: React.FC = () => {
             if (timelineItems.length === 0) {
               return (
                 <div className="property-page__placeholder">
-                  <p>No activity yet</p>
+                  <p>No ledger events yet.</p>
                 </div>
               );
             }
-            return (
-              <LedgerTimeline
-                items={timelineItems}
-                onSelect={(id: string) => setSelectedLedgerId(id)}
-              />
-            );
+            return <LedgerTimeline items={timelineItems} compact />;
           })()
         )}
-        {selectedLedgerId ? (
-          <LedgerEventDrawer eventId={selectedLedgerId} onClose={() => setSelectedLedgerId(null)} />
-        ) : null}
       </section>
 
       <section className="property-page__section">
