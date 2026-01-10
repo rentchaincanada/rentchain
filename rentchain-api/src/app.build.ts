@@ -66,6 +66,13 @@ app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(cookieParser());
+app.use((err: any, req: any, res: any, next: any) => {
+  if (err && err.type === "entity.parse.failed") {
+    console.error("[json] parse failed", { path: req?.originalUrl, message: err?.message });
+    return res.status(400).json({ ok: false, error: "INVALID_JSON_BODY" });
+  }
+  return next(err);
+});
 
 // Redirect accidental double /api/api/... to /api/...
 app.use("/api/api", (req, res) => {
