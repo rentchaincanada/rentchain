@@ -15,6 +15,7 @@ import { fetchMe } from "../../api/meApi";
 import { useUpgrade } from "../../context/UpgradeContext";
 import { buildUnitsCsvTemplate, downloadTextFile } from "../../utils/csvTemplates";
 import { UnitsCsvPreviewModal } from "./UnitsCsvPreviewModal";
+import { UnitEditModal } from "./UnitEditModal";
 import { parseCsvPreview } from "../../utils/csvPreview";
 import { useToast } from "../ui/ToastProvider";
 import { setOnboardingStep } from "../../api/onboardingApi";
@@ -65,6 +66,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   const [pendingFilename, setPendingFilename] = useState<string>("");
   const [units, setUnits] = useState<any[]>([]);
   const [unitsLoading, setUnitsLoading] = useState(false);
+  const [editingUnit, setEditingUnit] = useState<any | null>(null);
 
   const readFileText = useCallback((file: File) => {
     return new Promise<string>((resolve, reject) => {
@@ -653,6 +655,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
               <th style={{ textAlign: "left", padding: "10px 12px" }}>Baths</th>
               <th style={{ textAlign: "left", padding: "10px 12px" }}>Sqft</th>
               <th style={{ textAlign: "left", padding: "10px 12px" }}>Status</th>
+              <th style={{ textAlign: "left", padding: "10px 12px" }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -661,7 +664,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                 return (
               <tr>
                 <td
-                  colSpan={6}
+                  colSpan={7}
                   style={{
                     padding: "12px",
                     color: "#1f2937",
@@ -687,7 +690,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                 return (
               <tr>
                 <td
-                  colSpan={6}
+                  colSpan={7}
                   style={{
                     padding: "12px",
                     color: "#1f2937",
@@ -757,6 +760,22 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                         {isLeased ? "--" : "Vacant"}
                       </span>
                     </td>
+                    <td style={{ padding: "10px 12px" }}>
+                      <button
+                        type="button"
+                        onClick={() => setEditingUnit(u)}
+                        style={{
+                          padding: "6px 10px",
+                          borderRadius: 8,
+                          border: "1px solid #e5e7eb",
+                          background: "#fff",
+                          cursor: "pointer",
+                          fontSize: "0.85rem",
+                        }}
+                      >
+                        Edit
+                      </button>
+                    </td>
                   </tr>
                 );
               });
@@ -765,6 +784,14 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
         </table>
       </div>
       </div>
+      <UnitEditModal
+        open={!!editingUnit}
+        unit={editingUnit}
+        onClose={() => setEditingUnit(null)}
+        onSaved={(updated) => {
+          setUnits((prev) => prev.map((u) => (u?.id === updated?.id ? { ...u, ...updated } : u)));
+        }}
+      />
       <UnitsCsvPreviewModal
         open={previewOpen}
         onClose={() => setPreviewOpen(false)}

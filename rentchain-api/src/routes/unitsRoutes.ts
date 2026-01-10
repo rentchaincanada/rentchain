@@ -192,4 +192,71 @@ router.post(
   }
 );
 
+router.patch("/units/:unitId", authenticateJwt, requireLandlord, async (req: any, res) => {
+  res.setHeader("x-route-source", "unitsRoutes");
+  const landlordId = req.user?.landlordId || req.user?.id;
+  const unitId = String(req.params?.unitId || "");
+  if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+  if (!unitId) return res.status(400).json({ ok: false, error: "Missing unitId" });
+
+  const ref = db.collection("units").doc(unitId);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    return res.status(404).json({ ok: false, error: "UNIT_NOT_FOUND" });
+  }
+  const existing = snap.data() as any;
+  const propertyId = existing?.propertyId;
+  if (existing?.landlordId !== landlordId) {
+    return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+  }
+  if (propertyId) {
+    const ownership = await ensurePropertyOwned(String(propertyId), landlordId);
+    if (!ownership.ok) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+  }
+
+  const { unitNumber, rent, beds, baths, notes, status } = req.body || {};
+  const updates: any = {};
+
+  if (unitNumber !== undefined) {
+    updates.unitNumber = String(unitNumber || "").trim();
+  }
+  if (rent !== undefined) {
+    updates.rent = rent === null || rent === "" ? null : Number(rent);
+    if (updates.rent !== null && !Number.isFinite(updates.rent)) {
+      return res.status(400).json({ ok: false, error: "Invalid rent" });
+    }
+  }
+  if (beds !== undefined) {
+    updates.beds = beds === null || beds === "" ? null : Number(beds);
+    if (updates.beds !== null && !Number.isFinite(updates.beds)) {
+      return res.status(400).json({ ok: false, error: "Invalid beds" });
+    }
+  }
+  if (baths !== undefined) {
+    updates.baths = baths === null || baths === "" ? null : Number(baths);
+    if (updates.baths !== null && !Number.isFinite(updates.baths)) {
+      return res.status(400).json({ ok: false, error: "Invalid baths" });
+    }
+  }
+  if (notes !== undefined) {
+    updates.notes = notes === null ? null : String(notes);
+  }
+  if (status !== undefined) {
+    const valid = ["vacant", "occupied"];
+    if (!valid.includes(String(status))) {
+      return res.status(400).json({ ok: false, error: "Invalid status" });
+    }
+    updates.status = String(status);
+  }
+
+  updates.updatedAt = new Date();
+  updates.updatedAtServer = FieldValue.serverTimestamp ? FieldValue.serverTimestamp() : new Date();
+
+  await ref.set(updates, { merge: true });
+  const updated = { id: unitId, ...existing, ...updates };
+  return res.json({ ok: true, unit: updated });
+});
+
 export default router;

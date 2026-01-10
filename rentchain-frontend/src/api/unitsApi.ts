@@ -30,3 +30,11 @@ export async function addUnitsManual(propertyId: string, units: UnitInput[]) {
     body: JSON.stringify({ units }),
   });
 }
+
+export async function updateUnit(unitId: string, payload: any) {
+  return apiFetch(`/api/units/${unitId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
