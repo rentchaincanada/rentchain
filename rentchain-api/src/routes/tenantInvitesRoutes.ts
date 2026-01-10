@@ -2,6 +2,7 @@ import { Router } from "express";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { db } from "../config/firebase";
+import sgMail from "@sendgrid/mail";
 import { requireAuth } from "../middleware/requireAuth";
 import { requirePermission } from "../middleware/requireAuthz";
 
@@ -47,6 +48,52 @@ router.post(
     const baseUrl = (process.env.PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
     const inviteUrl = `${baseUrl}/tenant/invite/${token}`;
 
+    // Send email invite if SendGrid is configured
+    const apiKey = process.env.SENDGRID_API_KEY;
+    const from = process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM;
+    if (!apiKey || !from) {
+      console.error("[tenantInvitesRoutes] sendgrid not configured", {
+        hasKey: !!apiKey,
+        hasFrom: !!from,
+      });
+      return res.status(502).json({ ok: false, error: "INVITE_EMAIL_SEND_FAILED" });
+    }
+
+    try {
+      sgMail.setApiKey(apiKey as string);
+      const subject = "You're invited to RentChain";
+      const landlordEmail = req.user?.email ? String(req.user.email) : "A landlord";
+      const greet = tenantName ? `Hi ${tenantName},` : "Hi,";
+      const text =
+        `${greet}\n\n` +
+        `${landlordEmail} has invited you to join RentChain as a tenant.\n\n` +
+        `Open this link to accept your invite:\n${inviteUrl}\n\n` +
+        `Note: this link may expire. If you weren't expecting this, you can ignore this email.\n\n` +
+        `— RentChain`;
+
+      await sgMail.send({
+        to: tenantEmail,
+        from: from as string,
+        subject,
+        text,
+        trackingSettings: {
+          clickTracking: { enable: false, enableText: false },
+          openTracking: { enable: false },
+        },
+        mailSettings: {
+          footer: { enable: false },
+        },
+      });
+    } catch (e: any) {
+      console.error("[tenantInvitesRoutes] send invite email failed", {
+        message: e?.message,
+        code: e?.code || e?.response?.statusCode,
+        body: e?.response?.body,
+        stack: e?.stack,
+      });
+      return res.status(502).json({ ok: false, error: "INVITE_EMAIL_SEND_FAILED" });
+    }
+
     return res.json({
       ok: true,
       token,
@@ -61,6 +108,7 @@ router.post(
         tenantName: tenantName || null,
         createdAt: now,
       },
+      emailed: true,
     });
   }
 );
