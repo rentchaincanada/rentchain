@@ -21,9 +21,17 @@ router.post(
   async (req: any, res) => {
     try {
       res.setHeader("x-route-source", "tenantInvitesRoutes");
+      let body: any = req.body;
+      if (typeof req.body === "string") {
+        try {
+          body = JSON.parse(req.body);
+        } catch {
+          body = {};
+        }
+      }
       const landlordId = req.user?.landlordId || req.user?.id;
       if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
-      const { tenantEmail, tenantName, propertyId, unitId, leaseId } = req.body || {};
+      const { tenantEmail, tenantName, propertyId, unitId, leaseId } = body || {};
 
       if (!tenantEmail || !String(tenantEmail).includes("@")) {
         return res.status(400).json({ ok: false, error: "tenantEmail_required" });
