@@ -56,7 +56,9 @@ router.post(
         hasKey: !!apiKey,
         hasFrom: !!from,
       });
-      return res.status(502).json({ ok: false, error: "INVITE_EMAIL_SEND_FAILED" });
+      return res
+        .status(502)
+        .json({ ok: false, error: "INVITE_EMAIL_SEND_FAILED", detail: "SendGrid not configured" });
     }
 
     try {
@@ -91,7 +93,9 @@ router.post(
         body: e?.response?.body,
         stack: e?.stack,
       });
-      return res.status(502).json({ ok: false, error: "INVITE_EMAIL_SEND_FAILED" });
+      return res
+        .status(502)
+        .json({ ok: false, error: "INVITE_EMAIL_SEND_FAILED", detail: String(e?.message || e) });
     }
 
     return res.json({
