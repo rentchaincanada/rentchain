@@ -447,23 +447,91 @@ router.get("/applications/:id", async (req, res) => {
   return res.status(200).json(app);
 });
 
-router.get(
-  "/applications/:id/timeline",
-  (req, res: Response) => {
-    const { id } = req.params;
-    const app = getApplicationById(id);
-    if (!app) {
-      return res.status(404).json({ error: "Application not found" });
-    }
+router.get("/applications/:id/timeline", async (req: any, res: Response) => {
+  const { id } = req.params;
+  const landlordId = req.user?.landlordId || req.user?.id || null;
+  if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
 
-    if (!req.user?.id) {
-      return res.status(401).json({ error: "Unauthorized" });
+  const events: any[] = [];
+  const toMillis = (v: any): number | null => {
+    if (!v) return null;
+    if (typeof v === "number") return v;
+    if (typeof v === "string") {
+      const t = Date.parse(v);
+      return Number.isNaN(t) ? null : t;
     }
+    if (typeof v?.toMillis === "function") return v.toMillis();
+    if (typeof v?.seconds === "number") return v.seconds * 1000;
+    return null;
+  };
 
-    const events = getApplicationEvents(id);
-    return res.status(200).json({ events });
+  const pushEvent = (type: string, title: string, tsLike: any) => {
+    const ts = toMillis(tsLike);
+    if (!ts) return;
+    const createdAt = new Date(ts).toISOString();
+    events.push({
+      id: `${type}-${ts}-${id}`,
+      type,
+      title,
+      ts,
+      createdAt,
+      message: title,
+    });
+  };
+
+  try {
+    const snap = await db.collection("applications").doc(id).get();
+    if (snap.exists) {
+      const data = { id: snap.id, ...(snap.data() as any) };
+      if (data.landlordId && data.landlordId !== landlordId) {
+        return res.status(403).json({ ok: false, error: "Forbidden" });
+      }
+
+      pushEvent("submitted", "Application submitted", data.createdAt ?? data.submittedAt);
+      pushEvent("in_review", "Moved to review", data.inReviewAt);
+
+      if (data.status === "approved" || data.approvedAt) {
+        pushEvent("approved", "Application approved", data.approvedAt ?? data.updatedAt);
+      } else if (data.status === "rejected" || data.rejectedAt) {
+        pushEvent("rejected", "Application rejected", data.rejectedAt ?? data.updatedAt);
+      }
+
+      if (data.convertedTenantId || data.tenantId || data.convertedAt) {
+        pushEvent("converted", "Converted to tenant", data.convertedAt ?? data.updatedAt);
+      }
+
+      // Include any in-memory events if present (for legacy/local flows)
+      const memEvents = getApplicationEvents(id);
+      memEvents.forEach((e) => pushEvent(e.type, e.message || e.type, e.createdAt));
+
+      events.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+      return res.status(200).json({ ok: true, events });
+    }
+  } catch (err) {
+    console.error("[applications timeline] firestore fetch failed", err);
   }
-);
+
+  const app = getApplicationById(id);
+  if (!app) {
+    return res.status(404).json({ ok: false, error: "Application not found" });
+  }
+
+  pushEvent("submitted", "Application submitted", app.createdAt ?? app.submittedAt);
+  if (app.status === "approved" || app.approvedAt) {
+    pushEvent("approved", "Application approved", app.approvedAt ?? app.updatedAt);
+  } else if (app.status === "rejected" || app.rejectedAt) {
+    pushEvent("rejected", "Application rejected", app.rejectedAt ?? app.updatedAt);
+  }
+  if ((app as any).convertedTenantId || (app as any).tenantId || (app as any).convertedAt) {
+    pushEvent("converted", "Converted to tenant", (app as any).convertedAt ?? app.updatedAt);
+  }
+  getApplicationEvents(id).forEach((e) =>
+    pushEvent(e.type, e.message || e.type, e.createdAt)
+  );
+
+  events.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+  return res.status(200).json({ ok: true, events });
+});
 
 /**
  * PATCH /api/applications/:id
