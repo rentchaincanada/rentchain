@@ -35,7 +35,16 @@ export function SendApplicationModal({ open, propertyId, unit, onClose }: Props)
     setError(null);
     try {
       const res = await createApplicationLink(String(propertyId), String((unit as any).id));
-      const url = (res as any)?.applicationUrl || (res as any)?.link || null;
+      if ((res as any)?.ok === false) {
+        const detail = (res as any)?.detail || (res as any)?.error || "Failed to create application link";
+        throw new Error(String(detail));
+      }
+      const url =
+        (res as any)?.applicationUrl ||
+        (res as any)?.link ||
+        (res as any)?.url ||
+        (res as any)?.inviteUrl ||
+        null;
       if (!url) {
         throw new Error("Missing application link");
       }
