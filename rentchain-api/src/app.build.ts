@@ -169,6 +169,29 @@ app.post("/api/_echo", (req, res) => {
   return res.json({ ok: true, method: "POST", body: req.body ?? null });
 });
 
+app.get("/api/__probe/routes", (_req, res) => {
+  const appAny: any = app;
+  const stack = appAny?._router?.stack || [];
+  const mounts = stack
+    .filter((l: any) => l && l.name === "router" && l.regexp)
+    .map((l: any) => String(l.regexp));
+  const routes = stack
+    .filter((l: any) => l && l.route && l.route.path)
+    .map((l: any) => ({
+      path: l.route.path,
+      methods: l.route.methods,
+    }));
+
+  res.json({
+    ok: true,
+    mountsCount: mounts.length,
+    mounts,
+    routesCount: routes.length,
+    routes,
+    hasTenantsMount: mounts.some((s: string) => s.includes("tenants")),
+  });
+});
+
 // API 404 handler
 app.use("/api", (_req, res) => {
   res.setHeader("x-route-source", "not-found");
