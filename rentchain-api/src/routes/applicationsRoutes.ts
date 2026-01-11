@@ -1202,37 +1202,69 @@ function handleConfirmPhoneCode(req: Request, res: Response) {
 router.patch("/applications/:id/references", (req, res) => {
   try {
     const { id } = req.params;
-    const { contacted, notes } = req.body || {};
+    const landlordId = (req as any)?.user?.landlordId || (req as any)?.user?.id || null;
+    const references = Array.isArray((req.body as any)?.references) ? (req.body as any).references : null;
+    const contacted = !!(req.body as any)?.contacted;
+    const notes = (req.body as any)?.notes ?? null;
 
-    const application = getApplicationById(id);
-    if (!application) {
-      return res.status(404).json({ error: "Application not found" });
-    }
+    if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
 
-    const contactedFlag = !!contacted;
-    const now = new Date().toISOString();
+    const snapPromise = db.collection("applications").doc(id).get();
+    let application = getApplicationById(id);
 
-    const updated = saveApplication({
-      ...application,
-      referencesContacted: contactedFlag,
-      referencesContactedAt: contactedFlag ? now : null,
-      referencesNotes: notes ?? null,
-    });
+    // Prefer Firestore (ownership enforced)
+    snapPromise
+      .then(async (snap) => {
+        const now = new Date().toISOString();
+        let updated: any = null;
 
-    recordApplicationEvent({
-      applicationId: application.id,
-      type: "references_contacted",
-      message: contactedFlag
-        ? "References contacted"
-        : "References marked not contacted",
-      actor: "landlord",
-    });
+        if (snap.exists) {
+          const data = snap.data() as any;
+          if (data?.landlordId && data.landlordId !== landlordId) {
+            return res.status(403).json({ ok: false, error: "Forbidden" });
+          }
+          updated = {
+            ...data,
+            references: references ?? data?.references ?? [],
+            referencesContacted: contacted,
+            referencesContactedAt: contacted ? now : null,
+            referencesNotes: notes,
+            updatedAt: now,
+          };
+          await db.collection("applications").doc(id).set(updated, { merge: true });
+        } else {
+          if (!application) {
+            return res.status(404).json({ ok: false, error: "Application not found" });
+          }
+          if ((application as any)?.landlordId && (application as any).landlordId !== landlordId) {
+            return res.status(403).json({ ok: false, error: "Forbidden" });
+          }
+          updated = saveApplication({
+            ...application,
+            references: references ?? application.references ?? [],
+            referencesContacted: contacted,
+            referencesContactedAt: contacted ? now : null,
+            referencesNotes: notes,
+            updatedAt: now,
+          });
+        }
 
-    return res.status(200).json(updated);
+        recordApplicationEvent({
+          applicationId: id,
+          type: "references_contacted",
+          message: contacted ? "References contacted" : "References marked not contacted",
+          actor: "landlord",
+        });
+
+        return res.status(200).json({ ok: true, application: { id, ...updated } });
+      })
+      .catch((err) => {
+        console.error("[PATCH /applications/:id/references] error", err);
+        return res.status(500).json({ ok: false, error: "Failed to update references" });
+      });
   } catch (err: any) {
-    return res
-      .status(500)
-      .json({ error: err?.message || "Failed to update references" });
+    console.error("[PATCH /applications/:id/references] crash", err);
+    return res.status(500).json({ ok: false, error: err?.message || "Failed to update references" });
   }
 });
 
