@@ -39,16 +39,23 @@ export function SendApplicationModal({ open, propertyId, unit, onClose }: Props)
         const detail = (res as any)?.detail || (res as any)?.error || "Failed to create application link";
         throw new Error(String(detail));
       }
-      const url =
+      const rawUrl =
         (res as any)?.applicationUrl ||
         (res as any)?.link ||
         (res as any)?.url ||
         (res as any)?.inviteUrl ||
         null;
-      if (!url) {
+      if (!rawUrl) {
         throw new Error("Missing application link");
       }
-      setLink(url);
+      const fullUrl = (() => {
+        try {
+          return new URL(rawUrl, window.location.origin).toString();
+        } catch {
+          return rawUrl;
+        }
+      })();
+      setLink(fullUrl);
       showToast({
         message: "Application link ready",
         description: "Share this link with the applicant.",
