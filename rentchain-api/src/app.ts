@@ -160,6 +160,27 @@ app.get("/api/_build", (req, res) => {
   });
 });
 
+app.get("/api/__debug/build", (_req, res) => {
+  res.setHeader("x-route-source", "app.ts:/api/__debug/build");
+  return res.json({
+    ok: true,
+    vercel: {
+      gitCommitSha: process.env.VERCEL_GIT_COMMIT_SHA || null,
+      deploymentId: process.env.VERCEL_DEPLOYMENT_ID || null,
+      env: process.env.VERCEL_ENV || null,
+    },
+    routeCheck: {
+      landlordApplicationLinksMounted: true,
+      mountPath: "/api/landlord/application-links",
+    },
+  });
+});
+
+app.get("/api/__debug/ping-application-links", (_req, res) => {
+  res.setHeader("x-route-source", "debugPingApplicationLinks");
+  return res.json({ ok: true });
+});
+
 app.use("/api", tenantDetailsRoutes);
 app.use("/api", paymentsRoutes);
 app.use("/api/leases", leaseRoutes);
