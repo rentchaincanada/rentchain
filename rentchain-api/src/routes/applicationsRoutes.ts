@@ -25,6 +25,7 @@ import {
   recordApplicationEvent,
   getApplicationEvents,
 } from "../services/applicationEventsService";
+import { db } from "../config/firebase";
 
 const router = Router();
 
@@ -382,8 +383,23 @@ router.use(authenticateJwt);
 /**
  * GET /api/applications
  */
-router.get("/applications", (_req, res) => {
-  return res.status(200).json(getApplications());
+router.get("/applications", async (req: any, res) => {
+  try {
+    const landlordId = req.user?.landlordId || req.user?.id || null;
+    if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+
+    const snap = await db.collection("applications").where("landlordId", "==", landlordId).limit(500).get();
+    const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as any[];
+    const toMillis = (v: any) => (v?.toMillis?.() ?? Date.parse(v || "") ?? 0);
+    items.sort((a, b) => (toMillis(b.createdAt) || 0) - (toMillis(a.createdAt) || 0));
+
+    // Fallback to in-memory if Firestore empty (legacy/demo)
+    const result = items.length ? items : getApplications();
+    return res.status(200).json(result);
+  } catch (err: any) {
+    console.error("[applications] list failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "Failed to load applications" });
+  }
 });
 
 /**
@@ -412,10 +428,18 @@ router.get("/applications/:id/pdf", async (req, res) => {
 /**
  * GET /api/applications/:id
  */
-router.get("/applications/:id", (req, res) => {
+router.get("/applications/:id", async (req, res) => {
   const { id } = req.params;
-  const app = getApplicationById(id);
+  try {
+    const snap = await db.collection("applications").doc(id).get();
+    if (snap.exists) {
+      return res.status(200).json({ id: snap.id, ...(snap.data() as any) });
+    }
+  } catch (err) {
+    console.error("[applications] get by id failed", err?.message || err);
+  }
 
+  const app = getApplicationById(id);
   if (!app) {
     return res.status(404).json({ error: "Application not found" });
   }
