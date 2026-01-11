@@ -9,6 +9,11 @@ router.get("/health", (_req, res) => {
   res.json({ ok: true, service: "rentchain-api", ts: Date.now() });
 });
 
+router.get("/__probe/version", (_req, res) => {
+  res.setHeader("x-route-source", "publicRoutes.ts");
+  res.json({ ok: true, marker: "probe-v1", ts: Date.now() });
+});
+
 router.get("/ready", (_req, res) => {
   res.setHeader("x-route-source", "publicRoutes.ts");
   res.json({ ok: true, ready: true, ts: Date.now() });
