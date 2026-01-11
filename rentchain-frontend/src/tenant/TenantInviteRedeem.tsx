@@ -14,7 +14,7 @@ export default function TenantInviteRedeem() {
     (async () => {
       try {
         setStatus("loading");
-        const res: any = await apiFetch("/api/tenant-invites/redeem", {
+        const res: any = await apiFetch("/tenant-invites/redeem", {
           method: "POST",
           body: JSON.stringify({ token }),
         });

@@ -32,7 +32,7 @@ export const InviteTenantModal: React.FC<Props> = ({
     setInviteUrl("");
     setLoading(true);
     try {
-      const data: any = await apiFetch("/api/tenant-invites", {
+      const data: any = await apiFetch("/tenant-invites", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

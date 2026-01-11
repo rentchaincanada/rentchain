@@ -10,7 +10,7 @@ export type UnitInput = {
 
 export async function fetchUnitsForProperty(propertyId: string) {
   // Primary endpoint
-  const res: any = await apiFetch(`/api/properties/${propertyId}/units`, {
+  const res: any = await apiFetch(`/properties/${propertyId}/units`, {
     method: "GET",
     allowStatuses: [404],
     suppressToasts: true,
@@ -25,14 +25,14 @@ export async function fetchUnitsForProperty(propertyId: string) {
 }
 
 export async function addUnitsManual(propertyId: string, units: UnitInput[]) {
-  return apiFetch(`/api/properties/${propertyId}/units`, {
+  return apiFetch(`/properties/${propertyId}/units`, {
     method: "POST",
     body: JSON.stringify({ units }),
   });
 }
 
 export async function updateUnit(unitId: string, payload: any) {
-  return apiFetch(`/api/units/${unitId}`, {
+  return apiFetch(`/units/${unitId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),

@@ -33,7 +33,7 @@ export async function fetchLedger(
   if (params?.tenantId) search.set("tenantId", params.tenantId);
   if (params?.propertyId) search.set("propertyId", params.propertyId);
 
-  const path = `/api/ledger${search.toString() ? `?${search.toString()}` : ""}`;
+  const path = `/ledger${search.toString() ? `?${search.toString()}` : ""}`;
   const res: any = await apiFetch(path, { method: "GET" });
 
   if (Array.isArray(res)) return res as LedgerEventStored[];
@@ -48,7 +48,7 @@ export async function fetchLedgerEvents(params?: { limit?: number; tenantId?: st
 }
 
 export async function verifyLedger(limit = 500): Promise<{ ok: boolean; checked: number; brokenAt?: string; reason?: string }> {
-  const res: any = await apiFetch(`/api/ledger/verify?limit=${limit}`, { method: "GET" });
+  const res: any = await apiFetch(`/ledger/verify?limit=${limit}`, { method: "GET" });
 
   if (res?.result) return res.result as any;
   if (res?.ok !== undefined && res?.checked !== undefined) return res as any;

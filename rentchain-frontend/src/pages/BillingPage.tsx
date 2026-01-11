@@ -29,7 +29,12 @@ const BillingPage: React.FC = () => {
       setRecords(asArray(history));
       setUsage(usageResp);
     } catch (err: any) {
-      setError(err?.message || "Failed to load billing history.");
+      const msg = String(err?.message || "");
+      if (msg.includes("404")) {
+        setError("Billing coming soon");
+      } else {
+        setError(err?.message || "Failed to load billing history.");
+      }
     } finally {
       setLoading(false);
     }

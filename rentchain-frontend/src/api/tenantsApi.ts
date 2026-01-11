@@ -30,7 +30,7 @@ export async function fetchTenants(): Promise<TenantApiModel[]> {
 
 export async function downloadTenantReport(tenantId: string): Promise<any> {
   // Uses landlord-protected JSON endpoint; backend currently returns JSON report.
-  return apiFetch(`/api/tenants/${tenantId}/report`, { method: "GET" });
+  return apiFetch(`/tenants/${tenantId}/report`, { method: "GET" });
 }
 
 export async function impersonateTenant(tenantId: string): Promise<{ ok: boolean; token: string; tenantId: string; exp?: number }> {

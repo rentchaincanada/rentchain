@@ -12,17 +12,17 @@ async function apiFetch(path: string, init?: RequestInit) {
 }
 
 export async function tenantMe() {
-  return apiFetch("/api/tenant/me");
+  return apiFetch("/tenant/me");
 }
 
 export async function tenantLease() {
-  return apiFetch("/api/tenant/lease");
+  return apiFetch("/tenant/lease");
 }
 
 export async function tenantPayments() {
-  return apiFetch("/api/tenant/payments");
+  return apiFetch("/tenant/payments");
 }
 
 export async function tenantLedger() {
-  return apiFetch("/api/tenant/ledger");
+  return apiFetch("/tenant/ledger");
 }

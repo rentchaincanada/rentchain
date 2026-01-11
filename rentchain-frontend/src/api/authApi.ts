@@ -156,7 +156,7 @@ export async function trustDevice(code: string, deviceName?: string): Promise<Tr
 }
 
 export async function disable2fa(code: string): Promise<Disable2faResponse> {
-  return apiFetch<Disable2faResponse>("/api/auth/2fa/disable", {
+  return apiFetch<Disable2faResponse>("/auth/2fa/disable", {
     method: "POST",
     token: getAuthToken() ?? undefined,
     headers: { "Content-Type": "application/json" },
@@ -165,7 +165,7 @@ export async function disable2fa(code: string): Promise<Disable2faResponse> {
 }
 
 export async function getCurrentUser(token: string): Promise<MeResponse> {
-  const res = await fetch(resolveApiUrl("/api/auth/me"), {
+  const res = await fetch(resolveApiUrl("/auth/me"), {
     method: "GET",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -194,7 +194,7 @@ export async function restoreSession(): Promise<{ user: any | null }> {
 
   try {
     // Prefer auth/me which returns the decoded token payload
-    const authMe = await apiFetch<{ ok?: boolean; user?: AuthUser }>("/api/auth/me");
+    const authMe = await apiFetch<{ ok?: boolean; user?: AuthUser }>("/auth/me");
     if (authMe?.user) {
       return { user: authMe.user };
     }

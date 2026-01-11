@@ -4,7 +4,7 @@ export async function joinWaitlist(email: string, meta?: Record<string, any>) {
   const cleanEmail = String(email || "").trim().toLowerCase();
   if (!cleanEmail) throw new Error("EMAIL_REQUIRED");
 
-  return apiFetch("/api/waitlist", {
+  return apiFetch("/waitlist", {
     method: "POST",
     body: JSON.stringify({
       email: cleanEmail,

@@ -21,7 +21,7 @@ export type TenantEvent = {
 
 export async function getTenantEvents(limit = 25): Promise<TenantEvent[]> {
   try {
-    const res: any = await apiFetch(`/api/tenant/events?limit=${limit}`, { method: "GET" });
+    const res: any = await apiFetch(`/tenant/events?limit=${limit}`, { method: "GET" });
 
     if (!res) return [];
     if (Array.isArray(res)) return res as TenantEvent[];
