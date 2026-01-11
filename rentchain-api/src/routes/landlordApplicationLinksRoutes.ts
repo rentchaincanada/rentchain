@@ -15,7 +15,7 @@ async function ensurePropertyOwned(propertyId: string, landlordId: string) {
   return { ok: true as const, data };
 }
 
-router.post("/application-links", authenticateJwt, async (req: any, res) => {
+router.post("/", authenticateJwt, async (req: any, res) => {
   res.setHeader("x-route-source", "landlordApplicationLinksRoutes");
   try {
     const role = String(req.user?.role || "");
@@ -61,8 +61,7 @@ router.post("/application-links", authenticateJwt, async (req: any, res) => {
       isActive: true,
     });
 
-    const baseUrl = (process.env.PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
-    const applicationUrl = `${baseUrl}/apply/${encodeURIComponent(token)}`;
+    const applicationUrl = `/apply/${encodeURIComponent(token)}`;
 
     return res.json({
       ok: true,
