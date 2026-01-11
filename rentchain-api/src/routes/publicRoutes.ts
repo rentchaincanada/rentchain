@@ -1,6 +1,9 @@
 import { Router, Request, Response } from "express";
 import { db } from "../firebase";
 import { sendWaitlistConfirmation } from "../services/emailService";
+import { authenticateJwt } from "../middleware/authMiddleware";
+import { requireLandlord } from "../middleware/requireLandlord";
+import { getTenantsList, getTenantDetailBundle } from "../services/tenantDetailsService";
 
 const router = Router();
 
@@ -12,6 +15,14 @@ router.get("/health", (_req, res) => {
 router.get("/__probe/version", (_req, res) => {
   res.setHeader("x-route-source", "publicRoutes.ts");
   res.json({ ok: true, marker: "probe-v1", ts: Date.now() });
+});
+
+router.get("/__probe/routes-lite", (_req, res) => {
+  res.setHeader("x-route-source", "publicRoutes.ts");
+  return res.json({
+    ok: true,
+    routes: ["/__probe/version", "/tenants", "/tenants/:tenantId"],
+  });
 });
 
 router.get("/ready", (_req, res) => {
@@ -142,6 +153,37 @@ router.get("/waitlist/health", (_req, res) => {
       SENDGRID_KEY: Boolean(process.env.SENDGRID_KEY),
     },
   });
+});
+
+// Landlord-scoped tenants bridge (mounted under /api via publicRoutes)
+router.get("/tenants", authenticateJwt, requireLandlord, async (req: any, res) => {
+  const landlordId = req.user?.landlordId || req.user?.id || null;
+  if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+
+  try {
+    const tenants = await getTenantsList({ landlordId });
+    return res.status(200).json({ ok: true, tenants });
+  } catch (err: any) {
+    console.error("[publicRoutes] GET /tenants error", err);
+    return res.status(500).json({ ok: false, error: "Failed to load tenants" });
+  }
+});
+
+router.get("/tenants/:tenantId", authenticateJwt, requireLandlord, async (req: any, res) => {
+  const landlordId = req.user?.landlordId || req.user?.id || null;
+  if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+
+  const tenantId = String(req.params?.tenantId || "").trim();
+  if (!tenantId) return res.status(400).json({ ok: false, error: "tenantId is required" });
+
+  try {
+    const bundle = await getTenantDetailBundle(tenantId, { landlordId });
+    if (!bundle?.tenant) return res.status(404).json({ ok: false, error: "Tenant not found" });
+    return res.status(200).json({ ok: true, ...bundle });
+  } catch (err: any) {
+    console.error("[publicRoutes] GET /tenants/:tenantId error", err);
+    return res.status(500).json({ ok: false, error: "Failed to load tenant" });
+  }
 });
 
 export default router;
