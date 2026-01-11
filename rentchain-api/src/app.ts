@@ -165,8 +165,12 @@ app.use("/api", paymentsRoutes);
 app.use("/api/leases", leaseRoutes);
 app.use("/api", tenantOnboardRoutes);
 app.use("/api/events", eventsRoutes);
+app.use(
+  "/api/landlord/application-links",
+  routeSource("landlordApplicationLinksRoutes.ts"),
+  landlordApplicationLinksRoutes
+);
 app.use("/api/landlord", landlordMicroLiveRoutes);
-app.use("/api/landlord", routeSource("landlordApplicationLinksRoutes.ts"), landlordApplicationLinksRoutes);
 app.use("/api/tenants", tenantsRoutes);
 app.use("/api/account", accountRoutes);
 
