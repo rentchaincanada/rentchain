@@ -1,10 +1,13 @@
 import { getApiBaseUrl } from "./baseUrl";
 
-const raw = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
-export const API_HOST = raw;
-export const API_BASE_URL = import.meta.env.PROD ? "" : raw;
+const host = getApiBaseUrl();
+export const API_HOST = host;
+export const API_BASE_URL = host ? `${host.replace(/\/$/, "")}/api` : "";
 
 export function apiUrl(path: string) {
   const p = path.startsWith("/") ? path : `/${path}`;
-  return raw ? `${raw}${p}` : p;
+  if (!API_BASE_URL) {
+    throw new Error("API_BASE_URL is not configured");
+  }
+  return `${API_BASE_URL}${p}`;
 }

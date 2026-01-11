@@ -64,6 +64,8 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
     p = `/api${stripApi.startsWith("/") ? "" : "/"}${stripApi}`;
   }
 
+  const url = resolveApiUrl(p);
+
   const token = getAuthToken();
   const headers = new Headers(init.headers || {});
   headers.set("Accept", "application/json");
@@ -74,7 +76,7 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   }
-  const res = await fetch(p, { ...init, headers, credentials: "include" });
+  const res = await fetch(url, { ...init, headers, credentials: "include" });
 
   const ct = res.headers.get("content-type") || "";
   const isJson = ct.includes("application/json");

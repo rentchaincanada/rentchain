@@ -46,6 +46,15 @@ export async function apiFetch<T = any>(
   path: string,
   init: ApiFetchInit = {}
 ): Promise<T> {
+  if (!API_BASE_URL) {
+    throw new Error("API_BASE_URL is not configured");
+  }
+  const base = API_BASE_URL.replace(/\/$/, "");
+  if (!(apiFetch as any)._loggedBase) {
+    console.log("[apiFetch] API base:", base);
+    (apiFetch as any)._loggedBase = true;
+  }
+
   const token =
     sessionStorage.getItem("rentchain_token") ||
     sessionStorage.getItem("rentchain_tenant_token") ||
@@ -54,13 +63,14 @@ export async function apiFetch<T = any>(
 
   const normalizedPath = (() => {
     if (path.startsWith("http")) return path;
-    if (path.startsWith("/api/")) return path;
-    return `/api${path.startsWith("/") ? "" : "/"}${path}`;
+    let p = path;
+    if (p.startsWith("/api/")) p = p.slice(4);
+    else if (p.startsWith("api/")) p = p.slice(3);
+    p = p.startsWith("/") ? p : `/${p}`;
+    return `${base}${p}`;
   })();
 
-  const url = normalizedPath.startsWith("http")
-    ? normalizedPath
-    : `${API_BASE_URL}${normalizedPath.startsWith("/") ? "" : "/"}${normalizedPath}`;
+  const url = normalizedPath;
 
   const { allowStatuses, allow404, suppressToasts, ...fetchInit } = init;
 
