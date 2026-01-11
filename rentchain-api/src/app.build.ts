@@ -151,6 +151,9 @@ app.use("/api", tenantOnboardRoutes);
 app.use("/api/events", eventsRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/landlord", landlordMicroLiveRoutes);
+app.get("/api/__probe/tenants-mount", (_req, res) =>
+  res.json({ ok: true, probe: "tenants-mount", ts: Date.now() })
+);
 app.use("/api/tenants", routeSource("tenantsRoutes.ts"), tenantsRoutes);
 app.use("/api/account", accountRoutes);
 app.use("/api/onboarding", onboardingRoutes);

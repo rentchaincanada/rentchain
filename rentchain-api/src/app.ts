@@ -197,6 +197,9 @@ app.use(
   landlordApplicationLinksRoutes
 );
 app.use("/api/landlord", landlordMicroLiveRoutes);
+app.get("/api/__probe/tenants-mount", (_req, res) =>
+  res.json({ ok: true, probe: "tenants-mount", ts: Date.now() })
+);
 app.use("/api/tenants", routeSource("tenantsRoutes.ts"), tenantsRoutes);
 app.use("/api/account", accountRoutes);
 
