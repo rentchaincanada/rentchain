@@ -116,6 +116,11 @@ app.use("/api", compatRoutes);
 app.use("/api", routeSource("unitsRoutes.ts"), unitsRoutes);
 app.use("/api/ledger", ledgerRoutes);
 app.use("/api/dashboard", routeSource("dashboardRoutes.ts"), dashboardRoutes);
+app.use(
+  "/api/landlord/application-links",
+  routeSource("landlordApplicationLinksRoutes.ts"),
+  landlordApplicationLinksRoutes
+);
 app.use("/api/tenant-invites", tenantInvitesRoutes);
 app.use("/api/tenant", tenantPortalRoutes);
 app.use("/api", routeSource("tenantInviteAliasesRoutes"), tenantInviteAliasesRoutes);
@@ -137,11 +142,6 @@ app.use("/api", reportsExportRoutes);
 app.use("/api", stubsRoutes);
 app.use("/api/admin", routeSource("adminBootstrapRoutes"), adminBootstrapRoutes);
 app.use("/api/admin", routeSource("adminPropertiesRoutes.ts"), adminPropertiesRoutes);
-app.use(
-  "/api/landlord/application-links",
-  routeSource("landlordApplicationLinksRoutes.ts"),
-  landlordApplicationLinksRoutes
-);
 
 // Core APIs
 app.use("/api", tenantDetailsRoutes);

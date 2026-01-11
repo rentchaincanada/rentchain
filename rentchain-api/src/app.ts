@@ -117,6 +117,11 @@ app.use("/api/reporting", reportingRoutes);
 app.use("/api", compatRoutes);
 app.use("/api/ledger", ledgerRoutes);
 app.use("/api/dashboard", routeSource("dashboardRoutes.ts"), dashboardRoutes);
+app.use(
+  "/api/landlord/application-links",
+  routeSource("landlordApplicationLinksRoutes.ts"),
+  landlordApplicationLinksRoutes
+);
 app.use("/api/tenant-invites", tenantInvitesRoutes);
 app.use("/api", routeSource("unitsRoutes.ts"), unitsRoutes);
 app.use("/api/tenant", tenantPortalRoutes);
