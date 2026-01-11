@@ -194,6 +194,22 @@ router.post("/redeem", async (req: any, res) => {
     .digest("hex")
     .slice(0, 24);
 
+  // Resolve property/unit/lease from existing tenant record if invite lacks them
+  let resolvedPropertyId = invite.propertyId || null;
+  let resolvedUnitId = invite.unitId || null;
+  let resolvedLeaseId = invite.leaseId || null;
+  try {
+    const tenantSnap = await db.collection("tenants").doc(tenantId).get();
+    if (tenantSnap.exists) {
+      const t = tenantSnap.data() as any;
+      resolvedPropertyId = resolvedPropertyId || t?.propertyId || null;
+      resolvedUnitId = resolvedUnitId || t?.unitId || t?.unit || null;
+      resolvedLeaseId = resolvedLeaseId || t?.leaseId || null;
+    }
+  } catch (err) {
+    console.warn("[tenant-invites] resolve tenant doc failed", err);
+  }
+
   await db
     .collection("tenants")
     .doc(tenantId)
@@ -203,9 +219,9 @@ router.post("/redeem", async (req: any, res) => {
         landlordId: invite.landlordId,
         email: invite.tenantEmail,
         fullName: invite.tenantName || null,
-        propertyId: invite.propertyId || null,
-        unitId: invite.unitId || null,
-        leaseId: invite.leaseId || null,
+        propertyId: resolvedPropertyId,
+        unitId: resolvedUnitId,
+        leaseId: resolvedLeaseId,
         createdAt: Date.now(),
         source: "invite",
       },
@@ -227,9 +243,9 @@ router.post("/redeem", async (req: any, res) => {
     tenantId,
     landlordId: invite.landlordId,
     email: invite.tenantEmail,
-    propertyId: invite.propertyId || null,
-    unitId: invite.unitId || null,
-    leaseId: invite.leaseId || null,
+    propertyId: resolvedPropertyId,
+    unitId: resolvedUnitId,
+    leaseId: resolvedLeaseId,
   });
 
   return res.json({
@@ -238,9 +254,9 @@ router.post("/redeem", async (req: any, res) => {
     tenant: {
       id: tenantId,
       email: invite.tenantEmail,
-      propertyId: invite.propertyId || null,
-      unitId: invite.unitId || null,
-      leaseId: invite.leaseId || null,
+      propertyId: resolvedPropertyId,
+      unitId: resolvedUnitId,
+      leaseId: resolvedLeaseId,
     },
   });
 });

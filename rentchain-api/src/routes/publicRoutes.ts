@@ -268,24 +268,30 @@ router.get("/landlord/messages/conversations", authenticateJwt, requireLandlord,
   res.setHeader("x-route-source", "publicRoutes.ts");
   const landlordId = req.user?.landlordId || req.user?.id;
   try {
-    const snap = await db
-      .collection("conversations")
-      .where("landlordId", "==", landlordId)
-      .orderBy("lastMessageAt", "desc")
-      .limit(100)
-      .get();
+    const snap = await db.collection("conversations").where("landlordId", "==", landlordId).get();
 
-    const items = snap.docs.map(normalizeConversation).map((c: any) => ({
+    const items = snap.docs.map(normalizeConversation);
+    items.sort((a: any, b: any) => {
+      const aKey = a.lastMessageAt || a.createdAt || 0;
+      const bKey = b.lastMessageAt || b.createdAt || 0;
+      return (bKey as number) - (aKey as number);
+    });
+
+    const withUnread = items.map((c: any) => ({
       ...c,
       hasUnread:
         c.lastMessageAt != null &&
         (c.lastReadAtLandlord == null || c.lastMessageAt > c.lastReadAtLandlord),
     }));
 
-    return res.json({ ok: true, conversations: items });
+    return res.json({ ok: true, conversations: withUnread });
   } catch (err: any) {
     console.error("[publicRoutes] landlord conversations error", err);
-    return res.status(500).json({ ok: false, error: "Failed to list conversations" });
+    return res.status(500).json({
+      ok: false,
+      error: "Failed to list conversations",
+      detail: err?.message || String(err),
+    });
   }
 });
 
@@ -378,6 +384,7 @@ router.get("/tenant/messages/conversation", authenticateJwt, requireTenant, asyn
         tenantId: ctx.tenantId,
         unitId: ctx.unitId || null,
         createdAt: FieldValue.serverTimestamp(),
+        createdAtMs: Date.now(),
         lastMessageAt: null,
         lastReadAtLandlord: null,
         lastReadAtTenant: null,
