@@ -34,8 +34,9 @@ export function resolveApiUrl(input: string) {
 
   const [pathPart, queryPart] = sRaw.split("?");
   const path = pathPart.startsWith("/") ? pathPart : `/${pathPart}`;
-  const normalized = path.startsWith("/api/") ? path : `/api${path}`;
-  const url = `${base}${normalized}${queryPart ? `?${queryPart}` : ""}`;
+  const stripApi = path.startsWith("/api/") ? path.slice(4) : path;
+  const normalized = stripApi.startsWith("/") ? stripApi : `/${stripApi}`;
+  const url = `${base}/api${normalized}${queryPart ? `?${queryPart}` : ""}`;
 
   if (
     import.meta.env.DEV &&
