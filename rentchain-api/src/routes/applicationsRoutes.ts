@@ -537,101 +537,121 @@ router.get("/applications/:id/timeline", async (req: any, res: Response) => {
  * PATCH /api/applications/:id
  * Update editable application details (names, dates, addresses, consent).
  */
-router.patch("/applications/:id", (req, res) => {
-  const { id } = req.params;
-  const existing = getApplicationById(id);
+router.patch("/applications/:id", async (req: any, res) => {
+  try {
+    const { id } = req.params;
+    const landlordId = req.user?.landlordId || req.user?.id || null;
+    if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
 
-  if (!existing) {
-    return res.status(404).json({ error: "Application not found" });
-  }
+    const body = req.body || {};
+    const now = new Date().toISOString();
 
-  const body = req.body as Partial<Application>;
-  const updated: Application = {
-    ...existing,
-    leaseStartDate:
-      body.leaseStartDate !== undefined
-        ? trimValue(body.leaseStartDate) || null
-        : existing.leaseStartDate,
-    unitApplied:
-      body.unitApplied !== undefined
-        ? trimValue(body.unitApplied)
-        : existing.unitApplied || existing.unit,
-    dateOfBirth:
-      body.dateOfBirth !== undefined
-        ? trimValue(body.dateOfBirth) || ""
-        : trimValue(existing.dateOfBirth) || "",
-    consentCreditCheck:
-      body.consentCreditCheck !== undefined
-        ? !!body.consentCreditCheck
-        : existing.consentCreditCheck === true,
-    sinProvided:
-      body.sinProvided !== undefined
-        ? body.sinProvided
-        : existing.sinProvided ?? false,
-    sinLast4:
-      body.sinLast4 !== undefined
-        ? trimValue(body.sinLast4) || null
-        : existing.sinLast4 ?? null,
-  };
+    const applyPatch = (current: any) => {
+      const next = { ...current };
 
-  if (body.firstName !== undefined) {
-    updated.firstName = trimValue(body.firstName);
-  }
-  if (body.middleName !== undefined) {
-    updated.middleName = trimValue(body.middleName) || null;
-  }
-  if (body.lastName !== undefined) {
-    updated.lastName = trimValue(body.lastName);
-  }
-  if (body.email !== undefined) {
-    const nextEmail = trimValue(body.email);
-    updated.email = nextEmail;
-    updated.applicantEmail = nextEmail;
-  }
+      const has = (key: string) => Object.prototype.hasOwnProperty.call(body, key);
+      const trimOrNull = (v: any) => (v === null ? null : trimValue(v) || null);
 
-  if (body.recentAddress) {
-    updated.recentAddress = {
-      ...existing.recentAddress,
-      ...body.recentAddress,
+      const directFields = [
+        "unitApplied",
+        "unit",
+        "leaseStartDate",
+        "firstName",
+        "middleName",
+        "lastName",
+        "dateOfBirth",
+        "email",
+        "applicantEmail",
+        "phone",
+        "applicantPhone",
+        "notes",
+        "sinProvided",
+        "sinLast4",
+      ];
+
+      directFields.forEach((field) => {
+        if (has(field)) {
+          const val = body[field];
+          if (field === "middleName") next[field] = trimOrNull(val);
+          else if (field === "sinLast4") next[field] = trimOrNull(val);
+          else if (field === "sinProvided") next[field] = !!val;
+          else next[field] = trimOrNull(val) ?? val ?? null;
+        }
+      });
+
+      if (has("consentCreditCheck")) {
+        next.consentCreditCheck = !!body.consentCreditCheck;
+      }
+
+      const addrFields = ["streetNumber", "streetName", "city", "province", "postalCode"];
+      const hasAddrField = addrFields.some((k) => has(k));
+      if (hasAddrField) {
+        const currentAddr = next.recentAddress || {};
+        const patchedAddr: any = { ...currentAddr };
+        if (has("streetNumber")) patchedAddr.streetNumber = trimOrNull(body.streetNumber);
+        if (has("streetName")) patchedAddr.streetName = trimOrNull(body.streetName);
+        if (has("city")) patchedAddr.city = trimOrNull(body.city);
+        if (has("province")) patchedAddr.province = trimOrNull(body.province);
+        if (has("postalCode")) patchedAddr.postalCode = trimOrNull(body.postalCode);
+        next.recentAddress = patchedAddr;
+      } else if (body.recentAddress) {
+        next.recentAddress = {
+          ...next.recentAddress,
+          ...body.recentAddress,
+        };
+      }
+
+      if (has("firstName") || has("middleName") || has("lastName")) {
+        const recomposed = [
+          trimValue(next.firstName),
+          trimValue(next.middleName ?? undefined),
+          trimValue(next.lastName),
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .trim();
+        if (recomposed) next.fullName = recomposed;
+      }
+
+      if (has("email")) {
+        const nextEmail = trimValue(body.email);
+        if (nextEmail) {
+          next.email = nextEmail;
+          next.applicantEmail = nextEmail;
+        }
+      }
+
+      next.updatedAt = now;
+      return next;
     };
-    updated.recentAddress.streetNumber = trimValue(
-      updated.recentAddress.streetNumber
-    );
-    updated.recentAddress.streetName = trimValue(
-      updated.recentAddress.streetName
-    );
-    updated.recentAddress.city = trimValue(updated.recentAddress.city);
-    updated.recentAddress.province = trimValue(updated.recentAddress.province);
-    updated.recentAddress.postalCode = trimValue(
-      updated.recentAddress.postalCode
-    );
-  }
 
-  if (body.primaryAddress) {
-    updated.primaryAddress = {
-      ...existing.primaryAddress,
-      ...body.primaryAddress,
-    };
-  }
+    const snap = await db.collection("applications").doc(id).get();
+    if (snap.exists) {
+      const current = { id: snap.id, ...(snap.data() as any) };
+      if (current.landlordId && current.landlordId !== landlordId) {
+        return res.status(403).json({ ok: false, error: "Forbidden" });
+      }
 
-  if (
-    body.firstName !== undefined ||
-    body.middleName !== undefined ||
-    body.lastName !== undefined
-  ) {
-    const recomposed = [
-      trimValue(updated.firstName),
-      trimValue(updated.middleName ?? undefined),
-      trimValue(updated.lastName),
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .trim();
-    updated.fullName = recomposed || existing.fullName;
-  }
+      const next = applyPatch(current);
+      await db.collection("applications").doc(id).set(next, { merge: true });
+      return res.status(200).json({ ok: true, application: next });
+    }
 
-  const saved = saveApplication(updated);
-  return res.status(200).json(saved);
+    const existing = getApplicationById(id);
+    if (!existing) {
+      return res.status(404).json({ ok: false, error: "Application not found" });
+    }
+    if ((existing as any)?.landlordId && (existing as any).landlordId !== landlordId) {
+      return res.status(403).json({ ok: false, error: "Forbidden" });
+    }
+
+    const updated = applyPatch(existing);
+    const saved = saveApplication(updated);
+    return res.status(200).json({ ok: true, application: saved });
+  } catch (err: any) {
+    console.error("[PATCH /applications/:id] error", err);
+    return res.status(500).json({ ok: false, error: "Failed to update application" });
+  }
 });
 
 /**
