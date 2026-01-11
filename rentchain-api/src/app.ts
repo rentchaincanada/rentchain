@@ -49,6 +49,7 @@ import adminPropertiesRoutes from "./routes/adminPropertiesRoutes";
 import ledgerRoutes from "./routes/ledgerRoutes";
 import landlordApplicationLinksRoutes from "./routes/landlordApplicationLinksRoutes";
 import publicApplicationLinksRoutes from "./routes/publicApplicationLinksRoutes";
+import messagesRoutes from "./routes/messagesRoutes";
 import tenantsRoutes from "./routes/tenantsRoutes";
 
 const app: Application = express();
@@ -205,6 +206,7 @@ app.get("/api/__probe/version", (_req, res) =>
 );
 app.use("/api/tenants", routeSource("tenantsRoutes.ts"), tenantsRoutes);
 app.use("/api/account", accountRoutes);
+app.use("/api", routeSource("messagesRoutes.ts"), messagesRoutes);
 
 process.on("unhandledRejection", (reason) => {
   console.error("[FATAL] unhandledRejection", reason);
