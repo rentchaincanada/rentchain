@@ -8,7 +8,6 @@ import { notFoundHandler, errorHandler } from "./middleware/errorHandler";
 import publicRoutes from "./routes/publicRoutes";
 import authRoutes from "./routes/authRoutes";
 
-import tenantDetailsRoutes from "./routes/tenantDetailsRoutes";
 import paymentsRoutes from "./routes/paymentsRoutes";
 import applicationsRoutes from "./routes/applicationsRoutes";
 import applicationsConversionRoutes from "./routes/applicationsConversionRoutes";
@@ -46,13 +45,13 @@ import actionRequestsRoutes from "./routes/actionRequestsRoutes";
 import adminDemoRoutes from "./routes/adminDemoRoutes";
 import authzRoutes from "./routes/authzRoutes";
 import reportsExportRoutes from "./routes/reportsExportRoutes";
-import tenantsRoutes from "./routes/tenants";
 import compatRoutes from "./routes/compatRoutes";
 import unitsRoutes from "./routes/unitsRoutes";
 import adminPropertiesRoutes from "./routes/adminPropertiesRoutes";
 import ledgerRoutes from "./routes/ledgerRoutes";
 import landlordApplicationLinksRoutes from "./routes/landlordApplicationLinksRoutes";
 import publicApplicationLinksRoutes from "./routes/publicApplicationLinksRoutes";
+import tenantsRoutes from "./routes/tenantsRoutes";
 
 process.on("unhandledRejection", (reason) => {
   console.error("[FATAL] unhandledRejection", reason);
@@ -146,14 +145,13 @@ app.use("/api/admin", routeSource("adminBootstrapRoutes"), adminBootstrapRoutes)
 app.use("/api/admin", routeSource("adminPropertiesRoutes.ts"), adminPropertiesRoutes);
 
 // Core APIs
-app.use("/api", tenantDetailsRoutes);
 app.use("/api", paymentsRoutes);
 app.use("/api/leases", leaseRoutes);
 app.use("/api", tenantOnboardRoutes);
 app.use("/api/events", eventsRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/landlord", landlordMicroLiveRoutes);
-app.use("/api/tenants", tenantsRoutes);
+app.use("/api/tenants", routeSource("tenantsRoutes.ts"), tenantsRoutes);
 app.use("/api/account", accountRoutes);
 app.use("/api/onboarding", onboardingRoutes);
 app.use("/api/billing", billingRoutes);

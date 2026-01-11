@@ -53,8 +53,10 @@ export async function convertApplicationToTenant(params: {
   }
 
   const tenantId = crypto.randomUUID();
-  addConvertedTenant({
+  const createdAt = Date.now();
+  const tenantRecord = {
     id: tenantId,
+    landlordId: params.landlordId,
     fullName:
       application.applicantFullName ||
       application.fullName ||
@@ -62,15 +64,27 @@ export async function convertApplicationToTenant(params: {
     email: application.applicantEmail ?? application.email ?? null,
     phone: application.applicantPhone ?? application.phone ?? null,
     propertyName: application.propertyName ?? null,
-    propertyId: application.propertyId,
+    propertyId: application.propertyId ?? null,
+    unitId: application.unitApplied ?? application.unit ?? null,
     unit: application.unitApplied ?? application.unit ?? null,
     leaseStart: application.leaseStartDate ?? application.moveInDate ?? null,
     leaseEnd: null,
     monthlyRent: application.requestedRent ?? null,
-    status: "Active",
+    status: "active",
     balance: 0,
     riskLevel: "Low",
-  });
+    source: "application_conversion",
+    applicationId: application.id,
+    createdAt,
+  };
+
+  addConvertedTenant(tenantRecord);
+
+  try {
+    await db.collection("tenants").doc(tenantId).set(tenantRecord, { merge: true });
+  } catch (err) {
+    console.error("[applicationConversion] failed to persist tenant", err);
+  }
 
   if (application.propertyId && application.unitApplied) {
     const property = propertyService.getById(application.propertyId);

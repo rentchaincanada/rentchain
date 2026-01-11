@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import API_BASE from "../config/apiBase";
+import { apiJson } from "@/lib/apiClient";
 
 export type TenantPayment = {
   id: string;
@@ -37,17 +37,9 @@ export function useTenantPayments(tenantId: string | null): UseTenantPaymentsRes
         setLoading(true);
         setError(null);
 
-        const base = API_BASE.replace(/\/$/, "");
-        const res = await fetch(`${base}/api/tenants/${tenantId}/payments`);
-
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`);
-        }
-
-        const json = (await res.json()) as TenantPayment[];
-
+        const payments = await apiJson<TenantPayment[]>(`/tenants/${tenantId}/payments`);
         if (!cancelled) {
-          setData(json);
+          setData(payments);
         }
       } catch (err: any) {
         if (!cancelled) {

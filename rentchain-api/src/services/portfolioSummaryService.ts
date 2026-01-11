@@ -37,7 +37,7 @@ export async function getPortfolioSnapshot(
       0
     );
 
-  const tenants = await getTenantsList();
+  const tenants = await getTenantsList({ landlordId });
   const ledgerAnomalies: string[] = [];
   let overdueTenants = 0;
   const now = new Date();

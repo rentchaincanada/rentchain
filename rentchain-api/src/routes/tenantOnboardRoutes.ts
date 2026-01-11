@@ -14,6 +14,8 @@ const router = Router();
  */
 router.post("/tenants/onboard", async (req, res) => {
   try {
+    const landlordId =
+      (req as any)?.user?.landlordId || (req as any)?.user?.id || null;
     const {
       fullName,
       email,
@@ -33,8 +35,10 @@ router.post("/tenants/onboard", async (req, res) => {
     const tenantId = uuidv4();
 
     // Tenant record
+    const createdAt = Date.now();
     const tenantRecord = {
       id: tenantId,
+      landlordId,
       fullName,
       email: email ?? null,
       phone: phone ?? null,
@@ -42,8 +46,8 @@ router.post("/tenants/onboard", async (req, res) => {
       propertyName,
       unit,
       balance: 0,
-      status: "Active",
-      createdAt: new Date().toISOString(),
+      status: "active",
+      createdAt,
       sourceApplication: applicationId ?? null,
     };
 

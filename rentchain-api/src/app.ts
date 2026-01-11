@@ -11,7 +11,6 @@ import "./types/auth";
 import "./types/http";
 import { authenticateJwt } from "./middleware/authMiddleware";
 import authRoutes from "./routes/authRoutes";
-import tenantDetailsRoutes from "./routes/tenantDetailsRoutes";
 import paymentsRoutes from "./routes/paymentsRoutes";
 import applicationsRoutes from "./routes/applicationsRoutes";
 import applicationsConversionRoutes from "./routes/applicationsConversionRoutes";
@@ -43,7 +42,6 @@ import adminDemoRoutes from "./routes/adminDemoRoutes";
 import authzRoutes from "./routes/authzRoutes";
 import reportsExportRoutes from "./routes/reportsExportRoutes";
 import propertiesRoutes from "./routes/propertiesRoutes";
-import tenantsRoutes from "./routes/tenants";
 import accountRoutes from "./routes/accountRoutes";
 import compatRoutes from "./routes/compatRoutes";
 import unitsRoutes from "./routes/unitsRoutes";
@@ -51,6 +49,7 @@ import adminPropertiesRoutes from "./routes/adminPropertiesRoutes";
 import ledgerRoutes from "./routes/ledgerRoutes";
 import landlordApplicationLinksRoutes from "./routes/landlordApplicationLinksRoutes";
 import publicApplicationLinksRoutes from "./routes/publicApplicationLinksRoutes";
+import tenantsRoutes from "./routes/tenantsRoutes";
 
 const app: Application = express();
 app.set("etag", false);
@@ -188,7 +187,6 @@ app.get("/api/__debug/ping-application-links", (_req, res) => {
   return res.json({ ok: true });
 });
 
-app.use("/api", tenantDetailsRoutes);
 app.use("/api", paymentsRoutes);
 app.use("/api/leases", leaseRoutes);
 app.use("/api", tenantOnboardRoutes);
@@ -199,7 +197,7 @@ app.use(
   landlordApplicationLinksRoutes
 );
 app.use("/api/landlord", landlordMicroLiveRoutes);
-app.use("/api/tenants", tenantsRoutes);
+app.use("/api/tenants", routeSource("tenantsRoutes.ts"), tenantsRoutes);
 app.use("/api/account", accountRoutes);
 
 process.on("unhandledRejection", (reason) => {

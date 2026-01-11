@@ -3,9 +3,12 @@ import { db } from "../config/firebase";
 
 export interface TenantRecord {
   id: string;
+  landlordId?: string | null;
   fullName: string;
   email?: string;
   phone?: string;
+  propertyId?: string | null;
+  unitId?: string | null;
   propertyName?: string;
   unit?: string;
   leaseStart?: string;
@@ -14,6 +17,7 @@ export interface TenantRecord {
   status?: string;
   balance?: number;
   riskLevel?: string;
+  createdAt?: string | number | null;
 }
 
 export interface TenantLease {
@@ -93,6 +97,52 @@ const FALLBACK_TENANTS: TenantRecord[] = [
 
 const CONVERTED_TENANTS: TenantRecord[] = [];
 
+type TenantQueryOptions = {
+  landlordId?: string | null;
+};
+
+function toMillis(value: any): number | null {
+  if (!value) return null;
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    const ts = Date.parse(value);
+    return Number.isNaN(ts) ? null : ts;
+  }
+  if (typeof value?.toMillis === "function") return value.toMillis();
+  if (typeof value?.seconds === "number") return value.seconds * 1000;
+  return null;
+}
+
+function mapTenant(docId: string, data: any): TenantRecord {
+  const createdAt = data.createdAt ?? data.created_at ?? null;
+  const createdAtMs = toMillis(createdAt);
+  const createdAtIso =
+    typeof createdAt === "string"
+      ? createdAt
+      : createdAtMs
+      ? new Date(createdAtMs).toISOString()
+      : null;
+
+  return {
+    id: docId,
+    landlordId: data.landlordId ?? null,
+    fullName: data.fullName ?? data.name ?? "Unnamed Tenant",
+    email: data.email ?? null,
+    phone: data.phone ?? null,
+    propertyId: data.propertyId ?? null,
+    unitId: data.unitId ?? data.unit ?? null,
+    propertyName: data.propertyName ?? data.property ?? null,
+    unit: data.unit ?? data.unitLabel ?? null,
+    leaseStart: data.leaseStart ?? null,
+    leaseEnd: data.leaseEnd ?? null,
+    monthlyRent: data.monthlyRent ?? null,
+    status: data.status ?? "Current",
+    balance: data.balance ?? 0,
+    riskLevel: data.riskLevel ?? "Low",
+    createdAt: createdAtIso ?? createdAt ?? null,
+  };
+}
+
 export function addConvertedTenant(tenant: TenantRecord): void {
   CONVERTED_TENANTS.push(tenant);
 }
@@ -101,39 +151,40 @@ export function addConvertedTenant(tenant: TenantRecord): void {
  * List tenants for the sidebar.
  * Tries Firestore `tenants` collection, falls back to in-memory list.
  */
-export async function getTenantsList(): Promise<TenantRecord[]> {
-  try {
-    const snap = await db.collection("tenants").get();
+export async function getTenantsList(
+  opts: TenantQueryOptions = {}
+): Promise<TenantRecord[]> {
+  const landlordId = opts.landlordId?.trim?.() ? String(opts.landlordId).trim() : null;
 
-    if (snap.empty) {
+  try {
+    const collection = db.collection("tenants");
+    const snap = landlordId
+      ? await collection.where("landlordId", "==", landlordId).get()
+      : await collection.get();
+
+    const out: TenantRecord[] = [];
+    snap.forEach((doc) => {
+      const data = doc.data() as any;
+      out.push(mapTenant(doc.id, data));
+    });
+
+    out.sort((a, b) => {
+      const aTs = toMillis(a.createdAt);
+      const bTs = toMillis(b.createdAt);
+      return (bTs ?? 0) - (aTs ?? 0);
+    });
+
+    if (out.length === 0 && !landlordId) {
       console.warn(
         "[tenantDetailsService] No tenants collection, using FALLBACK_TENANTS"
       );
       return [...FALLBACK_TENANTS, ...CONVERTED_TENANTS];
     }
 
-    const out: TenantRecord[] = [];
-    snap.forEach((doc) => {
-      const data = doc.data() as any;
-      out.push({
-        id: doc.id,
-        fullName: data.fullName ?? data.name ?? "Unnamed Tenant",
-        email: data.email ?? null,
-        phone: data.phone ?? null,
-        propertyName: data.propertyName ?? data.property ?? null,
-        unit: data.unit ?? null,
-        leaseStart: data.leaseStart ?? null,
-        leaseEnd: data.leaseEnd ?? null,
-        monthlyRent: data.monthlyRent ?? null,
-        status: data.status ?? "Current",
-        balance: data.balance ?? 0,
-        riskLevel: data.riskLevel ?? "Low",
-      });
-    });
-
-    return [...out, ...CONVERTED_TENANTS];
+    return [...out, ...CONVERTED_TENANTS.filter((t) => !landlordId || t.landlordId === landlordId)];
   } catch (err) {
     console.error("[tenantDetailsService] getTenantsList error", err);
+    if (landlordId) return [];
     return [...FALLBACK_TENANTS, ...CONVERTED_TENANTS];
   }
 }
@@ -142,7 +193,11 @@ export async function getTenantsList(): Promise<TenantRecord[]> {
  * Full detail bundle for one tenant.
  * Returns: { tenant, lease, payments, ledger, insights }
  */
-export async function getTenantDetailBundle(tenantId: string) {
+export async function getTenantDetailBundle(
+  tenantId: string,
+  opts: TenantQueryOptions = {}
+) {
+  const landlordId = opts.landlordId?.trim?.() ? String(opts.landlordId).trim() : null;
   // 1) tenant core info
   let tenant: TenantRecord | null = null;
 
@@ -150,20 +205,10 @@ export async function getTenantDetailBundle(tenantId: string) {
     const doc = await db.collection("tenants").doc(tenantId).get();
     if (doc.exists) {
       const data = doc.data() as any;
-      tenant = {
-        id: doc.id,
-        fullName: data.fullName ?? data.name ?? "Unnamed Tenant",
-        email: data.email ?? null,
-        phone: data.phone ?? null,
-        propertyName: data.propertyName ?? data.property ?? null,
-        unit: data.unit ?? null,
-        leaseStart: data.leaseStart ?? null,
-        leaseEnd: data.leaseEnd ?? null,
-        monthlyRent: data.monthlyRent ?? null,
-        status: data.status ?? "Current",
-        balance: data.balance ?? 0,
-        riskLevel: data.riskLevel ?? "Low",
-      };
+      if (landlordId && data?.landlordId && data.landlordId !== landlordId) {
+        return { tenant: null, lease: null, payments: [], ledger: [], insights: [], ledgerSummary: null };
+      }
+      tenant = mapTenant(doc.id, data);
     }
   } catch (err) {
     console.error(
@@ -172,7 +217,7 @@ export async function getTenantDetailBundle(tenantId: string) {
     );
   }
 
-  if (!tenant) {
+  if (!tenant && !landlordId) {
     tenant =
       CONVERTED_TENANTS.find((t) => t.id === tenantId) ??
       FALLBACK_TENANTS.find((t) => t.id === tenantId) ??
