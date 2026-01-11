@@ -133,28 +133,52 @@ export async function updateApplicationStatus(
   applicationId: string,
   status: ApplicationStatus
 ): Promise<Application> {
-  const app = getApplicationById(applicationId);
-  if (!app) {
-    throw new Error(`Application ${applicationId} not found`);
-  }
-
   const nowIso = new Date().toISOString().slice(0, 10);
 
-  const updated: Application = { ...app, status };
+  // Prefer Firestore record if it exists
+  const snap = await db.collection("applications").doc(applicationId).get();
+  let saved: Application | null = null;
+  if (snap.exists) {
+    const current = { id: snap.id, ...(snap.data() as any) } as Application;
+    const updated: Application = { ...current, status };
+    if (!updated.submittedAt) updated.submittedAt = nowIso;
+    if (status === "in_review" && !updated.inReviewAt) updated.inReviewAt = nowIso;
+    else if (status === "approved" && !updated.approvedAt) updated.approvedAt = nowIso;
+    else if (status === "rejected" && !updated.rejectedAt) updated.rejectedAt = nowIso;
 
-  if (!updated.submittedAt) {
-    updated.submittedAt = nowIso;
+    await db
+      .collection("applications")
+      .doc(applicationId)
+      .set(
+        {
+          ...updated,
+          updatedAt: new Date().toISOString(),
+          updatedAtServer: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    saved = updated;
+  } else {
+    const app = getApplicationById(applicationId);
+    if (!app) {
+      throw new Error(`Application ${applicationId} not found`);
+    }
+    const updated: Application = { ...app, status };
+
+    if (!updated.submittedAt) {
+      updated.submittedAt = nowIso;
+    }
+
+    if (status === "in_review" && !updated.inReviewAt) {
+      updated.inReviewAt = nowIso;
+    } else if (status === "approved" && !updated.approvedAt) {
+      updated.approvedAt = nowIso;
+    } else if (status === "rejected" && !updated.rejectedAt) {
+      updated.rejectedAt = nowIso;
+    }
+
+    saved = saveApplication(updated);
   }
-
-  if (status === "in_review" && !updated.inReviewAt) {
-    updated.inReviewAt = nowIso;
-  } else if (status === "approved" && !updated.approvedAt) {
-    updated.approvedAt = nowIso;
-  } else if (status === "rejected" && !updated.rejectedAt) {
-    updated.rejectedAt = nowIso;
-  }
-
-  const saved = saveApplication(updated);
 
   try {
     await recordAuditEvent({

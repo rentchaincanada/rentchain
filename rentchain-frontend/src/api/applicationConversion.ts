@@ -6,6 +6,8 @@ export type ConvertApplicationResponse = {
   tenantId: string;
   alreadyConverted: boolean;
   screening: any | null;
+  inviteUrl?: string | null;
+  inviteEmailed?: boolean;
 };
 
 export async function convertApplicationToTenant(

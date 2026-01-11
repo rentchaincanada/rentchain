@@ -472,7 +472,31 @@ const nextStepMessage = (reqs: ReturnType<typeof screeningRequirementsFor>) => {
       if (result.alreadyConverted) {
         showToast({ message: "Already converted", variant: "info" });
       } else {
-        showToast({ message: "Converted to tenant", variant: "success" });
+        const msg = result.inviteEmailed
+          ? "Converted to tenant and invite emailed"
+          : "Converted to tenant";
+        const desc =
+          !result.inviteEmailed && result.inviteUrl
+            ? "Invite link ready to share."
+            : undefined;
+        showToast({ message: msg, description: desc, variant: "success" });
+      }
+
+      if (!result.inviteEmailed && result.inviteUrl) {
+        try {
+          await navigator.clipboard.writeText(result.inviteUrl);
+          showToast({
+            message: "Invite link copied",
+            description: "Share this link with the tenant.",
+            variant: "info",
+          });
+        } catch {
+          showToast({
+            message: "Invite link ready",
+            description: result.inviteUrl,
+            variant: "info",
+          });
+        }
       }
 
       if (result.screening?.status === "blocked_no_credits") {

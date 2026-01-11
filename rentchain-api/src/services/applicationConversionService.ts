@@ -8,6 +8,8 @@ import { addConvertedTenant } from "./tenantDetailsService";
 import { propertyService } from "./propertyService";
 import { runScreeningWithCredits } from "./screeningsService";
 import { logAuditEvent } from "./auditEventsService";
+import { db } from "../config/firebase";
+import sgMail from "@sendgrid/mail";
 
 export async function convertApplicationToTenant(params: {
   landlordId: string;
@@ -18,6 +20,8 @@ export async function convertApplicationToTenant(params: {
   tenantId: string;
   screening?: { screeningId: string; status: string };
   alreadyConverted: boolean;
+  inviteUrl?: string | null;
+  inviteEmailed?: boolean;
 }> {
   const application = await getApplicationByIdAsync(params.applicationId);
   if (!application) {
@@ -43,6 +47,8 @@ export async function convertApplicationToTenant(params: {
       screening: application.screeningRequestId
         ? { screeningId: application.screeningRequestId, status: "completed" }
         : undefined,
+      inviteUrl: application.inviteUrl ?? null,
+      inviteEmailed: application.inviteEmailed ?? false,
     };
   }
 
@@ -78,12 +84,23 @@ export async function convertApplicationToTenant(params: {
     }
   }
 
+  const invitation = await createAndEmailInvite({
+    landlordId: params.landlordId,
+    tenantId,
+    propertyId: application.propertyId ?? null,
+    unitId: application.unitApplied ?? application.unit ?? null,
+    tenantEmail: application.applicantEmail ?? application.email ?? null,
+    tenantName: application.applicantFullName ?? application.fullName ?? null,
+  });
+
   const updated = {
     ...application,
     landlordId: params.landlordId,
     status: "converted",
     convertedTenantId: tenantId,
     updatedAt: new Date().toISOString(),
+    inviteUrl: invitation.inviteUrl,
+    inviteEmailed: invitation.inviteEmailed,
   };
 
   let screeningResult: { screeningId: string; status: string } | undefined;
@@ -143,5 +160,88 @@ export async function convertApplicationToTenant(params: {
     tenantId,
     screening: screeningResult,
     alreadyConverted: false,
+    inviteUrl: invitation.inviteUrl,
+    inviteEmailed: invitation.inviteEmailed,
   };
+}
+
+async function createAndEmailInvite(opts: {
+  landlordId: string;
+  tenantId: string;
+  propertyId?: string | null;
+  unitId?: string | null;
+  tenantEmail?: string | null;
+  tenantName?: string | null;
+}): Promise<{ inviteUrl: string | null; inviteEmailed: boolean }> {
+  const tenantEmail = (opts.tenantEmail || "").trim();
+  const hasEmail = !!tenantEmail;
+  const token = crypto.randomBytes(24).toString("hex");
+  const now = Date.now();
+  const expiresAt = now + 1000 * 60 * 60 * 24 * 7;
+  const baseUrl = (process.env.PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
+  const inviteUrl = `${baseUrl}/tenant/invite/${token}`;
+
+  await db.collection("tenantInvites").doc(token).set({
+    token,
+    landlordId: opts.landlordId,
+    tenantEmail: hasEmail ? tenantEmail : null,
+    tenantName: opts.tenantName || null,
+    propertyId: opts.propertyId || null,
+    unitId: opts.unitId || null,
+    tenantId: opts.tenantId || null,
+    status: "pending",
+    createdAt: now,
+    expiresAt,
+  });
+
+  if (!hasEmail) {
+    return { inviteUrl, inviteEmailed: false };
+  }
+
+  const apiKey = process.env.SENDGRID_API_KEY;
+  const from =
+    process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM || process.env.FROM_EMAIL;
+  if (!apiKey || !from) {
+    console.warn("[applicationConversion] missing sendgrid env, skipping email");
+    return { inviteUrl, inviteEmailed: false };
+  }
+
+  const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T> =>
+    Promise.race([
+      p,
+      new Promise<T>((_, rej) => setTimeout(() => rej(new Error(`SEND_TIMEOUT_${ms}MS`)), ms)),
+    ]);
+
+  try {
+    sgMail.setApiKey(apiKey as string);
+    const subject = "You're invited to RentChain";
+    const greet = opts.tenantName ? `Hi ${opts.tenantName},` : "Hi,";
+    const text =
+      `${greet}\n\n` +
+      `You've been invited to join RentChain as a tenant. ` +
+      `Open this link to accept your invite:\n${inviteUrl}\n\n` +
+      `Note: this link may expire. If you weren't expecting this, you can ignore this email.\n\n` +
+      `— RentChain`;
+
+    await withTimeout(
+      sgMail.send({
+        to: tenantEmail,
+        from: from as string,
+        subject,
+        text,
+        trackingSettings: {
+          clickTracking: { enable: false, enableText: false },
+          openTracking: { enable: false },
+        },
+        mailSettings: {
+          footer: { enable: false },
+        },
+      }),
+      8000
+    );
+    return { inviteUrl, inviteEmailed: true };
+  } catch (err) {
+    console.error("[applicationConversion] invite email failed", err?.message || err);
+    return { inviteUrl, inviteEmailed: false };
+  }
 }

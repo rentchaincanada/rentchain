@@ -45,6 +45,8 @@ router.post(
         applicationId,
         tenantId: result.tenantId,
         alreadyConverted: !!result.alreadyConverted,
+        inviteUrl: result.inviteUrl ?? null,
+        inviteEmailed: !!result.inviteEmailed,
         screening: result.screening ?? null,
       });
     } catch (err: any) {
