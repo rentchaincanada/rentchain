@@ -64,8 +64,19 @@ export async function apiFetch<T = any>(
   const normalizedPath = (() => {
     if (path.startsWith("http")) return path;
     let p = path;
-    if (p.startsWith("/api/")) p = p.slice(4);
-    else if (p.startsWith("api/")) p = p.slice(3);
+    if (p.startsWith("/api/")) {
+      if (!(apiFetch as any)._warnedApiPrefix) {
+        console.warn("Do not prefix /api in apiFetch calls. Normalizing path:", path);
+        (apiFetch as any)._warnedApiPrefix = true;
+      }
+      p = p.slice(4);
+    } else if (p.startsWith("api/")) {
+      if (!(apiFetch as any)._warnedApiPrefix) {
+        console.warn("Do not prefix /api in apiFetch calls. Normalizing path:", path);
+        (apiFetch as any)._warnedApiPrefix = true;
+      }
+      p = p.slice(3);
+    }
     p = p.startsWith("/") ? p : `/${p}`;
     return `${base}${p}`;
   })();
