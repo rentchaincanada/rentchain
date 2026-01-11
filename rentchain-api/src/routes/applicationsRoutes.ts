@@ -369,6 +369,37 @@ function collectMissingScreeningFields(app: Application): string[] {
   return missing;
 }
 
+function normalizeApplicantFields(app: any) {
+  const first = trimValue(app.firstName);
+  const last = trimValue(app.lastName);
+  const middle = trimValue(app.middleName ?? undefined);
+  const derivedFull = [first, middle, last].filter(Boolean).join(" ").trim();
+  const fullName = app.fullName || app.applicantFullName || derivedFull || "Applicant";
+
+  const applicantEmail =
+    trimValue(app.applicantEmail) || trimValue(app.email) || trimValue(app.contactEmail) || null;
+  const applicantPhone =
+    trimValue(app.applicantPhone) || trimValue(app.phone) || trimValue(app.contactPhone) || null;
+
+  const unitLabel =
+    trimValue(app.unit) ||
+    trimValue(app.unitApplied) ||
+    trimValue(app.unitLabel) ||
+    trimValue(app.unitNumber) ||
+    trimValue(app.unitId) ||
+    null;
+
+  return {
+    ...app,
+    fullName,
+    applicantName: app.applicantName || fullName,
+    applicantFullName: app.applicantFullName || fullName,
+    applicantEmail,
+    applicantPhone,
+    unit: unitLabel || app.unit || null,
+  };
+}
+
 /**
  * Public applicant endpoints (no auth)
  */
@@ -389,12 +420,12 @@ router.get("/applications", async (req: any, res) => {
     if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
 
     const snap = await db.collection("applications").where("landlordId", "==", landlordId).limit(500).get();
-    const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as any[];
+    const items = snap.docs.map((d) => normalizeApplicantFields({ id: d.id, ...(d.data() as any) })) as any[];
     const toMillis = (v: any) => (v?.toMillis?.() ?? Date.parse(v || "") ?? 0);
     items.sort((a, b) => (toMillis(b.createdAt) || 0) - (toMillis(a.createdAt) || 0));
 
     // Fallback to in-memory if Firestore empty (legacy/demo)
-    const result = items.length ? items : getApplications();
+    const result = items.length ? items : getApplications().map(normalizeApplicantFields);
     return res.status(200).json(result);
   } catch (err: any) {
     console.error("[applications] list failed", err?.message || err);
@@ -433,7 +464,8 @@ router.get("/applications/:id", async (req, res) => {
   try {
     const snap = await db.collection("applications").doc(id).get();
     if (snap.exists) {
-      return res.status(200).json({ id: snap.id, ...(snap.data() as any) });
+      const data = { id: snap.id, ...(snap.data() as any) };
+      return res.status(200).json(normalizeApplicantFields(data));
     }
   } catch (err) {
     console.error("[applications] get by id failed", err?.message || err);
@@ -444,7 +476,7 @@ router.get("/applications/:id", async (req, res) => {
     return res.status(404).json({ error: "Application not found" });
   }
 
-  return res.status(200).json(app);
+  return res.status(200).json(normalizeApplicantFields(app));
 });
 
 router.get("/applications/:id/timeline", async (req: any, res: Response) => {
@@ -1052,12 +1084,16 @@ function handleApplicationFormSubmit(req: Request, res: Response) {
     const id = `app_${Date.now()}`;
     const createdAt = new Date().toISOString();
 
+    const derivedFullName = [applicant?.firstName, applicant?.middleName, applicant?.lastName]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+
     const newApp: Application = {
       id,
-      fullName: [applicant?.firstName, applicant?.middleName, applicant?.lastName]
-        .filter(Boolean)
-        .join(" ")
-        .trim(),
+      fullName: derivedFullName,
+      applicantFullName: derivedFullName || undefined,
+      applicantName: derivedFullName || undefined,
       firstName: applicant?.firstName?.trim() || "",
       middleName: applicant?.middleName?.trim() || null,
       lastName: applicant?.lastName?.trim() || "",
@@ -1071,6 +1107,7 @@ function handleApplicationFormSubmit(req: Request, res: Response) {
       propertyId: payload.propertyId,
       propertyName: payload.propertyName,
       unit: payload.unit,
+      unitId: payload.unit ?? null,
       unitApplied,
       leaseStartDate: payload.leaseStartDate,
       status: "new",

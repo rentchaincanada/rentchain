@@ -110,8 +110,9 @@ function fmtDate(d: Date) {
 
 function getApplicantName(app: any) {
   return (
-    app?.fullName ||
+    app?.applicantFullName ||
     app?.applicantName ||
+    app?.fullName ||
     app?.name ||
     [app?.firstName, app?.lastName].filter(Boolean).join(" ") ||
     "-"
@@ -119,11 +120,11 @@ function getApplicantName(app: any) {
 }
 
 function getApplicantEmail(app: any) {
-  return app?.email || app?.applicantEmail || app?.contactEmail || "-";
+  return app?.applicantEmail || app?.email || app?.contactEmail || "-";
 }
 
 function getApplicantPhone(app: any) {
-  return app?.phone || app?.phoneNumber || app?.contactPhone || "-";
+  return app?.applicantPhone || app?.phone || app?.phoneNumber || app?.contactPhone || "-";
 }
 
 const ApplicationsPage: React.FC = () => {
@@ -700,6 +701,16 @@ const nextStepMessage = (reqs: ReturnType<typeof screeningRequirementsFor>) => {
                   );
                   const isChecking = validatingScreeningId === app.id;
                   const disableRun = isChecking || !reqs.canRun;
+                  const applicantName = getApplicantName(app);
+                  const applicantEmail = getApplicantEmail(app);
+                  const applicantPhone = getApplicantPhone(app);
+                  const unitLabel =
+                    app.unit ||
+                    app.unitApplied ||
+                    app.unitLabel ||
+                    app.unitNumber ||
+                    app.unitId ||
+                    "—";
 
                   return (
                     <div
@@ -717,20 +728,27 @@ const nextStepMessage = (reqs: ReturnType<typeof screeningRequirementsFor>) => {
                         boxShadow: selected ? "0 8px 18px rgba(37,99,235,0.12)" : "none",
                       }}
                     >
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          gap: 8,
-                          alignItems: "center",
-                        }}
-                      >
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: 14 }}>{app.fullName}</div>
-                          <div style={{ fontSize: 12, color: text.muted }}>
-                            {app.propertyName} · Unit {app.unit}
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: 8,
+                            alignItems: "center",
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontWeight: 600, fontSize: 14 }}>
+                              {applicantName || "Applicant"}
+                            </div>
+                            <div style={{ fontSize: 12, color: text.muted }}>
+                              {app.propertyName || "Property"} · Unit {unitLabel}
+                            </div>
+                            <div style={{ fontSize: 11, color: text.subtle }}>
+                              {(applicantEmail && applicantEmail !== "-") ? applicantEmail : "Email n/a"}
+                              {" \u2022 "}
+                              {(applicantPhone && applicantPhone !== "-") ? applicantPhone : "Phone n/a"}
+                            </div>
                           </div>
-                        </div>
                         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
                           <div style={{ fontSize: 12, color: text.subtle }}>
                             {app.submittedAt
