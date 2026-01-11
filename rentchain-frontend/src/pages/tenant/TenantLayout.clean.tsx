@@ -94,6 +94,7 @@ export const TenantLayout: React.FC = () => {
     { to: "/tenant/ledger", label: "Ledger" },
     { to: "/tenant/documents", label: "Documents" },
     { to: "/tenant/reporting-consent", label: "Reporting consent" },
+    { to: "/tenant/messages", label: "Messages" },
   ];
 
   return (

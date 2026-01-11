@@ -188,6 +188,23 @@ export const TopNav: React.FC = () => {
           >
             Tenants
           </button>
+          <button
+            type="button"
+            className={`topnav-tab ${isActive("/messages") ? "active" : ""}`}
+            onClick={() => navigate("/messages")}
+            style={{
+              padding: "8px 12px",
+              borderRadius: radius.pill,
+              border: "none",
+              background: isActive("/messages") ? colors.accentSoft : "transparent",
+              color: text.primary,
+              fontWeight: 600,
+              cursor: "pointer",
+              transition: "background 0.15s ease, color 0.15s ease",
+            }}
+          >
+            Messages
+          </button>
           {user && (
             <button
               type="button"

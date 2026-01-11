@@ -31,6 +31,8 @@ import TenantLedgerPage from "./pages/tenant/TenantLedgerPage";
 import MonthlyOpsReportPage from "./pages/reports/MonthlyOpsReportPage";
 import InvitesPage from "./pages/landlord/InvitesPage";
 import PublicApplyPage from "./pages/PublicApplyPage";
+import MessagesPage from "./pages/MessagesPage";
+import TenantMessagesPage from "./pages/tenant/TenantMessagesPage";
 
 const TENANT_PORTAL_ENABLED = import.meta.env.VITE_TENANT_PORTAL_ENABLED === "true";
 
@@ -181,6 +183,14 @@ function App() {
           }
         />
         <Route
+          path="/messages"
+          element={
+            <RequireAuth>
+              <MessagesPage />
+            </RequireAuth>
+          }
+        />
+        <Route
           path="/landlord/invites"
           element={
             <RequireAuth>
@@ -224,6 +234,12 @@ function App() {
           path="/tenant/ledger"
           element={
             TENANT_PORTAL_ENABLED ? <TenantLedgerPage /> : <TenantPortalComingSoon />
+          }
+        />
+        <Route
+          path="/tenant/messages"
+          element={
+            TENANT_PORTAL_ENABLED ? <TenantMessagesPage /> : <TenantPortalComingSoon />
           }
         />
         {applicantApplyRedirects.map((path) => (

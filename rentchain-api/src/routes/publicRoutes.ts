@@ -199,7 +199,7 @@ async function addMessage(params: { conversationId: string; senderRole: "landlor
     },
     { merge: true }
   );
-  return { id: docRef.id, conversationId, senderRole, body, createdAt: now };
+  return { id: docRef.id, conversationId, senderRole, body, createdAt: now, createdAtMs: now };
 }
 
 function requireTenant(req: any, res: any, next: any) {
@@ -308,18 +308,22 @@ router.get("/landlord/messages/conversations/:id", authenticateJwt, requireLandl
     const convo = normalizeConversation(convoSnap);
     if (convo.landlordId !== landlordId) return res.status(403).json({ ok: false, error: "Forbidden" });
 
-    const msgSnap = await db
-      .collection("messages")
-      .where("conversationId", "==", id)
-      .orderBy("createdAt", "desc")
-      .limit(limit)
-      .get();
+    const msgSnap = await db.collection("messages").where("conversationId", "==", id).get();
     const messages = msgSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
-
-    return res.json({ ok: true, conversation: convo, messages });
+    messages.sort((a: any, b: any) => {
+      const aKey = a.createdAtMs || toMillis(a.createdAt) || 0;
+      const bKey = b.createdAtMs || toMillis(b.createdAt) || 0;
+      return (bKey as number) - (aKey as number);
+    });
+    const limited = messages.slice(0, limit);
+    return res.json({ ok: true, conversation: convo, conversationId: id, messages: limited });
   } catch (err: any) {
     console.error("[publicRoutes] landlord convo messages error", err);
-    return res.status(500).json({ ok: false, error: "Failed to load messages" });
+    return res.status(500).json({
+      ok: false,
+      error: "Failed to load messages",
+      detail: err?.message || String(err),
+    });
   }
 });
 
@@ -416,18 +420,23 @@ router.get("/tenant/messages/conversation/:id", authenticateJwt, requireTenant, 
       return res.status(403).json({ ok: false, error: "Forbidden" });
     }
 
-    const msgSnap = await db
-      .collection("messages")
-      .where("conversationId", "==", id)
-      .orderBy("createdAt", "desc")
-      .limit(limit)
-      .get();
+    const msgSnap = await db.collection("messages").where("conversationId", "==", id).get();
     const messages = msgSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+    messages.sort((a: any, b: any) => {
+      const aKey = a.createdAtMs || toMillis(a.createdAt) || 0;
+      const bKey = b.createdAtMs || toMillis(b.createdAt) || 0;
+      return (bKey as number) - (aKey as number);
+    });
+    const limited = messages.slice(0, limit);
 
-    return res.json({ ok: true, conversation: convo, messages });
+    return res.json({ ok: true, conversation: convo, conversationId: id, messages: limited });
   } catch (err: any) {
     console.error("[publicRoutes] tenant conversation error", err);
-    return res.status(500).json({ ok: false, error: "Failed to load messages" });
+    return res.status(500).json({
+      ok: false,
+      error: "Failed to load messages",
+      detail: err?.message || String(err),
+    });
   }
 });
 
