@@ -233,12 +233,14 @@ router.patch("/units/:unitId", authenticateJwt, requireLandlord, async (req: any
     if (updates.beds !== null && !Number.isFinite(updates.beds)) {
       return res.status(400).json({ ok: false, error: "Invalid beds" });
     }
+    updates.bedrooms = updates.beds;
   }
   if (baths !== undefined) {
     updates.baths = baths === null || baths === "" ? null : Number(baths);
     if (updates.baths !== null && !Number.isFinite(updates.baths)) {
       return res.status(400).json({ ok: false, error: "Invalid baths" });
     }
+    updates.bathrooms = updates.baths;
   }
   if (notes !== undefined) {
     updates.notes = notes === null ? null : String(notes);

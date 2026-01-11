@@ -707,7 +707,18 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
 
               return displayedUnits.map((u, idx) => {
                 const unitNum = (u as any).unitNumber || "--";
-                const isLeased = leasedUnitNumbers.has(unitNum);
+                const bedsVal =
+                  (u as any).beds ?? (u as any).bedrooms ?? (u as any).bedroomsCount ?? null;
+                const bathsVal =
+                  (u as any).baths ?? (u as any).bathrooms ?? (u as any).bathroomsCount ?? null;
+                const rentVal =
+                  (u as any).rent ??
+                  (u as any).marketRent ??
+                  (u as any).askingRent ??
+                  (u as any).monthlyRent ??
+                  null;
+                const statusVal = (u as any).status || (leasedUnitNumbers.has(unitNum) ? "occupied" : "vacant");
+                const isLeased = String(statusVal || "").toLowerCase() === "occupied";
                 return (
                   <tr
                     key={(u as any).id ?? `${unitNum}-${idx}`}
@@ -718,7 +729,9 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                   >
                     <td style={{ padding: "10px 12px" }}>{unitNum}</td>
                     <td style={{ padding: "10px 12px" }}>
-                      {formatCurrency(Number((u as any).rent) || 0)}
+                      {rentVal !== null && rentVal !== undefined
+                        ? formatCurrency(Number(rentVal) || 0)
+                        : "--"}
                     </td>
                     <td style={{ padding: "10px 12px" }}>
                       {(u as any).bedrooms ?? (u as any).bedrooms === 0
@@ -745,9 +758,9 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                           borderRadius: 999,
                           border: "1px solid rgba(148,163,184,0.35)",
                           background: isLeased
-                            ? "--"
+                            ? "rgba(34,197,94,0.1)"
                             : "rgba(248,113,113,0.08)",
-                          color: isLeased ? "--" : "#f87171",
+                          color: isLeased ? "#166534" : "#f87171",
                           fontSize: "0.8rem",
                         }}
                       >
@@ -756,10 +769,10 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                             width: 8,
                             height: 8,
                             borderRadius: "999px",
-                            backgroundColor: isLeased ? "--" : "#f87171",
+                            backgroundColor: isLeased ? "#22c55e" : "#f87171",
                           }}
                         />
-                        {isLeased ? "--" : "Vacant"}
+                        {isLeased ? "Occupied" : "Vacant"}
                       </span>
                     </td>
                     <td style={{ padding: "10px 12px" }}>

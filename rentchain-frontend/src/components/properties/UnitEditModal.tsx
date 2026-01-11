@@ -64,7 +64,7 @@ export function UnitEditModal({ open, unit, onClose, onSaved }: Props) {
       payload.beds = beds === "" ? null : Number(beds);
       payload.baths = baths === "" ? null : Number(baths);
       payload.notes = notes;
-      payload.status = status;
+      payload.status = (status || "vacant").toLowerCase();
       const resp: any = await updateUnit(String(unit.id), payload);
       const updated = resp?.unit || { ...unit, ...payload };
       onSaved(updated);
