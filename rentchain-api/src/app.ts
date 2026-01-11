@@ -50,6 +50,7 @@ import unitsRoutes from "./routes/unitsRoutes";
 import adminPropertiesRoutes from "./routes/adminPropertiesRoutes";
 import ledgerRoutes from "./routes/ledgerRoutes";
 import landlordApplicationLinksRoutes from "./routes/landlordApplicationLinksRoutes";
+import publicApplicationLinksRoutes from "./routes/publicApplicationLinksRoutes";
 
 const app: Application = express();
 app.set("etag", false);
@@ -106,6 +107,7 @@ app.use("/api", routeSource("publicRoutes.ts"), publicRoutes);
 app.use("/api/public", tenantHistorySharePublicRouter);
 app.use("/api/auth", authRoutes);
 app.use("/api/capabilities", routeSource("capabilitiesRoutes.ts"), capabilitiesRoutes);
+app.use("/api/public", routeSource("publicApplicationLinksRoutes.ts"), publicApplicationLinksRoutes);
 
 // Decode auth for protected routes
 app.use(authenticateJwt);

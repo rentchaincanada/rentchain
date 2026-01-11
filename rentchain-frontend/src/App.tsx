@@ -7,7 +7,6 @@ import PropertiesPage from "./pages/PropertiesPage";
 import { TenantsPage } from "./pages/TenantsPage";
 import PaymentsPage from "./pages/PaymentsPage";
 import ApplicationsPage from "./pages/ApplicationsPage";
-import ApplyPage from "./pages/ApplyPage";
 import ApplicantApplyPage from "./pages/ApplicantApplyPage";
 import CosignPage from "./pages/CosignPage";
 import LoginPage from "./pages/LoginPage";
@@ -31,6 +30,7 @@ import TenantDashboardPageV2 from "./pages/tenant/TenantDashboardPage.v2";
 import TenantLedgerPage from "./pages/tenant/TenantLedgerPage";
 import MonthlyOpsReportPage from "./pages/reports/MonthlyOpsReportPage";
 import InvitesPage from "./pages/landlord/InvitesPage";
+import PublicApplyPage from "./pages/PublicApplyPage";
 
 const TENANT_PORTAL_ENABLED = import.meta.env.VITE_TENANT_PORTAL_ENABLED === "true";
 
@@ -233,7 +233,7 @@ function App() {
             element={<Navigate to="/apply" replace />}
           />
         ))}
-        <Route path="/apply/:propertyId/:unit" element={<ApplyPage />} />
+        <Route path="/apply/:token" element={<PublicApplyPage />} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

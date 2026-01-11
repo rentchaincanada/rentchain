@@ -52,6 +52,7 @@ import unitsRoutes from "./routes/unitsRoutes";
 import adminPropertiesRoutes from "./routes/adminPropertiesRoutes";
 import ledgerRoutes from "./routes/ledgerRoutes";
 import landlordApplicationLinksRoutes from "./routes/landlordApplicationLinksRoutes";
+import publicApplicationLinksRoutes from "./routes/publicApplicationLinksRoutes";
 
 process.on("unhandledRejection", (reason) => {
   console.error("[FATAL] unhandledRejection", reason);
@@ -88,6 +89,7 @@ app.use("/health", healthRoutes);
 app.use("/api", routeSource("publicRoutes.ts"), publicRoutes);
 app.use("/api/public", routeSource("publicRoutes.ts"), publicRoutes);
 app.use("/api/public", tenantHistorySharePublicRouter);
+app.use("/api/public", routeSource("publicApplicationLinksRoutes.ts"), publicApplicationLinksRoutes);
 app.use("/api/auth", routeSource("authRoutes.ts"), authRoutes);
 app.use("/api/capabilities", routeSource("capabilitiesRoutes.ts"), capabilitiesRoutes);
 
