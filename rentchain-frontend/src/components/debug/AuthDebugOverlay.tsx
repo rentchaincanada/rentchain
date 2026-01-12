@@ -1,7 +1,5 @@
 import React, { useMemo, useState } from "react";
-
-const TOKEN_KEY = "rentchain_token";
-const TENANT_KEY = "rentchain_tenant_token";
+import { DEBUG_AUTH_KEY, TENANT_TOKEN_KEY, TOKEN_KEY } from "../../lib/authKeys";
 
 function decodeJwtPayload(token: string): any | null {
   try {
@@ -32,9 +30,9 @@ export const AuthDebugOverlay: React.FC = () => {
   const params = new URLSearchParams(window.location.search);
   const paramEnabled = params.get("debugAuth") === "1";
   if (paramEnabled) {
-    sessionStorage.setItem("debugAuthEnabled", "1");
+    localStorage.setItem(DEBUG_AUTH_KEY, "1");
   }
-  const enabledFlag = sessionStorage.getItem("debugAuthEnabled") === "1";
+  const enabledFlag = localStorage.getItem(DEBUG_AUTH_KEY) === "1";
   const closed = sessionStorage.getItem("debugAuthClosed") === "1";
   const [dismissed, setDismissed] = useState(closed);
   const shouldShow = enabledFlag && !dismissed;
@@ -43,8 +41,8 @@ export const AuthDebugOverlay: React.FC = () => {
     if (!shouldShow) return null;
     const sTok = sessionStorage.getItem(TOKEN_KEY);
     const lTok = localStorage.getItem(TOKEN_KEY);
-    const tenantS = sessionStorage.getItem(TENANT_KEY);
-    const tenantL = localStorage.getItem(TENANT_KEY);
+    const tenantS = sessionStorage.getItem(TENANT_TOKEN_KEY);
+    const tenantL = localStorage.getItem(TENANT_TOKEN_KEY);
     const active = sTok || lTok || tenantS || tenantL || null;
     const payload = active ? decodeJwtPayload(active) : null;
     const expMs = payload?.exp ? payload.exp * 1000 : null;
@@ -108,7 +106,7 @@ export const AuthDebugOverlay: React.FC = () => {
             <button
               type="button"
               onClick={() => {
-                sessionStorage.removeItem("debugAuthEnabled");
+                localStorage.removeItem(DEBUG_AUTH_KEY);
                 sessionStorage.removeItem("debugAuthClosed");
                 const url = new URL(window.location.href);
                 url.searchParams.delete("debugAuth");

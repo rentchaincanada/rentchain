@@ -13,6 +13,7 @@ import {
   logout as apiLogout,
   restoreSession as apiRestoreSession,
 } from "../api/authApi";
+import { DEBUG_AUTH_KEY, JUST_LOGGED_IN_KEY, TENANT_TOKEN_KEY, TOKEN_KEY } from "../lib/authKeys";
 
 const PUBLIC_ROUTE_ALLOWLIST = [
   "/",
@@ -59,9 +60,6 @@ export interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-const TOKEN_STORAGE_KEY = "rentchain_token";
-const TENANT_TOKEN_KEY = "rentchain_tenant_token";
-
 function decodeJwtPayload(token: string): any | null {
   try {
     const parts = token.split(".");
@@ -101,8 +99,8 @@ interface AuthProviderProps {
 const readTokenSafe = () => {
   if (typeof window === "undefined") return null;
   const raw =
-    sessionStorage.getItem("rentchain_token") ||
-    localStorage.getItem("rentchain_token");
+    sessionStorage.getItem(TOKEN_KEY) ||
+    localStorage.getItem(TOKEN_KEY);
   const t = (raw ?? "").trim();
   if (!t || t === "null" || t === "undefined") return null;
   if (t.split(".").length !== 3) return null; // basic JWT shape
@@ -129,7 +127,7 @@ function getStoredToken() {
   const tenantToken = window.sessionStorage.getItem(TENANT_TOKEN_KEY);
   if (tenantToken) return tenantToken;
 
-  const sessionToken = window.sessionStorage.getItem(TOKEN_STORAGE_KEY);
+  const sessionToken = window.sessionStorage.getItem(TOKEN_KEY);
   if (sessionToken) return sessionToken;
 
   // Fallback: pull from localStorage if sessionStorage is cleared (iOS)
@@ -139,9 +137,9 @@ function getStoredToken() {
     return persistedTenant;
   }
 
-  const persisted = window.localStorage.getItem(TOKEN_STORAGE_KEY);
+  const persisted = window.localStorage.getItem(TOKEN_KEY);
   if (persisted) {
-    window.sessionStorage.setItem(TOKEN_STORAGE_KEY, persisted);
+    window.sessionStorage.setItem(TOKEN_KEY, persisted);
     return persisted;
   }
 
@@ -158,20 +156,37 @@ function storeToken(token: string) {
     }
     return;
   }
-  const dbgStore = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("debugAuth") ?? "" : "";
-  if (dbgStore === "1") {
+  const dbgStore =
+    localStorage.getItem(DEBUG_AUTH_KEY) === "1" ||
+    sessionStorage.getItem(DEBUG_AUTH_KEY) === "1" ||
+    (typeof window !== "undefined"
+      ? (new URLSearchParams(window.location.search).get("debugAuth") ?? "") === "1"
+      : false);
+  if (dbgStore) {
     window.sessionStorage.setItem("debugAuthStoredAt", String(Date.now()));
   }
-  window.sessionStorage.setItem(TOKEN_STORAGE_KEY, clean);
-  window.localStorage.setItem(TOKEN_STORAGE_KEY, clean);
+  window.sessionStorage.setItem(TOKEN_KEY, clean);
+  window.localStorage.setItem(TOKEN_KEY, clean);
+  try {
+    window.localStorage.setItem(JUST_LOGGED_IN_KEY, String(Date.now()));
+    window.sessionStorage.setItem(JUST_LOGGED_IN_KEY, String(Date.now()));
+  } catch {
+    // ignore
+  }
 }
 
 function clearStoredToken() {
   if (typeof window === "undefined") return;
-  window.sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+  window.sessionStorage.removeItem(TOKEN_KEY);
   window.sessionStorage.removeItem(TENANT_TOKEN_KEY);
-  window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+  window.localStorage.removeItem(TOKEN_KEY);
   window.localStorage.removeItem(TENANT_TOKEN_KEY);
+  try {
+    window.localStorage.removeItem(JUST_LOGGED_IN_KEY);
+    window.sessionStorage.removeItem(JUST_LOGGED_IN_KEY);
+  } catch {
+    // ignore
+  }
 }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
@@ -188,56 +203,90 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setIsLoading(true);
     setReady(false);
 
-    const pathname =
-      typeof window !== "undefined" ? window.location.pathname : "";
-    const isPublic = PUBLIC_ROUTE_ALLOWLIST.includes(pathname);
-    const storedToken = getStoredToken();
-    const hasToken = Boolean(storedToken);
-    const tokenCheck = storedToken ? isTokenExpired(storedToken) : null;
-
-    // No token: stay logged out, skip /api/me on public routes, and don't redirect
-    if (!hasToken) {
-      setUser(null);
-      setToken(null);
-      clearStoredToken();
-      setIsLoading(false);
-      setReady(true);
-      return;
-    }
-
-    if (tokenCheck && (!tokenCheck.valid || tokenCheck.expired)) {
-      setUser(null);
-      setToken(null);
-      clearStoredToken();
-      if (!isPublic && typeof window !== "undefined") {
-        const reason = !tokenCheck.valid ? "invalid" : "expired";
-        const dbg = sessionStorage.getItem("debugAuthEnabled") === "1";
-        window.location.href = `/login?reason=${reason}${dbg ? "&debugAuth=1" : ""}`;
-      } else {
-        setIsLoading(false);
-        setReady(true);
-      }
-      return;
-    }
-
-    setToken(storedToken);
-
-    // Do not call /api/me on public routes; treat as logged-out view
-    if (isPublic) {
-      setIsLoading(false);
-      setReady(true);
-      return;
-    }
+    const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
     const runRestore = async () => {
-      const token = readTokenSafe();
-      if (!token) {
+      const pathname = typeof window !== "undefined" ? window.location.pathname : "";
+      const isPublic = PUBLIC_ROUTE_ALLOWLIST.includes(pathname);
+
+      let storedToken = getStoredToken();
+      const graceRaw =
+        (typeof window !== "undefined" &&
+          (window.localStorage.getItem(JUST_LOGGED_IN_KEY) ||
+            window.sessionStorage.getItem(JUST_LOGGED_IN_KEY))) ||
+        "0";
+      const graceAt = Number(graceRaw || "0");
+      const inGrace = graceAt > 0 && Date.now() - graceAt < 3000;
+
+      if (!storedToken && inGrace) {
+        for (let i = 0; i < 5 && !storedToken; i += 1) {
+          // brief retries to allow iOS storage flush
+          // eslint-disable-next-line no-await-in-loop
+          await sleep(300);
+          storedToken = getStoredToken();
+        }
+      }
+
+      if (storedToken) {
+        try {
+          window.localStorage.removeItem(JUST_LOGGED_IN_KEY);
+          window.sessionStorage.removeItem(JUST_LOGGED_IN_KEY);
+        } catch {
+          // ignore
+        }
+      }
+
+      const hasToken = Boolean(storedToken);
+      const tokenCheck = storedToken ? isTokenExpired(storedToken) : null;
+
+      // No token: stay logged out, skip /api/me on public routes, and don't redirect
+      if (!hasToken) {
+        try {
+          window.localStorage.removeItem(JUST_LOGGED_IN_KEY);
+          window.sessionStorage.removeItem(JUST_LOGGED_IN_KEY);
+        } catch {
+          // ignore
+        }
+        setUser(null);
+        setToken(null);
+        clearStoredToken();
+        setIsLoading(false);
+        setReady(true);
+        return;
+      }
+
+      if (tokenCheck && (!tokenCheck.valid || tokenCheck.expired)) {
+        setUser(null);
+        setToken(null);
+        clearStoredToken();
+        if (!isPublic && typeof window !== "undefined") {
+          const reason = !tokenCheck.valid ? "invalid" : "expired";
+          const dbg = localStorage.getItem(DEBUG_AUTH_KEY) === "1";
+          window.location.href = `/login?reason=${reason}${dbg ? "&debugAuth=1" : ""}`;
+        } else {
+          setIsLoading(false);
+          setReady(true);
+        }
+        return;
+      }
+
+      setToken(storedToken);
+
+      // Do not call /api/me on public routes; treat as logged-out view
+      if (isPublic) {
+        setIsLoading(false);
+        setReady(true);
+        return;
+      }
+
+      if (!storedToken) {
         setUser(null);
         setToken(null);
         setIsLoading(false);
         setReady(true);
         return;
       }
+
       try {
         const me = await apiRestoreSession();
         if (!me?.user) {
@@ -292,7 +341,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           setTwoFactorPendingToken(null);
           setTwoFactorMethods([]);
           if (import.meta.env.DEV) {
-            const stored = window.sessionStorage.getItem(TOKEN_STORAGE_KEY);
+            const stored = window.sessionStorage.getItem(TOKEN_KEY);
             console.info("[auth] login stored token", {
               stored: !!stored,
               len: stored?.length || 0,
@@ -380,7 +429,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setUser((prev) => (prev ? { ...prev, ...patch } : prev));
   }, []);
 
-  const debugAuth = typeof window !== "undefined" && (new URLSearchParams(window.location.search).get("debugAuth") ?? "") === "1";
+  const debugAuth =
+    typeof window !== "undefined" &&
+    (localStorage.getItem(DEBUG_AUTH_KEY) === "1" ||
+      (new URLSearchParams(window.location.search).get("debugAuth") ?? "") === "1");
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -416,8 +468,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const overlay = (() => {
     if (!debugAuth || typeof window === "undefined") return null;
-    const sessionTok = window.sessionStorage.getItem(TOKEN_STORAGE_KEY) ?? "";
-    const localTok = window.localStorage.getItem(TOKEN_STORAGE_KEY) ?? "";
+    const sessionTok = window.sessionStorage.getItem(TOKEN_KEY) ?? "";
+    const localTok = window.localStorage.getItem(TOKEN_KEY) ?? "";
     const tenantSession = window.sessionStorage.getItem(TENANT_TOKEN_KEY) ?? "";
     const tenantLocal = window.localStorage.getItem(TENANT_TOKEN_KEY) ?? "";
     const previewSession = tokenPreview(sessionTok);

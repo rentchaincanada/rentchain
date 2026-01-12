@@ -1,5 +1,6 @@
 import axios from "axios";
 import { API_BASE_URL } from "./config";
+import { DEBUG_AUTH_KEY, JUST_LOGGED_IN_KEY, TOKEN_KEY } from "../lib/authKeys";
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -47,8 +48,7 @@ function normalizePlanLimit(payload: any, status: number) {
 
 api.interceptors.request.use((config) => {
   const token =
-    sessionStorage.getItem("rentchain_token") ||
-    localStorage.getItem("rentchain_token");
+    sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY);
   if (token) {
     config.headers = config.headers ?? {};
     (config.headers as any).Authorization = `Bearer ${token}`;
@@ -67,15 +67,14 @@ api.interceptors.response.use(
     }
     if (status === 401) {
       const tok =
-        sessionStorage.getItem("rentchain_token") ||
-        localStorage.getItem("rentchain_token") ||
+        sessionStorage.getItem(TOKEN_KEY) ||
+        localStorage.getItem(TOKEN_KEY) ||
         sessionStorage.getItem("token") ||
         localStorage.getItem("token") ||
         "";
       const parts = tok.split(".");
       let reason = "missing";
       if (tok) {
-        reason = "invalid";
         if (parts.length === 3) {
           try {
             let b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
@@ -83,18 +82,38 @@ api.interceptors.response.use(
             const payload = JSON.parse(atob(b64));
             if (typeof payload?.exp === "number") {
               const expMs = payload.exp * 1000;
-              if (Date.now() >= expMs - 30_000) reason = "expired";
+              if (Date.now() >= expMs - 30_000) {
+                reason = "expired";
+              } else {
+                reason = "invalid";
+              }
+            } else {
+              reason = "invalid";
             }
           } catch {
             reason = "invalid";
           }
+        } else {
+          reason = "invalid";
         }
       }
-      sessionStorage.removeItem("rentchain_token");
-      localStorage.removeItem("rentchain_token");
+      sessionStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(TOKEN_KEY);
+      try {
+        localStorage.removeItem(JUST_LOGGED_IN_KEY);
+      } catch {
+        // ignore
+      }
       if (typeof window !== "undefined" && window.location.pathname !== "/login") {
-        const dbg = sessionStorage.getItem("debugAuthEnabled") === "1";
-        const suffix = dbg ? (reason === "missing" ? "?debugAuth=1" : `?reason=${reason}&debugAuth=1`) : reason === "missing" ? "" : `?reason=${reason}`;
+        const dbg = localStorage.getItem(DEBUG_AUTH_KEY) === "1";
+        const suffix =
+          reason === "missing"
+            ? dbg
+              ? "?debugAuth=1"
+              : ""
+            : dbg
+            ? `?reason=${reason}&debugAuth=1`
+            : `?reason=${reason}`;
         window.location.href = `/login${suffix}`;
       }
     }

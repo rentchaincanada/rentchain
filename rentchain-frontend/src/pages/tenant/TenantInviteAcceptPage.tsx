@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { setTenantToken } from "../../lib/tenantAuth";
+import { DEBUG_AUTH_KEY, JUST_LOGGED_IN_KEY } from "../../lib/authKeys";
 
 type InvitePreview = {
   ok: boolean;
@@ -106,7 +107,13 @@ export default function TenantInviteAcceptPage() {
 
       // store tenant token for portal access
       setTenantToken(jwt);
-      const dbg = sessionStorage.getItem("debugAuthEnabled") === "1";
+      const dbg = localStorage.getItem(DEBUG_AUTH_KEY) === "1";
+      try {
+        localStorage.setItem(JUST_LOGGED_IN_KEY, String(Date.now()));
+        sessionStorage.setItem(JUST_LOGGED_IN_KEY, String(Date.now()));
+      } catch {
+        // ignore
+      }
       if (dbg) {
         const sLen = (sessionStorage.getItem("rentchain_tenant_token") || "").length;
         const lLen = (localStorage.getItem("rentchain_tenant_token") || "").length;
@@ -114,6 +121,7 @@ export default function TenantInviteAcceptPage() {
         if (import.meta.env.DEV || dbg) console.log("[tenant-invite] stored token lengths", { sLen, lLen });
       }
       await Promise.resolve(); // allow storage write to settle before SPA nav
+      await new Promise((resolve) => setTimeout(resolve, 50));
       setOkMsg("Invite accepted. Redirecting to tenant portal...");
       navigate("/tenant", { replace: true });
     } catch (e: any) {

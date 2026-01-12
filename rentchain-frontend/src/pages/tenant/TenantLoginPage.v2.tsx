@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { setTenantToken } from "../../lib/tenantAuth";
+import { DEBUG_AUTH_KEY, JUST_LOGGED_IN_KEY } from "../../lib/authKeys";
 
 function Card({ children }: { children: React.ReactNode }) {
   return (
@@ -42,7 +43,13 @@ const TenantLoginPageV2: React.FC = () => {
       if (!jwt) throw new Error("Login succeeded but token missing");
       setTenantToken(jwt);
 
-      const dbg = sessionStorage.getItem("debugAuthEnabled") === "1";
+      const dbg = localStorage.getItem(DEBUG_AUTH_KEY) === "1";
+      try {
+        localStorage.setItem(JUST_LOGGED_IN_KEY, String(Date.now()));
+        sessionStorage.setItem(JUST_LOGGED_IN_KEY, String(Date.now()));
+      } catch {
+        // ignore
+      }
       if (dbg) {
         const sLen = (sessionStorage.getItem("rentchain_tenant_token") || "").length;
         const lLen = (localStorage.getItem("rentchain_tenant_token") || "").length;
@@ -51,6 +58,7 @@ const TenantLoginPageV2: React.FC = () => {
       }
 
       await Promise.resolve(); // allow storage flush on iOS before navigation
+      await new Promise((resolve) => setTimeout(resolve, 50));
       navigate("/tenant", { replace: true });
     } catch (e: any) {
       setErr(String(e?.message || e));

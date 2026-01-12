@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { setTenantToken } from "./tenantAuth";
+import { DEBUG_AUTH_KEY, JUST_LOGGED_IN_KEY } from "../lib/authKeys";
 import { apiFetch } from "../lib/apiClient";
 
 export default function TenantInviteRedeem() {
@@ -20,7 +21,13 @@ export default function TenantInviteRedeem() {
         });
         if (!res?.tenantToken) throw new Error("No tenant token returned");
         setTenantToken(res.tenantToken);
-        const dbg = sessionStorage.getItem("debugAuthEnabled") === "1";
+        const dbg = localStorage.getItem(DEBUG_AUTH_KEY) === "1";
+        try {
+          localStorage.setItem(JUST_LOGGED_IN_KEY, String(Date.now()));
+          sessionStorage.setItem(JUST_LOGGED_IN_KEY, String(Date.now()));
+        } catch {
+          // ignore
+        }
         if (dbg) {
           const sLen = (sessionStorage.getItem("rentchain_tenant_token") || "").length;
           const lLen = (localStorage.getItem("rentchain_tenant_token") || "").length;
@@ -29,6 +36,7 @@ export default function TenantInviteRedeem() {
         }
         setStatus("ok");
         await Promise.resolve();
+        await new Promise((resolve) => setTimeout(resolve, 50));
         nav("/tenant", { replace: true });
       } catch (e: any) {
         setStatus("error");

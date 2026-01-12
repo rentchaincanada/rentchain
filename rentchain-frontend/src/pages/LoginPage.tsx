@@ -4,6 +4,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
 import { colors, spacing, text } from "../styles/tokens";
 import { Card, Input, Button } from "../components/ui/Ui";
+import { DEBUG_AUTH_KEY, JUST_LOGGED_IN_KEY } from "../lib/authKeys";
 
 export const LoginPage: React.FC = () => {
   const { login, loginDemo, user, isLoading, isTwoFactorRequired } = useAuth();
@@ -47,7 +48,13 @@ export const LoginPage: React.FC = () => {
 
     try {
       await loginDemo("core");
-      const dbg = sessionStorage.getItem("debugAuthEnabled") === "1";
+      const dbg = localStorage.getItem(DEBUG_AUTH_KEY) === "1";
+      try {
+        localStorage.setItem(JUST_LOGGED_IN_KEY, String(Date.now()));
+        sessionStorage.setItem(JUST_LOGGED_IN_KEY, String(Date.now()));
+      } catch {
+        // ignore
+      }
       if (dbg) {
         const sTok = sessionStorage.getItem("rentchain_token");
         const lTok = localStorage.getItem("rentchain_token");
@@ -57,6 +64,7 @@ export const LoginPage: React.FC = () => {
         });
       }
       await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 50));
       navigate(nextPath, { replace: true });
     } catch (err: any) {
       setError(err?.message || "Demo login failed");
@@ -85,7 +93,13 @@ export const LoginPage: React.FC = () => {
         return;
       }
 
-      const dbg = sessionStorage.getItem("debugAuthEnabled") === "1";
+      const dbg = localStorage.getItem(DEBUG_AUTH_KEY) === "1";
+      try {
+        localStorage.setItem(JUST_LOGGED_IN_KEY, String(Date.now()));
+        sessionStorage.setItem(JUST_LOGGED_IN_KEY, String(Date.now()));
+      } catch {
+        // ignore
+      }
       if (dbg) {
         const sTok = sessionStorage.getItem("rentchain_token");
         const lTok = localStorage.getItem("rentchain_token");
@@ -95,6 +109,7 @@ export const LoginPage: React.FC = () => {
         });
       }
       await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 50));
       navigate(nextPath, { replace: true });
     } catch (err: unknown) {
       const message =
