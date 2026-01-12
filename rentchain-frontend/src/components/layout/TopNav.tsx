@@ -119,7 +119,16 @@ export const TopNav: React.FC = () => {
           <span style={{ color: text.primary, fontWeight: 700 }}>RentChain</span>
         </button>
 
-        <div className="topnav-tabs" style={{ display: "flex", gap: 6 }}>
+        <div
+          className="topnav-tabs"
+          style={{
+            display: "flex",
+            gap: 6,
+            flexWrap: "nowrap",
+            overflowX: "auto",
+            scrollbarWidth: "none",
+          }}
+        >
           <button
             type="button"
             className={`topnav-tab ${isActive("/pricing") ? "active" : ""}`}

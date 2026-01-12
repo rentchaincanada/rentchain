@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate, useOutletContext } from "react-router-dom";
 import { getTenantLease, getTenantMe, TenantLease, TenantProfile } from "../../api/tenantPortalApi";
 import { useAuth } from "../../context/useAuth";
+import { useIsMobile } from "../../hooks/useIsMobile";
 
 export type TenantOutletContext = {
   profile: TenantProfile | null;
@@ -50,6 +51,7 @@ export const TenantLayout: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const isMobile = useIsMobile();
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -98,7 +100,7 @@ export const TenantLayout: React.FC = () => {
   ];
 
   return (
-    <div style={containerStyle}>
+    <div style={{ ...containerStyle, paddingBottom: isMobile ? 96 : containerStyle.padding }}>
       <div style={{ maxWidth: 980, margin: "0 auto", display: "flex", flexDirection: "column", gap: 16 }}>
         <header style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -127,34 +129,37 @@ export const TenantLayout: React.FC = () => {
           </div>
         </header>
 
-        <nav
-          style={{
-            ...cardStyle,
-            display: "flex",
-            gap: 10,
-            padding: "10px 12px",
-            alignItems: "center",
-            backdropFilter: "blur(4px)",
-          }}
-        >
-          {navItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              style={({ isActive }) => ({
-                ...navLinkBase,
-                background: isActive ? "rgba(59, 130, 246, 0.12)" : "transparent",
-                border: isActive ? "1px solid rgba(59, 130, 246, 0.35)" : "1px solid transparent",
-                color: isActive ? "#bfdbfe" : "#e5e7eb",
-              })}
-            >
-              {item.label}
-            </NavLink>
-          ))}
-          <div style={{ marginLeft: "auto", color: "#9ca3af", fontSize: 12 }}>
-            {location.pathname.includes("/tenant") ? "View only" : ""}
-          </div>
-        </nav>
+        {!isMobile ? (
+          <nav
+            style={{
+              ...cardStyle,
+              display: "flex",
+              gap: 10,
+              padding: "10px 12px",
+              alignItems: "center",
+              backdropFilter: "blur(4px)",
+              flexWrap: "wrap",
+            }}
+          >
+            {navItems.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                style={({ isActive }) => ({
+                  ...navLinkBase,
+                  background: isActive ? "rgba(59, 130, 246, 0.12)" : "transparent",
+                  border: isActive ? "1px solid rgba(59, 130, 246, 0.35)" : "1px solid transparent",
+                  color: isActive ? "#bfdbfe" : "#e5e7eb",
+                })}
+              >
+                {item.label}
+              </NavLink>
+            ))}
+            <div style={{ marginLeft: "auto", color: "#9ca3af", fontSize: 12 }}>
+              {location.pathname.includes("/tenant") ? "View only" : ""}
+            </div>
+          </nav>
+        ) : null}
 
         {error ? (
           <div style={{ ...cardStyle, color: "#fca5a5", borderColor: "rgba(248,113,113,0.35)" }}>
@@ -201,6 +206,47 @@ export const TenantLayout: React.FC = () => {
           <Outlet context={{ profile, lease, refresh: fetchData }} />
         )}
       </div>
+      </div>
+      {isMobile ? (
+        <nav
+          aria-label="Tenant navigation"
+          style={{
+            position: "fixed",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            display: "grid",
+            gridTemplateColumns: `repeat(${navItems.length}, 1fr)`,
+            padding: "10px 12px calc(12px + env(safe-area-inset-bottom))",
+            background: "rgba(10, 15, 26, 0.92)",
+            backdropFilter: "blur(12px)",
+            borderTop: "1px solid rgba(255,255,255,0.08)",
+            zIndex: 30,
+          }}
+        >
+          {navItems.map((item) => {
+            const active = location.pathname.startsWith(item.to);
+            return (
+              <button
+                key={item.to}
+                type="button"
+                onClick={() => navigate(item.to)}
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  color: active ? "#bfdbfe" : "#e5e7eb",
+                  fontWeight: active ? 800 : 600,
+                  fontSize: 12,
+                  padding: "6px 4px",
+                  borderRadius: 10,
+                }}
+              >
+                {item.label}
+              </button>
+            );
+          })}
+        </nav>
+      ) : null}
     </div>
   );
 };

@@ -24,7 +24,7 @@ import { DebugPanel } from "./components/DebugPanel";
 import MicroLiveInvitePage from "./pages/MicroLiveInvitePage";
 import TenantInviteRedeem from "./tenant/TenantInviteRedeem";
 import TenantInviteAcceptPage from "./pages/tenant/TenantInviteAcceptPage";
-import { MobileTabBar } from "./components/layout/MobileTabBar";
+import { LandlordNav } from "./components/layout/LandlordNav";
 import TenantPortalComingSoon from "./pages/tenant/TenantPortalComingSoon";
 import TenantDashboardPageV2 from "./pages/tenant/TenantDashboardPage.v2";
 import TenantLedgerPage from "./pages/tenant/TenantLedgerPage";
@@ -72,7 +72,9 @@ function App() {
           path="/dashboard"
           element={
             <RequireAuth>
-              <DashboardPage />
+              <LandlordNav>
+                <DashboardPage />
+              </LandlordNav>
             </RequireAuth>
           }
         />
@@ -88,7 +90,9 @@ function App() {
           path="/billing"
           element={
             <RequireAuth>
-              <BillingPage />
+              <LandlordNav>
+                <BillingPage />
+              </LandlordNav>
             </RequireAuth>
           }
         />
@@ -96,7 +100,9 @@ function App() {
           path="/properties"
           element={
             <RequireAuth>
-              <PropertiesPage />
+              <LandlordNav>
+                <PropertiesPage />
+              </LandlordNav>
             </RequireAuth>
           }
         />
@@ -104,7 +110,9 @@ function App() {
           path="/tenants"
           element={
             <RequireAuth>
-              <TenantsPage />
+              <LandlordNav>
+                <TenantsPage />
+              </LandlordNav>
             </RequireAuth>
           }
         />
@@ -112,7 +120,9 @@ function App() {
           path="/applications"
           element={
             <RequireAuth>
-              <ApplicationsPage />
+              <LandlordNav>
+                <ApplicationsPage />
+              </LandlordNav>
             </RequireAuth>
           }
         />
@@ -132,7 +142,9 @@ function App() {
           path="/screening"
           element={
             <RequireAuth>
-              <ScreeningPage />
+              <LandlordNav>
+                <ScreeningPage />
+              </LandlordNav>
             </RequireAuth>
           }
         />
@@ -140,7 +152,9 @@ function App() {
           path="/screening/success"
           element={
             <RequireAuth>
-              <ScreeningSuccessPage />
+              <LandlordNav>
+                <ScreeningSuccessPage />
+              </LandlordNav>
             </RequireAuth>
           }
         />
@@ -148,7 +162,9 @@ function App() {
           path="/screening/cancel"
           element={
             <RequireAuth>
-              <ScreeningCancelPage />
+              <LandlordNav>
+                <ScreeningCancelPage />
+              </LandlordNav>
             </RequireAuth>
           }
         />
@@ -156,29 +172,35 @@ function App() {
           path="/payments"
           element={
             <RequireAuth>
-              <PaymentsPage />
+              <LandlordNav>
+                <PaymentsPage />
+              </LandlordNav>
             </RequireAuth>
           }
         />
         {import.meta.env.DEV ? (
           <Route
-            path="/ledger"
-            element={
-              <RequireAuth>
+          path="/ledger"
+          element={
+            <RequireAuth>
+              <LandlordNav>
                 <Suspense fallback={null}>
                   <LedgerPage />
                 </Suspense>
-              </RequireAuth>
-            }
-          />
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
         ) : null}
         <Route
           path="/ledger-v2"
           element={
             <RequireAuth>
-              <Suspense fallback={null}>
-                <LedgerV2Page />
-              </Suspense>
+              <LandlordNav>
+                <Suspense fallback={null}>
+                  <LedgerV2Page />
+                </Suspense>
+              </LandlordNav>
             </RequireAuth>
           }
         />
@@ -186,7 +208,9 @@ function App() {
           path="/messages"
           element={
             <RequireAuth>
-              <MessagesPage />
+              <LandlordNav>
+                <MessagesPage />
+              </LandlordNav>
             </RequireAuth>
           }
         />
@@ -194,27 +218,33 @@ function App() {
           path="/landlord/invites"
           element={
             <RequireAuth>
-              <InvitesPage />
+              <LandlordNav>
+                <InvitesPage />
+              </LandlordNav>
             </RequireAuth>
           }
         />
         {import.meta.env.DEV ? (
           <Route
-            path="/blockchain"
-            element={
-              <RequireAuth>
+          path="/blockchain"
+          element={
+            <RequireAuth>
+              <LandlordNav>
                 <Suspense fallback={null}>
                   <BlockchainPage />
                 </Suspense>
-              </RequireAuth>
-            }
-          />
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
         ) : null}
         <Route
           path="/account/security"
           element={
             <RequireAuth>
-              <AccountSecurityPage />
+              <LandlordNav>
+                <AccountSecurityPage />
+              </LandlordNav>
             </RequireAuth>
           }
         />
@@ -254,7 +284,6 @@ function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       {import.meta.env.DEV ? <DebugPanel /> : null}
-      <MobileTabBar />
     </>
   );
 }
