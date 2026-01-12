@@ -157,6 +157,9 @@ function storeToken(token: string) {
     }
     return;
   }
+  if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("debugAuth") === "1") {
+    window.sessionStorage.setItem("debugAuthStoredAt", String(Date.now()));
+  }
   window.sessionStorage.setItem(TOKEN_STORAGE_KEY, clean);
   window.localStorage.setItem(TOKEN_STORAGE_KEY, clean);
 }

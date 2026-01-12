@@ -12,6 +12,7 @@ import { DevAuthGate } from "./components/dev/DevAuthGate";
 import { ErrorBoundary } from "./components/system/ErrorBoundary";
 import { UpgradeProvider } from "./context/UpgradeContext";
 import { API_BASE_URL } from "./api/config";
+import { AuthDebugOverlay } from "./components/debug/AuthDebugOverlay";
 
 // Enforce canonical host (www) to keep storage/sessions consistent
 if (typeof window !== "undefined" && window.location.hostname === "rentchain.ai") {
@@ -78,6 +79,7 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
             <BrowserRouter>
               <DevAuthGate>
                 <UpgradeProvider>
+                  <AuthDebugOverlay />
                   <App />
                 </UpgradeProvider>
               </DevAuthGate>
