@@ -13,6 +13,13 @@ import { ErrorBoundary } from "./components/system/ErrorBoundary";
 import { UpgradeProvider } from "./context/UpgradeContext";
 import { API_BASE_URL } from "./api/config";
 
+// Enforce canonical host (www) to keep storage/sessions consistent
+if (typeof window !== "undefined" && window.location.hostname === "rentchain.ai") {
+  const target = new URL(window.location.href);
+  target.hostname = "www.rentchain.ai";
+  window.location.replace(target.toString());
+}
+
 const originalFetch = window.fetch.bind(window);
 // Legacy global (DO NOT REMOVE until all fetch() calls are migrated)
 (window as any).API_BASE_URL = API_BASE_URL;

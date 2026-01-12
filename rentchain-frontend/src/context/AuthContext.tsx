@@ -100,19 +100,26 @@ function getStoredToken() {
   const sessionToken = window.sessionStorage.getItem(TOKEN_STORAGE_KEY);
   if (sessionToken) return sessionToken;
 
-  // Legacy migration: if an older build wrote to localStorage, move it to sessionStorage
-  const legacy = window.localStorage.getItem(TOKEN_STORAGE_KEY);
-  if (legacy) {
-    window.sessionStorage.setItem(TOKEN_STORAGE_KEY, legacy);
-    window.localStorage.removeItem(TOKEN_STORAGE_KEY);
-    return legacy;
+  // Fallback: pull from localStorage if sessionStorage is cleared (iOS)
+  const persistedTenant = window.localStorage.getItem(TENANT_TOKEN_KEY);
+  if (persistedTenant) {
+    window.sessionStorage.setItem(TENANT_TOKEN_KEY, persistedTenant);
+    return persistedTenant;
+  }
+
+  const persisted = window.localStorage.getItem(TOKEN_STORAGE_KEY);
+  if (persisted) {
+    window.sessionStorage.setItem(TOKEN_STORAGE_KEY, persisted);
+    return persisted;
   }
 
   return null;
 }
 
 function storeToken(token: string) {
+  if (typeof window === "undefined") return;
   window.sessionStorage.setItem(TOKEN_STORAGE_KEY, token);
+  window.localStorage.setItem(TOKEN_STORAGE_KEY, token);
 }
 
 function clearStoredToken() {
@@ -120,6 +127,7 @@ function clearStoredToken() {
   window.sessionStorage.removeItem(TOKEN_STORAGE_KEY);
   window.sessionStorage.removeItem(TENANT_TOKEN_KEY);
   window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+  window.localStorage.removeItem(TENANT_TOKEN_KEY);
 }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {

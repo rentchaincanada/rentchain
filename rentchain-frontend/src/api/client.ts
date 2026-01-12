@@ -66,10 +66,12 @@ api.interceptors.response.use(
       dispatchPlanLimit(detail);
     }
     if (status === 401) {
+      const hadToken =
+        !!sessionStorage.getItem("rentchain_token") || !!localStorage.getItem("rentchain_token");
       sessionStorage.removeItem("rentchain_token");
       localStorage.removeItem("rentchain_token");
       if (typeof window !== "undefined" && window.location.pathname !== "/login") {
-        window.location.href = "/login?reason=expired";
+        window.location.href = hadToken ? "/login?reason=expired" : "/login";
       }
     }
     return Promise.reject(err);
