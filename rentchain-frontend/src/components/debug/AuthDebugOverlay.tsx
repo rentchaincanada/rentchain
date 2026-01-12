@@ -30,10 +30,14 @@ export const AuthDebugOverlay: React.FC = () => {
   if (typeof window === "undefined") return null;
 
   const params = new URLSearchParams(window.location.search);
-  const enabled = params.get("debugAuth") === "1";
+  const paramEnabled = params.get("debugAuth") === "1";
+  if (paramEnabled) {
+    sessionStorage.setItem("debugAuthEnabled", "1");
+  }
+  const enabledFlag = sessionStorage.getItem("debugAuthEnabled") === "1";
   const closed = sessionStorage.getItem("debugAuthClosed") === "1";
   const [dismissed, setDismissed] = useState(closed);
-  const shouldShow = enabled && !dismissed;
+  const shouldShow = enabledFlag && !dismissed;
 
   const data = useMemo(() => {
     if (!shouldShow) return null;
@@ -64,12 +68,12 @@ export const AuthDebugOverlay: React.FC = () => {
 
   if (!shouldShow || !data) return null;
 
-  return (
-    <div
-      style={{
-        position: "fixed",
-        top: 10,
-        left: 10,
+    return (
+      <div
+        style={{
+          position: "fixed",
+          top: 10,
+          left: 10,
         zIndex: 9999,
         background: "rgba(0,0,0,0.85)",
         color: "#fff",
@@ -81,28 +85,51 @@ export const AuthDebugOverlay: React.FC = () => {
         boxShadow: "0 6px 20px rgba(0,0,0,0.35)",
       }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-        <strong>debugAuth</strong>
-        <button
-          type="button"
-          onClick={() => {
-            sessionStorage.setItem("debugAuthClosed", "1");
-            setDismissed(true);
-          }}
-          style={{
-            background: "transparent",
-            border: "none",
-            color: "#fff",
-            fontWeight: 700,
-            cursor: "pointer",
-          }}
-        >
-          ×
-        </button>
-      </div>
-      <div>host: {data.hostname}</div>
-      <div>path: {data.path}</div>
-      <div>active: {data.activeSource}</div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+            <strong>debugAuth</strong>
+            <button
+              type="button"
+              onClick={() => {
+                sessionStorage.setItem("debugAuthClosed", "1");
+                setDismissed(true);
+              }}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "#fff",
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              ×
+            </button>
+          </div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+            <button
+              type="button"
+              onClick={() => {
+                sessionStorage.removeItem("debugAuthEnabled");
+                sessionStorage.removeItem("debugAuthClosed");
+                const url = new URL(window.location.href);
+                url.searchParams.delete("debugAuth");
+                window.location.replace(url.toString());
+              }}
+              style={{
+                background: "#dc2626",
+                border: "none",
+                color: "#fff",
+                padding: "4px 6px",
+                borderRadius: 6,
+                fontSize: 11,
+                cursor: "pointer",
+              }}
+            >
+              Clear
+            </button>
+          </div>
+          <div>host: {data.hostname}</div>
+          <div>path: {data.path}</div>
+          <div>active: {data.activeSource}</div>
       <div>session: {data.session.present ? `yes len=${data.session.len} ${data.session.preview}` : "no"}</div>
       <div>session ws?: {data.session.whitespace ? "yes" : "no"}</div>
       <div>local: {data.local.present ? `yes len=${data.local.len} ${data.local.preview}` : "no"}</div>

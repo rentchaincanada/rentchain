@@ -93,7 +93,9 @@ api.interceptors.response.use(
       sessionStorage.removeItem("rentchain_token");
       localStorage.removeItem("rentchain_token");
       if (typeof window !== "undefined" && window.location.pathname !== "/login") {
-        window.location.href = reason === "missing" ? "/login" : `/login?reason=${reason}`;
+        const dbg = sessionStorage.getItem("debugAuthEnabled") === "1";
+        const suffix = dbg ? (reason === "missing" ? "?debugAuth=1" : `?reason=${reason}&debugAuth=1`) : reason === "missing" ? "" : `?reason=${reason}`;
+        window.location.href = `/login${suffix}`;
       }
     }
     return Promise.reject(err);

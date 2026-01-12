@@ -211,7 +211,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       clearStoredToken();
       if (!isPublic && typeof window !== "undefined") {
         const reason = !tokenCheck.valid ? "invalid" : "expired";
-        window.location.href = `/login?reason=${reason}`;
+        const dbg = sessionStorage.getItem("debugAuthEnabled") === "1";
+        window.location.href = `/login?reason=${reason}${dbg ? "&debugAuth=1" : ""}`;
       } else {
         setIsLoading(false);
         setReady(true);
