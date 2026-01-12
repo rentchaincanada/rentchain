@@ -4,9 +4,11 @@ import { LayoutDashboard, Building2, Users, ScrollText, MessagesSquare } from "l
 import { TopNav } from "./TopNav";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { useAuth } from "../../context/useAuth";
+import { StickyHeader } from "./StickyHeader";
 
 type Props = {
   children: React.ReactNode;
+  unreadMessages?: boolean;
 };
 
 const tabs = [
@@ -28,74 +30,45 @@ const topLinks = [
   { path: "/messages", label: "Messages" },
 ];
 
-export const LandlordNav: React.FC<Props> = ({ children }) => {
+export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
   const isMobile = useIsMobile();
   const nav = useNavigate();
   const loc = useLocation();
   const { logout } = useAuth();
+  const pathMap: Record<string, string> = {
+    "/dashboard": "Dashboard",
+    "/properties": "Properties",
+    "/tenants": "Tenants",
+    "/applications": "Applications",
+    "/messages": "Messages",
+    "/payments": "Payments",
+    "/billing": "Billing",
+  };
+  const routeTitle =
+    pathMap[Object.keys(pathMap).find((p) => loc.pathname.startsWith(p)) || ""] || "RentChain";
 
   if (isMobile) {
     return (
       <div style={{ minHeight: "100vh", paddingBottom: 80 }}>
-        <header
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "12px 16px",
-            borderBottom: "1px solid rgba(0,0,0,0.06)",
-            background: "#fff",
-            position: "sticky",
-            top: 0,
-            zIndex: 15,
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => nav("/dashboard")}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              background: "transparent",
-              border: "none",
-              padding: 0,
-              fontWeight: 800,
-              fontSize: 16,
-              cursor: "pointer",
-            }}
-          >
-            <span
+        <StickyHeader
+          title={routeTitle}
+          right={
+            <button
+              type="button"
+              onClick={() => void logout()}
               style={{
-                width: 30,
-                height: 30,
-                borderRadius: 12,
-                background: "linear-gradient(135deg, #2563eb, #1e3a8a)",
-                color: "#fff",
-                display: "grid",
-                placeItems: "center",
-                fontWeight: 800,
+                background: "#f3f4f6",
+                border: "1px solid rgba(0,0,0,0.06)",
+                borderRadius: 10,
+                padding: "6px 10px",
+                fontWeight: 700,
+                cursor: "pointer",
               }}
             >
-              R
-            </span>
-            RentChain
-          </button>
-          <button
-            type="button"
-            onClick={() => void logout()}
-            style={{
-              background: "#f3f4f6",
-              border: "1px solid rgba(0,0,0,0.06)",
-              borderRadius: 10,
-              padding: "6px 10px",
-              fontWeight: 700,
-              cursor: "pointer",
-            }}
-          >
-            Sign out
-          </button>
-        </header>
+              Sign out
+            </button>
+          }
+        />
 
         <main style={{ minHeight: "calc(100vh - 72px)" }}>{children}</main>
 
@@ -135,7 +108,20 @@ export const LandlordNav: React.FC<Props> = ({ children }) => {
                 }}
               >
                 <Icon size={20} strokeWidth={2.2} />
-                <span>{label}</span>
+                <span style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+                  {label}
+                  {label === "Messages" && unreadMessages ? (
+                    <span
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: 8,
+                        background: "#ef4444",
+                        marginLeft: 4,
+                      }}
+                    />
+                  ) : null}
+                </span>
               </button>
             );
           })}
@@ -146,7 +132,8 @@ export const LandlordNav: React.FC<Props> = ({ children }) => {
 
   return (
     <div>
-      <TopNav />
+      <TopNav unreadMessages={unreadMessages} />
+      <StickyHeader title={routeTitle} />
       <div style={{ padding: "12px 0 24px" }}>{children}</div>
     </div>
   );

@@ -1,5 +1,5 @@
 // rentchain-frontend/src/components/layout/TopNav.tsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { DEMO_MODE } from "../../config/demo";
 import { useSubscription } from "../../context/SubscriptionContext";
@@ -18,7 +18,11 @@ import {
   effects,
 } from "../../styles/tokens";
 
-export const TopNav: React.FC = () => {
+type TopNavProps = {
+  unreadMessages?: boolean;
+};
+
+export const TopNav: React.FC<TopNavProps> = ({ unreadMessages }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { plan, setPlan } = useSubscription();
@@ -60,6 +64,19 @@ export const TopNav: React.FC = () => {
   }, [setPlan]);
 
   const isActive = (path: string) => location.pathname.startsWith(path);
+  const topTabs = useMemo(
+    () => [
+      { path: "/pricing", label: "Pricing" },
+      { path: "/dashboard", label: "Dashboard" },
+      { path: "/properties", label: "Properties" },
+      { path: "/tenants", label: "Tenants" },
+      { path: "/billing", label: "Billing" },
+      { path: "/applications", label: "Applications" },
+      { path: "/payments", label: "Payments" },
+      { path: "/messages", label: "Messages", unread: unreadMessages },
+    ],
+    [unreadMessages]
+  );
 
   const handleSignInClick = (
     e: React.MouseEvent<HTMLButtonElement>
