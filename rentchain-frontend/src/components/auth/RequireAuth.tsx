@@ -8,10 +8,10 @@ interface RequireAuthProps {
 }
 
 export const RequireAuth: React.FC<RequireAuthProps> = ({ children }) => {
-  const { user, isLoading, ready, token } = useAuth();
+  const { user, isLoading, ready, token, authStatus } = useAuth();
   const location = useLocation();
 
-  if (isLoading || !ready) {
+  if (authStatus === "restoring" || isLoading || !ready) {
     return (
       <div
         style={{
@@ -27,7 +27,7 @@ export const RequireAuth: React.FC<RequireAuthProps> = ({ children }) => {
             "radial-gradient(circle at top left, #111827 0, #020617 45%, #000000 100%)",
         }}
       >
-        Loading…
+        Restoring session…
       </div>
     );
   }
@@ -38,7 +38,7 @@ export const RequireAuth: React.FC<RequireAuthProps> = ({ children }) => {
     params.set("next", current);
     const reason =
       (location.state as any)?.reason ||
-      (token ? "expired" : null);
+      (token ? "expired" : "missing");
     if (reason) params.set("reason", reason);
     return <Navigate to={`/login?${params.toString()}`} replace />;
   }

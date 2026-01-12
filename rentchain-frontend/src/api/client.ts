@@ -66,6 +66,18 @@ api.interceptors.response.use(
       dispatchPlanLimit(detail);
     }
     if (status === 401) {
+      const graceRaw =
+        (typeof window !== "undefined" &&
+          (localStorage.getItem(JUST_LOGGED_IN_KEY) ||
+            sessionStorage.getItem(JUST_LOGGED_IN_KEY))) ||
+        "0";
+      const graceAt = Number(graceRaw || "0");
+      const inGrace = graceAt > 0 && Date.now() - graceAt < 5000;
+
+      if (inGrace) {
+        return Promise.reject(err);
+      }
+
       const tok =
         sessionStorage.getItem(TOKEN_KEY) ||
         localStorage.getItem(TOKEN_KEY) ||

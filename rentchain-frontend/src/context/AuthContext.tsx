@@ -43,6 +43,7 @@ export interface AuthContextValue {
   token: string | null;
   isLoading: boolean;
   ready: boolean;
+  authStatus: "restoring" | "authed" | "guest";
   login: (
     email: string,
     password: string,
@@ -194,6 +195,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [ready, setReady] = useState<boolean>(false);
+  const [authStatus, setAuthStatus] = useState<"restoring" | "authed" | "guest">("restoring");
   const [twoFactorPendingToken, setTwoFactorPendingToken] =
     useState<string | null>(null);
   const [twoFactorMethods, setTwoFactorMethods] = useState<string[]>([]);
@@ -202,6 +204,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   useEffect(() => {
     setIsLoading(true);
     setReady(false);
+    setAuthStatus("restoring");
 
     const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -249,6 +252,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
         setUser(null);
         setToken(null);
+        setAuthStatus("guest");
         clearStoredToken();
         setIsLoading(false);
         setReady(true);
@@ -258,6 +262,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (tokenCheck && (!tokenCheck.valid || tokenCheck.expired)) {
         setUser(null);
         setToken(null);
+        setAuthStatus("guest");
         clearStoredToken();
         if (!isPublic && typeof window !== "undefined") {
           const reason = !tokenCheck.valid ? "invalid" : "expired";
@@ -271,6 +276,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
 
       setToken(storedToken);
+      setAuthStatus("authed");
 
       // Do not call /api/me on public routes; treat as logged-out view
       if (isPublic) {
@@ -282,6 +288,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (!storedToken) {
         setUser(null);
         setToken(null);
+        setAuthStatus("guest");
         setIsLoading(false);
         setReady(true);
         return;
@@ -292,6 +299,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         if (!me?.user) {
           setUser(null);
           setToken(null);
+          setAuthStatus("guest");
           clearStoredToken();
           if (import.meta.env.DEV) {
             console.warn("[auth] restore missing user payload");
@@ -299,6 +307,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           return;
         }
         setUser(me.user);
+        setAuthStatus("authed");
       } catch (e: any) {
         const msg = String(e?.message ?? "");
         if (msg.toLowerCase().includes("unauthorized") || msg.includes("401")) {
@@ -308,6 +317,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           setUser(null);
         }
         setToken(null);
+        setAuthStatus("guest");
         clearStoredToken();
       } finally {
         setIsLoading(false);
@@ -338,6 +348,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           storeToken(response.token);
           setToken(response.token);
           setUser(response.user);
+          setAuthStatus("authed");
           setTwoFactorPendingToken(null);
           setTwoFactorMethods([]);
           if (import.meta.env.DEV) {
@@ -384,6 +395,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       storeToken(response.token);
       setToken(response.token);
       setUser(response.user ?? null);
+      setAuthStatus("authed");
       setTwoFactorPendingToken(null);
       setTwoFactorMethods([]);
     } finally {
@@ -413,6 +425,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     clearStoredToken();
     setToken(null);
     setUser(null);
+    setAuthStatus("guest");
     setTwoFactorPendingToken(null);
     setTwoFactorMethods([]);
 
@@ -440,6 +453,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       token,
       isLoading,
       ready,
+      authStatus,
       login,
       loginDemo,
       logout,
@@ -463,6 +477,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       completeTwoFactor,
       resetTwoFactor,
       updateUser,
+      authStatus,
     ]
   );
 
