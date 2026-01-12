@@ -1,4 +1,5 @@
 import { DEBUG_AUTH_KEY, JUST_LOGGED_IN_KEY, TENANT_TOKEN_KEY, TOKEN_KEY } from "./authKeys";
+export { TENANT_TOKEN_KEY } from "./authKeys";
 
 export function getTenantToken() {
   if (typeof window === "undefined") return "";
