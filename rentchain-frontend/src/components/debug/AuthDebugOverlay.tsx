@@ -48,6 +48,13 @@ export const AuthDebugOverlay: React.FC = () => {
     const expMs = payload?.exp ? payload.exp * 1000 : null;
     const remainingSec = expMs ? Math.round((expMs - Date.now()) / 1000) : null;
     const storedAt = sessionStorage.getItem("debugAuthStoredAt");
+    let last401: any = null;
+    try {
+      const raw = localStorage.getItem("authLast401");
+      if (raw) last401 = JSON.parse(raw);
+    } catch {
+      // ignore
+    }
 
     return {
       hostname: window.location.hostname,
@@ -60,6 +67,7 @@ export const AuthDebugOverlay: React.FC = () => {
       expMs,
       remainingSec,
       storedAt,
+      last401,
       activeSource: sTok ? "session" : lTok ? "local" : tenantS ? "tenantSession" : tenantL ? "tenantLocal" : "none",
     };
   }, [shouldShow]);
@@ -138,6 +146,11 @@ export const AuthDebugOverlay: React.FC = () => {
       <div>expMs: {data.expMs ?? "n/a"}</div>
       <div>remaining(s): {data.remainingSec ?? "n/a"}</div>
       <div>storedAt: {data.storedAt ?? "n/a"}</div>
+      {data.last401 ? (
+        <div>
+          last401: {data.last401.status} {data.last401.reason || "-"} {data.last401.url || ""}
+        </div>
+      ) : null}
       <div>now: {Date.now()}</div>
     </div>
   );

@@ -61,54 +61,73 @@ api.interceptors.response.use(
   (err) => {
     const status = err?.response?.status;
     const data = err?.response?.data;
+    const url = err?.config?.url || "";
     const detail = normalizePlanLimit(data, status);
     if (detail) {
       dispatchPlanLimit(detail);
     }
-    if (status === 401) {
-      const graceRaw =
-        (typeof window !== "undefined" &&
-          (localStorage.getItem(JUST_LOGGED_IN_KEY) ||
-            sessionStorage.getItem(JUST_LOGGED_IN_KEY))) ||
-        "0";
-      const graceAt = Number(graceRaw || "0");
-      const inGrace = graceAt > 0 && Date.now() - graceAt < 5000;
+    if (status !== 401 && status !== 403) {
+      return Promise.reject(err);
+    }
 
-      if (inGrace) {
-        return Promise.reject(err);
-      }
+    const graceRaw =
+      (typeof window !== "undefined" &&
+        (localStorage.getItem(JUST_LOGGED_IN_KEY) ||
+          sessionStorage.getItem(JUST_LOGGED_IN_KEY))) ||
+      "0";
+    const graceAt = Number(graceRaw || "0");
+    const inGrace = graceAt > 0 && Date.now() - graceAt < 5000;
 
-      const tok =
-        sessionStorage.getItem(TOKEN_KEY) ||
-        localStorage.getItem(TOKEN_KEY) ||
-        sessionStorage.getItem("token") ||
-        localStorage.getItem("token") ||
-        "";
-      const parts = tok.split(".");
-      let reason = "missing";
-      if (tok) {
-        if (parts.length === 3) {
-          try {
-            let b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-            while (b64.length % 4) b64 += "=";
-            const payload = JSON.parse(atob(b64));
-            if (typeof payload?.exp === "number") {
-              const expMs = payload.exp * 1000;
-              if (Date.now() >= expMs - 30_000) {
-                reason = "expired";
-              } else {
-                reason = "invalid";
-              }
+    if (inGrace) {
+      return Promise.reject(err);
+    }
+
+    const tok =
+      sessionStorage.getItem(TOKEN_KEY) ||
+      localStorage.getItem(TOKEN_KEY) ||
+      "";
+    const parts = tok.split(".");
+    let reason: "missing" | "expired" | "unauthorized" = "missing";
+
+    if (tok) {
+      if (parts.length === 3) {
+        try {
+          let b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+          while (b64.length % 4) b64 += "=";
+          const payload = JSON.parse(atob(b64));
+          if (typeof payload?.exp === "number") {
+            const expMs = payload.exp * 1000;
+            if (Date.now() >= expMs - 30_000) {
+              reason = "expired";
             } else {
-              reason = "invalid";
+              reason = "unauthorized";
             }
-          } catch {
-            reason = "invalid";
+          } else {
+            reason = "missing";
           }
-        } else {
-          reason = "invalid";
+        } catch {
+          reason = "missing";
         }
+      } else {
+        reason = "missing";
       }
+    }
+
+    try {
+      localStorage.setItem(
+        "authLast401",
+        JSON.stringify({
+          ts: Date.now(),
+          url: typeof url === "string" ? url.slice(0, 180) : "",
+          status,
+          reason,
+        })
+      );
+    } catch {
+      // ignore
+    }
+
+    if (reason === "expired") {
       sessionStorage.removeItem(TOKEN_KEY);
       localStorage.removeItem(TOKEN_KEY);
       try {
@@ -118,17 +137,11 @@ api.interceptors.response.use(
       }
       if (typeof window !== "undefined" && window.location.pathname !== "/login") {
         const dbg = localStorage.getItem(DEBUG_AUTH_KEY) === "1";
-        const suffix =
-          reason === "missing"
-            ? dbg
-              ? "?debugAuth=1"
-              : ""
-            : dbg
-            ? `?reason=${reason}&debugAuth=1`
-            : `?reason=${reason}`;
+        const suffix = dbg ? `?reason=expired&debugAuth=1` : `?reason=expired`;
         window.location.href = `/login${suffix}`;
       }
     }
+
     return Promise.reject(err);
   }
 );
