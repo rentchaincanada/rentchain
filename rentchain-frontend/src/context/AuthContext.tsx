@@ -84,6 +84,16 @@ function isTokenExpired(token: string): { valid: boolean; expired: boolean; expM
   return { valid: true, expired, expMs };
 }
 
+function tokenPreview(token: string | null | undefined) {
+  if (!token) return { has: false, len: 0, preview: "" };
+  const t = String(token);
+  if (!t) return { has: false, len: 0, preview: "" };
+  const len = t.length;
+  const first = t.slice(0, 10);
+  const last = t.slice(-10);
+  return { has: true, len, preview: `${first}...${last}` };
+}
+
 interface AuthProviderProps {
   children: React.ReactNode;
 }
@@ -140,8 +150,15 @@ function getStoredToken() {
 
 function storeToken(token: string) {
   if (typeof window === "undefined") return;
-  window.sessionStorage.setItem(TOKEN_STORAGE_KEY, token);
-  window.localStorage.setItem(TOKEN_STORAGE_KEY, token);
+  const clean = String(token ?? "").trim();
+  if (!clean || clean.includes("\n") || clean.includes("\r") || /\s/.test(clean)) {
+    if (import.meta.env.DEV || (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("debugAuth") === "1")) {
+      console.warn("[auth] refusing to store token with whitespace/newlines");
+    }
+    return;
+  }
+  window.sessionStorage.setItem(TOKEN_STORAGE_KEY, clean);
+  window.localStorage.setItem(TOKEN_STORAGE_KEY, clean);
 }
 
 function clearStoredToken() {
@@ -357,6 +374,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setUser((prev) => (prev ? { ...prev, ...patch } : prev));
   }, []);
 
+  const debugAuth = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("debugAuth") === "1";
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
@@ -389,7 +408,61 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     ]
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  const overlay = (() => {
+    if (!debugAuth || typeof window === "undefined") return null;
+    const sessionTok = window.sessionStorage.getItem(TOKEN_STORAGE_KEY);
+    const localTok = window.localStorage.getItem(TOKEN_STORAGE_KEY);
+    const tenantSession = window.sessionStorage.getItem(TENANT_TOKEN_KEY);
+    const tenantLocal = window.localStorage.getItem(TENANT_TOKEN_KEY);
+    const previewSession = tokenPreview(sessionTok);
+    const previewLocal = tokenPreview(localTok);
+    const previewTenantSession = tokenPreview(tenantSession);
+    const previewTenantLocal = tokenPreview(tenantLocal);
+
+    const check = sessionTok || localTok || tenantSession || tenantLocal
+      ? isTokenExpired(sessionTok || localTok || tenantSession || tenantLocal)
+      : null;
+
+    const payload = sessionTok || localTok ? decodeJwtPayload(sessionTok || localTok) : null;
+    const expMs = payload?.exp ? payload.exp * 1000 : null;
+
+    return (
+      <div
+        style={{
+          position: "fixed",
+          top: 10,
+          left: 10,
+          zIndex: 9999,
+          background: "rgba(0,0,0,0.8)",
+          color: "#fff",
+          padding: "10px 12px",
+          borderRadius: 8,
+          fontSize: 12,
+          maxWidth: 320,
+          lineHeight: 1.4,
+        }}
+      >
+        <div><strong>debugAuth</strong></div>
+        <div>host: {window.location.hostname}</div>
+        <div>path: {window.location.pathname}</div>
+        <div>session token: {previewSession.has ? "yes" : "no"} len={previewSession.len} {previewSession.preview}</div>
+        <div>local token: {previewLocal.has ? "yes" : "no"} len={previewLocal.len} {previewLocal.preview}</div>
+        <div>tenant session: {previewTenantSession.has ? "yes" : "no"} {previewTenantSession.preview}</div>
+        <div>tenant local: {previewTenantLocal.has ? "yes" : "no"} {previewTenantLocal.preview}</div>
+        <div>decode: {payload ? "ok" : "failed"}</div>
+        <div>exp: {expMs ? `${expMs} (${new Date(expMs).toISOString()})` : "n/a"}</div>
+        <div>now: {Date.now()}</div>
+        <div>expired?: {check ? String(check.expired) : "n/a"}</div>
+      </div>
+    );
+  })();
+
+  return (
+    <AuthContext.Provider value={value}>
+      {overlay}
+      {children}
+    </AuthContext.Provider>
+  );
 };
 
 export function useAuth(): AuthContextValue {
