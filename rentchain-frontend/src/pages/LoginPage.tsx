@@ -64,7 +64,7 @@ export const LoginPage: React.FC = () => {
         });
       }
       await Promise.resolve();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 150));
       navigate(nextPath, { replace: true });
     } catch (err: any) {
       setError(err?.message || "Demo login failed");
@@ -109,7 +109,7 @@ export const LoginPage: React.FC = () => {
         });
       }
       await Promise.resolve();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 150));
       navigate(nextPath, { replace: true });
     } catch (err: unknown) {
       const message =

@@ -121,7 +121,7 @@ export default function TenantInviteAcceptPage() {
         if (import.meta.env.DEV || dbg) console.log("[tenant-invite] stored token lengths", { sLen, lLen });
       }
       await Promise.resolve(); // allow storage write to settle before SPA nav
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 150));
       setOkMsg("Invite accepted. Redirecting to tenant portal...");
       navigate("/tenant", { replace: true });
     } catch (e: any) {

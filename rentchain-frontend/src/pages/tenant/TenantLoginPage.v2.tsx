@@ -58,7 +58,7 @@ const TenantLoginPageV2: React.FC = () => {
       }
 
       await Promise.resolve(); // allow storage flush on iOS before navigation
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 150));
       navigate("/tenant", { replace: true });
     } catch (e: any) {
       setErr(String(e?.message || e));

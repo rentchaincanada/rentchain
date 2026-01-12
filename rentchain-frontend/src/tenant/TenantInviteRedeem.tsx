@@ -36,7 +36,7 @@ export default function TenantInviteRedeem() {
         }
         setStatus("ok");
         await Promise.resolve();
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        await new Promise((resolve) => setTimeout(resolve, 150));
         nav("/tenant", { replace: true });
       } catch (e: any) {
         setStatus("error");

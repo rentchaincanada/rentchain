@@ -216,13 +216,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             window.sessionStorage.getItem(JUST_LOGGED_IN_KEY))) ||
         "0";
       const graceAt = Number(graceRaw || "0");
-      const inGrace = graceAt > 0 && Date.now() - graceAt < 3000;
+      const inGrace = graceAt > 0 && Date.now() - graceAt < 5000;
 
       if (!storedToken && inGrace) {
-        for (let i = 0; i < 5 && !storedToken; i += 1) {
+        for (let i = 0; i < 10 && !storedToken; i += 1) {
           // brief retries to allow iOS storage flush
           // eslint-disable-next-line no-await-in-loop
-          await sleep(300);
+          await sleep(250);
           storedToken = getStoredToken();
         }
       }
