@@ -1,10 +1,11 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { LayoutDashboard, Building2, Users, ScrollText, MessagesSquare } from "lucide-react";
 import { TopNav } from "./TopNav";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { useAuth } from "../../context/useAuth";
 import { StickyHeader } from "./StickyHeader";
+import { fetchLandlordConversations } from "../../api/messagesApi";
 
 type Props = {
   children: React.ReactNode;
@@ -35,7 +36,10 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
   const nav = useNavigate();
   const loc = useLocation();
   const { logout } = useAuth();
+  const [hasUnread, setHasUnread] = useState<boolean>(false);
+  const unreadFlag = typeof unreadMessages === "boolean" ? unreadMessages : hasUnread;
   const pathMap: Record<string, string> = {
+    "/": "Dashboard",
     "/dashboard": "Dashboard",
     "/properties": "Properties",
     "/tenants": "Tenants",
@@ -46,6 +50,29 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
   };
   const routeTitle =
     pathMap[Object.keys(pathMap).find((p) => loc.pathname.startsWith(p)) || ""] || "RentChain";
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const list = await fetchLandlordConversations();
+        if (!mounted) return;
+        const unread = (list || []).some(
+          (c: any) => c?.hasUnread === true || (c?.unreadCount ?? 0) > 0
+        );
+        setHasUnread(unread);
+      } catch {
+        if (!mounted) return;
+        setHasUnread(false);
+      }
+    };
+    void load();
+    const t = window.setInterval(load, 30000);
+    return () => {
+      mounted = false;
+      window.clearInterval(t);
+    };
+  }, []);
 
   if (isMobile) {
     return (
@@ -110,7 +137,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
                 <Icon size={20} strokeWidth={2.2} />
                 <span style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
                   {label}
-                  {label === "Messages" && unreadMessages ? (
+                  {label === "Messages" && unreadFlag ? (
                     <span
                       style={{
                         width: 8,
@@ -132,7 +159,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
 
   return (
     <div>
-      <TopNav unreadMessages={unreadMessages} />
+      <TopNav unreadMessages={unreadFlag} />
       <StickyHeader title={routeTitle} />
       <div style={{ padding: "12px 0 24px" }}>{children}</div>
     </div>

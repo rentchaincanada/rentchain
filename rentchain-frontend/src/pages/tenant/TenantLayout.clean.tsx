@@ -3,6 +3,8 @@ import { NavLink, Outlet, useLocation, useNavigate, useOutletContext } from "rea
 import { getTenantLease, getTenantMe, TenantLease, TenantProfile } from "../../api/tenantPortalApi";
 import { useAuth } from "../../context/useAuth";
 import { useIsMobile } from "../../hooks/useIsMobile";
+import { StickyHeader } from "../../components/layout/StickyHeader";
+import { ensureTenantConversation } from "../../api/messagesApi";
 
 export type TenantOutletContext = {
   profile: TenantProfile | null;
@@ -52,6 +54,7 @@ export const TenantLayout: React.FC = () => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const isMobile = useIsMobile();
+  const [unreadMessages, setUnreadMessages] = useState(false);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -99,8 +102,42 @@ export const TenantLayout: React.FC = () => {
     { to: "/tenant/messages", label: "Messages" },
   ];
 
+  useEffect(() => {
+    let mounted = true;
+    const loadUnread = async () => {
+      try {
+        const res = await ensureTenantConversation();
+        if (!mounted) return;
+        const conv: any = res?.conversation || null;
+        const lastMsg = Number(conv?.lastMessageAt || conv?.lastMessageAtMs || 0);
+        const lastRead = Number(conv?.lastReadAtTenant || conv?.lastReadAtTenantMs || 0);
+        setUnreadMessages(Boolean(lastMsg && (!lastRead || lastMsg > lastRead)));
+      } catch {
+        if (!mounted) return;
+        setUnreadMessages(false);
+      }
+    };
+    void loadUnread();
+    const t = window.setInterval(loadUnread, 30000);
+    return () => {
+      mounted = false;
+      window.clearInterval(t);
+    };
+  }, []);
+
+  const titleMap: Record<string, string> = {
+    "/tenant/messages": "Messages",
+    "/tenant/ledger": "Ledger",
+    "/tenant/payments": "Payments",
+    "/tenant": "Dashboard",
+  };
+  const routeTitle =
+    titleMap[Object.keys(titleMap).find((p) => location.pathname.startsWith(p)) || ""] ||
+    "Tenant Portal";
+
   return (
     <div style={{ ...containerStyle, paddingBottom: isMobile ? 96 : containerStyle.padding }}>
+      <StickyHeader title={routeTitle} />
       <div style={{ maxWidth: 980, margin: "0 auto", display: "flex", flexDirection: "column", gap: 16 }}>
         <header style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -241,7 +278,19 @@ export const TenantLayout: React.FC = () => {
                   borderRadius: 10,
                 }}
               >
-                {item.label}
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                  {item.label}
+                  {item.to === "/tenant/messages" && unreadMessages ? (
+                    <span
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: 8,
+                        background: "#ef4444",
+                      }}
+                    />
+                  ) : null}
+                </span>
               </button>
             );
           })}

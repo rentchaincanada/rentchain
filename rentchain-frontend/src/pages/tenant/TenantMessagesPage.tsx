@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import {
   ensureTenantConversation,
   fetchTenantConversationMessages,
@@ -17,6 +18,7 @@ export default function TenantMessagesPage() {
   const [composer, setComposer] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const location = useLocation();
 
   const loadConversation = async () => {
     try {
@@ -45,17 +47,19 @@ export default function TenantMessagesPage() {
   useEffect(() => {
     let mounted = true;
     (async () => {
+      const deepLinkId = new URLSearchParams(location.search).get("c");
       const id = await loadConversation();
       if (id && mounted) {
-        await loadThread(id);
-        const t = window.setInterval(() => void loadThread(id), POLL_THREAD_MS);
+        const targetId = deepLinkId && deepLinkId === id ? deepLinkId : id;
+        await loadThread(targetId);
+        const t = window.setInterval(() => void loadThread(targetId), POLL_THREAD_MS);
         return () => window.clearInterval(t);
       }
     })();
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [location.search]);
 
   const handleSend = async () => {
     if (!conversation?.id || !composer.trim()) return;

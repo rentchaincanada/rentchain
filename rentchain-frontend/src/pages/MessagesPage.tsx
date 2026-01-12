@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import {
   fetchLandlordConversations,
   fetchLandlordConversationMessages,
@@ -20,13 +21,18 @@ export default function MessagesPage() {
   const [loadingList, setLoadingList] = useState(false);
   const [loadingThread, setLoadingThread] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const location = useLocation();
 
-  const loadConversations = async () => {
+  const loadConversations = async (preferredId?: string | null) => {
     try {
       setLoadingList(true);
       const data = await fetchLandlordConversations();
       setConversations(data);
-      if (!selectedId && data.length > 0) setSelectedId(data[0].id);
+      if (preferredId) {
+        setSelectedId(preferredId);
+      } else if (!selectedId && data.length > 0) {
+        setSelectedId(data[0].id);
+      }
     } catch (err: any) {
       setError(err?.message || "Failed to load conversations");
     } finally {
@@ -48,10 +54,17 @@ export default function MessagesPage() {
   };
 
   useEffect(() => {
-    void loadConversations();
-    const t = window.setInterval(() => void loadConversations(), POLL_CONVERSATIONS_MS);
+    const params = new URLSearchParams(location.search);
+    const deepLinkId = params.get("c");
+    void (async () => {
+      await loadConversations(deepLinkId);
+      if (deepLinkId) {
+        await loadThread(deepLinkId);
+      }
+    })();
+    const t = window.setInterval(() => void loadConversations(selectedId), POLL_CONVERSATIONS_MS);
     return () => window.clearInterval(t);
-  }, []);
+  }, [location.search, selectedId]);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -105,7 +118,10 @@ export default function MessagesPage() {
               return (
                 <button
                   key={c.id}
-                  onClick={() => setSelectedId(c.id)}
+                  onClick={() => {
+                    setSelectedId(c.id);
+                    window.history.replaceState({}, "", `/messages?c=${c.id}`);
+                  }}
                   style={{
                     width: "100%",
                     textAlign: "left",

@@ -1,5 +1,5 @@
 // rentchain-frontend/src/components/layout/TopNav.tsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { DEMO_MODE } from "../../config/demo";
 import { useSubscription } from "../../context/SubscriptionContext";
@@ -227,9 +227,24 @@ export const TopNav: React.FC<TopNavProps> = ({ unreadMessages }) => {
               fontWeight: 600,
               cursor: "pointer",
               transition: "background 0.15s ease, color 0.15s ease",
+              position: "relative",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
             }}
           >
             Messages
+            {unreadMessages ? (
+              <span
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: 8,
+                  background: colors.danger,
+                  display: "inline-block",
+                }}
+              />
+            ) : null}
           </button>
           {user && (
             <button
