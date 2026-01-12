@@ -415,10 +415,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const overlay = (() => {
     if (!debugAuth || typeof window === "undefined") return null;
-    const sessionTok = window.sessionStorage.getItem(TOKEN_STORAGE_KEY);
-    const localTok = window.localStorage.getItem(TOKEN_STORAGE_KEY);
-    const tenantSession = window.sessionStorage.getItem(TENANT_TOKEN_KEY);
-    const tenantLocal = window.localStorage.getItem(TENANT_TOKEN_KEY);
+    const sessionTok = window.sessionStorage.getItem(TOKEN_STORAGE_KEY) ?? "";
+    const localTok = window.localStorage.getItem(TOKEN_STORAGE_KEY) ?? "";
+    const tenantSession = window.sessionStorage.getItem(TENANT_TOKEN_KEY) ?? "";
+    const tenantLocal = window.localStorage.getItem(TENANT_TOKEN_KEY) ?? "";
     const previewSession = tokenPreview(sessionTok);
     const previewLocal = tokenPreview(localTok);
     const previewTenantSession = tokenPreview(tenantSession);
