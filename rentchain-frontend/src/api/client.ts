@@ -66,12 +66,34 @@ api.interceptors.response.use(
       dispatchPlanLimit(detail);
     }
     if (status === 401) {
-      const hadToken =
-        !!sessionStorage.getItem("rentchain_token") || !!localStorage.getItem("rentchain_token");
+      const tok =
+        sessionStorage.getItem("rentchain_token") ||
+        localStorage.getItem("rentchain_token") ||
+        sessionStorage.getItem("token") ||
+        localStorage.getItem("token") ||
+        "";
+      const parts = tok.split(".");
+      let reason = "missing";
+      if (tok) {
+        reason = "invalid";
+        if (parts.length === 3) {
+          try {
+            let b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+            while (b64.length % 4) b64 += "=";
+            const payload = JSON.parse(atob(b64));
+            if (typeof payload?.exp === "number") {
+              const expMs = payload.exp * 1000;
+              if (Date.now() >= expMs - 30_000) reason = "expired";
+            }
+          } catch {
+            reason = "invalid";
+          }
+        }
+      }
       sessionStorage.removeItem("rentchain_token");
       localStorage.removeItem("rentchain_token");
       if (typeof window !== "undefined" && window.location.pathname !== "/login") {
-        window.location.href = hadToken ? "/login?reason=expired" : "/login";
+        window.location.href = reason === "missing" ? "/login" : `/login?reason=${reason}`;
       }
     }
     return Promise.reject(err);

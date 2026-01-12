@@ -62,6 +62,28 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 const TOKEN_STORAGE_KEY = "rentchain_token";
 const TENANT_TOKEN_KEY = "rentchain_tenant_token";
 
+function decodeJwtPayload(token: string): any | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length < 2) return null;
+    let b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    while (b64.length % 4) b64 += "=";
+    const json = atob(b64);
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
+function isTokenExpired(token: string): { valid: boolean; expired: boolean; expMs?: number } {
+  const payload = decodeJwtPayload(token);
+  if (!payload || typeof payload.exp !== "number") return { valid: false, expired: false };
+  const expMs = payload.exp * 1000;
+  const now = Date.now();
+  const expired = now >= expMs - 30_000;
+  return { valid: true, expired, expMs };
+}
+
 interface AuthProviderProps {
   children: React.ReactNode;
 }
@@ -149,6 +171,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const isPublic = PUBLIC_ROUTE_ALLOWLIST.includes(pathname);
     const storedToken = getStoredToken();
     const hasToken = Boolean(storedToken);
+    const tokenCheck = storedToken ? isTokenExpired(storedToken) : null;
 
     // No token: stay logged out, skip /api/me on public routes, and don't redirect
     if (!hasToken) {
@@ -157,6 +180,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       clearStoredToken();
       setIsLoading(false);
       setReady(true);
+      return;
+    }
+
+    if (tokenCheck && (!tokenCheck.valid || tokenCheck.expired)) {
+      setUser(null);
+      setToken(null);
+      clearStoredToken();
+      if (!isPublic && typeof window !== "undefined") {
+        const reason = !tokenCheck.valid ? "invalid" : "expired";
+        window.location.href = `/login?reason=${reason}`;
+      } else {
+        setIsLoading(false);
+        setReady(true);
+      }
       return;
     }
 

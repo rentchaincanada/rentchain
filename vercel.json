@@ -1,0 +1,9 @@
+{
+  "redirects": [
+    {
+      "source": "https://rentchain.ai/:path*",
+      "destination": "https://www.rentchain.ai/:path*",
+      "permanent": true
+    }
+  ]
+}
