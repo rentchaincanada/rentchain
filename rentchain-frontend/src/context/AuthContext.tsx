@@ -152,12 +152,14 @@ function storeToken(token: string) {
   if (typeof window === "undefined") return;
   const clean = String(token ?? "").trim();
   if (!clean || clean.includes("\n") || clean.includes("\r") || /\s/.test(clean)) {
-    if (import.meta.env.DEV || (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("debugAuth") === "1")) {
+    const dbg = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("debugAuth") ?? "" : "";
+    if (import.meta.env.DEV || dbg === "1") {
       console.warn("[auth] refusing to store token with whitespace/newlines");
     }
     return;
   }
-  if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("debugAuth") === "1") {
+  const dbgStore = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("debugAuth") ?? "" : "";
+  if (dbgStore === "1") {
     window.sessionStorage.setItem("debugAuthStoredAt", String(Date.now()));
   }
   window.sessionStorage.setItem(TOKEN_STORAGE_KEY, clean);
@@ -377,7 +379,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setUser((prev) => (prev ? { ...prev, ...patch } : prev));
   }, []);
 
-  const debugAuth = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("debugAuth") === "1";
+  const debugAuth = typeof window !== "undefined" && (new URLSearchParams(window.location.search).get("debugAuth") ?? "") === "1";
 
   const value = useMemo<AuthContextValue>(
     () => ({
