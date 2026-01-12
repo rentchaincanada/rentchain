@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { setTenantToken } from "../../lib/tenantAuth";
 
 type InvitePreview = {
@@ -31,6 +31,7 @@ function Card({ children }: { children: React.ReactNode }) {
 export default function TenantInviteAcceptPage() {
   const { token } = useParams();
   const inviteToken = useMemo(() => String(token || "").trim(), [token]);
+  const navigate = useNavigate();
 
   const [preview, setPreview] = useState<InvitePreview | null>(null);
   const [fullName, setFullName] = useState("");
@@ -104,15 +105,17 @@ export default function TenantInviteAcceptPage() {
       }
 
       // store tenant token for portal access
-      sessionStorage.setItem("rentchain_token", jwt);
-      sessionStorage.setItem("rentchain_tenant_token", jwt);
-      try {
-        localStorage.removeItem("rentchain_token");
-      } catch {
-        // ignore
+      setTenantToken(jwt);
+      const dbg = sessionStorage.getItem("debugAuthEnabled") === "1";
+      if (dbg) {
+        const sLen = (sessionStorage.getItem("rentchain_tenant_token") || "").length;
+        const lLen = (localStorage.getItem("rentchain_tenant_token") || "").length;
+        // eslint-disable-next-line no-console
+        if (import.meta.env.DEV || dbg) console.log("[tenant-invite] stored token lengths", { sLen, lLen });
       }
+      await Promise.resolve(); // allow storage write to settle before SPA nav
       setOkMsg("Invite accepted. Redirecting to tenant portal...");
-      window.location.href = "/tenant";
+      navigate("/tenant", { replace: true });
     } catch (e: any) {
       setErr(String(e?.message || e));
     } finally {

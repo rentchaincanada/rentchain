@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { setTenantToken } from "../../lib/tenantAuth";
 
 function Card({ children }: { children: React.ReactNode }) {
@@ -23,6 +23,7 @@ const TenantLoginPageV2: React.FC = () => {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -41,7 +42,16 @@ const TenantLoginPageV2: React.FC = () => {
       if (!jwt) throw new Error("Login succeeded but token missing");
       setTenantToken(jwt);
 
-      window.location.href = "/tenant";
+      const dbg = sessionStorage.getItem("debugAuthEnabled") === "1";
+      if (dbg) {
+        const sLen = (sessionStorage.getItem("rentchain_tenant_token") || "").length;
+        const lLen = (localStorage.getItem("rentchain_tenant_token") || "").length;
+        // eslint-disable-next-line no-console
+        if (import.meta.env.DEV || dbg) console.log("[tenant-login] stored token lengths", { sLen, lLen });
+      }
+
+      await Promise.resolve(); // allow storage flush on iOS before navigation
+      navigate("/tenant", { replace: true });
     } catch (e: any) {
       setErr(String(e?.message || e));
     } finally {

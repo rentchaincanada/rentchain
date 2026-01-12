@@ -20,7 +20,15 @@ export default function TenantInviteRedeem() {
         });
         if (!res?.tenantToken) throw new Error("No tenant token returned");
         setTenantToken(res.tenantToken);
+        const dbg = sessionStorage.getItem("debugAuthEnabled") === "1";
+        if (dbg) {
+          const sLen = (sessionStorage.getItem("rentchain_tenant_token") || "").length;
+          const lLen = (localStorage.getItem("rentchain_tenant_token") || "").length;
+          // eslint-disable-next-line no-console
+          if (import.meta.env.DEV || dbg) console.log("[tenant-invite-redeem] stored token lengths", { sLen, lLen });
+        }
         setStatus("ok");
+        await Promise.resolve();
         nav("/tenant", { replace: true });
       } catch (e: any) {
         setStatus("error");

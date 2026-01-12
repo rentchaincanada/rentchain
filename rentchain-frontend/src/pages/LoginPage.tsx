@@ -47,6 +47,16 @@ export const LoginPage: React.FC = () => {
 
     try {
       await loginDemo("core");
+      const dbg = sessionStorage.getItem("debugAuthEnabled") === "1";
+      if (dbg) {
+        const sTok = sessionStorage.getItem("rentchain_token");
+        const lTok = localStorage.getItem("rentchain_token");
+        console.info("[auth debug] demo login stored", {
+          sessionLen: sTok?.length || 0,
+          localLen: lTok?.length || 0,
+        });
+      }
+      await Promise.resolve();
       navigate(nextPath, { replace: true });
     } catch (err: any) {
       setError(err?.message || "Demo login failed");
@@ -75,6 +85,16 @@ export const LoginPage: React.FC = () => {
         return;
       }
 
+      const dbg = sessionStorage.getItem("debugAuthEnabled") === "1";
+      if (dbg) {
+        const sTok = sessionStorage.getItem("rentchain_token");
+        const lTok = localStorage.getItem("rentchain_token");
+        console.info("[auth debug] login stored", {
+          sessionLen: sTok?.length || 0,
+          localLen: lTok?.length || 0,
+        });
+      }
+      await Promise.resolve();
       navigate(nextPath, { replace: true });
     } catch (err: unknown) {
       const message =
