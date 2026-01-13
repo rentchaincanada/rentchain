@@ -8,23 +8,23 @@ export function useIsMobile(query: string = "(max-width: 768px)") {
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
     const mql = window.matchMedia(query);
-    const handler = (e: MediaQueryListEvent | MediaQueryList) => {
-      setIsMobile("matches" in e ? e.matches : (e as MediaQueryList).matches);
+    const handler = (e: MediaQueryListEvent) => {
+      setIsMobile(e.matches);
     };
     // Support older Safari by checking addEventListener
     if (mql.addEventListener) {
       mql.addEventListener("change", handler);
     } else {
-      // @ts-expect-error legacy API
-      mql.addListener(handler);
+      // legacy API fallback
+      (mql as any).addListener(handler);
     }
     handler(mql);
     return () => {
       if (mql.removeEventListener) {
         mql.removeEventListener("change", handler);
       } else {
-        // @ts-expect-error legacy API
-        mql.removeListener(handler);
+        // legacy API fallback
+        (mql as any).removeListener(handler);
       }
     };
   }, [query]);

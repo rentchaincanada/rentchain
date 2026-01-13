@@ -1,5 +1,5 @@
 // rentchain-frontend/src/components/layout/TopNav.tsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { DEMO_MODE } from "../../config/demo";
 import { useSubscription } from "../../context/SubscriptionContext";
