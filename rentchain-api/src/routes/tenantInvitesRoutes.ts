@@ -188,11 +188,13 @@ router.post("/redeem", async (req: any, res) => {
     return res.status(400).json({ ok: false, error: "invite_expired" });
   }
 
-  const tenantId = crypto
-    .createHash("sha256")
-    .update(`${invite.landlordId}:${invite.tenantEmail}`.toLowerCase())
-    .digest("hex")
-    .slice(0, 24);
+  const tenantId =
+    invite.tenantId ||
+    crypto
+      .createHash("sha256")
+      .update(`${invite.landlordId}:${invite.tenantEmail}`.toLowerCase())
+      .digest("hex")
+      .slice(0, 24);
 
   // Resolve property/unit/lease from existing tenant record if invite lacks them
   let resolvedPropertyId = invite.propertyId || null;
@@ -210,6 +212,7 @@ router.post("/redeem", async (req: any, res) => {
     console.warn("[tenant-invites] resolve tenant doc failed", err);
   }
 
+  const now = Date.now();
   await db
     .collection("tenants")
     .doc(tenantId)
@@ -219,10 +222,12 @@ router.post("/redeem", async (req: any, res) => {
         landlordId: invite.landlordId,
         email: invite.tenantEmail,
         fullName: invite.tenantName || null,
-        propertyId: resolvedPropertyId,
-        unitId: resolvedUnitId,
-        leaseId: resolvedLeaseId,
-        createdAt: Date.now(),
+        propertyId: resolvedPropertyId || null,
+        unitId: resolvedUnitId || null,
+        leaseId: resolvedLeaseId || null,
+        status: "active",
+        createdAt: invite.tenantId ? invite.createdAt || now : now,
+        updatedAt: now,
         source: "invite",
       },
       { merge: true }
@@ -257,6 +262,7 @@ router.post("/redeem", async (req: any, res) => {
       propertyId: resolvedPropertyId,
       unitId: resolvedUnitId,
       leaseId: resolvedLeaseId,
+      landlordId: invite.landlordId,
     },
   });
 });
