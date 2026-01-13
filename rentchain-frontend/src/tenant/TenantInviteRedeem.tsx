@@ -9,6 +9,16 @@ export default function TenantInviteRedeem() {
   const nav = useNavigate();
   const [status, setStatus] = useState<"idle" | "loading" | "ok" | "error">("idle");
   const [err, setErr] = useState<string>("");
+  const nextParam = (() => {
+    const p = new URLSearchParams(window.location.search).get("next") || "";
+    try {
+      const decoded = decodeURIComponent(p);
+      if (decoded.startsWith("/tenant")) return decoded;
+    } catch {
+      return "";
+    }
+    return "";
+  })();
 
   useEffect(() => {
     if (!token) return;
@@ -43,7 +53,7 @@ export default function TenantInviteRedeem() {
         setStatus("ok");
         await Promise.resolve();
         await new Promise((resolve) => setTimeout(resolve, 150));
-        nav("/tenant", { replace: true });
+        nav(nextParam || "/tenant", { replace: true });
       } catch (e: any) {
         setStatus("error");
         setErr(e?.message || "Failed to redeem invite");

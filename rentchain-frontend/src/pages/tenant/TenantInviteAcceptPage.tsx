@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useLocation } from "react-router-dom";
 import { setTenantToken } from "../../lib/tenantAuth";
 import { DEBUG_AUTH_KEY, JUST_LOGGED_IN_KEY } from "../../lib/authKeys";
 
@@ -33,6 +33,17 @@ export default function TenantInviteAcceptPage() {
   const { token } = useParams();
   const inviteToken = useMemo(() => String(token || "").trim(), [token]);
   const navigate = useNavigate();
+  const location = useLocation();
+  const nextParam = useMemo(() => {
+    const p = new URLSearchParams(location.search).get("next") || "";
+    try {
+      const decoded = decodeURIComponent(p);
+      if (decoded.startsWith("/tenant")) return decoded;
+    } catch {
+      return "";
+    }
+    return "";
+  }, [location.search]);
 
   const [preview, setPreview] = useState<InvitePreview | null>(null);
   const [fullName, setFullName] = useState("");
@@ -129,7 +140,7 @@ export default function TenantInviteAcceptPage() {
       await Promise.resolve(); // allow storage write to settle before SPA nav
       await new Promise((resolve) => setTimeout(resolve, 150));
       setOkMsg("Invite accepted. Redirecting to tenant portal...");
-      navigate("/tenant", { replace: true });
+      navigate(nextParam || "/tenant", { replace: true });
     } catch (e: any) {
       setErr(String(e?.message || e));
     } finally {
