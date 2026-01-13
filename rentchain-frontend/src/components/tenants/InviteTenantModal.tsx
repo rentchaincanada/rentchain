@@ -22,6 +22,7 @@ export const InviteTenantModal: React.FC<Props> = ({
   const [inviteUrl, setInviteUrl] = useState("");
   const [err, setErr] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
+  const [infoMsg, setInfoMsg] = useState("");
   const [loading, setLoading] = useState(false);
 
   if (!open) return null;
@@ -29,6 +30,7 @@ export const InviteTenantModal: React.FC<Props> = ({
   async function sendInvite() {
     setErr("");
     setSuccessMsg("");
+    setInfoMsg("");
     setInviteUrl("");
     setLoading(true);
     try {
@@ -53,7 +55,10 @@ export const InviteTenantModal: React.FC<Props> = ({
       if (data.emailed === true) {
         setSuccessMsg(`Invite emailed to ${tenantEmail}`);
       } else {
-        setSuccessMsg("Invite created");
+        setSuccessMsg("Invite link created (email failed)");
+        if (data.emailError) {
+          setInfoMsg(String(data.emailError));
+        }
       }
     } catch (e: any) {
       const respDetail =
@@ -162,6 +167,20 @@ export const InviteTenantModal: React.FC<Props> = ({
             }}
           >
             {successMsg}
+          </div>
+        )}
+        {infoMsg && (
+          <div
+            style={{
+              padding: 10,
+              borderRadius: 8,
+              border: "1px solid #e5e7eb",
+              background: "#f8fafc",
+              color: "#6b7280",
+              fontSize: 12,
+            }}
+          >
+            {infoMsg}
           </div>
         )}
 

@@ -70,6 +70,8 @@ router.post(
           new Promise<T>((_, rej) => setTimeout(() => rej(new Error(`SEND_TIMEOUT_${ms}MS`)), ms)),
         ]);
 
+      let emailed = false;
+      let emailError: string | null = null;
       try {
         sgMail.setApiKey(apiKey as string);
         const subject = "You're invited to RentChain";
@@ -98,17 +100,11 @@ router.post(
           }),
           8000
         );
+        emailed = true;
       } catch (e: any) {
+        emailed = false;
+        emailError = String(e?.message || e);
         console.error("[tenant-invites] email send failed", { message: e?.message, stack: e?.stack });
-        return res
-          .status(502)
-          .json({
-            ok: false,
-            error: "INVITE_EMAIL_SEND_FAILED",
-            code: "INVITE_EMAIL_SEND_FAILED",
-            hint: "Check SENDGRID_API_KEY and SENDGRID_FROM_EMAIL in Cloud Run env",
-            detail: String(e?.message || e),
-          });
       }
 
       return res.json({
@@ -125,7 +121,8 @@ router.post(
           tenantName: tenantName || null,
           createdAt: now,
         },
-        emailed: true,
+        emailed,
+        emailError,
       });
     } catch (err: any) {
       console.error("[tenant-invites] POST crashed", { message: err?.message, stack: err?.stack });
