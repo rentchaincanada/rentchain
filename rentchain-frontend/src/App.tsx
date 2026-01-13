@@ -28,6 +28,7 @@ import { LandlordNav } from "./components/layout/LandlordNav";
 import TenantPortalComingSoon from "./pages/tenant/TenantPortalComingSoon";
 import TenantDashboardPageV2 from "./pages/tenant/TenantDashboardPage.v2";
 import TenantLedgerPage from "./pages/tenant/TenantLedgerPage";
+import TenantMagicRedeemPage from "./pages/tenant/TenantMagicRedeemPage";
 import MonthlyOpsReportPage from "./pages/reports/MonthlyOpsReportPage";
 import InvitesPage from "./pages/landlord/InvitesPage";
 import PublicApplyPage from "./pages/PublicApplyPage";
@@ -57,6 +58,10 @@ function App() {
         <Route
           path="/tenant/login"
           element={TENANT_PORTAL_ENABLED ? <TenantLoginPageV2 /> : <TenantPortalComingSoon />}
+        />
+        <Route
+          path="/tenant/magic"
+          element={TENANT_PORTAL_ENABLED ? <TenantMagicRedeemPage /> : <TenantPortalComingSoon />}
         />
         <Route path="/2fa" element={<TwoFactorPage />} />
         <Route path="/pricing" element={<PricingPage />} />
