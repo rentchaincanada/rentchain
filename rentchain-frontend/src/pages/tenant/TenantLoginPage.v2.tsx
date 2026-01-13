@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import React, { useMemo, useState } from "react";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { setTenantToken } from "../../lib/tenantAuth";
 import { DEBUG_AUTH_KEY, JUST_LOGGED_IN_KEY } from "../../lib/authKeys";
 
@@ -25,6 +25,17 @@ const TenantLoginPageV2: React.FC = () => {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const navigate = useNavigate();
+  const location = useLocation();
+  const nextParam = useMemo(() => {
+    const p = new URLSearchParams(location.search).get("next") || "";
+    try {
+      const decoded = decodeURIComponent(p);
+      if (decoded.startsWith("/tenant")) return decoded;
+    } catch {
+      return "";
+    }
+    return "";
+  }, [location.search]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -65,7 +76,7 @@ const TenantLoginPageV2: React.FC = () => {
 
       await Promise.resolve(); // allow storage flush on iOS before navigation
       await new Promise((resolve) => setTimeout(resolve, 150));
-      navigate("/tenant", { replace: true });
+      navigate(nextParam || "/tenant", { replace: true });
     } catch (e: any) {
       setErr(String(e?.message || e));
     } finally {
