@@ -181,12 +181,11 @@ router.post("/redeem", async (req: any, res) => {
   if (!snap.exists) return res.status(404).json({ ok: false, error: "invite_not_found" });
 
   const invite = snap.data() as any;
-  if (invite.status !== "pending") {
-    return res.status(400).json({ ok: false, error: "invite_already_used" });
-  }
   if (Date.now() > invite.expiresAt) {
     return res.status(400).json({ ok: false, error: "invite_expired" });
   }
+
+  const alreadyRedeemed = invite.status === "redeemed";
 
   const tenantId =
     invite.tenantId ||
@@ -236,7 +235,7 @@ router.post("/redeem", async (req: any, res) => {
   await ref.set(
     {
       status: "redeemed",
-      redeemedAt: Date.now(),
+      redeemedAt: invite.redeemedAt || Date.now(),
       tenantId,
     },
     { merge: true }
@@ -264,6 +263,7 @@ router.post("/redeem", async (req: any, res) => {
       leaseId: resolvedLeaseId,
       landlordId: invite.landlordId,
     },
+    alreadyRedeemed,
   });
 });
 
