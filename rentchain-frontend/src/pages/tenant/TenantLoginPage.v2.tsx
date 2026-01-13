@@ -42,6 +42,12 @@ const TenantLoginPageV2: React.FC = () => {
       const jwt = data?.token || data?.jwt || data?.tenantToken;
       if (!jwt) throw new Error("Login succeeded but token missing");
       setTenantToken(jwt);
+      try {
+        sessionStorage.removeItem("rentchain_token");
+        localStorage.removeItem("rentchain_token");
+      } catch {
+        // ignore
+      }
 
       const dbg = localStorage.getItem(DEBUG_AUTH_KEY) === "1";
       try {

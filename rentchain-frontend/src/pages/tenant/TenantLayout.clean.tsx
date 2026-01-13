@@ -68,7 +68,7 @@ export const TenantLayout: React.FC = () => {
       if (payloadErr === "TENANT_NOT_FOUND") {
         setError("We couldn't find your tenant profile yet. Please contact your landlord or retry later.");
       } else {
-        setError(err?.message || "Failed to load tenant portal");
+        setError(err?.message || err?.toString() || "Failed to load tenant portal");
       }
     } finally {
       setIsLoading(false);

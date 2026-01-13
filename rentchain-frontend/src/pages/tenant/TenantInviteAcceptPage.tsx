@@ -107,6 +107,12 @@ export default function TenantInviteAcceptPage() {
 
       // store tenant token for portal access
       setTenantToken(jwt);
+      try {
+        sessionStorage.removeItem("rentchain_token");
+        localStorage.removeItem("rentchain_token");
+      } catch {
+        // ignore
+      }
       const dbg = localStorage.getItem(DEBUG_AUTH_KEY) === "1";
       try {
         localStorage.setItem(JUST_LOGGED_IN_KEY, String(Date.now()));

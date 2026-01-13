@@ -21,6 +21,12 @@ export default function TenantInviteRedeem() {
         });
         if (!res?.tenantToken) throw new Error("No tenant token returned");
         setTenantToken(res.tenantToken);
+        try {
+          sessionStorage.removeItem("rentchain_token");
+          localStorage.removeItem("rentchain_token");
+        } catch {
+          // ignore
+        }
         const dbg = localStorage.getItem(DEBUG_AUTH_KEY) === "1";
         try {
           localStorage.setItem(JUST_LOGGED_IN_KEY, String(Date.now()));
