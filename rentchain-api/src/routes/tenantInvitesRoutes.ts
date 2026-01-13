@@ -61,8 +61,25 @@ router.post(
       const apiKey = process.env.SENDGRID_API_KEY;
       const from =
         process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM || process.env.FROM_EMAIL;
-      if (!apiKey) return res.status(502).json({ ok: false, error: "SENDGRID_API_KEY_MISSING" });
-      if (!from) return res.status(502).json({ ok: false, error: "SENDGRID_FROM_EMAIL_MISSING" });
+      if (!apiKey || !from) {
+        return res.json({
+          ok: true,
+          token,
+          inviteUrl,
+          expiresAt,
+          invite: {
+            token,
+            inviteUrl,
+            status: "pending",
+            propertyId: propertyId || null,
+            tenantEmail,
+            tenantName: tenantName || null,
+            createdAt: now,
+          },
+          emailed: false,
+          emailError: "SendGrid not configured",
+        });
+      }
 
       const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T> =>
         Promise.race([
@@ -104,7 +121,12 @@ router.post(
       } catch (e: any) {
         emailed = false;
         emailError = String(e?.message || e);
-        console.error("[tenant-invites] email send failed", { message: e?.message, stack: e?.stack });
+        console.error("[tenant-invites] email send failed", {
+          token,
+          tenantEmail: toEmail,
+          message: e?.message,
+          stack: e?.stack,
+        });
       }
 
       return res.json({

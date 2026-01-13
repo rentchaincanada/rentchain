@@ -52,13 +52,13 @@ export const InviteTenantModal: React.FC<Props> = ({
 
       const url = data.inviteUrl || data.invite?.inviteUrl || "";
       setInviteUrl(url);
-      if (data.emailed === true) {
+      const emailed = data.emailed === true;
+      const emailError = data.emailError ? String(data.emailError) : "";
+      if (emailed) {
         setSuccessMsg(`Invite emailed to ${tenantEmail}`);
       } else {
         setSuccessMsg("Invite link created (email failed)");
-        if (data.emailError) {
-          setInfoMsg(String(data.emailError));
-        }
+        setInfoMsg(emailError || "Email was not sent. You can copy or open the link below.");
       }
     } catch (e: any) {
       const respDetail =
