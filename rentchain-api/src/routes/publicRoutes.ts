@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import { db, FieldValue } from "../config/firebase";
+import sgMail from "@sendgrid/mail";
 import { sendWaitlistConfirmation } from "../services/emailService";
 import { authenticateJwt } from "../middleware/authMiddleware";
 import { requireLandlord } from "../middleware/requireLandlord";
@@ -179,6 +180,8 @@ function normalizeConversation(doc: any) {
     lastReadAtLandlord: toMillis(data.lastReadAtLandlord) || null,
     lastReadAtTenant: toMillis(data.lastReadAtTenant) || null,
     createdAt: toMillis(data.createdAt) || null,
+    lastNotifiedAtLandlordMs: toMillis(data.lastNotifiedAtLandlordMs) || null,
+    lastNotifiedAtTenantMs: toMillis(data.lastNotifiedAtTenantMs) || null,
   };
 }
 
@@ -200,6 +203,108 @@ async function addMessage(params: { conversationId: string; senderRole: "landlor
     { merge: true }
   );
   return { id: docRef.id, conversationId, senderRole, body, createdAt: now, createdAtMs: now };
+}
+
+async function notifyMessageRecipient(params: {
+  convo: any;
+  senderRole: "landlord" | "tenant";
+  messageBody: string;
+  requestUser?: any;
+}) {
+  const { convo, senderRole, messageBody, requestUser } = params;
+  try {
+    const recipientRole = senderRole === "landlord" ? "tenant" : "landlord";
+    const now = Date.now();
+
+    const lastRead =
+      recipientRole === "tenant"
+        ? convo.lastReadAtTenant
+        : convo.lastReadAtLandlord;
+    if (lastRead && now - lastRead < 2 * 60 * 1000) {
+      return;
+    }
+
+    const lastNotified =
+      recipientRole === "tenant"
+        ? convo.lastNotifiedAtTenantMs
+        : convo.lastNotifiedAtLandlordMs;
+    if (lastNotified && now - lastNotified < 10 * 60 * 1000) {
+      return;
+    }
+
+    const sgKey = String(process.env.SENDGRID_API_KEY || "").trim();
+    const from =
+      String(process.env.SENDGRID_FROM_EMAIL || "").trim() ||
+      String(process.env.WAITLIST_FROM_EMAIL || "").trim();
+    if (!sgKey || !from) {
+      return;
+    }
+    sgMail.setApiKey(sgKey);
+
+    let toEmail: string | null = null;
+    if (recipientRole === "tenant") {
+      toEmail = requestUser?.tenantEmail || requestUser?.email || null;
+      if (!toEmail && convo?.tenantId) {
+        try {
+          const tenSnap = await db.collection("tenants").doc(convo.tenantId).get();
+          if (tenSnap.exists) {
+            const data = tenSnap.data() as any;
+            toEmail = data?.email || data?.applicantEmail || null;
+          }
+        } catch {
+          // ignore lookup error
+        }
+      }
+    } else {
+      toEmail = requestUser?.email || null;
+      if (!toEmail && convo?.landlordId) {
+        try {
+          const userSnap = await db.collection("users").doc(convo.landlordId).get();
+          if (userSnap.exists) {
+            const udata = userSnap.data() as any;
+            toEmail = udata?.email || null;
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+    if (!toEmail) return;
+
+    const snippet = String(messageBody || "").slice(0, 140);
+    const conversationId = convo.id;
+    const link =
+      recipientRole === "tenant"
+        ? `https://www.rentchain.ai/tenant/messages?c=${conversationId}`
+        : `https://www.rentchain.ai/messages?c=${conversationId}`;
+
+    const subject = "New message on RentChain";
+    const text = `You have a new message on RentChain:\n\n${snippet}\n\nOpen: ${link}`;
+    const html = `
+      <div style="font-family:Arial,sans-serif;line-height:1.5">
+        <h2 style="margin:0 0 12px 0;">New message on RentChain</h2>
+        <p style="color:#111;">${snippet}</p>
+        <p><a href="${link}" style="display:inline-block;padding:10px 14px;background:#2563eb;color:#fff;border-radius:10px;text-decoration:none;font-weight:700;">Open conversation</a></p>
+        <p style="color:#6b7280;font-size:12px;margin-top:18px;">If the button doesn’t work, copy and paste: ${link}</p>
+      </div>
+    `;
+
+    await sgMail.send({
+      to: toEmail,
+      from,
+      subject,
+      text,
+      html,
+    });
+
+    const update: any =
+      recipientRole === "tenant"
+        ? { lastNotifiedAtTenantMs: now }
+        : { lastNotifiedAtLandlordMs: now };
+    await db.collection("conversations").doc(conversationId).set(update, { merge: true });
+  } catch (err) {
+    console.warn("[messages notify] failed", { conversationId: convo?.id, err });
+  }
 }
 
 function requireTenant(req: any, res: any, next: any) {
@@ -342,6 +447,7 @@ router.post("/landlord/messages/conversations/:id", authenticateJwt, requireLand
     if (convo.landlordId !== landlordId) return res.status(403).json({ ok: false, error: "Forbidden" });
 
     const msg = await addMessage({ conversationId: id, senderRole: "landlord", body });
+    await notifyMessageRecipient({ convo, senderRole: "landlord", messageBody: body, requestUser: req.user });
     return res.status(201).json({ ok: true, message: msg });
   } catch (err: any) {
     console.error("[publicRoutes] landlord send error", err);
@@ -392,6 +498,8 @@ router.get("/tenant/messages/conversation", authenticateJwt, requireTenant, asyn
         lastMessageAt: null,
         lastReadAtLandlord: null,
         lastReadAtTenant: null,
+        lastNotifiedAtLandlordMs: null,
+        lastNotifiedAtTenantMs: null,
       });
       const created = await ref.get();
       return res.json({ ok: true, conversation: normalizeConversation(created) });
@@ -458,6 +566,7 @@ router.post("/tenant/messages/conversation/:id", authenticateJwt, requireTenant,
     }
 
     const msg = await addMessage({ conversationId: id, senderRole: "tenant", body });
+    await notifyMessageRecipient({ convo, senderRole: "tenant", messageBody: body, requestUser: req.user });
     return res.status(201).json({ ok: true, message: msg });
   } catch (err: any) {
     console.error("[publicRoutes] tenant send error", err);
