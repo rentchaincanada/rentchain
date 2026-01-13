@@ -61,9 +61,13 @@ router.post("/waitlist", async (req, res) => {
 
     let emailed = false;
 
+    const baseUrl = (process.env.PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
+    const ctaLink = `${baseUrl}/pricing?from=waitlist`;
+
     const subject = "You're on the RentChain waitlist";
     const text =
       `Thanks${nameRaw ? `, ${nameRaw}` : ""} - you're on the RentChain waitlist.\n\n` +
+      `See plans: ${ctaLink}\n\n` +
       "We'll email you when Micro-Live invites open.\n\n" +
       "If you didn't request this, ignore this email.\n";
 
@@ -74,6 +78,14 @@ router.post("/waitlist", async (req, res) => {
         from: from as string,
         subject,
         text,
+        html: `
+          <div style="font-family:Arial,sans-serif;line-height:1.5">
+            <h2 style="margin:0 0 12px 0;">You're on the RentChain waitlist.</h2>
+            <p>Thanks${nameRaw ? `, ${nameRaw}` : ""} for your interest. We'll email you when Micro-Live invites open.</p>
+            <p><a href="${ctaLink}" style="display:inline-block;padding:10px 14px;background:#2563eb;color:#fff;border-radius:10px;text-decoration:none;font-weight:700;">View pricing</a></p>
+            <p style="color:#6b7280;font-size:12px;margin-top:18px;">If the button doesn't work, copy and paste: ${ctaLink}</p>
+          </div>
+        `,
         trackingSettings: {
           clickTracking: { enable: false, enableText: false },
           openTracking: { enable: false },
