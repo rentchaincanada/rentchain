@@ -1,6 +1,6 @@
 import axios from "axios";
 import { API_BASE_URL } from "./config";
-import { DEBUG_AUTH_KEY, JUST_LOGGED_IN_KEY, TOKEN_KEY } from "../lib/authKeys";
+import { DEBUG_AUTH_KEY, JUST_LOGGED_IN_KEY, TENANT_TOKEN_KEY, TOKEN_KEY } from "../lib/authKeys";
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -47,8 +47,14 @@ function normalizePlanLimit(payload: any, status: number) {
 }
 
 api.interceptors.request.use((config) => {
-  const token =
-    sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY);
+  const url = config.url || "";
+  const isTenantPath =
+    url.startsWith("/api/tenant") ||
+    url.startsWith("tenant/") ||
+    url.includes("/tenant/");
+  const token = isTenantPath
+    ? sessionStorage.getItem(TENANT_TOKEN_KEY) || localStorage.getItem(TENANT_TOKEN_KEY)
+    : sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY);
   if (token) {
     config.headers = config.headers ?? {};
     (config.headers as any).Authorization = `Bearer ${token}`;

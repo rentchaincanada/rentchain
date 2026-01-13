@@ -111,32 +111,8 @@ const readTokenSafe = () => {
 function getStoredToken() {
   if (typeof window === "undefined") return null;
 
-  const params = new URLSearchParams(window.location.search);
-  const impersonationToken = params.get("impersonationToken");
-  if (impersonationToken) {
-    window.sessionStorage.setItem(TENANT_TOKEN_KEY, impersonationToken);
-    params.delete("impersonationToken");
-    const next = params.toString();
-    const hash = window.location.hash || "";
-    window.history.replaceState(
-      {},
-      "",
-      `${window.location.pathname}${next ? `?${next}` : ""}${hash}`
-    );
-  }
-
-  const tenantToken = window.sessionStorage.getItem(TENANT_TOKEN_KEY);
-  if (tenantToken) return tenantToken;
-
   const sessionToken = window.sessionStorage.getItem(TOKEN_KEY);
   if (sessionToken) return sessionToken;
-
-  // Fallback: pull from localStorage if sessionStorage is cleared (iOS)
-  const persistedTenant = window.localStorage.getItem(TENANT_TOKEN_KEY);
-  if (persistedTenant) {
-    window.sessionStorage.setItem(TENANT_TOKEN_KEY, persistedTenant);
-    return persistedTenant;
-  }
 
   const persisted = window.localStorage.getItem(TOKEN_KEY);
   if (persisted) {

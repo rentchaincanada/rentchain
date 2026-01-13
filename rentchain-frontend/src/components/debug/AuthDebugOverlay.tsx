@@ -45,9 +45,14 @@ export const AuthDebugOverlay: React.FC = () => {
     const tenantL = localStorage.getItem(TENANT_TOKEN_KEY);
     const active = sTok || lTok || tenantS || tenantL || null;
     const payload = active ? decodeJwtPayload(active) : null;
+    const tenantPayload = tenantS ? decodeJwtPayload(tenantS) : tenantL ? decodeJwtPayload(tenantL) : null;
     const expMs = payload?.exp ? payload.exp * 1000 : null;
     const remainingSec = expMs ? Math.round((expMs - Date.now()) / 1000) : null;
     const storedAt = sessionStorage.getItem("debugAuthStoredAt");
+    if (tenantPayload?.role === "landlord") {
+      // eslint-disable-next-line no-console
+      console.warn("[debugAuth] tenant token has landlord role");
+    }
     let last401: any = null;
     try {
       const raw = localStorage.getItem("authLast401");

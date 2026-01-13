@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "./config";
+import { TENANT_TOKEN_KEY, TOKEN_KEY } from "../lib/authKeys";
 
 function dispatchPlanLimit(detail: any) {
   try {
@@ -55,12 +56,6 @@ export async function apiFetch<T = any>(
     (apiFetch as any)._loggedBase = true;
   }
 
-  const token =
-    sessionStorage.getItem("rentchain_token") ||
-    sessionStorage.getItem("rentchain_tenant_token") ||
-    localStorage.getItem("rentchain_token") ||
-    localStorage.getItem("rentchain_tenant_token");
-
   const normalizedPath = (() => {
     if (path.startsWith("http")) return path;
     let p = path;
@@ -80,6 +75,15 @@ export async function apiFetch<T = any>(
     p = p.startsWith("/") ? p : `/${p}`;
     return `${base}${p}`;
   })();
+
+  const isTenantPath =
+    path.startsWith("tenant") ||
+    path.startsWith("/tenant") ||
+    path.startsWith("/api/tenant") ||
+    path.includes("/tenant/");
+  const token = isTenantPath
+    ? sessionStorage.getItem(TENANT_TOKEN_KEY) || localStorage.getItem(TENANT_TOKEN_KEY)
+    : sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY);
 
   const url = normalizedPath;
 
