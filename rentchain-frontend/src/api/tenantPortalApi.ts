@@ -75,7 +75,7 @@ export interface TenantPaymentsSummary {
 }
 
 export async function getTenantMe(): Promise<TenantProfile> {
-  return apiFetch<TenantProfile>("tenant/me");
+  return apiFetch<TenantProfile>("/tenant/me");
 }
 
 export async function getTenantLease(): Promise<TenantLease> {
