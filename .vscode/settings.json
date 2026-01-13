@@ -1,0 +1,56 @@
+{
+  // ===== Mobile-first readability =====
+  "editor.fontSize": 18,
+  "terminal.integrated.fontSize": 15,
+  "editor.lineHeight": 26,
+  "editor.wordWrap": "on",
+  "editor.wrappingIndent": "same",
+  "editor.renderWhitespace": "none",
+  "editor.minimap.enabled": false,
+  "editor.scrollBeyondLastLine": false,
+  "editor.stickyScroll.enabled": false,
+
+  // ===== Reduce visual clutter =====
+  "breadcrumbs.enabled": false,
+  "editor.hover.enabled": true,
+  "editor.parameterHints.enabled": true,
+  "editor.lightbulb.enabled": "off",
+  "editor.codeLens": false,
+  "editor.glyphMargin": false,
+  "editor.folding": true,
+  "editor.foldingHighlight": false,
+  "editor.matchBrackets": "near",
+
+  // ===== Make touch navigation easier =====
+  "workbench.list.horizontalScrolling": true,
+  "workbench.tree.indent": 14,
+  "workbench.tree.renderIndentGuides": "none",
+  "explorer.compactFolders": false,
+  "explorer.openEditors.visible": 0,
+
+  // ===== Keep panels stable on small screens =====
+  "workbench.activityBar.location": "left",
+  "workbench.sideBar.location": "left",
+  "workbench.panel.defaultLocation": "bottom",
+  "workbench.panel.opensMaximized": "never",
+
+  // ===== Files / formatting safety =====
+  "files.autoSave": "afterDelay",
+  "files.autoSaveDelay": 1500,
+  "editor.formatOnSave": true,
+  "editor.formatOnPaste": false,
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+
+  // ===== Search / git usability =====
+  "search.useGlobalIgnoreFiles": true,
+  "search.smartCase": true,
+  "git.confirmSync": false,
+  "git.autofetch": true,
+
+  // ===== Reduce popups that get in the way =====
+  "notifications.doNotDisturbMode": true,
+
+  // ===== Prevent accidental huge scroll jumps =====
+  "editor.mouseWheelZoom": false
+}
