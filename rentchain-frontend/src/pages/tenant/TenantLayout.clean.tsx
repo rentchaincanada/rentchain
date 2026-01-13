@@ -243,7 +243,6 @@ export const TenantLayout: React.FC = () => {
           <Outlet context={{ profile, lease, refresh: fetchData }} />
         )}
       </div>
-      </div>
       {isMobile ? (
         <nav
           aria-label="Tenant navigation"
