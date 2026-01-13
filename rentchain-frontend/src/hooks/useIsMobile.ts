@@ -8,8 +8,8 @@ export function useIsMobile(query: string = "(max-width: 768px)") {
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
     const mql = window.matchMedia(query);
-    const handler = (e: MediaQueryListEvent) => {
-      setIsMobile(e.matches);
+    const handler = (e: MediaQueryListEvent | MediaQueryList | any) => {
+      setIsMobile(!!e.matches);
     };
     // Support older Safari by checking addEventListener
     if (mql.addEventListener) {
