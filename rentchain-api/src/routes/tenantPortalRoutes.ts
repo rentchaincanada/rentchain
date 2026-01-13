@@ -17,9 +17,24 @@ router.get("/me", requireTenant, async (req: any, res) => {
     const tenantId = req.user?.tenantId || null;
     if (!tenantId) return res.status(401).json({ ok: false, error: "Unauthorized" });
 
-    const snap = await db.collection("tenants").doc(tenantId).get();
+    const ref = db.collection("tenants").doc(tenantId);
+    let snap = await ref.get();
     if (!snap.exists) {
-      return res.status(404).json({ ok: false, error: "TENANT_NOT_FOUND" });
+      const now = Date.now();
+      const seed = {
+        id: tenantId,
+        landlordId: req.user?.landlordId ?? null,
+        email: req.user?.email ?? null,
+        unitId: req.user?.unitId ?? null,
+        propertyId: req.user?.propertyId ?? null,
+        leaseId: req.user?.leaseId ?? null,
+        status: "active",
+        createdAt: now,
+        updatedAt: now,
+        source: "token_upsert",
+      };
+      await ref.set(seed, { merge: true });
+      snap = await ref.get();
     }
     const data = snap.data() as any;
     return res.json({
