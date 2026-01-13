@@ -19,6 +19,11 @@ export default function TenantMessagesPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const location = useLocation();
+  const tenantToken =
+    (typeof window !== "undefined" &&
+      (sessionStorage.getItem("rentchain_tenant_token") ||
+        localStorage.getItem("rentchain_tenant_token"))) ||
+    "";
 
   const loadConversation = async () => {
     try {
@@ -60,6 +65,30 @@ export default function TenantMessagesPage() {
       mounted = false;
     };
   }, [location.search]);
+
+  if (!tenantToken) {
+    const next = encodeURIComponent(`/tenant/messages${location.search || ""}`);
+    return (
+      <div style={{ padding: spacing.lg }}>
+        <div style={{ color: text.muted, marginBottom: spacing.sm }}>Tenant login required.</div>
+        <a
+          href={`/tenant/login?next=${next}`}
+          style={{
+            display: "inline-block",
+            padding: "10px 12px",
+            borderRadius: radius.md,
+            border: `1px solid ${colors.border}`,
+            background: colors.accent,
+            color: "#fff",
+            fontWeight: 700,
+            textDecoration: "none",
+          }}
+        >
+          Go to tenant login
+        </a>
+      </div>
+    );
+  }
 
   const handleSend = async () => {
     if (!conversation?.id || !composer.trim()) return;

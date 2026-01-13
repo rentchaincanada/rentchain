@@ -76,11 +76,19 @@ export async function apiFetch<T = any>(
     return `${base}${p}`;
   })();
 
+  let pathForMatch = path;
+  try {
+    if (path.startsWith("http")) {
+      pathForMatch = new URL(path).pathname || path;
+    }
+  } catch {
+    // ignore parse errors
+  }
   const isTenantPath =
-    path.startsWith("tenant") ||
-    path.startsWith("/tenant") ||
-    path.startsWith("/api/tenant") ||
-    path.includes("/tenant/");
+    pathForMatch === "/tenant" ||
+    pathForMatch === "/api/tenant" ||
+    pathForMatch.startsWith("/tenant/") ||
+    pathForMatch.startsWith("/api/tenant/");
   const token = isTenantPath
     ? sessionStorage.getItem(TENANT_TOKEN_KEY) || localStorage.getItem(TENANT_TOKEN_KEY)
     : sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY);

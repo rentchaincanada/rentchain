@@ -47,11 +47,21 @@ function normalizePlanLimit(payload: any, status: number) {
 }
 
 api.interceptors.request.use((config) => {
-  const url = config.url || "";
+  const rawUrl = config.url || "";
+  let path = rawUrl;
+  try {
+    if (rawUrl.startsWith("http")) {
+      path = new URL(rawUrl).pathname || rawUrl;
+    }
+  } catch {
+    // ignore parse errors; fall back to raw
+  }
   const isTenantPath =
-    url.startsWith("/api/tenant") ||
-    url.startsWith("tenant/") ||
-    url.includes("/tenant/");
+    path === "/tenant" ||
+    path === "/api/tenant" ||
+    path.startsWith("/tenant/") ||
+    path.startsWith("/api/tenant/");
+
   const token = isTenantPath
     ? sessionStorage.getItem(TENANT_TOKEN_KEY) || localStorage.getItem(TENANT_TOKEN_KEY)
     : sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY);

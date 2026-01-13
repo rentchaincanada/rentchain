@@ -55,6 +55,11 @@ export const TenantLayout: React.FC = () => {
   const { user, logout } = useAuth();
   const isMobile = useIsMobile();
   const [unreadMessages, setUnreadMessages] = useState(false);
+  const tenantToken =
+    (typeof window !== "undefined" &&
+      (sessionStorage.getItem("rentchain_tenant_token") ||
+        localStorage.getItem("rentchain_tenant_token"))) ||
+    "";
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -134,6 +139,35 @@ export const TenantLayout: React.FC = () => {
   const routeTitle =
     titleMap[Object.keys(titleMap).find((p) => location.pathname.startsWith(p)) || ""] ||
     "Tenant Portal";
+
+  if (!tenantToken) {
+    const next = encodeURIComponent(`${location.pathname}${location.search || ""}`);
+    return (
+      <div style={{ ...containerStyle, display: "grid", placeItems: "center" }}>
+        <div style={{ maxWidth: 420, padding: 16, background: "rgba(17,24,39,0.8)", borderRadius: 12 }}>
+          <h2 style={{ margin: 0, color: "#e5e7eb" }}>Tenant login required</h2>
+          <p style={{ color: "#9ca3af" }}>
+            Please sign in to view your tenant portal.
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate(`/tenant/login?next=${next}`, { replace: true })}
+            style={{
+              padding: "10px 14px",
+              borderRadius: 10,
+              border: "1px solid rgba(255,255,255,0.15)",
+              background: "#2563eb",
+              color: "#fff",
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            Go to tenant login
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ ...containerStyle, paddingBottom: isMobile ? 96 : containerStyle.padding }}>
