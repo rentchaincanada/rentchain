@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from "react";
-import { Link, useNavigate, useLocation } from "react-router-dom";
-import { setTenantToken } from "../../lib/tenantAuth";
-import { DEBUG_AUTH_KEY, JUST_LOGGED_IN_KEY } from "../../lib/authKeys";
+import { Link, useLocation } from "react-router-dom";
+import { apiFetch } from "../../api/apiFetch";
 
 function Card({ children }: { children: React.ReactNode }) {
   return (
@@ -21,120 +20,113 @@ function Card({ children }: { children: React.ReactNode }) {
 
 const TenantLoginPageV2: React.FC = () => {
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const navigate = useNavigate();
+  const [isSending, setIsSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const location = useLocation();
-  const nextParam = useMemo(() => {
-    const p = new URLSearchParams(location.search).get("next") || "";
-    try {
-      const decoded = decodeURIComponent(p);
-      if (decoded.startsWith("/tenant")) return decoded;
-    } catch {
-      return "";
-    }
-    return "";
+  const next = useMemo(() => {
+    const raw = new URLSearchParams(location.search).get("next") ?? "";
+    return raw.startsWith("/tenant") ? raw : "/tenant";
   }, [location.search]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setBusy(true);
-    setErr(null);
+    setError(null);
+    setIsSending(true);
+    setSent(false);
     try {
-      const res = await fetch("/api/tenant/auth/login", {
+      await apiFetch("/tenant/auth/magic-link", {
         method: "POST",
+        body: JSON.stringify({ email: email.trim().toLowerCase(), next }),
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
       });
-      const data: any = await res.json().catch(() => ({}));
-      if (!res.ok || !data?.ok) throw new Error(data?.error || "Login failed");
-
-      const jwt = data?.token || data?.jwt || data?.tenantToken;
-      if (!jwt) throw new Error("Login succeeded but token missing");
-      setTenantToken(jwt);
-      try {
-        sessionStorage.removeItem("rentchain_token");
-        localStorage.removeItem("rentchain_token");
-      } catch {
-        // ignore
-      }
-
-      const dbg = localStorage.getItem(DEBUG_AUTH_KEY) === "1";
-      try {
-        localStorage.setItem(JUST_LOGGED_IN_KEY, String(Date.now()));
-        sessionStorage.setItem(JUST_LOGGED_IN_KEY, String(Date.now()));
-      } catch {
-        // ignore
-      }
-      if (dbg) {
-        const sLen = (sessionStorage.getItem("rentchain_tenant_token") || "").length;
-        const lLen = (localStorage.getItem("rentchain_tenant_token") || "").length;
-        // eslint-disable-next-line no-console
-        if (import.meta.env.DEV || dbg) console.log("[tenant-login] stored token lengths", { sLen, lLen });
-      }
-
-      await Promise.resolve(); // allow storage flush on iOS before navigation
-      await new Promise((resolve) => setTimeout(resolve, 150));
-      navigate(nextParam || "/tenant", { replace: true });
-    } catch (e: any) {
-      setErr(String(e?.message || e));
+      setSent(true);
+    } catch (err: any) {
+      setError(err?.message || "Couldn’t send link. Please try again.");
     } finally {
-      setBusy(false);
+      setIsSending(false);
     }
   }
 
   return (
     <div style={{ maxWidth: 480, margin: "48px auto", padding: 16 }}>
       <Card>
-        <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>Tenant Login</h1>
-        <p style={{ marginTop: 8, opacity: 0.75 }}>Sign in to view your lease, payments, and ledger.</p>
+        <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>Tenant login</h1>
+        <p style={{ marginTop: 8, opacity: 0.75 }}>We’ll email you a one-time login link.</p>
 
-        <form onSubmit={onSubmit} style={{ display: "grid", gap: 12, marginTop: 16 }}>
-          <label style={{ display: "grid", gap: 6 }}>
-            <span style={{ fontSize: 13, opacity: 0.75 }}>Email</span>
-            <input
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="tenant@email.com"
-              style={{ padding: 10, borderRadius: 10, border: "1px solid rgba(0,0,0,0.15)" }}
-            />
-          </label>
+        {!sent ? (
+          <form onSubmit={onSubmit} style={{ display: "grid", gap: 12, marginTop: 16 }}>
+            <label style={{ display: "grid", gap: 6 }}>
+              <span style={{ fontSize: 13, opacity: 0.75 }}>Email</span>
+              <input
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="tenant@email.com"
+                style={{ padding: 10, borderRadius: 10, border: "1px solid rgba(0,0,0,0.15)" }}
+              />
+            </label>
 
-          <label style={{ display: "grid", gap: 6 }}>
-            <span style={{ fontSize: 13, opacity: 0.75 }}>Password</span>
-            <input
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              type="password"
-              style={{ padding: 10, borderRadius: 10, border: "1px solid rgba(0,0,0,0.15)" }}
-            />
-          </label>
+            {error ? <div style={{ color: "crimson" }}>{error}</div> : null}
 
-          {err ? <div style={{ color: "crimson" }}>{err}</div> : null}
+            <button
+              type="submit"
+              disabled={isSending || !email.trim()}
+              style={{
+                padding: "10px 12px",
+                borderRadius: 10,
+                border: "1px solid rgba(0,0,0,0.15)",
+                background: "black",
+                color: "white",
+                fontWeight: 700,
+                cursor: isSending || !email.trim() ? "not-allowed" : "pointer",
+              }}
+            >
+              {isSending ? "Sending…" : "Email me a login link"}
+            </button>
 
-          <button
-            type="submit"
-            disabled={busy}
-            style={{
-              padding: "10px 12px",
-              borderRadius: 10,
-              border: "1px solid rgba(0,0,0,0.15)",
-              background: "black",
-              color: "white",
-              fontWeight: 700,
-              cursor: busy ? "not-allowed" : "pointer",
-            }}
-          >
-            {busy ? "Signing in…" : "Sign in"}
-          </button>
-
-          <div style={{ fontSize: 13, opacity: 0.75 }}>
-            Have an invite link? Open it to accept your invite.{" "}
-            <Link to="/">Back to main</Link>
+            <div style={{ fontSize: 13, opacity: 0.75 }}>
+              Have an invite link? Open it to accept your invite. <Link to="/">Back to main</Link>
+            </div>
+          </form>
+        ) : (
+          <div style={{ marginTop: 16, display: "grid", gap: 10 }}>
+            <div style={{ color: "green", fontWeight: 700 }}>
+              If an account exists for that email, we sent a login link.
+            </div>
+            <div style={{ color: "#6b7280", fontSize: 13 }}>Check your spam/junk folder.</div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <a
+                href={next || "/tenant"}
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  border: "1px solid rgba(0,0,0,0.15)",
+                  background: "#f3f4f6",
+                  color: "#111",
+                  fontWeight: 700,
+                  textDecoration: "none",
+                }}
+              >
+                Back
+              </a>
+              <button
+                type="button"
+                onClick={() => setSent(false)}
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  border: "1px solid rgba(0,0,0,0.15)",
+                  background: "white",
+                  color: "#111",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                Resend
+              </button>
+            </div>
           </div>
-        </form>
+        )}
       </Card>
     </div>
   );

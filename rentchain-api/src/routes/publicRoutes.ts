@@ -1,5 +1,7 @@
 import { Router, Request, Response } from "express";
 import { db, FieldValue } from "../config/firebase";
+import crypto from "crypto";
+import jwt from "jsonwebtoken";
 import sgMail from "@sendgrid/mail";
 import { sendWaitlistConfirmation } from "../services/emailService";
 import { authenticateJwt } from "../middleware/authMiddleware";
@@ -335,6 +337,12 @@ async function getTenantContext(req: any) {
   return { tenantId, landlordId, unitId };
 }
 
+function signTenantJwt(payload: any) {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) throw new Error("JWT_SECRET missing");
+  return jwt.sign(payload, secret, { expiresIn: "14d" });
+}
+
 // Landlord-scoped tenants bridge (mounted under /api via publicRoutes)
 router.get("/tenants", authenticateJwt, requireLandlord, async (req: any, res) => {
   const landlordId = req.user?.landlordId || req.user?.id || null;
@@ -596,6 +604,133 @@ router.post("/tenant/messages/conversation/:id/read", authenticateJwt, requireTe
   } catch (err: any) {
     console.error("[publicRoutes] tenant read error", err);
     return res.status(500).json({ ok: false, error: "Failed to mark read" });
+  }
+});
+
+/**
+ * Tenant magic link authentication (passwordless)
+ */
+router.post("/tenant/auth/magic-link", async (req: any, res) => {
+  res.setHeader("x-route-source", "publicRoutes.ts");
+  try {
+    const emailRaw = String(req.body?.email || "").trim().toLowerCase();
+    const nextRaw = String(req.body?.next || "").trim();
+    const next =
+      nextRaw && (nextRaw.startsWith("/tenant") || nextRaw.startsWith("tenant"))
+        ? nextRaw
+        : null;
+    if (!emailRaw || !emailRaw.includes("@")) {
+      return res.json({ ok: true });
+    }
+
+    const tenantSnap = await db.collection("tenants").where("email", "==", emailRaw).limit(1).get();
+    if (tenantSnap.empty) {
+      return res.json({ ok: true });
+    }
+    const tenantDoc = tenantSnap.docs[0];
+    const tenant = tenantDoc.data() as any;
+    const token = crypto.randomBytes(32).toString("hex");
+    const expiresAtMs = Date.now() + 15 * 60 * 1000;
+    await db.collection("tenant_magic_links").doc(token).set({
+      token,
+      tenantId: tenantDoc.id,
+      email: emailRaw,
+      landlordId: tenant?.landlordId || null,
+      next,
+      createdAt: FieldValue.serverTimestamp(),
+      expiresAtMs,
+      usedAt: null,
+      used: false,
+    });
+
+    const apiKey = process.env.SENDGRID_API_KEY;
+    const from =
+      process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM || process.env.FROM_EMAIL;
+    if (apiKey && from) {
+      try {
+        sgMail.setApiKey(apiKey as string);
+        const baseUrl = (process.env.PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
+        const link = `${baseUrl}/tenant/magic?token=${encodeURIComponent(token)}${
+          next ? `&next=${encodeURIComponent(next)}` : ""
+        }`;
+        const subject = "Your RentChain login link";
+        const text =
+          `Hi,\n\n` +
+          `Use this secure link to sign in to your RentChain tenant portal:\n${link}\n\n` +
+          `This link expires in 15 minutes and can be used once.\n\n` +
+          `— RentChain`;
+        const html = `
+          <div style="font-family:Arial,sans-serif;line-height:1.5">
+            <h2 style="margin:0 0 12px 0;">Your RentChain login link</h2>
+            <p>Use this secure link to sign in to your tenant portal. It expires in 15 minutes.</p>
+            <p><a href="${link}" style="display:inline-block;padding:10px 14px;background:#2563eb;color:#fff;border-radius:10px;text-decoration:none;font-weight:700;">Sign in</a></p>
+            <p style="color:#6b7280;font-size:12px;margin-top:18px;">If the button doesn't work, copy and paste: ${link}</p>
+          </div>
+        `;
+        await sgMail.send({
+          to: emailRaw,
+          from: from as string,
+          subject,
+          text,
+          html,
+          trackingSettings: {
+            clickTracking: { enable: false, enableText: false },
+            openTracking: { enable: false },
+          },
+          mailSettings: {
+            footer: { enable: false },
+          },
+        });
+      } catch (e: any) {
+        console.error("[tenant magic-link] email send failed", e?.message || e);
+      }
+    }
+
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("[tenant magic-link] request error", err);
+    return res.json({ ok: true });
+  }
+});
+
+router.post("/tenant/auth/magic-redeem", async (req: any, res) => {
+  res.setHeader("x-route-source", "publicRoutes.ts");
+  try {
+    const token = String(req.body?.token || "").trim();
+    if (!token) return res.status(400).json({ ok: false, error: "MAGIC_LINK_INVALID" });
+
+    const ref = db.collection("tenant_magic_links").doc(token);
+    const snap = await ref.get();
+    if (!snap.exists) return res.status(400).json({ ok: false, error: "MAGIC_LINK_INVALID" });
+    const data = snap.data() as any;
+    const now = Date.now();
+    if (data.used || data.usedAt || (data.expiresAtMs && now > data.expiresAtMs)) {
+      return res.status(400).json({ ok: false, error: "MAGIC_LINK_INVALID" });
+    }
+
+    const tenantId = data.tenantId;
+    if (!tenantId) return res.status(400).json({ ok: false, error: "MAGIC_LINK_INVALID" });
+    const tenantSnap = await db.collection("tenants").doc(tenantId).get();
+    if (!tenantSnap.exists) return res.status(400).json({ ok: false, error: "TENANT_NOT_FOUND" });
+    const tenant = tenantSnap.data() as any;
+
+    await ref.set({ used: true, usedAt: FieldValue.serverTimestamp() }, { merge: true });
+
+    const tenantJwt = signTenantJwt({
+      sub: tenantId,
+      role: "tenant",
+      tenantId,
+      landlordId: tenant?.landlordId || data.landlordId || null,
+      email: tenant?.email || data.email || null,
+      propertyId: tenant?.propertyId || null,
+      unitId: tenant?.unitId || tenant?.unit || null,
+      leaseId: tenant?.leaseId || null,
+    });
+
+    return res.json({ ok: true, tenantToken: tenantJwt });
+  } catch (err) {
+    console.error("[tenant magic-link] redeem error", err);
+    return res.status(400).json({ ok: false, error: "MAGIC_LINK_INVALID" });
   }
 });
 
