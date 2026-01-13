@@ -31,6 +31,10 @@ router.post("/diag/email/send-test", requireAdmin, async (req: any, res) => {
       from,
       subject: "RentChain SendGrid test",
       text: "If you received this, SendGrid is working.",
+      trackingSettings: {
+        clickTracking: { enable: false, enableText: false },
+        openTracking: { enable: false },
+      },
     });
     return res.json({ ok: true });
   } catch (e: any) {

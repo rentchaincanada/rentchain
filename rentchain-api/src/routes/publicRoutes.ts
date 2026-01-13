@@ -297,6 +297,13 @@ async function notifyMessageRecipient(params: {
       subject,
       text,
       html,
+      trackingSettings: {
+        clickTracking: { enable: false, enableText: false },
+        openTracking: { enable: false },
+      },
+      mailSettings: {
+        footer: { enable: false },
+      },
     });
 
     const update: any =

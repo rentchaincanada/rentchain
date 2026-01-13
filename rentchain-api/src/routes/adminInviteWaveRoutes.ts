@@ -54,7 +54,7 @@ router.post("/waitlist/invite-wave", requireAuth, requireRole(["landlord", "admi
 
   const apiKey = process.env.SENDGRID_API_KEY;
   const fromEmail = process.env.SENDGRID_FROM_EMAIL;
-  const appUrl = process.env.PUBLIC_APP_URL || "";
+  const appUrl = process.env.PUBLIC_APP_URL || "https://www.rentchain.ai";
 
   if (!dryRun) {
     if (!apiKey || !fromEmail) {
