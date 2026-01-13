@@ -6,12 +6,21 @@ import { layout, spacing, colors, text } from "../../styles/tokens";
 interface MacShellProps {
   title?: string;
   children: React.ReactNode;
+  showTopNav?: boolean;
 }
 
 export const MacShell: React.FC<MacShellProps> = ({
   title = "RentChain",
   children,
+  showTopNav = true,
 }) => {
+  const autoHide =
+    typeof window !== "undefined" &&
+    /^\/(dashboard|properties|tenants|applications|payments|billing|ledger|screening|account|blockchain)/i.test(
+      window.location.pathname || ""
+    );
+  const renderTopNav = showTopNav && !autoHide;
+
   return (
     <div
       className="app-root"
@@ -21,7 +30,7 @@ export const MacShell: React.FC<MacShellProps> = ({
         backgroundImage: colors.bgAmbient,
       }}
     >
-      <TopNav />
+      {renderTopNav ? <TopNav /> : null}
       <main
         style={{
           maxWidth: layout.maxWidth,

@@ -1,6 +1,5 @@
 // rentchain-frontend/src/pages/BlockchainPage.tsx
 import React, { useMemo, useState } from "react";
-import { TopNav } from "../components/layout/TopNav";
 import { useBlockchain } from "../hooks/useBlockchain";
 import { useBlockchainVerify } from "../hooks/useBlockchainVerify";
 
@@ -132,7 +131,6 @@ const BlockchainPage: React.FC = () => {
 
   return (
     <div className="app-root">
-      <TopNav />
       <div className="app-shell">
         {/* Header */}
         <div

@@ -80,7 +80,7 @@ const DashboardPage: React.FC = () => {
   const showEmptyCTA = !loading && !propsLoading && !error && (kpis?.propertiesCount ?? 0) === 0;
 
   return (
-    <MacShell title="RentChain · Dashboard">
+    <MacShell title="RentChain · Dashboard" showTopNav={false}>
       <div
         style={{
           display: "flex",

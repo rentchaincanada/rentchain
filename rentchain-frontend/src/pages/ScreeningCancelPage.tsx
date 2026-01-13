@@ -33,3 +33,4 @@ const ScreeningCancelPage: React.FC = () => {
 };
 
 export default ScreeningCancelPage;
+

@@ -1,7 +1,6 @@
 // rentchain-frontend/src/pages/LedgerPage.tsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { TopNav } from "../components/layout/TopNav";
 import { fetchLedgerEvents, type LedgerEventStored } from "../api/ledgerApi";
 import { useToast } from "../components/ui/ToastProvider";
 
@@ -140,7 +139,6 @@ const LedgerPage: React.FC = () => {
 
   return (
     <div className="app-root">
-      <TopNav />
       <div className="app-shell">
         <div
           style={{

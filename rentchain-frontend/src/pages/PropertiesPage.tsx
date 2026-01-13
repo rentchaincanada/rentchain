@@ -427,7 +427,7 @@ const PropertiesPage: React.FC = () => {
   };
 
   return (
-    <MacShell title="RentChain Properties">
+    <MacShell title="RentChain Properties" showTopNav={false}>
       <div
         className="page-content"
         style={{ display: "flex", flexDirection: "column", gap: spacing.lg }}

@@ -1206,3 +1206,4 @@ function getCosignerVerdict(
 }
 
 export default ApplicationsPage;
+

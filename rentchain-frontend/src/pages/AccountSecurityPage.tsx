@@ -709,3 +709,4 @@ export const AccountSecurityPage: React.FC = () => {
     </MacShell>
   );
 };
+
