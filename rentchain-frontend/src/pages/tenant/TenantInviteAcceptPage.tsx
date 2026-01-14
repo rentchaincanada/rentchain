@@ -95,8 +95,7 @@ export default function TenantInviteAcceptPage() {
     try {
       const data: any = await apiFetch(`/tenant-invites/redeem`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: inviteToken, password, fullName }),
+        body: { token: inviteToken, password, fullName },
       });
 
       if (!data?.ok) {
