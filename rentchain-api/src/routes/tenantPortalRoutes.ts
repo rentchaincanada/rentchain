@@ -198,7 +198,12 @@ router.get("/activity", requireTenant, async (req: any, res) => {
             id: `invite-${doc.id}`,
             type: "invite",
             title: "Invite accepted",
-            description: inv.tenantEmail ? `Joined as ${inv.tenantEmail}` : undefined,
+            description:
+              tenantData.email?.trim?.() && inv?.tenantEmail
+                ? `Joined as ${tenantData.email}`
+                : tenantData.email?.trim?.()
+                ? `Joined as ${tenantData.email}`
+                : "Invite accepted",
             occurredAt,
           });
         }
