@@ -120,14 +120,47 @@ export async function createTenantEvent(payload: {
   tenantId: string;
   propertyId?: string;
   type: string;
-  title: string;
+  title?: string;
   description?: string;
   amount?: number;
-  occurredAt?: string;
+  occurredAt?: string | number;
 }) {
+  const defaultTitleFromType = (type: string): string => {
+    switch (type) {
+      case "RENT_PAID":
+        return "Rent paid";
+      case "RENT_RECORDED":
+        return "Rent recorded";
+      case "RENT_DUE":
+        return "Rent due";
+      case "FEE_ADDED":
+        return "Fee added";
+      case "ADJUSTMENT":
+        return "Adjustment recorded";
+      case "NOTICE_SENT":
+        return "Notice sent";
+      default:
+        return (type || "")
+          .replace(/_/g, " ")
+          .toLowerCase()
+          .replace(/\b\w/g, (c) => c.toUpperCase());
+    }
+  };
+
+  const occurredAt =
+    typeof payload.occurredAt === "number"
+      ? payload.occurredAt
+      : payload.occurredAt
+      ? new Date(payload.occurredAt).getTime()
+      : Date.now();
+
   return apiFetch("/tenant-events", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      ...payload,
+      title: payload.title && payload.title.trim() ? payload.title.trim() : defaultTitleFromType(payload.type),
+      occurredAt,
+    }),
   });
 }

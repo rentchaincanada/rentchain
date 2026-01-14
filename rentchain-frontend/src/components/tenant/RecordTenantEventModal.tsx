@@ -14,16 +14,40 @@ export function RecordTenantEventModal({ tenantId, onSuccess, onClose }: Props) 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const defaultTitleFromType = (t: string): string => {
+    switch (t) {
+      case "rent_payment":
+        return "Rent payment";
+      case "late_payment":
+        return "Late payment";
+      case "maintenance":
+        return "Maintenance";
+      case "notice":
+        return "Notice sent";
+      case "lease_update":
+        return "Lease update";
+      case "breach":
+        return "Breach";
+      default:
+        return t.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+    }
+  };
+
   async function submit() {
-    if (!tenantId || !title.trim()) return;
+    if (!tenantId) {
+      setError("Select a tenant first.");
+      return;
+    }
+    const finalTitle = title.trim() || defaultTitleFromType(type);
     setLoading(true);
     setError(null);
     try {
       await createTenantEvent({
         tenantId,
         type,
-        title: title.trim(),
+        title: finalTitle,
         description: description.trim() || undefined,
+        occurredAt: Date.now(),
       });
       onSuccess?.();
       onClose?.();
