@@ -45,18 +45,21 @@ export default function TenantDashboardPageV2() {
       setLoading(true);
       setErr(null);
       try {
-        const meRes = await tenantMe();
-        if (!meRes.res.ok || !meRes.data?.ok) throw new Error(meRes.data?.error || "Failed to load profile");
-        setMe(meRes.data.tenant || meRes.data.user || meRes.data.me || null);
+        const meRes: any = await tenantMe();
+        if (!meRes?.ok) throw new Error(meRes?.error || "Failed to load profile");
+        setMe(meRes.tenant || meRes.user || meRes.me || null);
 
-        const leaseRes = await tenantLease();
-        if (leaseRes.res.ok && leaseRes.data?.ok) setLease(leaseRes.data.lease || leaseRes.data.item || leaseRes.data.data || null);
+        const leaseRes: any = await tenantLease();
+        if (leaseRes?.ok !== false)
+          setLease(leaseRes?.lease || leaseRes?.item || leaseRes?.data || null);
 
-        const payRes = await tenantPayments();
-        if (payRes.res.ok && payRes.data?.ok) setPayments(payRes.data.items || payRes.data.payments || []);
+        const payRes: any = await tenantPayments();
+        if (payRes?.ok !== false)
+          setPayments(payRes?.items || payRes?.payments || []);
 
-        const ledRes = await tenantLedger();
-        if (ledRes.res.ok && ledRes.data?.ok) setLedger(ledRes.data.items || ledRes.data.ledger || []);
+        const ledRes: any = await tenantLedger();
+        if (ledRes?.ok !== false)
+          setLedger(ledRes?.items || ledRes?.ledger || []);
       } catch (e: any) {
         setErr(String(e?.message || e));
       } finally {

@@ -1,4 +1,5 @@
 import { apiFetch } from "./http";
+import { DEBUG_AUTH_KEY } from "../lib/authKeys";
 
 export interface TenantProfile {
   id: string;
@@ -75,6 +76,11 @@ export interface TenantPaymentsSummary {
 }
 
 export async function getTenantMe(): Promise<TenantProfile> {
+  const dbg = localStorage.getItem(DEBUG_AUTH_KEY) === "1";
+  if (dbg) {
+    // eslint-disable-next-line no-console
+    console.log("[tenantMe] calling API via apiFetch('/tenant/me')");
+  }
   return apiFetch<TenantProfile>("/tenant/me");
 }
 

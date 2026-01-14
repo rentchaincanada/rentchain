@@ -1,15 +1,4 @@
-import { getTenantToken } from "../lib/tenantAuth";
-
-async function apiFetch(path: string, init?: RequestInit) {
-  const token = getTenantToken();
-  const headers: any = {
-    ...(init?.headers || {}),
-  };
-  if (token) headers.Authorization = `Bearer ${token}`;
-  const res = await fetch(path, { ...init, headers });
-  const data = await res.json().catch(() => ({}));
-  return { res, data };
-}
+import { apiFetch } from "./apiFetch";
 
 export async function tenantMe() {
   return apiFetch("/tenant/me");
