@@ -20,6 +20,58 @@ router.get("/__probe/version", (_req, res) => {
   res.json({ ok: true, marker: "probe-v1", ts: Date.now() });
 });
 
+router.post("/notify-plan-interest", async (req: any, res) => {
+  res.setHeader("x-route-source", "publicRoutes.ts");
+  const emailRaw = String(req.body?.email || "").trim().toLowerCase();
+  const planRaw = String(req.body?.plan || "").trim().toLowerCase();
+  const noteRaw = String(req.body?.note || "").trim();
+
+  if (!emailRaw || !emailRaw.includes("@")) {
+    return res.status(400).json({ ok: false, error: "INVALID_EMAIL" });
+  }
+  if (planRaw !== "core" && planRaw !== "pro") {
+    return res.status(400).json({ ok: false, error: "INVALID_PLAN" });
+  }
+
+  const apiKey = process.env.SENDGRID_API_KEY;
+  const from = process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM || process.env.FROM_EMAIL;
+  const to = process.env.NOTIFY_PLAN_EMAIL || process.env.SUPPORT_EMAIL || from;
+
+  if (!apiKey || !from || !to) {
+    return res.json({ ok: true, emailed: false, emailError: "SendGrid not configured" });
+  }
+
+  try {
+    sgMail.setApiKey(apiKey as string);
+    const subject = `Plan interest: ${planRaw}`;
+    const textLines = [
+      `Email: ${emailRaw}`,
+      `Plan: ${planRaw}`,
+      noteRaw ? `Note: ${noteRaw}` : null,
+      `Timestamp: ${new Date().toISOString()}`,
+    ].filter(Boolean);
+
+    await sgMail.send({
+      to,
+      from: from as string,
+      subject,
+      text: textLines.join("\n"),
+      trackingSettings: {
+        clickTracking: { enable: false, enableText: false },
+        openTracking: { enable: false },
+      },
+      mailSettings: {
+        footer: { enable: false },
+      },
+    });
+
+    return res.json({ ok: true, emailed: true });
+  } catch (e: any) {
+    console.error("[notify-plan-interest] send failed", { email: emailRaw, plan: planRaw, message: e?.message });
+    return res.json({ ok: true, emailed: false, emailError: String(e?.message || e) });
+  }
+});
+
 router.get("/__probe/routes-lite", (_req, res) => {
   res.setHeader("x-route-source", "publicRoutes.ts");
   return res.json({

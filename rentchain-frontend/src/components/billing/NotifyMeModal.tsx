@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { joinWaitlist } from "../../api/waitlistApi";
+import { notifyPlanInterest } from "../../api/notifyPlanInterest";
+import { useToast } from "../ui/ToastProvider";
 
 export function NotifyMeModal({
   open,
@@ -18,6 +19,7 @@ export function NotifyMeModal({
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const { showToast } = useToast();
 
   if (!open) return null;
 
@@ -27,8 +29,20 @@ export function NotifyMeModal({
     try {
       const trimmed = email.trim();
       if (!trimmed) throw new Error("Email required");
-      await joinWaitlist(trimmed, { plan: desiredPlan, context: context || "pricing" });
+      const payloadPlan = desiredPlan === "pro" ? "pro" : "core";
+      const res: any = await notifyPlanInterest({
+        email: trimmed,
+        plan: payloadPlan,
+        note: context || "pricing",
+      });
+      const emailed = res?.emailed === true;
+      const emailError = res?.emailError ? String(res.emailError) : "";
       setDone(true);
+      showToast({
+        message: emailed ? "Notification sent" : "Notification failed",
+        description: emailed ? undefined : emailError || "Email could not be sent",
+        variant: emailed ? "success" : "error",
+      });
     } catch (e: any) {
       setErr(e?.message ?? "Failed to save");
     } finally {
@@ -60,7 +74,7 @@ export function NotifyMeModal({
             Get early access to {desiredPlan.toUpperCase()}
           </div>
           <div style={{ marginTop: 8, fontSize: 14, opacity: 0.85 }}>
-            We’ll notify you when it’s available — and you’ll get priority onboarding.
+            We'll notify you when it's available — and you'll get priority onboarding.
           </div>
 
           {done ? (
@@ -75,12 +89,12 @@ export function NotifyMeModal({
                 fontWeight: 850,
               }}
             >
-              You’re on the list. We’ll reach out soon.
+              You're on the list. We'll reach out soon.
             </div>
           ) : (
             <>
               <div style={{ marginTop: 16, fontWeight: 900, fontSize: 13 }}>
-                Email (optional)
+                Email
               </div>
               <input
                 value={email}
@@ -132,7 +146,7 @@ export function NotifyMeModal({
                     opacity: saving ? 0.75 : 1,
                   }}
                 >
-                  {saving ? "Saving…" : "Notify me"}
+                  {saving ? "Sending..." : "Notify me"}
                 </button>
               </div>
             </>
