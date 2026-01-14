@@ -17,47 +17,48 @@ export function NotifyMeModal({
   context: string;
   defaultEmail?: string;
 }) {
-  const [email, setEmail] = useState(defaultEmail ?? "");
+  const { user } = useAuth();
+  const [email, setEmail] = useState(defaultEmail ?? user?.email ?? "");
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const { showToast } = useToast();
-  const { user } = useAuth();
 
   if (!open) return null;
 
   const submit = async () => {
+    const normalized = String(email || "").trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!normalized) {
+      setErr("Please enter your email.");
+      return;
+    }
+    if (!emailRegex.test(normalized)) {
+      setErr("Please enter a valid email.");
+      return;
+    }
+
     setSaving(true);
     setErr(null);
+    const payloadPlan = desiredPlan === "pro" ? "pro" : "core";
     try {
-      const emailToUse = String(user?.email || "").trim().toLowerCase();
-      if (!emailToUse || !emailToUse.includes("@")) {
-        setErr("Missing email. Please log in again.");
-        showToast({
-          message: "Missing email",
-          description: "Please log in again to send a notification.",
-          variant: "error",
-        });
-        setSaving(false);
-        return;
-      }
-      const payloadPlan = desiredPlan === "pro" ? "pro" : "core";
       const dbg = localStorage.getItem(DEBUG_AUTH_KEY) === "1";
       if (dbg) {
         // eslint-disable-next-line no-console
-        console.log("[notify-plan-interest payload]", { hasEmail: !!emailToUse, plan: payloadPlan });
+        console.log("[notify-plan-interest payload]", { email: normalized, plan: payloadPlan, context });
       }
       const res: any = await notifyPlanInterest({
-        email: emailToUse,
+        email: normalized,
         plan: payloadPlan,
       });
-      const emailed = res?.emailed === true;
-      const emailError = res?.emailError ? String(res.emailError) : res?.error ? String(res.error) : "";
+      if (res?.error === "INVALID_EMAIL") {
+        setErr("Please enter a valid email.");
+        return;
+      }
       setDone(true);
       showToast({
-        message: emailed ? "Notification sent" : "Notification failed",
-        description: emailed ? undefined : emailError || "Email could not be sent",
-        variant: emailed ? "success" : "error",
+        message: "Thanks — we'll notify you.",
+        variant: "success",
       });
     } catch (e: any) {
       const msg = e?.message ?? "Failed to save";
@@ -92,7 +93,7 @@ export function NotifyMeModal({
             Get early access to {desiredPlan.toUpperCase()}
           </div>
           <div style={{ marginTop: 8, fontSize: 14, opacity: 0.85 }}>
-            We'll notify you when it's available — and you'll get priority onboarding.
+            We'll notify you when it's available — you'll get priority onboarding.
           </div>
 
           {done ? (
@@ -107,7 +108,7 @@ export function NotifyMeModal({
                 fontWeight: 850,
               }}
             >
-              You're on the list. We'll reach out soon.
+              Thanks — we'll notify you.
             </div>
           ) : (
             <>

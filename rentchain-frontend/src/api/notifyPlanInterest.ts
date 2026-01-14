@@ -12,6 +12,6 @@ export async function notifyPlanInterest(payload: PlanInterestPayload) {
 
   return apiFetch("/notify-plan-interest", {
     method: "POST",
-    body: JSON.stringify(body),
+    body,
   });
 }

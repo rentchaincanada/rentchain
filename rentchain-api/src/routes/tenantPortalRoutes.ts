@@ -123,19 +123,21 @@ router.get("/me", requireTenant, async (req: any, res) => {
         tenantData.createdAt ??
         null
     );
+    const hasLeaseContext =
+      Boolean(propertyId || propertyName) && Boolean(unitId || unitLabel);
     const leaseStatusRaw = String(
       tenantData.leaseStatus ?? tenantData.status ?? ""
     ).toLowerCase();
     const leaseStatus =
-      leaseStatusRaw === "active" || leaseStatusRaw === "current"
+      hasLeaseContext && (leaseStatusRaw === "active" || leaseStatusRaw === "current")
         ? "Active"
-        : leaseStatusRaw === "pending"
+        : hasLeaseContext && leaseStatusRaw === "pending"
         ? "Pending"
         : "Unknown";
     const rentCents =
-      typeof tenantData.rentCents === "number"
+      hasLeaseContext && typeof tenantData.rentCents === "number"
         ? tenantData.rentCents
-        : typeof tenantData.monthlyRent === "number"
+        : hasLeaseContext && typeof tenantData.monthlyRent === "number"
         ? Math.round(Number(tenantData.monthlyRent) * 100)
         : null;
 
@@ -155,9 +157,9 @@ router.get("/me", requireTenant, async (req: any, res) => {
         unit: { label: unitLabel ?? null },
         lease: {
           status: leaseStatus,
-          startDate: leaseStart,
+          startDate: hasLeaseContext ? leaseStart : null,
           rentCents,
-          currency: tenantData.currency ?? null,
+          currency: hasLeaseContext ? tenantData.currency ?? null : null,
         },
       },
     });

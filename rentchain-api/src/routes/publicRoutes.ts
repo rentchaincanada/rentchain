@@ -23,7 +23,9 @@ router.get("/__probe/version", (_req, res) => {
 router.post("/notify-plan-interest", async (req: any, res) => {
   res.setHeader("x-route-source", "publicRoutes.ts");
   const body = req?.body || {};
-  const emailRaw = ((body.email ?? body.userEmail ?? "") as any).toString();
+  const emailRaw = (
+    (body.email ?? body.tenantEmail ?? body.userEmail ?? body.user_email ?? "") as any
+  ).toString();
   const planRaw = ((body.plan ?? "") as any).toString();
   const noteRaw = ((body.note ?? body.context ?? "") as any).toString();
   const email = emailRaw.trim().toLowerCase();
@@ -36,7 +38,7 @@ router.post("/notify-plan-interest", async (req: any, res) => {
     plan,
   });
 
-  if (!email || !email.includes("@")) {
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return res.status(400).json({ ok: false, error: "INVALID_EMAIL" });
   }
   if (plan !== "core" && plan !== "pro") {
@@ -52,6 +54,22 @@ router.post("/notify-plan-interest", async (req: any, res) => {
   }
 
   try {
+    const docId = emailKey(email);
+    const ref = db.collection("planInterest").doc(docId);
+    const snap = await ref.get();
+    if (snap.exists) {
+      return res.json({ ok: true, deduped: true });
+    }
+    await ref.set(
+      {
+        email,
+        plan,
+        note: noteRaw || null,
+        createdAt: FieldValue.serverTimestamp ? FieldValue.serverTimestamp() : new Date(),
+      },
+      { merge: true }
+    );
+
     sgMail.setApiKey(apiKey as string);
     const subject = `Plan interest: ${planRaw}`;
     const textLines = [
