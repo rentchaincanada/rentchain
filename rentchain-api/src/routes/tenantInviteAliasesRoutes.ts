@@ -110,12 +110,18 @@ router.post("/tenant/invites/:token/accept", async (req: any, res: any) => {
   return res.json({
     ok: true,
     tenantToken: tenantJwt,
+    tenantId,
+    landlordId: inv.landlordId || null,
+    propertyId: inv.propertyId || null,
+    unitId: inv.unitId || null,
+    leaseId: inv.leaseId || null,
     tenant: {
       id: tenantId,
       email,
       propertyId: inv.propertyId || null,
       unitId: inv.unitId || null,
       leaseId: inv.leaseId || null,
+      landlordId: inv.landlordId || null,
     },
   });
 });

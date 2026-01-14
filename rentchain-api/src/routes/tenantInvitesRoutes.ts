@@ -274,6 +274,11 @@ router.post("/redeem", async (req: any, res) => {
   return res.json({
     ok: true,
     tenantToken: tenantJwt,
+    tenantId,
+    landlordId: invite.landlordId,
+    propertyId: resolvedPropertyId,
+    unitId: resolvedUnitId,
+    leaseId: resolvedLeaseId,
     tenant: {
       id: tenantId,
       email: invite.tenantEmail,

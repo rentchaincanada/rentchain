@@ -92,13 +92,13 @@ export default function TenantInviteAcceptPage() {
 
     setBusy(true);
     try {
-      let res = await fetch(`/api/tenant/invites/${inviteToken}/accept`, {
+      const res1 = await fetch(`/api/tenant/invites/${inviteToken}/accept`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password, fullName }),
       });
-
-      if (res.status === 404) {
+      let res = res1;
+      if (res1.status === 404) {
         res = await fetch(`/api/tenant-invites/redeem`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
