@@ -41,7 +41,13 @@ function normalizePlanLimit(payload: any, status: number) {
   return null;
 }
 
-export type ApiFetchInit = RequestInit & { allowStatuses?: number[]; allow404?: boolean; suppressToasts?: boolean };
+type Jsonish = Record<string, any>;
+export type ApiFetchInit = Omit<RequestInit, "body"> & {
+  body?: BodyInit | Jsonish;
+  allowStatuses?: number[];
+  allow404?: boolean;
+  suppressToasts?: boolean;
+};
 
 export async function apiFetch<T = any>(
   path: string,
@@ -106,9 +112,23 @@ export async function apiFetch<T = any>(
 
   if (token) headers.Authorization = `Bearer ${token}`;
 
+  let bodyToSend: any = (fetchInit as any).body;
+  const isPlainObject =
+    bodyToSend &&
+    typeof bodyToSend === "object" &&
+    !(bodyToSend instanceof FormData) &&
+    !(bodyToSend instanceof Blob) &&
+    !(bodyToSend instanceof ArrayBuffer) &&
+    !(bodyToSend instanceof URLSearchParams);
+  if (isPlainObject) {
+    if (!headers["Content-Type"]) headers["Content-Type"] = "application/json";
+    bodyToSend = JSON.stringify(bodyToSend);
+  }
+
   const res = await fetch(url, {
     ...fetchInit,
     headers,
+    body: bodyToSend,
   });
 
   const text = await res.text().catch(() => "");
