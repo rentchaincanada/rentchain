@@ -31,7 +31,7 @@ export function NotifyMeModal({
     setErr(null);
     try {
       const emailToUse = String(user?.email || "").trim().toLowerCase();
-      if (!emailToUse) {
+      if (!emailToUse || !emailToUse.includes("@")) {
         setErr("Missing email. Please log in again.");
         showToast({
           message: "Missing email",
@@ -45,11 +45,7 @@ export function NotifyMeModal({
       const dbg = localStorage.getItem(DEBUG_AUTH_KEY) === "1";
       if (dbg) {
         // eslint-disable-next-line no-console
-        console.log("[notify-plan-interest] payload", {
-          hasEmail: !!emailToUse,
-          plan: payloadPlan,
-          context: context || "pricing",
-        });
+        console.log("[notify-plan-interest payload]", { hasEmail: !!emailToUse, plan: payloadPlan });
       }
       const res: any = await notifyPlanInterest({
         email: emailToUse,
