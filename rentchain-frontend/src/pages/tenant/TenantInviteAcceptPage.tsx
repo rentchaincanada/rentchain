@@ -93,22 +93,11 @@ export default function TenantInviteAcceptPage() {
 
     setBusy(true);
     try {
-      const acceptData: any =
-        (await apiFetch(`/tenant/invites/${inviteToken}/accept`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ password, fullName }),
-          allow404: true,
-        })) || null;
-
-      let data = acceptData;
-      if (!acceptData) {
-        data = await apiFetch(`/tenant-invites/redeem`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token: inviteToken, password, fullName }),
-        });
-      }
+      const data: any = await apiFetch(`/tenant-invites/redeem`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: inviteToken, password, fullName }),
+      });
 
       if (!data?.ok) {
         throw new Error(data?.error || "Failed to redeem invite.");
