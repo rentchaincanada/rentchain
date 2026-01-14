@@ -182,6 +182,15 @@ router.get("/activity", requireTenant, async (req: any, res) => {
       occurredAt: number;
     }> = [];
 
+    let tenantData: any = {};
+    try {
+      const tenantSnap = await db.collection("tenants").doc(tenantId).get();
+      tenantData = tenantSnap.exists ? (tenantSnap.data() as any) : {};
+    } catch {
+      tenantData = {};
+    }
+    const tenantEmail = tenantData?.email ?? req.user?.email ?? null;
+
     // Invite redemption
     try {
       const inviteSnap = await db
@@ -198,12 +207,7 @@ router.get("/activity", requireTenant, async (req: any, res) => {
             id: `invite-${doc.id}`,
             type: "invite",
             title: "Invite accepted",
-            description:
-              tenantData.email?.trim?.() && inv?.tenantEmail
-                ? `Joined as ${tenantData.email}`
-                : tenantData.email?.trim?.()
-                ? `Joined as ${tenantData.email}`
-                : "Invite accepted",
+            description: tenantEmail ? `Joined as ${tenantEmail}` : "Invite accepted",
             occurredAt,
           });
         }
@@ -214,8 +218,7 @@ router.get("/activity", requireTenant, async (req: any, res) => {
 
     // Lease start
     try {
-      const tenantSnap = await db.collection("tenants").doc(tenantId).get();
-      const data = tenantSnap.exists ? (tenantSnap.data() as any) : {};
+      const data = tenantData || {};
       const propertyId = data?.propertyId ?? null;
       const unitId = data?.unitId ?? data?.unit ?? null;
       const leaseStart = toMillis(
@@ -279,6 +282,78 @@ router.get("/activity", requireTenant, async (req: any, res) => {
   } catch (err) {
     console.error("[tenantPortalRoutes] /tenant/activity error", err);
     return res.status(500).json({ ok: false, error: "TENANT_ACTIVITY_FAILED" });
+  }
+});
+
+router.get("/ledger", requireTenant, async (req: any, res) => {
+  try {
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+
+    const { getTenantLedger } = await import("../services/tenantLedgerService");
+    const entries = await getTenantLedger(tenantId);
+
+    const toMillis = (v: any): number | null => {
+      if (!v) return null;
+      if (typeof v === "number") return v;
+      if (typeof v === "string") {
+        const ts = Date.parse(v);
+        return Number.isNaN(ts) ? null : ts;
+      }
+      if (typeof v?.toMillis === "function") return v.toMillis();
+      if (typeof v?.seconds === "number") return v.seconds * 1000;
+      return null;
+    };
+
+    const normalizeAmount = (amount: any): number | null => {
+      if (typeof amount !== "number" || Number.isNaN(amount)) return null;
+      return Math.round(amount * 100);
+    };
+
+    const mapType = (t: string): "rent" | "fee" | "adjustment" | "payment" => {
+      const type = (t || "").toLowerCase();
+      if (type.includes("payment")) return "payment";
+      if (type.includes("fee")) return "fee";
+      if (type.includes("adjust")) return "adjustment";
+      return "rent";
+    };
+
+    const toPeriod = (date: any): string | null => {
+      const ts = toMillis(date);
+      if (!ts) return null;
+      const d = new Date(ts);
+      const yyyy = d.getUTCFullYear();
+      const mm = `${d.getUTCMonth() + 1}`.padStart(2, "0");
+      return `${yyyy}-${mm}`;
+    };
+
+    const items = (entries || []).map((entry: any) => {
+      const occurredAt = toMillis(entry.date ?? entry.occurredAt);
+      return {
+        id: entry.id,
+        type: mapType(entry.type || ""),
+        title:
+          mapType(entry.type || "") === "payment"
+            ? "Payment recorded"
+            : mapType(entry.type || "") === "fee"
+            ? "Fee recorded"
+            : mapType(entry.type || "") === "adjustment"
+            ? "Adjustment recorded"
+            : "Rent recorded",
+        description: entry.notes ?? entry.label ?? entry.description ?? undefined,
+        amountCents: normalizeAmount(entry.amount),
+        currency: entry.currency ?? null,
+        period: entry.period ?? toPeriod(entry.date ?? entry.occurredAt),
+        occurredAt: occurredAt ?? Date.now(),
+      };
+    });
+
+    items.sort((a, b) => b.occurredAt - a.occurredAt);
+
+    return res.json({ ok: true, data: items.slice(0, 25) });
+  } catch (err) {
+    console.error("[tenantPortalRoutes] /tenant/ledger error", err);
+    return res.status(500).json({ ok: false, error: "TENANT_LEDGER_FAILED" });
   }
 });
 

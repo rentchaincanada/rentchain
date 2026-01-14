@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Bell, CheckCircle2, Clock3, Home, Lock, MailCheck, Receipt, Sparkles } from "lucide-react";
+import { Bell, CheckCircle2, Clock3, Home, Lock, MailCheck, Receipt, Sparkles, Wallet } from "lucide-react";
 import { tenantApiFetch } from "../../api/tenantApiFetch";
 import { Card, Section } from "../../components/ui/Ui";
 import { clearTenantToken, getTenantToken } from "../../lib/tenantAuth";
@@ -36,6 +36,17 @@ type ActivityItem = {
   occurredAt: number;
 };
 
+type LedgerItem = {
+  id: string;
+  type: "rent" | "fee" | "adjustment" | "payment";
+  title: string;
+  description?: string | null;
+  amountCents: number | null;
+  currency: string | null;
+  period: string | null;
+  occurredAt: number;
+};
+
 function fmtMoney(value: number | null | undefined, currency?: string | null): string {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return "—";
   const amount = Number(value) / 100;
@@ -59,6 +70,16 @@ function fmtDate(ts: number | null | undefined): string {
   const d = new Date(ts);
   if (Number.isNaN(d.getTime())) return "—";
   return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(d);
+}
+
+function fmtPeriod(period: string | null | undefined): string | null {
+  if (!period) return null;
+  if (/^\d{4}-\d{2}$/.test(period)) {
+    const [year, month] = period.split("-");
+    const d = new Date(Number(year), Number(month) - 1, 1);
+    return new Intl.DateTimeFormat(undefined, { month: "short", year: "numeric" }).format(d);
+  }
+  return period;
 }
 
 function valueOrDash<T>(val: T | null | undefined): T | string {
@@ -162,6 +183,9 @@ export default function TenantDashboardPage() {
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [activityError, setActivityError] = useState<string | null>(null);
   const [activityLoading, setActivityLoading] = useState(true);
+  const [ledger, setLedger] = useState<LedgerItem[]>([]);
+  const [ledgerError, setLedgerError] = useState<string | null>(null);
+  const [ledgerLoading, setLedgerLoading] = useState(true);
   const [hasToken, setHasToken] = useState<boolean>(() =>
     typeof window === "undefined" ? true : !!getTenantToken()
   );
@@ -183,10 +207,13 @@ export default function TenantDashboardPage() {
       setError(null);
       setActivityLoading(true);
       setActivityError(null);
+      setLedgerLoading(true);
+      setLedgerError(null);
       try {
-        const [meRes, activityRes] = await Promise.allSettled([
+        const [meRes, activityRes, ledgerRes] = await Promise.allSettled([
           tenantApiFetch<TenantMeResponse>("/tenant/me"),
           tenantApiFetch<{ ok: boolean; data: ActivityItem[] }>("/tenant/activity"),
+          tenantApiFetch<{ ok: boolean; data: LedgerItem[] }>("/tenant/ledger"),
         ]);
 
         if (!cancelled) {
@@ -211,6 +238,18 @@ export default function TenantDashboardPage() {
               "Unable to load activity";
             setActivityError(String(message));
           }
+
+          if (ledgerRes.status === "fulfilled") {
+            const payload = ledgerRes.value;
+            const list = Array.isArray((payload as any)?.data) ? (payload as any).data : [];
+            setLedger(list);
+          } else {
+            const message =
+              (ledgerRes.reason as any)?.message ||
+              (ledgerRes.reason as any)?.payload?.error ||
+              "Unable to load ledger";
+            setLedgerError(String(message));
+          }
         }
       } catch (e: any) {
         if (!cancelled) {
@@ -222,6 +261,7 @@ export default function TenantDashboardPage() {
         if (!cancelled) {
           setLoading(false);
           setActivityLoading(false);
+          setLedgerLoading(false);
         }
       }
     })();
@@ -241,7 +281,7 @@ export default function TenantDashboardPage() {
     () => [
       { label: "Tenant identity (name & email)", status: "tracked" as const },
       { label: "Lease basics (property, unit, rent)", status: "tracked" as const },
-      { label: "Ledger timeline", status: "coming" as const },
+      { label: "Ledger timeline", status: "tracked" as const },
       { label: "Documents & receipts", status: "coming" as const },
     ],
     []
@@ -457,6 +497,89 @@ export default function TenantDashboardPage() {
               </div>
             )}
           </Card>
+
+          <Card elevated style={{ gridColumn: "1 / -1" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: spacing.sm }}>
+              <div>
+                <div style={labelStyle}>Ledger Timeline</div>
+                <div style={{ fontSize: "1.2rem", fontWeight: 800, color: textTokens.primary }}>
+                  Rent and fee history
+                </div>
+              </div>
+            </div>
+            {ledgerError ? (
+              <div style={{ color: colors.danger }}>{ledgerError}</div>
+            ) : ledgerLoading ? (
+              <div style={{ display: "grid", gap: 10 }}>
+                {Array.from({ length: 3 }).map((_, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "auto 1fr auto",
+                      alignItems: "center",
+                      gap: 10,
+                      opacity: 0.8,
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: 10,
+                        background: colors.accentSoft,
+                      }}
+                    />
+                    <div>
+                      <div style={{ height: 10, background: colors.accentSoft, borderRadius: 6, width: "50%" }} />
+                      <div
+                        style={{
+                          height: 8,
+                          background: colors.accentSoft,
+                          borderRadius: 6,
+                          width: "30%",
+                          marginTop: 6,
+                        }}
+                      />
+                    </div>
+                    <div style={{ height: 12, background: colors.accentSoft, borderRadius: 6, width: 70 }} />
+                  </div>
+                ))}
+              </div>
+            ) : ledger.length === 0 ? (
+              <div style={{ color: textTokens.muted }}>Your rent history will appear here.</div>
+            ) : (
+              <div style={{ display: "grid", gap: 12 }}>
+                {ledger.map((item) => (
+                  <div
+                    key={item.id}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "auto 1fr auto",
+                      alignItems: "start",
+                      gap: 10,
+                    }}
+                  >
+                    <LedgerIcon type={item.type} />
+                    <div style={{ display: "grid", gap: 4 }}>
+                      <div style={{ fontWeight: 700, color: textTokens.primary }}>{item.title}</div>
+                      <div style={{ fontSize: "0.95rem", color: textTokens.muted }}>
+                        {[fmtPeriod(item.period) || null, fmtDate(item.occurredAt)]
+                          .filter(Boolean)
+                          .join(" • ")}
+                      </div>
+                      {item.description ? (
+                        <div style={{ fontSize: "0.95rem", color: textTokens.secondary }}>{item.description}</div>
+                      ) : null}
+                    </div>
+                    <div style={{ textAlign: "right", fontWeight: 800, color: textTokens.primary }}>
+                      {fmtMoney(item.amountCents, item.currency || undefined)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
         </div>
       </DashboardShell>
     </div>
@@ -503,6 +626,45 @@ function ActivityIcon({ type }: { type: ActivityItem["type"] }) {
       return (
         <span style={baseStyle}>
           <Sparkles size={16} />
+        </span>
+      );
+  }
+}
+
+function LedgerIcon({ type }: { type: LedgerItem["type"] }) {
+  const baseStyle: React.CSSProperties = {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    display: "grid",
+    placeItems: "center",
+    background: colors.accentSoft,
+    color: colors.accent,
+  };
+  switch (type) {
+    case "payment":
+      return (
+        <span style={baseStyle}>
+          <Wallet size={16} />
+        </span>
+      );
+    case "fee":
+      return (
+        <span style={baseStyle}>
+          <Bell size={16} />
+        </span>
+      );
+    case "adjustment":
+      return (
+        <span style={baseStyle}>
+          <Sparkles size={16} />
+        </span>
+      );
+    case "rent":
+    default:
+      return (
+        <span style={baseStyle}>
+          <Receipt size={16} />
         </span>
       );
   }
