@@ -74,7 +74,14 @@ export const RecordTenantEventModal: React.FC<Props> = ({
   };
 
   const submit = async () => {
-    if (!tenantId) return;
+    if (!tenantId) {
+      showToast({
+        message: "Select a tenant first.",
+        description: "Choose a tenant before recording an event.",
+        variant: "error",
+      });
+      return;
+    }
     if (!confirm) {
       showToast({
         message: "Confirm required",
@@ -84,11 +91,22 @@ export const RecordTenantEventModal: React.FC<Props> = ({
       return;
     }
 
+    if (!type) {
+      showToast({
+        message: "Event type required",
+        description: "Select an event type before saving.",
+        variant: "error",
+      });
+      return;
+    }
+
     setSubmitting(true);
     try {
+      const title = typeMeta?.label || "Tenant event";
       const payload: any = {
         tenantId,
         type,
+        title,
         occurredAt: occurredAtISO(),
         description: description.trim() ? description.trim() : undefined,
       };
