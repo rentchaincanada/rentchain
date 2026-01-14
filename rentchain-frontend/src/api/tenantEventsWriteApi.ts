@@ -19,6 +19,8 @@ export type CreateTenantEventInput = {
   currency?: string;
   daysLate?: number;
   noticeType?: string;
+  purpose?: string;
+  purposeLabel?: string;
 };
 
 export async function createTenantEvent(input: CreateTenantEventInput) {
@@ -54,6 +56,14 @@ export async function createTenantEvent(input: CreateTenantEventInput) {
       ? new Date(input.occurredAt).getTime()
       : Date.now();
 
+  const normalizePurpose = (p?: string) => {
+    const raw = (p || "").trim();
+    if (!raw) return undefined;
+    const normalized = raw.replace(/\s+/g, "_").toUpperCase();
+    const allowed = ["RENT", "PARKING", "SECURITY_DEPOSIT", "DAMAGE", "LATE_FEE", "UTILITIES", "OTHER"];
+    return allowed.includes(normalized) ? normalized : "OTHER";
+  };
+
   return apiFetch("/tenant-events", {
     method: "POST",
     token,
@@ -62,6 +72,8 @@ export async function createTenantEvent(input: CreateTenantEventInput) {
       ...input,
       title: input.title && input.title.trim() ? input.title.trim() : defaultTitleFromType(input.type),
       occurredAt,
+      purpose: normalizePurpose(input.purpose),
+      purposeLabel: input.purposeLabel?.trim()?.slice(0, 80) || undefined,
     }),
   });
 }

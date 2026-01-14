@@ -45,6 +45,8 @@ export const RecordTenantEventModal: React.FC<Props> = ({
   const [currency, setCurrency] = useState("CAD");
   const [daysLate, setDaysLate] = useState("");
   const [noticeType, setNoticeType] = useState("");
+  const [purpose, setPurpose] = useState("RENT");
+  const [purposeLabel, setPurposeLabel] = useState("");
   const [confirm, setConfirm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -108,7 +110,9 @@ export const RecordTenantEventModal: React.FC<Props> = ({
         type,
         title,
         occurredAt: occurredAtISO(),
-        description: description.trim() ? description.trim() : undefined,
+          description: description.trim() ? description.trim() : undefined,
+        purpose,
+        purposeLabel: purposeLabel.trim() ? purposeLabel.trim() : undefined,
       };
 
       if (showAmount) {
@@ -219,6 +223,42 @@ export const RecordTenantEventModal: React.FC<Props> = ({
               ))}
             </select>
             <div style={{ fontSize: 12, color: text.muted }}>{typeMeta?.hint}</div>
+        </label>
+
+          <label style={{ display: "grid", gap: 6 }}>
+            <div style={{ fontSize: 12, color: text.muted }}>Purpose</div>
+            <select
+              value={purpose}
+              onChange={(e) => setPurpose(e.target.value)}
+              style={{
+                padding: "8px 10px",
+                borderRadius: radius.md,
+                border: `1px solid ${colors.border}`,
+                background: colors.panel,
+                color: text.primary,
+              }}
+            >
+              <option value="RENT">Rent</option>
+              <option value="PARKING">Parking</option>
+              <option value="SECURITY_DEPOSIT">Security deposit</option>
+              <option value="DAMAGE">Damage</option>
+              <option value="LATE_FEE">Late fee</option>
+              <option value="UTILITIES">Utilities</option>
+              <option value="OTHER">Other</option>
+            </select>
+            <input
+              placeholder="Purpose details (e.g., Jan 2026, Spot #12)"
+              value={purposeLabel}
+              onChange={(e) => setPurposeLabel(e.target.value)}
+              style={{
+                marginTop: 6,
+                padding: "8px 10px",
+                borderRadius: radius.md,
+                border: `1px solid ${colors.border}`,
+                background: colors.panel,
+                color: text.primary,
+              }}
+            />
           </label>
 
           <label style={{ display: "grid", gap: 6 }}>

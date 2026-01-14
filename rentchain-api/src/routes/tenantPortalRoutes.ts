@@ -327,8 +327,21 @@ router.get("/ledger", requireTenant, async (req: any, res) => {
       return `${yyyy}-${mm}`;
     };
 
+    const inferPurpose = (t: string): string | null => {
+      const type = (t || "").toUpperCase();
+      if (type.startsWith("RENT")) return "RENT";
+      if (type.includes("LATE")) return "LATE_FEE";
+      if (type.includes("FEE")) return "LATE_FEE";
+      if (type.includes("DEPOSIT")) return "SECURITY_DEPOSIT";
+      if (type.includes("PARK")) return "PARKING";
+      if (type.includes("UTIL")) return "UTILITIES";
+      return "OTHER";
+    };
+
     const items = (entries || []).map((entry: any) => {
       const occurredAt = toMillis(entry.date ?? entry.occurredAt);
+      const purpose = entry.purpose ?? inferPurpose(entry.type || "");
+      const purposeLabel = entry.purposeLabel ?? entry.period ?? null;
       return {
         id: entry.id,
         type: mapType(entry.type || ""),
@@ -344,6 +357,8 @@ router.get("/ledger", requireTenant, async (req: any, res) => {
         amountCents: normalizeAmount(entry.amount),
         currency: entry.currency ?? null,
         period: entry.period ?? toPeriod(entry.date ?? entry.occurredAt),
+        purpose: purpose ?? null,
+        purposeLabel: purposeLabel ?? null,
         occurredAt: occurredAt ?? Date.now(),
       };
     });

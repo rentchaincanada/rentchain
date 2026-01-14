@@ -27,7 +27,8 @@ router.post("/tenant-events", authenticateJwt, requireLandlord, async (req: any,
       return res.status(401).json({ ok: false, error: "Unauthorized" });
     }
 
-    const { tenantId, propertyId, type, title, description, amount, occurredAt } = req.body || {};
+    const { tenantId, propertyId, type, title, description, amount, occurredAt, purpose, purposeLabel } =
+      req.body || {};
 
     if (!tenantId || !String(type || "").trim() || !String(title || "").trim()) {
       return res.status(400).json({
@@ -38,6 +39,19 @@ router.post("/tenant-events", authenticateJwt, requireLandlord, async (req: any,
 
     const occurredDate = new Date(occurredAt || Date.now());
     const validOccurredAt = Number.isNaN(occurredDate.getTime()) ? new Date() : occurredDate;
+
+    const normalizePurpose = (val: any): string | null => {
+      const raw = String(val || "").trim();
+      if (!raw) return null;
+      const normalized = raw.replace(/\s+/g, "_").replace(/__+/g, "_").toUpperCase();
+      const allowed = ["RENT", "PARKING", "SECURITY_DEPOSIT", "DAMAGE", "LATE_FEE", "UTILITIES", "OTHER"];
+      return allowed.includes(normalized) ? normalized : "OTHER";
+    };
+    const normalizedPurpose = normalizePurpose(purpose);
+    const normalizedPurposeLabel =
+      typeof purposeLabel === "string" && purposeLabel.trim()
+        ? purposeLabel.trim().slice(0, 80)
+        : null;
 
     const payload: any = {
       tenantId: String(tenantId),
@@ -52,6 +66,8 @@ router.post("/tenant-events", authenticateJwt, requireLandlord, async (req: any,
       createdAtServer: FieldValue.serverTimestamp(),
       createdBy: landlordId,
       source: "landlord_manual",
+      purpose: normalizedPurpose,
+      purposeLabel: normalizedPurposeLabel,
     };
 
     const ref = await db.collection("tenantEvents").add(payload);

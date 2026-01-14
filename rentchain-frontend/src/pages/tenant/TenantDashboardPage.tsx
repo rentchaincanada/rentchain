@@ -45,6 +45,8 @@ type LedgerItem = {
   currency: string | null;
   period: string | null;
   occurredAt: number;
+  purpose?: string | null;
+  purposeLabel?: string | null;
 };
 
 function fmtMoney(value: number | null | undefined, currency?: string | null): string {
@@ -85,6 +87,33 @@ function fmtPeriod(period: string | null | undefined): string | null {
 function valueOrDash<T>(val: T | null | undefined): T | string {
   if (val === null || val === undefined || (typeof val === "string" && val.trim() === "")) return "—";
   return val;
+}
+
+function prettyPurpose(purpose?: string | null): string | null {
+  switch ((purpose || "").toUpperCase()) {
+    case "RENT":
+      return "Rent";
+    case "PARKING":
+      return "Parking";
+    case "SECURITY_DEPOSIT":
+      return "Security deposit";
+    case "DAMAGE":
+      return "Damage";
+    case "LATE_FEE":
+      return "Late fee";
+    case "UTILITIES":
+      return "Utilities";
+    case "OTHER":
+      return "Other";
+    default:
+      return null;
+  }
+}
+
+function formatPurpose(item: LedgerItem): string {
+  const base = prettyPurpose(item.purpose) || item.title || "Ledger entry";
+  const detail = item.purposeLabel?.trim?.() ? item.purposeLabel : null;
+  return detail ? `${base} — ${detail}` : base;
 }
 
 const pageStyle: React.CSSProperties = {
@@ -562,7 +591,9 @@ export default function TenantDashboardPage() {
                   >
                     <LedgerIcon type={item.type} />
                     <div style={{ display: "grid", gap: 4 }}>
-                      <div style={{ fontWeight: 700, color: textTokens.primary }}>{item.title}</div>
+                      <div style={{ fontWeight: 700, color: textTokens.primary }}>
+                        {formatPurpose(item)}
+                      </div>
                       <div style={{ fontSize: "0.95rem", color: textTokens.muted }}>
                         {[fmtPeriod(item.period) || null, fmtDate(item.occurredAt)]
                           .filter(Boolean)

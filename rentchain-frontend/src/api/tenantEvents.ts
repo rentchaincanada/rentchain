@@ -124,6 +124,8 @@ export async function createTenantEvent(payload: {
   description?: string;
   amount?: number;
   occurredAt?: string | number;
+  purpose?: string;
+  purposeLabel?: string;
 }) {
   const defaultTitleFromType = (type: string): string => {
     switch (type) {
@@ -154,6 +156,14 @@ export async function createTenantEvent(payload: {
       ? new Date(payload.occurredAt).getTime()
       : Date.now();
 
+  const normalizePurpose = (p?: string) => {
+    const raw = (p || "").trim();
+    if (!raw) return undefined;
+    const normalized = raw.replace(/\s+/g, "_").toUpperCase();
+    const allowed = ["RENT", "PARKING", "SECURITY_DEPOSIT", "DAMAGE", "LATE_FEE", "UTILITIES", "OTHER"];
+    return allowed.includes(normalized) ? normalized : "OTHER";
+  };
+
   return apiFetch("/tenant-events", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -161,6 +171,8 @@ export async function createTenantEvent(payload: {
       ...payload,
       title: payload.title && payload.title.trim() ? payload.title.trim() : defaultTitleFromType(payload.type),
       occurredAt,
+      purpose: normalizePurpose(payload.purpose),
+      purposeLabel: payload.purposeLabel?.trim()?.slice(0, 80) || undefined,
     }),
   });
 }

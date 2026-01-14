@@ -11,6 +11,8 @@ export function RecordTenantEventModal({ tenantId, onSuccess, onClose }: Props) 
   const [type, setType] = useState("note");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [purpose, setPurpose] = useState("RENT");
+  const [purposeLabel, setPurposeLabel] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,12 +49,15 @@ export function RecordTenantEventModal({ tenantId, onSuccess, onClose }: Props) 
         type,
         title: finalTitle,
         description: description.trim() || undefined,
+        purpose,
+        purposeLabel: purposeLabel.trim() || undefined,
         occurredAt: Date.now(),
       });
       onSuccess?.();
       onClose?.();
       setTitle("");
       setDescription("");
+      setPurposeLabel("");
     } catch (e: any) {
       setError(e?.message || "Failed to record event");
     } finally {
@@ -85,6 +90,29 @@ export function RecordTenantEventModal({ tenantId, onSuccess, onClose }: Props) 
           placeholder="Event title"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
+          style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #e5e7eb" }}
+        />
+      </label>
+
+      <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 13 }}>
+        <span>Purpose</span>
+        <select
+          value={purpose}
+          onChange={(e) => setPurpose(e.target.value)}
+          style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #e5e7eb" }}
+        >
+          <option value="RENT">Rent</option>
+          <option value="PARKING">Parking</option>
+          <option value="SECURITY_DEPOSIT">Security deposit</option>
+          <option value="DAMAGE">Damage</option>
+          <option value="LATE_FEE">Late fee</option>
+          <option value="UTILITIES">Utilities</option>
+          <option value="OTHER">Other</option>
+        </select>
+        <input
+          placeholder="Purpose details (optional)"
+          value={purposeLabel}
+          onChange={(e) => setPurposeLabel(e.target.value)}
           style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #e5e7eb" }}
         />
       </label>
