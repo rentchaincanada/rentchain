@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { notifyPlanInterest } from "../../api/notifyPlanInterest";
 import { useToast } from "../ui/ToastProvider";
+import { useAuth } from "../../context/useAuth";
+import { DEBUG_AUTH_KEY } from "../../lib/authKeys";
 
 export function NotifyMeModal({
   open,
@@ -20,6 +22,7 @@ export function NotifyMeModal({
   const [done, setDone] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const { showToast } = useToast();
+  const { user } = useAuth();
 
   if (!open) return null;
 
@@ -27,17 +30,30 @@ export function NotifyMeModal({
     setSaving(true);
     setErr(null);
     try {
-      const trimmed = (email || defaultEmail || "").trim().toLowerCase();
-      if (!trimmed) {
-        setErr("Please log in again to send a notification.");
+      const emailToUse = String(user?.email || "").trim().toLowerCase();
+      if (!emailToUse) {
+        setErr("Missing email. Please log in again.");
+        showToast({
+          message: "Missing email",
+          description: "Please log in again to send a notification.",
+          variant: "error",
+        });
         setSaving(false);
         return;
       }
       const payloadPlan = desiredPlan === "pro" ? "pro" : "core";
+      const dbg = localStorage.getItem(DEBUG_AUTH_KEY) === "1";
+      if (dbg) {
+        // eslint-disable-next-line no-console
+        console.log("[notify-plan-interest] payload", {
+          hasEmail: !!emailToUse,
+          plan: payloadPlan,
+          context: context || "pricing",
+        });
+      }
       const res: any = await notifyPlanInterest({
-        email: trimmed,
+        email: emailToUse,
         plan: payloadPlan,
-        note: context || "pricing",
       });
       const emailed = res?.emailed === true;
       const emailError = res?.emailError ? String(res.emailError) : "";
