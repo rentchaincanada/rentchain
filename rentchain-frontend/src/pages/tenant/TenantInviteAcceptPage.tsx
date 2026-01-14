@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useLocation } from "react-router-dom";
+import { apiFetch } from "../../api/apiFetch";
 import { setTenantToken } from "../../lib/tenantAuth";
 import { DEBUG_AUTH_KEY, JUST_LOGGED_IN_KEY } from "../../lib/authKeys";
 
@@ -92,22 +93,24 @@ export default function TenantInviteAcceptPage() {
 
     setBusy(true);
     try {
-      const res1 = await fetch(`/api/tenant/invites/${inviteToken}/accept`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password, fullName }),
-      });
-      let res = res1;
-      if (res1.status === 404) {
-        res = await fetch(`/api/tenant-invites/redeem`, {
+      const acceptData: any =
+        (await apiFetch(`/tenant/invites/${inviteToken}/accept`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password, fullName }),
+          allow404: true,
+        })) || null;
+
+      let data = acceptData;
+      if (!acceptData) {
+        data = await apiFetch(`/tenant-invites/redeem`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ token: inviteToken, password, fullName }),
         });
       }
 
-      const data: any = await res.json().catch(() => ({}));
-      if (!res.ok || !data?.ok) {
+      if (!data?.ok) {
         throw new Error(data?.error || "Failed to redeem invite.");
       }
 
