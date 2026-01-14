@@ -26,7 +26,7 @@ import TenantInviteRedeem from "./tenant/TenantInviteRedeem";
 import TenantInviteAcceptPage from "./pages/tenant/TenantInviteAcceptPage";
 import { LandlordNav } from "./components/layout/LandlordNav";
 import TenantPortalComingSoon from "./pages/tenant/TenantPortalComingSoon";
-import TenantDashboardPageV2 from "./pages/tenant/TenantDashboardPage.v2";
+import TenantDashboardPage from "./pages/tenant/TenantDashboardPage";
 import TenantLedgerPage from "./pages/tenant/TenantLedgerPage";
 import TenantMagicRedeemPage from "./pages/tenant/TenantMagicRedeemPage";
 import MonthlyOpsReportPage from "./pages/reports/MonthlyOpsReportPage";
@@ -259,7 +259,7 @@ function App() {
           path="/tenant"
           element={
             TENANT_PORTAL_ENABLED ? (
-              <TenantDashboardPageV2 />
+              <TenantDashboardPage />
             ) : (
               <TenantPortalComingSoon />
             )

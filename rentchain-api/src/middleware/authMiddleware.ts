@@ -70,7 +70,7 @@ export const authenticateJwt: RequestHandler = (req, res, next): void => {
   }
 
   if (!authHeader.startsWith("Bearer ")) {
-    jsonError(res, 401, "UNAUTHORIZED", "Unauthorized", undefined, (req as any).requestId);
+    jsonError(res, 401, "UNAUTHORIZED", "UNAUTHORIZED", undefined, (req as any).requestId);
     return;
   }
 
@@ -82,7 +82,7 @@ export const authenticateJwt: RequestHandler = (req, res, next): void => {
       decoded as any;
 
     if (!sub || !email) {
-      jsonError(res, 401, "UNAUTHORIZED", "Unauthorized", undefined, (req as any).requestId);
+      jsonError(res, 401, "UNAUTHORIZED", "UNAUTHORIZED", undefined, (req as any).requestId);
       return;
     }
 
@@ -101,6 +101,6 @@ export const authenticateJwt: RequestHandler = (req, res, next): void => {
     next();
   } catch (err) {
     console.error("[authenticateJwt] verification failed", err);
-    jsonError(res, 401, "UNAUTHORIZED", "Unauthorized", undefined, (req as any).requestId);
+    jsonError(res, 401, "UNAUTHORIZED", "UNAUTHORIZED", undefined, (req as any).requestId);
   }
 };

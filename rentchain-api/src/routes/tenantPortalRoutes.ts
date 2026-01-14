@@ -6,55 +6,164 @@ const router = Router();
 router.use(authenticateJwt);
 
 function requireTenant(req: any, res: any, next: any) {
-  if (!req.user || req.user.role !== "tenant") {
-    return res.status(403).json({ ok: false, error: "TENANT_ONLY" });
+  const user = req.user;
+  if (!user || user.role !== "tenant" || !user.tenantId) {
+    return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
   }
   return next();
 }
 
+function toMillis(value: any): number | null {
+  if (!value) return null;
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    const ts = Date.parse(value);
+    return Number.isNaN(ts) ? null : ts;
+  }
+  if (typeof value?.toMillis === "function") return value.toMillis();
+  if (typeof value?.seconds === "number") return value.seconds * 1000;
+  return null;
+}
+
 router.get("/me", requireTenant, async (req: any, res) => {
   try {
-    const tenantId = req.user?.tenantId || null;
-    if (!tenantId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
 
-    const ref = db.collection("tenants").doc(tenantId);
-    let snap = await ref.get();
-    if (!snap.exists) {
-      const now = Date.now();
-      const seed = {
-        id: tenantId,
-        landlordId: req.user?.landlordId ?? null,
-        email: req.user?.email ?? null,
-        unitId: req.user?.unitId ?? null,
-        propertyId: req.user?.propertyId ?? null,
-        leaseId: req.user?.leaseId ?? null,
-        status: "active",
-        createdAt: now,
-        updatedAt: now,
-        source: "token_upsert",
-      };
-      await ref.set(seed, { merge: true });
-      snap = await ref.get();
+    const tenantRef = db.collection("tenants").doc(tenantId);
+    const tenantSnap = await tenantRef.get();
+    const tenantData = (tenantSnap.exists ? (tenantSnap.data() as any) : null) || {};
+
+    let landlordId = tenantData.landlordId ?? req.user?.landlordId ?? null;
+    let propertyId = tenantData.propertyId ?? req.user?.propertyId ?? null;
+    let unitId = tenantData.unitId ?? tenantData.unit ?? req.user?.unitId ?? null;
+
+    // Invite redemption timestamp takes precedence for joinedAt
+    let joinedAt: number | null = null;
+    try {
+      const inviteSnap = await db
+        .collection("tenantInvites")
+        .where("tenantId", "==", tenantId)
+        .limit(1)
+        .get();
+      const inviteDoc = inviteSnap.docs[0];
+      if (inviteDoc?.exists) {
+        const invite = inviteDoc.data() as any;
+        joinedAt = toMillis(invite.redeemedAt ?? invite.createdAt ?? null);
+      }
+    } catch {
+      joinedAt = null;
     }
-    const data = snap.data() as any;
+    if (!joinedAt) {
+      joinedAt = toMillis(tenantData.redeemedAt ?? tenantData.createdAt ?? null);
+    }
+
+    let propertyName: string | null = tenantData.propertyName ?? tenantData.property ?? null;
+    if (propertyId) {
+      try {
+        const propSnap = await db.collection("properties").doc(propertyId).get();
+        if (propSnap.exists) {
+          const prop = propSnap.data() as any;
+          propertyName = prop?.name ?? prop?.addressLine1 ?? propertyName ?? null;
+          landlordId = landlordId ?? prop?.landlordId ?? prop?.ownerId ?? prop?.owner ?? null;
+        }
+      } catch {
+        // ignore property lookup errors
+      }
+    }
+
+    let unitLabel: string | null = tenantData.unit ?? null;
+    if (unitId) {
+      try {
+        const unitSnap = await db.collection("units").doc(unitId).get();
+        if (unitSnap.exists) {
+          const unit = unitSnap.data() as any;
+          unitLabel = unit?.unitNumber ?? unit?.label ?? unitLabel ?? null;
+          propertyId = propertyId ?? unit?.propertyId ?? null;
+          landlordId = landlordId ?? unit?.landlordId ?? null;
+        }
+      } catch {
+        unitLabel = unitLabel ?? null;
+      }
+      if (!unitLabel && propertyName) {
+        unitLabel = typeof tenantData.unit === "string" ? tenantData.unit : null;
+      }
+    }
+
+    if (!propertyName && propertyId) {
+      try {
+        const propSnap = await db.collection("properties").doc(propertyId).get();
+        if (propSnap.exists) {
+          const prop = propSnap.data() as any;
+          propertyName = prop?.name ?? prop?.addressLine1 ?? null;
+          landlordId = landlordId ?? prop?.landlordId ?? prop?.ownerId ?? prop?.owner ?? null;
+        }
+      } catch {
+        propertyName = propertyName ?? null;
+      }
+    }
+
+    let landlordName: string | null = null;
+    if (landlordId) {
+      try {
+        const llSnap = await db.collection("landlords").doc(landlordId).get();
+        if (llSnap.exists) {
+          const ll = llSnap.data() as any;
+          landlordName = ll?.name ?? ll?.fullName ?? ll?.company ?? ll?.email ?? null;
+        }
+      } catch {
+        landlordName = null;
+      }
+    }
+
+    const leaseStart = toMillis(
+      tenantData.leaseStart ??
+        tenantData.lease_begin ??
+        tenantData.leaseStartDate ??
+        tenantData.createdAt ??
+        null
+    );
+    const leaseStatusRaw = String(
+      tenantData.leaseStatus ?? tenantData.status ?? ""
+    ).toLowerCase();
+    const leaseStatus =
+      leaseStatusRaw === "active" || leaseStatusRaw === "current"
+        ? "Active"
+        : leaseStatusRaw === "pending"
+        ? "Pending"
+        : "Unknown";
+    const rentCents =
+      typeof tenantData.rentCents === "number"
+        ? tenantData.rentCents
+        : typeof tenantData.monthlyRent === "number"
+        ? Math.round(Number(tenantData.monthlyRent) * 100)
+        : null;
+
     return res.json({
       ok: true,
-      tenant: {
-        id: snap.id,
-        fullName: data?.fullName || data?.name || null,
-        email: data?.email ?? req.user?.email ?? null,
-        phone: data?.phone ?? null,
-        status: data?.status ?? null,
-        landlordId: data?.landlordId ?? null,
-        propertyId: data?.propertyId ?? req.user?.propertyId ?? null,
-        unitId: data?.unitId ?? data?.unit ?? req.user?.unitId ?? null,
-        leaseId: data?.leaseId ?? req.user?.leaseId ?? null,
-        createdAt: data?.createdAt ?? null,
+      data: {
+        tenant: {
+          id: tenantId,
+          shortId: tenantId.slice(0, 8),
+          name: tenantData.fullName ?? tenantData.name ?? null,
+          email: tenantData.email ?? req.user?.email ?? null,
+          joinedAt,
+          status: "Active",
+        },
+        landlord: { name: landlordName },
+        property: { name: propertyName ?? null },
+        unit: { label: unitLabel ?? null },
+        lease: {
+          status: leaseStatus,
+          startDate: leaseStart,
+          rentCents,
+          currency: tenantData.currency ?? null,
+        },
       },
     });
   } catch (err) {
     console.error("[tenantPortalRoutes] /tenant/me error", err);
-    return res.status(500).json({ ok: false, error: "Failed to load tenant profile" });
+    return res.status(500).json({ ok: false, error: "TENANT_ME_FAILED" });
   }
 });
 
