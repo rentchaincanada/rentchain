@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Bell, CheckCircle2, Clock3, Home, Lock, MailCheck, Receipt, Sparkles } from "lucide-react";
-import { apiFetch } from "../../api/apiFetch";
+import { tenantApiFetch } from "../../api/tenantApiFetch";
 import { Card, Section } from "../../components/ui/Ui";
 import { clearTenantToken, getTenantToken } from "../../lib/tenantAuth";
 import { colors, radius, shadows, spacing, text as textTokens } from "../../styles/tokens";
@@ -185,8 +185,8 @@ export default function TenantDashboardPage() {
       setActivityError(null);
       try {
         const [meRes, activityRes] = await Promise.allSettled([
-          apiFetch<TenantMeResponse>("/tenant/me"),
-          apiFetch<{ ok: boolean; data: ActivityItem[] }>("/tenant/activity"),
+          tenantApiFetch<TenantMeResponse>("/tenant/me"),
+          tenantApiFetch<{ ok: boolean; data: ActivityItem[] }>("/tenant/activity"),
         ]);
 
         if (!cancelled) {
@@ -201,7 +201,9 @@ export default function TenantDashboardPage() {
           }
 
           if (activityRes.status === "fulfilled") {
-            setActivity(Array.isArray(activityRes.value?.data) ? activityRes.value.data : []);
+            const payload = activityRes.value;
+            const list = Array.isArray((payload as any)?.data) ? (payload as any).data : [];
+            setActivity(list);
           } else {
             const message =
               (activityRes.reason as any)?.message ||
