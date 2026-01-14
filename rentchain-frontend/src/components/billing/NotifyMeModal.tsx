@@ -27,8 +27,12 @@ export function NotifyMeModal({
     setSaving(true);
     setErr(null);
     try {
-      const trimmed = email.trim();
-      if (!trimmed) throw new Error("Email required");
+      const trimmed = (email || defaultEmail || "").trim().toLowerCase();
+      if (!trimmed) {
+        setErr("Please log in again to send a notification.");
+        setSaving(false);
+        return;
+      }
       const payloadPlan = desiredPlan === "pro" ? "pro" : "core";
       const res: any = await notifyPlanInterest({
         email: trimmed,
