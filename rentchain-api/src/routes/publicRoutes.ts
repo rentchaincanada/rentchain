@@ -22,14 +22,24 @@ router.get("/__probe/version", (_req, res) => {
 
 router.post("/notify-plan-interest", async (req: any, res) => {
   res.setHeader("x-route-source", "publicRoutes.ts");
-  const emailRaw = String(req.body?.email || "").trim().toLowerCase();
-  const planRaw = String(req.body?.plan || "").trim().toLowerCase();
-  const noteRaw = String(req.body?.note || "").trim();
+  const body = req?.body || {};
+  const emailRaw = ((body.email ?? body.userEmail ?? "") as any).toString();
+  const planRaw = ((body.plan ?? "") as any).toString();
+  const noteRaw = ((body.note ?? body.context ?? "") as any).toString();
+  const email = emailRaw.trim().toLowerCase();
+  const plan = planRaw.trim().toLowerCase();
 
-  if (!emailRaw || !emailRaw.includes("@")) {
+  console.log("notify-plan-interest payload", {
+    hasBody: !!req?.body,
+    keys: Object.keys(body || {}),
+    emailLen: email.length,
+    plan,
+  });
+
+  if (!email || !email.includes("@")) {
     return res.status(400).json({ ok: false, error: "INVALID_EMAIL" });
   }
-  if (planRaw !== "core" && planRaw !== "pro") {
+  if (plan !== "core" && plan !== "pro") {
     return res.status(400).json({ ok: false, error: "INVALID_PLAN" });
   }
 
