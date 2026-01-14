@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Clock3, Lock } from "lucide-react";
+import { Bell, CheckCircle2, Clock3, Home, Lock, MailCheck, Receipt, Sparkles } from "lucide-react";
 import { apiFetch } from "../../api/apiFetch";
 import { Card, Section } from "../../components/ui/Ui";
 import { clearTenantToken, getTenantToken } from "../../lib/tenantAuth";
@@ -26,6 +26,14 @@ type TenantMeResponse = {
       currency: string | null;
     };
   };
+};
+
+type ActivityItem = {
+  id: string;
+  type: "invite" | "lease" | "rent" | "notice" | "system";
+  title: string;
+  description?: string | null;
+  occurredAt: number;
 };
 
 function fmtMoney(value: number | null | undefined, currency?: string | null): string {
@@ -151,6 +159,9 @@ export default function TenantDashboardPage() {
   const [data, setData] = useState<TenantMeResponse["data"] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [activityError, setActivityError] = useState<string | null>(null);
+  const [activityLoading, setActivityLoading] = useState(true);
   const [hasToken, setHasToken] = useState<boolean>(() =>
     typeof window === "undefined" ? true : !!getTenantToken()
   );
@@ -170,10 +181,34 @@ export default function TenantDashboardPage() {
     (async () => {
       setLoading(true);
       setError(null);
+      setActivityLoading(true);
+      setActivityError(null);
       try {
-        const res = await apiFetch<TenantMeResponse>("/tenant/me");
+        const [meRes, activityRes] = await Promise.allSettled([
+          apiFetch<TenantMeResponse>("/tenant/me"),
+          apiFetch<{ ok: boolean; data: ActivityItem[] }>("/tenant/activity"),
+        ]);
+
         if (!cancelled) {
-          setData(res.data);
+          if (meRes.status === "fulfilled") {
+            setData(meRes.value.data);
+          } else {
+            const message =
+              (meRes.reason as any)?.message ||
+              (meRes.reason as any)?.payload?.error ||
+              "Unable to load your RentChain account";
+            setError(String(message));
+          }
+
+          if (activityRes.status === "fulfilled") {
+            setActivity(Array.isArray(activityRes.value?.data) ? activityRes.value.data : []);
+          } else {
+            const message =
+              (activityRes.reason as any)?.message ||
+              (activityRes.reason as any)?.payload?.error ||
+              "Unable to load activity";
+            setActivityError(String(message));
+          }
         }
       } catch (e: any) {
         if (!cancelled) {
@@ -182,7 +217,10 @@ export default function TenantDashboardPage() {
           setError(String(message));
         }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          setActivityLoading(false);
+        }
       }
     })();
 
@@ -351,8 +389,119 @@ export default function TenantDashboardPage() {
               })}
             </div>
           </Card>
+
+          <Card elevated style={{ gridColumn: "1 / -1" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: spacing.sm }}>
+              <div>
+                <div style={labelStyle}>Activity Timeline</div>
+                <div style={{ fontSize: "1.2rem", fontWeight: 800, color: textTokens.primary }}>
+                  Recent account events
+                </div>
+              </div>
+            </div>
+            {activityError ? (
+              <div style={{ color: colors.danger }}>{activityError}</div>
+            ) : activityLoading ? (
+              <div style={{ display: "grid", gap: 10 }}>
+                {Array.from({ length: 4 }).map((_, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      display: "flex",
+                      gap: 12,
+                      alignItems: "center",
+                      opacity: 0.8,
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: 10,
+                        background: colors.accentSoft,
+                      }}
+                    />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ height: 10, background: colors.accentSoft, borderRadius: 6, width: "40%" }} />
+                      <div
+                        style={{
+                          height: 8,
+                          background: colors.accentSoft,
+                          borderRadius: 6,
+                          width: "25%",
+                          marginTop: 6,
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : activity.length === 0 ? (
+              <div style={{ color: textTokens.muted }}>No activity yet.</div>
+            ) : (
+              <div style={{ display: "grid", gap: 12 }}>
+                {activity.map((item) => (
+                  <div key={item.id} style={{ display: "flex", gap: 12 }}>
+                    <ActivityIcon type={item.type} />
+                    <div style={{ display: "grid", gap: 4 }}>
+                      <div style={{ fontWeight: 700, color: textTokens.primary }}>{item.title}</div>
+                      <div style={{ fontSize: "0.95rem", color: textTokens.muted }}>{fmtDate(item.occurredAt)}</div>
+                      {item.description ? (
+                        <div style={{ fontSize: "0.95rem", color: textTokens.secondary }}>{item.description}</div>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
         </div>
       </DashboardShell>
     </div>
   );
+}
+
+function ActivityIcon({ type }: { type: ActivityItem["type"] }) {
+  const baseStyle: React.CSSProperties = {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    display: "grid",
+    placeItems: "center",
+    background: colors.accentSoft,
+    color: colors.accent,
+  };
+  switch (type) {
+    case "invite":
+      return (
+        <span style={baseStyle}>
+          <MailCheck size={16} />
+        </span>
+      );
+    case "lease":
+      return (
+        <span style={baseStyle}>
+          <Home size={16} />
+        </span>
+      );
+    case "rent":
+      return (
+        <span style={baseStyle}>
+          <Receipt size={16} />
+        </span>
+      );
+    case "notice":
+      return (
+        <span style={baseStyle}>
+          <Bell size={16} />
+        </span>
+      );
+    case "system":
+    default:
+      return (
+        <span style={baseStyle}>
+          <Sparkles size={16} />
+        </span>
+      );
+  }
 }

@@ -15,3 +15,7 @@ export async function tenantPayments() {
 export async function tenantLedger() {
   return apiFetch("/tenant/ledger");
 }
+
+export async function tenantActivity() {
+  return apiFetch("/tenant/activity");
+}
