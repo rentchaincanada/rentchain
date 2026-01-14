@@ -56,7 +56,7 @@ export function NotifyMeModal({
         plan: payloadPlan,
       });
       const emailed = res?.emailed === true;
-      const emailError = res?.emailError ? String(res.emailError) : "";
+      const emailError = res?.emailError ? String(res.emailError) : res?.error ? String(res.error) : "";
       setDone(true);
       showToast({
         message: emailed ? "Notification sent" : "Notification failed",
@@ -64,7 +64,9 @@ export function NotifyMeModal({
         variant: emailed ? "success" : "error",
       });
     } catch (e: any) {
-      setErr(e?.message ?? "Failed to save");
+      const msg = e?.message ?? "Failed to save";
+      setErr(msg);
+      showToast({ message: "Notification failed", description: msg, variant: "error" });
     } finally {
       setSaving(false);
     }
