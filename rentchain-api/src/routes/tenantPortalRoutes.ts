@@ -377,6 +377,49 @@ router.get("/ledger", requireTenant, async (req: any, res) => {
   }
 });
 
+router.get("/attachments", requireTenant, async (req: any, res) => {
+  try {
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+
+    const snap = await db
+      .collection("ledgerAttachments")
+      .where("tenantId", "==", tenantId)
+      .orderBy("createdAt", "desc")
+      .limit(50)
+      .get();
+
+    const data = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+    return res.json({ ok: true, data });
+  } catch (err) {
+    console.error("[tenantPortalRoutes] /tenant/attachments error", err);
+    return res.status(500).json({ ok: false, error: "TENANT_ATTACHMENTS_FAILED" });
+  }
+});
+
+router.get("/ledger/:ledgerItemId/attachments", requireTenant, async (req: any, res) => {
+  try {
+    const tenantId = req.user?.tenantId;
+    const ledgerItemId = String(req.params?.ledgerItemId || "").trim();
+    if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    if (!ledgerItemId) return res.status(400).json({ ok: false, error: "ledgerItemId required" });
+
+    const snap = await db
+      .collection("ledgerAttachments")
+      .where("tenantId", "==", tenantId)
+      .where("ledgerItemId", "==", ledgerItemId)
+      .orderBy("createdAt", "desc")
+      .limit(10)
+      .get();
+
+    const data = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+    return res.json({ ok: true, data });
+  } catch (err) {
+    console.error("[tenantPortalRoutes] /tenant/ledger/:id/attachments error", err);
+    return res.status(500).json({ ok: false, error: "TENANT_ATTACHMENTS_FAILED" });
+  }
+});
+
 router.get("/lease", requireTenant, (_req: any, res) => {
   return res.json({
     ok: true,

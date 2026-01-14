@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Bell, CheckCircle2, Clock3, Home, Lock, MailCheck, Receipt, Sparkles, Wallet } from "lucide-react";
 import { tenantApiFetch } from "../../api/tenantApiFetch";
+import { TenantAttachment } from "../../api/tenantAttachmentsApi";
 import { Card, Section } from "../../components/ui/Ui";
 import { clearTenantToken, getTenantToken } from "../../lib/tenantAuth";
 import { colors, radius, shadows, spacing, text as textTokens } from "../../styles/tokens";
@@ -48,6 +49,8 @@ type LedgerItem = {
   purpose?: string | null;
   purposeLabel?: string | null;
 };
+
+type Attachment = TenantAttachment;
 
 function fmtMoney(value: number | null | undefined, currency?: string | null): string {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return "—";
@@ -114,6 +117,12 @@ function formatPurpose(item: LedgerItem): string {
   const base = prettyPurpose(item.purpose) || item.title || "Ledger entry";
   const detail = item.purposeLabel?.trim?.() ? item.purposeLabel : null;
   return detail ? `${base} — ${detail}` : base;
+}
+
+function formatAttachment(att: Attachment): string {
+  const purpose = prettyPurpose(att.purpose) || "Document";
+  const label = att.purposeLabel?.trim?.() ? att.purposeLabel : null;
+  return label ? `${purpose} — ${label}` : purpose;
 }
 
 const pageStyle: React.CSSProperties = {
@@ -215,6 +224,9 @@ export default function TenantDashboardPage() {
   const [ledger, setLedger] = useState<LedgerItem[]>([]);
   const [ledgerError, setLedgerError] = useState<string | null>(null);
   const [ledgerLoading, setLedgerLoading] = useState(true);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [attachmentsError, setAttachmentsError] = useState<string | null>(null);
+  const [attachmentsLoading, setAttachmentsLoading] = useState(true);
   const [hasToken, setHasToken] = useState<boolean>(() =>
     typeof window === "undefined" ? true : !!getTenantToken()
   );
@@ -238,11 +250,14 @@ export default function TenantDashboardPage() {
       setActivityError(null);
       setLedgerLoading(true);
       setLedgerError(null);
+      setAttachmentsLoading(true);
+      setAttachmentsError(null);
       try {
-        const [meRes, activityRes, ledgerRes] = await Promise.allSettled([
+        const [meRes, activityRes, ledgerRes, attachmentsRes] = await Promise.allSettled([
           tenantApiFetch<TenantMeResponse>("/tenant/me"),
           tenantApiFetch<{ ok: boolean; data: ActivityItem[] }>("/tenant/activity"),
           tenantApiFetch<{ ok: boolean; data: LedgerItem[] }>("/tenant/ledger"),
+          tenantApiFetch<{ ok: boolean; data: Attachment[] }>("/tenant/attachments"),
         ]);
 
         if (!cancelled) {
@@ -279,6 +294,18 @@ export default function TenantDashboardPage() {
               "Unable to load ledger";
             setLedgerError(String(message));
           }
+
+          if (attachmentsRes.status === "fulfilled") {
+            const payload = attachmentsRes.value;
+            const list = Array.isArray((payload as any)?.data) ? (payload as any).data : [];
+            setAttachments(list);
+          } else {
+            const message =
+              (attachmentsRes.reason as any)?.message ||
+              (attachmentsRes.reason as any)?.payload?.error ||
+              "Unable to load attachments";
+            setAttachmentsError(String(message));
+          }
         }
       } catch (e: any) {
         if (!cancelled) {
@@ -291,6 +318,7 @@ export default function TenantDashboardPage() {
           setLoading(false);
           setActivityLoading(false);
           setLedgerLoading(false);
+          setAttachmentsLoading(false);
         }
       }
     })();
@@ -606,6 +634,54 @@ export default function TenantDashboardPage() {
                     <div style={{ textAlign: "right", fontWeight: 800, color: textTokens.primary }}>
                       {fmtMoney(item.amountCents, item.currency || undefined)}
                     </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          <Card elevated style={{ gridColumn: "1 / -1" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: spacing.sm }}>
+              <div>
+                <div style={labelStyle}>Documents & receipts</div>
+                <div style={{ fontSize: "1.2rem", fontWeight: 800, color: textTokens.primary }}>
+                  Linked files from your landlord
+                </div>
+              </div>
+            </div>
+            {attachmentsError ? (
+              <div style={{ color: colors.danger }}>{attachmentsError}</div>
+            ) : attachmentsLoading ? (
+              <div style={{ display: "grid", gap: 10 }}>
+                {Array.from({ length: 3 }).map((_, idx) => (
+                  <div key={idx} style={{ display: "grid", gap: 6 }}>
+                    <div style={{ height: 10, background: colors.accentSoft, borderRadius: 6, width: "50%" }} />
+                    <div style={{ height: 8, background: colors.accentSoft, borderRadius: 6, width: "30%" }} />
+                  </div>
+                ))}
+              </div>
+            ) : attachments.length === 0 ? (
+              <div style={{ color: textTokens.muted }}>Documents and receipts will appear here.</div>
+            ) : (
+              <div style={{ display: "grid", gap: 12 }}>
+                {attachments.map((att) => (
+                  <div key={att.id} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                    <div style={{ display: "grid", gap: 4 }}>
+                      <div style={{ fontWeight: 700, color: textTokens.primary }}>
+                        {formatAttachment(att)}
+                      </div>
+                      <div style={{ fontSize: "0.95rem", color: textTokens.muted }}>
+                        {att.title || att.url}
+                      </div>
+                    </div>
+                    <a
+                      href={att.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ fontWeight: 700, color: colors.accent, textDecoration: "none" }}
+                    >
+                      Open
+                    </a>
                   </div>
                 ))}
               </div>
