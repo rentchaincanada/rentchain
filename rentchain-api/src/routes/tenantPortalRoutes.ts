@@ -340,8 +340,13 @@ router.get("/ledger", requireTenant, async (req: any, res) => {
 
     const items = (entries || []).map((entry: any) => {
       const occurredAt = toMillis(entry.date ?? entry.occurredAt);
-      const purpose = entry.purpose ?? inferPurpose(entry.type || "");
-      const purposeLabel = entry.purposeLabel ?? entry.period ?? null;
+      const purpose =
+        entry.purpose ??
+        entry?.meta?.purpose ??
+        inferPurpose(entry.type || "") ??
+        "OTHER";
+      const purposeLabel =
+        entry.purposeLabel ?? entry?.meta?.purposeLabel ?? entry.period ?? null;
       return {
         id: entry.id,
         type: mapType(entry.type || ""),
