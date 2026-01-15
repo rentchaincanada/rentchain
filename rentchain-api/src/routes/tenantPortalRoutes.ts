@@ -370,16 +370,12 @@ router.get("/ledger", requireTenant, async (req: any, res) => {
 
     // Bridge: add finance tenant events as ledger items for visibility
     try {
-      const financeTypes = [
-        "RENT_PAID",
-        "RENT_RECORDED",
-        "RENT_DUE",
-        "FEE_ADDED",
-        "LATE_FEE",
-        "SECURITY_DEPOSIT",
-        "ADJUSTMENT",
-        "PAYMENT_RECORDED",
-      ];
+      const isFinanceType = (t: string): boolean => {
+        const x = (t || "").toUpperCase();
+        return ["RENT", "FEE", "DEPOSIT", "PAY", "PAYMENT", "ADJUST", "CHARGE", "CREDIT", "DAMAGE", "PARK", "UTIL"].some(
+          (k) => x.includes(k)
+        );
+      };
       const eventsSnap = await db
         .collection("tenantEvents")
         .where("tenantId", "==", tenantId)
@@ -389,7 +385,7 @@ router.get("/ledger", requireTenant, async (req: any, res) => {
       const eventItems =
         eventsSnap.docs
           .map((d) => ({ id: d.id, ...(d.data() as any) }))
-          .filter((ev) => financeTypes.includes(String(ev.type || "").toUpperCase()))
+          .filter((ev) => isFinanceType(ev.type || ""))
           .map((ev) => {
             const occurredAt = toMillis(ev.occurredAt);
             const purpose = ev.purpose ?? inferPurpose(ev.type || "");

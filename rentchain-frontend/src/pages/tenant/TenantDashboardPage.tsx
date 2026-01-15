@@ -227,6 +227,7 @@ export default function TenantDashboardPage() {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [attachmentsError, setAttachmentsError] = useState<string | null>(null);
   const [attachmentsLoading, setAttachmentsLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const attachmentsByLedgerId = useMemo(() => {
     const map = new Map<string, Attachment[]>();
     attachments.forEach((att) => {
@@ -241,6 +242,81 @@ export default function TenantDashboardPage() {
     typeof window === "undefined" ? true : !!getTenantToken()
   );
 
+  const loadAll = React.useCallback(async () => {
+    setRefreshing(true);
+    setLoading(true);
+    setError(null);
+    setActivityLoading(true);
+    setActivityError(null);
+    setLedgerLoading(true);
+    setLedgerError(null);
+    setAttachmentsLoading(true);
+    setAttachmentsError(null);
+    try {
+      const [meRes, activityRes, ledgerRes, attachmentsRes] = await Promise.allSettled([
+        tenantApiFetch<TenantMeResponse>("/tenant/me"),
+        tenantApiFetch<{ ok: boolean; data: ActivityItem[] }>("/tenant/activity"),
+        tenantApiFetch<{ ok: boolean; data: LedgerItem[] }>("/tenant/ledger"),
+        tenantApiFetch<{ ok: boolean; data: Attachment[] }>("/tenant/attachments"),
+      ]);
+
+      if (meRes.status === "fulfilled") {
+        setData(meRes.value.data);
+      } else {
+        const message =
+          (meRes.reason as any)?.message ||
+          (meRes.reason as any)?.payload?.error ||
+          "Unable to load your RentChain account";
+        setError(String(message));
+      }
+
+      if (activityRes.status === "fulfilled") {
+        const payload = activityRes.value;
+        const list = Array.isArray((payload as any)?.data) ? (payload as any).data : [];
+        setActivity(list);
+      } else {
+        const message =
+          (activityRes.reason as any)?.message ||
+          (activityRes.reason as any)?.payload?.error ||
+          "Unable to load activity";
+        setActivityError(String(message));
+      }
+
+      if (ledgerRes.status === "fulfilled") {
+        const payload = ledgerRes.value;
+        const list = Array.isArray((payload as any)?.data) ? (payload as any).data : [];
+        setLedger(list);
+      } else {
+        const message =
+          (ledgerRes.reason as any)?.message ||
+          (ledgerRes.reason as any)?.payload?.error ||
+          "Unable to load ledger";
+        setLedgerError(String(message));
+      }
+
+      if (attachmentsRes.status === "fulfilled") {
+        const payload = attachmentsRes.value;
+        const list = Array.isArray((payload as any)?.data) ? (payload as any).data : [];
+        setAttachments(list);
+      } else {
+        const message =
+          (attachmentsRes.reason as any)?.message ||
+          (attachmentsRes.reason as any)?.payload?.error ||
+          "Unable to load attachments";
+        setAttachmentsError(String(message));
+      }
+    } catch (e: any) {
+      const message = e?.message || e?.payload?.error || "Unable to load your RentChain account";
+      setError(String(message));
+    } finally {
+      setLoading(false);
+      setActivityLoading(false);
+      setLedgerLoading(false);
+      setAttachmentsLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const token = getTenantToken();
@@ -251,92 +327,8 @@ export default function TenantDashboardPage() {
       return;
     }
     setHasToken(true);
-
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      setError(null);
-      setActivityLoading(true);
-      setActivityError(null);
-      setLedgerLoading(true);
-      setLedgerError(null);
-      setAttachmentsLoading(true);
-      setAttachmentsError(null);
-      try {
-        const [meRes, activityRes, ledgerRes, attachmentsRes] = await Promise.allSettled([
-          tenantApiFetch<TenantMeResponse>("/tenant/me"),
-          tenantApiFetch<{ ok: boolean; data: ActivityItem[] }>("/tenant/activity"),
-          tenantApiFetch<{ ok: boolean; data: LedgerItem[] }>("/tenant/ledger"),
-          tenantApiFetch<{ ok: boolean; data: Attachment[] }>("/tenant/attachments"),
-        ]);
-
-        if (!cancelled) {
-          if (meRes.status === "fulfilled") {
-            setData(meRes.value.data);
-          } else {
-            const message =
-              (meRes.reason as any)?.message ||
-              (meRes.reason as any)?.payload?.error ||
-              "Unable to load your RentChain account";
-            setError(String(message));
-          }
-
-          if (activityRes.status === "fulfilled") {
-            const payload = activityRes.value;
-            const list = Array.isArray((payload as any)?.data) ? (payload as any).data : [];
-            setActivity(list);
-          } else {
-            const message =
-              (activityRes.reason as any)?.message ||
-              (activityRes.reason as any)?.payload?.error ||
-              "Unable to load activity";
-            setActivityError(String(message));
-          }
-
-          if (ledgerRes.status === "fulfilled") {
-            const payload = ledgerRes.value;
-            const list = Array.isArray((payload as any)?.data) ? (payload as any).data : [];
-            setLedger(list);
-          } else {
-            const message =
-              (ledgerRes.reason as any)?.message ||
-              (ledgerRes.reason as any)?.payload?.error ||
-              "Unable to load ledger";
-            setLedgerError(String(message));
-          }
-
-          if (attachmentsRes.status === "fulfilled") {
-            const payload = attachmentsRes.value;
-            const list = Array.isArray((payload as any)?.data) ? (payload as any).data : [];
-            setAttachments(list);
-          } else {
-            const message =
-              (attachmentsRes.reason as any)?.message ||
-              (attachmentsRes.reason as any)?.payload?.error ||
-              "Unable to load attachments";
-            setAttachmentsError(String(message));
-          }
-        }
-      } catch (e: any) {
-        if (!cancelled) {
-          const message =
-            e?.message || e?.payload?.error || "Unable to load your RentChain account";
-          setError(String(message));
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-          setActivityLoading(false);
-          setLedgerLoading(false);
-          setAttachmentsLoading(false);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    void loadAll();
+  }, [loadAll]);
 
   const profile = data?.tenant;
   const lease = data?.lease;
