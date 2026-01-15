@@ -26,6 +26,8 @@ export const CreateNoticeModal: React.FC<Props> = ({ open, tenantId, onClose, on
   const [effectiveAt, setEffectiveAt] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [createdId, setCreatedId] = useState<string | null>(null);
+  const [createdLink, setCreatedLink] = useState<string | null>(null);
+  const [copyMsg, setCopyMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -35,6 +37,8 @@ export const CreateNoticeModal: React.FC<Props> = ({ open, tenantId, onClose, on
       setEffectiveAt("");
       setSubmitting(false);
       setCreatedId(null);
+      setCreatedLink(null);
+      setCopyMsg(null);
     }
   }, [open]);
 
@@ -45,6 +49,29 @@ export const CreateNoticeModal: React.FC<Props> = ({ open, tenantId, onClose, on
     const d = new Date(effectiveAt);
     const ms = d.getTime();
     return Number.isFinite(ms) ? ms : null;
+  };
+
+  const copyText = async (txt: string) => {
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(txt);
+      } else {
+        throw new Error("no-clipboard");
+      }
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = txt;
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand("copy");
+      } catch {
+        // ignore
+      }
+      document.body.removeChild(ta);
+    }
+    setCopyMsg("Copied");
+    setTimeout(() => setCopyMsg(null), 1200);
   };
 
   const submit = async () => {
@@ -78,8 +105,10 @@ export const CreateNoticeModal: React.FC<Props> = ({ open, tenantId, onClose, on
           effectiveAt: eff,
         }),
       });
-      const id = res?.data?.id || null;
-      setCreatedId(id);
+      const noticeId = res?.data?.[0]?.id || res?.data?.id || res?.id || null;
+      setCreatedId(noticeId);
+      const link = noticeId ? `${window.location.origin}/tenant/notices/${noticeId}` : null;
+      setCreatedLink(link);
       const emailed = res?.emailed === true;
       const emailError = res?.emailError;
       if (emailed) {
@@ -262,7 +291,78 @@ export const CreateNoticeModal: React.FC<Props> = ({ open, tenantId, onClose, on
             </button>
           </div>
           {createdId ? (
-            <div style={{ fontSize: 12, color: text.muted }}>Created notice ID: {createdId}</div>
+            <div
+              style={{
+                marginTop: spacing.sm,
+                padding: spacing.sm,
+                borderRadius: radius.md,
+                border: `1px solid ${colors.border}`,
+                background: colors.panel,
+                display: "grid",
+                gap: 8,
+                fontSize: 12,
+                color: text.primary,
+              }}
+            >
+              <div style={{ fontWeight: 700 }}>Notice created</div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                <span style={{ color: text.muted }}>Notice ID: {createdId}</span>
+                <button
+                  type="button"
+                  onClick={() => copyText(String(createdId))}
+                  style={{
+                    borderRadius: radius.pill,
+                    border: `1px solid ${colors.border}`,
+                    background: colors.card,
+                    color: text.primary,
+                    padding: "4px 10px",
+                    cursor: "pointer",
+                    fontWeight: 700,
+                  }}
+                >
+                  Copy ID
+                </button>
+              </div>
+              {createdLink ? (
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                  <span style={{ color: text.muted }}>Tenant link: /tenant/notices/{createdId}</span>
+                  <button
+                    type="button"
+                    onClick={() => copyText(createdLink)}
+                    style={{
+                      borderRadius: radius.pill,
+                      border: `1px solid ${colors.border}`,
+                      background: colors.card,
+                      color: text.primary,
+                      padding: "4px 10px",
+                      cursor: "pointer",
+                      fontWeight: 700,
+                    }}
+                  >
+                    Copy link
+                  </button>
+                </div>
+              ) : null}
+              {copyMsg ? <div style={{ color: text.muted }}>{copyMsg}</div> : null}
+              <div>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  style={{
+                    marginTop: 6,
+                    borderRadius: radius.pill,
+                    border: `1px solid ${colors.border}`,
+                    background: colors.panel,
+                    color: text.primary,
+                    padding: "6px 10px",
+                    cursor: "pointer",
+                    fontWeight: 700,
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
           ) : null}
         </div>
       </div>
