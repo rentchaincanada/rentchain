@@ -14,12 +14,7 @@ export const MacShell: React.FC<MacShellProps> = ({
   children,
   showTopNav = true,
 }) => {
-  const autoHide =
-    typeof window !== "undefined" &&
-    /^\/(dashboard|properties|tenants|applications|payments|billing|ledger|screening|account|blockchain)/i.test(
-      window.location.pathname || ""
-    );
-  const renderTopNav = showTopNav && !autoHide;
+  const renderTopNav = showTopNav;
 
   return (
     <div
@@ -30,7 +25,18 @@ export const MacShell: React.FC<MacShellProps> = ({
         backgroundImage: colors.bgAmbient,
       }}
     >
-      {renderTopNav ? <TopNav /> : null}
+      {renderTopNav ? (
+        <div
+          style={{
+            position: "sticky",
+            top: 0,
+            zIndex: 2000,
+            backgroundColor: "#fff",
+          }}
+        >
+          <TopNav />
+        </div>
+      ) : null}
       <main
         style={{
           maxWidth: layout.maxWidth,
@@ -38,20 +44,6 @@ export const MacShell: React.FC<MacShellProps> = ({
           padding: `${spacing.lg} ${layout.pagePadding} ${spacing.xxl}`,
         }}
       >
-        <header
-          style={{
-            marginBottom: spacing.lg,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: spacing.lg,
-            color: text.primary,
-          }}
-        >
-          <h1 style={{ margin: 0, fontSize: "1.4rem", fontWeight: 700 }}>
-            {title}
-          </h1>
-        </header>
         <div style={{ display: "flex", flexDirection: "column", gap: spacing.lg }}>
           {children}
         </div>
