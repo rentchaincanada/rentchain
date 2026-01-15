@@ -15,11 +15,11 @@ type Props = {
 };
 
 const TYPES: { type: TenantEventType; label: string; hint: string }[] = [
-  { type: "LEASE_STARTED", label: "Lease started", hint: "Start of tenancy" },
-  { type: "RENT_PAID", label: "Rent paid", hint: "Payment received" },
-  { type: "RENT_LATE", label: "Rent paid late", hint: "Payment received after due date" },
+  { type: "PAYMENT_RECORDED", label: "Payment recorded", hint: "Payment received" },
+  { type: "CHARGE_ADDED", label: "Charge added", hint: "Rent or fee added" },
+  { type: "ADJUSTMENT_RECORDED", label: "Adjustment recorded", hint: "Credit or adjustment" },
   { type: "NOTICE_SERVED", label: "Notice served", hint: "Formal notice delivered" },
-  { type: "LEASE_ENDED", label: "Lease ended", hint: "End of tenancy" },
+  { type: "LEASE_STARTED", label: "Lease started", hint: "Start of tenancy" },
 ];
 
 const isoToday = () => {
@@ -49,13 +49,15 @@ export const RecordTenantEventModal: React.FC<Props> = ({
   const [purposeLabel, setPurposeLabel] = useState("");
   const [confirm, setConfirm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [createdId, setCreatedId] = useState<string | null>(null);
 
   const typeMeta = useMemo(() => TYPES.find((t) => t.type === type), [type]);
 
   if (!open) return null;
 
-  const showAmount = type === "RENT_PAID";
-  const showDaysLate = type === "RENT_LATE";
+  const financeTypes: TenantEventType[] = ["PAYMENT_RECORDED", "CHARGE_ADDED", "ADJUSTMENT_RECORDED"];
+  const showAmount = financeTypes.includes(type);
+  const showDaysLate = false;
   const showNotice = type === "NOTICE_SERVED";
 
   const parseAmountCents = () => {
@@ -102,9 +104,35 @@ export const RecordTenantEventModal: React.FC<Props> = ({
       return;
     }
 
+    if (financeTypes.includes(type)) {
+      if (!purpose) {
+        showToast({
+          message: "Purpose required",
+          description: "Select a purpose for this finance event.",
+          variant: "error",
+        });
+        return;
+      }
+      if (!parseAmountCents()) {
+        showToast({
+          message: "Amount required",
+          description: "Enter an amount for this finance event.",
+          variant: "error",
+        });
+        return;
+      }
+    }
+
     setSubmitting(true);
     try {
-      const title = typeMeta?.label || "Tenant event";
+      const title =
+        type === "PAYMENT_RECORDED"
+          ? "Payment recorded"
+          : type === "CHARGE_ADDED"
+          ? "Charge added"
+          : type === "ADJUSTMENT_RECORDED"
+          ? "Adjustment recorded"
+          : typeMeta?.label || "Tenant event";
       const payload: any = {
         tenantId,
         type,
@@ -118,11 +146,15 @@ export const RecordTenantEventModal: React.FC<Props> = ({
       if (showAmount) {
         payload.amountCents = parseAmountCents();
         payload.currency = currency?.trim() ? currency.trim().toUpperCase() : "CAD";
+        payload.purpose = purpose;
+        payload.purposeLabel = purposeLabel.trim() ? purposeLabel.trim() : undefined;
       }
       if (showDaysLate) payload.daysLate = parseDaysLate();
       if (showNotice) payload.noticeType = noticeType.trim() ? noticeType.trim() : undefined;
 
-      await createTenantEvent(payload);
+      const res: any = await createTenantEvent(payload);
+      const eventId = res?.eventId || res?.id || null;
+      setCreatedId(eventId);
 
       showToast({
         message: "Event recorded",
@@ -133,7 +165,6 @@ export const RecordTenantEventModal: React.FC<Props> = ({
       });
 
       onCreated?.();
-      onClose();
     } catch (err: any) {
       const msg = String(err?.message || "");
       showToast({

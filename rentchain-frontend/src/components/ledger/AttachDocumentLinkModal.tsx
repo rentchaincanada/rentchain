@@ -39,6 +39,7 @@ export function AttachDocumentLinkModal({
   const [purposeLabel, setPurposeLabel] = useState(defaultPurposeLabel || "");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const showDomainWarning = url.includes("rentchain.ai");
 
   if (!open) return null;
 
@@ -134,6 +135,11 @@ export function AttachDocumentLinkModal({
                 border: `1px solid ${colors.border}`,
               }}
             />
+            {showDomainWarning ? (
+              <div style={{ color: "#b45309", fontSize: 12 }}>
+                This link may require landlord login for tenants. Prefer a public share link (Drive/Dropbox).
+              </div>
+            ) : null}
           </label>
 
           <label style={{ display: "grid", gap: 4 }}>

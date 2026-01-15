@@ -407,7 +407,24 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
           }}
         >
           <span>Ledger timeline</span>
-          <VerifyLedgerButton onVerified={() => void loadLedger()} />
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <button
+              type="button"
+              onClick={() => setRecordOpen(true)}
+              style={{
+                padding: "6px 10px",
+                borderRadius: radius.md,
+                border: `1px solid ${colors.border}`,
+                background: colors.panel,
+                cursor: "pointer",
+                fontWeight: 700,
+                fontSize: "0.8rem",
+              }}
+            >
+              Record event
+            </button>
+            <VerifyLedgerButton onVerified={() => void loadLedger()} />
+          </div>
         </div>
         {ledgerLoading ? (
           <div style={{ color: text.muted }}>Loading ledger...</div>
