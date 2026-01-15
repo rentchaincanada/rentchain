@@ -1,9 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  endLease,
-  getLeasesForTenant,
-  Lease,
-} from "../../api/leasesApi";
+import { endLease, getLeasesForTenant, Lease } from "../../api/leasesApi";
+
+function isNotFound(err: any): boolean {
+  return (
+    err?.status === 404 ||
+    err?.payload?.error === "NOT_FOUND" ||
+    String(err?.message || "").includes("(404)")
+  );
+}
 
 interface TenantLeasePanelProps {
   tenantId: string | null;
@@ -34,11 +38,15 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
           setLeases(data.leases);
           setError(null);
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error("[TenantLeasePanel] Failed to load leases", err);
         if (!cancelled) {
           setLeases([]);
-          setError("Failed to load leases");
+          if (isNotFound(err)) {
+            setError(null);
+          } else {
+            setError("Failed to load leases");
+          }
         }
       } finally {
         if (!cancelled) {
@@ -65,7 +73,7 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
   );
 
   const formatDate = (value?: string) => {
-    if (!value) return "—";
+    if (!value) return "--";
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) return value;
     return d.toLocaleDateString();
@@ -101,7 +109,7 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
   } else if (isLoading) {
     content = (
       <div style={{ color: "#9ca3af", fontSize: "0.9rem" }}>
-        Loading lease information…
+        Loading lease information...
       </div>
     );
   } else if (error) {
@@ -130,13 +138,13 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
               Current Lease
             </div>
             <div style={{ color: "#e5e7eb", fontWeight: 600 }}>
-              Property: {activeLease.propertyId} · Unit {activeLease.unitNumber}
+              Property: {activeLease.propertyId} - Unit {activeLease.unitNumber}
             </div>
             <div style={{ color: "#cbd5f5", fontSize: 13, marginTop: 4 }}>
               Rent: {formatCurrency(activeLease.monthlyRent)} / month
             </div>
             <div style={{ color: "#9ca3af", fontSize: 12, marginTop: 4 }}>
-              {formatDate(activeLease.startDate)} → {" "}
+              {formatDate(activeLease.startDate)} ->{" "}
               {activeLease.endDate ? formatDate(activeLease.endDate) : "Ongoing"}
             </div>
             <button
@@ -155,7 +163,7 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
                 fontSize: 12,
               }}
             >
-              {endingLeaseId === activeLease.id ? "Ending…" : "End lease"}
+              {endingLeaseId === activeLease.id ? "Ending..." : "End lease"}
             </button>
           </div>
         )}
@@ -189,10 +197,10 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
                 >
                   <div>
                     <div style={{ fontWeight: 600 }}>
-                      {lease.propertyId} · Unit {lease.unitNumber}
+                      {lease.propertyId} - Unit {lease.unitNumber}
                     </div>
                     <div style={{ color: "#9ca3af", fontSize: 12 }}>
-                      {formatDate(lease.startDate)} → {formatDate(lease.endDate)}
+                      {formatDate(lease.startDate)} -> {formatDate(lease.endDate)}
                     </div>
                   </div>
                   <div style={{ fontWeight: 600 }}>

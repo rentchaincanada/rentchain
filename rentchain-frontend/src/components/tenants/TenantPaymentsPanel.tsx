@@ -12,6 +12,14 @@ type Props = {
   tenantId?: string | null;
 };
 
+function isNotFound(err: any): boolean {
+  return (
+    err?.status === 404 ||
+    err?.payload?.error === "NOT_FOUND" ||
+    String(err?.message || "").includes("(404)")
+  );
+}
+
 function formatDate(value?: string | number | null) {
   if (value === null || value === undefined || value === "") return "--";
   const d = new Date(value as any);
@@ -73,9 +81,15 @@ export function TenantPaymentsPanel({ tenantId }: Props) {
       setPayments(Array.isArray(all) ? all : []);
       setMonthly(m ?? { payments: [], total: 0 });
     } catch (e: any) {
-      setErr(e?.message ?? "Failed to load payments.");
-      setPayments([]);
-      setMonthly(null);
+      if (isNotFound(e)) {
+        setPayments([]);
+        setMonthly({ payments: [], total: 0 });
+        setErr(null);
+      } else {
+        setErr(e?.message ?? "Failed to load payments.");
+        setPayments([]);
+        setMonthly(null);
+      }
     } finally {
       setBusy(false);
     }
