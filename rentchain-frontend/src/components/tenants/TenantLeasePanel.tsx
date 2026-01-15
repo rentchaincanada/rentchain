@@ -144,7 +144,7 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
               Rent: {formatCurrency(activeLease.monthlyRent)} / month
             </div>
             <div style={{ color: "#9ca3af", fontSize: 12, marginTop: 4 }}>
-              {formatDate(activeLease.startDate)} ->{" "}
+              {formatDate(activeLease.startDate)} →{" "}
               {activeLease.endDate ? formatDate(activeLease.endDate) : "Ongoing"}
             </div>
             <button
@@ -200,7 +200,7 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
                       {lease.propertyId} - Unit {lease.unitNumber}
                     </div>
                     <div style={{ color: "#9ca3af", fontSize: 12 }}>
-                      {formatDate(lease.startDate)} -> {formatDate(lease.endDate)}
+                      {formatDate(lease.startDate)} → {formatDate(lease.endDate)}
                     </div>
                   </div>
                   <div style={{ fontWeight: 600 }}>
