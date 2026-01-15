@@ -8,6 +8,7 @@ import { fetchLedger } from "@/api/ledgerApi";
 import { LedgerTimeline } from "../ledger/LedgerTimeline";
 import { VerifyLedgerButton } from "../ledger/VerifyLedgerButton";
 import { RecordTenantEventModal } from "./RecordTenantEventModal";
+import { CreateNoticeModal } from "./CreateNoticeModal";
 import { useToast } from "../ui/ToastProvider";
 import { colors, radius, spacing, text, shadows } from "../../styles/tokens";
 
@@ -86,6 +87,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
   const [signals, setSignals] = useState<TenantSignals | null>(null);
   const [signalsError, setSignalsError] = useState<string | null>(null);
   const [recordOpen, setRecordOpen] = useState(false);
+  const [noticeOpen, setNoticeOpen] = useState(false);
 
   useEffect(() => {
     cancelledRef.current = false;
@@ -274,28 +276,46 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
               <span>Download report (JSON)</span>
             </button>
             {isLandlord ? (
-              <button
-                type="button"
-                onClick={() => setRecordOpen(true)}
-                style={{
-                borderRadius: radius.pill,
-                border: `1px solid ${colors.border}`,
-                padding: "6px 10px",
-                background: colors.accent,
-                color: "white",
-                fontSize: 12,
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                cursor: "pointer",
-                boxShadow: shadows.sm,
-              }}
-            >
-                <span role="img" aria-label="plus">
-                  ＋
-                </span>
-                <span>Record event</span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => setNoticeOpen(true)}
+                  style={{
+                    borderRadius: radius.pill,
+                    border: `1px solid ${colors.border}`,
+                    padding: "6px 10px",
+                    background: colors.panel,
+                    color: text.primary,
+                    fontSize: 12,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    cursor: "pointer",
+                    boxShadow: shadows.sm,
+                  }}
+                >
+                  <span>Create notice</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRecordOpen(true)}
+                  style={{
+                    borderRadius: radius.pill,
+                    border: `1px solid ${colors.border}`,
+                    padding: "6px 10px",
+                    background: colors.accent,
+                    color: "white",
+                    fontSize: 12,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    cursor: "pointer",
+                    boxShadow: shadows.sm,
+                  }}
+                >
+                  <span>Record event</span>
+                </button>
+              </>
             ) : null}
           </div>
         </div>
@@ -445,6 +465,15 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
           setRecordOpen(false);
         }}
       />
+      <CreateNoticeModal
+        open={noticeOpen}
+        tenantId={tenant.id}
+        onClose={() => setNoticeOpen(false)}
+        onCreated={() => {
+          setNoticeOpen(false);
+          showToast({ message: "Notice created", variant: "success" });
+        }}
+      />
     </div>
   );
 };
@@ -462,3 +491,4 @@ const SignalField: React.FC<{ label: string; value: React.ReactNode }> = ({ labe
     <div style={{ color: text.primary, fontWeight: 600 }}>{value ?? "—"}</div>
   </div>
 );
+

@@ -33,6 +33,7 @@ import tenantInviteAliasesRoutes from "./routes/tenantInviteAliasesRoutes";
 import tenantEventsRoutes from "./routes/tenantEventsRoutes";
 import tenantEventsWriteRoutes from "./routes/tenantEventsWriteRoutes";
 import ledgerAttachmentsRoutes from "./routes/ledgerAttachmentsRoutes";
+import tenantNoticesRoutes from "./routes/tenantNoticesRoutes";
 import stubsRoutes from "./routes/stubsRoutes";
 import adminBootstrapRoutes from "./routes/adminBootstrapRoutes";
 import usageBreakdownRoutes from "./routes/usageBreakdownRoutes";
@@ -132,6 +133,7 @@ app.use("/api", routeSource("tenantInviteAliasesRoutes"), tenantInviteAliasesRou
 app.use("/api", routeSource("tenantEventsRoutes"), tenantEventsRoutes);
 app.use("/api", routeSource("tenantEventsWriteRoutes"), tenantEventsWriteRoutes);
 app.use("/api", routeSource("ledgerAttachmentsRoutes"), ledgerAttachmentsRoutes);
+app.use("/api", routeSource("tenantNoticesRoutes"), tenantNoticesRoutes);
 app.use("/api", routeSource("usageBreakdownRoutes.ts"), usageBreakdownRoutes);
 app.use("/api/properties", propertiesRoutes);
 app.use("/api", routeSource("tenantReportRoutes.ts"), tenantReportRoutes);
