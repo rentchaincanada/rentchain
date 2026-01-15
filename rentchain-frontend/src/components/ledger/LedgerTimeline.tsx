@@ -1,6 +1,8 @@
 import React from "react";
 import type { LedgerEventStored } from "@/api/ledgerApi";
 import { IntegrityBadge } from "./IntegrityBadge";
+import { AttachDocumentLinkModal } from "./AttachDocumentLinkModal";
+import { useToast } from "../ui/ToastProvider";
 
 type Props = {
   items: LedgerEventStored[];
@@ -46,6 +48,9 @@ export function LedgerTimeline({ items, compact }: Props) {
     return <div style={{ color: "#6b7280", fontSize: 14 }}>No ledger events yet.</div>;
   }
 
+  const { showToast } = useToast();
+  const [attachFor, setAttachFor] = React.useState<LedgerEventStored | null>(null);
+
   const sorted = [...items].sort((a, b) => (Number(b?.ts || 0) as any) - (Number(a?.ts || 0) as any));
   const toRender = compact ? sorted.slice(0, 6) : sorted;
 
@@ -74,7 +79,7 @@ export function LedgerTimeline({ items, compact }: Props) {
               <IntegrityBadge status={status as any} />
             </div>
 
-            <div style={{ marginTop: 8 }}>
+            <div style={{ marginTop: 8, display: "flex", gap: 12, alignItems: "center" }}>
               <button
                 type="button"
                 onClick={() => setOpen(!open)}
@@ -89,6 +94,28 @@ export function LedgerTimeline({ items, compact }: Props) {
               >
                 {open ? "Hide details" : "Show details"}
               </button>
+              {ev.tenantId ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!ev.id || !ev.tenantId) {
+                      showToast({ message: "Missing tenant or event id", variant: "error" });
+                      return;
+                    }
+                    setAttachFor(ev);
+                  }}
+                  style={{
+                    border: "none",
+                    background: "transparent",
+                    color: "#2563eb",
+                    cursor: "pointer",
+                    fontSize: 12,
+                    padding: 0,
+                  }}
+                >
+                  Attach document
+                </button>
+              ) : null}
             </div>
 
             {open ? (
@@ -114,6 +141,18 @@ export function LedgerTimeline({ items, compact }: Props) {
           </div>
         );
       })}
+
+      {attachFor ? (
+        <AttachDocumentLinkModal
+          open={!!attachFor}
+          onClose={() => setAttachFor(null)}
+          tenantId={attachFor.tenantId || ""}
+          ledgerItemId={attachFor.id}
+          defaultTitle={(attachFor.payload as any)?.title || attachFor.type}
+          defaultPurpose={(attachFor.payload as any)?.purpose || undefined}
+          defaultPurposeLabel={(attachFor.payload as any)?.purposeLabel || (attachFor.payload as any)?.period || undefined}
+        />
+      ) : null}
     </div>
   );
 }
