@@ -123,7 +123,7 @@ export const CreateNoticeModal: React.FC<Props> = ({ open, tenantId, onClose, on
           variant: "success",
         });
       }
-      onCreated?.(id || undefined);
+      onCreated?.(noticeId || undefined);
       onClose();
     } catch (err: any) {
       const msg = err?.payload?.error || err?.message || "Failed to create notice.";
