@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import { Bell, CheckCircle2, Clock3, Home, Lock, MailCheck, Receipt, Sparkles, Wallet } from "lucide-react";
 import { tenantApiFetch } from "../../api/tenantApiFetch";
 import { TenantAttachment } from "../../api/tenantAttachmentsApi";
@@ -51,7 +51,6 @@ type LedgerItem = {
 };
 
 type Attachment = TenantAttachment;
-
 function fmtMoney(value: number | null | undefined, currency?: string | null): string {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return "—";
   const amount = Number(value) / 100;
@@ -124,7 +123,6 @@ function formatAttachment(att: Attachment): string {
   const label = att.purposeLabel?.trim?.() ? att.purposeLabel : null;
   return label ? `${purpose} — ${label}` : purpose;
 }
-
 const pageStyle: React.CSSProperties = {
   minHeight: "100vh",
   background: colors.bgAmbient,
@@ -375,11 +373,29 @@ export default function TenantDashboardPage() {
                 <span>This information is managed by your landlord.</span>
               </div>
             </div>
-            {profile?.shortId ? (
-              <div style={{ ...labelStyle, textTransform: "none", textAlign: "right" }}>
-                Tenant ID • {profile.shortId}
-              </div>
-            ) : null}
+            <div style={{ display: "flex", alignItems: "center", gap: spacing.sm }}>
+              {profile?.shortId ? (
+                <div style={{ ...labelStyle, textTransform: "none", textAlign: "right" }}>
+                  Tenant ID • {profile.shortId}
+                </div>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => void loadAll()}
+                disabled={refreshing}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: radius.md,
+                  border: `1px solid ${colors.border}`,
+                  background: colors.panel,
+                  cursor: refreshing ? "not-allowed" : "pointer",
+                  fontWeight: 700,
+                  color: textTokens.primary,
+                }}
+              >
+                {refreshing ? "Refreshing…" : "Refresh"}
+              </button>
+            </div>
           </div>
         </Section>
 
@@ -814,3 +830,8 @@ function LedgerIcon({ type }: { type: LedgerItem["type"] }) {
       );
   }
 }
+
+
+
+
+

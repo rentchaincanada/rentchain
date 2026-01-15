@@ -38,7 +38,7 @@ export const RecordTenantEventModal: React.FC<Props> = ({
   onCreated,
 }) => {
   const { showToast } = useToast();
-  const [type, setType] = useState<TenantEventType>("RENT_PAID");
+  const [type, setType] = useState<TenantEventType>("PAYMENT_RECORDED");
   const [dateStr, setDateStr] = useState(isoToday());
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
@@ -54,6 +54,13 @@ export const RecordTenantEventModal: React.FC<Props> = ({
   const typeMeta = useMemo(() => TYPES.find((t) => t.type === type), [type]);
 
   if (!open) return null;
+
+  React.useEffect(() => {
+    if (open) {
+      setCreatedId(null);
+      setConfirm(false);
+    }
+  }, [open, tenantId]);
 
   const financeTypes: TenantEventType[] = ["PAYMENT_RECORDED", "CHARGE_ADDED", "ADJUSTMENT_RECORDED"];
   const showAmount = financeTypes.includes(type);
@@ -211,7 +218,7 @@ export const RecordTenantEventModal: React.FC<Props> = ({
           <div>
             <div style={{ fontSize: 16, fontWeight: 700 }}>Record tenant event</div>
             <div style={{ fontSize: 12, color: text.muted }}>
-              This becomes part of the tenant’s permanent rental history.
+              This becomes part of the tenant's permanent rental history.
             </div>
           </div>
           <button
@@ -436,10 +443,50 @@ export const RecordTenantEventModal: React.FC<Props> = ({
             <div>
               <div style={{ fontSize: 13, fontWeight: 600 }}>I understand this is permanent</div>
               <div style={{ fontSize: 12, color: text.muted }}>
-                This event will appear in the tenant’s rental history and cannot be edited or deleted.
+                This event will appear in the tenant's rental history and cannot be edited or deleted.
               </div>
             </div>
           </label>
+
+          {createdId ? (
+            <div
+              style={{
+                padding: spacing.sm,
+                borderRadius: radius.md,
+                border: `1px solid ${colors.border}`,
+                background: colors.panel,
+                display: "flex",
+                alignItems: "center",
+                gap: spacing.sm,
+                justifyContent: "space-between",
+              }}
+            >
+              <div style={{ display: "grid", gap: 4 }}>
+                <div style={{ fontWeight: 700 }}>Event created</div>
+                <div style={{ fontSize: 12, color: text.muted }}>Event ID: {createdId}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (navigator?.clipboard?.writeText) {
+                    void navigator.clipboard.writeText(createdId);
+                    showToast({ message: "Copied event ID", variant: "success" });
+                  }
+                }}
+                style={{
+                  borderRadius: radius.pill,
+                  border: `1px solid ${colors.border}`,
+                  background: colors.card,
+                  color: text.primary,
+                  padding: "6px 10px",
+                  cursor: "pointer",
+                  fontWeight: 700,
+                }}
+              >
+                Copy ID
+              </button>
+            </div>
+          ) : null}
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
             <button

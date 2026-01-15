@@ -5,7 +5,10 @@ export type TenantEventType =
   | "RENT_PAID"
   | "RENT_LATE"
   | "NOTICE_SERVED"
-  | "LEASE_ENDED";
+  | "LEASE_ENDED"
+  | "PAYMENT_RECORDED"
+  | "CHARGE_ADDED"
+  | "ADJUSTMENT_RECORDED";
 
 export type TenantEvent = {
   id: string;

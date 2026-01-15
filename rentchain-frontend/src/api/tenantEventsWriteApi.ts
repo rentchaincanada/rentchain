@@ -5,7 +5,10 @@ export type TenantEventType =
   | "RENT_PAID"
   | "RENT_LATE"
   | "NOTICE_SERVED"
-  | "LEASE_ENDED";
+  | "LEASE_ENDED"
+  | "PAYMENT_RECORDED"
+  | "CHARGE_ADDED"
+  | "ADJUSTMENT_RECORDED";
 
 export type CreateTenantEventInput = {
   tenantId: string;
@@ -32,7 +35,12 @@ export async function createTenantEvent(input: CreateTenantEventInput) {
   const defaultTitleFromType = (type: string): string => {
     switch (type) {
       case "RENT_PAID":
-        return "Rent paid";
+      case "PAYMENT_RECORDED":
+        return "Payment recorded";
+      case "CHARGE_ADDED":
+        return "Charge added";
+      case "ADJUSTMENT_RECORDED":
+        return "Adjustment recorded";
       case "LEASE_STARTED":
         return "Lease started";
       case "LEASE_ENDED":
