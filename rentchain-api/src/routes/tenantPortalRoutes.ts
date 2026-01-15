@@ -385,14 +385,18 @@ router.get("/attachments", requireTenant, async (req: any, res) => {
     const snap = await db
       .collection("ledgerAttachments")
       .where("tenantId", "==", tenantId)
-      .orderBy("createdAt", "desc")
       .limit(50)
       .get();
 
     const data = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+    data.sort((a, b) => (Number(b.createdAt || 0) || 0) - (Number(a.createdAt || 0) || 0));
     return res.json({ ok: true, data });
   } catch (err) {
-    console.error("[tenantPortalRoutes] /tenant/attachments error", err);
+    console.error("[tenant/attachments] failed", {
+      tenantId: req.user?.tenantId,
+      err: (err as any)?.message,
+      code: (err as any)?.code,
+    });
     return res.status(500).json({ ok: false, error: "TENANT_ATTACHMENTS_FAILED" });
   }
 });
@@ -408,14 +412,19 @@ router.get("/ledger/:ledgerItemId/attachments", requireTenant, async (req: any, 
       .collection("ledgerAttachments")
       .where("tenantId", "==", tenantId)
       .where("ledgerItemId", "==", ledgerItemId)
-      .orderBy("createdAt", "desc")
-      .limit(10)
+      .limit(25)
       .get();
 
     const data = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+    data.sort((a, b) => (Number(b.createdAt || 0) || 0) - (Number(a.createdAt || 0) || 0));
     return res.json({ ok: true, data });
   } catch (err) {
-    console.error("[tenantPortalRoutes] /tenant/ledger/:id/attachments error", err);
+    console.error("[tenant/ledger/:id/attachments] failed", {
+      tenantId: req.user?.tenantId,
+      ledgerItemId: req.params?.ledgerItemId,
+      err: (err as any)?.message,
+      code: (err as any)?.code,
+    });
     return res.status(500).json({ ok: false, error: "TENANT_ATTACHMENTS_FAILED" });
   }
 });
