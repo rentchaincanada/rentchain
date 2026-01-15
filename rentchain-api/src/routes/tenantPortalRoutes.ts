@@ -368,7 +368,24 @@ router.get("/ledger", requireTenant, async (req: any, res) => {
       };
     });
 
-    // Bridge: add finance tenant events as ledger items for visibility
+    const fetchTenantEventsForLedger = async () => {
+      try {
+        return await db
+          .collection("tenantEvents")
+          .where("tenantId", "==", tenantId)
+          .orderBy("occurredAt", "desc")
+          .limit(50)
+          .get();
+      } catch {
+        return db
+          .collection("tenantEvents")
+          .where("tenantId", "==", tenantId)
+          .orderBy("createdAt", "desc")
+          .limit(50)
+          .get();
+      }
+    };
+
     try {
       const isFinanceType = (t: string): boolean => {
         const x = (t || "").toUpperCase();
@@ -376,25 +393,20 @@ router.get("/ledger", requireTenant, async (req: any, res) => {
           (k) => x.includes(k)
         );
       };
-      const eventsSnap = await db
-        .collection("tenantEvents")
-        .where("tenantId", "==", tenantId)
-        .orderBy("occurredAt", "desc")
-        .limit(50)
-        .get();
+      const eventsSnap = await fetchTenantEventsForLedger();
       const eventItems =
         eventsSnap.docs
           .map((d) => ({ id: d.id, ...(d.data() as any) }))
           .filter((ev) => isFinanceType(ev.type || ""))
           .map((ev) => {
-            const occurredAt = toMillis(ev.occurredAt);
+            const occurredAt = toMillis(ev.occurredAt ?? ev.createdAt);
             const purpose = ev.purpose ?? inferPurpose(ev.type || "");
             const purposeLabel = ev.purposeLabel ?? ev.period ?? null;
             const mapType = (t: string): "rent" | "fee" | "adjustment" | "payment" => {
               const type = (t || "").toLowerCase();
-              if (type.includes("payment")) return "payment";
+              if (type.includes("payment") || type.includes("pay")) return "payment";
               if (type.includes("fee")) return "fee";
-              if (type.includes("adjust")) return "adjustment";
+              if (type.includes("adjust") || type.includes("credit")) return "adjustment";
               return "rent";
             };
             const normalizeAmount = (amount: any): number | null => {
@@ -414,7 +426,6 @@ router.get("/ledger", requireTenant, async (req: any, res) => {
               occurredAt: occurredAt ?? Date.now(),
             };
           }) || [];
-      // Merge and dedupe by id
       const mergedMap = new Map<string, any>();
       [...items, ...eventItems].forEach((it) => {
         if (!it?.id) return;
