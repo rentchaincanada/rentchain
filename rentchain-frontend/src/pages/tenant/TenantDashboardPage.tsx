@@ -227,6 +227,16 @@ export default function TenantDashboardPage() {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [attachmentsError, setAttachmentsError] = useState<string | null>(null);
   const [attachmentsLoading, setAttachmentsLoading] = useState(true);
+  const attachmentsByLedgerId = useMemo(() => {
+    const map = new Map<string, Attachment[]>();
+    attachments.forEach((att) => {
+      if (!att.ledgerItemId) return;
+      const list = map.get(att.ledgerItemId) || [];
+      list.push(att);
+      map.set(att.ledgerItemId, list);
+    });
+    return map;
+  }, [attachments]);
   const [hasToken, setHasToken] = useState<boolean>(() =>
     typeof window === "undefined" ? true : !!getTenantToken()
   );
@@ -634,6 +644,42 @@ export default function TenantDashboardPage() {
                     <div style={{ textAlign: "right", fontWeight: 800, color: textTokens.primary }}>
                       {fmtMoney(item.amountCents, item.currency || undefined)}
                     </div>
+                    {(() => {
+                      const atts = attachmentsByLedgerId.get(item.id) || [];
+                      if (!atts.length) return null;
+                      if (atts.length === 1) {
+                        return (
+                          <a
+                            href={atts[0].url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ gridColumn: "1 / -1", color: colors.accent, fontWeight: 700, fontSize: "0.95rem" }}
+                          >
+                            View receipt
+                          </a>
+                        );
+                      }
+                      return (
+                        <div style={{ gridColumn: "1 / -1", display: "grid", gap: 6 }}>
+                          <div style={{ color: colors.accent, fontWeight: 700, fontSize: "0.95rem" }}>
+                            View documents ({atts.length})
+                          </div>
+                          <div style={{ display: "grid", gap: 4 }}>
+                            {atts.map((att) => (
+                              <a
+                                key={att.id}
+                                href={att.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{ color: textTokens.primary, textDecoration: "none", fontSize: "0.95rem" }}
+                              >
+                                {att.title || att.url}
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 ))}
               </div>
