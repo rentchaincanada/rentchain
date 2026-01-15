@@ -82,15 +82,18 @@ export const CreateNoticeModal: React.FC<Props> = ({ open, tenantId, onClose, on
       setCreatedId(id);
       const emailed = res?.emailed === true;
       const emailError = res?.emailError;
-      showToast({
-        message: emailed ? "Notice created and emailed" : "Notice created",
-        description: emailed
-          ? "Tenant has been notified by email."
-          : emailError
-          ? `Email not sent: ${emailError}`
-          : "Email not sent.",
-        variant: emailed ? "success" : "info",
-      });
+      if (emailed) {
+        showToast({
+          message: "Notice created and emailed to tenant.",
+          variant: "success",
+        });
+      } else {
+        showToast({
+          message: "Notice created. Email not sent.",
+          description: emailError ? String(emailError) : undefined,
+          variant: "success",
+        });
+      }
       onCreated?.(id || undefined);
       onClose();
     } catch (err: any) {

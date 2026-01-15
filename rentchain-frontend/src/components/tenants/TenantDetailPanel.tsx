@@ -471,7 +471,6 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
         onClose={() => setNoticeOpen(false)}
         onCreated={() => {
           setNoticeOpen(false);
-          showToast({ message: "Notice created", variant: "success" });
         }}
       />
     </div>
