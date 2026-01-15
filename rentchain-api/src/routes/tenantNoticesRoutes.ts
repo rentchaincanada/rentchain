@@ -1,4 +1,5 @@
 import { Router } from "express";
+import sgMail from "@sendgrid/mail";
 import { db } from "../config/firebase";
 import { authenticateJwt } from "../middleware/authMiddleware";
 
@@ -37,7 +38,8 @@ router.post("/tenant-notices", authenticateJwt, async (req: any, res) => {
       return res.status(400).json({ ok: false, error: "INVALID_REQUEST" });
     }
 
-    // Ownership check
+    // Ownership check + tenant lookup for email
+    let tenantEmail: string | null = null;
     try {
       const tenantSnap = await db.collection("tenants").doc(String(tenantId)).get();
       if (tenantSnap.exists) {
@@ -46,6 +48,7 @@ router.post("/tenant-notices", authenticateJwt, async (req: any, res) => {
         if (tenantLandlordId && tenantLandlordId !== landlordId) {
           return res.status(403).json({ ok: false, error: "FORBIDDEN" });
         }
+        tenantEmail = typeof t?.email === "string" ? t.email.trim() : null;
       }
     } catch {
       // ignore lookup errors; rely on auth fallback
@@ -65,7 +68,77 @@ router.post("/tenant-notices", authenticateJwt, async (req: any, res) => {
     };
 
     const ref = await db.collection("tenantNotices").add(doc);
-    return res.json({ ok: true, data: { id: ref.id, ...doc } });
+
+    // Attempt non-blocking email
+    let emailed = false;
+    let emailError: string | undefined;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const hasValidEmail = !!(tenantEmail && emailRegex.test(tenantEmail));
+
+    if (!hasValidEmail) {
+      emailError = "INVALID_TENANT_EMAIL";
+    } else {
+      const apiKey = process.env.SENDGRID_API_KEY;
+      const from =
+        process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM || process.env.FROM_EMAIL;
+      const replyTo = process.env.SENDGRID_REPLY_TO || process.env.SENDGRID_REPLYTO_EMAIL;
+      const baseUrl = (process.env.PUBLIC_APP_URL || process.env.VITE_PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
+      const noticeLink = `${baseUrl}/tenant/notices/${ref.id}`;
+      const excerpt = trimmedBody.length > 400 ? `${trimmedBody.slice(0, 400)}...` : trimmedBody;
+
+      if (!apiKey || !from) {
+        emailError = "EMAIL_NOT_CONFIGURED";
+      } else {
+        try {
+          sgMail.setApiKey(apiKey);
+          await sgMail.send({
+            to: tenantEmail as string,
+            from,
+            replyTo: replyTo || from,
+            subject: `New notice from your landlord: ${trimmedTitle}`,
+            text: [
+              `Notice type: ${normalizedType}`,
+              `Title: ${trimmedTitle}`,
+              "",
+              excerpt,
+              "",
+              `View in RentChain: ${noticeLink}`,
+            ].join("\n"),
+            html: `
+              <div style="font-family:Arial,sans-serif;line-height:1.5;color:#0f172a;">
+                <p style="font-weight:700;margin:0 0 4px 0;">Notice type: ${normalizedType}</p>
+                <h3 style="margin:4px 0 8px 0;">${trimmedTitle}</h3>
+                <p style="margin:8px 0;">${excerpt.replace(/\n/g, "<br/>")}</p>
+                <p style="margin:12px 0;">
+                  <a href="${noticeLink}" style="display:inline-block;padding:10px 14px;background:#2563eb;color:#fff;border-radius:10px;text-decoration:none;font-weight:700;">View notice</a>
+                </p>
+                <p style="font-size:12px;color:#475569;margin-top:18px;">If the button doesn't work, copy and paste: ${noticeLink}</p>
+              </div>
+            `,
+            trackingSettings: {
+              clickTracking: { enable: false, enableText: false },
+              openTracking: { enable: false },
+            },
+            mailSettings: {
+              footer: { enable: false },
+            },
+          });
+          emailed = true;
+        } catch (err: any) {
+          emailed = false;
+          emailError = err?.message || "SEND_FAILED";
+          console.error("[tenant-notices] email send failed", {
+            noticeId: ref.id,
+            tenantId,
+            tenantEmail,
+            errMessage: err?.message,
+            errBody: err?.response?.body,
+          });
+        }
+      }
+    }
+
+    return res.json({ ok: true, data: { id: ref.id, ...doc }, emailed, emailError });
   } catch (err) {
     console.error("[tenant-notices] create failed", err);
     return res.status(500).json({ ok: false, error: "TENANT_NOTICE_CREATE_FAILED" });
