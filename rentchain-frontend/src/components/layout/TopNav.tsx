@@ -93,10 +93,10 @@ export const TopNav: React.FC<TopNavProps> = ({ unreadMessages }) => {
       style={{
         position: "sticky",
         top: 0,
-        zIndex: 20,
+        zIndex: 2000,
         padding: `${spacing.sm} ${layout.pagePadding}`,
         backdropFilter: blur.sm,
-        background: effects.glassBg,
+        background: "#fff",
         borderBottom: `1px solid ${colors.border}`,
         boxShadow: shadows.sm,
       }}

@@ -4,7 +4,6 @@ import { LayoutDashboard, Building2, Users, ScrollText, MessagesSquare } from "l
 import { TopNav } from "./TopNav";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { useAuth } from "../../context/useAuth";
-import { StickyHeader } from "./StickyHeader";
 import { fetchLandlordConversations } from "../../api/messagesApi";
 
 type Props = {
@@ -38,18 +37,6 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
   const { logout } = useAuth();
   const [hasUnread, setHasUnread] = useState<boolean>(false);
   const unreadFlag = typeof unreadMessages === "boolean" ? unreadMessages : hasUnread;
-  const pathMap: Record<string, string> = {
-    "/": "Dashboard",
-    "/dashboard": "Dashboard",
-    "/properties": "Properties",
-    "/tenants": "Tenants",
-    "/applications": "Applications",
-    "/messages": "Messages",
-    "/payments": "Payments",
-    "/billing": "Billing",
-  };
-  const routeTitle =
-    pathMap[Object.keys(pathMap).find((p) => loc.pathname.startsWith(p)) || ""] || "RentChain";
 
   useEffect(() => {
     let mounted = true;
@@ -77,26 +64,6 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
   if (isMobile) {
     return (
       <div style={{ minHeight: "100vh", paddingBottom: 80 }}>
-        <StickyHeader
-          title={routeTitle}
-          right={
-            <button
-              type="button"
-              onClick={() => void logout()}
-              style={{
-                background: "#f3f4f6",
-                border: "1px solid rgba(0,0,0,0.06)",
-                borderRadius: 10,
-                padding: "6px 10px",
-                fontWeight: 700,
-                cursor: "pointer",
-              }}
-            >
-              Sign out
-            </button>
-          }
-        />
-
         <main style={{ minHeight: "calc(100vh - 72px)" }}>{children}</main>
 
         <nav
@@ -160,7 +127,6 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
   return (
     <div>
       <TopNav unreadMessages={unreadFlag} />
-      <StickyHeader title={routeTitle} />
       <div style={{ padding: "12px 0 24px" }}>{children}</div>
     </div>
   );
