@@ -520,4 +520,71 @@ router.get("/ledger", requireTenant, (_req: any, res) => {
   return res.json({ ok: true, items: [] });
 });
 
+router.get("/notices", requireTenant, async (req: any, res) => {
+  try {
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+
+    const snap = await db.collection("tenantNotices").where("tenantId", "==", tenantId).limit(50).get();
+    const items = snap.docs.map((doc) => {
+      const data = (doc.data() as any) || {};
+      return {
+        id: doc.id,
+        type: data.type ?? "GENERAL",
+        title: data.title ?? "Notice",
+        effectiveAt: toMillis(data.effectiveAt),
+        createdAt: toMillis(data.createdAt),
+        status: data.status ?? "ACTIVE",
+      };
+    });
+    items.sort((a, b) => (Number(b.createdAt || 0) || 0) - (Number(a.createdAt || 0) || 0));
+    return res.json({ ok: true, data: items });
+  } catch (err) {
+    console.error("[tenant/notices] failed", {
+      tenantId: req.user?.tenantId,
+      err,
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_NOTICES_FAILED" });
+  }
+});
+
+router.get("/notices/:noticeId", requireTenant, async (req: any, res) => {
+  try {
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    const noticeId = String(req.params?.noticeId || "").trim();
+    if (!noticeId) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+    const doc = await db.collection("tenantNotices").doc(noticeId).get();
+    if (!doc.exists) {
+      return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    }
+    const data = (doc.data() as any) || {};
+    const docTenantId = data.tenantId ?? data.tenant ?? null;
+    if (docTenantId && docTenantId !== tenantId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+    const payload = {
+      id: doc.id,
+      landlordId: data.landlordId ?? null,
+      tenantId: docTenantId ?? null,
+      type: data.type ?? "GENERAL",
+      title: data.title ?? "Notice",
+      body: data.body ?? "",
+      effectiveAt: toMillis(data.effectiveAt),
+      createdAt: toMillis(data.createdAt) ?? Date.now(),
+      createdBy: data.createdBy ?? null,
+      status: data.status ?? "ACTIVE",
+    };
+    return res.json({ ok: true, data: payload });
+  } catch (err) {
+    console.error("[tenant/notices/:noticeId] failed", {
+      tenantId: req.user?.tenantId,
+      noticeId: req.params?.noticeId,
+      err,
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_NOTICE_READ_FAILED" });
+  }
+});
+
 export default router;

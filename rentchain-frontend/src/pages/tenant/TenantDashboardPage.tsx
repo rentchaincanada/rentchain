@@ -2,6 +2,7 @@
 import { Bell, CheckCircle2, Clock3, Home, Lock, MailCheck, Receipt, Sparkles, Wallet } from "lucide-react";
 import { tenantApiFetch } from "../../api/tenantApiFetch";
 import { TenantAttachment } from "../../api/tenantAttachmentsApi";
+import { TenantNoticeSummary } from "../../api/tenantNoticesApi";
 import { Card, Section } from "../../components/ui/Ui";
 import { clearTenantToken, getTenantToken } from "../../lib/tenantAuth";
 import { colors, radius, shadows, spacing, text as textTokens } from "../../styles/tokens";
@@ -51,6 +52,7 @@ type LedgerItem = {
 };
 
 type Attachment = TenantAttachment;
+type Notice = TenantNoticeSummary;
 function fmtMoney(value: number | null | undefined, currency?: string | null): string {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return "—";
   const amount = Number(value) / 100;
@@ -122,6 +124,22 @@ function formatAttachment(att: Attachment): string {
   const purpose = prettyPurpose(att.purpose) || "Document";
   const label = att.purposeLabel?.trim?.() ? att.purposeLabel : null;
   return label ? `${purpose} — ${label}` : purpose;
+}
+
+function formatNoticeType(type?: string | null): string {
+  switch ((type || "").toUpperCase()) {
+    case "LATE_RENT":
+      return "Late rent";
+    case "ENTRY_NOTICE":
+      return "Entry notice";
+    case "LEASE_UPDATE":
+      return "Lease update";
+    case "WARNING":
+      return "Warning";
+    case "GENERAL":
+    default:
+      return "Notice";
+  }
 }
 const pageStyle: React.CSSProperties = {
   minHeight: "100vh",
@@ -225,6 +243,9 @@ export default function TenantDashboardPage() {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [attachmentsError, setAttachmentsError] = useState<string | null>(null);
   const [attachmentsLoading, setAttachmentsLoading] = useState(true);
+  const [notices, setNotices] = useState<Notice[]>([]);
+  const [noticesError, setNoticesError] = useState<string | null>(null);
+  const [noticesLoading, setNoticesLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const attachmentsByLedgerId = useMemo(() => {
     const map = new Map<string, Attachment[]>();
@@ -250,12 +271,15 @@ export default function TenantDashboardPage() {
     setLedgerError(null);
     setAttachmentsLoading(true);
     setAttachmentsError(null);
+    setNoticesLoading(true);
+    setNoticesError(null);
     try {
-      const [meRes, activityRes, ledgerRes, attachmentsRes] = await Promise.allSettled([
+      const [meRes, activityRes, ledgerRes, attachmentsRes, noticesRes] = await Promise.allSettled([
         tenantApiFetch<TenantMeResponse>("/tenant/me"),
         tenantApiFetch<{ ok: boolean; data: ActivityItem[] }>("/tenant/activity"),
         tenantApiFetch<{ ok: boolean; data: LedgerItem[] }>("/tenant/ledger"),
         tenantApiFetch<{ ok: boolean; data: Attachment[] }>("/tenant/attachments"),
+        tenantApiFetch<{ ok: boolean; data: Notice[] }>("/tenant/notices"),
       ]);
 
       if (meRes.status === "fulfilled") {
@@ -303,6 +327,18 @@ export default function TenantDashboardPage() {
           "Unable to load attachments";
         setAttachmentsError(String(message));
       }
+
+      if (noticesRes.status === "fulfilled") {
+        const payload = noticesRes.value;
+        const list = Array.isArray((payload as any)?.data) ? (payload as any).data : [];
+        setNotices(list);
+      } else {
+        const message =
+          (noticesRes.reason as any)?.message ||
+          (noticesRes.reason as any)?.payload?.error ||
+          "Unable to load notices";
+        setNoticesError(String(message));
+      }
     } catch (e: any) {
       const message = e?.message || e?.payload?.error || "Unable to load your RentChain account";
       setError(String(message));
@@ -311,6 +347,7 @@ export default function TenantDashboardPage() {
       setActivityLoading(false);
       setLedgerLoading(false);
       setAttachmentsLoading(false);
+      setNoticesLoading(false);
       setRefreshing(false);
     }
   }, []);
@@ -505,6 +542,80 @@ export default function TenantDashboardPage() {
                 );
               })}
             </div>
+          </Card>
+
+          <Card elevated style={{ gridColumn: "1 / -1" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: spacing.sm }}>
+              <div>
+                <div style={labelStyle}>Notices</div>
+                <div style={{ fontSize: "1.2rem", fontWeight: 800, color: textTokens.primary }}>
+                  Official communications
+                </div>
+              </div>
+            </div>
+            {noticesError ? (
+              <div style={{ color: colors.danger }}>{noticesError}</div>
+            ) : noticesLoading ? (
+              <div style={{ display: "grid", gap: 10 }}>
+                {Array.from({ length: 3 }).map((_, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "auto 1fr",
+                      gap: 10,
+                      alignItems: "center",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 10,
+                        height: 10,
+                        borderRadius: 999,
+                        background: colors.accentSoft,
+                      }}
+                    />
+                    <div>
+                      <div style={{ height: 10, background: colors.accentSoft, borderRadius: 6, width: "40%" }} />
+                      <div
+                        style={{
+                          height: 8,
+                          background: colors.accentSoft,
+                          borderRadius: 6,
+                          width: "25%",
+                          marginTop: 6,
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : notices.length === 0 ? (
+              <div style={{ color: textTokens.muted }}>No notices yet.</div>
+            ) : (
+              <div style={{ display: "grid", gap: 10 }}>
+                {notices.map((n) => (
+                  <a
+                    key={n.id}
+                    href={`/tenant/notices/${n.id}`}
+                    style={{
+                      display: "grid",
+                      gap: 2,
+                      textDecoration: "none",
+                      color: textTokens.primary,
+                      padding: 8,
+                      borderRadius: radius.md,
+                      border: `1px solid ${colors.border}`,
+                    }}
+                  >
+                    <div style={{ fontWeight: 800 }}>{n.title}</div>
+                    <div style={{ fontSize: "0.95rem", color: textTokens.muted }}>
+                      {formatNoticeType(n.type)} • {fmtDate(n.createdAt)}
+                    </div>
+                  </a>
+                ))}
+              </div>
+            )}
           </Card>
 
           <Card elevated style={{ gridColumn: "1 / -1" }}>

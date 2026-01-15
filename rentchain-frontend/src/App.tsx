@@ -34,6 +34,7 @@ import InvitesPage from "./pages/landlord/InvitesPage";
 import PublicApplyPage from "./pages/PublicApplyPage";
 import MessagesPage from "./pages/MessagesPage";
 import TenantMessagesPage from "./pages/tenant/TenantMessagesPage";
+import TenantNoticeDetailPage from "./pages/tenant/TenantNoticeDetailPage";
 
 const TENANT_PORTAL_ENABLED = import.meta.env.VITE_TENANT_PORTAL_ENABLED === "true";
 
@@ -269,6 +270,12 @@ function App() {
           path="/tenant/ledger"
           element={
             TENANT_PORTAL_ENABLED ? <TenantLedgerPage /> : <TenantPortalComingSoon />
+          }
+        />
+        <Route
+          path="/tenant/notices/:noticeId"
+          element={
+            TENANT_PORTAL_ENABLED ? <TenantNoticeDetailPage /> : <TenantPortalComingSoon />
           }
         />
         <Route
