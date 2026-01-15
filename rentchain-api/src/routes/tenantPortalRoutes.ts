@@ -368,9 +368,73 @@ router.get("/ledger", requireTenant, async (req: any, res) => {
       };
     });
 
-    items.sort((a, b) => b.occurredAt - a.occurredAt);
-
-    return res.json({ ok: true, data: items.slice(0, 25) });
+    // Bridge: add finance tenant events as ledger items for visibility
+    try {
+      const financeTypes = [
+        "RENT_PAID",
+        "RENT_RECORDED",
+        "RENT_DUE",
+        "FEE_ADDED",
+        "LATE_FEE",
+        "SECURITY_DEPOSIT",
+        "ADJUSTMENT",
+        "PAYMENT_RECORDED",
+      ];
+      const eventsSnap = await db
+        .collection("tenantEvents")
+        .where("tenantId", "==", tenantId)
+        .orderBy("occurredAt", "desc")
+        .limit(50)
+        .get();
+      const eventItems =
+        eventsSnap.docs
+          .map((d) => ({ id: d.id, ...(d.data() as any) }))
+          .filter((ev) => financeTypes.includes(String(ev.type || "").toUpperCase()))
+          .map((ev) => {
+            const occurredAt = toMillis(ev.occurredAt);
+            const purpose = ev.purpose ?? inferPurpose(ev.type || "");
+            const purposeLabel = ev.purposeLabel ?? ev.period ?? null;
+            const mapType = (t: string): "rent" | "fee" | "adjustment" | "payment" => {
+              const type = (t || "").toLowerCase();
+              if (type.includes("payment")) return "payment";
+              if (type.includes("fee")) return "fee";
+              if (type.includes("adjust")) return "adjustment";
+              return "rent";
+            };
+            const normalizeAmount = (amount: any): number | null => {
+              if (typeof amount !== "number" || Number.isNaN(amount)) return null;
+              return Math.round(amount * 100);
+            };
+            return {
+              id: ev.id,
+              type: mapType(ev.type || ""),
+              title: ev.title || "Ledger entry",
+              description: ev.description || undefined,
+              amountCents: normalizeAmount(ev.amount ?? ev.amountCents),
+              currency: ev.currency ?? null,
+              period: ev.period ?? null,
+              purpose: purpose ?? null,
+              purposeLabel: purposeLabel ?? null,
+              occurredAt: occurredAt ?? Date.now(),
+            };
+          }) || [];
+      // Merge and dedupe by id
+      const mergedMap = new Map<string, any>();
+      [...items, ...eventItems].forEach((it) => {
+        if (!it?.id) return;
+        mergedMap.set(it.id, it);
+      });
+      const merged = Array.from(mergedMap.values());
+      merged.sort((a, b) => b.occurredAt - a.occurredAt);
+      return res.json({ ok: true, data: merged.slice(0, 25) });
+    } catch (err) {
+      console.warn("[tenant/ledger] event bridge failed; returning base ledger", {
+        tenantId,
+        err: (err as any)?.message,
+      });
+      items.sort((a, b) => b.occurredAt - a.occurredAt);
+      return res.json({ ok: true, data: items.slice(0, 25) });
+    }
   } catch (err) {
     console.error("[tenantPortalRoutes] /tenant/ledger error", err);
     return res.status(500).json({ ok: false, error: "TENANT_LEDGER_FAILED" });

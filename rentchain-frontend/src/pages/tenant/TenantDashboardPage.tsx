@@ -349,7 +349,7 @@ export default function TenantDashboardPage() {
       { label: "Tenant identity (name & email)", status: "tracked" as const },
       { label: "Lease basics (property, unit, rent)", status: "tracked" as const },
       { label: "Ledger timeline", status: "tracked" as const },
-      { label: "Documents & receipts", status: "coming" as const },
+      { label: "Documents & receipts", status: "tracked" as const },
     ],
     []
   );
