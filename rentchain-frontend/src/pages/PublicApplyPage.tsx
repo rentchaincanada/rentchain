@@ -68,24 +68,24 @@ export default function PublicApplyPage() {
   const [context, setContext] = useState<{ propertyName?: string | null; unitLabel?: string | null }>({});
   const [linkData, setLinkData] = useState<{ propertyId?: string | null; unitId?: string | null; expiresAt?: number | null }>({});
 
-  const [applicant, setApplicant] = useState<RentalApplicationPayload["applicant"]>({
+  const [applicant, setApplicant] = useState<Partial<RentalApplicationPayload["applicant"]>>({
     firstName: "",
-    middleInitial: "",
+    middleInitial: null,
     lastName: "",
     email: "",
-    phoneHome: "",
-    phoneWork: "",
+    phoneHome: null,
+    phoneWork: null,
     dob: "",
     maritalStatus: null,
   });
   const [coApplicantEnabled, setCoApplicantEnabled] = useState(false);
-  const [coApplicant, setCoApplicant] = useState<RentalApplicationPayload["coApplicant"]>({
+  const [coApplicant, setCoApplicant] = useState<Partial<NonNullable<RentalApplicationPayload["coApplicant"]>>>({
     firstName: "",
-    middleInitial: "",
+    middleInitial: null,
     lastName: "",
     email: "",
-    phoneHome: "",
-    phoneWork: "",
+    phoneHome: null,
+    phoneWork: null,
     dob: "",
     maritalStatus: null,
   });
@@ -154,7 +154,20 @@ export default function PublicApplyPage() {
 
   const updateApplicant = (value: Partial<RentalApplicationPayload["applicant"]>) => {
     setApplicant((prev) => {
-      const next = { ...prev, ...value };
+      const next = { ...(prev || {}), ...value };
+      return {
+        ...next,
+        firstName: (next.firstName ?? "").trim(),
+        lastName: (next.lastName ?? "").trim(),
+        email: (next.email ?? "").trim(),
+        dob: (next.dob ?? "").trim(),
+      };
+    });
+  };
+
+  const updateCoApplicant = (value: Partial<NonNullable<RentalApplicationPayload["coApplicant"]>>) => {
+    setCoApplicant((prev) => {
+      const next = { ...(prev || {}), ...value };
       return {
         ...next,
         firstName: (next.firstName ?? "").trim(),
@@ -225,11 +238,11 @@ export default function PublicApplyPage() {
 
   const canContinue = () => {
     if (step === 0) {
-      const dobValue = (applicant.dob || "").trim();
+      const dobValue = (applicant.dob ?? "").trim();
       return (
-        applicant.firstName.trim() &&
-        applicant.lastName.trim() &&
-        applicant.email.trim() &&
+        (applicant.firstName ?? "").trim() &&
+        (applicant.lastName ?? "").trim() &&
+        (applicant.email ?? "").trim() &&
         dobValue &&
         isValidDob(dobValue)
       );
@@ -252,7 +265,17 @@ export default function PublicApplyPage() {
       setStep(1);
       return;
     }
-    const dobValue = (applicant.dob || "").trim();
+    const normalizedApplicant = {
+      firstName: (applicant.firstName ?? "").trim(),
+      lastName: (applicant.lastName ?? "").trim(),
+      email: (applicant.email ?? "").trim(),
+      dob: (applicant.dob ?? "").trim(),
+      middleInitial: applicant.middleInitial ?? null,
+      phoneHome: applicant.phoneHome ?? null,
+      phoneWork: applicant.phoneWork ?? null,
+      maritalStatus: applicant.maritalStatus ?? null,
+    };
+    const dobValue = normalizedApplicant.dob;
     if (!dobValue) {
       setError("Date of birth is required for screening.");
       setStep(0);
@@ -260,6 +283,11 @@ export default function PublicApplyPage() {
     }
     if (!isValidDob(dobValue)) {
       setError("Date of birth must be YYYY-MM-DD.");
+      setStep(0);
+      return;
+    }
+    if (!normalizedApplicant.firstName || !normalizedApplicant.lastName || !normalizedApplicant.email) {
+      setError("Please complete required fields.");
       setStep(0);
       return;
     }
@@ -273,20 +301,17 @@ export default function PublicApplyPage() {
     try {
       const payload: RentalApplicationPayload = {
         token,
-        applicant: {
-          ...applicant,
-          middleInitial: applicant.middleInitial || null,
-          phoneHome: applicant.phoneHome || null,
-          phoneWork: applicant.phoneWork || null,
-          dob: applicant.dob || null,
-        },
+        applicant: normalizedApplicant,
         coApplicant: coApplicantEnabled
           ? {
-              ...coApplicant,
-              middleInitial: coApplicant.middleInitial || null,
-              phoneHome: coApplicant.phoneHome || null,
-              phoneWork: coApplicant.phoneWork || null,
-              dob: coApplicant.dob || null,
+              firstName: (coApplicant.firstName ?? "").trim(),
+              lastName: (coApplicant.lastName ?? "").trim(),
+              email: (coApplicant.email ?? "").trim(),
+              dob: (coApplicant.dob ?? "").trim(),
+              middleInitial: coApplicant.middleInitial ?? null,
+              phoneHome: coApplicant.phoneHome ?? null,
+              phoneWork: coApplicant.phoneWork ?? null,
+              maritalStatus: coApplicant.maritalStatus ?? null,
             }
           : null,
         otherResidents: otherResidents.filter((r) => r.name.trim()),
@@ -383,7 +408,7 @@ export default function PublicApplyPage() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 12 }}>
               <label style={labelStyle}>
                 First name *
-                <input value={applicant.firstName} onChange={(e) => updateApplicant({ firstName: e.target.value })} />
+                <input value={applicant.firstName ?? ""} onChange={(e) => updateApplicant({ firstName: e.target.value })} />
               </label>
               <label style={labelStyle}>
                 Middle initial
@@ -391,11 +416,11 @@ export default function PublicApplyPage() {
               </label>
               <label style={labelStyle}>
                 Last name *
-                <input value={applicant.lastName} onChange={(e) => updateApplicant({ lastName: e.target.value })} />
+                <input value={applicant.lastName ?? ""} onChange={(e) => updateApplicant({ lastName: e.target.value })} />
               </label>
               <label style={labelStyle}>
                 Email *
-                <input type="email" value={applicant.email} onChange={(e) => updateApplicant({ email: e.target.value })} />
+                <input type="email" value={applicant.email ?? ""} onChange={(e) => updateApplicant({ email: e.target.value })} />
               </label>
               <label style={labelStyle}>
                 Phone (home)
@@ -435,31 +460,31 @@ export default function PublicApplyPage() {
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 12 }}>
                   <label style={labelStyle}>
                     First name
-                    <input value={coApplicant?.firstName || ""} onChange={(e) => setCoApplicant({ ...coApplicant, firstName: e.target.value })} />
+                    <input value={coApplicant?.firstName || ""} onChange={(e) => updateCoApplicant({ firstName: e.target.value })} />
                   </label>
                   <label style={labelStyle}>
                     Middle initial
-                    <input value={coApplicant?.middleInitial || ""} onChange={(e) => setCoApplicant({ ...coApplicant, middleInitial: e.target.value })} />
+                    <input value={coApplicant?.middleInitial || ""} onChange={(e) => updateCoApplicant({ middleInitial: e.target.value })} />
                   </label>
                   <label style={labelStyle}>
                     Last name
-                    <input value={coApplicant?.lastName || ""} onChange={(e) => setCoApplicant({ ...coApplicant, lastName: e.target.value })} />
+                    <input value={coApplicant?.lastName || ""} onChange={(e) => updateCoApplicant({ lastName: e.target.value })} />
                   </label>
                   <label style={labelStyle}>
                     Email
-                    <input type="email" value={coApplicant?.email || ""} onChange={(e) => setCoApplicant({ ...coApplicant, email: e.target.value })} />
+                    <input type="email" value={coApplicant?.email || ""} onChange={(e) => updateCoApplicant({ email: e.target.value })} />
                   </label>
                   <label style={labelStyle}>
                     Phone (home)
-                    <input value={coApplicant?.phoneHome || ""} onChange={(e) => setCoApplicant({ ...coApplicant, phoneHome: e.target.value })} />
+                    <input value={coApplicant?.phoneHome || ""} onChange={(e) => updateCoApplicant({ phoneHome: e.target.value })} />
                   </label>
                   <label style={labelStyle}>
                     Phone (work)
-                    <input value={coApplicant?.phoneWork || ""} onChange={(e) => setCoApplicant({ ...coApplicant, phoneWork: e.target.value })} />
+                    <input value={coApplicant?.phoneWork || ""} onChange={(e) => updateCoApplicant({ phoneWork: e.target.value })} />
                   </label>
                   <label style={labelStyle}>
                     Date of birth
-                    <input type="date" value={coApplicant?.dob || ""} onChange={(e) => setCoApplicant({ ...coApplicant, dob: e.target.value })} />
+                    <input type="date" value={coApplicant?.dob || ""} onChange={(e) => updateCoApplicant({ dob: e.target.value })} />
                   </label>
                 </div>
               </div>
