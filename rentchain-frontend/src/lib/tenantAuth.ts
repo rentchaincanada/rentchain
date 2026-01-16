@@ -1,8 +1,28 @@
 import { DEBUG_AUTH_KEY, JUST_LOGGED_IN_KEY, TENANT_TOKEN_KEY } from "./authKeys";
 export { TENANT_TOKEN_KEY } from "./authKeys";
 
-export function getTenantToken() {
-  if (typeof window === "undefined") return "";
+function decodeJwtPayload(token: string): any | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length < 2) return null;
+    let b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    while (b64.length % 4) b64 += "=";
+    const json = atob(b64);
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
+function isTokenExpired(token: string): boolean {
+  const payload = decodeJwtPayload(token);
+  if (!payload || typeof payload.exp !== "number") return false;
+  const expMs = payload.exp * 1000;
+  return Date.now() >= expMs;
+}
+
+export function getTenantToken(): string | null {
+  if (typeof window === "undefined") return null;
   let persisted = "";
   try {
     persisted = localStorage.getItem(TENANT_TOKEN_KEY) ?? "";
@@ -10,10 +30,16 @@ export function getTenantToken() {
     persisted = "";
   }
   const clean = String(persisted || "").trim();
-  if (clean) return clean;
+  if (clean) {
+    if (clean.split(".").length !== 3) return null;
+    if (isTokenExpired(clean)) return null;
+    return clean;
+  }
 
   const session = sessionStorage.getItem(TENANT_TOKEN_KEY) || "";
   if (session) {
+    if (session.split(".").length !== 3) return null;
+    if (isTokenExpired(session)) return null;
     try {
       localStorage.setItem(TENANT_TOKEN_KEY, session);
     } catch {
@@ -21,7 +47,7 @@ export function getTenantToken() {
     }
     return session;
   }
-  return "";
+  return null;
 }
 
 export function setTenantToken(token: string) {
