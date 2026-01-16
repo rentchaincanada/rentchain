@@ -275,6 +275,18 @@ export default function PublicApplyPage() {
       phoneWork: applicant.phoneWork ?? null,
       maritalStatus: applicant.maritalStatus ?? null,
     };
+    const normalizedCoApplicant = coApplicantEnabled
+      ? {
+          firstName: (coApplicant.firstName ?? "").trim(),
+          lastName: (coApplicant.lastName ?? "").trim(),
+          email: (coApplicant.email ?? "").trim(),
+          dob: (coApplicant.dob ?? "").trim(),
+          middleInitial: coApplicant.middleInitial ?? null,
+          phoneHome: coApplicant.phoneHome ?? null,
+          phoneWork: coApplicant.phoneWork ?? null,
+          maritalStatus: coApplicant.maritalStatus ?? null,
+        }
+      : null;
     const dobValue = normalizedApplicant.dob;
     if (!dobValue) {
       setError("Date of birth is required for screening.");
@@ -286,9 +298,35 @@ export default function PublicApplyPage() {
       setStep(0);
       return;
     }
+    if (
+      normalizedCoApplicant &&
+      (!normalizedCoApplicant.firstName ||
+        !normalizedCoApplicant.lastName ||
+        !normalizedCoApplicant.email ||
+        !normalizedCoApplicant.dob)
+    ) {
+      setError("Please complete co-applicant required fields.");
+      setStep(0);
+      return;
+    }
+    if (normalizedCoApplicant && !isValidDob(normalizedCoApplicant.dob)) {
+      setError("Co-applicant date of birth must be YYYY-MM-DD.");
+      setStep(0);
+      return;
+    }
     if (!normalizedApplicant.firstName || !normalizedApplicant.lastName || !normalizedApplicant.email) {
       setError("Please complete required fields.");
       setStep(0);
+      return;
+    }
+    if (!consent.creditConsent) {
+      setError("Consent for credit screening is required.");
+      setStep(4);
+      return;
+    }
+    if (!consent.referenceConsent) {
+      setError("Consent to contact references is required.");
+      setStep(4);
       return;
     }
     if (!canContinue()) {
@@ -302,18 +340,7 @@ export default function PublicApplyPage() {
       const payload: RentalApplicationPayload = {
         token,
         applicant: normalizedApplicant,
-        coApplicant: coApplicantEnabled
-          ? {
-              firstName: (coApplicant.firstName ?? "").trim(),
-              lastName: (coApplicant.lastName ?? "").trim(),
-              email: (coApplicant.email ?? "").trim(),
-              dob: (coApplicant.dob ?? "").trim(),
-              middleInitial: coApplicant.middleInitial ?? null,
-              phoneHome: coApplicant.phoneHome ?? null,
-              phoneWork: coApplicant.phoneWork ?? null,
-              maritalStatus: coApplicant.maritalStatus ?? null,
-            }
-          : null,
+        coApplicant: normalizedCoApplicant,
         otherResidents: otherResidents.filter((r) => r.name.trim()),
         residentialHistory: residentialHistory.filter((h) => h.address.trim()),
         employment: {

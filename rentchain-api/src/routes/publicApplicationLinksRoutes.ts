@@ -113,11 +113,18 @@ router.post("/rental-applications", async (req: any, res) => {
     if (!firstName || !lastName || !email || !email.includes("@")) {
       return res.status(400).json({ ok: false, error: "INVALID_APPLICANT" });
     }
-    if (!dob || !/^\d{4}-\d{2}-\d{2}$/.test(dob) || !currentAddress || !creditConsent || !referenceConsent || !acceptedAt) {
+    if (!dob || !/^\d{4}-\d{2}-\d{2}$/.test(dob) || !currentAddress) {
       return res.status(400).json({
         ok: false,
         error: "INVALID_REQUEST",
         detail: "DOB and current address are required.",
+      });
+    }
+    if (!creditConsent || !referenceConsent || !acceptedAt) {
+      return res.status(400).json({
+        ok: false,
+        error: "INVALID_REQUEST",
+        detail: "Credit and reference consent are required.",
       });
     }
 
