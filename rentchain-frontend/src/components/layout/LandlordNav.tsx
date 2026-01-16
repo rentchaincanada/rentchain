@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { LayoutDashboard, Building2, Users, ScrollText, MessagesSquare } from "lucide-react";
-import { TopNav } from "./TopNav";
+import TopNav from "./TopNav";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { useAuth } from "../../context/useAuth";
 import { fetchLandlordConversations } from "../../api/messagesApi";

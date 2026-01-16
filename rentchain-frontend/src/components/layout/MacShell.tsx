@@ -1,6 +1,6 @@
 // src/components/layout/MacShell.tsx
 import React from "react";
-import { TopNav } from "./TopNav";
+import TopNav from "./TopNav";
 import { layout, spacing, colors, text } from "../../styles/tokens";
 
 interface MacShellProps {

@@ -4,7 +4,7 @@ import {
   fetchTenantDetail,
   TenantDetail,
 } from "../../services/tenantDetailApi";
-import { TopNav } from "../components/layout/TopNav";
+import TopNav from "../components/layout/TopNav";
 type DashboardTenantDetailPanelProps = {
   tenantId?: string;
 };

@@ -4,7 +4,7 @@ import {
   fetchDashboardProperties,
   DashboardProperty,
 } from "../../services/dashboardPropertiesService";
-import { TopNav } from "../components/layout/TopNav";
+import TopNav from "../components/layout/TopNav";
 import { safeLocaleNumber } from "@/utils/format";
 type DashboardPropertyTableProps = {
   // Optional: parent can still pass properties explicitly
