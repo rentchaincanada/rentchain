@@ -54,6 +54,7 @@ import landlordApplicationLinksRoutes from "./routes/landlordApplicationLinksRou
 import publicApplicationLinksRoutes from "./routes/publicApplicationLinksRoutes";
 import messagesRoutes from "./routes/messagesRoutes";
 import tenantsRoutes from "./routes/tenantsRoutes";
+import rentalApplicationsRoutes from "./routes/rentalApplicationsRoutes";
 
 const app: Application = express();
 app.set("etag", false);
@@ -122,6 +123,7 @@ app.use("/api/reporting", reportingRoutes);
 app.use("/api", compatRoutes);
 app.use("/api/ledger", ledgerRoutes);
 app.use("/api/dashboard", routeSource("dashboardRoutes.ts"), dashboardRoutes);
+app.use("/api/application-links", routeSource("landlordApplicationLinksRoutes.ts"), landlordApplicationLinksRoutes);
 app.use(
   "/api/landlord/application-links",
   routeSource("landlordApplicationLinksRoutes.ts"),
@@ -138,6 +140,7 @@ app.use("/api", routeSource("tenantNoticesRoutes"), tenantNoticesRoutes);
 app.use("/api", routeSource("maintenanceRequestsRoutes"), maintenanceRequestsRoutes);
 app.use("/api", routeSource("usageBreakdownRoutes.ts"), usageBreakdownRoutes);
 app.use("/api/properties", propertiesRoutes);
+app.use("/api", routeSource("rentalApplicationsRoutes.ts"), rentalApplicationsRoutes);
 app.use("/api", routeSource("tenantReportRoutes.ts"), tenantReportRoutes);
 app.use("/api", applicationsRoutes);
 app.use("/api/applications", routeSource("applicationsConversionRoutes.ts"), applicationsConversionRoutes);

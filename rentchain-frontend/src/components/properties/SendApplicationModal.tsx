@@ -34,12 +34,16 @@ export function SendApplicationModal({ open, propertyId, unit, onClose }: Props)
     setLoading(true);
     setError(null);
     try {
-      const res = await createApplicationLink(String(propertyId), String((unit as any).id));
+      const res = await createApplicationLink({
+        propertyId: String(propertyId),
+        unitId: (unit as any)?.id ? String((unit as any).id) : null,
+      });
       if ((res as any)?.ok === false) {
         const detail = (res as any)?.detail || (res as any)?.error || "Failed to create application link";
         throw new Error(String(detail));
       }
       const rawUrl =
+        (res as any)?.data?.url ||
         (res as any)?.applicationUrl ||
         (res as any)?.link ||
         (res as any)?.url ||

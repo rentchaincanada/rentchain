@@ -56,6 +56,7 @@ import landlordApplicationLinksRoutes from "./routes/landlordApplicationLinksRou
 import publicApplicationLinksRoutes from "./routes/publicApplicationLinksRoutes";
 import tenantsRoutes from "./routes/tenantsRoutes";
 import messagesRoutes from "./routes/messagesRoutes";
+import rentalApplicationsRoutes from "./routes/rentalApplicationsRoutes";
 
 process.on("unhandledRejection", (reason) => {
   console.error("[FATAL] unhandledRejection", reason);
@@ -121,6 +122,7 @@ app.use("/api", compatRoutes);
 app.use("/api", routeSource("unitsRoutes.ts"), unitsRoutes);
 app.use("/api/ledger", ledgerRoutes);
 app.use("/api/dashboard", routeSource("dashboardRoutes.ts"), dashboardRoutes);
+app.use("/api/application-links", routeSource("landlordApplicationLinksRoutes.ts"), landlordApplicationLinksRoutes);
 app.use(
   "/api/landlord/application-links",
   routeSource("landlordApplicationLinksRoutes.ts"),
@@ -136,6 +138,7 @@ app.use("/api", routeSource("tenantNoticesRoutes"), tenantNoticesRoutes);
 app.use("/api", routeSource("maintenanceRequestsRoutes"), maintenanceRequestsRoutes);
 app.use("/api", routeSource("usageBreakdownRoutes.ts"), usageBreakdownRoutes);
 app.use("/api/properties", propertiesRoutes);
+app.use("/api", routeSource("rentalApplicationsRoutes.ts"), rentalApplicationsRoutes);
 app.use("/api/tenant-report", routeSource("tenantReportRoutes.ts"), tenantReportRoutes);
 app.use("/api/tenant-report-pdf", routeSource("tenantReportPdfRoutes.ts"), tenantReportPdfRoutes);
 app.use("/api", applicationsRoutes);

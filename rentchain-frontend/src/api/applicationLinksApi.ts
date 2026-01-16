@@ -2,15 +2,21 @@ import { apiFetch } from "./apiFetch";
 
 export type ApplicationLinkResponse = {
   ok: boolean;
-  id?: string;
-  token?: string;
-  applicationUrl?: string;
+  data?: {
+    id: string;
+    url: string;
+    expiresAt: number;
+  };
 };
 
-export async function createApplicationLink(propertyId: string, unitId: string): Promise<ApplicationLinkResponse> {
-  return apiFetch("/landlord/application-links", {
+export async function createApplicationLink(params: {
+  propertyId: string;
+  unitId?: string | null;
+  expiresInDays?: number;
+}): Promise<ApplicationLinkResponse> {
+  return apiFetch("/application-links", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ propertyId, unitId }),
+    body: JSON.stringify(params),
   });
 }

@@ -1,35 +1,34 @@
 import { apiFetch } from "./apiFetch";
 
-export type PublicApplicationContext = {
-  propertyName?: string | null;
-  unitLabel?: string | null;
-};
+export type RentalApplicationStatus =
+  | "DRAFT"
+  | "SUBMITTED"
+  | "IN_REVIEW"
+  | "APPROVED"
+  | "DECLINED"
+  | "CONDITIONAL_COSIGNER"
+  | "CONDITIONAL_DEPOSIT";
 
-export type PublicApplicationLinkData = {
+export type RentalApplicationSummary = {
+  id: string;
+  applicantName: string;
+  email: string | null;
   propertyId: string | null;
   unitId: string | null;
-  expiresAt: number | null;
-  landlordBrandName?: string | null;
+  status: RentalApplicationStatus;
+  submittedAt: number | null;
 };
 
-export async function fetchPublicApplicationLink(token: string): Promise<{
-  data: PublicApplicationLinkData;
-  context: PublicApplicationContext;
-}> {
-  const res: any = await apiFetch(`/public/application-links/${encodeURIComponent(token)}`);
-  const data = (res?.data || {}) as PublicApplicationLinkData;
-  const context = (res?.context || {}) as PublicApplicationContext;
-  if (!res?.ok && res?.error) {
-    throw new Error(res.error);
-  }
-  if (!data?.propertyId) {
-    throw new Error("Application link not found");
-  }
-  return { data, context };
-}
-
-export type RentalApplicationPayload = {
-  token: string;
+export type RentalApplication = {
+  id: string;
+  landlordId: string;
+  propertyId: string;
+  unitId: string | null;
+  applicationLinkId: string;
+  createdAt: number;
+  submittedAt: number | null;
+  updatedAt: number;
+  status: RentalApplicationStatus;
   applicant: {
     firstName: string;
     middleInitial?: string | null;
@@ -99,17 +98,43 @@ export type RentalApplicationPayload = {
     acceptedAt: number | null;
     applicantNameTyped?: string | null;
     coApplicantNameTyped?: string | null;
+    ip?: string | null;
+    userAgent?: string | null;
   };
+  screening: {
+    requested: boolean;
+    requestedAt?: number | null;
+    provider?: string | null;
+    resultSummary?: string | null;
+  };
+  landlordNote?: string | null;
 };
 
-export async function submitPublicApplication(params: RentalApplicationPayload): Promise<{ applicationId?: string }> {
-  const res: any = await apiFetch("/public/rental-applications", {
-    method: "POST",
+export async function fetchRentalApplications(params?: {
+  propertyId?: string;
+  status?: string;
+}): Promise<RentalApplicationSummary[]> {
+  const query = new URLSearchParams();
+  if (params?.propertyId) query.set("propertyId", params.propertyId);
+  if (params?.status) query.set("status", params.status);
+  const res: any = await apiFetch(`/rental-applications?${query.toString()}`);
+  return (res?.data || []) as RentalApplicationSummary[];
+}
+
+export async function fetchRentalApplication(id: string): Promise<RentalApplication> {
+  const res: any = await apiFetch(`/rental-applications/${encodeURIComponent(id)}`);
+  return res?.data as RentalApplication;
+}
+
+export async function updateRentalApplicationStatus(
+  id: string,
+  status: RentalApplicationStatus,
+  note?: string | null
+): Promise<RentalApplication> {
+  const res: any = await apiFetch(`/rental-applications/${encodeURIComponent(id)}`, {
+    method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(params),
+    body: JSON.stringify({ status, note }),
   });
-  if (!res?.ok && res?.error) {
-    throw new Error(res?.error || "Failed to submit application");
-  }
-  return { applicationId: res?.data?.applicationId };
+  return res?.data as RentalApplication;
 }

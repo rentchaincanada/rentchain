@@ -1,10 +1,12 @@
 import { Router } from "express";
-import { db, FieldValue } from "../config/firebase";
+import { createHash } from "crypto";
+import { db } from "../config/firebase";
 
 const router = Router();
 
 async function findLinkByToken(token: string) {
-  const snap = await db.collection("application_links").where("token", "==", token).limit(1).get();
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+  const snap = await db.collection("applicationLinks").where("tokenHash", "==", tokenHash).limit(1).get();
   if (snap.empty) return null;
   const doc = snap.docs[0];
   return { id: doc.id, ...(doc.data() as any) };
@@ -17,7 +19,16 @@ router.get("/application-links/:token", async (req: any, res) => {
     if (!token) return res.status(400).json({ ok: false, error: "Missing token" });
 
     const link = await findLinkByToken(token);
-    if (!link || link.isActive === false) {
+    const now = Date.now();
+    const isExpired = link?.expiresAt && now > Number(link.expiresAt);
+    if (!link || link.status !== "ACTIVE" || isExpired) {
+      if (link?.id && isExpired && link.status === "ACTIVE") {
+        try {
+          await db.collection("applicationLinks").doc(link.id).set({ status: "EXPIRED" }, { merge: true });
+        } catch {
+          // ignore
+        }
+      }
       return res.status(404).json({ ok: false, error: "APPLICATION_LINK_NOT_FOUND" });
     }
 
@@ -49,16 +60,13 @@ router.get("/application-links/:token", async (req: any, res) => {
 
     return res.json({
       ok: true,
-      link: {
-        token,
+      data: {
         propertyId: link.propertyId || null,
         unitId: link.unitId || null,
+        expiresAt: link.expiresAt ?? null,
+        landlordBrandName: null,
       },
-      context: {
-        landlordDisplayName: null,
-        propertyName,
-        unitLabel,
-      },
+      context: { propertyName, unitLabel },
     });
   } catch (err: any) {
     console.error("[public application-links] lookup failed", err?.message || err);
@@ -66,51 +74,98 @@ router.get("/application-links/:token", async (req: any, res) => {
   }
 });
 
-router.post("/applications", async (req: any, res) => {
+router.post("/rental-applications", async (req: any, res) => {
   res.setHeader("x-route-source", "publicApplicationLinksRoutes");
   try {
     const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
     const token = String(body?.token || "").trim();
-    const applicant = body?.applicant || {};
-    const fullName = String(applicant?.fullName || "").trim();
-    const email = String(applicant?.email || "").trim();
-    const phone = String(applicant?.phone || "").trim();
-    const message = applicant?.message ? String(applicant.message) : "";
-
     if (!token) return res.status(400).json({ ok: false, error: "token_required" });
-    if (!fullName || !email || !phone || !email.includes("@")) {
-      return res.status(400).json({ ok: false, error: "invalid_applicant" });
-    }
 
     const link = await findLinkByToken(token);
-    if (!link || link.isActive === false) {
+    const now = Date.now();
+    const isExpired = link?.expiresAt && now > Number(link.expiresAt);
+    if (!link || link.status !== "ACTIVE" || isExpired) {
+      if (link?.id && isExpired && link.status === "ACTIVE") {
+        try {
+          await db.collection("applicationLinks").doc(link.id).set({ status: "EXPIRED" }, { merge: true });
+        } catch {
+          // ignore
+        }
+      }
       return res.status(404).json({ ok: false, error: "APPLICATION_LINK_NOT_FOUND" });
     }
 
-    const now = new Date();
-    const appRef = db.collection("applications").doc();
-    const applicationId = appRef.id;
+    const applicant = body?.applicant || {};
+    const firstName = String(applicant?.firstName || "").trim();
+    const lastName = String(applicant?.lastName || "").trim();
+    const email = String(applicant?.email || "").trim();
+    const consent = body?.consent || {};
+    const creditConsent = consent?.creditConsent === true;
+    const referenceConsent = consent?.referenceConsent === true;
+    const acceptedAt =
+      typeof consent?.acceptedAt === "number" && Number.isFinite(consent.acceptedAt)
+        ? consent.acceptedAt
+        : null;
 
+    if (!firstName || !lastName || !email || !email.includes("@")) {
+      return res.status(400).json({ ok: false, error: "INVALID_APPLICANT" });
+    }
+    if (!creditConsent || !referenceConsent || !acceptedAt) {
+      return res.status(400).json({ ok: false, error: "CONSENT_REQUIRED" });
+    }
+
+    const appRef = db.collection("rentalApplications").doc();
+    const applicationId = appRef.id;
+    const createdAt = now;
     const payload: any = {
       landlordId: link.landlordId || null,
       propertyId: link.propertyId || null,
       unitId: link.unitId || null,
-      applicantFullName: fullName,
-      applicantEmail: email,
-      applicantPhone: phone,
-      applicantMessage: message || null,
-      status: "new",
-      source: "public_link",
-      phoneVerified: false,
-      createdAt: now.toISOString(),
-      updatedAt: now.toISOString(),
-      createdAtServer: FieldValue.serverTimestamp ? FieldValue.serverTimestamp() : now,
-      updatedAtServer: FieldValue.serverTimestamp ? FieldValue.serverTimestamp() : now,
+      applicationLinkId: link.id,
+      createdAt,
+      submittedAt: createdAt,
+      updatedAt: createdAt,
+      status: "SUBMITTED",
+      applicant: {
+        firstName,
+        middleInitial: applicant?.middleInitial ?? null,
+        lastName,
+        email,
+        phoneHome: applicant?.phoneHome ?? null,
+        phoneWork: applicant?.phoneWork ?? null,
+        dob: applicant?.dob ?? null,
+        maritalStatus: applicant?.maritalStatus ?? null,
+      },
+      coApplicant: body?.coApplicant ?? null,
+      otherResidents: Array.isArray(body?.otherResidents) ? body.otherResidents : [],
+      residentialHistory: Array.isArray(body?.residentialHistory) ? body.residentialHistory : [],
+      employment: body?.employment ?? { applicant: {}, coApplicant: null },
+      references: body?.references ?? null,
+      loans: Array.isArray(body?.loans) ? body.loans : [],
+      vehicles: Array.isArray(body?.vehicles) ? body.vehicles : [],
+      nextOfKin: body?.nextOfKin ?? null,
+      coNextOfKin: body?.coNextOfKin ?? null,
+      consent: {
+        creditConsent: creditConsent,
+        referenceConsent: referenceConsent,
+        dataSharingConsent: consent?.dataSharingConsent === true,
+        acceptedAt,
+        applicantNameTyped: consent?.applicantNameTyped ?? null,
+        coApplicantNameTyped: consent?.coApplicantNameTyped ?? null,
+        ip: req.ip || null,
+        userAgent: req.get("user-agent") || null,
+      },
+      screening: {
+        requested: false,
+        requestedAt: null,
+        provider: null,
+        resultSummary: null,
+      },
     };
 
     await appRef.set(payload, { merge: true });
 
-    return res.json({ ok: true, applicationId });
+    return res.json({ ok: true, data: { applicationId } });
   } catch (err: any) {
     console.error("[public applications] create failed", err?.message || err);
     return res.status(500).json({ ok: false, error: "Failed to submit application" });

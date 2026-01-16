@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { randomBytes } from "crypto";
+import { createHash, randomBytes } from "crypto";
 import { authenticateJwt } from "../middleware/authMiddleware";
 import { db } from "../config/firebase";
 
@@ -25,11 +25,13 @@ router.post("/", authenticateJwt, async (req: any, res) => {
 
     const landlordId = req.user?.landlordId || req.user?.id;
     const propertyId = String(req.body?.propertyId || "").trim();
-    const unitId = String(req.body?.unitId || "").trim();
+    const unitIdRaw = req.body?.unitId;
+    const unitId = unitIdRaw === null || unitIdRaw === undefined ? "" : String(unitIdRaw).trim();
+    const expiresInDaysRaw = Number(req.body?.expiresInDays ?? 14);
 
     if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
-    if (!propertyId || !unitId) {
-      return res.status(400).json({ ok: false, error: "propertyId and unitId are required" });
+    if (!propertyId) {
+      return res.status(400).json({ ok: false, error: "propertyId is required" });
     }
 
     const ownership = await ensurePropertyOwned(propertyId, landlordId);
@@ -38,36 +40,48 @@ router.post("/", authenticateJwt, async (req: any, res) => {
       return res.status(403).json({ ok: false, error: "Forbidden" });
     }
 
-    const unitSnap = await db.collection("units").doc(unitId).get();
-    if (!unitSnap.exists) {
-      return res.status(404).json({ ok: false, error: "Unit not found" });
-    }
-    const unit = unitSnap.data() as any;
-    if (unit?.landlordId !== landlordId) {
-      return res.status(403).json({ ok: false, error: "Forbidden" });
-    }
-    if (unit?.propertyId && unit.propertyId !== propertyId) {
-      return res.status(400).json({ ok: false, error: "Unit does not belong to property" });
+    if (unitId) {
+      const unitSnap = await db.collection("units").doc(unitId).get();
+      if (!unitSnap.exists) {
+        return res.status(404).json({ ok: false, error: "Unit not found" });
+      }
+      const unit = unitSnap.data() as any;
+      if (unit?.landlordId !== landlordId) {
+        return res.status(403).json({ ok: false, error: "Forbidden" });
+      }
+      if (unit?.propertyId && unit.propertyId !== propertyId) {
+        return res.status(400).json({ ok: false, error: "Unit does not belong to property" });
+      }
     }
 
     const token = randomBytes(32).toString("hex");
-    const now = new Date();
-    const ref = await db.collection("application_links").add({
+    const tokenHash = createHash("sha256").update(token).digest("hex");
+    const now = Date.now();
+    const expiresInDays = Number.isFinite(expiresInDaysRaw)
+      ? Math.min(Math.max(expiresInDaysRaw, 1), 60)
+      : 14;
+    const expiresAt = now + expiresInDays * 24 * 60 * 60 * 1000;
+
+    const ref = await db.collection("applicationLinks").add({
       landlordId,
       propertyId,
-      unitId,
-      token,
+      unitId: unitId || null,
       createdAt: now,
-      isActive: true,
+      expiresAt,
+      status: "ACTIVE",
+      tokenHash,
     });
 
-    const applicationUrl = `/apply/${encodeURIComponent(token)}`;
+    const baseUrl = (process.env.PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
+    const applicationUrl = `${baseUrl}/apply/${encodeURIComponent(token)}`;
 
     return res.json({
       ok: true,
-      id: ref.id,
-      token,
-      applicationUrl,
+      data: {
+        id: ref.id,
+        url: applicationUrl,
+        expiresAt,
+      },
     });
   } catch (err: any) {
     console.error("[application-links] create failed", err?.message || err, err);
