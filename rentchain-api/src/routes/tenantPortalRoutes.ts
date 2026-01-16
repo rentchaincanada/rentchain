@@ -587,4 +587,148 @@ router.get("/notices/:noticeId", requireTenant, async (req: any, res) => {
   }
 });
 
+router.post("/maintenance-requests", requireTenant, async (req: any, res) => {
+  try {
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    const { category, priority, title, description, tenantContact } = req.body || {};
+    const trimmedTitle = typeof title === "string" ? title.trim().slice(0, 120) : "";
+    const trimmedDescription = typeof description === "string" ? description.trim().slice(0, 5000) : "";
+    const normalizedCategory = typeof category === "string" ? category.trim().toUpperCase() : "GENERAL";
+    const normalizedPriority = typeof priority === "string" ? priority.trim().toUpperCase() : "NORMAL";
+    const allowedCategories = [
+      "PLUMBING",
+      "ELECTRICAL",
+      "HVAC",
+      "APPLIANCE",
+      "PEST",
+      "CLEANING",
+      "GENERAL",
+      "OTHER",
+    ];
+    const allowedPriorities = ["LOW", "NORMAL", "HIGH", "URGENT"];
+    if (!trimmedTitle || !trimmedDescription) {
+      return res.status(400).json({ ok: false, error: "INVALID_REQUEST" });
+    }
+    const categorySafe = allowedCategories.includes(normalizedCategory) ? normalizedCategory : "GENERAL";
+    const prioritySafe = allowedPriorities.includes(normalizedPriority) ? normalizedPriority : "NORMAL";
+
+    // Derive property/unit/landlord from tenant doc when possible
+    let propertyId: string | null = null;
+    let unitId: string | null = null;
+    let landlordId: string | null = null;
+    try {
+      const tenantSnap = await db.collection("tenants").doc(tenantId).get();
+      if (tenantSnap.exists) {
+        const t = tenantSnap.data() as any;
+        propertyId = t?.propertyId || t?.property || null;
+        unitId = t?.unitId || t?.unit || null;
+        landlordId = t?.landlordId || t?.ownerId || t?.owner || null;
+      }
+    } catch {
+      // ignore lookup errors
+    }
+
+    const now = Date.now();
+    const contact = typeof tenantContact === "object" && tenantContact !== null ? tenantContact : null;
+    const doc = {
+      landlordId,
+      tenantId,
+      propertyId,
+      unitId,
+      category: categorySafe,
+      priority: prioritySafe,
+      title: trimmedTitle,
+      description: trimmedDescription,
+      status: "NEW",
+      tenantContact: {
+        phone: contact?.phone ?? null,
+        preferredTimes: contact?.preferredTimes ?? null,
+      },
+      createdAt: now,
+      updatedAt: now,
+      lastUpdatedBy: "TENANT",
+      landlordNote: null,
+    };
+
+    const ref = await db.collection("maintenanceRequests").add(doc);
+    return res.json({ ok: true, data: { id: ref.id, ...doc } });
+  } catch (err) {
+    console.error("[tenant/maintenance-requests] create failed", {
+      tenantId: req.user?.tenantId,
+      err,
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_MAINT_REQUEST_CREATE_FAILED" });
+  }
+});
+
+router.get("/maintenance-requests", requireTenant, async (req: any, res) => {
+  try {
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    const snap = await db.collection("maintenanceRequests").where("tenantId", "==", tenantId).limit(50).get();
+    const items = snap.docs.map((d) => {
+      const data = (d.data() as any) || {};
+      return {
+        id: d.id,
+        status: data.status ?? "NEW",
+        priority: data.priority ?? "NORMAL",
+        category: data.category ?? "GENERAL",
+        title: data.title ?? "",
+        createdAt: toMillis(data.createdAt),
+        updatedAt: toMillis(data.updatedAt),
+      };
+    });
+    items.sort((a, b) => (Number(b.updatedAt || 0) || 0) - (Number(a.updatedAt || 0) || 0));
+    return res.json({ ok: true, data: items });
+  } catch (err) {
+    console.error("[tenant/maintenance-requests] list failed", {
+      tenantId: req.user?.tenantId,
+      err,
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_MAINT_REQUESTS_FAILED" });
+  }
+});
+
+router.get("/maintenance-requests/:id", requireTenant, async (req: any, res) => {
+  try {
+    const tenantId = req.user?.tenantId;
+    const id = String(req.params?.id || "").trim();
+    if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    const doc = await db.collection("maintenanceRequests").doc(id).get();
+    if (!doc.exists) {
+      return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    }
+    const data = (doc.data() as any) || {};
+    if (data.tenantId && data.tenantId !== tenantId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+    const payload = {
+      id: doc.id,
+      landlordId: data.landlordId ?? null,
+      tenantId: data.tenantId ?? null,
+      propertyId: data.propertyId ?? null,
+      unitId: data.unitId ?? null,
+      category: data.category ?? "GENERAL",
+      priority: data.priority ?? "NORMAL",
+      title: data.title ?? "",
+      description: data.description ?? "",
+      status: data.status ?? "NEW",
+      tenantContact: data.tenantContact ?? null,
+      createdAt: toMillis(data.createdAt),
+      updatedAt: toMillis(data.updatedAt),
+      lastUpdatedBy: data.lastUpdatedBy ?? "TENANT",
+    };
+    return res.json({ ok: true, data: payload });
+  } catch (err) {
+    console.error("[tenant/maintenance-requests/:id] read failed", {
+      tenantId: req.user?.tenantId,
+      id: req.params?.id,
+      err,
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_MAINT_REQUEST_READ_FAILED" });
+  }
+});
+
 export default router;

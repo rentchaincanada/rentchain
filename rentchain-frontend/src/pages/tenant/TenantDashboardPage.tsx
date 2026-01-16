@@ -3,6 +3,11 @@ import { Bell, CheckCircle2, Clock3, Home, Lock, MailCheck, Receipt, Sparkles, W
 import { tenantApiFetch } from "../../api/tenantApiFetch";
 import { TenantAttachment } from "../../api/tenantAttachmentsApi";
 import { TenantNoticeSummary } from "../../api/tenantNoticesApi";
+import {
+  getTenantMaintenanceRequests,
+  MaintenanceRequest,
+} from "../../api/tenantMaintenanceApi";
+import { CreateMaintenanceRequestModal } from "../../components/tenant/CreateMaintenanceRequestModal";
 import { Card, Section } from "../../components/ui/Ui";
 import { clearTenantToken, getTenantToken } from "../../lib/tenantAuth";
 import { colors, radius, shadows, spacing, text as textTokens } from "../../styles/tokens";
@@ -53,6 +58,7 @@ type LedgerItem = {
 
 type Attachment = TenantAttachment;
 type Notice = TenantNoticeSummary;
+type MaintenanceSummary = MaintenanceRequest;
 function fmtMoney(value: number | null | undefined, currency?: string | null): string {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return "—";
   const amount = Number(value) / 100;
@@ -125,6 +131,37 @@ function formatAttachment(att: Attachment): string {
   const label = att.purposeLabel?.trim?.() ? att.purposeLabel : null;
   return label ? `${purpose} — ${label}` : purpose;
 }
+
+const CreateMaintenanceRequestModalTrigger: React.FC<{ onCreated: () => void }> = ({ onCreated }) => {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        style={{
+          padding: "8px 12px",
+          borderRadius: radius.pill,
+          border: `1px solid ${colors.border}`,
+          background: colors.panel,
+          color: textTokens.primary,
+          fontWeight: 700,
+          cursor: "pointer",
+        }}
+      >
+        New request
+      </button>
+      <CreateMaintenanceRequestModal
+        open={open}
+        onClose={() => setOpen(false)}
+        onCreated={() => {
+          setOpen(false);
+          onCreated();
+        }}
+      />
+    </>
+  );
+};
 
 function formatNoticeType(type?: string | null): string {
   switch ((type || "").toUpperCase()) {
@@ -246,6 +283,9 @@ export default function TenantDashboardPage() {
   const [notices, setNotices] = useState<Notice[]>([]);
   const [noticesError, setNoticesError] = useState<string | null>(null);
   const [noticesLoading, setNoticesLoading] = useState(true);
+  const [maintRequests, setMaintRequests] = useState<MaintenanceSummary[]>([]);
+  const [maintError, setMaintError] = useState<string | null>(null);
+  const [maintLoading, setMaintLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const attachmentsByLedgerId = useMemo(() => {
     const map = new Map<string, Attachment[]>();
@@ -273,13 +313,16 @@ export default function TenantDashboardPage() {
     setAttachmentsError(null);
     setNoticesLoading(true);
     setNoticesError(null);
+    setMaintLoading(true);
+    setMaintError(null);
     try {
-      const [meRes, activityRes, ledgerRes, attachmentsRes, noticesRes] = await Promise.allSettled([
+      const [meRes, activityRes, ledgerRes, attachmentsRes, noticesRes, maintRes] = await Promise.allSettled([
         tenantApiFetch<TenantMeResponse>("/tenant/me"),
         tenantApiFetch<{ ok: boolean; data: ActivityItem[] }>("/tenant/activity"),
         tenantApiFetch<{ ok: boolean; data: LedgerItem[] }>("/tenant/ledger"),
         tenantApiFetch<{ ok: boolean; data: Attachment[] }>("/tenant/attachments"),
         tenantApiFetch<{ ok: boolean; data: Notice[] }>("/tenant/notices"),
+        getTenantMaintenanceRequests(),
       ]);
 
       if (meRes.status === "fulfilled") {
@@ -339,6 +382,18 @@ export default function TenantDashboardPage() {
           "Unable to load notices";
         setNoticesError(String(message));
       }
+
+      if (maintRes.status === "fulfilled") {
+        const payload = maintRes.value;
+        const list = Array.isArray((payload as any)?.data) ? (payload as any).data : [];
+        setMaintRequests(list);
+      } else {
+        const message =
+          (maintRes.reason as any)?.message ||
+          (maintRes.reason as any)?.payload?.error ||
+          "Unable to load maintenance requests";
+        setMaintError(String(message));
+      }
     } catch (e: any) {
       const message = e?.message || e?.payload?.error || "Unable to load your RentChain account";
       setError(String(message));
@@ -348,6 +403,7 @@ export default function TenantDashboardPage() {
       setLedgerLoading(false);
       setAttachmentsLoading(false);
       setNoticesLoading(false);
+      setMaintLoading(false);
       setRefreshing(false);
     }
   }, []);
@@ -542,6 +598,54 @@ export default function TenantDashboardPage() {
                 );
               })}
             </div>
+          </Card>
+
+          <Card elevated style={{ gridColumn: "1 / -1" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: spacing.sm }}>
+              <div>
+                <div style={labelStyle}>Maintenance</div>
+                <div style={{ fontSize: "1.2rem", fontWeight: 800, color: textTokens.primary }}>
+                  Requests you've submitted
+                </div>
+              </div>
+              <div>
+                <CreateMaintenanceRequestModalTrigger onCreated={() => void loadAll()} />
+              </div>
+            </div>
+            {maintError ? (
+              <div style={{ color: colors.danger }}>{maintError}</div>
+            ) : maintLoading ? (
+              <div style={{ display: "grid", gap: 8 }}>
+                {Array.from({ length: 3 }).map((_, idx) => (
+                  <div key={idx} style={{ height: 12, background: colors.accentSoft, borderRadius: 6, width: "60%" }} />
+                ))}
+              </div>
+            ) : maintRequests.length === 0 ? (
+              <div style={{ color: textTokens.muted }}>No maintenance requests yet.</div>
+            ) : (
+              <div style={{ display: "grid", gap: 10 }}>
+                {maintRequests.slice(0, 3).map((r) => (
+                  <a
+                    key={r.id}
+                    href={`/tenant/maintenance/${r.id}`}
+                    style={{
+                      padding: "10px 12px",
+                      borderRadius: radius.md,
+                      border: `1px solid ${colors.border}`,
+                      textDecoration: "none",
+                      color: textTokens.primary,
+                      display: "grid",
+                      gap: 4,
+                    }}
+                  >
+                    <div style={{ fontWeight: 800 }}>{r.title}</div>
+                    <div style={{ fontSize: "0.95rem", color: textTokens.muted }}>
+                      {r.status} • {r.priority} • {fmtDate(r.updatedAt)}
+                    </div>
+                  </a>
+                ))}
+              </div>
+            )}
           </Card>
 
           <Card elevated style={{ gridColumn: "1 / -1" }}>

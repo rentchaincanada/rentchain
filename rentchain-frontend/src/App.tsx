@@ -29,6 +29,7 @@ import TenantPortalComingSoon from "./pages/tenant/TenantPortalComingSoon";
 import TenantDashboardPage from "./pages/tenant/TenantDashboardPage";
 import TenantLedgerPage from "./pages/tenant/TenantLedgerPage";
 import TenantMagicRedeemPage from "./pages/tenant/TenantMagicRedeemPage";
+import TenantMaintenanceRequestDetailPage from "./pages/tenant/TenantMaintenanceRequestDetailPage";
 import MonthlyOpsReportPage from "./pages/reports/MonthlyOpsReportPage";
 import InvitesPage from "./pages/landlord/InvitesPage";
 import PublicApplyPage from "./pages/PublicApplyPage";
@@ -282,6 +283,12 @@ function App() {
           path="/tenant/messages"
           element={
             TENANT_PORTAL_ENABLED ? <TenantMessagesPage /> : <TenantPortalComingSoon />
+          }
+        />
+        <Route
+          path="/tenant/maintenance/:id"
+          element={
+            TENANT_PORTAL_ENABLED ? <TenantMaintenanceRequestDetailPage /> : <TenantPortalComingSoon />
           }
         />
         {applicantApplyRedirects.map((path) => (
