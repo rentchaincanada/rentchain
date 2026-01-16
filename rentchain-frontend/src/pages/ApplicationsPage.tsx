@@ -8,6 +8,7 @@ import {
   updateRentalApplicationStatus,
   fetchScreeningQuote,
   runScreening,
+  fetchScreening,
   type RentalApplication,
   type RentalApplicationStatus,
   type RentalApplicationSummary,
@@ -174,21 +175,10 @@ const ApplicationsPage: React.FC = () => {
       if (!res.ok || !res.data) {
         throw new Error(res.detail || res.error || "Screening failed");
       }
-      setDetail((prev) =>
-        prev
-          ? {
-              ...prev,
-              screening: {
-                requested: true,
-                requestedAt: Date.now(),
-                status: res.data?.status || "COMPLETE",
-                provider: "STUB",
-                orderId: res.data?.orderId || null,
-                result: res.data?.result || null,
-              },
-            }
-          : prev
-      );
+      const screeningRes = await fetchScreening(detail.id);
+      if (screeningRes.ok && screeningRes.data) {
+        setDetail((prev) => (prev ? { ...prev, screening: screeningRes.data } : prev));
+      }
       showToast({ message: "Screening complete", variant: "success" });
     } catch (err: any) {
       showToast({ message: "Screening failed", description: err?.message || "", variant: "error" });

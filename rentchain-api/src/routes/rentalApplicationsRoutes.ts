@@ -324,6 +324,9 @@ router.post(
           result,
           amountCents: orderPayload.amountCents,
           currency: orderPayload.currency,
+          paidAt: now,
+          scoreAddOn,
+          scoreAddOnCents: scoreAddOn ? 110 : 0,
         },
       });
     } catch (err: any) {
