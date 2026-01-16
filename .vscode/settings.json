@@ -12,7 +12,7 @@
 
   // ===== Reduce visual clutter =====
   "breadcrumbs.enabled": false,
-  "editor.hover.enabled": true,
+  "editor.hover.enabled": "on",
   "editor.parameterHints.enabled": true,
   "editor.lightbulb.enabled": "off",
   "editor.codeLens": false,
