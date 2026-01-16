@@ -54,6 +54,10 @@ function parseCents(value: string): number | null {
   return Math.round(num * 100);
 }
 
+function isValidDob(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
 export default function PublicApplyPage() {
   const { token } = useParams<ApplyParams>();
   const [step, setStep] = useState(0);
@@ -208,7 +212,14 @@ export default function PublicApplyPage() {
 
   const canContinue = () => {
     if (step === 0) {
-      return applicant.firstName.trim() && applicant.lastName.trim() && applicant.email.trim();
+      const dobValue = (applicant.dob || "").trim();
+      return (
+        applicant.firstName.trim() &&
+        applicant.lastName.trim() &&
+        applicant.email.trim() &&
+        dobValue &&
+        isValidDob(dobValue)
+      );
     }
     if (step === 4) {
       const hasApplicantSig = (consent.applicantNameTyped || "").trim();
@@ -221,6 +232,22 @@ export default function PublicApplyPage() {
   async function handleSubmit() {
     if (!token) {
       setError("Missing application link token.");
+      return;
+    }
+    if (!residentialHistory[0]?.address?.trim()) {
+      setError("Current address is required for screening.");
+      setStep(1);
+      return;
+    }
+    const dobValue = (applicant.dob || "").trim();
+    if (!dobValue) {
+      setError("Date of birth is required for screening.");
+      setStep(0);
+      return;
+    }
+    if (!isValidDob(dobValue)) {
+      setError("Date of birth must be YYYY-MM-DD.");
+      setStep(0);
       return;
     }
     if (!canContinue()) {
@@ -366,7 +393,7 @@ export default function PublicApplyPage() {
                 <input value={applicant.phoneWork || ""} onChange={(e) => setApplicant({ ...applicant, phoneWork: e.target.value })} />
               </label>
               <label style={labelStyle}>
-                Date of birth
+                Date of birth *
                 <input type="date" value={applicant.dob || ""} onChange={(e) => setApplicant({ ...applicant, dob: e.target.value })} />
               </label>
               <label style={labelStyle}>
@@ -434,7 +461,7 @@ export default function PublicApplyPage() {
               <div key={idx} style={{ border: "1px solid #e5e7eb", borderRadius: 10, padding: 10, display: "grid", gap: 8 }}>
                 <div style={{ fontWeight: 600 }}>Address {idx + 1}</div>
                 <label style={labelStyle}>
-                  Address
+                  {idx === 0 ? "Current address *" : "Address"}
                   <input value={entry.address} onChange={(e) => updateHistory(idx, { address: e.target.value })} />
                 </label>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 8 }}>

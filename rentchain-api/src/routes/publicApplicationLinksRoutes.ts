@@ -99,6 +99,9 @@ router.post("/rental-applications", async (req: any, res) => {
     const firstName = String(applicant?.firstName || "").trim();
     const lastName = String(applicant?.lastName || "").trim();
     const email = String(applicant?.email || "").trim();
+    const dob = String(applicant?.dob || "").trim();
+    const residentialHistory = Array.isArray(body?.residentialHistory) ? body.residentialHistory : [];
+    const currentAddress = String(residentialHistory?.[0]?.address || "").trim();
     const consent = body?.consent || {};
     const creditConsent = consent?.creditConsent === true;
     const referenceConsent = consent?.referenceConsent === true;
@@ -110,8 +113,12 @@ router.post("/rental-applications", async (req: any, res) => {
     if (!firstName || !lastName || !email || !email.includes("@")) {
       return res.status(400).json({ ok: false, error: "INVALID_APPLICANT" });
     }
-    if (!creditConsent || !referenceConsent || !acceptedAt) {
-      return res.status(400).json({ ok: false, error: "CONSENT_REQUIRED" });
+    if (!dob || !/^\d{4}-\d{2}-\d{2}$/.test(dob) || !currentAddress || !creditConsent || !referenceConsent || !acceptedAt) {
+      return res.status(400).json({
+        ok: false,
+        error: "INVALID_REQUEST",
+        detail: "DOB and current address are required.",
+      });
     }
 
     const appRef = db.collection("rentalApplications").doc();
@@ -133,12 +140,23 @@ router.post("/rental-applications", async (req: any, res) => {
         email,
         phoneHome: applicant?.phoneHome ?? null,
         phoneWork: applicant?.phoneWork ?? null,
-        dob: applicant?.dob ?? null,
+        dob: dob,
         maritalStatus: applicant?.maritalStatus ?? null,
       },
-      coApplicant: body?.coApplicant ?? null,
+      coApplicant: body?.coApplicant
+        ? {
+            firstName: body?.coApplicant?.firstName ?? null,
+            middleInitial: body?.coApplicant?.middleInitial ?? null,
+            lastName: body?.coApplicant?.lastName ?? null,
+            email: body?.coApplicant?.email ?? null,
+            phoneHome: body?.coApplicant?.phoneHome ?? null,
+            phoneWork: body?.coApplicant?.phoneWork ?? null,
+            dob: body?.coApplicant?.dob ?? null,
+            maritalStatus: body?.coApplicant?.maritalStatus ?? null,
+          }
+        : null,
       otherResidents: Array.isArray(body?.otherResidents) ? body.otherResidents : [],
-      residentialHistory: Array.isArray(body?.residentialHistory) ? body.residentialHistory : [],
+      residentialHistory,
       employment: body?.employment ?? { applicant: {}, coApplicant: null },
       references: body?.references ?? null,
       loans: Array.isArray(body?.loans) ? body.loans : [],
@@ -161,6 +179,7 @@ router.post("/rental-applications", async (req: any, res) => {
         provider: null,
         resultSummary: null,
       },
+      identityMatchBasis: "DOB_ADDRESS",
     };
 
     await appRef.set(payload, { merge: true });
