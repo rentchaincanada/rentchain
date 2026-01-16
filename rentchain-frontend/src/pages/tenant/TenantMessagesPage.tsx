@@ -21,7 +21,7 @@ export default function TenantMessagesPage() {
   const [error, setError] = useState<string | null>(null);
   const [sessionExpired, setSessionExpired] = useState(false);
   const location = useLocation();
-  const tenantToken = typeof window === "undefined" ? "" : getTenantToken();
+  const tenantToken = typeof window === "undefined" ? null : getTenantToken();
 
   const loadConversation = async () => {
     try {
@@ -31,6 +31,9 @@ export default function TenantMessagesPage() {
     } catch (err: any) {
       if (err?.payload?.error === "UNAUTHORIZED" || err?.status === 401 || String(err?.message || "").includes("401")) {
         setSessionExpired(true);
+        setConversation(null);
+        setMessages([]);
+        setError(null);
         return null;
       }
       setError(err?.message || "Failed to load conversation");
@@ -47,6 +50,9 @@ export default function TenantMessagesPage() {
     } catch (err: any) {
       if (err?.payload?.error === "UNAUTHORIZED" || err?.status === 401 || String(err?.message || "").includes("401")) {
         setSessionExpired(true);
+        setConversation(null);
+        setMessages([]);
+        setError(null);
         return;
       }
       setError(err?.message || "Failed to load messages");
@@ -72,11 +78,13 @@ export default function TenantMessagesPage() {
     };
   }, [location.search]);
 
-  if (!tenantToken) {
+  if (!tenantToken || sessionExpired) {
     const next = encodeURIComponent(`/tenant/messages${location.search || ""}`);
     return (
       <div style={{ padding: spacing.lg }}>
-        <div style={{ color: text.muted, marginBottom: spacing.sm }}>Tenant login required.</div>
+        <div style={{ color: text.muted, marginBottom: spacing.sm }}>
+          Your session expired. Please sign in again.
+        </div>
         <a
           href={`/tenant/login?next=${next}`}
           style={{

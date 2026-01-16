@@ -18,14 +18,20 @@ export default function TenantMaintenanceRequestDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sessionExpired, setSessionExpired] = useState(false);
+  const [hasToken, setHasToken] = useState<boolean>(() =>
+    typeof window === "undefined" ? true : !!getTenantToken()
+  );
 
   useEffect(() => {
     const token = getTenantToken();
     if (!token && typeof window !== "undefined") {
-      const next = encodeURIComponent(window.location.pathname + (window.location.search || ""));
-      window.location.replace(`/tenant/login?next=${next}`);
+      setHasToken(false);
+      setSessionExpired(true);
+      setData(null);
+      setError(null);
       return;
     }
+    setHasToken(true);
     const load = async () => {
       setLoading(true);
       setError(null);
@@ -36,6 +42,8 @@ export default function TenantMaintenanceRequestDetailPage() {
       } catch (err: any) {
         if (err?.payload?.error === "UNAUTHORIZED" || err?.status === 401) {
           setSessionExpired(true);
+          setData(null);
+          setError(null);
         } else {
           const msg = err?.payload?.error || err?.message || "Unable to load request";
           setError(String(msg));
@@ -46,6 +54,46 @@ export default function TenantMaintenanceRequestDetailPage() {
     };
     void load();
   }, [id]);
+
+  if (!hasToken || sessionExpired) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: colors.bgAmbient,
+          padding: spacing.xl,
+          boxSizing: "border-box",
+        }}
+      >
+        <Section style={{ maxWidth: 900, margin: "0 auto" }}>
+          <Card elevated style={{ borderColor: colors.borderStrong, background: "#fff7ed", color: "#9a3412" }}>
+            <div style={{ fontWeight: 800, marginBottom: 6 }}>Your session expired. Please sign in again.</div>
+            <div style={{ marginTop: spacing.sm }}>
+              <button
+                type="button"
+                onClick={() => {
+                  if (typeof window !== "undefined") {
+                    const next = encodeURIComponent(window.location.pathname + (window.location.search || ""));
+                    window.location.href = `/tenant/login?next=${next}`;
+                  }
+                }}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: radius.md,
+                  border: `1px solid ${colors.borderStrong}`,
+                  background: "#fff",
+                  cursor: "pointer",
+                  fontWeight: 700,
+                }}
+              >
+                Sign in
+              </button>
+            </div>
+          </Card>
+        </Section>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -77,32 +125,7 @@ export default function TenantMaintenanceRequestDetailPage() {
           </a>
         </div>
 
-        {sessionExpired ? (
-          <Card elevated style={{ borderColor: colors.borderStrong, background: "#fff7ed", color: "#9a3412" }}>
-            <div style={{ fontWeight: 800, marginBottom: 6 }}>Your session expired. Please sign in again.</div>
-            <div style={{ marginTop: spacing.sm }}>
-              <button
-                type="button"
-                onClick={() => {
-                  if (typeof window !== "undefined") {
-                    const next = encodeURIComponent(window.location.pathname + (window.location.search || ""));
-                    window.location.href = `/tenant/login?next=${next}`;
-                  }
-                }}
-                style={{
-                  padding: "8px 12px",
-                  borderRadius: radius.md,
-                  border: `1px solid ${colors.borderStrong}`,
-                  background: "#fff",
-                  cursor: "pointer",
-                  fontWeight: 700,
-                }}
-              >
-                Sign in
-              </button>
-            </div>
-          </Card>
-        ) : error ? (
+        {error ? (
           <Card elevated style={{ borderColor: colors.borderStrong, color: colors.danger }}>
             <div style={{ fontWeight: 800, marginBottom: 6 }}>Unable to load request</div>
             <div style={{ fontSize: "0.95rem" }}>{error}</div>

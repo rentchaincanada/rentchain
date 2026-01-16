@@ -301,6 +301,20 @@ export default function TenantDashboardPage() {
   const [hasToken, setHasToken] = useState<boolean>(() =>
     typeof window === "undefined" ? true : !!getTenantToken()
   );
+  const resetSensitiveState = React.useCallback(() => {
+    setData(null);
+    setActivity([]);
+    setNotices([]);
+    setLedger([]);
+    setAttachments([]);
+    setMaintRequests([]);
+    setError(null);
+    setActivityError(null);
+    setLedgerError(null);
+    setAttachmentsError(null);
+    setNoticesError(null);
+    setMaintError(null);
+  }, []);
 
   const loadAll = React.useCallback(async () => {
     setRefreshing(true);
@@ -329,12 +343,16 @@ export default function TenantDashboardPage() {
 
       const isUnauthorized = (err: any) =>
         err?.payload?.error === "UNAUTHORIZED" || err?.status === 401;
+      const expireSession = () => {
+        setSessionExpired(true);
+        resetSensitiveState();
+      };
 
       if (meRes.status === "fulfilled") {
         setData(meRes.value.data);
       } else {
         if (isUnauthorized(meRes.reason)) {
-          setSessionExpired(true);
+          expireSession();
         } else {
         const message =
           (meRes.reason as any)?.message ||
@@ -350,7 +368,7 @@ export default function TenantDashboardPage() {
         setActivity(list);
       } else {
         if (isUnauthorized(activityRes.reason)) {
-          setSessionExpired(true);
+          expireSession();
         } else {
         const message =
           (activityRes.reason as any)?.message ||
@@ -366,7 +384,7 @@ export default function TenantDashboardPage() {
         setLedger(list);
       } else {
         if (isUnauthorized(ledgerRes.reason)) {
-          setSessionExpired(true);
+          expireSession();
         } else {
         const message =
           (ledgerRes.reason as any)?.message ||
@@ -382,7 +400,7 @@ export default function TenantDashboardPage() {
         setAttachments(list);
       } else {
         if (isUnauthorized(attachmentsRes.reason)) {
-          setSessionExpired(true);
+          expireSession();
         } else {
         const message =
           (attachmentsRes.reason as any)?.message ||
@@ -398,7 +416,7 @@ export default function TenantDashboardPage() {
         setNotices(list);
       } else {
         if (isUnauthorized(noticesRes.reason)) {
-          setSessionExpired(true);
+          expireSession();
         } else {
         const message =
           (noticesRes.reason as any)?.message ||
@@ -414,7 +432,7 @@ export default function TenantDashboardPage() {
         setMaintRequests(list);
       } else {
         if (isUnauthorized(maintRes.reason)) {
-          setSessionExpired(true);
+          expireSession();
         } else {
         const message =
           (maintRes.reason as any)?.message ||
@@ -426,6 +444,7 @@ export default function TenantDashboardPage() {
     } catch (e: any) {
       if (e?.payload?.error === "UNAUTHORIZED" || e?.status === 401) {
         setSessionExpired(true);
+        resetSensitiveState();
       } else {
         const message = e?.message || e?.payload?.error || "Unable to load your RentChain account";
         setError(String(message));
@@ -446,13 +465,13 @@ export default function TenantDashboardPage() {
     const token = getTenantToken();
     if (!token) {
       setHasToken(false);
-      const next = encodeURIComponent(window.location.pathname + (window.location.search || ""));
-      window.location.replace(`/tenant/login?next=${next}`);
+      setSessionExpired(true);
+      resetSensitiveState();
       return;
     }
     setHasToken(true);
     void loadAll();
-  }, [loadAll]);
+  }, [loadAll, resetSensitiveState]);
 
   const profile = data?.tenant;
   const lease = data?.lease;
@@ -470,8 +489,44 @@ export default function TenantDashboardPage() {
     []
   );
 
-  if (!hasToken) {
-    return null;
+  if (!hasToken || sessionExpired) {
+    return (
+      <div style={pageStyle}>
+        <DashboardShell>
+          <Card
+            elevated
+            style={{
+              borderColor: colors.borderStrong,
+              background: "#fff7ed",
+              color: "#9a3412",
+            }}
+          >
+            <div style={{ fontWeight: 800, marginBottom: 6 }}>Your session expired. Please sign in again.</div>
+            <div style={{ marginTop: spacing.sm }}>
+              <button
+                type="button"
+                onClick={() => {
+                  if (typeof window !== "undefined") {
+                    const next = encodeURIComponent(window.location.pathname + (window.location.search || ""));
+                    window.location.href = `/tenant/login?next=${next}`;
+                  }
+                }}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: radius.md,
+                  border: `1px solid ${colors.borderStrong}`,
+                  background: "#fff",
+                  cursor: "pointer",
+                  fontWeight: 700,
+                }}
+              >
+                Sign in
+              </button>
+            </div>
+          </Card>
+        </DashboardShell>
+      </div>
+    );
   }
 
   return (
@@ -525,39 +580,7 @@ export default function TenantDashboardPage() {
           </div>
         </Section>
 
-        {sessionExpired ? (
-          <Card
-            elevated
-            style={{
-              borderColor: colors.borderStrong,
-              background: "#fff7ed",
-              color: "#9a3412",
-            }}
-          >
-            <div style={{ fontWeight: 800, marginBottom: 6 }}>Your session expired. Please sign in again.</div>
-            <div style={{ marginTop: spacing.sm }}>
-              <button
-                type="button"
-                onClick={() => {
-                  if (typeof window !== "undefined") {
-                    const next = encodeURIComponent(window.location.pathname + (window.location.search || ""));
-                    window.location.href = `/tenant/login?next=${next}`;
-                  }
-                }}
-                style={{
-                  padding: "8px 12px",
-                  borderRadius: radius.md,
-                  border: `1px solid ${colors.borderStrong}`,
-                  background: "#fff",
-                  cursor: "pointer",
-                  fontWeight: 700,
-                }}
-              >
-                Sign in
-              </button>
-            </div>
-          </Card>
-        ) : error ? (
+        {error ? (
           <Card
             elevated
             style={{
