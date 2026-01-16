@@ -151,6 +151,19 @@ export default function PublicApplyPage() {
     coApplicantNameTyped: "",
   });
   const [submitting, setSubmitting] = useState(false);
+
+  const updateApplicant = (value: Partial<RentalApplicationPayload["applicant"]>) => {
+    setApplicant((prev) => {
+      const next = { ...prev, ...value };
+      return {
+        ...next,
+        firstName: (next.firstName ?? "").trim(),
+        lastName: (next.lastName ?? "").trim(),
+        email: (next.email ?? "").trim(),
+        dob: (next.dob ?? "").trim(),
+      };
+    });
+  };
   useEffect(() => {
     let alive = true;
     async function load() {
@@ -370,37 +383,37 @@ export default function PublicApplyPage() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 12 }}>
               <label style={labelStyle}>
                 First name *
-                <input value={applicant.firstName} onChange={(e) => setApplicant({ ...applicant, firstName: e.target.value })} />
+                <input value={applicant.firstName} onChange={(e) => updateApplicant({ firstName: e.target.value })} />
               </label>
               <label style={labelStyle}>
                 Middle initial
-                <input value={applicant.middleInitial || ""} onChange={(e) => setApplicant({ ...applicant, middleInitial: e.target.value })} />
+                <input value={applicant.middleInitial || ""} onChange={(e) => updateApplicant({ middleInitial: e.target.value })} />
               </label>
               <label style={labelStyle}>
                 Last name *
-                <input value={applicant.lastName} onChange={(e) => setApplicant({ ...applicant, lastName: e.target.value })} />
+                <input value={applicant.lastName} onChange={(e) => updateApplicant({ lastName: e.target.value })} />
               </label>
               <label style={labelStyle}>
                 Email *
-                <input type="email" value={applicant.email} onChange={(e) => setApplicant({ ...applicant, email: e.target.value })} />
+                <input type="email" value={applicant.email} onChange={(e) => updateApplicant({ email: e.target.value })} />
               </label>
               <label style={labelStyle}>
                 Phone (home)
-                <input value={applicant.phoneHome || ""} onChange={(e) => setApplicant({ ...applicant, phoneHome: e.target.value })} />
+                <input value={applicant.phoneHome || ""} onChange={(e) => updateApplicant({ phoneHome: e.target.value })} />
               </label>
               <label style={labelStyle}>
                 Phone (work)
-                <input value={applicant.phoneWork || ""} onChange={(e) => setApplicant({ ...applicant, phoneWork: e.target.value })} />
+                <input value={applicant.phoneWork || ""} onChange={(e) => updateApplicant({ phoneWork: e.target.value })} />
               </label>
               <label style={labelStyle}>
                 Date of birth *
-                <input type="date" value={applicant.dob || ""} onChange={(e) => setApplicant({ ...applicant, dob: e.target.value })} />
+                <input type="date" value={applicant.dob || ""} onChange={(e) => updateApplicant({ dob: e.target.value })} />
               </label>
               <label style={labelStyle}>
                 Marital status
                 <select
                   value={applicant.maritalStatus || ""}
-                  onChange={(e) => setApplicant({ ...applicant, maritalStatus: (e.target.value as any) || null })}
+                  onChange={(e) => updateApplicant({ maritalStatus: (e.target.value as any) || null })}
                 >
                   <option value="">Select</option>
                   <option value="SINGLE">Single</option>
