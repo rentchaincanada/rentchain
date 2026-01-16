@@ -126,7 +126,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
 
   return (
     <div>
-      <TopNav unreadMessages={unreadFlag} />
+      <TopNav />
       <div style={{ padding: "12px 0 24px" }}>{children}</div>
     </div>
   );
