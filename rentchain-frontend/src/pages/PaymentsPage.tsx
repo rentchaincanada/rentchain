@@ -161,7 +161,11 @@ const PaymentsPage: React.FC = () => {
                       >
                         {p.method || "Unspecified"}
                       </span>
-                      <Button variant="secondary" size="sm" onClick={() => void handleEditPayment(p)}>
+                      <Button
+                        variant="secondary"
+                        onClick={() => void handleEditPayment(p)}
+                        style={{ padding: "0.35rem 0.6rem", fontSize: "0.85rem" }}
+                      >
                         Edit
                       </Button>
                     </td>
