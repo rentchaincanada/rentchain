@@ -11,7 +11,7 @@ const router = Router();
 function signTenantJwt(payload: any) {
   const secret = process.env.JWT_SECRET;
   if (!secret) throw new Error("JWT_SECRET missing");
-  return jwt.sign(payload, secret, { expiresIn: "14d" });
+  return jwt.sign(payload, secret, { expiresIn: "7d" });
 }
 
 router.post(

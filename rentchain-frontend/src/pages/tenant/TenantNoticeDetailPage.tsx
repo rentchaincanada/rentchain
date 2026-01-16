@@ -34,6 +34,7 @@ export default function TenantNoticeDetailPage() {
   const [notice, setNotice] = useState<TenantNoticeDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   useEffect(() => {
     const token = getTenantToken();
@@ -45,12 +46,17 @@ export default function TenantNoticeDetailPage() {
     const load = async () => {
       setLoading(true);
       setError(null);
+      setSessionExpired(false);
       try {
         const res = await getTenantNotice(noticeId);
         setNotice(res.data);
       } catch (err: any) {
-        const msg = err?.payload?.error || err?.message || "Unable to load notice";
-        setError(String(msg));
+        if (err?.payload?.error === "UNAUTHORIZED" || err?.status === 401) {
+          setSessionExpired(true);
+        } else {
+          const msg = err?.payload?.error || err?.message || "Unable to load notice";
+          setError(String(msg));
+        }
       } finally {
         setLoading(false);
       }
@@ -88,7 +94,32 @@ export default function TenantNoticeDetailPage() {
           </a>
         </div>
 
-        {error ? (
+        {sessionExpired ? (
+          <Card elevated style={{ borderColor: colors.borderStrong, background: "#fff7ed", color: "#9a3412" }}>
+            <div style={{ fontWeight: 800, marginBottom: 6 }}>Your session expired. Please sign in again.</div>
+            <div style={{ marginTop: spacing.sm }}>
+              <button
+                type="button"
+                onClick={() => {
+                  if (typeof window !== "undefined") {
+                    const next = encodeURIComponent(window.location.pathname + (window.location.search || ""));
+                    window.location.href = `/tenant/login?next=${next}`;
+                  }
+                }}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: radius.md,
+                  border: `1px solid ${colors.borderStrong}`,
+                  background: "#fff",
+                  cursor: "pointer",
+                  fontWeight: 700,
+                }}
+              >
+                Sign in
+              </button>
+            </div>
+          </Card>
+        ) : error ? (
           <Card elevated style={{ borderColor: colors.borderStrong, color: colors.danger }}>
             <div style={{ fontWeight: 800, marginBottom: 6 }}>Unable to load notice</div>
             <div style={{ fontSize: "0.95rem" }}>{error}</div>

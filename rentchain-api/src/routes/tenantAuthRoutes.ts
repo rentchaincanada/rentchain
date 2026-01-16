@@ -2,7 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import jwt, { type Secret, type SignOptions } from "jsonwebtoken";
 import { db } from "../config/firebase";
-import { JWT_EXPIRES_IN, JWT_SECRET } from "../config/authConfig";
+import { JWT_SECRET } from "../config/authConfig";
 
 const router = Router();
 
@@ -39,7 +39,7 @@ router.post("/login", async (req, res) => {
       email: tenant.email || email,
     };
     const secret: Secret = JWT_SECRET;
-    const expiresIn = (JWT_EXPIRES_IN as SignOptions["expiresIn"]) || "2h";
+    const expiresIn: SignOptions["expiresIn"] = "7d";
     const token = jwt.sign(payload, secret, { expiresIn });
 
     return res.json({ ok: true, token });

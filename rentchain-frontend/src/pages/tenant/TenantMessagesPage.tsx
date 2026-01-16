@@ -9,6 +9,7 @@ import {
   type Message,
 } from "@/api/messagesApi";
 import { spacing, colors, radius, text } from "@/styles/tokens";
+import { getTenantToken } from "../../lib/tenantAuth";
 
 const POLL_THREAD_MS = 12000;
 
@@ -18,12 +19,9 @@ export default function TenantMessagesPage() {
   const [composer, setComposer] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
   const location = useLocation();
-  const tenantToken =
-    (typeof window !== "undefined" &&
-      (sessionStorage.getItem("rentchain_tenant_token") ||
-        localStorage.getItem("rentchain_tenant_token"))) ||
-    "";
+  const tenantToken = typeof window === "undefined" ? "" : getTenantToken();
 
   const loadConversation = async () => {
     try {
@@ -31,6 +29,10 @@ export default function TenantMessagesPage() {
       setConversation(res.conversation);
       return res.conversation?.id || null;
     } catch (err: any) {
+      if (err?.payload?.error === "UNAUTHORIZED" || err?.status === 401 || String(err?.message || "").includes("401")) {
+        setSessionExpired(true);
+        return null;
+      }
       setError(err?.message || "Failed to load conversation");
       return null;
     }
@@ -43,6 +45,10 @@ export default function TenantMessagesPage() {
       setMessages(res.messages || []);
       await markTenantConversationRead(id);
     } catch (err: any) {
+      if (err?.payload?.error === "UNAUTHORIZED" || err?.status === 401 || String(err?.message || "").includes("401")) {
+        setSessionExpired(true);
+        return;
+      }
       setError(err?.message || "Failed to load messages");
     } finally {
       setLoading(false);
@@ -101,6 +107,26 @@ export default function TenantMessagesPage() {
   return (
     <div style={{ padding: spacing.lg }}>
       <h1 style={{ marginBottom: spacing.md }}>Messages</h1>
+      {sessionExpired ? (
+        <div style={{ marginBottom: spacing.sm, padding: spacing.sm, borderRadius: radius.md, background: "#fff7ed", color: "#9a3412", border: `1px solid ${colors.border}` }}>
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>Your session expired. Please sign in again.</div>
+          <a
+            href={`/tenant/login?next=${encodeURIComponent(`/tenant/messages${location.search || ""}`)}`}
+            style={{
+              display: "inline-block",
+              padding: "8px 12px",
+              borderRadius: radius.md,
+              border: `1px solid ${colors.border}`,
+              background: "#fff",
+              color: "#9a3412",
+              fontWeight: 700,
+              textDecoration: "none",
+            }}
+          >
+            Sign in
+          </a>
+        </div>
+      ) : null}
       {error && <div style={{ color: colors.danger, marginBottom: spacing.sm }}>{error}</div>}
       <div
         style={{

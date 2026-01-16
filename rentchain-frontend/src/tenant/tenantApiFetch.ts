@@ -22,10 +22,13 @@ export async function tenantApiFetch(path: string, opts: RequestInit = {}) {
     const payload = isJson
       ? await res.json().catch(() => null)
       : await res.text().catch(() => "");
-    const err = typeof payload === "string" ? payload.slice(0, 300) : payload;
-    throw new Error(
-      `tenantApiFetch ${res.status}: ${isJson ? JSON.stringify(err) : String(err)}`
+    const errPayload = res.status === 401 ? { error: "UNAUTHORIZED" } : payload;
+    const err: any = new Error(
+      `tenantApiFetch ${res.status}: ${isJson ? JSON.stringify(errPayload) : String(errPayload)}`
     );
+    err.payload = errPayload;
+    err.status = res.status;
+    throw err;
   }
 
   return isJson ? res.json() : { ok: true, text: await res.text() };

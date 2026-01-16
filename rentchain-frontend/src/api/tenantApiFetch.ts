@@ -1,9 +1,8 @@
 import { API_BASE_URL } from "./config";
+import { getTenantToken } from "../lib/tenantAuth";
 
 type Jsonish = Record<string, any>;
 type TenantApiInit = Omit<RequestInit, "body"> & { body?: BodyInit | Jsonish };
-
-const TENANT_TOKEN_KEY = "rentchain_tenant_token";
 
 export async function tenantApiFetch<T = any>(path: string, init: TenantApiInit = {}): Promise<T> {
   if (!API_BASE_URL) throw new Error("API_BASE_URL is not configured");
@@ -15,7 +14,7 @@ export async function tenantApiFetch<T = any>(path: string, init: TenantApiInit 
     return `${base}${p}`;
   })();
 
-  const token = sessionStorage.getItem(TENANT_TOKEN_KEY) || localStorage.getItem(TENANT_TOKEN_KEY) || "";
+  const token = getTenantToken();
 
   const headers: Record<string, string> = {
     ...(init.headers as any),
@@ -45,8 +44,13 @@ export async function tenantApiFetch<T = any>(path: string, init: TenantApiInit 
   }
 
   if (!res.ok) {
-    const err: any = new Error(data?.error || data?.message || text || `tenantApiFetch ${res.status}`);
-    err.payload = data ?? text;
+    const unauthorized = res.status === 401;
+    const payload = unauthorized ? { error: "UNAUTHORIZED" } : data ?? text;
+    const err: any = new Error(
+      (payload as any)?.error || (payload as any)?.message || text || `tenantApiFetch ${res.status}`
+    );
+    err.payload = payload;
+    err.status = res.status;
     throw err;
   }
 

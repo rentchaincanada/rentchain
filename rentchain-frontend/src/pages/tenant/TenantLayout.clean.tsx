@@ -5,6 +5,7 @@ import { useAuth } from "../../context/useAuth";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { StickyHeader } from "../../components/layout/StickyHeader";
 import { ensureTenantConversation } from "../../api/messagesApi";
+import { getTenantToken } from "../../lib/tenantAuth";
 
 export type TenantOutletContext = {
   profile: TenantProfile | null;
@@ -55,11 +56,7 @@ export const TenantLayout: React.FC = () => {
   const { user, logout } = useAuth();
   const isMobile = useIsMobile();
   const [unreadMessages, setUnreadMessages] = useState(false);
-  const tenantToken =
-    (typeof window !== "undefined" &&
-      (sessionStorage.getItem("rentchain_tenant_token") ||
-        localStorage.getItem("rentchain_tenant_token"))) ||
-    "";
+  const tenantToken = typeof window === "undefined" ? "" : getTenantToken();
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);

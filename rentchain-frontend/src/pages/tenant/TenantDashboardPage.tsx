@@ -271,6 +271,7 @@ export default function TenantDashboardPage() {
   const [data, setData] = useState<TenantMeResponse["data"] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [activityError, setActivityError] = useState<string | null>(null);
   const [activityLoading, setActivityLoading] = useState(true);
@@ -305,6 +306,7 @@ export default function TenantDashboardPage() {
     setRefreshing(true);
     setLoading(true);
     setError(null);
+    setSessionExpired(false);
     setActivityLoading(true);
     setActivityError(null);
     setLedgerLoading(true);
@@ -325,14 +327,21 @@ export default function TenantDashboardPage() {
         getTenantMaintenanceRequests(),
       ]);
 
+      const isUnauthorized = (err: any) =>
+        err?.payload?.error === "UNAUTHORIZED" || err?.status === 401;
+
       if (meRes.status === "fulfilled") {
         setData(meRes.value.data);
       } else {
+        if (isUnauthorized(meRes.reason)) {
+          setSessionExpired(true);
+        } else {
         const message =
           (meRes.reason as any)?.message ||
           (meRes.reason as any)?.payload?.error ||
           "Unable to load your RentChain account";
         setError(String(message));
+        }
       }
 
       if (activityRes.status === "fulfilled") {
@@ -340,11 +349,15 @@ export default function TenantDashboardPage() {
         const list = Array.isArray((payload as any)?.data) ? (payload as any).data : [];
         setActivity(list);
       } else {
+        if (isUnauthorized(activityRes.reason)) {
+          setSessionExpired(true);
+        } else {
         const message =
           (activityRes.reason as any)?.message ||
           (activityRes.reason as any)?.payload?.error ||
           "Unable to load activity";
         setActivityError(String(message));
+        }
       }
 
       if (ledgerRes.status === "fulfilled") {
@@ -352,11 +365,15 @@ export default function TenantDashboardPage() {
         const list = Array.isArray((payload as any)?.data) ? (payload as any).data : [];
         setLedger(list);
       } else {
+        if (isUnauthorized(ledgerRes.reason)) {
+          setSessionExpired(true);
+        } else {
         const message =
           (ledgerRes.reason as any)?.message ||
           (ledgerRes.reason as any)?.payload?.error ||
           "Unable to load ledger";
         setLedgerError(String(message));
+        }
       }
 
       if (attachmentsRes.status === "fulfilled") {
@@ -364,11 +381,15 @@ export default function TenantDashboardPage() {
         const list = Array.isArray((payload as any)?.data) ? (payload as any).data : [];
         setAttachments(list);
       } else {
+        if (isUnauthorized(attachmentsRes.reason)) {
+          setSessionExpired(true);
+        } else {
         const message =
           (attachmentsRes.reason as any)?.message ||
           (attachmentsRes.reason as any)?.payload?.error ||
           "Unable to load attachments";
         setAttachmentsError(String(message));
+        }
       }
 
       if (noticesRes.status === "fulfilled") {
@@ -376,11 +397,15 @@ export default function TenantDashboardPage() {
         const list = Array.isArray((payload as any)?.data) ? (payload as any).data : [];
         setNotices(list);
       } else {
+        if (isUnauthorized(noticesRes.reason)) {
+          setSessionExpired(true);
+        } else {
         const message =
           (noticesRes.reason as any)?.message ||
           (noticesRes.reason as any)?.payload?.error ||
           "Unable to load notices";
         setNoticesError(String(message));
+        }
       }
 
       if (maintRes.status === "fulfilled") {
@@ -388,15 +413,23 @@ export default function TenantDashboardPage() {
         const list = Array.isArray((payload as any)?.data) ? (payload as any).data : [];
         setMaintRequests(list);
       } else {
+        if (isUnauthorized(maintRes.reason)) {
+          setSessionExpired(true);
+        } else {
         const message =
           (maintRes.reason as any)?.message ||
           (maintRes.reason as any)?.payload?.error ||
           "Unable to load maintenance requests";
         setMaintError(String(message));
+        }
       }
     } catch (e: any) {
-      const message = e?.message || e?.payload?.error || "Unable to load your RentChain account";
-      setError(String(message));
+      if (e?.payload?.error === "UNAUTHORIZED" || e?.status === 401) {
+        setSessionExpired(true);
+      } else {
+        const message = e?.message || e?.payload?.error || "Unable to load your RentChain account";
+        setError(String(message));
+      }
     } finally {
       setLoading(false);
       setActivityLoading(false);
@@ -492,7 +525,39 @@ export default function TenantDashboardPage() {
           </div>
         </Section>
 
-        {error ? (
+        {sessionExpired ? (
+          <Card
+            elevated
+            style={{
+              borderColor: colors.borderStrong,
+              background: "#fff7ed",
+              color: "#9a3412",
+            }}
+          >
+            <div style={{ fontWeight: 800, marginBottom: 6 }}>Your session expired. Please sign in again.</div>
+            <div style={{ marginTop: spacing.sm }}>
+              <button
+                type="button"
+                onClick={() => {
+                  if (typeof window !== "undefined") {
+                    const next = encodeURIComponent(window.location.pathname + (window.location.search || ""));
+                    window.location.href = `/tenant/login?next=${next}`;
+                  }
+                }}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: radius.md,
+                  border: `1px solid ${colors.borderStrong}`,
+                  background: "#fff",
+                  cursor: "pointer",
+                  fontWeight: 700,
+                }}
+              >
+                Sign in
+              </button>
+            </div>
+          </Card>
+        ) : error ? (
           <Card
             elevated
             style={{

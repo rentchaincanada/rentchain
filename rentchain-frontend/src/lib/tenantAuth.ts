@@ -3,15 +3,25 @@ export { TENANT_TOKEN_KEY } from "./authKeys";
 
 export function getTenantToken() {
   if (typeof window === "undefined") return "";
-  const session = sessionStorage.getItem(TENANT_TOKEN_KEY) || "";
-  if (session) return session;
-
-  const persisted = localStorage.getItem(TENANT_TOKEN_KEY) ?? "";
-  const clean = (persisted || "").trim();
-  if (clean) {
-    sessionStorage.setItem(TENANT_TOKEN_KEY, clean);
+  let persisted = "";
+  try {
+    persisted = localStorage.getItem(TENANT_TOKEN_KEY) ?? "";
+  } catch {
+    persisted = "";
   }
-  return clean;
+  const clean = String(persisted || "").trim();
+  if (clean) return clean;
+
+  const session = sessionStorage.getItem(TENANT_TOKEN_KEY) || "";
+  if (session) {
+    try {
+      localStorage.setItem(TENANT_TOKEN_KEY, session);
+    } catch {
+      // ignore storage errors
+    }
+    return session;
+  }
+  return "";
 }
 
 export function setTenantToken(token: string) {
@@ -44,6 +54,7 @@ export function setTenantToken(token: string) {
 export function clearTenantToken() {
   if (typeof window === "undefined") return;
   sessionStorage.removeItem(TENANT_TOKEN_KEY);
+  sessionStorage.removeItem(JUST_LOGGED_IN_KEY);
   try {
     localStorage.removeItem(TENANT_TOKEN_KEY);
     localStorage.removeItem(JUST_LOGGED_IN_KEY);
