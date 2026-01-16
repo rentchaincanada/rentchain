@@ -16,6 +16,7 @@ const links = [
   { path: "/payments", label: "Payments" },
   { path: "/applications", label: "Applications" },
   { path: "/billing", label: "Billing" },
+  { path: "/maintenance", label: "Maintenance" },
 ];
 
 export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose, userEmail, onSignOut }) => {

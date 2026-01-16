@@ -36,6 +36,7 @@ import PublicApplyPage from "./pages/PublicApplyPage";
 import MessagesPage from "./pages/MessagesPage";
 import TenantMessagesPage from "./pages/tenant/TenantMessagesPage";
 import TenantNoticeDetailPage from "./pages/tenant/TenantNoticeDetailPage";
+import MaintenanceRequestsPage from "./pages/MaintenanceRequestsPage";
 
 const TENANT_PORTAL_ENABLED = import.meta.env.VITE_TENANT_PORTAL_ENABLED === "true";
 
@@ -217,6 +218,16 @@ function App() {
             <RequireAuth>
               <LandlordNav>
                 <MessagesPage />
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/maintenance"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <MaintenanceRequestsPage />
               </LandlordNav>
             </RequireAuth>
           }
