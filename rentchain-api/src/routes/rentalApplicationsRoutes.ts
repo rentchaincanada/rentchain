@@ -300,6 +300,11 @@ router.post(
         status: "COMPLETE",
         provider: "STUB",
         orderId,
+        amountCents: orderPayload.amountCents,
+        currency: orderPayload.currency,
+        paidAt: now,
+        scoreAddOn,
+        scoreAddOnCents: scoreAddOn ? 110 : 0,
         result,
       };
 

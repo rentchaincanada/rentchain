@@ -107,6 +107,11 @@ export type RentalApplication = {
     status?: "NOT_REQUESTED" | "PENDING" | "COMPLETE" | "FAILED";
     provider?: "STUB" | string | null;
     orderId?: string | null;
+    amountCents?: number | null;
+    currency?: string | null;
+    paidAt?: number | null;
+    scoreAddOn?: boolean;
+    scoreAddOnCents?: number | null;
     result?: {
       riskBand: "LOW" | "MEDIUM" | "HIGH";
       matchConfidence: "LOW" | "MEDIUM" | "HIGH";

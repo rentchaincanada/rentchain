@@ -344,6 +344,20 @@ const ApplicationsPage: React.FC = () => {
                     </div>
                     {detail.screening?.status === "COMPLETE" && detail.screening.result ? (
                       <div style={{ display: "grid", gap: 6 }}>
+                        {detail.screening.orderId ? <div>Order ID: {detail.screening.orderId}</div> : null}
+                        {typeof detail.screening.amountCents === "number" ? (
+                          <div>
+                            Paid: ${(detail.screening.amountCents / 100).toFixed(2)} {detail.screening.currency || "CAD"}
+                          </div>
+                        ) : null}
+                        {detail.screening.scoreAddOn && typeof detail.screening.scoreAddOnCents === "number" ? (
+                          <div>
+                            Score add-on: ${(detail.screening.scoreAddOnCents / 100).toFixed(2)} {detail.screening.currency || "CAD"}
+                          </div>
+                        ) : null}
+                        {detail.screening.paidAt ? (
+                          <div>Paid at: {new Date(detail.screening.paidAt).toLocaleString()}</div>
+                        ) : null}
                         <div>Provider: {detail.screening.provider || "STUB"}</div>
                         <div>Risk band: {detail.screening.result.riskBand}</div>
                         <div>Match confidence: {detail.screening.result.matchConfidence}</div>
@@ -352,6 +366,7 @@ const ApplicationsPage: React.FC = () => {
                         <div style={{ fontSize: 12, color: text.muted }}>
                           {detail.screening.result.notes || "This is a pre-approval report (stub)."}
                         </div>
+                        <div style={{ fontSize: 12, color: text.muted }}>Receipt recorded for audit.</div>
                       </div>
                     ) : (
                       <>
