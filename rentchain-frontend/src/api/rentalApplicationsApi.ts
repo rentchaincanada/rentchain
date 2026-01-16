@@ -104,10 +104,36 @@ export type RentalApplication = {
   screening: {
     requested: boolean;
     requestedAt?: number | null;
-    provider?: string | null;
-    resultSummary?: string | null;
+    status?: "NOT_REQUESTED" | "PENDING" | "COMPLETE" | "FAILED";
+    provider?: "STUB" | string | null;
+    orderId?: string | null;
+    result?: {
+      riskBand: "LOW" | "MEDIUM" | "HIGH";
+      matchConfidence: "LOW" | "MEDIUM" | "HIGH";
+      fileFound: boolean;
+      score?: number | null;
+      tradelinesCount?: number | null;
+      collectionsCount?: number | null;
+      bankruptciesCount?: number | null;
+      notes?: string | null;
+    } | null;
   };
   landlordNote?: string | null;
+};
+
+export type ScreeningQuote = {
+  amountCents: number;
+  currency: string;
+  scoreAddOnCents: number;
+  eligible: boolean;
+};
+
+export type ScreeningRunResult = {
+  orderId: string;
+  status: "COMPLETE" | "FAILED" | "PENDING";
+  result: NonNullable<RentalApplication["screening"]["result"]> | null;
+  amountCents: number;
+  currency: string;
 };
 
 export async function fetchRentalApplications(params?: {
@@ -137,4 +163,30 @@ export async function updateRentalApplicationStatus(
     body: JSON.stringify({ status, note }),
   });
   return res?.data as RentalApplication;
+}
+
+export async function fetchScreeningQuote(
+  id: string
+): Promise<{ ok: boolean; data?: ScreeningQuote; error?: string; detail?: string }> {
+  const res: any = await apiFetch(`/rental-applications/${encodeURIComponent(id)}/screening/quote`);
+  return res as { ok: boolean; data?: ScreeningQuote; error?: string; detail?: string };
+}
+
+export async function runScreening(
+  id: string,
+  scoreAddOn: boolean
+): Promise<{ ok: boolean; data?: ScreeningRunResult; error?: string; detail?: string }> {
+  const res: any = await apiFetch(`/rental-applications/${encodeURIComponent(id)}/screening/run`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ scoreAddOn }),
+  });
+  return res as { ok: boolean; data?: ScreeningRunResult; error?: string; detail?: string };
+}
+
+export async function fetchScreening(
+  id: string
+): Promise<{ ok: boolean; data?: RentalApplication["screening"]; error?: string }> {
+  const res: any = await apiFetch(`/rental-applications/${encodeURIComponent(id)}/screening`);
+  return res as { ok: boolean; data?: RentalApplication["screening"]; error?: string };
 }

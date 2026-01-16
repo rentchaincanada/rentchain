@@ -26,7 +26,7 @@ export const PLANS: Record<Plan, PlanSpec> = {
     capabilities: {
       "ai.insights": false,
       "team.invites": false,
-      "screening": false,
+      "screening": true,
       "properties.create": true,
       "units.create": true,
     },

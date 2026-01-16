@@ -6,11 +6,15 @@ import {
   fetchRentalApplications,
   fetchRentalApplication,
   updateRentalApplicationStatus,
+  fetchScreeningQuote,
+  runScreening,
   type RentalApplication,
   type RentalApplicationStatus,
   type RentalApplicationSummary,
+  type ScreeningQuote,
 } from "@/api/rentalApplicationsApi";
 import { useToast } from "../components/ui/ToastProvider";
+import { useCapabilities } from "@/hooks/useCapabilities";
 
 const statusOptions: RentalApplicationStatus[] = [
   "SUBMITTED",
@@ -35,6 +39,12 @@ const ApplicationsPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [propertyFilter, setPropertyFilter] = useState<string>("");
   const [properties, setProperties] = useState<PropertyOption[]>([]);
+  const { features, loading: loadingCaps } = useCapabilities();
+  const [screeningQuote, setScreeningQuote] = useState<ScreeningQuote | null>(null);
+  const [screeningQuoteDetail, setScreeningQuoteDetail] = useState<string | null>(null);
+  const [screeningLoading, setScreeningLoading] = useState(false);
+  const [screeningRunning, setScreeningRunning] = useState(false);
+  const [scoreAddOn, setScoreAddOn] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -93,6 +103,8 @@ const ApplicationsPage: React.FC = () => {
     const loadDetail = async () => {
       if (!selectedId) {
         setDetail(null);
+        setScreeningQuote(null);
+        setScreeningQuoteDetail(null);
         return;
       }
       setLoadingDetail(true);
@@ -106,6 +118,30 @@ const ApplicationsPage: React.FC = () => {
       }
     };
     void loadDetail();
+  }, [selectedId]);
+
+  useEffect(() => {
+    const loadQuote = async () => {
+      if (!selectedId) return;
+      setScreeningLoading(true);
+      setScreeningQuote(null);
+      setScreeningQuoteDetail(null);
+      try {
+        const res = await fetchScreeningQuote(selectedId);
+        if (res.ok) {
+          setScreeningQuote(res.data || null);
+        } else {
+          setScreeningQuote(null);
+          setScreeningQuoteDetail(res.detail || "Screening not eligible.");
+        }
+      } catch (err: any) {
+        setScreeningQuote(null);
+        setScreeningQuoteDetail(err?.message || "Failed to load screening quote.");
+      } finally {
+        setScreeningLoading(false);
+      }
+    };
+    void loadQuote();
   }, [selectedId]);
 
   const filtered = useMemo(() => {
@@ -127,6 +163,37 @@ const ApplicationsPage: React.FC = () => {
       showToast({ message: `Status set to ${status}`, variant: "success" });
     } catch (err: any) {
       showToast({ message: "Failed to update status", description: err?.message || "", variant: "error" });
+    }
+  };
+
+  const runScreeningRequest = async () => {
+    if (!detail) return;
+    setScreeningRunning(true);
+    try {
+      const res = await runScreening(detail.id, scoreAddOn);
+      if (!res.ok || !res.data) {
+        throw new Error(res.detail || res.error || "Screening failed");
+      }
+      setDetail((prev) =>
+        prev
+          ? {
+              ...prev,
+              screening: {
+                requested: true,
+                requestedAt: Date.now(),
+                status: res.data?.status || "COMPLETE",
+                provider: "STUB",
+                orderId: res.data?.orderId || null,
+                result: res.data?.result || null,
+              },
+            }
+          : prev
+      );
+      showToast({ message: "Screening complete", variant: "success" });
+    } catch (err: any) {
+      showToast({ message: "Screening failed", description: err?.message || "", variant: "error" });
+    } finally {
+      setScreeningRunning(false);
     }
   };
 
@@ -262,6 +329,61 @@ const ApplicationsPage: React.FC = () => {
                     </div>
                   )) : <div style={{ color: text.muted }}>No history provided.</div>}
                 </div>
+              </Card>
+
+              <Card>
+                <div style={{ fontWeight: 700, marginBottom: 8 }}>Screening</div>
+                {!loadingCaps && features?.screening === false ? (
+                  <div style={{ color: text.muted }}>
+                    Screening is unavailable on your current plan.
+                  </div>
+                ) : (
+                  <div style={{ display: "grid", gap: 10 }}>
+                    <div style={{ fontSize: 13, color: text.muted }}>
+                      {detail.screening?.status ? `Status: ${detail.screening.status}` : "Status: NOT_REQUESTED"}
+                    </div>
+                    {detail.screening?.status === "COMPLETE" && detail.screening.result ? (
+                      <div style={{ display: "grid", gap: 6 }}>
+                        <div>Provider: {detail.screening.provider || "STUB"}</div>
+                        <div>Risk band: {detail.screening.result.riskBand}</div>
+                        <div>Match confidence: {detail.screening.result.matchConfidence}</div>
+                        <div>File found: {detail.screening.result.fileFound ? "Yes" : "No"}</div>
+                        {detail.screening.result.score ? <div>Score: {detail.screening.result.score}</div> : null}
+                        <div style={{ fontSize: 12, color: text.muted }}>
+                          {detail.screening.result.notes || "This is a pre-approval report (stub)."}
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        {screeningLoading ? (
+                          <div style={{ color: text.muted }}>Checking eligibility...</div>
+                        ) : screeningQuote ? (
+                          <div style={{ display: "grid", gap: 6 }}>
+                            <div>Price: ${(screeningQuote.amountCents / 100).toFixed(2)} {screeningQuote.currency}</div>
+                            <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>
+                              <input type="checkbox" checked={scoreAddOn} onChange={(e) => setScoreAddOn(e.target.checked)} />
+                              Include credit score (+${(screeningQuote.scoreAddOnCents / 100).toFixed(2)})
+                            </label>
+                            <Button
+                              variant="primary"
+                              onClick={() => void runScreeningRequest()}
+                              disabled={screeningRunning}
+                            >
+                              {screeningRunning ? "Running..." : "Run screening ($19.99)"}
+                            </Button>
+                          </div>
+                        ) : (
+                          <div style={{ color: colors.danger, fontSize: 13 }}>
+                            {screeningQuoteDetail || "Screening not eligible."}
+                          </div>
+                        )}
+                        <div style={{ fontSize: 12, color: text.muted }}>
+                          This is a pre-approval report (stub). Real bureau integration coming.
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
               </Card>
             </div>
           )}

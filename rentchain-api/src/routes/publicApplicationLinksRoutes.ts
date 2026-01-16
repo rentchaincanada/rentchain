@@ -183,8 +183,10 @@ router.post("/rental-applications", async (req: any, res) => {
       screening: {
         requested: false,
         requestedAt: null,
-        provider: null,
-        resultSummary: null,
+        status: "NOT_REQUESTED",
+        provider: "STUB",
+        orderId: null,
+        result: null,
       },
       identityMatchBasis: "DOB_ADDRESS",
     };
