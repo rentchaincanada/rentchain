@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Card, Section, Button } from "../components/ui/Ui";
 import { spacing, text, colors, radius, shadows } from "../styles/tokens";
 import { apiFetch } from "@/api/http";
+import { useToast } from "../components/ui/ToastProvider";
 
 type MaintItem = {
   id: string;
@@ -20,6 +21,7 @@ type MaintItem = {
 const statuses = ["NEW", "IN_PROGRESS", "WAITING_ON_TENANT", "SCHEDULED", "RESOLVED", "CLOSED"];
 
 const MaintenanceRequestsPage: React.FC = () => {
+  const { showToast } = useToast();
   const [items, setItems] = useState<MaintItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -63,10 +65,15 @@ const MaintenanceRequestsPage: React.FC = () => {
     if (!selected) return;
     setSaving(true);
     try {
-      await apiFetch(`/maintenance-requests/${selected.id}`, {
+      const res: any = await apiFetch(`/maintenance-requests/${selected.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status, landlordNote: note }),
+      });
+      const emailed = Boolean(res?.emailed);
+      showToast({
+        message: emailed ? "Saved. Tenant notified." : "Saved.",
+        variant: "success",
       });
       await load();
     } catch (err: any) {

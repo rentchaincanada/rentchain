@@ -1,9 +1,12 @@
 import { Router } from "express";
+import sgMail from "@sendgrid/mail";
 import { authenticateJwt } from "../middleware/authMiddleware";
 import { db } from "../config/firebase";
 
 const router = Router();
 router.use(authenticateJwt);
+
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function requireTenant(req: any, res: any, next: any) {
   const user = req.user;
@@ -617,6 +620,8 @@ router.post("/maintenance-requests", requireTenant, async (req: any, res) => {
     let propertyId: string | null = null;
     let unitId: string | null = null;
     let landlordId: string | null = null;
+    let tenantName: string | null = null;
+    let tenantEmail: string | null = null;
     try {
       const tenantSnap = await db.collection("tenants").doc(tenantId).get();
       if (tenantSnap.exists) {
@@ -624,6 +629,8 @@ router.post("/maintenance-requests", requireTenant, async (req: any, res) => {
         propertyId = t?.propertyId || t?.property || null;
         unitId = t?.unitId || t?.unit || null;
         landlordId = t?.landlordId || t?.ownerId || t?.owner || null;
+        tenantName = t?.fullName || t?.name || null;
+        tenantEmail = t?.email || null;
       }
     } catch {
       // ignore lookup errors
@@ -652,7 +659,112 @@ router.post("/maintenance-requests", requireTenant, async (req: any, res) => {
     };
 
     const ref = await db.collection("maintenanceRequests").add(doc);
-    return res.json({ ok: true, data: { id: ref.id, ...doc } });
+
+    let emailed = false;
+    let emailError: string | undefined;
+    const landlordFallbackEmail = String(process.env.MAINTENANCE_NOTIFY_EMAIL || "").trim();
+    let landlordEmail: string | null = null;
+
+    if (landlordId) {
+      try {
+        const userSnap = await db.collection("users").doc(landlordId).get();
+        if (userSnap.exists) {
+          const u = userSnap.data() as any;
+          landlordEmail = u?.email || landlordEmail;
+        }
+      } catch {
+        // ignore lookup errors
+      }
+      if (!landlordEmail) {
+        try {
+          const llSnap = await db.collection("landlords").doc(landlordId).get();
+          if (llSnap.exists) {
+            const ll = llSnap.data() as any;
+            landlordEmail = ll?.email || landlordEmail;
+          }
+        } catch {
+          // ignore lookup errors
+        }
+      }
+    }
+
+    if (!landlordEmail && landlordFallbackEmail) {
+      landlordEmail = landlordFallbackEmail;
+    }
+
+    if (!landlordEmail) {
+      emailError = "MISSING_LANDLORD_EMAIL";
+    } else if (!emailRegex.test(landlordEmail)) {
+      emailError = "INVALID_LANDLORD_EMAIL";
+    } else {
+      const apiKey = process.env.SENDGRID_API_KEY;
+      const from =
+        process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM || process.env.FROM_EMAIL;
+      const replyTo = process.env.SENDGRID_REPLY_TO || process.env.SENDGRID_REPLYTO_EMAIL;
+      const baseUrl = (process.env.PUBLIC_APP_URL || process.env.VITE_PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
+      const requestLink = `${baseUrl}/maintenance`;
+      const excerpt =
+        trimmedDescription.length > 400 ? `${trimmedDescription.slice(0, 400)}...` : trimmedDescription;
+
+      if (!apiKey || !from) {
+        emailError = "EMAIL_NOT_CONFIGURED";
+      } else {
+        try {
+          sgMail.setApiKey(apiKey);
+          await sgMail.send({
+            to: landlordEmail,
+            from,
+            replyTo: replyTo || from,
+            subject: `New maintenance request: ${trimmedTitle}`,
+            text: [
+              "A tenant submitted a new maintenance request.",
+              "",
+              `Tenant: ${tenantName || "Unknown"}${tenantEmail ? ` (${tenantEmail})` : ""}`,
+              `Category: ${categorySafe}`,
+              `Priority: ${prioritySafe}`,
+              "",
+              excerpt,
+              "",
+              `Request ID: ${ref.id}`,
+              `View in RentChain: ${requestLink}`,
+            ].join("\n"),
+            html: `
+              <div style="font-family:Arial,sans-serif;line-height:1.5;color:#0f172a;">
+                <p style="font-weight:700;margin:0 0 6px 0;">New maintenance request</p>
+                <p style="margin:6px 0;">Tenant: ${tenantName || "Unknown"}${tenantEmail ? ` (${tenantEmail})` : ""}</p>
+                <p style="margin:6px 0;">Category: ${categorySafe} | Priority: ${prioritySafe}</p>
+                <p style="margin:10px 0;">${excerpt.replace(/\n/g, "<br/>")}</p>
+                <p style="margin:12px 0;">Request ID: ${ref.id}</p>
+                <p style="margin:12px 0;">
+                  <a href="${requestLink}" style="display:inline-block;padding:10px 14px;background:#2563eb;color:#fff;border-radius:10px;text-decoration:none;font-weight:700;">Open maintenance</a>
+                </p>
+                <p style="font-size:12px;color:#475569;margin-top:18px;">If the button doesn't work, copy and paste: ${requestLink}</p>
+              </div>
+            `,
+            trackingSettings: {
+              clickTracking: { enable: false, enableText: false },
+              openTracking: { enable: false },
+            },
+            mailSettings: {
+              footer: { enable: false },
+            },
+          });
+          emailed = true;
+        } catch (err: any) {
+          emailed = false;
+          emailError = err?.message || "SEND_FAILED";
+          console.error("[tenant/maintenance-requests] email send failed", {
+            requestId: ref.id,
+            landlordId,
+            landlordEmail,
+            errMessage: err?.message,
+            errBody: err?.response?.body,
+          });
+        }
+      }
+    }
+
+    return res.json({ ok: true, data: { id: ref.id, ...doc }, emailed, emailError });
   } catch (err) {
     console.error("[tenant/maintenance-requests] create failed", {
       tenantId: req.user?.tenantId,

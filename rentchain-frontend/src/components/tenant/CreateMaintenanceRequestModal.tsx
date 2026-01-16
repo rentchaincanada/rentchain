@@ -61,7 +61,7 @@ export const CreateMaintenanceRequestModal: React.FC<Props> = ({ open, onClose, 
     }
     setSubmitting(true);
     try {
-      await createTenantMaintenanceRequest({
+      const res = await createTenantMaintenanceRequest({
         category,
         priority,
         title: title.trim(),
@@ -71,7 +71,11 @@ export const CreateMaintenanceRequestModal: React.FC<Props> = ({ open, onClose, 
           preferredTimes: preferredTimes.trim() || undefined,
         },
       });
-      showToast({ message: "Request submitted", variant: "success" });
+      const emailed = Boolean(res?.emailed);
+      showToast({
+        message: emailed ? "Request submitted and landlord notified." : "Request submitted.",
+        variant: "success",
+      });
       onCreated?.();
       onClose();
     } catch (err: any) {

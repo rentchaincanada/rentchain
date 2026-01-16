@@ -1,4 +1,5 @@
 import { Router } from "express";
+import sgMail from "@sendgrid/mail";
 import { db } from "../config/firebase";
 import { authenticateJwt } from "../middleware/authMiddleware";
 
@@ -12,6 +13,16 @@ const ALLOWED_STATUS = [
   "RESOLVED",
   "CLOSED",
 ];
+
+const NOTIFY_STATUS = [
+  "IN_PROGRESS",
+  "WAITING_ON_TENANT",
+  "SCHEDULED",
+  "RESOLVED",
+  "CLOSED",
+];
+
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 router.use(authenticateJwt);
 
@@ -82,9 +93,120 @@ router.patch("/maintenance-requests/:id", async (req: any, res) => {
     updates.updatedAt = Date.now();
     updates.lastUpdatedBy = "LANDLORD";
 
+    const previousStatus = String(data?.status || "NEW").toUpperCase();
+
     await docRef.update(updates);
     const refreshed = await docRef.get();
-    return res.json({ ok: true, data: { id: refreshed.id, ...(refreshed.data() as any) } });
+    const refreshedData = refreshed.data() as any;
+
+    let emailed = false;
+    let emailError: string | undefined;
+    const nextStatus = String(refreshedData?.status || previousStatus).toUpperCase();
+    const statusChanged = Boolean(updates.status) && nextStatus !== previousStatus;
+    const shouldNotify = statusChanged && NOTIFY_STATUS.includes(nextStatus);
+
+    if (shouldNotify) {
+      const tenantId = refreshedData?.tenantId || data?.tenantId || null;
+      if (!tenantId) {
+        emailError = "MISSING_TENANT_ID";
+      } else {
+        let tenantEmail: string | null = null;
+        try {
+          const tenantSnap = await db.collection("tenants").doc(String(tenantId)).get();
+          if (tenantSnap.exists) {
+            const tenant = tenantSnap.data() as any;
+            tenantEmail = typeof tenant?.email === "string" ? tenant.email.trim() : null;
+          }
+        } catch {
+          // ignore lookup errors
+        }
+
+        if (!tenantEmail || !emailRegex.test(tenantEmail)) {
+          emailError = "INVALID_TENANT_EMAIL";
+        } else {
+          const apiKey = process.env.SENDGRID_API_KEY;
+          const from =
+            process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM || process.env.FROM_EMAIL;
+          const replyTo = process.env.SENDGRID_REPLY_TO || process.env.SENDGRID_REPLYTO_EMAIL;
+          const baseUrl =
+            (process.env.PUBLIC_APP_URL || process.env.VITE_PUBLIC_APP_URL || "https://www.rentchain.ai").replace(
+              /\/$/,
+              ""
+            );
+          const requestLink = `${baseUrl}/tenant/maintenance/${refreshed.id}`;
+          const title = String(refreshedData?.title || "Maintenance request");
+          const category = String(refreshedData?.category || "GENERAL");
+          const priority = String(refreshedData?.priority || "NORMAL");
+          const descriptionRaw = String(refreshedData?.description || "");
+          const excerpt =
+            descriptionRaw.length > 400 ? `${descriptionRaw.slice(0, 400)}...` : descriptionRaw;
+          const timestamp = new Date().toISOString();
+
+          if (!apiKey || !from) {
+            emailError = "EMAIL_NOT_CONFIGURED";
+          } else {
+            try {
+              sgMail.setApiKey(apiKey);
+              await sgMail.send({
+                to: tenantEmail,
+                from,
+                replyTo: replyTo || from,
+                subject: `Maintenance update: ${title} (${nextStatus})`,
+                text: [
+                  `Your maintenance request was updated to ${nextStatus}.`,
+                  `Updated at: ${timestamp}`,
+                  "",
+                  `Category: ${category}`,
+                  `Priority: ${priority}`,
+                  "",
+                  excerpt,
+                  "",
+                  `View details: ${requestLink}`,
+                ].join("\n"),
+                html: `
+                  <div style="font-family:Arial,sans-serif;line-height:1.5;color:#0f172a;">
+                    <p style="font-weight:700;margin:0 0 6px 0;">Maintenance request updated</p>
+                    <p style="margin:6px 0;">Status: ${nextStatus}</p>
+                    <p style="margin:6px 0;font-size:12px;color:#475569;">Updated at: ${timestamp}</p>
+                    <p style="margin:6px 0;">Category: ${category} | Priority: ${priority}</p>
+                    <p style="margin:10px 0;">${excerpt.replace(/\n/g, "<br/>")}</p>
+                    <p style="margin:12px 0;">
+                      <a href="${requestLink}" style="display:inline-block;padding:10px 14px;background:#2563eb;color:#fff;border-radius:10px;text-decoration:none;font-weight:700;">View request</a>
+                    </p>
+                    <p style="font-size:12px;color:#475569;margin-top:18px;">If the button doesn't work, copy and paste: ${requestLink}</p>
+                  </div>
+                `,
+                trackingSettings: {
+                  clickTracking: { enable: false, enableText: false },
+                  openTracking: { enable: false },
+                },
+                mailSettings: {
+                  footer: { enable: false },
+                },
+              });
+              emailed = true;
+            } catch (err: any) {
+              emailed = false;
+              emailError = err?.message || "SEND_FAILED";
+              console.error("[maintenance-requests] tenant email send failed", {
+                requestId: refreshed.id,
+                tenantId,
+                tenantEmail,
+                errMessage: err?.message,
+                errBody: err?.response?.body,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    return res.json({
+      ok: true,
+      data: { id: refreshed.id, ...(refreshedData as any) },
+      emailed,
+      emailError,
+    });
   } catch (err) {
     console.error("[maintenance-requests] update failed", { id: req.params?.id, err });
     return res.status(500).json({ ok: false, error: "MAINT_REQUEST_UPDATE_FAILED" });
