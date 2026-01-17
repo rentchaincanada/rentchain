@@ -27,6 +27,14 @@ const statusOptions: RentalApplicationStatus[] = [
 
 type PropertyOption = { id: string; name: string };
 
+const AI_FLAG_LABELS: Record<string, string> = {
+  INCOME_STRESS: "Income stress",
+  ADDRESS_GAP: "Address gap",
+  EMPLOYMENT_SHORT_TENURE: "Short employment tenure",
+  REFERENCE_WEAK: "Weak references",
+  IDENTITY_MISMATCH_HINT: "Identity mismatch hint",
+};
+
 const ApplicationsPage: React.FC = () => {
   const { showToast } = useToast();
   const [applications, setApplications] = useState<RentalApplicationSummary[]>([]);
@@ -45,6 +53,13 @@ const ApplicationsPage: React.FC = () => {
   const [screeningLoading, setScreeningLoading] = useState(false);
   const [screeningRunning, setScreeningRunning] = useState(false);
   const [scoreAddOn, setScoreAddOn] = useState(false);
+  const [serviceLevel, setServiceLevel] = useState<"SELF_SERVE" | "VERIFIED" | "VERIFIED_AI">("SELF_SERVE");
+
+  const screeningOptions = [
+    { value: "SELF_SERVE", label: "Self-serve screening", priceLabel: "$19.99" },
+    { value: "VERIFIED", label: "Verified screening by RentChain", priceLabel: "$29.99" },
+    { value: "VERIFIED_AI", label: "Verified + AI Verification", priceLabel: "$39.99" },
+  ] as const;
 
   useEffect(() => {
     let alive = true;
@@ -127,7 +142,7 @@ const ApplicationsPage: React.FC = () => {
       setScreeningQuote(null);
       setScreeningQuoteDetail(null);
       try {
-        const res = await fetchScreeningQuote(selectedId);
+        const res = await fetchScreeningQuote(selectedId, { serviceLevel, scoreAddOn });
         if (res.ok) {
           setScreeningQuote(res.data || null);
         } else {
@@ -142,7 +157,7 @@ const ApplicationsPage: React.FC = () => {
       }
     };
     void loadQuote();
-  }, [selectedId]);
+  }, [selectedId, serviceLevel, scoreAddOn]);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return applications;
@@ -170,7 +185,7 @@ const ApplicationsPage: React.FC = () => {
     if (!detail) return;
     setScreeningRunning(true);
     try {
-      const res = await runScreening(detail.id, scoreAddOn);
+      const res = await runScreening(detail.id, { scoreAddOn, serviceLevel });
       if (!res.ok || !res.data) {
         throw new Error(res.detail || res.error || "Screening failed");
       }
@@ -331,8 +346,15 @@ const ApplicationsPage: React.FC = () => {
                     </div>
                     {detail.screening?.status === "COMPLETE" && detail.screening.result ? (
                       <div style={{ display: "grid", gap: 6 }}>
+                        {detail.screening.serviceLevel ? (
+                          <div>Service level: {detail.screening.serviceLevel.replace("_", " ")}</div>
+                        ) : null}
                         {detail.screening.orderId ? <div>Order ID: {detail.screening.orderId}</div> : null}
-                        {typeof detail.screening.amountCents === "number" ? (
+                        {typeof detail.screening.totalAmountCents === "number" ? (
+                          <div>
+                            Paid: ${(detail.screening.totalAmountCents / 100).toFixed(2)} {detail.screening.currency || "CAD"}
+                          </div>
+                        ) : typeof detail.screening.amountCents === "number" ? (
                           <div>
                             Paid: ${(detail.screening.amountCents / 100).toFixed(2)} {detail.screening.currency || "CAD"}
                           </div>
@@ -353,6 +375,25 @@ const ApplicationsPage: React.FC = () => {
                         <div style={{ fontSize: 12, color: text.muted }}>
                           {detail.screening.result.notes || "This is a pre-approval report (stub)."}
                         </div>
+                        {detail.screening.ai ? (
+                          <div style={{ borderTop: `1px solid ${colors.border}`, paddingTop: 8, display: "grid", gap: 6 }}>
+                            <div style={{ fontWeight: 600 }}>AI Verification</div>
+                            <div>Risk assessment: <Pill>{detail.screening.ai.riskAssessment}</Pill></div>
+                            <div>Confidence score: {detail.screening.ai.confidenceScore}/100</div>
+                            {detail.screening.ai.flags?.length ? (
+                              <div>
+                                Flags: {detail.screening.ai.flags.map((f) => AI_FLAG_LABELS[f] || f).join(", ")}
+                              </div>
+                            ) : null}
+                            {detail.screening.ai.recommendations?.length ? (
+                              <div>Recommendations: {detail.screening.ai.recommendations.join("; ")}</div>
+                            ) : null}
+                            <div style={{ fontSize: 12, color: text.muted }}>{detail.screening.ai.summary}</div>
+                            <div style={{ fontSize: 12, color: text.muted }}>
+                              AI Verification provides risk signals to assist decision-making.
+                            </div>
+                          </div>
+                        ) : null}
                         <div style={{ fontSize: 12, color: text.muted }}>Receipt recorded for audit.</div>
                       </div>
                     ) : (
@@ -361,7 +402,27 @@ const ApplicationsPage: React.FC = () => {
                           <div style={{ color: text.muted }}>Checking eligibility...</div>
                         ) : screeningQuote ? (
                           <div style={{ display: "grid", gap: 6 }}>
-                            <div>Price: ${(screeningQuote.amountCents / 100).toFixed(2)} {screeningQuote.currency}</div>
+                            <div>Price: ${(screeningQuote.totalAmountCents / 100).toFixed(2)} {screeningQuote.currency}</div>
+                            <div style={{ fontSize: 12, color: text.muted }}>
+                              Base ${(screeningQuote.baseAmountCents / 100).toFixed(2)}
+                              {screeningQuote.verifiedAddOnCents ? ` + Verified ${(screeningQuote.verifiedAddOnCents / 100).toFixed(2)}` : ""}
+                              {screeningQuote.aiAddOnCents ? ` + AI ${(screeningQuote.aiAddOnCents / 100).toFixed(2)}` : ""}
+                              {screeningQuote.scoreAddOnCents ? ` + Score ${(screeningQuote.scoreAddOnCents / 100).toFixed(2)}` : ""}
+                            </div>
+                            <div style={{ display: "grid", gap: 6 }}>
+                              <div style={{ fontSize: 12, fontWeight: 600 }}>Screening type</div>
+                              {screeningOptions.map((opt) => (
+                                <label key={opt.value} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>
+                                  <input
+                                    type="radio"
+                                    name="screeningType"
+                                    checked={serviceLevel === opt.value}
+                                    onChange={() => setServiceLevel(opt.value)}
+                                  />
+                                  {opt.label} — {opt.priceLabel}
+                                </label>
+                              ))}
+                            </div>
                             <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>
                               <input type="checkbox" checked={scoreAddOn} onChange={(e) => setScoreAddOn(e.target.checked)} />
                               Include credit score (+${(screeningQuote.scoreAddOnCents / 100).toFixed(2)})

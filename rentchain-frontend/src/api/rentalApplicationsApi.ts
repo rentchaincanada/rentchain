@@ -112,6 +112,18 @@ export type RentalApplication = {
     paidAt?: number | null;
     scoreAddOn?: boolean;
     scoreAddOnCents?: number | null;
+    totalAmountCents?: number | null;
+    serviceLevel?: "SELF_SERVE" | "VERIFIED" | "VERIFIED_AI";
+    aiVerification?: boolean;
+    ai?: {
+      enabled: boolean;
+      riskAssessment: "LOW" | "MODERATE" | "HIGH";
+      confidenceScore: number;
+      flags: string[];
+      recommendations: string[];
+      summary: string;
+      generatedAt: number;
+    } | null;
     result?: {
       riskBand: "LOW" | "MEDIUM" | "HIGH";
       matchConfidence: "LOW" | "MEDIUM" | "HIGH";
@@ -127,9 +139,12 @@ export type RentalApplication = {
 };
 
 export type ScreeningQuote = {
-  amountCents: number;
+  baseAmountCents: number;
+  verifiedAddOnCents: number;
+  aiAddOnCents: number;
   currency: string;
   scoreAddOnCents: number;
+  totalAmountCents: number;
   eligible: boolean;
 };
 
@@ -139,6 +154,13 @@ export type ScreeningRunResult = {
   result: NonNullable<RentalApplication["screening"]["result"]> | null;
   amountCents: number;
   currency: string;
+  paidAt?: number;
+  scoreAddOn?: boolean;
+  scoreAddOnCents?: number;
+  totalAmountCents?: number;
+  serviceLevel?: "SELF_SERVE" | "VERIFIED" | "VERIFIED_AI";
+  aiVerification?: boolean;
+  ai?: RentalApplication["screening"]["ai"] | null;
 };
 
 export async function fetchRentalApplications(params?: {
@@ -171,20 +193,25 @@ export async function updateRentalApplicationStatus(
 }
 
 export async function fetchScreeningQuote(
-  id: string
+  id: string,
+  params?: { serviceLevel?: "SELF_SERVE" | "VERIFIED" | "VERIFIED_AI"; scoreAddOn?: boolean }
 ): Promise<{ ok: boolean; data?: ScreeningQuote; error?: string; detail?: string }> {
-  const res: any = await apiFetch(`/rental-applications/${encodeURIComponent(id)}/screening/quote`);
+  const res: any = await apiFetch(`/rental-applications/${encodeURIComponent(id)}/screening/quote`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params || {}),
+  });
   return res as { ok: boolean; data?: ScreeningQuote; error?: string; detail?: string };
 }
 
 export async function runScreening(
   id: string,
-  scoreAddOn: boolean
+  params: { scoreAddOn: boolean; serviceLevel: "SELF_SERVE" | "VERIFIED" | "VERIFIED_AI" }
 ): Promise<{ ok: boolean; data?: ScreeningRunResult; error?: string; detail?: string }> {
   const res: any = await apiFetch(`/rental-applications/${encodeURIComponent(id)}/screening/run`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ scoreAddOn }),
+    body: JSON.stringify(params),
   });
   return res as { ok: boolean; data?: ScreeningRunResult; error?: string; detail?: string };
 }

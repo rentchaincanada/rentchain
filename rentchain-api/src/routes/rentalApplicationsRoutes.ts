@@ -18,6 +18,12 @@ const ALLOWED_STATUS = [
 ];
 
 const ELIGIBLE_STATUS = ["SUBMITTED", "IN_REVIEW"];
+const SERVICE_LEVELS = ["SELF_SERVE", "VERIFIED", "VERIFIED_AI"] as const;
+
+const BASE_AMOUNT_CENTS = 1999;
+const VERIFIED_ADD_ON_CENTS = 1000;
+const AI_ADD_ON_CENTS = 1000;
+const SCORE_ADD_ON_CENTS = 110;
 
 function applicantName(app: any): string {
   const first = String(app?.firstName || "").trim();
@@ -58,6 +64,40 @@ function buildStubResult(application: any, scoreAddOn: boolean, seed: number) {
   };
 }
 
+function buildAiVerification(applicationId: string, seed: number) {
+  const confidenceScore = 60 + (seed % 36);
+  const riskAssessment = (["LOW", "MODERATE", "HIGH"] as const)[seed % 3];
+  const flagOptions = [
+    "INCOME_STRESS",
+    "ADDRESS_GAP",
+    "EMPLOYMENT_SHORT_TENURE",
+    "REFERENCE_WEAK",
+    "IDENTITY_MISMATCH_HINT",
+  ];
+  const flags = flagOptions.filter((_f, idx) => ((seed >> idx) & 1) === 1).slice(0, 3);
+  const recommendations = [
+    "Consider cosigner",
+    "Request additional employment proof",
+    "Verify previous landlord reference",
+  ].filter((_r, idx) => ((seed >> (idx + 2)) & 1) === 1);
+
+  const summary = [
+    `AI Verification generated for application ${applicationId}.`,
+    `Risk assessment: ${riskAssessment.toLowerCase()} with confidence ${confidenceScore}/100.`,
+    flags.length ? `Flags: ${flags.join(", ")}.` : "No material flags detected.",
+  ].join(" ");
+
+  return {
+    enabled: true,
+    riskAssessment,
+    confidenceScore,
+    flags,
+    recommendations,
+    summary,
+    generatedAt: Date.now(),
+  };
+}
+
 function evaluateEligibility(application: any) {
   const status = String(application?.status || "").toUpperCase();
   if (!ELIGIBLE_STATUS.includes(status)) {
@@ -73,6 +113,28 @@ function evaluateEligibility(application: any) {
     return { eligible: false, detail: "DOB and current address are required." };
   }
   return { eligible: true, detail: null };
+}
+
+function resolveServiceLevel(raw?: string | null) {
+  const val = String(raw || "").toUpperCase();
+  if (SERVICE_LEVELS.includes(val as any)) return val as (typeof SERVICE_LEVELS)[number];
+  return "SELF_SERVE";
+}
+
+function computePricing(serviceLevel: string, scoreAddOn: boolean) {
+  const isVerified = serviceLevel === "VERIFIED" || serviceLevel === "VERIFIED_AI";
+  const isAi = serviceLevel === "VERIFIED_AI";
+  const verifiedAddOn = isVerified ? VERIFIED_ADD_ON_CENTS : 0;
+  const aiAddOn = isAi ? AI_ADD_ON_CENTS : 0;
+  const scoreAddOnCents = scoreAddOn ? SCORE_ADD_ON_CENTS : 0;
+  const totalAmountCents = BASE_AMOUNT_CENTS + verifiedAddOn + aiAddOn + scoreAddOnCents;
+  return {
+    baseAmountCents: BASE_AMOUNT_CENTS,
+    verifiedAddOnCents: verifiedAddOn,
+    aiAddOnCents: aiAddOn,
+    scoreAddOnCents,
+    totalAmountCents,
+  };
 }
 
 router.use(authenticateJwt);
@@ -225,12 +287,20 @@ router.post(
         return res.json({ ok: false, error: "NOT_ELIGIBLE", detail: eligibility.detail });
       }
 
+      const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
+      const serviceLevel = resolveServiceLevel(body?.serviceLevel);
+      const scoreAddOn = body?.scoreAddOn === true;
+      const pricing = computePricing(serviceLevel, scoreAddOn);
+
       return res.json({
         ok: true,
         data: {
-          amountCents: 1999,
+          baseAmountCents: pricing.baseAmountCents,
+          verifiedAddOnCents: pricing.verifiedAddOnCents,
+          aiAddOnCents: pricing.aiAddOnCents,
+          scoreAddOnCents: pricing.scoreAddOnCents,
+          totalAmountCents: pricing.totalAmountCents,
           currency: "CAD",
-          scoreAddOnCents: 110,
           eligible: true,
         },
       });
@@ -268,10 +338,14 @@ router.post(
         return res.status(400).json({ ok: false, error: "NOT_ELIGIBLE", detail: eligibility.detail });
       }
 
-      const scoreAddOn = req.body?.scoreAddOn === true;
+      const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
+      const serviceLevel = resolveServiceLevel(body?.serviceLevel);
+      const scoreAddOn = body?.scoreAddOn === true;
+      const pricing = computePricing(serviceLevel, scoreAddOn);
       const now = Date.now();
       const orderRef = db.collection("screeningOrders").doc();
       const orderId = orderRef.id;
+      const aiVerification = serviceLevel === "VERIFIED_AI";
       const orderPayload: any = {
         id: orderId,
         landlordId,
@@ -279,14 +353,20 @@ router.post(
         propertyId: data?.propertyId || null,
         unitId: data?.unitId || null,
         createdAt: now,
-        amountCents: 1999 + (scoreAddOn ? 110 : 0),
+        amountCents: pricing.baseAmountCents,
         currency: "CAD",
         status: "CREATED",
         scoreAddOn,
+        scoreAddOnCents: pricing.scoreAddOnCents,
         provider: "STUB",
         providerRequestId: null,
         paidAt: null,
         error: null,
+        serviceLevel,
+        aiVerification,
+        aiPriceCents: aiVerification ? pricing.aiAddOnCents : 0,
+        totalAmountCents: pricing.totalAmountCents,
+        reviewerStatus: "QUEUED",
       };
 
       await orderRef.set(orderPayload, { merge: true });
@@ -294,17 +374,22 @@ router.post(
 
       const seed = seededNumber(id);
       const result = buildStubResult(data, scoreAddOn, seed);
+      const ai = aiVerification ? buildAiVerification(id, seed) : null;
       const screeningUpdate = {
         requested: true,
         requestedAt: now,
         status: "COMPLETE",
         provider: "STUB",
         orderId,
-        amountCents: orderPayload.amountCents,
+        amountCents: pricing.baseAmountCents,
         currency: orderPayload.currency,
         paidAt: now,
         scoreAddOn,
-        scoreAddOnCents: scoreAddOn ? 110 : 0,
+        scoreAddOnCents: pricing.scoreAddOnCents,
+        totalAmountCents: pricing.totalAmountCents,
+        serviceLevel,
+        aiVerification,
+        ai,
         result,
       };
 
@@ -322,11 +407,15 @@ router.post(
           orderId,
           status: "COMPLETE",
           result,
-          amountCents: orderPayload.amountCents,
+          amountCents: pricing.baseAmountCents,
           currency: orderPayload.currency,
           paidAt: now,
           scoreAddOn,
-          scoreAddOnCents: scoreAddOn ? 110 : 0,
+          scoreAddOnCents: pricing.scoreAddOnCents,
+          totalAmountCents: pricing.totalAmountCents,
+          serviceLevel,
+          aiVerification,
+          ai,
         },
       });
     } catch (err: any) {
@@ -366,6 +455,15 @@ router.get(
           provider: "STUB",
           orderId: null,
           result: null,
+          amountCents: null,
+          currency: "CAD",
+          paidAt: null,
+          scoreAddOn: false,
+          scoreAddOnCents: null,
+          totalAmountCents: null,
+          serviceLevel: "SELF_SERVE",
+          aiVerification: false,
+          ai: null,
         };
 
       return res.json({ ok: true, data: screening });
@@ -375,5 +473,13 @@ router.get(
     }
   }
 );
+
+function safeParse(raw: string) {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
 
 export default router;
