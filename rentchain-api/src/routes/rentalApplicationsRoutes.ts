@@ -319,6 +319,8 @@ router.post(
   requireFeature("screening"),
   async (req: any, res) => {
     try {
+      res.setHeader("x-route-source", "rentalApplicationsRoutes:screeningCheckout");
+      console.log("[screening/checkout] hit", { id: req.params?.id });
       const role = String(req.user?.role || "").toLowerCase();
       if (role !== "landlord" && role !== "admin") {
         return res.status(403).json({ ok: false, error: "FORBIDDEN" });
