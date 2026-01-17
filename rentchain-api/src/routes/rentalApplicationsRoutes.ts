@@ -437,17 +437,54 @@ router.post(
         process.env.STRIPE_CANCEL_URL ||
         `${baseUrl}/applications?screening=cancelled&orderId=${encodeURIComponent(orderId)}`;
 
+      // Ensure Stripe-safe integers
+      const safeInt = (n: unknown) => {
+        const x = Number(n);
+        if (!Number.isFinite(x)) return 0;
+        return Math.round(x);
+      };
+
+      // (Optional) sanity clamp: avoid negative or zero charges accidentally
+      const normalizeLineItems = (items: any[]) =>
+        items.map((it) => ({
+          ...it,
+          price_data: {
+            ...it.price_data,
+            unit_amount: Math.max(0, safeInt(it.price_data?.unit_amount)),
+            currency: String(it.price_data?.currency || currency).toLowerCase(),
+          },
+        }));
+
+      const normalizedLineItems = normalizeLineItems(lineItems);
+
       const session = await stripe.checkout.sessions.create({
         mode: "payment",
-        line_items: lineItems,
+        line_items: normalizedLineItems,
+
+        // Use this to correlate in Stripe dashboard & API searches
+        client_reference_id: orderId,
+
         success_url: successUrl,
         cancel_url: cancelUrl,
+
+        // Keep lightweight order context here (shows up on the Session)
         metadata: {
           orderId,
           applicationId: id,
           landlordId,
           serviceLevel,
           scoreAddOn: String(scoreAddOn),
+        },
+
+        // Recommended: also stamp the PaymentIntent so webhook handling is simpler
+        payment_intent_data: {
+          metadata: {
+            orderId,
+            applicationId: id,
+            landlordId,
+            serviceLevel,
+            scoreAddOn: String(scoreAddOn),
+          },
         },
       });
 
