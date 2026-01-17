@@ -7,6 +7,7 @@ import {
   FRONTEND_URL,
 } from "../config/screeningConfig";
 import { getStripeClient } from "../services/stripeService";
+import { stripeNotConfiguredResponse, isStripeNotConfiguredError } from "../lib/stripeNotConfigured";
 import {
   markScreeningPaid,
   getScreeningRequestById,
@@ -32,20 +33,19 @@ const isDev = process.env.NODE_ENV !== "production";
 router.post(
   "/webhook",
   async (req: StripeWebhookRequest, res: Response): Promise<void> => {
-    const stripe = getStripeClient();
-    if (!stripe) {
-      res.status(400).json({
-        error: "stripe_not_configured",
-        message: "Stripe is not configured for screenings",
-      });
-      return;
+    let stripe: Stripe;
+    try {
+      stripe = getStripeClient();
+    } catch (err) {
+      if (isStripeNotConfiguredError(err)) {
+        res.status(400).json(stripeNotConfiguredResponse());
+        return;
+      }
+      throw err;
     }
 
     if (!STRIPE_SECRET_CONFIGURED || !STRIPE_WEBHOOK_CONFIGURED) {
-      res.status(400).json({
-        error: "stripe_not_configured",
-        message: "Stripe is not configured for screenings",
-      });
+      res.status(400).json(stripeNotConfiguredResponse());
       return;
     }
 

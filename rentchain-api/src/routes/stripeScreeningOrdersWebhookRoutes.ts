@@ -4,6 +4,7 @@ import { createHash } from "crypto";
 import { db } from "../config/firebase";
 import { getStripeClient } from "../services/stripeService";
 import { STRIPE_WEBHOOK_SECRET } from "../config/screeningConfig";
+import { stripeNotConfiguredResponse, isStripeNotConfiguredError } from "../lib/stripeNotConfigured";
 import sgMail from "@sendgrid/mail";
 
 interface StripeWebhookRequest extends Request {
@@ -80,9 +81,17 @@ function buildAiVerification(applicationId: string, seed: number) {
 }
 
 router.post("/", async (req: StripeWebhookRequest, res: Response) => {
-  const stripe = getStripeClient();
-  if (!stripe || !STRIPE_WEBHOOK_SECRET) {
-    return res.status(400).json({ ok: false, error: "stripe_not_configured" });
+  let stripe: Stripe;
+  try {
+    stripe = getStripeClient();
+  } catch (err) {
+    if (isStripeNotConfiguredError(err)) {
+      return res.status(400).json(stripeNotConfiguredResponse());
+    }
+    throw err;
+  }
+  if (!STRIPE_WEBHOOK_SECRET) {
+    return res.status(400).json(stripeNotConfiguredResponse());
   }
 
   const signature = req.headers["stripe-signature"];
@@ -120,12 +129,12 @@ router.post("/", async (req: StripeWebhookRequest, res: Response) => {
       }
 
       if (!orderDoc || !orderDoc.exists) {
-        return res.sendStatus(200);
+        return res.status(200).json({ received: true });
       }
 
       const order = orderDoc.data() as any;
       if (order?.status === "PAID") {
-        return res.sendStatus(200);
+        return res.status(200).json({ received: true });
       }
 
       const now = Date.now();
@@ -142,7 +151,7 @@ router.post("/", async (req: StripeWebhookRequest, res: Response) => {
           },
           { merge: true }
         );
-        return res.sendStatus(200);
+        return res.status(200).json({ received: true });
       }
 
       const application = appSnap.data() as any;
@@ -151,7 +160,7 @@ router.post("/", async (req: StripeWebhookRequest, res: Response) => {
           { status: "PAID", paidAt: now, updatedAt: now },
           { merge: true }
         );
-        return res.sendStatus(200);
+        return res.status(200).json({ received: true });
       }
       const scoreAddOn = order?.scoreAddOn === true;
       const serviceLevel = String(order?.serviceLevel || "SELF_SERVE").toUpperCase();
@@ -324,7 +333,7 @@ router.post("/", async (req: StripeWebhookRequest, res: Response) => {
     }
   }
 
-  return res.sendStatus(200);
+  return res.status(200).json({ received: true });
 });
 
 export default router;

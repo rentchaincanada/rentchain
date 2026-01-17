@@ -14,13 +14,13 @@ import {
   sanitizeScreeningResponse,
   purgeExpiredScreenings,
 } from "../services/screeningRequestService";
-import { getStripeClient } from "../services/stripeService";
+import { getStripeClient, isStripeConfigured } from "../services/stripeService";
+import { stripeNotConfiguredResponse, isStripeNotConfiguredError } from "../lib/stripeNotConfigured";
 import {
   FRONTEND_URL,
   FRONTEND_URL_CONFIGURED,
   SCREENING_CURRENCY,
   SCREENING_PRICE_CENTS,
-  STRIPE_SECRET_CONFIGURED,
 } from "../config/screeningConfig";
 import { recordAuditEvent } from "../services/auditEventService";
 import { getLastEmailPreview } from "../services/emailService";
@@ -47,7 +47,7 @@ router.use(authenticateJwt, attachAccount, requireFeature("screening"));
 
 router.get("/screenings/config", (_req, res: Response) => {
   res.status(200).json({
-    stripeConfigured: STRIPE_SECRET_CONFIGURED,
+    stripeConfigured: isStripeConfigured(),
     frontendUrlConfigured: FRONTEND_URL_CONFIGURED,
     currency: SCREENING_CURRENCY || "cad",
     priceCents: SCREENING_PRICE_CENTS || 2999,
@@ -205,19 +205,18 @@ router.post(
       return res.status(403).json({ error: "Forbidden" });
     }
 
-    if (!STRIPE_SECRET_CONFIGURED || !FRONTEND_URL_CONFIGURED) {
-      return res.status(400).json({
-        error: "stripe_not_configured",
-        message: "Stripe is not configured for screenings",
-      });
+    if (!isStripeConfigured() || !FRONTEND_URL_CONFIGURED) {
+      return res.status(400).json(stripeNotConfiguredResponse());
     }
 
-    const stripe = getStripeClient();
-    if (!stripe) {
-      return res.status(400).json({
-        error: "stripe_not_configured",
-        message: "Stripe is not configured for screenings",
-      });
+    let stripe: any;
+    try {
+      stripe = getStripeClient();
+    } catch (err) {
+      if (isStripeNotConfiguredError(err)) {
+        return res.status(400).json(stripeNotConfiguredResponse());
+      }
+      throw err;
     }
 
     try {

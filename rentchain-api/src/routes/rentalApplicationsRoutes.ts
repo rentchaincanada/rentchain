@@ -5,7 +5,8 @@ import { db } from "../config/firebase";
 import { authenticateJwt } from "../middleware/authMiddleware";
 import { attachAccount } from "../middleware/attachAccount";
 import { requireFeature } from "../middleware/entitlements";
-import { getStripeClient } from "../services/stripeService";
+import { getStripeClient, isStripeConfigured } from "../services/stripeService";
+import { stripeNotConfiguredResponse, isStripeNotConfiguredError } from "../lib/stripeNotConfigured";
 
 const router = Router();
 
@@ -346,9 +347,14 @@ router.post(
       const serviceLevel = resolveServiceLevel(body?.serviceLevel);
       const scoreAddOn = body?.scoreAddOn === true;
       const pricing = computePricing(serviceLevel, scoreAddOn);
-      const stripe = getStripeClient();
-      if (!stripe) {
-        return res.status(400).json({ ok: false, error: "stripe_not_configured" });
+      let stripe: any;
+      try {
+        stripe = getStripeClient();
+      } catch (err) {
+        if (isStripeNotConfiguredError(err)) {
+          return res.status(400).json(stripeNotConfiguredResponse());
+        }
+        throw err;
       }
 
       const now = Date.now();
@@ -489,7 +495,7 @@ router.post(
   requireFeature("screening"),
   async (req: any, res) => {
     try {
-      if (process.env.STRIPE_SECRET_KEY) {
+      if (isStripeConfigured()) {
         return res.status(400).json({ ok: false, error: "USE_CHECKOUT" });
       }
       const role = String(req.user?.role || "").toLowerCase();

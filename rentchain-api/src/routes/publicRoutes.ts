@@ -7,12 +7,18 @@ import { sendWaitlistConfirmation } from "../services/emailService";
 import { authenticateJwt } from "../middleware/authMiddleware";
 import { requireLandlord } from "../middleware/requireLandlord";
 import { getTenantsList, getTenantDetailBundle } from "../services/tenantDetailsService";
+import { isStripeConfigured, STRIPE_API_VERSION } from "../services/stripeService";
 
 const router = Router();
 
 router.get("/health", (_req, res) => {
   res.setHeader("x-route-source", "publicRoutes.ts");
   res.json({ ok: true, service: "rentchain-api", ts: Date.now() });
+});
+
+router.get("/health/stripe", (_req, res) => {
+  res.setHeader("x-route-source", "publicRoutes.ts");
+  res.json({ ok: true, configured: isStripeConfigured(), apiVersion: STRIPE_API_VERSION });
 });
 
 router.get("/__probe/version", (_req, res) => {
