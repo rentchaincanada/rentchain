@@ -1,13 +1,12 @@
 import Stripe from "stripe";
 
-/**
- * IMPORTANT:
- * - Keep Stripe API version pinned for predictable behavior.
- * - Do not silently return null; let callers decide how to respond.
- */
+// IMPORTANT:
+// - Keep Stripe API version pinned for predictable behavior.
+// - Do not silently return null; let callers decide how to respond.
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 
-export const STRIPE_API_VERSION: Stripe.LatestApiVersion = "2024-06-20";
+// ✅ use Stripe.StripeConfig["apiVersion"] instead of Stripe.LatestApiVersion
+export const STRIPE_API_VERSION: Stripe.StripeConfig["apiVersion"] = "2024-06-20";
 
 export function isStripeConfigured(): boolean {
   return Boolean(STRIPE_SECRET_KEY && STRIPE_SECRET_KEY.trim().length > 0);
@@ -23,6 +22,5 @@ export function getStripeClient(): Stripe {
 
   return new Stripe(STRIPE_SECRET_KEY as string, {
     apiVersion: STRIPE_API_VERSION,
-    // maxNetworkRetries: 2,
   });
 }
