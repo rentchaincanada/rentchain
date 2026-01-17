@@ -88,6 +88,7 @@ const TopNav: React.FC = () => {
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         userEmail={user?.email || ""}
+        userRole={user?.role || ""}
         onSignOut={() => {
           logout();
           navigate("/login");

@@ -44,6 +44,7 @@ const LedgerPage = lazy(() => import("./pages/LedgerPage"));
 const LedgerV2Page = lazy(() => import("./pages/LedgerV2Page"));
 const BlockchainPage = lazy(() => import("./pages/BlockchainPage"));
 const AdminScreeningsPage = lazy(() => import("./pages/AdminScreeningsPage"));
+const AdminVerifiedScreeningsPage = lazy(() => import("./pages/AdminVerifiedScreeningsPage"));
 
 function App() {
   const applicantApplyRedirects = [
@@ -146,6 +147,16 @@ function App() {
             }
           />
         ) : null}
+        <Route
+          path="/admin/verified-screenings"
+          element={
+            <RequireAuth>
+              <Suspense fallback={null}>
+                <AdminVerifiedScreeningsPage />
+              </Suspense>
+            </RequireAuth>
+          }
+        />
         <Route
           path="/screening"
           element={

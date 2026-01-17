@@ -57,6 +57,7 @@ import publicApplicationLinksRoutes from "./routes/publicApplicationLinksRoutes"
 import tenantsRoutes from "./routes/tenantsRoutes";
 import messagesRoutes from "./routes/messagesRoutes";
 import rentalApplicationsRoutes from "./routes/rentalApplicationsRoutes";
+import verifiedScreeningRoutes from "./routes/verifiedScreeningRoutes";
 
 process.on("unhandledRejection", (reason) => {
   console.error("[FATAL] unhandledRejection", reason);
@@ -139,6 +140,7 @@ app.use("/api", routeSource("maintenanceRequestsRoutes"), maintenanceRequestsRou
 app.use("/api", routeSource("usageBreakdownRoutes.ts"), usageBreakdownRoutes);
 app.use("/api/properties", propertiesRoutes);
 app.use("/api", routeSource("rentalApplicationsRoutes.ts"), rentalApplicationsRoutes);
+app.use("/api", routeSource("verifiedScreeningRoutes.ts"), verifiedScreeningRoutes);
 app.use("/api/tenant-report", routeSource("tenantReportRoutes.ts"), tenantReportRoutes);
 app.use("/api/tenant-report-pdf", routeSource("tenantReportPdfRoutes.ts"), tenantReportPdfRoutes);
 app.use("/api", applicationsRoutes);

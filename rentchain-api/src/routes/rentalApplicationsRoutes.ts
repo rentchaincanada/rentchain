@@ -1,4 +1,5 @@
 import { Router } from "express";
+import sgMail from "@sendgrid/mail";
 import { createHash } from "crypto";
 import { db } from "../config/firebase";
 import { authenticateJwt } from "../middleware/authMiddleware";
@@ -400,6 +401,100 @@ router.post(
         },
         { merge: true }
       );
+
+      if (serviceLevel === "VERIFIED" || serviceLevel === "VERIFIED_AI") {
+        try {
+          const applicantFirst = String(data?.applicant?.firstName || "").trim();
+          const applicantLast = String(data?.applicant?.lastName || "").trim();
+          const applicantName = `${applicantFirst} ${applicantLast}`.trim() || "Applicant";
+          const applicantEmail = String(data?.applicant?.email || "").trim();
+          const queueRef = db.collection("verifiedScreeningQueue").doc();
+          const queueDoc = {
+            id: queueRef.id,
+            createdAt: now,
+            updatedAt: now,
+            status: "QUEUED",
+            serviceLevel,
+            landlordId,
+            applicationId: id,
+            orderId,
+            propertyId: data?.propertyId || null,
+            unitId: data?.unitId || null,
+            applicant: { name: applicantName, email: applicantEmail || "" },
+            aiIncluded: serviceLevel === "VERIFIED_AI",
+            scoreAddOn,
+            totalAmountCents: pricing.totalAmountCents,
+            currency: orderPayload.currency,
+            notesInternal: null,
+            reviewer: null,
+            completedAt: null,
+            resultSummary: null,
+            recommendation: null,
+          };
+
+          await queueRef.set(queueDoc, { merge: true });
+
+          const notifyTo =
+            process.env.VERIFIED_SCREENING_NOTIFY_EMAIL ||
+            process.env.MAINTENANCE_NOTIFY_EMAIL ||
+            process.env.ADMIN_NOTIFY_EMAIL ||
+            "admin@rentchain.ai";
+          const apiKey = process.env.SENDGRID_API_KEY;
+          const from =
+            process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM || process.env.FROM_EMAIL;
+          const replyTo = process.env.SENDGRID_REPLY_TO || process.env.SENDGRID_REPLYTO_EMAIL;
+          if (apiKey && from && notifyTo) {
+            const baseUrl = (process.env.PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
+            const adminLink = `${baseUrl}/admin/verified-screenings`;
+            sgMail.setApiKey(apiKey);
+            await sgMail.send({
+              to: notifyTo,
+              from,
+              replyTo: replyTo || from,
+              subject: `Verified screening queued — ${applicantName}`,
+              text: [
+                "A verified screening is queued.",
+                "",
+                `Applicant: ${applicantName} (${applicantEmail || "n/a"})`,
+                `Service level: ${serviceLevel}`,
+                `Application ID: ${id}`,
+                `Order ID: ${orderId}`,
+                `Property ID: ${data?.propertyId || "n/a"}`,
+                data?.unitId ? `Unit ID: ${data.unitId}` : null,
+                `Total paid: ${(pricing.totalAmountCents / 100).toFixed(2)} ${orderPayload.currency}`,
+                "",
+                `View queue: ${adminLink}`,
+              ]
+                .filter(Boolean)
+                .join("\n"),
+              html: `
+                <div style="font-family:Arial,sans-serif;line-height:1.5;color:#0f172a;">
+                  <h3 style="margin:0 0 8px 0;">Verified screening queued</h3>
+                  <div><strong>Applicant:</strong> ${applicantName} ${applicantEmail ? `(${applicantEmail})` : ""}</div>
+                  <div><strong>Service level:</strong> ${serviceLevel}</div>
+                  <div><strong>Application ID:</strong> ${id}</div>
+                  <div><strong>Order ID:</strong> ${orderId}</div>
+                  <div><strong>Property ID:</strong> ${data?.propertyId || "n/a"}</div>
+                  ${data?.unitId ? `<div><strong>Unit ID:</strong> ${data.unitId}</div>` : ""}
+                  <div><strong>Total paid:</strong> ${(pricing.totalAmountCents / 100).toFixed(2)} ${orderPayload.currency}</div>
+                  <p style="margin:14px 0;">
+                    <a href="${adminLink}" style="display:inline-block;padding:10px 14px;background:#2563eb;color:#fff;border-radius:10px;text-decoration:none;font-weight:700;">View queue</a>
+                  </p>
+                </div>
+              `,
+              trackingSettings: {
+                clickTracking: { enable: false, enableText: false },
+                openTracking: { enable: false },
+              },
+              mailSettings: {
+                footer: { enable: false },
+              },
+            });
+          }
+        } catch (queueErr: any) {
+          console.error("[rental-applications] verified queue/create failed", queueErr?.message || queueErr);
+        }
+      }
 
       return res.json({
         ok: true,
