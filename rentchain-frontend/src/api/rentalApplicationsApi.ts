@@ -219,13 +219,13 @@ export async function runScreening(
 export async function createScreeningCheckout(
   id: string,
   params: { scoreAddOn: boolean; serviceLevel: "SELF_SERVE" | "VERIFIED" | "VERIFIED_AI" }
-): Promise<{ ok: boolean; checkoutUrl?: string; error?: string; detail?: string }> {
+): Promise<{ ok: boolean; checkoutUrl?: string; orderId?: string; error?: string; detail?: string }> {
   const res: any = await apiFetch(`/rental-applications/${encodeURIComponent(id)}/screening/checkout`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(params),
   });
-  return res as { ok: boolean; checkoutUrl?: string; error?: string; detail?: string };
+  return res as { ok: boolean; checkoutUrl?: string; orderId?: string; error?: string; detail?: string };
 }
 
 export async function fetchScreening(

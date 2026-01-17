@@ -71,19 +71,20 @@ export const app = express();
 app.set("etag", false);
 
 app.use(cors({ origin: true, credentials: true }));
-app.use(
-  express.json({
-    limit: "10mb",
-    verify: (req: any, _res, buf) => {
-      if (
-        req.originalUrl?.startsWith("/api/stripe/webhook") ||
-        req.originalUrl?.startsWith("/api/webhooks/stripe")
-      ) {
-        req.rawBody = Buffer.from(buf);
-      }
-    },
-  })
-);
+const jsonParser = express.json({
+  limit: "10mb",
+  verify: (req: any, _res, buf) => {
+    if (req.originalUrl?.startsWith("/api/stripe/webhook")) {
+      req.rawBody = Buffer.from(buf);
+    }
+  },
+});
+app.use((req, res, next) => {
+  if (req.originalUrl?.startsWith("/api/webhooks/stripe")) {
+    return next();
+  }
+  return jsonParser(req, res, next);
+});
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(cookieParser());
 app.use((err: any, req: any, res: any, next: any) => {
@@ -154,7 +155,12 @@ app.use("/api", routeSource("usageBreakdownRoutes.ts"), usageBreakdownRoutes);
 app.use("/api/properties", propertiesRoutes);
 app.use("/api", routeSource("rentalApplicationsRoutes.ts"), rentalApplicationsRoutes);
 app.use("/api", routeSource("verifiedScreeningRoutes.ts"), verifiedScreeningRoutes);
-app.use("/api", routeSource("stripeScreeningOrdersWebhookRoutes.ts"), stripeScreeningOrdersWebhookRoutes);
+app.use(
+  "/api/webhooks/stripe",
+  express.raw({ type: "application/json" }),
+  routeSource("stripeScreeningOrdersWebhookRoutes.ts"),
+  stripeScreeningOrdersWebhookRoutes
+);
 app.use("/api/tenant-report", routeSource("tenantReportRoutes.ts"), tenantReportRoutes);
 app.use("/api/tenant-report-pdf", routeSource("tenantReportPdfRoutes.ts"), tenantReportPdfRoutes);
 app.use("/api", applicationsRoutes);

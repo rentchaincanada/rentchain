@@ -423,8 +423,12 @@ router.post(
       }
 
       const baseUrl = (process.env.PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
-      const successUrl = `${baseUrl}/applications?screening=success&orderId=${encodeURIComponent(orderId)}`;
-      const cancelUrl = `${baseUrl}/applications?screening=cancelled`;
+      const successUrl =
+        process.env.STRIPE_SUCCESS_URL ||
+        `${baseUrl}/applications?screening=success&orderId=${encodeURIComponent(orderId)}`;
+      const cancelUrl =
+        process.env.STRIPE_CANCEL_URL ||
+        `${baseUrl}/applications?screening=cancelled&orderId=${encodeURIComponent(orderId)}`;
 
       const session = await stripe.checkout.sessions.create({
         mode: "payment",
@@ -469,7 +473,7 @@ router.post(
         { merge: true }
       );
 
-      return res.json({ ok: true, checkoutUrl: session.url });
+      return res.json({ ok: true, checkoutUrl: session.url, orderId });
     } catch (err: any) {
       console.error("[rental-applications] screening checkout failed", err?.message || err);
       return res.status(500).json({ ok: false, error: "SCREENING_CHECKOUT_FAILED" });
@@ -483,6 +487,9 @@ router.post(
   requireFeature("screening"),
   async (req: any, res) => {
     try {
+      if (process.env.STRIPE_SECRET_KEY) {
+        return res.status(400).json({ ok: false, error: "USE_CHECKOUT" });
+      }
       const role = String(req.user?.role || "").toLowerCase();
       if (role !== "landlord" && role !== "admin") {
         return res.status(403).json({ ok: false, error: "FORBIDDEN" });

@@ -79,7 +79,7 @@ function buildAiVerification(applicationId: string, seed: number) {
   };
 }
 
-router.post("/webhooks/stripe", async (req: StripeWebhookRequest, res: Response) => {
+router.post("/", async (req: StripeWebhookRequest, res: Response) => {
   const stripe = getStripeClient();
   if (!stripe || !STRIPE_WEBHOOK_SECRET) {
     return res.status(400).json({ ok: false, error: "stripe_not_configured" });
@@ -92,9 +92,7 @@ router.post("/webhooks/stripe", async (req: StripeWebhookRequest, res: Response)
 
   let event: Stripe.Event;
   try {
-    const rawBody =
-      req.rawBody ??
-      Buffer.from(typeof req.body === "string" ? req.body : JSON.stringify(req.body));
+    const rawBody = req.body as Buffer;
     event = stripe.webhooks.constructEvent(rawBody, signature, STRIPE_WEBHOOK_SECRET);
   } catch (err: any) {
     console.error("[stripe-webhook-orders] signature verification failed", err?.message || err);
@@ -148,6 +146,13 @@ router.post("/webhooks/stripe", async (req: StripeWebhookRequest, res: Response)
       }
 
       const application = appSnap.data() as any;
+      if (String(application?.screening?.status || "").toUpperCase() === "COMPLETE") {
+        await db.collection("screeningOrders").doc(orderDoc.id).set(
+          { status: "PAID", paidAt: now, updatedAt: now },
+          { merge: true }
+        );
+        return res.sendStatus(200);
+      }
       const scoreAddOn = order?.scoreAddOn === true;
       const serviceLevel = String(order?.serviceLevel || "SELF_SERVE").toUpperCase();
       const aiVerification = serviceLevel === "VERIFIED_AI";
