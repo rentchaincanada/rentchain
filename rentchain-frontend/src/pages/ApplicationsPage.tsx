@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Card, Section, Input, Button, Pill } from "../components/ui/Ui";
 import { spacing, colors, text, radius } from "../styles/tokens";
 import { apiFetch } from "@/api/http";
@@ -7,7 +8,7 @@ import {
   fetchRentalApplication,
   updateRentalApplicationStatus,
   fetchScreeningQuote,
-  runScreening,
+  createScreeningCheckout,
   type RentalApplication,
   type RentalApplicationStatus,
   type RentalApplicationSummary,
@@ -36,6 +37,8 @@ const AI_FLAG_LABELS: Record<string, string> = {
 };
 
 const ApplicationsPage: React.FC = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const { showToast } = useToast();
   const [applications, setApplications] = useState<RentalApplicationSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -136,6 +139,25 @@ const ApplicationsPage: React.FC = () => {
   }, [selectedId]);
 
   useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const screeningStatus = params.get("screening");
+    if (!screeningStatus) return;
+    if (screeningStatus === "success") {
+      showToast({ message: "Payment received. Screening completed.", variant: "success" });
+      if (selectedId) {
+        fetchRentalApplication(selectedId)
+          .then((app) => setDetail(app))
+          .catch(() => null);
+      }
+    } else if (screeningStatus === "cancelled") {
+      showToast({ message: "Payment cancelled.", variant: "error" });
+    }
+    params.delete("screening");
+    params.delete("orderId");
+    navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
+  }, [location.pathname, location.search, navigate, selectedId, showToast]);
+
+  useEffect(() => {
     const loadQuote = async () => {
       if (!selectedId) return;
       setScreeningLoading(true);
@@ -185,13 +207,11 @@ const ApplicationsPage: React.FC = () => {
     if (!detail) return;
     setScreeningRunning(true);
     try {
-      const res = await runScreening(detail.id, { scoreAddOn, serviceLevel });
-      if (!res.ok || !res.data) {
-        throw new Error(res.detail || res.error || "Screening failed");
+      const res = await createScreeningCheckout(detail.id, { scoreAddOn, serviceLevel });
+      if (!res.ok || !res.checkoutUrl) {
+        throw new Error(res.detail || res.error || "Unable to start checkout");
       }
-      const fresh = await fetchRentalApplication(detail.id);
-      setDetail(fresh);
-      showToast({ message: "Screening complete", variant: "success" });
+      window.location.href = res.checkoutUrl;
     } catch (err: any) {
       showToast({ message: "Screening failed", description: err?.message || "", variant: "error" });
     } finally {

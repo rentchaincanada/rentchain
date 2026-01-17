@@ -56,6 +56,7 @@ import messagesRoutes from "./routes/messagesRoutes";
 import tenantsRoutes from "./routes/tenantsRoutes";
 import rentalApplicationsRoutes from "./routes/rentalApplicationsRoutes";
 import verifiedScreeningRoutes from "./routes/verifiedScreeningRoutes";
+import stripeScreeningOrdersWebhookRoutes from "./routes/stripeScreeningOrdersWebhookRoutes";
 
 const app: Application = express();
 app.set("etag", false);
@@ -74,7 +75,10 @@ app.options("*", cors({ origin: true, credentials: true }));
 app.use(
   express.json({
     verify: (req: Request & { rawBody?: Buffer }, _res, buf) => {
-      if (req.originalUrl.startsWith("/api/stripe/webhook")) {
+      if (
+        req.originalUrl.startsWith("/api/stripe/webhook") ||
+        req.originalUrl.startsWith("/api/webhooks/stripe")
+      ) {
         req.rawBody = Buffer.from(buf);
       }
     },
@@ -143,6 +147,7 @@ app.use("/api", routeSource("usageBreakdownRoutes.ts"), usageBreakdownRoutes);
 app.use("/api/properties", propertiesRoutes);
 app.use("/api", routeSource("rentalApplicationsRoutes.ts"), rentalApplicationsRoutes);
 app.use("/api", routeSource("verifiedScreeningRoutes.ts"), verifiedScreeningRoutes);
+app.use("/api", routeSource("stripeScreeningOrdersWebhookRoutes.ts"), stripeScreeningOrdersWebhookRoutes);
 app.use("/api", routeSource("tenantReportRoutes.ts"), tenantReportRoutes);
 app.use("/api", applicationsRoutes);
 app.use("/api/applications", routeSource("applicationsConversionRoutes.ts"), applicationsConversionRoutes);

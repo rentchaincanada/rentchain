@@ -5,6 +5,7 @@ import { db } from "../config/firebase";
 import { authenticateJwt } from "../middleware/authMiddleware";
 import { attachAccount } from "../middleware/attachAccount";
 import { requireFeature } from "../middleware/entitlements";
+import { getStripeClient } from "../services/stripeService";
 
 const router = Router();
 
@@ -308,6 +309,170 @@ router.post(
     } catch (err: any) {
       console.error("[rental-applications] screening quote failed", err?.message || err);
       return res.status(500).json({ ok: false, error: "SCREENING_QUOTE_FAILED" });
+    }
+  }
+);
+
+router.post(
+  "/rental-applications/:id/screening/checkout",
+  attachAccount,
+  requireFeature("screening"),
+  async (req: any, res) => {
+    try {
+      const role = String(req.user?.role || "").toLowerCase();
+      if (role !== "landlord" && role !== "admin") {
+        return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+      }
+      const landlordId = req.user?.landlordId || req.user?.id || null;
+      if (!landlordId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+
+      const id = String(req.params?.id || "").trim();
+      if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+      const snap = await db.collection("rentalApplications").doc(id).get();
+      if (!snap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+      const data = snap.data() as any;
+      if (data?.landlordId && data.landlordId !== landlordId) {
+        return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+      }
+
+      const eligibility = evaluateEligibility(data);
+      if (!eligibility.eligible) {
+        return res.status(400).json({ ok: false, error: "NOT_ELIGIBLE", detail: eligibility.detail });
+      }
+
+      const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
+      const serviceLevel = resolveServiceLevel(body?.serviceLevel);
+      const scoreAddOn = body?.scoreAddOn === true;
+      const pricing = computePricing(serviceLevel, scoreAddOn);
+      const stripe = getStripeClient();
+      if (!stripe) {
+        return res.status(400).json({ ok: false, error: "stripe_not_configured" });
+      }
+
+      const now = Date.now();
+      const orderRef = db.collection("screeningOrders").doc();
+      const orderId = orderRef.id;
+      const aiVerification = serviceLevel === "VERIFIED_AI";
+      const orderPayload: any = {
+        id: orderId,
+        landlordId,
+        applicationId: id,
+        propertyId: data?.propertyId || null,
+        unitId: data?.unitId || null,
+        createdAt: now,
+        amountCents: pricing.baseAmountCents,
+        currency: "CAD",
+        status: "CREATED",
+        scoreAddOn,
+        scoreAddOnCents: pricing.scoreAddOnCents,
+        provider: "STUB",
+        providerRequestId: null,
+        paidAt: null,
+        error: null,
+        serviceLevel,
+        aiVerification,
+        aiPriceCents: aiVerification ? pricing.aiAddOnCents : 0,
+        totalAmountCents: pricing.totalAmountCents,
+        reviewerStatus: "QUEUED",
+        stripeSessionId: null,
+        stripePaymentIntentId: null,
+      };
+
+      await orderRef.set(orderPayload, { merge: true });
+
+      const currency = String(orderPayload.currency || "CAD").toLowerCase();
+      const lineItems: any[] = [
+        {
+          price_data: {
+            currency,
+            product_data: { name: "Rental screening" },
+            unit_amount: pricing.baseAmountCents,
+          },
+          quantity: 1,
+        },
+      ];
+      if (pricing.verifiedAddOnCents) {
+        lineItems.push({
+          price_data: {
+            currency,
+            product_data: { name: "Verified screening add-on" },
+            unit_amount: pricing.verifiedAddOnCents,
+          },
+          quantity: 1,
+        });
+      }
+      if (pricing.aiAddOnCents) {
+        lineItems.push({
+          price_data: {
+            currency,
+            product_data: { name: "AI verification add-on" },
+            unit_amount: pricing.aiAddOnCents,
+          },
+          quantity: 1,
+        });
+      }
+      if (pricing.scoreAddOnCents) {
+        lineItems.push({
+          price_data: {
+            currency,
+            product_data: { name: "Credit score add-on" },
+            unit_amount: pricing.scoreAddOnCents,
+          },
+          quantity: 1,
+        });
+      }
+
+      const baseUrl = (process.env.PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
+      const successUrl = `${baseUrl}/applications?screening=success&orderId=${encodeURIComponent(orderId)}`;
+      const cancelUrl = `${baseUrl}/applications?screening=cancelled`;
+
+      const session = await stripe.checkout.sessions.create({
+        mode: "payment",
+        line_items: lineItems,
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        metadata: {
+          orderId,
+          applicationId: id,
+          landlordId,
+          serviceLevel,
+          scoreAddOn: String(scoreAddOn),
+        },
+      });
+
+      await orderRef.set(
+        { stripeSessionId: session.id },
+        { merge: true }
+      );
+
+      await db.collection("rentalApplications").doc(id).set(
+        {
+          screening: {
+            requested: true,
+            requestedAt: now,
+            status: "PENDING",
+            provider: "STUB",
+            orderId,
+            amountCents: pricing.baseAmountCents,
+            currency: "CAD",
+            paidAt: null,
+            scoreAddOn,
+            scoreAddOnCents: pricing.scoreAddOnCents,
+            totalAmountCents: pricing.totalAmountCents,
+            serviceLevel,
+            aiVerification,
+            ai: null,
+            result: null,
+          },
+          updatedAt: now,
+        },
+        { merge: true }
+      );
+
+      return res.json({ ok: true, checkoutUrl: session.url });
+    } catch (err: any) {
+      console.error("[rental-applications] screening checkout failed", err?.message || err);
+      return res.status(500).json({ ok: false, error: "SCREENING_CHECKOUT_FAILED" });
     }
   }
 );
