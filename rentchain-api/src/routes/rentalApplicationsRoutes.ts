@@ -430,67 +430,98 @@ router.post(
             completedAt: null,
             resultSummary: null,
             recommendation: null,
+            notify: {
+              attemptedAt: null,
+              emailed: false,
+              error: null,
+              to: null,
+            },
           };
 
           await queueRef.set(queueDoc, { merge: true });
 
-          const notifyTo =
-            process.env.VERIFIED_SCREENING_NOTIFY_EMAIL ||
-            process.env.MAINTENANCE_NOTIFY_EMAIL ||
-            process.env.ADMIN_NOTIFY_EMAIL ||
-            "admin@rentchain.ai";
-          const apiKey = process.env.SENDGRID_API_KEY;
-          const from =
-            process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM || process.env.FROM_EMAIL;
-          const replyTo = process.env.SENDGRID_REPLY_TO || process.env.SENDGRID_REPLYTO_EMAIL;
-          if (apiKey && from && notifyTo) {
-            const baseUrl = (process.env.PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
-            const adminLink = `${baseUrl}/admin/verified-screenings`;
-            sgMail.setApiKey(apiKey);
-            await sgMail.send({
-              to: notifyTo,
-              from,
-              replyTo: replyTo || from,
-              subject: `Verified screening queued — ${applicantName}`,
-              text: [
-                "A verified screening is queued.",
-                "",
-                `Applicant: ${applicantName} (${applicantEmail || "n/a"})`,
-                `Service level: ${serviceLevel}`,
-                `Application ID: ${id}`,
-                `Order ID: ${orderId}`,
-                `Property ID: ${data?.propertyId || "n/a"}`,
-                data?.unitId ? `Unit ID: ${data.unitId}` : null,
-                `Total paid: ${(pricing.totalAmountCents / 100).toFixed(2)} ${orderPayload.currency}`,
-                "",
-                `View queue: ${adminLink}`,
-              ]
-                .filter(Boolean)
-                .join("\n"),
-              html: `
-                <div style="font-family:Arial,sans-serif;line-height:1.5;color:#0f172a;">
-                  <h3 style="margin:0 0 8px 0;">Verified screening queued</h3>
-                  <div><strong>Applicant:</strong> ${applicantName} ${applicantEmail ? `(${applicantEmail})` : ""}</div>
-                  <div><strong>Service level:</strong> ${serviceLevel}</div>
-                  <div><strong>Application ID:</strong> ${id}</div>
-                  <div><strong>Order ID:</strong> ${orderId}</div>
-                  <div><strong>Property ID:</strong> ${data?.propertyId || "n/a"}</div>
-                  ${data?.unitId ? `<div><strong>Unit ID:</strong> ${data.unitId}</div>` : ""}
-                  <div><strong>Total paid:</strong> ${(pricing.totalAmountCents / 100).toFixed(2)} ${orderPayload.currency}</div>
-                  <p style="margin:14px 0;">
-                    <a href="${adminLink}" style="display:inline-block;padding:10px 14px;background:#2563eb;color:#fff;border-radius:10px;text-decoration:none;font-weight:700;">View queue</a>
-                  </p>
-                </div>
-              `,
-              trackingSettings: {
-                clickTracking: { enable: false, enableText: false },
-                openTracking: { enable: false },
-              },
-              mailSettings: {
-                footer: { enable: false },
-              },
-            });
+          const opsEmail = String(process.env.VERIFIED_SCREENING_NOTIFY_EMAIL || "").trim();
+          let notifiedOps = false;
+          let notifyError: string | null = null;
+          if (!opsEmail) {
+            notifyError = "MISSING_VERIFIED_SCREENING_NOTIFY_EMAIL";
+          } else {
+            try {
+              const apiKey = process.env.SENDGRID_API_KEY;
+              const from =
+                process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM || process.env.FROM_EMAIL;
+              const replyTo = process.env.SENDGRID_REPLY_TO || process.env.SENDGRID_REPLYTO_EMAIL;
+              if (!apiKey || !from) {
+                notifyError = "EMAIL_NOT_CONFIGURED";
+              } else {
+                const baseUrl = (process.env.PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
+                const adminLink = `${baseUrl}/admin/verified-screenings`;
+                sgMail.setApiKey(apiKey);
+                await sgMail.send({
+                  to: opsEmail,
+                  from,
+                  replyTo: replyTo || from,
+                  subject: `Verified screening queued — ${applicantName}`,
+                  text: [
+                    "A verified screening is queued.",
+                    "",
+                    `Applicant: ${applicantName} (${applicantEmail || "n/a"})`,
+                    `Service level: ${serviceLevel}`,
+                    `Application ID: ${id}`,
+                    `Order ID: ${orderId}`,
+                    `Property ID: ${data?.propertyId || "n/a"}`,
+                    data?.unitId ? `Unit ID: ${data.unitId}` : null,
+                    `Total paid: ${(pricing.totalAmountCents / 100).toFixed(2)} ${orderPayload.currency}`,
+                    "",
+                    `View queue: ${adminLink}`,
+                  ]
+                    .filter(Boolean)
+                    .join("\n"),
+                  html: `
+                    <div style="font-family:Arial,sans-serif;line-height:1.5;color:#0f172a;">
+                      <h3 style="margin:0 0 8px 0;">Verified screening queued</h3>
+                      <div><strong>Applicant:</strong> ${applicantName} ${applicantEmail ? `(${applicantEmail})` : ""}</div>
+                      <div><strong>Service level:</strong> ${serviceLevel}</div>
+                      <div><strong>Application ID:</strong> ${id}</div>
+                      <div><strong>Order ID:</strong> ${orderId}</div>
+                      <div><strong>Property ID:</strong> ${data?.propertyId || "n/a"}</div>
+                      ${data?.unitId ? `<div><strong>Unit ID:</strong> ${data.unitId}</div>` : ""}
+                      <div><strong>Total paid:</strong> ${(pricing.totalAmountCents / 100).toFixed(2)} ${orderPayload.currency}</div>
+                      <p style="margin:14px 0;">
+                        <a href="${adminLink}" style="display:inline-block;padding:10px 14px;background:#2563eb;color:#fff;border-radius:10px;text-decoration:none;font-weight:700;">View queue</a>
+                      </p>
+                    </div>
+                  `,
+                  trackingSettings: {
+                    clickTracking: { enable: false, enableText: false },
+                    openTracking: { enable: false },
+                  },
+                  mailSettings: {
+                    footer: { enable: false },
+                  },
+                });
+                notifiedOps = true;
+              }
+            } catch (err: any) {
+              notifyError = err?.response?.body ? JSON.stringify(err.response.body) : err?.message || "SEND_FAILED";
+              console.error("[verified-screening] ops email failed", { opsEmail, notifyError });
+            }
           }
+
+          await queueRef.set(
+            {
+              notify: {
+                attemptedAt: Date.now(),
+                emailed: notifiedOps,
+                error: notifyError,
+                to: opsEmail || null,
+              },
+            },
+            { merge: true }
+          );
+
+          (res as any).locals = (res as any).locals || {};
+          (res as any).locals.opsNotify = { notifiedOps, notifyError };
         } catch (queueErr: any) {
           console.error("[rental-applications] verified queue/create failed", queueErr?.message || queueErr);
         }
@@ -511,6 +542,8 @@ router.post(
           serviceLevel,
           aiVerification,
           ai,
+          notifiedOps: (res as any).locals?.opsNotify?.notifiedOps ?? false,
+          notifyError: (res as any).locals?.opsNotify?.notifyError ?? null,
         },
       });
     } catch (err: any) {
