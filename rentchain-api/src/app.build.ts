@@ -225,12 +225,6 @@ app.get("/api/__probe/routes", (_req, res) => {
   });
 });
 
-// API 404 handler
-app.use("/api", (_req, res) => {
-  res.setHeader("x-route-source", "not-found");
-  return res.status(404).json({ ok: false, code: "NOT_FOUND", error: "Not Found" });
-});
-
 // Build stamp
 app.get("/api/_build", (_req, res) => {
   res.setHeader("x-route-source", "app.build.ts:/api/_build");
@@ -272,6 +266,12 @@ app.get("/api/__debug/build", (_req, res) => {
 app.get("/api/__debug/ping-application-links", (_req, res) => {
   res.setHeader("x-route-source", "debugPingApplicationLinks");
   return res.json({ ok: true });
+});
+
+// API 404 handler
+app.use("/api", (_req, res) => {
+  res.setHeader("x-route-source", "not-found");
+  return res.status(404).json({ ok: false, code: "NOT_FOUND", error: "Not Found" });
 });
 
 app.use((err: any, req: any, res: any, next: any) => {
