@@ -7,12 +7,15 @@ export type ApplicationLinkResponse = {
     url: string;
     expiresAt: number;
   };
+  emailed?: boolean;
+  emailError?: string;
 };
 
 export async function createApplicationLink(params: {
   propertyId: string;
   unitId?: string | null;
   expiresInDays?: number;
+  applicantEmail?: string | null;
 }): Promise<ApplicationLinkResponse> {
   return apiFetch("/application-links", {
     method: "POST",

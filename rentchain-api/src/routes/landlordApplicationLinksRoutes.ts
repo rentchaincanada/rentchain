@@ -1,4 +1,5 @@
 import { Router } from "express";
+import sgMail from "@sendgrid/mail";
 import { createHash, randomBytes } from "crypto";
 import { authenticateJwt } from "../middleware/authMiddleware";
 import { db } from "../config/firebase";
@@ -28,6 +29,8 @@ router.post("/", authenticateJwt, async (req: any, res) => {
     const unitIdRaw = req.body?.unitId;
     const unitId = unitIdRaw === null || unitIdRaw === undefined ? "" : String(unitIdRaw).trim();
     const expiresInDaysRaw = Number(req.body?.expiresInDays ?? 14);
+    const applicantEmailRaw = req.body?.applicantEmail;
+    const applicantEmail = typeof applicantEmailRaw === "string" ? applicantEmailRaw.trim() : "";
 
     if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
     if (!propertyId) {
@@ -40,12 +43,14 @@ router.post("/", authenticateJwt, async (req: any, res) => {
       return res.status(403).json({ ok: false, error: "Forbidden" });
     }
 
+    let unitData: any | null = null;
     if (unitId) {
       const unitSnap = await db.collection("units").doc(unitId).get();
       if (!unitSnap.exists) {
         return res.status(404).json({ ok: false, error: "Unit not found" });
       }
       const unit = unitSnap.data() as any;
+      unitData = unit;
       if (unit?.landlordId !== landlordId) {
         return res.status(403).json({ ok: false, error: "Forbidden" });
       }
@@ -75,6 +80,112 @@ router.post("/", authenticateJwt, async (req: any, res) => {
     const baseUrl = (process.env.PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
     const applicationUrl = `${baseUrl}/apply/${encodeURIComponent(token)}`;
 
+    let emailed = false;
+    let emailError: string | undefined;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const hasValidEmail = !!(applicantEmail && emailRegex.test(applicantEmail));
+
+    if (applicantEmail && !hasValidEmail) {
+      emailError = "INVALID_APPLICANT_EMAIL";
+    } else if (hasValidEmail) {
+      const apiKey = process.env.SENDGRID_API_KEY;
+      const from =
+        process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM || process.env.FROM_EMAIL;
+      const replyTo = process.env.SENDGRID_REPLY_TO || process.env.SENDGRID_REPLYTO_EMAIL;
+
+      if (!apiKey || !from) {
+        emailError = "EMAIL_NOT_CONFIGURED";
+      } else {
+        try {
+          sgMail.setApiKey(apiKey);
+          const prop = ownership.data || {};
+          const addressLine1 = prop.addressLine1 || prop.name || "Property";
+          const addressLine2 = prop.addressLine2 || "";
+          const city = prop.city || "";
+          const region = prop.province || prop.state || "";
+          const postal = prop.postalCode || prop.postal || "";
+          const propertyAddress = [addressLine1, addressLine2, city, region, postal]
+            .filter((v) => String(v || "").trim())
+            .join(", ");
+          const unitLabel = unitData?.unitNumber || unitData?.name || unitData?.label || "";
+          const rentValue =
+            unitData?.rent ??
+            unitData?.monthlyRent ??
+            unitData?.marketRent ??
+            prop?.rent ??
+            prop?.monthlyRent ??
+            null;
+          const rentAmount =
+            typeof rentValue === "number" && Number.isFinite(rentValue)
+              ? `$${rentValue.toFixed(0)}`
+              : null;
+          const subjectUnit = unitLabel ? ` Unit ${unitLabel}` : "";
+          const subject = `Rental Application — ${addressLine1}${subjectUnit}`;
+          const expiresAtFormatted = new Date(expiresAt).toLocaleDateString();
+
+          await sgMail.send({
+            to: applicantEmail,
+            from,
+            replyTo: replyTo || from,
+            subject,
+            text: [
+              "Hello,",
+              "",
+              "Thank you for your interest in the property listed below.",
+              "Please complete the rental application at your convenience.",
+              "",
+              `Property: ${propertyAddress || addressLine1}`,
+              unitLabel ? `Unit: ${unitLabel}` : null,
+              rentAmount ? `Rent: ${rentAmount}` : null,
+              "",
+              `Complete application: ${applicationUrl}`,
+              "",
+              `This application link expires on ${expiresAtFormatted}.`,
+              "",
+              "Powered by RentChain.ai",
+            ]
+              .filter(Boolean)
+              .join("\n"),
+            html: `
+              <div style="font-family:Arial,sans-serif;line-height:1.5;color:#0f172a;">
+                <p>Hello,</p>
+                <p>Thank you for your interest in the property listed below.</p>
+                <p>Please complete the rental application at your convenience.</p>
+                <div style="margin:14px 0 10px 0;">
+                  <div><strong>Property:</strong> ${propertyAddress || addressLine1}</div>
+                  ${unitLabel ? `<div><strong>Unit:</strong> ${unitLabel}</div>` : ""}
+                  ${rentAmount ? `<div><strong>Rent:</strong> ${rentAmount}</div>` : ""}
+                </div>
+                <p style="margin:16px 0;">
+                  <a href="${applicationUrl}" style="display:inline-block;padding:10px 14px;background:#2563eb;color:#fff;border-radius:10px;text-decoration:none;font-weight:700;">Complete Application</a>
+                </p>
+                <p style="font-size:12px;color:#475569;">This application link expires on ${expiresAtFormatted}.</p>
+                <p style="font-size:12px;color:#64748b;">Powered by RentChain.ai</p>
+              </div>
+            `,
+            trackingSettings: {
+              clickTracking: { enable: false, enableText: false },
+              openTracking: { enable: false },
+            },
+            mailSettings: {
+              footer: { enable: false },
+            },
+          });
+          emailed = true;
+        } catch (err: any) {
+          emailed = false;
+          emailError = err?.message || "SEND_FAILED";
+          console.error("[application-links] email send failed", {
+            applicantEmail,
+            propertyId,
+            unitId,
+            errMessage: err?.message,
+            errBody: err?.response?.body,
+          });
+        }
+      }
+    }
+
     return res.json({
       ok: true,
       data: {
@@ -82,6 +193,8 @@ router.post("/", authenticateJwt, async (req: any, res) => {
         url: applicationUrl,
         expiresAt,
       },
+      emailed,
+      emailError,
     });
   } catch (err: any) {
     console.error("[application-links] create failed", err?.message || err, err);

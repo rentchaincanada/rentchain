@@ -14,6 +14,9 @@ export function SendApplicationModal({ open, propertyId, unit, onClose }: Props)
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [link, setLink] = React.useState<string | null>(null);
+  const [applicantEmail, setApplicantEmail] = React.useState("");
+  const [emailed, setEmailed] = React.useState<boolean | null>(null);
+  const [emailError, setEmailError] = React.useState<string | null>(null);
   const tenantEmail = (unit as any)?.tenantEmail || "";
 
   React.useEffect(() => {
@@ -21,22 +24,34 @@ export function SendApplicationModal({ open, propertyId, unit, onClose }: Props)
       setLoading(false);
       setError(null);
       setLink(null);
+      setApplicantEmail("");
+      setEmailed(null);
+      setEmailError(null);
     }
   }, [open]);
+
+  React.useEffect(() => {
+    if (open && tenantEmail) {
+      setApplicantEmail(tenantEmail);
+    }
+  }, [open, tenantEmail]);
 
   if (!open) return null;
 
   const handleGenerate = async () => {
-    if (!propertyId || !(unit as any)?.id) {
-      setError("Missing property or unit id");
+    if (!propertyId) {
+      setError("Missing property id");
       return;
     }
     setLoading(true);
     setError(null);
+    setEmailed(null);
+    setEmailError(null);
     try {
       const res = await createApplicationLink({
         propertyId: String(propertyId),
         unitId: (unit as any)?.id ? String((unit as any).id) : null,
+        applicantEmail: applicantEmail.trim() || null,
       });
       if ((res as any)?.ok === false) {
         const detail = (res as any)?.detail || (res as any)?.error || "Failed to create application link";
@@ -60,11 +75,21 @@ export function SendApplicationModal({ open, propertyId, unit, onClose }: Props)
         }
       })();
       setLink(fullUrl);
-      showToast({
-        message: "Application link ready",
-        description: "Share this link with the applicant.",
-        variant: "success",
-      });
+      setEmailed(Boolean((res as any)?.emailed));
+      setEmailError(((res as any)?.emailError as string) || null);
+      if ((res as any)?.emailed) {
+        showToast({
+          message: "Application link sent",
+          description: "The applicant received the email.",
+          variant: "success",
+        });
+      } else {
+        showToast({
+          message: "Application link created",
+          description: "Email not sent. Share the link with the applicant.",
+          variant: "success",
+        });
+      }
     } catch (e: any) {
       const msg = e?.message || "Failed to create application link";
       setError(msg);
@@ -126,8 +151,32 @@ export function SendApplicationModal({ open, propertyId, unit, onClose }: Props)
         </div>
 
         <div style={{ fontSize: "0.9rem", color: "#111827" }}>
-          Generate a shareable link for unit {(unit as any)?.unitNumber || ""}.
+          Generate a shareable link for {unit ? `unit ${(unit as any)?.unitNumber || ""}` : "this property"}.
         </div>
+        {!unit ? (
+          <div style={{ fontSize: "0.85rem", color: "#6b7280" }}>
+            Unit and rent details can be entered manually by the applicant.
+          </div>
+        ) : null}
+
+        <label style={{ display: "grid", gap: 6, fontSize: "0.9rem", color: "#111827" }}>
+          Applicant email
+          <input
+            value={applicantEmail}
+            onChange={(e) => setApplicantEmail(e.target.value)}
+            placeholder="applicant@email.com"
+            style={{
+              width: "100%",
+              padding: "8px 10px",
+              borderRadius: 8,
+              border: "1px solid #e5e7eb",
+              fontSize: "0.9rem",
+            }}
+          />
+          <span style={{ fontSize: "0.8rem", color: "#6b7280" }}>
+            We'll email the applicant a secure application link.
+          </span>
+        </label>
 
         {error ? (
           <div
@@ -198,8 +247,13 @@ export function SendApplicationModal({ open, propertyId, unit, onClose }: Props)
                 Open link
               </a>
             </div>
-            {tenantEmail ? (
-              <div style={{ fontSize: "0.85rem", color: "#374151" }}>Invite sent to {tenantEmail}</div>
+            {emailed === true ? (
+              <div style={{ fontSize: "0.85rem", color: "#374151" }}>Application link sent to applicant.</div>
+            ) : emailed === false ? (
+              <div style={{ fontSize: "0.85rem", color: "#6b7280" }}>
+                Application link created. Email not sent.
+                {emailError ? ` (${emailError})` : ""}
+              </div>
             ) : null}
           </div>
         ) : null}
