@@ -6,7 +6,6 @@ import { authenticateJwt } from "../middleware/authMiddleware";
 import { attachAccount } from "../middleware/attachAccount";
 import { requireFeature } from "../middleware/entitlements";
 import { getStripeClient, isStripeConfigured } from "../services/stripeService";
-import { stripeNotConfiguredResponse, isStripeNotConfiguredError } from "../lib/stripeNotConfigured";
 
 const router = Router();
 
@@ -350,9 +349,9 @@ router.post(
       let stripe: any;
       try {
         stripe = getStripeClient();
-      } catch (err) {
-        if (isStripeNotConfiguredError(err)) {
-          return res.status(400).json(stripeNotConfiguredResponse());
+      } catch (err: any) {
+        if (err?.code === "stripe_not_configured" || err?.message === "stripe_not_configured") {
+          return res.status(400).json({ ok: false, error: "stripe_not_configured" });
         }
         throw err;
       }
