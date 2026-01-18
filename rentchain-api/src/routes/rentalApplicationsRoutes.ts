@@ -6,6 +6,8 @@ import { authenticateJwt } from "../middleware/authMiddleware";
 import { attachAccount } from "../middleware/attachAccount";
 import { requireFeature } from "../middleware/entitlements";
 import { getStripeClient, isStripeConfigured } from "../services/stripeService";
+import { finalizeStripePayment } from "../services/stripeFinalize";
+import { applyScreeningResultsFromOrder } from "../services/stripeScreeningProcessor";
 
 const router = Router();
 
@@ -370,6 +372,11 @@ router.post(
         amountCents: pricing.baseAmountCents,
         currency: "CAD",
         status: "CREATED",
+        paymentStatus: "unpaid",
+        finalized: false,
+        finalizedAt: null,
+        lastStripeEventId: null,
+        amountTotalCents: pricing.totalAmountCents,
         scoreAddOn,
         scoreAddOnCents: pricing.scoreAddOnCents,
         provider: "STUB",
@@ -765,6 +772,82 @@ router.post(
     } catch (err: any) {
       console.error("[rental-applications] screening run failed", err?.message || err);
       return res.status(500).json({ ok: false, error: "SCREENING_RUN_FAILED" });
+    }
+  }
+);
+
+router.post(
+  "/screening/stripe/confirm",
+  attachAccount,
+  requireFeature("screening"),
+  async (req: any, res) => {
+    try {
+      const role = String(req.user?.role || "").toLowerCase();
+      if (role !== "landlord" && role !== "admin") {
+        return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+      }
+      const sessionId = String(req.body?.sessionId || "").trim();
+      if (!sessionId) {
+        return res.status(400).json({ ok: false, error: "sessionId_required" });
+      }
+
+      let stripe: any;
+      try {
+        stripe = getStripeClient();
+      } catch (err: any) {
+        if (err?.code === "stripe_not_configured" || err?.message === "stripe_not_configured") {
+          return res.status(400).json({ ok: false, error: "stripe_not_configured" });
+        }
+        throw err;
+      }
+
+      const session = await stripe.checkout.sessions.retrieve(sessionId, {
+        expand: ["payment_intent"],
+      });
+      if (!session || session.payment_status !== "paid") {
+        return res.status(400).json({ ok: false, error: "payment_not_confirmed" });
+      }
+
+      const paymentIntent =
+        typeof session.payment_intent === "string"
+          ? null
+          : (session.payment_intent as any);
+      const paymentIntentId =
+        typeof session.payment_intent === "string" ? session.payment_intent : paymentIntent?.id;
+
+      const finalize = await finalizeStripePayment({
+        eventId: `manual_confirm_${session.id}_${paymentIntentId || "na"}`,
+        eventType: "manual.confirm",
+        orderId: session.metadata?.orderId,
+        sessionId: session.id,
+        paymentIntentId,
+        amountTotalCents: typeof session.amount_total === "number" ? session.amount_total : undefined,
+        currency: session.currency || undefined,
+        landlordId: session.metadata?.landlordId,
+        applicationId: session.metadata?.applicationId,
+      });
+
+      if (!finalize.ok) {
+        return res.status(404).json({ ok: false, error: finalize.error || "finalize_failed" });
+      }
+
+      if (finalize.orderId && finalize.applicationId) {
+        await applyScreeningResultsFromOrder({
+          orderId: finalize.orderId,
+          applicationId: String(finalize.applicationId),
+        });
+      }
+
+      return res.json({
+        ok: true,
+        orderId: finalize.orderId || null,
+        applicationId: finalize.applicationId || null,
+        alreadyProcessed: finalize.alreadyProcessed || false,
+        alreadyFinalized: finalize.alreadyFinalized || false,
+      });
+    } catch (err: any) {
+      console.error("[screening/stripe/confirm] failed", err?.message || err);
+      return res.status(500).json({ ok: false, error: "STRIPE_CONFIRM_FAILED" });
     }
   }
 );
