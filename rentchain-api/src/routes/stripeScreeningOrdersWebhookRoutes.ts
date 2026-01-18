@@ -131,15 +131,10 @@ export const stripeWebhookHandler = async (req: StripeWebhookRequest, res: Respo
         applicationId,
       });
 
+      console.log("[stripe-webhook-orders] finalize result", finalize);
+
       if (!finalize.ok) {
-        console.error("[stripe-webhook-orders] finalize failed", {
-          eventId: event.id,
-          eventType: event.type,
-          orderId,
-          sessionId,
-          paymentIntentId,
-          error: finalize.error,
-        });
+        console.error("[stripe-webhook-orders] finalize failed", finalize);
         return res.status(200).json({ received: true });
       }
 
@@ -169,7 +164,7 @@ export const stripeWebhookHandler = async (req: StripeWebhookRequest, res: Respo
         });
       }
     } catch (err: any) {
-      console.error("[stripe-webhook-orders] handler failed", err?.message || err);
+      console.error("[stripe-webhook-orders] handler failed", err?.stack || err);
     }
   }
 
