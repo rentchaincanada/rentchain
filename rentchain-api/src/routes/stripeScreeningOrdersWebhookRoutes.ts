@@ -27,6 +27,12 @@ export const stripeWebhookHandler = async (req: StripeWebhookRequest, res: Respo
   }
 
   const signature = req.headers["stripe-signature"];
+  console.log("[stripe-webhook-orders] raw-body", {
+    isBuffer: Buffer.isBuffer(req.body),
+    bodyType: typeof req.body,
+    bodyLength: Buffer.isBuffer(req.body) ? req.body.length : undefined,
+    hasSig: Boolean(req.headers["stripe-signature"]),
+  });
   if (!signature) {
     return res.status(400).send("Missing Stripe signature");
   }
