@@ -1,6 +1,6 @@
 import { db } from "../config/firebase";
 
-type FinalizeArgs = {
+export type FinalizeStripeArgs = {
   eventId: string;
   eventType: string;
   orderId?: string;
@@ -8,135 +8,189 @@ type FinalizeArgs = {
   paymentIntentId?: string;
   amountTotalCents?: number;
   currency?: string;
-  landlordId?: string;
   applicationId?: string;
+  landlordId?: string;
 };
 
-type FinalizeResult = {
-  ok: boolean;
-  alreadyProcessed?: boolean;
-  alreadyFinalized?: boolean;
-  orderId?: string;
-  applicationId?: string | null;
-  error?: string;
-};
+export type FinalizeStripeResult =
+  | { ok: true; alreadyProcessed: boolean; alreadyFinalized: boolean; orderIdResolved?: string }
+  | { ok: false; error: "order_not_found" | "application_not_found" | "unknown"; detail?: string };
 
-async function markEventProcessed(args: FinalizeArgs): Promise<{ ok: boolean; already: boolean }> {
-  const ref = db.collection("stripe_events").doc(String(args.eventId));
-  return db.runTransaction(async (tx) => {
-    const snap = await tx.get(ref);
-    if (snap.exists) {
-      return { ok: true, already: true };
-    }
-    tx.set(ref, {
-      createdAt: Date.now(),
-      type: args.eventType,
-      orderId: args.orderId || null,
-      paymentIntentId: args.paymentIntentId || null,
-      sessionId: args.sessionId || null,
-    });
-    return { ok: true, already: false };
-  });
+function nowMs() {
+  return Date.now();
 }
 
-async function resolveOrderDoc(args: FinalizeArgs): Promise<FirebaseFirestore.DocumentSnapshot | null> {
-  if (args.orderId) {
-    const doc = await db.collection("screeningOrders").doc(String(args.orderId)).get();
-    if (doc.exists) return doc;
-  }
-  if (args.sessionId) {
+function normStr(v: unknown): string | undefined {
+  if (v == null) return undefined;
+  const s = String(v).trim();
+  return s.length ? s : undefined;
+}
+
+function normInt(v: unknown): number | undefined {
+  if (v == null) return undefined;
+  const n = Number(v);
+  if (!Number.isFinite(n)) return undefined;
+  return Math.round(n);
+}
+
+async function resolveOrderRef(args: FinalizeStripeArgs) {
+  const orderId = normStr(args.orderId);
+  if (orderId) return db.collection("screeningOrders").doc(orderId);
+
+  const sessionId = normStr(args.sessionId);
+  if (sessionId) {
     const snap = await db
       .collection("screeningOrders")
-      .where("stripeSessionId", "==", String(args.sessionId))
+      .where("stripeSessionId", "==", sessionId)
       .limit(1)
       .get();
-    if (!snap.empty) return snap.docs[0];
+    if (!snap.empty) return snap.docs[0].ref;
   }
-  if (args.paymentIntentId) {
+
+  const pi = normStr(args.paymentIntentId);
+  if (pi) {
     const snap = await db
       .collection("screeningOrders")
-      .where("stripePaymentIntentId", "==", String(args.paymentIntentId))
+      .where("stripePaymentIntentId", "==", pi)
       .limit(1)
       .get();
-    if (!snap.empty) return snap.docs[0];
+    if (!snap.empty) return snap.docs[0].ref;
   }
+
   return null;
 }
 
-export async function finalizeStripePayment(args: FinalizeArgs): Promise<FinalizeResult> {
-  const eventGate = await markEventProcessed(args);
-  if (eventGate.already) {
-    return { ok: true, alreadyProcessed: true };
-  }
+export async function finalizeStripePayment(
+  args: FinalizeStripeArgs
+): Promise<FinalizeStripeResult> {
+  const eventId = normStr(args.eventId);
+  if (!eventId) return { ok: false, error: "unknown", detail: "missing eventId" };
 
-  const orderDoc = await resolveOrderDoc(args);
-  if (!orderDoc || !orderDoc.exists) {
+  const eventRef = db.collection("stripeEvents").doc(eventId);
+  const amountTotalCents = normInt(args.amountTotalCents);
+  const currency = normStr(args.currency)?.toLowerCase();
+
+  const orderRef = await resolveOrderRef(args);
+  if (!orderRef) {
+    await eventRef.set(
+      {
+        createdAt: nowMs(),
+        type: normStr(args.eventType) || "unknown",
+        orderId: normStr(args.orderId) || null,
+        sessionId: normStr(args.sessionId) || null,
+        paymentIntentId: normStr(args.paymentIntentId) || null,
+        resolved: false,
+      },
+      { merge: true }
+    );
     return { ok: false, error: "order_not_found" };
   }
 
-  const orderId = orderDoc.id;
-  const orderData = orderDoc.data() as any;
-  const applicationId = args.applicationId || orderData?.applicationId || null;
-  const now = Date.now();
-
-  const orderRef = db.collection("screeningOrders").doc(orderId);
-  const appRef = applicationId ? db.collection("rentalApplications").doc(String(applicationId)) : null;
-
-  const txResult = await db.runTransaction(async (tx) => {
-    const freshOrder = await tx.get(orderRef);
-    if (!freshOrder.exists) {
-      return { ok: false, error: "order_not_found" as const };
-    }
-    const current = freshOrder.data() as any;
-    if (current?.finalized === true || current?.paymentStatus === "paid") {
-      return { ok: true, alreadyFinalized: true as const };
+  return await db.runTransaction(async (tx) => {
+    const existingEvent = await tx.get(eventRef);
+    if (existingEvent.exists) {
+      return { ok: true, alreadyProcessed: true, alreadyFinalized: true } as FinalizeStripeResult;
     }
 
-    const updates: any = {
-      paymentStatus: "paid",
-      finalized: true,
-      finalizedAt: now,
-      paidAt: now,
-      lastStripeEventId: args.eventId,
-      stripePaymentIntentId: args.paymentIntentId || current?.stripePaymentIntentId || null,
-      stripeSessionId: args.sessionId || current?.stripeSessionId || null,
-    };
-
-    if (typeof args.amountTotalCents === "number") {
-      updates.amountTotalCents = args.amountTotalCents;
-    }
-    if (args.currency) {
-      updates.currency = args.currency;
-    }
-
-    tx.set(orderRef, updates, { merge: true });
-
-    if (appRef) {
+    const orderSnap = await tx.get(orderRef);
+    if (!orderSnap.exists) {
       tx.set(
-        appRef,
+        eventRef,
         {
-          screening: {
-            status: "PENDING",
-            paymentStatus: "paid",
-            paidAt: now,
-          },
-          updatedAt: now,
+          createdAt: nowMs(),
+          type: normStr(args.eventType) || "unknown",
+          orderRef: orderRef.path,
+          resolved: false,
         },
         { merge: true }
       );
+      return { ok: false, error: "order_not_found" } as FinalizeStripeResult;
     }
 
-    return { ok: true, alreadyFinalized: false as const };
+    const order = orderSnap.data() || {};
+    const alreadyFinalized = Boolean(order.finalized) || order.paymentStatus === "paid";
+
+    tx.set(
+      eventRef,
+      {
+        createdAt: nowMs(),
+        type: normStr(args.eventType) || "unknown",
+        resolved: true,
+        orderRef: orderRef.path,
+        orderId: orderRef.id,
+        sessionId: normStr(args.sessionId) || order.stripeSessionId || null,
+        paymentIntentId: normStr(args.paymentIntentId) || order.stripePaymentIntentId || null,
+      },
+      { merge: true }
+    );
+
+    if (alreadyFinalized) {
+      const patch: any = {
+        lastStripeEventId: eventId,
+      };
+      const pi = normStr(args.paymentIntentId);
+      const sid = normStr(args.sessionId);
+      if (pi && !order.stripePaymentIntentId) patch.stripePaymentIntentId = pi;
+      if (sid && !order.stripeSessionId) patch.stripeSessionId = sid;
+      if (currency && !order.currency) patch.currency = currency;
+      if (amountTotalCents != null && order.amountTotalCents == null) {
+        patch.amountTotalCents = amountTotalCents;
+      }
+
+      tx.set(orderRef, patch, { merge: true });
+
+      return {
+        ok: true,
+        alreadyProcessed: false,
+        alreadyFinalized: true,
+        orderIdResolved: orderRef.id,
+      } as FinalizeStripeResult;
+    }
+
+    const finalizedAt = nowMs();
+    tx.set(
+      orderRef,
+      {
+        paymentStatus: "paid",
+        finalized: true,
+        paidAt: finalizedAt,
+        finalizedAt,
+        lastStripeEventId: eventId,
+        stripeSessionId: normStr(args.sessionId) || order.stripeSessionId || null,
+        stripePaymentIntentId: normStr(args.paymentIntentId) || order.stripePaymentIntentId || null,
+        amountTotalCents: amountTotalCents ?? order.amountTotalCents ?? null,
+        currency: currency ?? order.currency ?? null,
+        updatedAt: finalizedAt,
+      },
+      { merge: true }
+    );
+
+    const applicationId = normStr(args.applicationId) || normStr(order.applicationId);
+    if (applicationId) {
+      const appRef = db.collection("rentalApplications").doc(applicationId);
+      const appSnap = await tx.get(appRef);
+      if (appSnap.exists) {
+        tx.set(
+          appRef,
+          {
+            screening: {
+              ...(appSnap.data()?.screening || {}),
+              status: "paid",
+              paidAt: finalizedAt,
+              orderId: orderRef.id,
+            },
+            updatedAt: finalizedAt,
+          },
+          { merge: true }
+        );
+      }
+    }
+
+    return {
+      ok: true,
+      alreadyProcessed: false,
+      alreadyFinalized: false,
+      orderIdResolved: orderRef.id,
+    } as FinalizeStripeResult;
   });
-
-  if (!txResult.ok) {
-    return { ok: false, error: txResult.error };
-  }
-
-  return {
-    ok: true,
-    alreadyFinalized: txResult.alreadyFinalized,
-    orderId,
-    applicationId,
-  };
 }

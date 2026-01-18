@@ -786,10 +786,10 @@ router.post(
       if (role !== "landlord" && role !== "admin") {
         return res.status(403).json({ ok: false, error: "FORBIDDEN" });
       }
-      const sessionId = String(req.body?.sessionId || "").trim();
-      if (!sessionId) {
-        return res.status(400).json({ ok: false, error: "sessionId_required" });
-      }
+        const sessionId = String(req.body?.sessionId || "").trim();
+        if (!sessionId) {
+          return res.status(400).json({ ok: false, error: "missing_session_id" });
+        }
 
       let stripe: any;
       try {
@@ -804,9 +804,14 @@ router.post(
       const session = await stripe.checkout.sessions.retrieve(sessionId, {
         expand: ["payment_intent"],
       });
-      if (!session || session.payment_status !== "paid") {
-        return res.status(400).json({ ok: false, error: "payment_not_confirmed" });
-      }
+        if (!session || session.payment_status !== "paid") {
+          return res.status(409).json({
+            ok: false,
+            error: "not_paid",
+            payment_status: session?.payment_status || null,
+            status: session?.status || null,
+          });
+        }
 
       const paymentIntent =
         typeof session.payment_intent === "string"
@@ -815,36 +820,43 @@ router.post(
       const paymentIntentId =
         typeof session.payment_intent === "string" ? session.payment_intent : paymentIntent?.id;
 
-      const finalize = await finalizeStripePayment({
-        eventId: `manual_confirm_${session.id}_${paymentIntentId || "na"}`,
-        eventType: "manual.confirm",
-        orderId: session.metadata?.orderId,
-        sessionId: session.id,
-        paymentIntentId,
-        amountTotalCents: typeof session.amount_total === "number" ? session.amount_total : undefined,
-        currency: session.currency || undefined,
-        landlordId: session.metadata?.landlordId,
-        applicationId: session.metadata?.applicationId,
-      });
+        const orderId =
+          (session.client_reference_id as string | null) ||
+          (session.metadata?.orderId as string | undefined);
+        const applicationId = session.metadata?.applicationId;
+        const landlordId = session.metadata?.landlordId;
 
-      if (!finalize.ok) {
-        return res.status(404).json({ ok: false, error: finalize.error || "finalize_failed" });
-      }
-
-      if (finalize.orderId && finalize.applicationId) {
-        await applyScreeningResultsFromOrder({
-          orderId: finalize.orderId,
-          applicationId: String(finalize.applicationId),
+        const finalize = await finalizeStripePayment({
+          eventId: `manual_confirm_${session.id}_${paymentIntentId || "na"}`,
+          eventType: "manual.confirm",
+          orderId: orderId || undefined,
+          sessionId: session.id,
+          paymentIntentId,
+          amountTotalCents: typeof session.amount_total === "number" ? session.amount_total : undefined,
+          currency: session.currency || undefined,
+          landlordId: landlordId || undefined,
+          applicationId: applicationId || undefined,
         });
-      }
 
-      return res.json({
-        ok: true,
-        orderId: finalize.orderId || null,
-        applicationId: finalize.applicationId || null,
-        alreadyProcessed: finalize.alreadyProcessed || false,
-        alreadyFinalized: finalize.alreadyFinalized || false,
-      });
+        if (!finalize.ok) {
+          return res.status(404).json({ ok: false, error: finalize.error || "finalize_failed" });
+        }
+
+        const resolvedOrderId = finalize.orderIdResolved || orderId;
+        if (!finalize.alreadyFinalized && resolvedOrderId && applicationId) {
+          await applyScreeningResultsFromOrder({
+            orderId: resolvedOrderId,
+            applicationId: String(applicationId),
+          });
+        }
+
+        return res.json({
+          ok: true,
+          orderId: resolvedOrderId || null,
+          applicationId: applicationId || null,
+          alreadyProcessed: finalize.alreadyProcessed,
+          alreadyFinalized: finalize.alreadyFinalized,
+        });
     } catch (err: any) {
       console.error("[screening/stripe/confirm] failed", err?.message || err);
       return res.status(500).json({ ok: false, error: "STRIPE_CONFIRM_FAILED" });

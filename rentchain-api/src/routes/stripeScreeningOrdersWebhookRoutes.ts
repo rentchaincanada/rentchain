@@ -47,7 +47,6 @@ router.post("/", async (req: StripeWebhookRequest, res: Response) => {
     event.type === "payment_intent.succeeded"
   ) {
     try {
-      const now = Date.now();
       let orderId: string | undefined;
       let sessionId: string | undefined;
       let paymentIntentId: string | undefined;
@@ -66,7 +65,9 @@ router.post("/", async (req: StripeWebhookRequest, res: Response) => {
         currency = pi.currency;
       } else {
         const session = event.data.object as Stripe.Checkout.Session;
-        orderId = session.metadata?.orderId;
+        orderId =
+          (session.client_reference_id as string | null) ||
+          (session.metadata?.orderId as string | undefined);
         applicationId = session.metadata?.applicationId;
         landlordId = session.metadata?.landlordId;
         sessionId = session.id;
@@ -103,8 +104,12 @@ router.post("/", async (req: StripeWebhookRequest, res: Response) => {
         return res.status(200).json({ received: true });
       }
 
-      const resolvedOrderId = finalize.orderId || orderId;
-      const resolvedApplicationId = finalize.applicationId || applicationId;
+      if (finalize.alreadyFinalized) {
+        return res.status(200).json({ received: true });
+      }
+
+      const resolvedOrderId = finalize.orderIdResolved || orderId;
+      const resolvedApplicationId = applicationId;
       if (!resolvedOrderId || !resolvedApplicationId) {
         return res.status(200).json({ received: true });
       }
