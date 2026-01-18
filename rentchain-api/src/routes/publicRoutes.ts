@@ -18,7 +18,12 @@ router.get("/health", (_req, res) => {
 
 router.get("/health/stripe", (_req, res) => {
   res.setHeader("x-route-source", "publicRoutes.ts");
-  res.json({ ok: true, configured: isStripeConfigured(), apiVersion: STRIPE_API_VERSION });
+  res.json({
+    ok: true,
+    stripeConfigured: isStripeConfigured(),
+    webhookSecretConfigured: Boolean(process.env.STRIPE_WEBHOOK_SECRET),
+    apiRevision: process.env.K_REVISION || null,
+  });
 });
 
 router.get("/__probe/version", (_req, res) => {

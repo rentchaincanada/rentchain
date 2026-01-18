@@ -26,19 +26,23 @@ export const stripeWebhookHandler = async (req: StripeWebhookRequest, res: Respo
     return res.status(400).json(stripeNotConfiguredResponse());
   }
 
+  const STRIPE_WEBHOOK_DEBUG = process.env.STRIPE_WEBHOOK_DEBUG === "true";
   const signature = req.headers["stripe-signature"];
-  console.log("[stripe-webhook-orders] raw-body", {
-    isBuffer: Buffer.isBuffer(req.body),
-    bodyType: typeof req.body,
-    bodyLength: Buffer.isBuffer(req.body) ? req.body.length : undefined,
-    hasSig: Boolean(req.headers["stripe-signature"]),
-  });
+  if (STRIPE_WEBHOOK_DEBUG) {
+    console.log("[stripe-webhook-orders] raw-body", {
+      isBuffer: Buffer.isBuffer(req.body),
+      bodyType: typeof req.body,
+      bodyLength: Buffer.isBuffer(req.body) ? req.body.length : undefined,
+      hasSig: Boolean(req.headers["stripe-signature"]),
+    });
+  }
   if (!signature) {
     return res.status(400).send("Missing Stripe signature");
   }
 
   let event: Stripe.Event;
   try {
+    // Dashboard whsec_ differs from Stripe CLI whsec_; ensure the sender secret matches Cloud Run.
     const rawBody = req.body as Buffer;
     event = stripe.webhooks.constructEvent(rawBody, signature, STRIPE_WEBHOOK_SECRET);
   } catch (err: any) {
@@ -90,6 +94,15 @@ export const stripeWebhookHandler = async (req: StripeWebhookRequest, res: Respo
           }
         }
 
+        if (!orderId) {
+          console.log("[stripe-webhook-orders] ignore PI event (missing orderId)", {
+            eventType: event.type,
+            eventId: event.id,
+            paymentIntentId: pi.id,
+          });
+          return res.json({ received: true, ignored: true });
+        }
+
         console.log("[stripe-webhook-orders] PI resolve", {
           eventId: event.id,
           hasOrderId: Boolean(orderId),
@@ -107,6 +120,15 @@ export const stripeWebhookHandler = async (req: StripeWebhookRequest, res: Respo
         paymentIntentId = typeof session.payment_intent === "string" ? session.payment_intent : undefined;
         amountTotalCents = typeof session.amount_total === "number" ? session.amount_total : undefined;
         currency = session.currency || undefined;
+
+        if (!orderId) {
+          console.log("[stripe-webhook-orders] ignore event (missing orderId)", {
+            eventType: event.type,
+            eventId: event.id,
+            sessionId: session.id,
+          });
+          return res.json({ received: true, ignored: true });
+        }
       }
 
       console.log("[stripe-webhook-orders] extracted", {
@@ -115,8 +137,6 @@ export const stripeWebhookHandler = async (req: StripeWebhookRequest, res: Respo
         orderId,
         sessionId,
         paymentIntentId,
-        applicationId,
-        landlordId,
       });
 
       const finalize = await finalizeStripePayment({
