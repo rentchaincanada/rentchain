@@ -104,6 +104,16 @@ router.post("/", async (req: StripeWebhookRequest, res: Response) => {
         currency = session.currency || undefined;
       }
 
+      console.log("[stripe-webhook-orders] extracted", {
+        eventType: event.type,
+        eventId: event.id,
+        orderId,
+        sessionId,
+        paymentIntentId,
+        applicationId,
+        landlordId,
+      });
+
       const finalize = await finalizeStripePayment({
         eventId: event.id,
         eventType: event.type,
