@@ -12,8 +12,7 @@ interface StripeWebhookRequest extends Request {
 
 const router = Router();
 
-
-router.post("/", async (req: StripeWebhookRequest, res: Response) => {
+export const stripeWebhookHandler = async (req: StripeWebhookRequest, res: Response) => {
   let stripe: Stripe;
   try {
     stripe = getStripeClient();
@@ -169,6 +168,8 @@ router.post("/", async (req: StripeWebhookRequest, res: Response) => {
   }
 
   return res.status(200).json({ received: true });
-});
+};
+
+router.post("/", stripeWebhookHandler);
 
 export default router;
