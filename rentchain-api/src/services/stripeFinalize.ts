@@ -88,11 +88,16 @@ export async function finalizeStripePayment(
 
   return await db.runTransaction(async (tx) => {
     const existingEvent = await tx.get(eventRef);
+    const orderSnap = await tx.get(orderRef);
+    let order: any = null;
+    let alreadyFinalized = false;
+    let appRef: FirebaseFirestore.DocumentReference | null = null;
+    let appSnap: FirebaseFirestore.DocumentSnapshot | null = null;
+
     if (existingEvent.exists) {
       return { ok: true, alreadyProcessed: true, alreadyFinalized: true } as FinalizeStripeResult;
     }
 
-    const orderSnap = await tx.get(orderRef);
     if (!orderSnap.exists) {
       tx.set(
         eventRef,
@@ -107,8 +112,14 @@ export async function finalizeStripePayment(
       return { ok: false, error: "order_not_found" } as FinalizeStripeResult;
     }
 
-    const order = orderSnap.data() || {};
-    const alreadyFinalized = Boolean(order.finalized) || order.paymentStatus === "paid";
+    order = orderSnap.data() || {};
+    alreadyFinalized = Boolean(order.finalized) || order.paymentStatus === "paid";
+
+    const applicationId = normStr(args.applicationId) || normStr(order.applicationId);
+    if (applicationId) {
+      appRef = db.collection("rentalApplications").doc(applicationId);
+      appSnap = await tx.get(appRef);
+    }
 
     tx.set(
       eventRef,
@@ -165,25 +176,20 @@ export async function finalizeStripePayment(
       { merge: true }
     );
 
-    const applicationId = normStr(args.applicationId) || normStr(order.applicationId);
-    if (applicationId) {
-      const appRef = db.collection("rentalApplications").doc(applicationId);
-      const appSnap = await tx.get(appRef);
-      if (appSnap.exists) {
-        tx.set(
-          appRef,
-          {
-            screening: {
-              ...(appSnap.data()?.screening || {}),
-              status: "paid",
-              paidAt: finalizedAt,
-              orderId: orderRef.id,
-            },
-            updatedAt: finalizedAt,
+    if (appRef && appSnap?.exists) {
+      tx.set(
+        appRef,
+        {
+          screening: {
+            ...(appSnap.data()?.screening || {}),
+            status: "paid",
+            paidAt: finalizedAt,
+            orderId: orderRef.id,
           },
-          { merge: true }
-        );
-      }
+          updatedAt: finalizedAt,
+        },
+        { merge: true }
+      );
     }
 
     return {
