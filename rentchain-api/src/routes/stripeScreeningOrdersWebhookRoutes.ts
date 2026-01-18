@@ -63,6 +63,34 @@ router.post("/", async (req: StripeWebhookRequest, res: Response) => {
         paymentIntentId = pi.id;
         amountTotalCents = typeof pi.amount_received === "number" ? pi.amount_received : undefined;
         currency = pi.currency;
+
+        if (!orderId) {
+          try {
+            const sessions = await stripe.checkout.sessions.list({
+              payment_intent: pi.id,
+              limit: 1,
+            });
+            const s = sessions.data?.[0];
+            if (s) {
+              sessionId = s.id;
+              orderId =
+                (s.client_reference_id as string | null) ||
+                (s.metadata?.orderId as string | undefined) ||
+                undefined;
+              applicationId = applicationId || (s.metadata?.applicationId as string | undefined) || undefined;
+              landlordId = landlordId || (s.metadata?.landlordId as string | undefined) || undefined;
+            }
+          } catch {
+            // ignore lookup errors; finalize may still work if order already has stripePaymentIntentId
+          }
+        }
+
+        console.log("[stripe-webhook-orders] PI resolve", {
+          eventId: event.id,
+          hasOrderId: Boolean(orderId),
+          hasSessionId: Boolean(sessionId),
+          paymentIntentId: pi.id,
+        });
       } else {
         const session = event.data.object as Stripe.Checkout.Session;
         orderId =
