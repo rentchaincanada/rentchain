@@ -116,22 +116,40 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
             );
           })}
           {String(userRole || "").toLowerCase() === "admin" ? (
-            <button
-              type="button"
-              onClick={() => handleNav("/admin/verified-screenings")}
-              style={{
-                textAlign: "left",
-                padding: "10px 12px",
-                borderRadius: radius.md,
-                border: `1px solid ${location.pathname.startsWith("/admin/verified-screenings") ? colors.accent : colors.border}`,
-                background: location.pathname.startsWith("/admin/verified-screenings") ? "rgba(37,99,235,0.08)" : colors.card,
-                color: text.primary,
-                fontWeight: location.pathname.startsWith("/admin/verified-screenings") ? 700 : 600,
-                cursor: "pointer",
-              }}
-            >
-              Verified Screenings
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => handleNav("/admin")}
+                style={{
+                  textAlign: "left",
+                  padding: "10px 12px",
+                  borderRadius: radius.md,
+                  border: `1px solid ${location.pathname === "/admin" ? colors.accent : colors.border}`,
+                  background: location.pathname === "/admin" ? "rgba(37,99,235,0.08)" : colors.card,
+                  color: text.primary,
+                  fontWeight: location.pathname === "/admin" ? 700 : 600,
+                  cursor: "pointer",
+                }}
+              >
+                Admin Dashboard
+              </button>
+              <button
+                type="button"
+                onClick={() => handleNav("/admin/verified-screenings")}
+                style={{
+                  textAlign: "left",
+                  padding: "10px 12px",
+                  borderRadius: radius.md,
+                  border: `1px solid ${location.pathname.startsWith("/admin/verified-screenings") ? colors.accent : colors.border}`,
+                  background: location.pathname.startsWith("/admin/verified-screenings") ? "rgba(37,99,235,0.08)" : colors.card,
+                  color: text.primary,
+                  fontWeight: location.pathname.startsWith("/admin/verified-screenings") ? 700 : 600,
+                  cursor: "pointer",
+                }}
+              >
+                Verified Screenings
+              </button>
+            </>
           ) : null}
         </div>
 

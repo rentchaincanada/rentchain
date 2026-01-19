@@ -62,6 +62,7 @@ import stripeScreeningOrdersWebhookRoutes, {
   stripeWebhookHandler,
 } from "./routes/stripeScreeningOrdersWebhookRoutes";
 import screeningJobsAdminRoutes from "./routes/screeningJobsAdminRoutes";
+import adminRoutes from "./routes/adminRoutes";
 
 process.on("unhandledRejection", (reason) => {
   console.error("[FATAL] unhandledRejection", reason);
@@ -178,6 +179,7 @@ app.use("/api", reportsExportRoutes);
 app.use("/api", stubsRoutes);
 app.use("/api/admin", routeSource("adminBootstrapRoutes"), adminBootstrapRoutes);
 app.use("/api/admin", routeSource("screeningJobsAdminRoutes.ts"), screeningJobsAdminRoutes);
+app.use("/api", routeSource("adminRoutes.ts"), adminRoutes);
 app.use("/api/admin", routeSource("adminPropertiesRoutes.ts"), adminPropertiesRoutes);
 
 // Core APIs

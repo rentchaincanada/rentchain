@@ -60,6 +60,7 @@ import stripeScreeningOrdersWebhookRoutes, {
   stripeWebhookHandler,
 } from "./routes/stripeScreeningOrdersWebhookRoutes";
 import screeningJobsAdminRoutes from "./routes/screeningJobsAdminRoutes";
+import adminRoutes from "./routes/adminRoutes";
 
 const app: Application = express();
 app.set("etag", false);
@@ -165,6 +166,7 @@ app.use("/api/tenant-report-pdf", routeSource("tenantReportPdfRoutes.ts"), tenan
 app.use("/api", stubsRoutes);
 app.use("/api/admin", routeSource("adminBootstrapRoutes"), adminBootstrapRoutes);
 app.use("/api/admin", routeSource("screeningJobsAdminRoutes.ts"), screeningJobsAdminRoutes);
+app.use("/api", routeSource("adminRoutes.ts"), adminRoutes);
 app.use("/api/admin/demo", routeSource("adminDemoRoutes.ts"), adminDemoRoutes);
 app.use("/api/admin", routeSource("adminPropertiesRoutes.ts"), adminPropertiesRoutes);
 app.use("/api", authzRoutes);

@@ -15,6 +15,7 @@ import ComingSoonPage from "./pages/ComingSoonPage";
 import { TwoFactorPage } from "./pages/TwoFactorPage";
 import { AccountSecurityPage } from "./pages/AccountSecurityPage";
 import { RequireAuth } from "./components/auth/RequireAuth";
+import { RequireAdmin } from "./components/auth/RequireAdmin";
 import ScreeningPage from "./pages/ScreeningPage";
 import ScreeningSuccessPage from "./pages/ScreeningSuccessPage";
 import ScreeningCancelPage from "./pages/ScreeningCancelPage";
@@ -45,6 +46,7 @@ const LedgerV2Page = lazy(() => import("./pages/LedgerV2Page"));
 const BlockchainPage = lazy(() => import("./pages/BlockchainPage"));
 const AdminScreeningsPage = lazy(() => import("./pages/AdminScreeningsPage"));
 const AdminVerifiedScreeningsPage = lazy(() => import("./pages/AdminVerifiedScreeningsPage"));
+const AdminDashboardPage = lazy(() => import("./pages/admin/AdminDashboardPage"));
 
 function App() {
   const applicantApplyRedirects = [
@@ -155,6 +157,16 @@ function App() {
                 <AdminVerifiedScreeningsPage />
               </Suspense>
             </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin"
+          element={
+            <RequireAdmin>
+              <Suspense fallback={null}>
+                <AdminDashboardPage />
+              </Suspense>
+            </RequireAdmin>
           }
         />
         <Route
