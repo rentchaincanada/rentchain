@@ -59,6 +59,7 @@ import verifiedScreeningRoutes from "./routes/verifiedScreeningRoutes";
 import stripeScreeningOrdersWebhookRoutes, {
   stripeWebhookHandler,
 } from "./routes/stripeScreeningOrdersWebhookRoutes";
+import screeningJobsAdminRoutes from "./routes/screeningJobsAdminRoutes";
 
 const app: Application = express();
 app.set("etag", false);
@@ -163,6 +164,7 @@ app.use("/api/impersonation", routeSource("impersonationRoutes.ts"), impersonati
 app.use("/api/tenant-report-pdf", routeSource("tenantReportPdfRoutes.ts"), tenantReportPdfRoutes);
 app.use("/api", stubsRoutes);
 app.use("/api/admin", routeSource("adminBootstrapRoutes"), adminBootstrapRoutes);
+app.use("/api/admin", routeSource("screeningJobsAdminRoutes.ts"), screeningJobsAdminRoutes);
 app.use("/api/admin/demo", routeSource("adminDemoRoutes.ts"), adminDemoRoutes);
 app.use("/api/admin", routeSource("adminPropertiesRoutes.ts"), adminPropertiesRoutes);
 app.use("/api", authzRoutes);

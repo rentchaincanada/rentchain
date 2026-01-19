@@ -1,4 +1,5 @@
 import { db } from "../config/firebase";
+import { enqueueScreeningJob } from "./screeningJobs";
 
 export type FinalizeStripeArgs = {
   eventId: string;
@@ -86,7 +87,7 @@ export async function finalizeStripePayment(
     return { ok: false, error: "order_not_found" };
   }
 
-  return await db.runTransaction(async (tx) => {
+  const result = await db.runTransaction(async (tx) => {
     const existingEvent = await tx.get(eventRef);
     const orderSnap = await tx.get(orderRef);
     let order: any = null;
@@ -199,4 +200,29 @@ export async function finalizeStripePayment(
       orderIdResolved: orderRef.id,
     } as FinalizeStripeResult;
   });
+
+  if (result.ok && !result.alreadyFinalized) {
+    try {
+      let resolvedApplicationId = normStr(args.applicationId);
+      let resolvedLandlordId = normStr(args.landlordId);
+      if (!resolvedApplicationId || !resolvedLandlordId) {
+        const orderSnap = await db.collection("screeningOrders").doc(orderRef.id).get();
+        const data = orderSnap.data() as any;
+        resolvedApplicationId = resolvedApplicationId || normStr(data?.applicationId);
+        resolvedLandlordId = resolvedLandlordId || normStr(data?.landlordId);
+      }
+      if (resolvedApplicationId) {
+        await enqueueScreeningJob({
+          orderId: orderRef.id,
+          applicationId: resolvedApplicationId,
+          landlordId: resolvedLandlordId || null,
+          provider: "STUB",
+        });
+      }
+    } catch (err: any) {
+      console.warn("[screening-jobs] enqueue failed (non-blocking)", err?.message || err);
+    }
+  }
+
+  return result;
 }
