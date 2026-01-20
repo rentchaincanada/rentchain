@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import React, { useEffect, useRef, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { colors, layout, radius, shadows, spacing, text, typography } from "../../styles/tokens";
 
 interface MarketingLayoutProps {
@@ -9,6 +9,10 @@ interface MarketingLayoutProps {
 export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) => {
   const [isMobile, setIsMobile] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement | null>(null);
+  const prevMenuOpen = useRef(false);
+  const prevBodyOverflow = useRef<string | null>(null);
+  const location = useLocation();
 
   const onHover = (event: React.MouseEvent<HTMLElement>, active: boolean) => {
     event.currentTarget.style.color = active ? text.primary : text.muted;
@@ -48,6 +52,36 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [menuOpen]);
+
+  useEffect(() => {
+    if (menuOpen) {
+      setMenuOpen(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname, location.search]);
+
+  useEffect(() => {
+    if (!isMobile) return;
+    if (!menuOpen && prevMenuOpen.current) {
+      menuButtonRef.current?.focus();
+    }
+    prevMenuOpen.current = menuOpen;
+  }, [menuOpen, isMobile]);
+
+  useEffect(() => {
+    if (!isMobile) return;
+    if (menuOpen) {
+      if (typeof document !== "undefined") {
+        prevBodyOverflow.current = document.body.style.overflow || "";
+        document.body.style.overflow = "hidden";
+      }
+      return;
+    }
+    if (typeof document !== "undefined") {
+      document.body.style.overflow = prevBodyOverflow.current ?? "";
+      prevBodyOverflow.current = null;
+    }
+  }, [menuOpen, isMobile]);
 
   return (
     <div
@@ -246,6 +280,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
               <button
                 type="button"
                 onClick={() => setMenuOpen((open) => !open)}
+                ref={menuButtonRef}
                 style={{
                   border: `1px solid ${colors.border}`,
                   background: colors.panel,
@@ -254,10 +289,17 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                   padding: "8px 12px",
                   fontWeight: 600,
                   cursor: "pointer",
+                  outline: "none",
                 }}
                 aria-expanded={menuOpen}
                 aria-controls="marketing-header-menu"
                 aria-label={menuOpen ? "Close menu" : "Open menu"}
+                onFocus={(event) => {
+                  event.currentTarget.style.boxShadow = shadows.focus;
+                }}
+                onBlur={(event) => {
+                  event.currentTarget.style.boxShadow = "none";
+                }}
               >
                 Menu
               </button>
@@ -267,10 +309,24 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
       </header>
       {isMobile && menuOpen ? (
         <div
+          role="presentation"
+          onClick={() => setMenuOpen(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15,23,42,0.18)",
+            zIndex: 5,
+          }}
+        />
+      ) : null}
+      {isMobile && menuOpen ? (
+        <div
           id="marketing-header-menu"
           style={{
             borderBottom: `1px solid ${colors.border}`,
             background: colors.panel,
+            position: "relative",
+            zIndex: 6,
           }}
         >
           <div
