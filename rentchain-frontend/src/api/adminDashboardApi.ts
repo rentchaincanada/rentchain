@@ -1,4 +1,4 @@
-import { apiJson } from "../lib/apiClient";
+import { apiFetch } from "./apiFetch";
 
 export type AdminSummary = {
   revenue: {
@@ -33,7 +33,7 @@ export type AdminExpense = {
 };
 
 export async function fetchAdminSummary() {
-  const data = await apiJson<{ ok: boolean; revenue: AdminSummary["revenue"]; marketing: AdminSummary["marketing"]; expenses: AdminSummary["expenses"] }>(
+  const data = await apiFetch<{ ok: boolean; revenue: AdminSummary["revenue"]; marketing: AdminSummary["marketing"]; expenses: AdminSummary["expenses"] }>(
     "/admin/summary"
   );
   return {
@@ -48,15 +48,14 @@ export async function listAdminExpenses(params?: { from?: string; to?: string })
   if (params?.from) query.set("from", params.from);
   if (params?.to) query.set("to", params.to);
   const url = query.toString() ? `/admin/expenses?${query.toString()}` : "/admin/expenses";
-  const data = await apiJson<{ ok: boolean; items: AdminExpense[] }>(url);
+  const data = await apiFetch<{ ok: boolean; items: AdminExpense[] }>(url);
   return data.items || [];
 }
 
 export async function createAdminExpense(payload: Omit<AdminExpense, "id">) {
-  const data = await apiJson<{ ok: boolean; item: AdminExpense }>("/admin/expenses", {
+  const data = await apiFetch<{ ok: boolean; item: AdminExpense }>("/admin/expenses", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: payload,
   });
   return data.item;
 }
