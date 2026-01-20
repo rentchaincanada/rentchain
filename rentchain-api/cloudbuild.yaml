@@ -3,6 +3,7 @@ substitutions:
   _SERVICE: rentchain-landlord-api
   _REPO: rentchain-api
   _IMAGE: rentchain-landlord-api
+  _IMAGE_TAG: "${SHORT_SHA}"
 
 options:
   logging: CLOUD_LOGGING_ONLY
@@ -32,6 +33,18 @@ steps:
         npm install
         npm run build
 
+  # Validate image tag before docker build
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        if [ -z "${_IMAGE_TAG}" ]; then
+          echo "ERROR: _IMAGE_TAG is empty. Provide --substitutions=_IMAGE_TAG=xxxx"
+          exit 1
+        fi
+        echo "Using _IMAGE_TAG=${_IMAGE_TAG}"
+
   # Build Docker image from rentchain-api
   - name: "gcr.io/cloud-builders/docker"
     dir: rentchain-api
@@ -39,7 +52,7 @@ steps:
       [
         "build",
         "-t",
-        "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:$SHORT_SHA",
+        "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:${_IMAGE_TAG}",
         ".",
       ]
 
@@ -48,7 +61,7 @@ steps:
     args:
       [
         "push",
-        "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:$SHORT_SHA",
+        "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:${_IMAGE_TAG}",
       ]
 
   # Deploy to Cloud Run
@@ -59,7 +72,7 @@ steps:
       - |
         set -euxo pipefail
         gcloud run deploy "${_SERVICE}" \
-          --image "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:$SHORT_SHA" \
+          --image "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:${_IMAGE_TAG}" \
           --region "${_REGION}" \
           --platform managed \
           --allow-unauthenticated
