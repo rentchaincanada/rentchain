@@ -24,13 +24,30 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
       }
     };
     update();
-    if ("addEventListener" in media) {
-      media.addEventListener("change", update);
-      return () => media.removeEventListener("change", update);
+    const legacy = media as MediaQueryList & {
+      addListener?: (listener: () => void) => void;
+      removeListener?: (listener: () => void) => void;
+    };
+    if (typeof legacy.addEventListener === "function") {
+      legacy.addEventListener("change", update);
+      return () => legacy.removeEventListener("change", update);
     }
-    media.addListener(update);
-    return () => media.removeListener(update);
+    if (typeof legacy.addListener === "function") {
+      legacy.addListener(update);
+      return () => legacy.removeListener?.(update);
+    }
   }, []);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMenuOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [menuOpen]);
 
   return (
     <div
@@ -239,7 +256,8 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                   cursor: "pointer",
                 }}
                 aria-expanded={menuOpen}
-                aria-label="Toggle navigation menu"
+                aria-controls="marketing-header-menu"
+                aria-label={menuOpen ? "Close menu" : "Open menu"}
               >
                 Menu
               </button>
@@ -249,6 +267,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
       </header>
       {isMobile && menuOpen ? (
         <div
+          id="marketing-header-menu"
           style={{
             borderBottom: `1px solid ${colors.border}`,
             background: colors.panel,
