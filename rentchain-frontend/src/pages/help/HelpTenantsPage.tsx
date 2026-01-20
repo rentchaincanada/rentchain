@@ -20,7 +20,7 @@ const HelpTenantsPage: React.FC = () => {
           <li>Consent and transparency</li>
           <li>How to review your records</li>
         </ul>
-        <h2 style={{ marginTop: spacing.lg }}>Downloads</h2>
+        <h2 style={{ marginTop: spacing.lg }}>Downloads (coming soon)</h2>
         <ul style={{ margin: 0, paddingLeft: "1.1rem", color: text.muted }}>
           <li>Tenant Rights Overview</li>
           <li>Rental Application Checklist</li>

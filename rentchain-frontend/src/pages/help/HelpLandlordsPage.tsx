@@ -20,7 +20,7 @@ const HelpLandlordsPage: React.FC = () => {
           <li>Inviting tenants</li>
           <li>Creating and tracking lease events</li>
         </ul>
-        <h2 style={{ marginTop: spacing.lg }}>Downloads</h2>
+        <h2 style={{ marginTop: spacing.lg }}>Downloads (coming soon)</h2>
         <ul style={{ margin: 0, paddingLeft: "1.1rem", color: text.muted }}>
           <li>Tenant Notice Templates (PDF / DOCX)</li>
           <li>Lease Event Log Template</li>

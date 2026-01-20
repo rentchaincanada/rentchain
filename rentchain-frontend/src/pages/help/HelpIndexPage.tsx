@@ -23,6 +23,7 @@ const HelpIndexPage: React.FC = () => {
             <p style={{ color: text.muted }}>
               Start here for onboarding, templates, and lifecycle guidance.
             </p>
+            <div style={{ color: text.muted, fontWeight: 600 }}>Downloads (coming soon)</div>
             <ul style={{ margin: 0, paddingLeft: "1.1rem", color: text.muted }}>
               <li>Getting Started</li>
               <li>Guides</li>
@@ -40,6 +41,7 @@ const HelpIndexPage: React.FC = () => {
             <p style={{ color: text.muted }}>
               Learn how RentChain works and how to manage your records.
             </p>
+            <div style={{ color: text.muted, fontWeight: 600 }}>Downloads (coming soon)</div>
             <ul style={{ margin: 0, paddingLeft: "1.1rem", color: text.muted }}>
               <li>Understanding RentChain</li>
               <li>Guides</li>
