@@ -67,7 +67,7 @@ async function sumExpenses(from?: string, to?: string) {
   return total;
 }
 
-router.get("/admin/summary", requireAdmin, async (_req, res) => {
+router.get("/summary", requireAdmin, async (_req, res) => {
   try {
     const last30 = dateRangeForLast30d();
     const mtd = dateRangeForMtd();
@@ -127,7 +127,7 @@ router.get("/admin/summary", requireAdmin, async (_req, res) => {
   }
 });
 
-router.get("/admin/expenses", requireAdmin, async (req, res) => {
+router.get("/expenses", requireAdmin, async (req, res) => {
   try {
     const from = String(req.query?.from || "").trim();
     const to = String(req.query?.to || "").trim();
@@ -143,7 +143,7 @@ router.get("/admin/expenses", requireAdmin, async (req, res) => {
   }
 });
 
-router.post("/admin/expenses", requireAdmin, async (req, res) => {
+router.post("/expenses", requireAdmin, async (req, res) => {
   try {
     const date = String(req.body?.date || "").trim();
     const vendor = String(req.body?.vendor || "").trim();
