@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { Card } from "../../components/ui/Ui";
 import { spacing, text } from "../../styles/tokens";
 import { MarketingLayout } from "./MarketingLayout";
+import { TEMPLATES_VERSION } from "../../constants/templates";
 
 const LegalHelpPage: React.FC = () => {
   useEffect(() => {
@@ -83,10 +84,20 @@ const LegalHelpPage: React.FC = () => {
                 <li>Downloads list:</li>
               </ul>
               <ul style={{ paddingLeft: "1.1rem", color: text.muted }}>
-                <li>Tenant Notice Templates (PDF / DOCX)</li>
-                <li>Lease Event Log Template</li>
-                <li>Move-In / Move-Out Checklist</li>
-                <li>Rent Ledger Summary Sheet</li>
+                <li>
+                  <a href={`/templates/Tenant_Notice_Templates.pdf?v=${TEMPLATES_VERSION}`}>Tenant Notice Templates (PDF)</a>{" "}
+                  /{" "}
+                  <a href={`/templates/Tenant_Notice_Templates.docx?v=${TEMPLATES_VERSION}`}>DOCX</a>
+                </li>
+                <li>
+                  <a href={`/templates/Lease_Event_Log_Template.pdf?v=${TEMPLATES_VERSION}`}>Lease Event Log Template</a>
+                </li>
+                <li>
+                  <a href={`/templates/Move_In_Move_Out_Checklist.pdf?v=${TEMPLATES_VERSION}`}>Move-In / Move-Out Checklist</a>
+                </li>
+                <li>
+                  <a href={`/templates/Rent_Ledger_Summary_Sheet.pdf?v=${TEMPLATES_VERSION}`}>Rent Ledger Summary Sheet</a>
+                </li>
               </ul>
             </div>
             <div style={{ flex: "1 1 280px" }}>
@@ -97,9 +108,15 @@ const LegalHelpPage: React.FC = () => {
                 <li>Downloads list:</li>
               </ul>
               <ul style={{ paddingLeft: "1.1rem", color: text.muted }}>
-                <li>Tenant Rights Overview</li>
-                <li>Rental Application Checklist</li>
-                <li>Dispute Documentation Guide</li>
+                <li>
+                  <a href={`/templates/Tenant_Rights_Overview.pdf?v=${TEMPLATES_VERSION}`}>Tenant Rights Overview</a>
+                </li>
+                <li>
+                  <a href={`/templates/Rental_Application_Checklist.pdf?v=${TEMPLATES_VERSION}`}>Rental Application Checklist</a>
+                </li>
+                <li>
+                  <a href={`/templates/Dispute_Documentation_Guide.pdf?v=${TEMPLATES_VERSION}`}>Dispute Documentation Guide</a>
+                </li>
               </ul>
             </div>
           </div>

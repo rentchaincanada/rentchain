@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
 import { spacing, text } from "../../styles/tokens";
 import { MarketingLayout } from "../marketing/MarketingLayout";
+import { TEMPLATES_VERSION } from "../../constants/templates";
 
 const HelpTenantsPage: React.FC = () => {
   useEffect(() => {
@@ -22,9 +23,15 @@ const HelpTenantsPage: React.FC = () => {
         </ul>
         <h2 style={{ marginTop: spacing.lg }}>Downloads (coming soon)</h2>
         <ul style={{ margin: 0, paddingLeft: "1.1rem", color: text.muted }}>
-          <li>Tenant Rights Overview</li>
-          <li>Rental Application Checklist</li>
-          <li>Dispute Documentation Guide</li>
+          <li>
+            <a href={`/templates/Tenant_Rights_Overview.pdf?v=${TEMPLATES_VERSION}`}>Tenant Rights Overview</a>
+          </li>
+          <li>
+            <a href={`/templates/Rental_Application_Checklist.pdf?v=${TEMPLATES_VERSION}`}>Rental Application Checklist</a>
+          </li>
+          <li>
+            <a href={`/templates/Dispute_Documentation_Guide.pdf?v=${TEMPLATES_VERSION}`}>Dispute Documentation Guide</a>
+          </li>
         </ul>
       </div>
     </MarketingLayout>
