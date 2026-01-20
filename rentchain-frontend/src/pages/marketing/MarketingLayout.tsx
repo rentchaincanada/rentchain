@@ -7,6 +7,10 @@ interface MarketingLayoutProps {
 }
 
 export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) => {
+  const onHover = (event: React.MouseEvent<HTMLElement>, active: boolean) => {
+    event.currentTarget.style.color = active ? text.primary : text.muted;
+  };
+
   return (
     <div
       style={{
@@ -32,34 +36,67 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
             maxWidth: layout.maxWidth,
             margin: "0 auto",
             padding: `${spacing.md} ${layout.pagePadding}`,
-            display: "grid",
-            gridTemplateColumns: "minmax(120px, 1fr) auto minmax(220px, 1fr)",
+            display: "flex",
             alignItems: "center",
+            justifyContent: "space-between",
             gap: spacing.lg,
           }}
         >
-          <Link
-            to="/"
-            style={{ fontWeight: 700, textDecoration: "none", color: text.primary, letterSpacing: "0.2px" }}
+          <div style={{ flex: "1 1 0", display: "flex", alignItems: "center" }}>
+            <Link
+              to="/"
+              style={{ fontWeight: 700, textDecoration: "none", color: text.primary, letterSpacing: "0.2px" }}
+            >
+              RentChain
+            </Link>
+          </div>
+          <nav
+            style={{
+              flex: "1 1 auto",
+              display: "flex",
+              justifyContent: "center",
+              gap: "24px",
+              fontWeight: 500,
+              color: text.muted,
+              flexWrap: "wrap",
+            }}
           >
-            RentChain
-          </Link>
-          <nav style={{ display: "flex", gap: spacing.md, justifyContent: "center", flexWrap: "wrap" }}>
-            <Link to="/" style={{ color: text.muted, textDecoration: "none" }}>
+            <Link
+              to="/"
+              style={{ color: text.muted, textDecoration: "none" }}
+              onMouseEnter={(e) => onHover(e, true)}
+              onMouseLeave={(e) => onHover(e, false)}
+            >
               Home
             </Link>
-            <Link to="/about" style={{ color: text.muted, textDecoration: "none" }}>
+            <Link
+              to="/about"
+              style={{ color: text.muted, textDecoration: "none" }}
+              onMouseEnter={(e) => onHover(e, true)}
+              onMouseLeave={(e) => onHover(e, false)}
+            >
               About
             </Link>
-            <Link to="/pricing" style={{ color: text.muted, textDecoration: "none" }}>
+            <Link
+              to="/pricing"
+              style={{ color: text.muted, textDecoration: "none" }}
+              onMouseEnter={(e) => onHover(e, true)}
+              onMouseLeave={(e) => onHover(e, false)}
+            >
               Pricing
             </Link>
-            <Link to="/legal" style={{ color: text.muted, textDecoration: "none" }}>
+            <Link
+              to="/legal"
+              style={{ color: text.muted, textDecoration: "none" }}
+              onMouseEnter={(e) => onHover(e, true)}
+              onMouseLeave={(e) => onHover(e, false)}
+            >
               Legal &amp; Help
             </Link>
           </nav>
           <div
             style={{
+              flex: "1 1 0",
               display: "flex",
               justifyContent: "flex-end",
               alignItems: "center",
@@ -96,6 +133,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                 EN
               </button>
               <span style={{ color: text.subtle }}>/</span>
+              {/* TODO: Wire FR toggle once i18n is available. */}
               <button
                 type="button"
                 style={{
@@ -112,10 +150,20 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                 FR
               </button>
             </div>
-            <a href="mailto:support@rentchain.ai" style={{ color: text.muted, textDecoration: "none" }}>
+            <Link
+              to="/legal"
+              style={{ color: text.muted, textDecoration: "none" }}
+              onMouseEnter={(e) => onHover(e, true)}
+              onMouseLeave={(e) => onHover(e, false)}
+            >
               Support
-            </a>
-            <Link to="/login" style={{ color: text.muted, textDecoration: "none" }}>
+            </Link>
+            <Link
+              to="/login"
+              style={{ color: text.muted, textDecoration: "none" }}
+              onMouseEnter={(e) => onHover(e, true)}
+              onMouseLeave={(e) => onHover(e, false)}
+            >
               Log in
             </Link>
             <Link
