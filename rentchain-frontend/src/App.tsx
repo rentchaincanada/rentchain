@@ -15,6 +15,7 @@ import LandingPage from "./pages/marketing/LandingPage";
 import AboutPage from "./pages/marketing/AboutPage";
 import MarketingPricingPage from "./pages/marketing/PricingPage";
 import LegalHelpPage from "./pages/marketing/LegalHelpPage";
+import { InfoPage } from "./pages/marketing/InfoPage";
 import { TwoFactorPage } from "./pages/TwoFactorPage";
 import { AccountSecurityPage } from "./pages/AccountSecurityPage";
 import { RequireAuth } from "./components/auth/RequireAuth";
@@ -61,6 +62,7 @@ function App() {
     <>
       <Routes>
         <Route path="/" element={<LandingPage />} />
+        <Route path="/site" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/app/login" element={<LoginPage />} />
         <Route
@@ -73,8 +75,55 @@ function App() {
         />
         <Route path="/2fa" element={<TwoFactorPage />} />
         <Route path="/pricing" element={<MarketingPricingPage />} />
+        <Route path="/site/pricing" element={<MarketingPricingPage />} />
         <Route path="/about" element={<AboutPage />} />
+        <Route path="/site/about" element={<AboutPage />} />
         <Route path="/legal" element={<LegalHelpPage />} />
+        <Route path="/site/legal" element={<LegalHelpPage />} />
+        <Route
+          path="/help"
+          element={<InfoPage title="Help Center" description="Help resources are being prepared." />}
+        />
+        <Route
+          path="/help/landlords"
+          element={<InfoPage title="Help for Landlords" description="Landlord guides are being prepared." />}
+        />
+        <Route
+          path="/help/tenants"
+          element={<InfoPage title="Help for Tenants" description="Tenant guides are being prepared." />}
+        />
+        <Route
+          path="/privacy"
+          element={<InfoPage title="Privacy Policy" description="Privacy policy content is being prepared." />}
+        />
+        <Route
+          path="/terms"
+          element={<InfoPage title="Terms of Service" description="Terms of service content is being prepared." />}
+        />
+        <Route
+          path="/acceptable-use"
+          element={<InfoPage title="Acceptable Use" description="Acceptable use policy content is being prepared." />}
+        />
+        <Route
+          path="/subprocessors"
+          element={<InfoPage title="Subprocessors" description="Subprocessor disclosures are being prepared." />}
+        />
+        <Route
+          path="/trust"
+          element={<InfoPage title="Trust" description="Trust and compliance resources are being prepared." />}
+        />
+        <Route
+          path="/security"
+          element={<InfoPage title="Security" description="Security information is being prepared." />}
+        />
+        <Route
+          path="/accessibility"
+          element={<InfoPage title="Accessibility" description="Accessibility information is being prepared." />}
+        />
+        <Route
+          path="/status"
+          element={<InfoPage title="Status" description="Service status information is being prepared." />}
+        />
         <Route path="/micro-live" element={<MicroLiveInvitePage />} />
         <Route
           path="/tenant/invite/:token"
@@ -338,7 +387,10 @@ function App() {
         ))}
         <Route path="/apply/:token" element={<PublicApplyPage />} />
 
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route
+          path="*"
+          element={<InfoPage title="Page not found" description="The page you are looking for does not exist." />}
+        />
       </Routes>
       {import.meta.env.DEV ? <DebugPanel /> : null}
     </>
