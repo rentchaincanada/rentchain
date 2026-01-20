@@ -6,6 +6,8 @@ import { getStripeClient, isStripeConfigured } from "../services/stripeService";
 
 const router = Router();
 
+router.get("/ping", requireAdmin, (_req, res) => res.json({ ok: true }));
+
 function toDayString(d: Date) {
   const y = d.getUTCFullYear();
   const m = String(d.getUTCMonth() + 1).padStart(2, "0");
