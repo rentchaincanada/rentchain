@@ -11,7 +11,11 @@ export const RequireAdmin: React.FC<RequireAdminProps> = ({ children }) => {
   const location = useLocation();
 
   if (authStatus === "restoring" || isLoading || !ready) {
-    return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>Loading.</div>;
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        Loading.
+      </div>
+    );
   }
 
   if (!user) {
@@ -23,8 +27,7 @@ export const RequireAdmin: React.FC<RequireAdminProps> = ({ children }) => {
     return <Navigate to={`/login?${params.toString()}`} replace />;
   }
 
-  const role = String(user.role || "").toLowerCase();
-  if (role !== "admin") {
+  if (user.role !== "admin") {
     return (
       <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <div style={{ textAlign: "center", maxWidth: 420 }}>
