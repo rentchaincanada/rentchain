@@ -32,9 +32,9 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
             maxWidth: layout.maxWidth,
             margin: "0 auto",
             padding: `${spacing.md} ${layout.pagePadding}`,
-            display: "flex",
+            display: "grid",
+            gridTemplateColumns: "minmax(120px, 1fr) auto minmax(220px, 1fr)",
             alignItems: "center",
-            justifyContent: "space-between",
             gap: spacing.lg,
           }}
         >
@@ -44,7 +44,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
           >
             RentChain
           </Link>
-          <nav style={{ display: "flex", gap: spacing.md, flexWrap: "wrap" }}>
+          <nav style={{ display: "flex", gap: spacing.md, justifyContent: "center", flexWrap: "wrap" }}>
             <Link to="/" style={{ color: text.muted, textDecoration: "none" }}>
               Home
             </Link>
@@ -58,6 +58,81 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
               Legal &amp; Help
             </Link>
           </nav>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              alignItems: "center",
+              gap: spacing.sm,
+              flexWrap: "wrap",
+            }}
+          >
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: spacing.xs,
+                border: `1px solid ${colors.border}`,
+                borderRadius: radius.pill,
+                padding: "4px 6px",
+                fontSize: "0.85rem",
+                color: text.muted,
+                background: colors.panel,
+              }}
+            >
+              <button
+                type="button"
+                style={{
+                  border: "none",
+                  background: colors.accentSoft,
+                  color: text.primary,
+                  borderRadius: radius.pill,
+                  padding: "4px 10px",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                }}
+                aria-pressed="true"
+              >
+                EN
+              </button>
+              <span style={{ color: text.subtle }}>/</span>
+              <button
+                type="button"
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  color: text.muted,
+                  borderRadius: radius.pill,
+                  padding: "4px 10px",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                }}
+                aria-pressed="false"
+              >
+                FR
+              </button>
+            </div>
+            <a href="mailto:support@rentchain.ai" style={{ color: text.muted, textDecoration: "none" }}>
+              Support
+            </a>
+            <Link to="/login" style={{ color: text.muted, textDecoration: "none" }}>
+              Log in
+            </Link>
+            <Link
+              to="/login"
+              style={{
+                color: "#fff",
+                background: colors.accent,
+                padding: "8px 14px",
+                borderRadius: radius.pill,
+                textDecoration: "none",
+                fontWeight: 600,
+                boxShadow: shadows.sm,
+              }}
+            >
+              Get Started
+            </Link>
+          </div>
         </div>
       </header>
 
