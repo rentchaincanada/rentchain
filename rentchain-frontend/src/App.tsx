@@ -11,7 +11,10 @@ import ApplicantApplyPage from "./pages/ApplicantApplyPage";
 import CosignPage from "./pages/CosignPage";
 import LoginPage from "./pages/LoginPage";
 import TenantLoginPageV2 from "./pages/tenant/TenantLoginPage.v2";
-import ComingSoonPage from "./pages/ComingSoonPage";
+import LandingPage from "./pages/marketing/LandingPage";
+import AboutPage from "./pages/marketing/AboutPage";
+import MarketingPricingPage from "./pages/marketing/PricingPage";
+import LegalHelpPage from "./pages/marketing/LegalHelpPage";
 import { TwoFactorPage } from "./pages/TwoFactorPage";
 import { AccountSecurityPage } from "./pages/AccountSecurityPage";
 import { RequireAuth } from "./components/auth/RequireAuth";
@@ -19,7 +22,6 @@ import { RequireAdmin } from "./components/auth/RequireAdmin";
 import ScreeningPage from "./pages/ScreeningPage";
 import ScreeningSuccessPage from "./pages/ScreeningSuccessPage";
 import ScreeningCancelPage from "./pages/ScreeningCancelPage";
-import PricingPage from "./pages/PricingPage";
 import BillingPage from "./pages/BillingPage";
 import { DebugPanel } from "./components/DebugPanel";
 import MicroLiveInvitePage from "./pages/MicroLiveInvitePage";
@@ -58,7 +60,7 @@ function App() {
   return (
     <>
       <Routes>
-        <Route path="/" element={<ComingSoonPage />} />
+        <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/app/login" element={<LoginPage />} />
         <Route
@@ -70,7 +72,9 @@ function App() {
           element={TENANT_PORTAL_ENABLED ? <TenantMagicRedeemPage /> : <TenantPortalComingSoon />}
         />
         <Route path="/2fa" element={<TwoFactorPage />} />
-        <Route path="/pricing" element={<PricingPage />} />
+        <Route path="/pricing" element={<MarketingPricingPage />} />
+        <Route path="/about" element={<AboutPage />} />
+        <Route path="/legal" element={<LegalHelpPage />} />
         <Route path="/micro-live" element={<MicroLiveInvitePage />} />
         <Route
           path="/tenant/invite/:token"
