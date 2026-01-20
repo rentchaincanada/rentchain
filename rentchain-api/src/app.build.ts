@@ -173,14 +173,14 @@ app.use("/api/impersonation", routeSource("impersonationRoutes.ts"), impersonati
 app.use("/api/properties/:propertyId/units", routeSource("unitImportRoutes.ts"), unitImportRoutes);
 app.use("/api/action-requests", routeSource("actionRequestsRoutes.ts"), actionRequestsRoutes);
 app.use("/api/action-requests", routeSource("actionRequestsRecomputeRoutes.ts"), actionRequestsRecomputeRoutes);
-app.use("/api/admin/demo", routeSource("adminDemoRoutes.ts"), adminDemoRoutes);
 app.use("/api", authzRoutes);
 app.use("/api", reportsExportRoutes);
-app.use("/api", stubsRoutes);
+app.use("/api/admin", routeSource("adminRoutes.ts"), adminRoutes);
 app.use("/api/admin", routeSource("adminBootstrapRoutes"), adminBootstrapRoutes);
 app.use("/api/admin", routeSource("screeningJobsAdminRoutes.ts"), screeningJobsAdminRoutes);
-app.use("/api/admin", routeSource("adminRoutes.ts"), adminRoutes);
 app.use("/api/admin", routeSource("adminPropertiesRoutes.ts"), adminPropertiesRoutes);
+app.use("/api/admin/demo", routeSource("adminDemoRoutes.ts"), adminDemoRoutes);
+app.use("/api", stubsRoutes);
 
 // Core APIs
 app.use("/api", paymentsRoutes);
