@@ -1,0 +1,1 @@
+export const TEMPLATES_VERSION = "20260120";
