@@ -80,68 +80,51 @@ const LegalHelpPage: React.FC = () => {
               <ul style={{ paddingLeft: "1.1rem", color: text.muted }}>
                 <li>Getting Started</li>
                 <li>Guides</li>
-                <li>Downloads list:</li>
               </ul>
-              <ul style={{ paddingLeft: "1.1rem", color: text.muted }}>
-                <li>
-                  <a
-                    href={templateUrl("/templates/Late_Rent_Notice_Template.pdf")}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    download
-                  >
-                    Late Rent Notice Template
-                  </a>
+              <ul style={{ paddingLeft: "1.1rem", color: text.muted, display: "grid", gap: spacing.xs }}>
+                <li style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm }}>
+                  <span>Late Rent Notice</span>
+                  <span style={{ display: "flex", gap: spacing.xs }}>
+                    <a href={templateUrl("/templates/Late_Rent_Notice_Template.pdf")} download>PDF</a>
+                    <a href={templateUrl("/templates/Late_Rent_Notice_Template.docx")} download>DOCX</a>
+                  </span>
                 </li>
-                <li>
-                  <a
-                    href={templateUrl("/templates/Tenant_Notice_Templates.pdf")}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    download
-                  >
-                    Tenant Notice Templates
-                  </a>
+                <li style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm }}>
+                  <span>Tenant Notice Templates</span>
+                  <span style={{ display: "flex", gap: spacing.xs }}>
+                    <a href={templateUrl("/templates/Tenant_Notice_Templates.pdf")} download>PDF</a>
+                    <a href={templateUrl("/templates/Tenant_Notice_Templates.docx")} download>DOCX</a>
+                  </span>
                 </li>
-                <li>
-                  <a
-                    href={templateUrl("/templates/Notice_of_Entry_Template.pdf")}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    download
-                  >
-                    Notice of Entry Template
-                  </a>
+                <li style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm }}>
+                  <span>Notice of Entry</span>
+                  <span style={{ display: "flex", gap: spacing.xs }}>
+                    <a href={templateUrl("/templates/Notice_of_Entry_Template.pdf")} download>PDF</a>
+                    <a href={templateUrl("/templates/Notice_of_Entry_Template.docx")} download>DOCX</a>
+                  </span>
                 </li>
-                <li>
-                  <a
-                    href={templateUrl("/templates/Lease_Event_Log_Template.pdf")}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    download
-                  >
-                    Lease Event Log Template
-                  </a>
+                <li style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm }}>
+                  <span>Lease Event Log</span>
+                  <span style={{ display: "flex", gap: spacing.xs }}>
+                    <a href={templateUrl("/templates/Lease_Event_Log_Template.pdf")} download>PDF</a>
+                    <a href={templateUrl("/templates/Lease_Event_Log_Template.docx")} download>DOCX</a>
+                    <a href={templateUrl("/templates/Lease_Event_Log_Template.csv")} download>CSV</a>
+                  </span>
                 </li>
-                <li>
-                  <a
-                    href={templateUrl("/templates/Move_In_Out_Inspection_Checklist_Template.pdf")}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    download
-                  >
-                    Move-In / Move-Out Inspection Checklist
-                  </a>
+                <li style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm }}>
+                  <span>Move-In / Move-Out Inspection Checklist</span>
+                  <span style={{ display: "flex", gap: spacing.xs }}>
+                    <a href={templateUrl("/templates/Move_In_Out_Inspection_Checklist_Template.pdf")} download>PDF</a>
+                    <a href={templateUrl("/templates/Move_In_Out_Inspection_Checklist_Template.docx")} download>DOCX</a>
+                  </span>
                 </li>
-                <li>
-                  <a
-                    href={templateUrl("/templates/Rent_Ledger_Summary_Template.pdf")}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    download
-                  >
-                    Rent Ledger Summary Template
-                  </a>
+                <li style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm }}>
+                  <span>Rent Ledger Summary Sheet</span>
+                  <span style={{ display: "flex", gap: spacing.xs }}>
+                    <a href={templateUrl("/templates/Rent_Ledger_Summary_Template.pdf")} download>PDF</a>
+                    <a href={templateUrl("/templates/Rent_Ledger_Summary_Template.docx")} download>DOCX</a>
+                    <a href={templateUrl("/templates/Rent_Ledger_Summary_Template.csv")} download>CSV</a>
+                  </span>
                 </li>
               </ul>
             </div>
@@ -150,38 +133,21 @@ const LegalHelpPage: React.FC = () => {
               <ul style={{ paddingLeft: "1.1rem", color: text.muted }}>
                 <li>Understanding RentChain</li>
                 <li>Guides</li>
-                <li>Downloads list:</li>
               </ul>
-              <ul style={{ paddingLeft: "1.1rem", color: text.muted }}>
-                <li>
-                  <a
-                    href={templateUrl("/templates/Rental_Application_Checklist_Tenant.pdf")}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    download
-                  >
-                    Rental Application Checklist
-                  </a>
+              <ul style={{ paddingLeft: "1.1rem", color: text.muted, display: "grid", gap: spacing.xs }}>
+                <li style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm }}>
+                  <span>Rental Application Checklist (Tenant)</span>
+                  <span style={{ display: "flex", gap: spacing.xs }}>
+                    <a href={templateUrl("/templates/Rental_Application_Checklist_Tenant.pdf")} download>PDF</a>
+                    <a href={templateUrl("/templates/Rental_Application_Checklist_Tenant.docx")} download>DOCX</a>
+                  </span>
                 </li>
-                <li>
-                  <a
-                    href={templateUrl("/templates/Tenant_Rights_Overview.pdf")}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    download
-                  >
-                    Tenant Rights Overview
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href={templateUrl("/templates/Dispute_Documentation_Guide_Template.pdf")}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    download
-                  >
-                    Dispute Documentation Guide
-                  </a>
+                <li style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm }}>
+                  <span>Dispute Documentation Guide</span>
+                  <span style={{ display: "flex", gap: spacing.xs }}>
+                    <a href={templateUrl("/templates/Dispute_Documentation_Guide_Template.pdf")} download>PDF</a>
+                    <a href={templateUrl("/templates/Dispute_Documentation_Guide_Template.docx")} download>DOCX</a>
+                  </span>
                 </li>
               </ul>
             </div>
