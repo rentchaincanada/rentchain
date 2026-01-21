@@ -53,20 +53,19 @@ const LegalHelpPage: React.FC = () => {
 
         <Card>
           <h2 style={{ marginTop: 0 }}>Terms &amp; Policies</h2>
-          {/* TODO: Replace placeholder links when policies are published. */}
           <ul style={{ margin: 0, paddingLeft: "1.1rem", color: text.muted }}>
             <li>
-              <a href="/legal/terms" style={{ color: text.secondary }}>
+              <a href="/terms" style={{ color: text.secondary }}>
                 Terms of Service
               </a>
             </li>
             <li>
-              <a href="/legal/privacy" style={{ color: text.secondary }}>
+              <a href="/privacy" style={{ color: text.secondary }}>
                 Privacy Policy
               </a>
             </li>
             <li>
-              <a href="/legal/acceptable-use" style={{ color: text.secondary }}>
+              <a href="/acceptable-use" style={{ color: text.secondary }}>
                 Acceptable Use Policy
               </a>
             </li>
@@ -187,6 +186,9 @@ const LegalHelpPage: React.FC = () => {
               </ul>
             </div>
           </div>
+          <p style={{ marginTop: spacing.sm, color: text.subtle }}>
+            Templates are general-purpose and not legal advice. Customize for your jurisdiction and consult counsel as needed.
+          </p>
           <p style={{ marginTop: spacing.md, color: text.muted }}>
             If you need help or have questions, visit the Help Center or contact our support team.
           </p>
