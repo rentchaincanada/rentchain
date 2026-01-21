@@ -2,7 +2,7 @@ import React, { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { spacing, text } from "../../styles/tokens";
 import { MarketingLayout } from "../marketing/MarketingLayout";
-import { TEMPLATES_VERSION } from "../../constants/templates";
+import { templateUrl } from "../../utils/templateUrl";
 
 const HelpIndexPage: React.FC = () => {
   useEffect(() => {
@@ -29,18 +29,53 @@ const HelpIndexPage: React.FC = () => {
               <li>Getting Started</li>
               <li>Guides</li>
               <li>
-                <a href={`/templates/Tenant_Notice_Templates.pdf?v=${TEMPLATES_VERSION}`}>Tenant Notice Templates (PDF)</a>{" "}
+                <a
+                  href={templateUrl("/templates/Tenant_Notice_Templates.pdf")}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download
+                >
+                  Tenant Notice Templates (PDF)
+                </a>{" "}
                 /{" "}
-                <a href={`/templates/Tenant_Notice_Templates.docx?v=${TEMPLATES_VERSION}`}>DOCX</a>
+                <a
+                  href={templateUrl("/templates/Tenant_Notice_Templates.docx")}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download
+                >
+                  DOCX
+                </a>
               </li>
               <li>
-                <a href={`/templates/Lease_Event_Log_Template.pdf?v=${TEMPLATES_VERSION}`}>Lease Event Log Template</a>
+                <a
+                  href={templateUrl("/templates/Lease_Event_Log_Template.pdf")}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download
+                >
+                  Lease Event Log Template
+                </a>
               </li>
               <li>
-                <a href={`/templates/Move_In_Move_Out_Checklist.pdf?v=${TEMPLATES_VERSION}`}>Move-In / Move-Out Checklist</a>
+                <a
+                  href={templateUrl("/templates/Move_In_Move_Out_Checklist.pdf")}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download
+                >
+                  Move-In / Move-Out Checklist
+                </a>
               </li>
               <li>
-                <a href={`/templates/Rent_Ledger_Summary_Sheet.pdf?v=${TEMPLATES_VERSION}`}>Rent Ledger Summary Sheet</a>
+                <a
+                  href={templateUrl("/templates/Rent_Ledger_Summary_Sheet.pdf")}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download
+                >
+                  Rent Ledger Summary Sheet
+                </a>
               </li>
             </ul>
             <Link to="/help/landlords" style={{ display: "inline-block", marginTop: spacing.sm }}>
@@ -57,13 +92,34 @@ const HelpIndexPage: React.FC = () => {
               <li>Understanding RentChain</li>
               <li>Guides</li>
               <li>
-                <a href={`/templates/Tenant_Rights_Overview.pdf?v=${TEMPLATES_VERSION}`}>Tenant Rights Overview</a>
+                <a
+                  href={templateUrl("/templates/Tenant_Rights_Overview.pdf")}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download
+                >
+                  Tenant Rights Overview
+                </a>
               </li>
               <li>
-                <a href={`/templates/Rental_Application_Checklist.pdf?v=${TEMPLATES_VERSION}`}>Rental Application Checklist</a>
+                <a
+                  href={templateUrl("/templates/Rental_Application_Checklist.pdf")}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download
+                >
+                  Rental Application Checklist
+                </a>
               </li>
               <li>
-                <a href={`/templates/Dispute_Documentation_Guide.pdf?v=${TEMPLATES_VERSION}`}>Dispute Documentation Guide</a>
+                <a
+                  href={templateUrl("/templates/Dispute_Documentation_Guide.pdf")}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download
+                >
+                  Dispute Documentation Guide
+                </a>
               </li>
             </ul>
             <Link to="/help/tenants" style={{ display: "inline-block", marginTop: spacing.sm }}>
