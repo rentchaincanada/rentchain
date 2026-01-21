@@ -186,6 +186,9 @@ const LegalHelpPage: React.FC = () => {
               </ul>
             </div>
           </div>
+          <p style={{ marginTop: spacing.sm, color: text.subtle }}>
+            Templates are general-purpose and not legal advice. Customize for your jurisdiction and consult counsel as needed.
+          </p>
           <p style={{ marginTop: spacing.md, color: text.muted }}>
             If you need help or have questions, visit the Help Center or contact our support team.
           </p>
