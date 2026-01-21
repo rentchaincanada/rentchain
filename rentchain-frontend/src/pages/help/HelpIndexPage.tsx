@@ -24,27 +24,28 @@ const HelpIndexPage: React.FC = () => {
             <p style={{ color: text.muted }}>
               Start here for onboarding, templates, and lifecycle guidance.
             </p>
-            <div style={{ color: text.muted, fontWeight: 600 }}>Downloads (coming soon)</div>
+            <div style={{ color: text.muted, fontWeight: 600 }}>Downloads</div>
             <ul style={{ margin: 0, paddingLeft: "1.1rem", color: text.muted }}>
               <li>Getting Started</li>
               <li>Guides</li>
               <li>
                 <a
-                  href={templateUrl("/templates/Tenant_Notice_Templates.pdf")}
+                  href={templateUrl("/templates/Late_Rent_Notice_Template.pdf")}
                   target="_blank"
                   rel="noopener noreferrer"
                   download
                 >
-                  Tenant Notice Templates (PDF)
-                </a>{" "}
-                /{" "}
+                  Late Rent Notice Template
+                </a>
+              </li>
+              <li>
                 <a
-                  href={templateUrl("/templates/Tenant_Notice_Templates.docx")}
+                  href={templateUrl("/templates/Notice_of_Entry_Template.pdf")}
                   target="_blank"
                   rel="noopener noreferrer"
                   download
                 >
-                  DOCX
+                  Notice of Entry Template
                 </a>
               </li>
               <li>
@@ -59,22 +60,22 @@ const HelpIndexPage: React.FC = () => {
               </li>
               <li>
                 <a
-                  href={templateUrl("/templates/Move_In_Move_Out_Checklist.pdf")}
+                  href={templateUrl("/templates/Move_In_Out_Inspection_Checklist_Template.pdf")}
                   target="_blank"
                   rel="noopener noreferrer"
                   download
                 >
-                  Move-In / Move-Out Checklist
+                  Move-In / Move-Out Inspection Checklist
                 </a>
               </li>
               <li>
                 <a
-                  href={templateUrl("/templates/Rent_Ledger_Summary_Sheet.pdf")}
+                  href={templateUrl("/templates/Rent_Ledger_Summary_Template.pdf")}
                   target="_blank"
                   rel="noopener noreferrer"
                   download
                 >
-                  Rent Ledger Summary Sheet
+                  Rent Ledger Summary Template
                 </a>
               </li>
             </ul>
@@ -87,23 +88,13 @@ const HelpIndexPage: React.FC = () => {
             <p style={{ color: text.muted }}>
               Learn how RentChain works and how to manage your records.
             </p>
-            <div style={{ color: text.muted, fontWeight: 600 }}>Downloads (coming soon)</div>
+            <div style={{ color: text.muted, fontWeight: 600 }}>Downloads</div>
             <ul style={{ margin: 0, paddingLeft: "1.1rem", color: text.muted }}>
               <li>Understanding RentChain</li>
               <li>Guides</li>
               <li>
                 <a
-                  href={templateUrl("/templates/Tenant_Rights_Overview.pdf")}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  download
-                >
-                  Tenant Rights Overview
-                </a>
-              </li>
-              <li>
-                <a
-                  href={templateUrl("/templates/Rental_Application_Checklist.pdf")}
+                  href={templateUrl("/templates/Rental_Application_Checklist_Tenant.pdf")}
                   target="_blank"
                   rel="noopener noreferrer"
                   download
@@ -113,7 +104,7 @@ const HelpIndexPage: React.FC = () => {
               </li>
               <li>
                 <a
-                  href={templateUrl("/templates/Dispute_Documentation_Guide.pdf")}
+                  href={templateUrl("/templates/Dispute_Documentation_Guide_Template.pdf")}
                   target="_blank"
                   rel="noopener noreferrer"
                   download
