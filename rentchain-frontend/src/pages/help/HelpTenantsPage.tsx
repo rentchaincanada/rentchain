@@ -35,6 +35,16 @@ const HelpTenantsPage: React.FC = () => {
           </li>
           <li>
             <a
+              href={templateUrl("/templates/Tenant_Rights_Overview.pdf")}
+              target="_blank"
+              rel="noopener noreferrer"
+              download
+            >
+              Tenant Rights Overview
+            </a>
+          </li>
+          <li>
+            <a
               href={templateUrl("/templates/Dispute_Documentation_Guide_Template.pdf")}
               target="_blank"
               rel="noopener noreferrer"

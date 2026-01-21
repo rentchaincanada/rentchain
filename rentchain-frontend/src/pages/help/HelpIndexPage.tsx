@@ -40,6 +40,16 @@ const HelpIndexPage: React.FC = () => {
               </li>
               <li>
                 <a
+                  href={templateUrl("/templates/Tenant_Notice_Templates.pdf")}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download
+                >
+                  Tenant Notice Templates
+                </a>
+              </li>
+              <li>
+                <a
                   href={templateUrl("/templates/Notice_of_Entry_Template.pdf")}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -100,6 +110,16 @@ const HelpIndexPage: React.FC = () => {
                   download
                 >
                   Rental Application Checklist
+                </a>
+              </li>
+              <li>
+                <a
+                  href={templateUrl("/templates/Tenant_Rights_Overview.pdf")}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download
+                >
+                  Tenant Rights Overview
                 </a>
               </li>
               <li>
