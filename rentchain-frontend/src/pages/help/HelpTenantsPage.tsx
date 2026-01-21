@@ -21,16 +21,38 @@ const HelpTenantsPage: React.FC = () => {
           <li>Consent and transparency</li>
           <li>How to review your records</li>
         </ul>
-        <h2 style={{ marginTop: spacing.lg }}>Downloads (coming soon)</h2>
+        <h2 style={{ marginTop: spacing.lg }}>Downloads</h2>
         <ul style={{ margin: 0, paddingLeft: "1.1rem", color: text.muted }}>
           <li>
-            <a href={templateUrl("/templates/Tenant_Rights_Overview.pdf")}>Tenant Rights Overview</a>
+
+            <a
+              href={templateUrl("/templates/Rental_Application_Checklist_Tenant.pdf")}
+              target="_blank"
+              rel="noopener noreferrer"
+              download
+            >
+              Rental Application Checklist
+            </a>
           </li>
           <li>
-            <a href={templateUrl("/templates/Rental_Application_Checklist.pdf")}>Rental Application Checklist</a>
+            <a
+              href={templateUrl("/templates/Tenant_Rights_Overview.pdf")}
+              target="_blank"
+              rel="noopener noreferrer"
+              download
+            >
+              Tenant Rights Overview
+            </a>
           </li>
           <li>
-            <a href={templateUrl("/templates/Dispute_Documentation_Guide.pdf")}>Dispute Documentation Guide</a>
+            <a
+              href={templateUrl("/templates/Dispute_Documentation_Guide_Template.pdf")}
+              target="_blank"
+              rel="noopener noreferrer"
+              download
+            >
+              Dispute Documentation Guide
+            </a>
           </li>
         </ul>
       </div>

@@ -84,19 +84,81 @@ const LegalHelpPage: React.FC = () => {
                 <li>Downloads list:</li>
               </ul>
               <ul style={{ paddingLeft: "1.1rem", color: text.muted }}>
-                <li>
-                  <a href={templateUrl("/templates/Tenant_Notice_Templates.pdf")}>Tenant Notice Templates (PDF)</a>{" "}
-                  /{" "}
-                  <a href={templateUrl("/templates/Tenant_Notice_Templates.docx")}>DOCX</a>
-                </li>
+               <li>
+  <a
+    href={templateUrl("/templates/Tenant_Notice_Templates.pdf")}
+    target="_blank"
+    rel="noopener noreferrer"
+    download
+  >
+    Tenant Notice Templates
+  </a>
+</li>
                 <li>
                   <a href={templateUrl("/templates/Lease_Event_Log_Template.pdf")}>Lease Event Log Template</a>
                 </li>
+             
                 <li>
-                  <a href={templateUrl("/templates/Move_In_Move_Out_Checklist.pdf")}>Move-In / Move-Out Checklist</a>
+  
+=======
+                  <a
+                    href={templateUrl("/templates/Late_Rent_Notice_Template.pdf")}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download
+                  >
+                    Late Rent Notice Template
+                  </a>
                 </li>
                 <li>
-                  <a href={templateUrl("/templates/Rent_Ledger_Summary_Sheet.pdf")}>Rent Ledger Summary Sheet</a>
+                  <a
+                    href={templateUrl("/templates/Tenant_Notice_Templates.pdf")}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download
+                  >
+                    Tenant Notice Templates
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href={templateUrl("/templates/Notice_of_Entry_Template.pdf")}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download
+                  >
+                    Notice of Entry Template
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href={templateUrl("/templates/Lease_Event_Log_Template.pdf")}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download
+                  >
+                    Lease Event Log Template
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href={templateUrl("/templates/Move_In_Out_Inspection_Checklist_Template.pdf")}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download
+                  >
+                    Move-In / Move-Out Inspection Checklist
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href={templateUrl("/templates/Rent_Ledger_Summary_Template.pdf")}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download
+                  >
+                    Rent Ledger Summary Template
+                  </a>
                 </li>
               </ul>
             </div>
@@ -109,13 +171,14 @@ const LegalHelpPage: React.FC = () => {
               </ul>
               <ul style={{ paddingLeft: "1.1rem", color: text.muted }}>
                 <li>
-                  <a href={templateUrl("/templates/Tenant_Rights_Overview.pdf")}>Tenant Rights Overview</a>
-                </li>
+                 href={templateUrl("/templates/Tenant_Rights_Overview.pdf")}
+    target="_blank"
+    rel="noopener noreferrer"
+    download
+  >
+Tenant Rights Overview
+  </a>
                 <li>
-                  <a href={templateUrl("/templates/Rental_Application_Checklist.pdf")}>Rental Application Checklist</a>
-                </li>
-                <li>
-                  <a href={templateUrl("/templates/Dispute_Documentation_Guide.pdf")}>Dispute Documentation Guide</a>
                 </li>
               </ul>
             </div>

@@ -21,21 +21,67 @@ const HelpLandlordsPage: React.FC = () => {
           <li>Inviting tenants</li>
           <li>Creating and tracking lease events</li>
         </ul>
-        <h2 style={{ marginTop: spacing.lg }}>Downloads (coming soon)</h2>
+        <h2 style={{ marginTop: spacing.lg }}>Downloads</h2>
         <ul style={{ margin: 0, paddingLeft: "1.1rem", color: text.muted }}>
           <li>
-            <a href={templateUrl("/templates/Tenant_Notice_Templates.pdf")}>Tenant Notice Templates (PDF)</a>{" "}
-            /{" "}
-            <a href={templateUrl("/templates/Tenant_Notice_Templates.docx")}>DOCX</a>
+            <a
+              href={templateUrl("/templates/Late_Rent_Notice_Template.pdf")}
+              target="_blank"
+              rel="noopener noreferrer"
+              download
+            >
+              Late Rent Notice Template
+            </a>
           </li>
           <li>
-            <a href={templateUrl("/templates/Lease_Event_Log_Template.pdf")}>Lease Event Log Template</a>
+            <a
+              href={templateUrl("/templates/Tenant_Notice_Templates.pdf")}
+              target="_blank"
+              rel="noopener noreferrer"
+              download
+            >
+              Tenant Notice Templates
+            </a>
           </li>
           <li>
-            <a href={templateUrl("/templates/Move_In_Move_Out_Checklist.pdf")}>Move-In / Move-Out Checklist</a>
+            <a
+              href={templateUrl("/templates/Notice_of_Entry_Template.pdf")}
+              target="_blank"
+              rel="noopener noreferrer"
+              download
+            >
+              Notice of Entry Template
+            </a>
           </li>
           <li>
-            <a href={templateUrl("/templates/Rent_Ledger_Summary_Sheet.pdf")}>Rent Ledger Summary Sheet</a>
+            <a
+              href={templateUrl("/templates/Lease_Event_Log_Template.pdf")}
+              target="_blank"
+              rel="noopener noreferrer"
+              download
+            >
+              Lease Event Log Template
+            </a>
+          </li>
+          <li>
+            <a
+              href={templateUrl("/templates/Move_In_Out_Inspection_Checklist_Template.pdf")}
+              target="_blank"
+              rel="noopener noreferrer"
+              download
+            >
+              Move-In / Move-Out Inspection Checklist
+            </a>
+          </li>
+          <li>
+            <a
+              href={templateUrl("/templates/Rent_Ledger_Summary_Template.pdf")}
+              target="_blank"
+              rel="noopener noreferrer"
+              download
+            >
+              Rent Ledger Summary Template
+            </a>
           </li>
         </ul>
       </div>
