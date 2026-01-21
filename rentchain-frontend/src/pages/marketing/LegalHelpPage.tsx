@@ -2,7 +2,7 @@ import React, { useEffect } from "react";
 import { Card } from "../../components/ui/Ui";
 import { spacing, text } from "../../styles/tokens";
 import { MarketingLayout } from "./MarketingLayout";
-import { TEMPLATES_VERSION } from "../../constants/templates";
+import { templateUrl } from "../../utils/templateUrl";
 
 const LegalHelpPage: React.FC = () => {
   useEffect(() => {
@@ -85,18 +85,64 @@ const LegalHelpPage: React.FC = () => {
               </ul>
               <ul style={{ paddingLeft: "1.1rem", color: text.muted }}>
                 <li>
-                  <a href={`/templates/Tenant_Notice_Templates.pdf?v=${TEMPLATES_VERSION}`}>Tenant Notice Templates (PDF)</a>{" "}
-                  /{" "}
-                  <a href={`/templates/Tenant_Notice_Templates.docx?v=${TEMPLATES_VERSION}`}>DOCX</a>
+                  <a
+                    href={templateUrl("/templates/Late_Rent_Notice_Template.pdf")}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download
+                  >
+                    Late Rent Notice Template
+                  </a>
                 </li>
                 <li>
-                  <a href={`/templates/Lease_Event_Log_Template.pdf?v=${TEMPLATES_VERSION}`}>Lease Event Log Template</a>
+                  <a
+                    href={templateUrl("/templates/Tenant_Notice_Templates.pdf")}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download
+                  >
+                    Tenant Notice Templates
+                  </a>
                 </li>
                 <li>
-                  <a href={`/templates/Move_In_Move_Out_Checklist.pdf?v=${TEMPLATES_VERSION}`}>Move-In / Move-Out Checklist</a>
+                  <a
+                    href={templateUrl("/templates/Notice_of_Entry_Template.pdf")}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download
+                  >
+                    Notice of Entry Template
+                  </a>
                 </li>
                 <li>
-                  <a href={`/templates/Rent_Ledger_Summary_Sheet.pdf?v=${TEMPLATES_VERSION}`}>Rent Ledger Summary Sheet</a>
+                  <a
+                    href={templateUrl("/templates/Lease_Event_Log_Template.pdf")}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download
+                  >
+                    Lease Event Log Template
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href={templateUrl("/templates/Move_In_Out_Inspection_Checklist_Template.pdf")}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download
+                  >
+                    Move-In / Move-Out Inspection Checklist
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href={templateUrl("/templates/Rent_Ledger_Summary_Template.pdf")}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download
+                  >
+                    Rent Ledger Summary Template
+                  </a>
                 </li>
               </ul>
             </div>
@@ -109,13 +155,34 @@ const LegalHelpPage: React.FC = () => {
               </ul>
               <ul style={{ paddingLeft: "1.1rem", color: text.muted }}>
                 <li>
-                  <a href={`/templates/Tenant_Rights_Overview.pdf?v=${TEMPLATES_VERSION}`}>Tenant Rights Overview</a>
+                  <a
+                    href={templateUrl("/templates/Rental_Application_Checklist_Tenant.pdf")}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download
+                  >
+                    Rental Application Checklist
+                  </a>
                 </li>
                 <li>
-                  <a href={`/templates/Rental_Application_Checklist.pdf?v=${TEMPLATES_VERSION}`}>Rental Application Checklist</a>
+                  <a
+                    href={templateUrl("/templates/Tenant_Rights_Overview.pdf")}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download
+                  >
+                    Tenant Rights Overview
+                  </a>
                 </li>
                 <li>
-                  <a href={`/templates/Dispute_Documentation_Guide.pdf?v=${TEMPLATES_VERSION}`}>Dispute Documentation Guide</a>
+                  <a
+                    href={templateUrl("/templates/Dispute_Documentation_Guide_Template.pdf")}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download
+                  >
+                    Dispute Documentation Guide
+                  </a>
                 </li>
               </ul>
             </div>
