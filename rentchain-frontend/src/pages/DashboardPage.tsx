@@ -11,8 +11,6 @@ import { debugApiBase } from "@/api/baseUrl";
 import { fetchProperties } from "../api/propertiesApi";
 import { unitsForProperty } from "../lib/propertyCounts";
 import { useApplications } from "../hooks/useApplications";
-import { useSubscription } from "../context/SubscriptionContext";
-import { planLabel } from "../lib/plan";
 import StarterOnboardingPanel from "../components/dashboard/StarterOnboardingPanel";
 
 function formatDate(ts: number | null): string {
@@ -33,7 +31,6 @@ function formatDate(ts: number | null): string {
 const DashboardPage: React.FC = () => {
   const { data, loading, error, refetch, lastUpdatedAt } = useDashboardSummary();
   const { applications, loading: applicationsLoading } = useApplications();
-  const { plan, loading: planLoading } = useSubscription();
   const navigate = useNavigate();
   const apiBase = debugApiBase();
   const showDebug =
@@ -76,8 +73,6 @@ const DashboardPage: React.FC = () => {
   React.useEffect(() => {
     if (import.meta.env.DEV) {
       console.debug("[dashboard gates]", {
-        plan,
-        planLoading,
         loadingSummary: loading,
         applicationsLoading,
         propsLoading,
@@ -85,7 +80,7 @@ const DashboardPage: React.FC = () => {
         applicationsCount: applications?.length ?? null,
       });
     }
-  }, [plan, planLoading, loading, applicationsLoading, propsLoading, properties, applications]);
+  }, [loading, applicationsLoading, propsLoading, properties, applications]);
 
   const derivedPropertiesCount = properties.length;
   const derivedUnitsCount = properties.reduce((sum, p) => sum + unitsForProperty(p), 0);
@@ -101,15 +96,13 @@ const DashboardPage: React.FC = () => {
   const actions = data?.actions ?? [];
   const events = data?.events ?? [];
 
-  const planReady = !planLoading;
   const dataReady = !loading && !propsLoading && !applicationsLoading && !error;
-  const isStarter = plan === "starter";
   const hasNoProperties = dataReady && (kpis?.propertiesCount ?? 0) === 0;
   const hasNoApplications = dataReady && applicationsCount === 0;
-  const showEmptyCTA = planReady && hasNoProperties;
-  const showStarterOnboarding = planReady && isStarter;
+  const showEmptyCTA = hasNoProperties;
+  const showStarterOnboarding =
+    dataReady && (hasNoProperties || hasNoApplications || screeningStartedCount === 0);
   const showAdvancedCollapsed = showStarterOnboarding;
-  const planName = planLabel(plan);
 
   return (
     <MacShell title="RentChain · Dashboard" showTopNav={false}>
@@ -129,17 +122,9 @@ const DashboardPage: React.FC = () => {
           </Card>
         ) : null}
 
-        {!planReady ? (
-          <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>Loading your dashboard…</div>
-            <div style={{ color: text.muted }}>Preparing your plan and next steps.</div>
-          </Card>
-        ) : null}
-
         {showStarterOnboarding ? (
           <>
             <StarterOnboardingPanel
-              planName={planName}
               propertiesCount={kpis.propertiesCount}
               applicationsCount={applicationsCount}
               screeningStartedCount={screeningStartedCount}
