@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { KNOWLEDGE_BASE, KBEntry } from "../../help/knowledgeBase";
 import { searchKb, snippetFor } from "../../help/searchKb";
+import { track } from "../../lib/analytics";
 import { Button, Card, Input, Pill } from "../ui/Ui";
 import { colors, radius, spacing, text } from "../../styles/tokens";
 
@@ -45,11 +46,33 @@ export const AskRentChainWidget: React.FC<WidgetProps> = ({
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const [query, setQuery] = useState("");
   const [messages, setMessages] = useState<WidgetMessage[]>([]);
+  const [feedbackByMessage, setFeedbackByMessage] = useState<Record<string, boolean>>({});
 
   const scopedQuery = (textValue: string) =>
     audience && audience !== "general" ? `audience:${audience} ${textValue}` : textValue;
 
-  const handleSend = (textValue: string) => {
+  const trackAsk = (textValue: string, resultsCount: number, trigger: "enter" | "button" | "prompt") => {
+    const page = typeof window !== "undefined" ? window.location.pathname : "";
+    track("ask_widget_search", {
+      q_len: textValue.trim().length,
+      results_count: resultsCount,
+      page,
+      audience,
+      trigger,
+    });
+  };
+
+  const trackFeedback = (resultsCount: number, helpful: boolean) => {
+    const page = typeof window !== "undefined" ? window.location.pathname : "";
+    track("ask_widget_feedback", {
+      helpful,
+      page,
+      audience,
+      results_count: resultsCount,
+    });
+  };
+
+  const handleSend = (textValue: string, trigger: "enter" | "button" | "prompt") => {
     const trimmed = textValue.trim();
     if (!trimmed) {
       return;
@@ -59,6 +82,7 @@ export const AskRentChainWidget: React.FC<WidgetProps> = ({
     const assistantText = results.length
       ? "Here are the closest answers:"
       : "Sorry, I could not find a match. Try another keyword or visit the Help Center.";
+    trackAsk(trimmed, results.length, trigger);
 
     setMessages((prev) => [
       ...prev,
@@ -82,7 +106,7 @@ export const AskRentChainWidget: React.FC<WidgetProps> = ({
         fontSize: compact ? "0.8rem" : "0.85rem",
         borderRadius: radius.pill,
       }}
-      onClick={() => handleSend(label)}
+      onClick={() => handleSend(label, "prompt")}
       aria-label={`Search: ${label}`}
     >
       {label}
@@ -147,6 +171,8 @@ export const AskRentChainWidget: React.FC<WidgetProps> = ({
             )}
             {messages.map((message) => {
               const isUser = message.role === "user";
+              const feedbackValue = feedbackByMessage[message.id];
+              const feedbackLocked = feedbackValue !== undefined;
               return (
                 <div
                   key={message.id}
@@ -191,6 +217,39 @@ export const AskRentChainWidget: React.FC<WidgetProps> = ({
                           </div>
                         </div>
                       ))}
+                      <div style={{ display: "flex", alignItems: "center", gap: spacing.sm, flexWrap: "wrap" }}>
+                        <span style={{ color: text.muted, fontSize: "0.85rem" }}>Was this helpful?</span>
+                        <Button
+                          variant="ghost"
+                          disabled={feedbackLocked}
+                          aria-label="Helpful response"
+                          style={{ padding: "6px 10px", opacity: feedbackLocked ? 0.6 : 1 }}
+                          onClick={() => {
+                            if (feedbackLocked) {
+                              return;
+                            }
+                            setFeedbackByMessage((prev) => ({ ...prev, [message.id]: true }));
+                            trackFeedback(message.results?.length ?? 0, true);
+                          }}
+                        >
+                          Yes
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          disabled={feedbackLocked}
+                          aria-label="Not helpful response"
+                          style={{ padding: "6px 10px", opacity: feedbackLocked ? 0.6 : 1 }}
+                          onClick={() => {
+                            if (feedbackLocked) {
+                              return;
+                            }
+                            setFeedbackByMessage((prev) => ({ ...prev, [message.id]: false }));
+                            trackFeedback(message.results?.length ?? 0, false);
+                          }}
+                        >
+                          No
+                        </Button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -208,13 +267,13 @@ export const AskRentChainWidget: React.FC<WidgetProps> = ({
                 onKeyDown={(event) => {
                   if (event.key === "Enter") {
                     event.preventDefault();
-                    handleSend(query);
+                    handleSend(query, "enter");
                   }
                 }}
               />
             </div>
             <Button
-              onClick={() => handleSend(query)}
+              onClick={() => handleSend(query, "button")}
               aria-label="Send search query"
               style={{ padding: compact ? "8px 12px" : "10px 16px" }}
             >
