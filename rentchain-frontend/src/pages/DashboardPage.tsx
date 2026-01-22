@@ -73,6 +73,20 @@ const DashboardPage: React.FC = () => {
     }
   }, [showDebug, apiBase]);
 
+  React.useEffect(() => {
+    if (import.meta.env.DEV) {
+      console.debug("[dashboard gates]", {
+        plan,
+        planLoading,
+        loadingSummary: loading,
+        applicationsLoading,
+        propsLoading,
+        propertiesCount: properties?.length ?? null,
+        applicationsCount: applications?.length ?? null,
+      });
+    }
+  }, [plan, planLoading, loading, applicationsLoading, propsLoading, properties, applications]);
+
   const derivedPropertiesCount = properties.length;
   const derivedUnitsCount = properties.reduce((sum, p) => sum + unitsForProperty(p), 0);
   const applicationsCount = applications.length;
@@ -89,10 +103,11 @@ const DashboardPage: React.FC = () => {
 
   const planReady = !planLoading;
   const dataReady = !loading && !propsLoading && !applicationsLoading && !error;
+  const isStarter = plan === "starter";
   const hasNoProperties = dataReady && (kpis?.propertiesCount ?? 0) === 0;
   const hasNoApplications = dataReady && applicationsCount === 0;
   const showEmptyCTA = planReady && hasNoProperties;
-  const showStarterOnboarding = planReady && (plan === "starter" || hasNoProperties);
+  const showStarterOnboarding = planReady && isStarter;
   const showAdvancedCollapsed = showStarterOnboarding;
   const planName = planLabel(plan);
 

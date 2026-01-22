@@ -101,6 +101,11 @@ export function SubscriptionProvider({
         const p = me?.plan;
         if (p === "starter" || p === "core" || p === "pro" || p === "elite") {
           setPlan(p);
+          return;
+        }
+
+        if (me?.role === "landlord") {
+          setPlan("starter");
         }
       })
       .catch(() => {
