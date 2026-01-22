@@ -66,7 +66,20 @@ const TopNav: React.FC = () => {
             <span style={{ color: text.primary, fontWeight: 700 }}>RentChain</span>
           </button>
 
-          <div style={{ marginLeft: "auto" }}>
+          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: spacing.sm }}>
+            <Button
+              variant="ghost"
+              onClick={() => navigate("/site")}
+              style={{
+                borderRadius: radius.pill,
+                border: `1px solid ${colors.border}`,
+                background: "transparent",
+                color: text.primary,
+                boxShadow: shadows.sm,
+              }}
+            >
+              About RentChain
+            </Button>
             <Button
               variant="secondary"
               onClick={() => setDrawerOpen(true)}

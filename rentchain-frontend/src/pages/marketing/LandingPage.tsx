@@ -27,7 +27,7 @@ const LandingPage: React.FC = () => {
             <Button type="button" onClick={() => navigate("/login")}>
               Get started
             </Button>
-            <Button type="button" variant="ghost" onClick={() => navigate("/pricing")}>
+            <Button type="button" variant="ghost" onClick={() => navigate("/site/pricing")}>
               See pricing
             </Button>
           </div>

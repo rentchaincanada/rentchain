@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
 import { Link } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { Card } from "../../components/ui/Ui";
 import { spacing, text } from "../../styles/tokens";
 import { MarketingLayout } from "./MarketingLayout";
@@ -56,19 +57,19 @@ const LegalHelpPage: React.FC = () => {
           <h2 style={{ marginTop: 0 }}>Terms &amp; Policies</h2>
           <ul style={{ margin: 0, paddingLeft: "1.1rem", color: text.muted }}>
             <li>
-              <a href="/terms" style={{ color: text.secondary }}>
+              <Link to="/terms" style={{ color: text.secondary }}>
                 Terms of Service
-              </a>
+              </Link>
             </li>
             <li>
-              <a href="/privacy" style={{ color: text.secondary }}>
+              <Link to="/privacy" style={{ color: text.secondary }}>
                 Privacy Policy
-              </a>
+              </Link>
             </li>
             <li>
-              <a href="/acceptable-use" style={{ color: text.secondary }}>
+              <Link to="/acceptable-use" style={{ color: text.secondary }}>
                 Acceptable Use Policy
-              </a>
+              </Link>
             </li>
           </ul>
         </Card>
@@ -94,13 +95,6 @@ const LegalHelpPage: React.FC = () => {
                   <span style={{ display: "flex", gap: spacing.xs }}>
                     <a href={templateUrl("/templates/Late_Rent_Notice_Template.pdf")} download>PDF</a>
                     <a href={templateUrl("/templates/Late_Rent_Notice_Template.docx")} download>DOCX</a>
-                  </span>
-                </li>
-                <li style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm }}>
-                  <span>Tenant Notice Templates</span>
-                  <span style={{ display: "flex", gap: spacing.xs }}>
-                    <a href={templateUrl("/templates/Tenant_Notice_Templates.pdf")} download>PDF</a>
-                    <a href={templateUrl("/templates/Tenant_Notice_Templates.docx")} download>DOCX</a>
                   </span>
                 </li>
                 <li style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm }}>

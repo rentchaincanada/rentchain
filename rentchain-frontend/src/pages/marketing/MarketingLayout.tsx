@@ -116,7 +116,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
         >
           <div style={{ flex: "1 1 0", display: "flex", alignItems: "center" }}>
             <Link
-              to="/"
+              to="/site"
               style={{ fontWeight: 700, textDecoration: "none", color: text.primary, letterSpacing: "0.2px" }}
             >
               RentChain
@@ -134,15 +134,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
             }}
           >
             <Link
-              to="/"
-              style={{ color: text.muted, textDecoration: "none" }}
-              onMouseEnter={(e) => onHover(e, true)}
-              onMouseLeave={(e) => onHover(e, false)}
-            >
-              Home
-            </Link>
-            <Link
-              to="/about"
+              to="/site/about"
               style={{ color: text.muted, textDecoration: "none" }}
               onMouseEnter={(e) => onHover(e, true)}
               onMouseLeave={(e) => onHover(e, false)}
@@ -150,7 +142,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
               About
             </Link>
             <Link
-              to="/pricing"
+              to="/site/pricing"
               style={{ color: text.muted, textDecoration: "none" }}
               onMouseEnter={(e) => onHover(e, true)}
               onMouseLeave={(e) => onHover(e, false)}
@@ -158,20 +150,12 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
               Pricing
             </Link>
             <Link
-              to="/legal"
+              to="/site/legal"
               style={{ color: text.muted, textDecoration: "none" }}
               onMouseEnter={(e) => onHover(e, true)}
               onMouseLeave={(e) => onHover(e, false)}
             >
-              Help
-            </Link>
-            <Link
-              to="/legal"
-              style={{ color: text.muted, textDecoration: "none" }}
-              onMouseEnter={(e) => onHover(e, true)}
-              onMouseLeave={(e) => onHover(e, false)}
-            >
-              Legal
+              Legal &amp; Help
             </Link>
           </nav>
           <div
@@ -230,14 +214,6 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                 FR
               </button>
             </div>
-            <Link
-              to="/help"
-              style={{ color: text.muted, textDecoration: "none" }}
-              onMouseEnter={(e) => onHover(e, true)}
-              onMouseLeave={(e) => onHover(e, false)}
-            >
-              Help Center
-            </Link>
             <Link
               to="/login"
               style={{ color: text.muted, textDecoration: "none" }}
@@ -349,7 +325,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
           >
             <div style={{ display: "flex", flexDirection: "column", gap: spacing.sm, fontWeight: 500 }}>
               <Link
-                to="/"
+                to="/site"
                 style={{ color: text.muted, textDecoration: "none" }}
                 onMouseEnter={(e) => onHover(e, true)}
                 onMouseLeave={(e) => onHover(e, false)}
@@ -358,7 +334,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                 Home
               </Link>
               <Link
-                to="/about"
+                to="/site/about"
                 style={{ color: text.muted, textDecoration: "none" }}
                 onMouseEnter={(e) => onHover(e, true)}
                 onMouseLeave={(e) => onHover(e, false)}
@@ -367,13 +343,22 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                 About
               </Link>
               <Link
-                to="/pricing"
+                to="/site/pricing"
                 style={{ color: text.muted, textDecoration: "none" }}
                 onMouseEnter={(e) => onHover(e, true)}
                 onMouseLeave={(e) => onHover(e, false)}
                 onClick={() => setMenuOpen(false)}
               >
                 Pricing
+              </Link>
+              <Link
+                to="/site/legal"
+                style={{ color: text.muted, textDecoration: "none" }}
+                onMouseEnter={(e) => onHover(e, true)}
+                onMouseLeave={(e) => onHover(e, false)}
+                onClick={() => setMenuOpen(false)}
+              >
+                Legal &amp; Help
               </Link>
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: spacing.sm, alignItems: "center" }}>
@@ -423,124 +408,6 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                   FR
                 </button>
               </div>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: spacing.xs }}>
-              <div style={{ fontSize: "0.8rem", color: text.subtle, textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                Help Center
-              </div>
-              <Link
-                to="/help"
-                style={{ color: text.muted, textDecoration: "none" }}
-                onMouseEnter={(e) => onHover(e, true)}
-                onMouseLeave={(e) => onHover(e, false)}
-                onClick={() => setMenuOpen(false)}
-              >
-                Help Center
-              </Link>
-              <Link
-                to="/help/landlords"
-                style={{ color: text.muted, textDecoration: "none" }}
-                onMouseEnter={(e) => onHover(e, true)}
-                onMouseLeave={(e) => onHover(e, false)}
-                onClick={() => setMenuOpen(false)}
-              >
-                Landlords
-              </Link>
-              <Link
-                to="/help/tenants"
-                style={{ color: text.muted, textDecoration: "none" }}
-                onMouseEnter={(e) => onHover(e, true)}
-                onMouseLeave={(e) => onHover(e, false)}
-                onClick={() => setMenuOpen(false)}
-              >
-                Tenants
-              </Link>
-              <Link
-                to="/contact"
-                style={{ color: text.muted, textDecoration: "none" }}
-                onMouseEnter={(e) => onHover(e, true)}
-                onMouseLeave={(e) => onHover(e, false)}
-                onClick={() => setMenuOpen(false)}
-              >
-                Contact
-              </Link>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: spacing.xs }}>
-              <div style={{ fontSize: "0.8rem", color: text.subtle, textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                Legal
-              </div>
-              <Link
-                to="/privacy"
-                style={{ color: text.muted, textDecoration: "none" }}
-                onMouseEnter={(e) => onHover(e, true)}
-                onMouseLeave={(e) => onHover(e, false)}
-                onClick={() => setMenuOpen(false)}
-              >
-                Privacy
-              </Link>
-              <Link
-                to="/terms"
-                style={{ color: text.muted, textDecoration: "none" }}
-                onMouseEnter={(e) => onHover(e, true)}
-                onMouseLeave={(e) => onHover(e, false)}
-                onClick={() => setMenuOpen(false)}
-              >
-                Terms
-              </Link>
-              <Link
-                to="/acceptable-use"
-                style={{ color: text.muted, textDecoration: "none" }}
-                onMouseEnter={(e) => onHover(e, true)}
-                onMouseLeave={(e) => onHover(e, false)}
-                onClick={() => setMenuOpen(false)}
-              >
-                Acceptable Use
-              </Link>
-              <Link
-                to="/subprocessors"
-                style={{ color: text.muted, textDecoration: "none" }}
-                onMouseEnter={(e) => onHover(e, true)}
-                onMouseLeave={(e) => onHover(e, false)}
-                onClick={() => setMenuOpen(false)}
-              >
-                Subprocessors
-              </Link>
-              <Link
-                to="/trust"
-                style={{ color: text.muted, textDecoration: "none" }}
-                onMouseEnter={(e) => onHover(e, true)}
-                onMouseLeave={(e) => onHover(e, false)}
-                onClick={() => setMenuOpen(false)}
-              >
-                Trust
-              </Link>
-              <Link
-                to="/security"
-                style={{ color: text.muted, textDecoration: "none" }}
-                onMouseEnter={(e) => onHover(e, true)}
-                onMouseLeave={(e) => onHover(e, false)}
-                onClick={() => setMenuOpen(false)}
-              >
-                Security
-              </Link>
-              <Link
-                to="/accessibility"
-                style={{ color: text.muted, textDecoration: "none" }}
-                onMouseEnter={(e) => onHover(e, true)}
-                onMouseLeave={(e) => onHover(e, false)}
-                onClick={() => setMenuOpen(false)}
-              >
-                Accessibility
-              </Link>
-              <Link
-                to="/status"
-                style={{ color: text.muted, textDecoration: "none" }}
-                onMouseEnter={(e) => onHover(e, true)}
-                onMouseLeave={(e) => onHover(e, false)}
-                onClick={() => setMenuOpen(false)}
-              >
-                Status
-              </Link>
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: spacing.sm, alignItems: "center" }}>
               <Link
