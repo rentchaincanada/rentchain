@@ -1,4 +1,5 @@
 import React from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { MacShell } from "../components/layout/MacShell";
 import { Card, Section, Button } from "../components/ui/Ui";
 import { spacing, text, colors } from "../styles/tokens";
@@ -9,6 +10,10 @@ import { RecentEventsCard } from "../components/dashboard/RecentEventsCard";
 import { debugApiBase } from "@/api/baseUrl";
 import { fetchProperties } from "../api/propertiesApi";
 import { unitsForProperty } from "../lib/propertyCounts";
+import { useApplications } from "../hooks/useApplications";
+import { useSubscription } from "../context/SubscriptionContext";
+import { planLabel } from "../lib/plan";
+import StarterOnboardingPanel from "../components/dashboard/StarterOnboardingPanel";
 
 function formatDate(ts: number | null): string {
   if (!ts) return "—";
@@ -27,6 +32,9 @@ function formatDate(ts: number | null): string {
 
 const DashboardPage: React.FC = () => {
   const { data, loading, error, refetch, lastUpdatedAt } = useDashboardSummary();
+  const { applications, loading: applicationsLoading } = useApplications();
+  const { plan } = useSubscription();
+  const navigate = useNavigate();
   const apiBase = debugApiBase();
   const showDebug =
     typeof window !== "undefined" && new URLSearchParams(window.location.search).get("debug") === "1";
@@ -67,6 +75,8 @@ const DashboardPage: React.FC = () => {
 
   const derivedPropertiesCount = properties.length;
   const derivedUnitsCount = properties.reduce((sum, p) => sum + unitsForProperty(p), 0);
+  const applicationsCount = applications.length;
+  const screeningStartedCount = applications.filter((app) => app.screeningId || app.screeningRequestId).length;
   const kpis = {
     propertiesCount: derivedPropertiesCount,
     unitsCount: derivedUnitsCount,
@@ -77,7 +87,12 @@ const DashboardPage: React.FC = () => {
   const actions = data?.actions ?? [];
   const events = data?.events ?? [];
 
-  const showEmptyCTA = !loading && !propsLoading && !error && (kpis?.propertiesCount ?? 0) === 0;
+  const hasNoProperties = (kpis?.propertiesCount ?? 0) === 0;
+  const hasNoApplications = !applicationsLoading && applicationsCount === 0;
+  const showEmptyCTA = !loading && !propsLoading && !error && hasNoProperties;
+  const showStarterOnboarding = plan === "starter" || hasNoProperties;
+  const showAdvancedCollapsed = showStarterOnboarding;
+  const planName = planLabel(plan);
 
   return (
     <MacShell title="RentChain · Dashboard" showTopNav={false}>
@@ -97,6 +112,35 @@ const DashboardPage: React.FC = () => {
           </Card>
         ) : null}
 
+        {showStarterOnboarding ? (
+          <>
+            <StarterOnboardingPanel
+              planName={planName}
+              propertiesCount={kpis.propertiesCount}
+              applicationsCount={applicationsCount}
+              screeningStartedCount={screeningStartedCount}
+              onAddProperty={() => navigate("/properties")}
+              onCreateApplication={() => navigate("/applications")}
+              onStartScreening={() => navigate("/applications")}
+              onUpgrade={() => navigate("/pricing")}
+            />
+            <Card style={{ padding: spacing.md }}>
+              <div style={{ fontWeight: 700, marginBottom: spacing.sm }}>Quick actions</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: spacing.sm }}>
+                <Button onClick={() => navigate("/properties")} aria-label="Add property">
+                  Add property
+                </Button>
+                <Button variant="secondary" onClick={() => navigate("/applications")} aria-label="Start screening">
+                  Start screening
+                </Button>
+                <Button variant="ghost" onClick={() => navigate("/site/legal")} aria-label="View templates">
+                  View templates
+                </Button>
+              </div>
+            </Card>
+          </>
+        ) : null}
+
         {showEmptyCTA ? (
           <Card
             style={{
@@ -109,30 +153,61 @@ const DashboardPage: React.FC = () => {
             <div style={{ color: text.muted, marginBottom: 12 }}>
               Create your first property to start tracking tenants, rent, and records.
             </div>
-            <Button onClick={() => { window.location.assign("/properties"); }}>Create property</Button>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: spacing.sm }}>
+              <Button onClick={() => navigate("/properties")}>Add property</Button>
+              <Link to="/help/landlords" style={{ alignSelf: "center", color: colors.accent }}>
+                Learn more
+              </Link>
+            </div>
+          </Card>
+        ) : null}
+
+        {!showEmptyCTA && hasNoApplications ? (
+          <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>Next: create an application</div>
+            <div style={{ color: text.muted, marginBottom: 12 }}>
+              Invite a tenant or start an application to begin screening.
+            </div>
+            <Button onClick={() => navigate("/applications")}>Go to applications</Button>
           </Card>
         ) : null}
 
         <KpiStrip kpis={kpis} loading={loading} />
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-            gap: spacing.md,
-          }}
-        >
-          <ActionRequiredPanel
-            items={actions}
-            loading={loading}
-            viewAllEnabled={false}
-          />
-          <RecentEventsCard
-            events={events}
-            loading={loading}
-            openLedgerEnabled={false}
-          />
-        </div>
+        {showAdvancedCollapsed ? (
+          <details
+            style={{
+              border: `1px solid ${colors.border}`,
+              borderRadius: 12,
+              padding: spacing.md,
+              background: colors.card,
+            }}
+          >
+            <summary style={{ cursor: "pointer", fontWeight: 700 }}>More insights</summary>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+                gap: spacing.md,
+                marginTop: spacing.md,
+              }}
+            >
+              <ActionRequiredPanel items={actions} loading={loading} viewAllEnabled={false} />
+              <RecentEventsCard events={events} loading={loading} openLedgerEnabled={false} />
+            </div>
+          </details>
+        ) : (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+              gap: spacing.md,
+            }}
+          >
+            <ActionRequiredPanel items={actions} loading={loading} viewAllEnabled={false} />
+            <RecentEventsCard events={events} loading={loading} openLedgerEnabled={false} />
+          </div>
+        )}
 
         <Section>
           <div style={{ color: text.muted, fontSize: 12, textAlign: "right" }}>
