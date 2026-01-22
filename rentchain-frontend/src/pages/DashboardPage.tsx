@@ -33,7 +33,7 @@ function formatDate(ts: number | null): string {
 const DashboardPage: React.FC = () => {
   const { data, loading, error, refetch, lastUpdatedAt } = useDashboardSummary();
   const { applications, loading: applicationsLoading } = useApplications();
-  const { plan } = useSubscription();
+  const { plan, loading: planLoading } = useSubscription();
   const navigate = useNavigate();
   const apiBase = debugApiBase();
   const showDebug =
@@ -87,10 +87,12 @@ const DashboardPage: React.FC = () => {
   const actions = data?.actions ?? [];
   const events = data?.events ?? [];
 
-  const hasNoProperties = (kpis?.propertiesCount ?? 0) === 0;
-  const hasNoApplications = !applicationsLoading && applicationsCount === 0;
-  const showEmptyCTA = !loading && !propsLoading && !error && hasNoProperties;
-  const showStarterOnboarding = plan === "starter" || hasNoProperties;
+  const planReady = !planLoading;
+  const dataReady = !loading && !propsLoading && !applicationsLoading && !error;
+  const hasNoProperties = dataReady && (kpis?.propertiesCount ?? 0) === 0;
+  const hasNoApplications = dataReady && applicationsCount === 0;
+  const showEmptyCTA = planReady && hasNoProperties;
+  const showStarterOnboarding = planReady && (plan === "starter" || hasNoProperties);
   const showAdvancedCollapsed = showStarterOnboarding;
   const planName = planLabel(plan);
 
@@ -106,9 +108,16 @@ const DashboardPage: React.FC = () => {
       >
         {error ? (
           <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
-            <div style={{ fontWeight: 800, color: colors.danger, marginBottom: 8 }}>Couldn’t load dashboard</div>
+            <div style={{ fontWeight: 800, color: colors.danger, marginBottom: 8 }}>Couldn't load dashboard</div>
             <div style={{ marginBottom: 12 }}>{error}</div>
             <Button onClick={refetch}>Retry</Button>
+          </Card>
+        ) : null}
+
+        {!planReady ? (
+          <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>Loading your dashboard…</div>
+            <div style={{ color: text.muted }}>Preparing your plan and next steps.</div>
           </Card>
         ) : null}
 
