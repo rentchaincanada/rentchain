@@ -18,6 +18,7 @@ import LegalHelpPage from "./pages/marketing/LegalHelpPage";
 import HelpIndexPage from "./pages/help/HelpIndexPage";
 import HelpLandlordsPage from "./pages/help/HelpLandlordsPage";
 import HelpTenantsPage from "./pages/help/HelpTenantsPage";
+import TemplatesPage from "./pages/help/TemplatesPage";
 import PrivacyPage from "./pages/legal/PrivacyPage";
 import TermsPage from "./pages/legal/TermsPage";
 import AcceptableUsePage from "./pages/legal/AcceptableUsePage";
@@ -95,6 +96,7 @@ function App() {
         <Route path="/help" element={<HelpIndexPage />} />
         <Route path="/help/landlords" element={<HelpLandlordsPage />} />
         <Route path="/help/tenants" element={<HelpTenantsPage />} />
+        <Route path="/help/templates" element={<TemplatesPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/terms" element={<TermsPage />} />
         <Route path="/acceptable-use" element={<AcceptableUsePage />} />

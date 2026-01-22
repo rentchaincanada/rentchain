@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { Link } from "react-router-dom";
 import { Card } from "../../components/ui/Ui";
 import { spacing, text } from "../../styles/tokens";
 import { MarketingLayout } from "./MarketingLayout";
@@ -74,6 +75,12 @@ const LegalHelpPage: React.FC = () => {
 
         <Card>
           <h2 style={{ marginTop: 0 }}>Help Center</h2>
+          <p style={{ marginTop: 0, color: text.muted }}>
+            Looking for the full library?{" "}
+            <Link to="/help/templates" style={{ color: text.secondary }}>
+              View all templates →
+            </Link>
+          </p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: spacing.lg }}>
             <div style={{ flex: "1 1 280px" }}>
               <h3 style={{ marginTop: 0 }}>Help for Landlords</h3>
