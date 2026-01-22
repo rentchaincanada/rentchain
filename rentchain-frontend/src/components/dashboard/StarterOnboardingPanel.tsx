@@ -120,21 +120,19 @@ export const StarterOnboardingPanel: React.FC<StarterOnboardingPanelProps> = ({
           Screening and records are handled securely. No hidden scoring.
         </div>
 
-        {planName === "Starter" && propertiesCount >= 1 && (
+        {onUpgrade ? (
           <div style={{ color: text.subtle, fontSize: "0.85rem" }}>
-            Starter includes 1 property. Upgrade to add more.
-            {onUpgrade ? (
-              <Button
-                variant="ghost"
-                onClick={onUpgrade}
-                style={{ marginLeft: spacing.sm, padding: "6px 10px" }}
-                aria-label="Upgrade plan"
-              >
-                Upgrade
-              </Button>
-            ) : null}
+            Upgrade to unlock advanced property management, automation, and portfolio tools.
+            <Button
+              variant="ghost"
+              onClick={onUpgrade}
+              style={{ marginLeft: spacing.sm, padding: "6px 10px" }}
+              aria-label="See upgrades"
+            >
+              See upgrades
+            </Button>
           </div>
-        )}
+        ) : null}
       </div>
     </Card>
   );
