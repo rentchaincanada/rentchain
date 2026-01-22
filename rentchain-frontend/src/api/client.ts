@@ -14,6 +14,11 @@ function dispatchPlanLimit(detail: any) {
   }
 }
 
+function shouldIgnorePlanLimit(detail: any) {
+  const type = String(detail?.limitType ?? "").toLowerCase();
+  return type === "properties" || type === "property" || type === "units" || type === "unit";
+}
+
 function normalizePlanLimit(payload: any, status: number) {
   const raw = payload ?? {};
   if (status === 403 && raw?.error === "PLAN_LIMIT") {
@@ -79,7 +84,7 @@ api.interceptors.response.use(
     const data = err?.response?.data;
     const url = err?.config?.url || "";
     const detail = normalizePlanLimit(data, status);
-    if (detail) {
+    if (detail && !shouldIgnorePlanLimit(detail)) {
       dispatchPlanLimit(detail);
     }
     if (status !== 401 && status !== 403) {
