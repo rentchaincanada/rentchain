@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Link } from "react-router-dom";
+import AskRentChainWidget from "../../components/help/AskRentChainWidget";
 import { Card } from "../../components/ui/Ui";
 import { spacing, text } from "../../styles/tokens";
 import { MarketingLayout } from "./MarketingLayout";
@@ -16,6 +17,11 @@ const LegalHelpPage: React.FC = () => {
       <div style={{ display: "flex", flexDirection: "column", gap: spacing.lg }}>
         <div>
           <h1 style={{ margin: 0 }}>Legal &amp; Help</h1>
+        </div>
+
+        <div>
+          <h2 style={{ marginTop: 0 }}>Need help? Ask RentChain</h2>
+          <AskRentChainWidget compact defaultOpen={false} />
         </div>
 
         <Card>

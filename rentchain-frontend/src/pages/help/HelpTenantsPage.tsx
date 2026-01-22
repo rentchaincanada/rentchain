@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { spacing, text } from "../../styles/tokens";
 import { MarketingLayout } from "../marketing/MarketingLayout";
 import { templateUrl } from "../../utils/templateUrl";
+import AskRentChainWidget from "../../components/help/AskRentChainWidget";
 
 const HelpTenantsPage: React.FC = () => {
   useEffect(() => {
@@ -15,6 +16,7 @@ const HelpTenantsPage: React.FC = () => {
         <p style={{ color: text.muted, margin: 0 }}>
           Guidance on consent, screenings, and how your rental records are handled.
         </p>
+        <AskRentChainWidget audience="tenant" compact defaultOpen={false} />
         <h2 style={{ marginTop: spacing.lg }}>Getting Started</h2>
         <ul style={{ margin: 0, paddingLeft: "1.1rem", color: text.muted }}>
           <li>Understanding RentChain</li>

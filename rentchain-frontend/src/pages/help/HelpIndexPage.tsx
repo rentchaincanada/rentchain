@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { spacing, text } from "../../styles/tokens";
 import { MarketingLayout } from "../marketing/MarketingLayout";
+import AskRentChainWidget from "../../components/help/AskRentChainWidget";
 import { templateUrl } from "../../utils/templateUrl";
 
 const HelpIndexPage: React.FC = () => {
@@ -18,6 +19,7 @@ const HelpIndexPage: React.FC = () => {
             Guides, downloads, and support resources for landlords and tenants.
           </p>
         </div>
+        <AskRentChainWidget defaultOpen />
         <div style={{ display: "grid", gap: spacing.lg, gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
           <div>
             <h2 style={{ marginTop: 0 }}>Landlords</h2>
