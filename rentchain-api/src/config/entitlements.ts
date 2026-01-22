@@ -10,8 +10,8 @@ export const ENTITLEMENTS: Record<
   }
 > = {
   starter: {
-    maxProperties: 1,
-    maxUnits: 5,
+    maxProperties: Infinity,
+    maxUnits: Infinity,
     maxTenants: 10,
     maxActiveLeases: 10,
   },

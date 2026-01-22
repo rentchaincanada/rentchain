@@ -1,7 +1,7 @@
 export const PLANS = {
   starter: {
-    maxProperties: 1,
-    maxUnits: 10,
+    maxProperties: Infinity,
+    maxUnits: Infinity,
   },
 } as const;
 
