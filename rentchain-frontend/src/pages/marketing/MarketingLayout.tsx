@@ -163,6 +163,14 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
               onMouseEnter={(e) => onHover(e, true)}
               onMouseLeave={(e) => onHover(e, false)}
             >
+              Help
+            </Link>
+            <Link
+              to="/legal"
+              style={{ color: text.muted, textDecoration: "none" }}
+              onMouseEnter={(e) => onHover(e, true)}
+              onMouseLeave={(e) => onHover(e, false)}
+            >
               Legal
             </Link>
           </nav>
@@ -592,7 +600,40 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
           fontSize: "0.85rem",
         }}
       >
-        © RentChain
+        <div
+          style={{
+            maxWidth: layout.maxWidth,
+            margin: "0 auto",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: spacing.md,
+            flexWrap: "wrap",
+          }}
+        >
+          <span>&copy; RentChain</span>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: spacing.md,
+              flexWrap: "wrap",
+            }}
+          >
+            <Link to="/legal" style={{ color: text.muted, textDecoration: "none" }}>
+              Help Center
+            </Link>
+            <Link to="/help/templates" style={{ color: text.muted, textDecoration: "none" }}>
+              Templates
+            </Link>
+            <Link to="/privacy" style={{ color: text.muted, textDecoration: "none" }}>
+              Privacy
+            </Link>
+            <Link to="/terms" style={{ color: text.muted, textDecoration: "none" }}>
+              Terms
+            </Link>
+          </div>
+        </div>
       </footer>
     </div>
   );
