@@ -100,8 +100,10 @@ const DashboardPage: React.FC = () => {
   const hasNoProperties = dataReady && (kpis?.propertiesCount ?? 0) === 0;
   const hasNoApplications = dataReady && applicationsCount === 0;
   const showEmptyCTA = hasNoProperties;
-  const showStarterOnboarding =
-    dataReady && (hasNoProperties || hasNoApplications || screeningStartedCount === 0);
+  const progressLoading = !dataReady;
+  const showStarterOnboarding = progressLoading
+    ? true
+    : hasNoProperties || hasNoApplications || screeningStartedCount === 0;
   const showAdvancedCollapsed = showStarterOnboarding;
 
   return (
@@ -140,12 +142,13 @@ const DashboardPage: React.FC = () => {
           </Card>
         ) : null}
 
-        {dataReady && showStarterOnboarding ? (
+        {showStarterOnboarding ? (
           <>
             <StarterOnboardingPanel
               propertiesCount={kpis.propertiesCount}
               applicationsCount={applicationsCount}
               screeningStartedCount={screeningStartedCount}
+              loading={progressLoading}
               onAddProperty={() => navigate("/properties")}
               onCreateApplication={() => navigate("/applications")}
               onStartScreening={() => navigate("/applications")}
@@ -154,13 +157,27 @@ const DashboardPage: React.FC = () => {
             <Card style={{ padding: spacing.md }}>
               <div style={{ fontWeight: 700, marginBottom: spacing.sm }}>Quick actions</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: spacing.sm }}>
-                <Button onClick={() => navigate("/properties")} aria-label="Add property">
+                <Button
+                  onClick={() => navigate("/properties")}
+                  aria-label="Add property"
+                  disabled={progressLoading}
+                >
                   Add property
                 </Button>
-                <Button variant="secondary" onClick={() => navigate("/applications")} aria-label="Start screening">
+                <Button
+                  variant="secondary"
+                  onClick={() => navigate("/applications")}
+                  aria-label="Start screening"
+                  disabled={progressLoading}
+                >
                   Start screening
                 </Button>
-                <Button variant="ghost" onClick={() => navigate("/site/legal")} aria-label="View templates">
+                <Button
+                  variant="ghost"
+                  onClick={() => navigate("/site/legal")}
+                  aria-label="View templates"
+                  disabled={progressLoading}
+                >
                   View templates
                 </Button>
               </div>

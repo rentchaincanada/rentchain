@@ -7,6 +7,7 @@ type StarterOnboardingPanelProps = {
   propertiesCount: number;
   applicationsCount: number;
   screeningStartedCount: number;
+  loading?: boolean;
   onAddProperty: () => void;
   onCreateApplication: () => void;
   onStartScreening: () => void;
@@ -17,6 +18,7 @@ type ChecklistItemProps = {
   title: string;
   description: string;
   isComplete: boolean;
+  loading?: boolean;
   actionLabel: string;
   onAction: () => void;
   isPrimary?: boolean;
@@ -26,10 +28,12 @@ const ChecklistItem: React.FC<ChecklistItemProps> = ({
   title,
   description,
   isComplete,
+  loading = false,
   actionLabel,
   onAction,
   isPrimary = false,
 }) => {
+  const statusLabel = loading ? "Checking..." : isComplete ? "Complete" : "Next";
   return (
     <div
       style={{
@@ -51,10 +55,10 @@ const ChecklistItem: React.FC<ChecklistItemProps> = ({
             style={{
               fontWeight: 600,
               fontSize: "0.85rem",
-              color: isComplete ? "#15803d" : text.muted,
+              color: loading ? text.muted : isComplete ? "#15803d" : text.muted,
             }}
           >
-            {isComplete ? "Complete" : "Next"}
+            {statusLabel}
           </span>
         </div>
         <div style={{ color: text.muted, fontSize: "0.9rem" }}>{description}</div>
@@ -64,6 +68,7 @@ const ChecklistItem: React.FC<ChecklistItemProps> = ({
         variant={isPrimary ? "primary" : "secondary"}
         aria-label={actionLabel}
         style={{ minWidth: 160 }}
+        disabled={loading}
       >
         {actionLabel}
       </Button>
@@ -76,6 +81,7 @@ export const StarterOnboardingPanel: React.FC<StarterOnboardingPanelProps> = ({
   propertiesCount,
   applicationsCount,
   screeningStartedCount,
+  loading = false,
   onAddProperty,
   onCreateApplication,
   onStartScreening,
@@ -96,6 +102,7 @@ export const StarterOnboardingPanel: React.FC<StarterOnboardingPanelProps> = ({
             title="Add a property"
             description="Set up your first unit to begin."
             isComplete={propertiesCount > 0}
+            loading={loading}
             actionLabel="Add property"
             onAction={onAddProperty}
           />
@@ -103,6 +110,7 @@ export const StarterOnboardingPanel: React.FC<StarterOnboardingPanelProps> = ({
             title="Create an application"
             description="Invite a tenant or start an application."
             isComplete={applicationsCount > 0}
+            loading={loading}
             actionLabel="Go to applications"
             onAction={onCreateApplication}
           />
@@ -110,6 +118,7 @@ export const StarterOnboardingPanel: React.FC<StarterOnboardingPanelProps> = ({
             title="Order screening"
             description="Run screening to verify your applicant."
             isComplete={screeningStartedCount > 0}
+            loading={loading}
             actionLabel="Start screening"
             onAction={onStartScreening}
             isPrimary
