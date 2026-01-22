@@ -6,15 +6,12 @@ import {
   UnitInput,
 } from "../../api/propertiesApi";
 import { colors, radius, text } from "../../styles/tokens";
-import { useUpgrade } from "../../context/UpgradeContext";
-import { handleEntitlementError } from "../../hooks/useEntitlementGuard";
 import { setOnboardingStep } from "../../api/onboardingApi";
 import { useToast } from "@/components/ui/ToastProvider";
 
 interface AddPropertyFormProps {
   onCreated?: (property: Property) => void;
-  maxUnits?: number;
-  plan?: string;
+  onExistingPropertyId?: (id: string) => void;
 }
 
 interface UnitRow extends UnitInput {
@@ -38,8 +35,7 @@ const emptyUnitRow = (): UnitRow => ({
 
 export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
   onCreated,
-  maxUnits,
-  plan,
+  onExistingPropertyId,
 }) => {
   const [name, setName] = useState("");
   const [addressLine1, setAddressLine1] = useState("");
@@ -56,7 +52,6 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
   const [errorText, setErrorText] = useState<string | null>(null);
   const [successText, setSuccessText] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(true);
-  const { openUpgrade } = useUpgrade();
   const { showToast } = useToast();
   const inputStyle: React.CSSProperties = {
     padding: "8px 10px",
@@ -168,13 +163,6 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
           );
           return;
         }
-        if (typeof maxUnits === "number" && parsed.length > maxUnits) {
-          setErrorText(
-            `Your plan allows up to ${maxUnits} units. Loaded ${parsed.length} from CSV. Upgrade to import this file.`
-          );
-          openUpgrade("unitsMax");
-          return;
-        }
         setUnits(parsed);
         setTotalUnits(parsed.length);
         setErrorText(null);
@@ -222,14 +210,6 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
       typeof totalUnits === "number" && totalUnits > 0
         ? totalUnits
         : validUnits.length;
-
-    if (typeof maxUnits === "number" && totalUnitCount > maxUnits) {
-      setErrorText(
-        `Your plan allows up to ${maxUnits} units. Reduce units or upgrade to continue.`
-      );
-      openUpgrade("unitsMax");
-      return;
-    }
 
     if (!totalUnitCount || Number.isNaN(totalUnitCount)) {
       setErrorText("Total units is required (we auto-create units).");
@@ -284,48 +264,23 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
       if (status === 409 || code === "PROPERTY_EXISTS") {
         if (existingId) {
           setSuccessText(null);
-          setErrorText(null);
-          showToast({
-            message: "Property already exists",
-            description: "Opening existing property.",
-            variant: "success",
-          });
-          // navigate available via window for now; if you have navigate hook, prefer that
-          window.location.href = `/properties/${existingId}`;
+          setErrorText(
+            "That address already exists. We selected the existing property below."
+          );
+          onExistingPropertyId?.(String(existingId));
           return;
         }
         setErrorText("A property with this address already exists.");
         return;
       }
 
-      if (status === 402 && code === "ENTITLEMENT_LIMIT_REACHED") {
-        const resource =
-          err?.response?.data?.limit?.key ||
-          err?.response?.data?.resource ||
-          "properties";
-        const cap = err?.response?.data?.limit?.max ?? 0;
-        const plan = err?.response?.data?.plan ?? "starter";
-
-        (openUpgrade as any)({
-          title: "Upgrade required",
-          subtitle: `Starter allows up to ${cap} ${resource}. Upgrade to continue.`,
-          resource,
-          cap,
-          plan,
-        });
-      } else if (err?.code === "UPGRADE_REQUIRED") {
-        openUpgrade(err.reason || "propertiesMax");
-      } else if (handleEntitlementError(err, openUpgrade)) {
-        // handled
-      } else {
-        const msg = err?.message || "Failed to create property.";
-        setErrorText(msg);
-        showToast({
-          message: "Failed to create property",
-          description: msg,
-          variant: "error",
-        });
-      }
+      const msg = err?.message || "Failed to create property.";
+      setErrorText(msg);
+      showToast({
+        message: "Failed to create property",
+        description: msg,
+        variant: "error",
+      });
     } finally {
       setIsSubmitting(false);
     }

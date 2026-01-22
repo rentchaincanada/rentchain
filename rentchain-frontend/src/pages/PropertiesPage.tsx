@@ -564,7 +564,15 @@ const PropertiesPage: React.FC = () => {
             Capture units, rents, and amenities. Newly added properties will show
             up in your list and rent roll below.
           </p>
-          <AddPropertyForm onCreated={handlePropertyCreated} />
+          <AddPropertyForm
+            onCreated={handlePropertyCreated}
+            onExistingPropertyId={(existingId) => {
+              setSelectedPropertyId(existingId);
+              const next = new URLSearchParams(location.search);
+              next.set("propertyId", existingId);
+              navigate({ pathname: location.pathname, search: next.toString() }, { replace: true });
+            }}
+          />
         </Card>
 
         <Card

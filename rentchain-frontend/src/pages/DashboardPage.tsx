@@ -122,7 +122,25 @@ const DashboardPage: React.FC = () => {
           </Card>
         ) : null}
 
-        {showStarterOnboarding ? (
+        {!dataReady && !error ? (
+          <Card
+            style={{
+              padding: spacing.md,
+              border: `1px solid ${colors.border}`,
+              background: colors.card,
+            }}
+          >
+            <div style={{ fontWeight: 700, marginBottom: 10 }}>Loading your dashboard...</div>
+            <div style={{ display: "grid", gap: 10 }}>
+              <div style={{ height: 12, borderRadius: 999, background: "rgba(15,23,42,0.08)" }} />
+              <div style={{ height: 12, width: "80%", borderRadius: 999, background: "rgba(15,23,42,0.08)" }} />
+              <div style={{ height: 12, width: "60%", borderRadius: 999, background: "rgba(15,23,42,0.08)" }} />
+              <div style={{ height: 180, borderRadius: 12, background: "rgba(15,23,42,0.05)" }} />
+            </div>
+          </Card>
+        ) : null}
+
+        {dataReady && showStarterOnboarding ? (
           <>
             <StarterOnboardingPanel
               propertiesCount={kpis.propertiesCount}
@@ -150,7 +168,7 @@ const DashboardPage: React.FC = () => {
           </>
         ) : null}
 
-        {showEmptyCTA ? (
+        {dataReady && showEmptyCTA ? (
           <Card
             style={{
               padding: spacing.md,
@@ -171,7 +189,7 @@ const DashboardPage: React.FC = () => {
           </Card>
         ) : null}
 
-        {!showEmptyCTA && hasNoApplications ? (
+        {dataReady && !showEmptyCTA && hasNoApplications ? (
           <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
             <div style={{ fontWeight: 700, marginBottom: 6 }}>Next: create an application</div>
             <div style={{ color: text.muted, marginBottom: 12 }}>
@@ -181,9 +199,9 @@ const DashboardPage: React.FC = () => {
           </Card>
         ) : null}
 
-        <KpiStrip kpis={kpis} loading={loading} />
+        {dataReady ? <KpiStrip kpis={kpis} loading={loading} /> : null}
 
-        {showAdvancedCollapsed ? (
+        {dataReady && showAdvancedCollapsed ? (
           <details
             style={{
               border: `1px solid ${colors.border}`,
@@ -205,7 +223,7 @@ const DashboardPage: React.FC = () => {
               <RecentEventsCard events={events} loading={loading} openLedgerEnabled={false} />
             </div>
           </details>
-        ) : (
+        ) : dataReady ? (
           <div
             style={{
               display: "grid",
@@ -216,7 +234,7 @@ const DashboardPage: React.FC = () => {
             <ActionRequiredPanel items={actions} loading={loading} viewAllEnabled={false} />
             <RecentEventsCard events={events} loading={loading} openLedgerEnabled={false} />
           </div>
-        )}
+        ) : null}
 
         <Section>
           <div style={{ color: text.muted, fontSize: 12, textAlign: "right" }}>
