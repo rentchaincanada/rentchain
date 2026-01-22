@@ -21,16 +21,10 @@ import { fetchActionRequestCounts } from "../api/actionRequestCountsApi";
 import { ActionCenterDrawer } from "../components/action-center/ActionCenterDrawer";
 import { fetchMonthlyOpsSnapshot } from "../api/actionSnapshotApi";
 import { asArray } from "../lib/asArray";
-import { fetchMe } from "../api/meApi";
-import { fetchAccountLimits, type AccountLimits } from "../api/accountApi";
 import { arr, num, str } from "@/utils/safe";
-import { useUpgrade } from "../context/UpgradeContext";
 import { setOnboardingStep } from "../api/onboardingApi";
 import { addUnitsManual, type UnitInput } from "../api/unitsApi";
 import { useToast } from "../components/ui/ToastProvider";
-import { useIsMobile } from "@/hooks/useIsMobile";
-import { PLANS } from "../config/plans";
-import { resolvePlanFrom, normalizePlan } from "../lib/plan";
 import { unitsForProperty } from "../lib/propertyCounts";
 
 const PropertiesPage: React.FC = () => {
@@ -59,20 +53,8 @@ const PropertiesPage: React.FC = () => {
   const navigate = useNavigate();
   const [actionCounts, setActionCounts] = useState<Record<string, number>>({});
   const [actionCenterOpen, setActionCenterOpen] = useState(false);
-  const [me, setMe] = useState<any>(null);
-  const [limits, setLimits] = useState<AccountLimits | null>(null);
-  const { openUpgrade } = useUpgrade();
   const { showToast } = useToast();
-  const isMobile = useIsMobile();
-  const plan = resolvePlanFrom({ me, limits });
-  const planKey = normalizePlan(plan);
-  const planLimits = (PLANS as any)[planKey] ?? PLANS.starter;
-  const maxProperties = planLimits.maxProperties;
-  const maxUnits = planLimits.maxUnits;
   const currentProperties = properties?.length ?? 0;
-  const limitsReady = Boolean(limits && planLimits && typeof planLimits.maxProperties === "number");
-  const atCap = limitsReady ? currentProperties >= maxProperties : false;
-  const canAddProperty = limitsReady && !atCap;
   const unitsUsed = useMemo(
     () => (properties || []).reduce((sum, p) => sum + unitsForProperty(p), 0),
     [properties]
@@ -155,37 +137,7 @@ const PropertiesPage: React.FC = () => {
     void loadProperties();
   }, [loadProperties]);
 
-  useEffect(() => {
-    let cancelled = false;
-    fetchMe()
-      .then((m) => {
-        if (cancelled) return;
-        setMe(m);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setMe(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchAccountLimits()
-      .then((lim) => {
-        if (cancelled) return;
-        setLimits(lim);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setLimits(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // no plan limits fetch; starter supports unlimited properties/units
 
   useEffect(() => {
     if (isLoadingProperties) return;
@@ -434,32 +386,27 @@ const PropertiesPage: React.FC = () => {
       >
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ fontWeight: 800, fontSize: "1.2rem" }}>Properties</div>
-          {limits ? (
-            <div
-              style={{
-                padding: "6px 10px",
-                borderRadius: 12,
-                border: "1px solid rgba(148,163,184,0.35)",
-                fontSize: 12,
-                fontWeight: 700,
-                color: text.muted,
-                display: "inline-flex",
-                gap: 8,
-                alignItems: "center",
-              }}
-              title={`Plan ${plan} - Properties ${currentProperties}/${maxProperties} - Units ${unitsUsed}/${maxUnits}`}
-            >
-              <span style={{ fontWeight: 800, color: text.primary }}>
-                {plan}
-              </span>
-              <span>
-                Props: {currentProperties}/{planLimits.maxProperties}
-              </span>
-              <span>
-                Units: {unitsUsed}/{planLimits.maxUnits}
-              </span>
-            </div>
-          ) : null}
+          <div
+            style={{
+              padding: "6px 10px",
+              borderRadius: 12,
+              border: "1px solid rgba(148,163,184,0.35)",
+              fontSize: 12,
+              fontWeight: 700,
+              color: text.muted,
+              display: "inline-flex",
+              gap: 8,
+              alignItems: "center",
+            }}
+            title={`Properties ${currentProperties} - Units ${unitsUsed}`}
+          >
+            <span>
+              Props: {currentProperties}
+            </span>
+            <span>
+              Units: {unitsUsed}
+            </span>
+          </div>
 
           {selectedPropertyId ? (
             <button
@@ -617,50 +564,7 @@ const PropertiesPage: React.FC = () => {
             Capture units, rents, and amenities. Newly added properties will show
             up in your list and rent roll below.
           </p>
-          {!limitsReady ? (
-            <div
-              style={{
-                padding: 14,
-                borderRadius: 14,
-                background: "rgba(2,6,23,0.03)",
-                border: `1px solid ${colors.border}`,
-                color: text.muted,
-              }}
-            >
-              Loading plan limits...
-            </div>
-          ) : canAddProperty ? (
-            <AddPropertyForm onCreated={handlePropertyCreated} maxUnits={maxUnits} plan={plan} />
-          ) : (
-            <div
-              style={{
-                padding: 14,
-                borderRadius: 14,
-                background: "rgba(2,6,23,0.03)",
-                border: `1px solid ${colors.border}`,
-              }}
-            >
-              <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                Upgrade to add more properties
-              </div>
-              <div style={{ color: text.muted, marginBottom: 12 }}>
-                Your current plan allows up to {maxProperties} property
-                {maxProperties === 1 ? "" : "ies"}. Upgrade to continue.
-              </div>
-              <Button
-                onClick={() =>
-                  (openUpgrade as any)({
-                    reason: "propertiesMax",
-                    plan,
-                    cap: maxProperties,
-                    resource: "properties",
-                  })
-                }
-              >
-                Upgrade plan
-              </Button>
-            </div>
-          )}
+          <AddPropertyForm onCreated={handlePropertyCreated} />
         </Card>
 
         <Card

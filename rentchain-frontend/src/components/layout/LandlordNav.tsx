@@ -37,6 +37,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
   const [hasUnread, setHasUnread] = useState<boolean>(false);
   const unreadFlag = typeof unreadMessages === "boolean" ? unreadMessages : hasUnread;
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [shellReady, setShellReady] = useState(false);
   const lastFocusedRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -89,6 +90,47 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
       document.body.style.overflow = "";
     };
   }, [drawerOpen]);
+
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      setShellReady(true);
+    }, 200);
+    return () => window.clearTimeout(t);
+  }, []);
+
+  if (!shellReady) {
+    return (
+      <div
+        className="rc-landlord-shell"
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "center",
+          padding: "24px",
+        }}
+      >
+        <div
+          style={{
+            width: "min(980px, 95vw)",
+            background: "rgba(255,255,255,0.92)",
+            border: "1px solid rgba(15,23,42,0.08)",
+            borderRadius: 16,
+            padding: "18px 20px",
+            boxShadow: "0 12px 30px rgba(15,23,42,0.12)",
+          }}
+        >
+          <div style={{ fontWeight: 700, marginBottom: 12 }}>Loading dashboard…</div>
+          <div style={{ display: "grid", gap: 10 }}>
+            <div style={{ height: 14, borderRadius: 999, background: "rgba(15,23,42,0.08)" }} />
+            <div style={{ height: 14, width: "85%", borderRadius: 999, background: "rgba(15,23,42,0.08)" }} />
+            <div style={{ height: 14, width: "60%", borderRadius: 999, background: "rgba(15,23,42,0.08)" }} />
+            <div style={{ height: 220, borderRadius: 12, background: "rgba(15,23,42,0.05)" }} />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="rc-landlord-shell">
