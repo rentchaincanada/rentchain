@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { LayoutDashboard, Building2, Users, ScrollText, MessagesSquare } from "lucide-react";
 import TopNav from "./TopNav";
 import { useIsMobile } from "../../hooks/useIsMobile";
+import { useHasMounted } from "../../hooks/useHasMounted";
 import { useAuth } from "../../context/useAuth";
 import { fetchLandlordConversations } from "../../api/messagesApi";
 
@@ -31,6 +32,7 @@ const topLinks = [
 ];
 
 export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
+  const hasMounted = useHasMounted();
   const isMobile = useIsMobile();
   const nav = useNavigate();
   const loc = useLocation();
@@ -61,7 +63,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
     };
   }, []);
 
-  if (isMobile) {
+  if (hasMounted && isMobile) {
     return (
       <div style={{ minHeight: "100vh", paddingBottom: 80 }}>
         <main style={{ minHeight: "calc(100vh - 72px)" }}>{children}</main>
