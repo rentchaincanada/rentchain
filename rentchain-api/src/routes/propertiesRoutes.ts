@@ -60,9 +60,6 @@ function normalizeUnits(units: any[]): Array<{
       sqft: number | null;
     }>;
 }
-  return [street, city, province, postal].filter(Boolean).join("|");
-}
-
 /**
  * GET /api/properties
  * Returns properties for the authenticated landlord.
