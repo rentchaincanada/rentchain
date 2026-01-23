@@ -116,6 +116,9 @@ router.post(
   requireCapability("properties.create"),
   enforcePropertyCap,
   async (req: any, res) => {
+    const requestId =
+      String(req.headers["x-request-id"] || req.headers["x-requestid"] || req.headers["x-correlation-id"] || "")
+        .trim() || `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const landlordId = req.user?.landlordId || req.user?.id;
     if (!landlordId) {
       return res.status(401).json({ error: "Unauthorized" });
@@ -123,6 +126,7 @@ router.post(
 
     const plan = req.user?.plan || "starter";
     if (process.env.NODE_ENV !== "production") {
+      console.log("[POST /api/properties] requestId=", requestId);
       console.log("[POST /api/properties] landlordId=", landlordId);
       console.log("[POST /api/properties] plan=", plan);
     }
@@ -258,7 +262,17 @@ router.post(
           "submittedUnits=",
           submittedUnitsCount,
           "propertyId=",
-          propertyRef.id
+          propertyRef.id,
+          "requestId=",
+          requestId
+        );
+        console.log(
+          "[create property] addressLine1=",
+          resolvedAddressLine1,
+          "landlordId=",
+          landlordId,
+          "requestId=",
+          requestId
         );
       }
 
@@ -283,16 +297,33 @@ router.post(
         }
         try {
           await batch.commit();
+          if (process.env.NODE_ENV !== "production") {
+            console.log(
+              "[create property] units write success propertyId=",
+              propertyRef.id,
+              "requestId=",
+              requestId
+            );
+          }
         } catch (err: any) {
           console.error("[POST /api/properties] failed to write units", err);
           return res.status(500).json({
             error: "units_write_failed",
             message: err?.message || "Failed to create units",
+            requestId,
           });
         }
       }
 
       const property = { id: propertyRef.id, propertyId: propertyRef.id, ...propertyBase };
+      if (process.env.NODE_ENV !== "production") {
+        console.log(
+          "[create property] property write success propertyId=",
+          propertyRef.id,
+          "requestId=",
+          requestId
+        );
+      }
       try {
         const { emitLedgerEventV2 } = await import(
           "../services/ledgerEventsFirestoreService"
@@ -310,10 +341,11 @@ router.post(
       }
       return res.status(201).json(property);
     } catch (err: any) {
-      console.error("[POST /api/properties] failed to write", err);
+      console.error("[POST /api/properties] failed to write", err, "requestId=", requestId);
       return res.status(500).json({
         error: "db_failed",
         message: err?.message || "Failed to create property",
+        requestId,
       });
     }
   }
