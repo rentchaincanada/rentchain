@@ -126,6 +126,14 @@ export function ActionRequestsPanel({
           <button
             onClick={load}
             disabled={loading || recomputing}
+            onMouseEnter={(e) => {
+              if (e.currentTarget.disabled) return;
+              e.currentTarget.style.background = "rgba(15,23,42,0.06)";
+            }}
+            onMouseLeave={(e) => {
+              if (e.currentTarget.disabled) return;
+              e.currentTarget.style.background = "transparent";
+            }}
             style={{
               padding: "8px 10px",
               borderRadius: 12,
@@ -134,6 +142,7 @@ export function ActionRequestsPanel({
               cursor: "pointer",
               fontWeight: 650,
               fontSize: 12,
+              transition: "background 150ms ease",
             }}
             title="Reload"
           >
@@ -143,6 +152,14 @@ export function ActionRequestsPanel({
           <button
             onClick={onRecompute}
             disabled={recomputing || loading}
+            onMouseEnter={(e) => {
+              if (e.currentTarget.disabled) return;
+              e.currentTarget.style.background = "rgba(15,23,42,0.06)";
+            }}
+            onMouseLeave={(e) => {
+              if (e.currentTarget.disabled) return;
+              e.currentTarget.style.background = "transparent";
+            }}
             style={{
               padding: "8px 10px",
               borderRadius: 12,
@@ -151,6 +168,7 @@ export function ActionRequestsPanel({
               cursor: "pointer",
               fontWeight: 650,
               fontSize: 12,
+              transition: "background 150ms ease",
             }}
             title="Recompute (dev)"
           >
@@ -232,6 +250,12 @@ export function ActionRequestsPanel({
                 </div>
                 <button
                   onClick={() => onFix(it)}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "rgba(15,23,42,0.06)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "transparent";
+                  }}
                   style={{
                     padding: "8px 10px",
                     borderRadius: 12,
@@ -240,6 +264,7 @@ export function ActionRequestsPanel({
                     cursor: "pointer",
                     fontWeight: 800,
                     fontSize: 12,
+                    transition: "background 150ms ease",
                   }}
                   title="Fix this"
                 >

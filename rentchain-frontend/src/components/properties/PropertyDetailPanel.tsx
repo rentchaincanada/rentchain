@@ -392,6 +392,14 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                 setImportMessage(null);
                 fileInputRef.current?.click();
               }}
+              onMouseEnter={(e) => {
+                if (e.currentTarget.disabled) return;
+                e.currentTarget.style.background = "rgba(15,23,42,0.06)";
+              }}
+              onMouseLeave={(e) => {
+                if (e.currentTarget.disabled) return;
+                e.currentTarget.style.background = "#fff";
+              }}
               disabled={!property}
               style={{
                 padding: "6px 10px",
@@ -400,6 +408,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                 background: "#fff",
                 color: text.primary,
                 cursor: "pointer",
+                transition: "background 150ms ease",
               }}
             >
               Add units
@@ -411,6 +420,14 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                 setImportMessage(null);
                 fileInputRef.current?.click();
               }}
+              onMouseEnter={(e) => {
+                if (e.currentTarget.disabled) return;
+                e.currentTarget.style.background = "rgba(15,23,42,0.06)";
+              }}
+              onMouseLeave={(e) => {
+                if (e.currentTarget.disabled) return;
+                e.currentTarget.style.background = "#fff";
+              }}
               disabled={isImporting || !property}
               style={{
                 padding: "6px 10px",
@@ -419,6 +436,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                 background: "#fff",
                 color: text.primary,
                 cursor: "pointer",
+                transition: "background 150ms ease",
               }}
             >
               {isImporting ? "Uploading…" : "Upload CSV"}
@@ -430,6 +448,12 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                 const csv = buildUnitsCsvTemplate();
                 downloadTextFile("rentchain-units-template.csv", csv);
               }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "rgba(15,23,42,0.06)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "#fff";
+              }}
               style={{
                 padding: "6px 10px",
                 borderRadius: 10,
@@ -437,6 +461,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                 background: "#fff",
                 color: text.primary,
                 cursor: "pointer",
+                transition: "background 150ms ease",
               }}
             >
               Download CSV template
@@ -670,9 +695,11 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
               return displayedUnits.map((u, idx) => {
                 const unitNum = (u as any).unitNumber || "--";
                 const bedsVal =
-                  (u as any).beds ?? (u as any).bedrooms ?? (u as any).bedroomsCount ?? null;
+                  (u as any).bedrooms ?? (u as any).beds ?? (u as any).bedroomsCount ?? null;
                 const bathsVal =
-                  (u as any).baths ?? (u as any).bathrooms ?? (u as any).bathroomsCount ?? null;
+                  (u as any).bathrooms ?? (u as any).baths ?? (u as any).bathroomsCount ?? null;
+                const sqftVal =
+                  (u as any).sqft ?? (u as any).squareFeet ?? (u as any).sqFeet ?? null;
                 const rentVal =
                   (u as any).rent ??
                   (u as any).marketRent ??
@@ -700,22 +727,22 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                       )}
                     </td>
                     <td style={{ padding: "10px 12px" }}>
-                      {(u as any).bedrooms ?? (u as any).bedrooms === 0 ? (
-                        (u as any).bedrooms
+                      {bedsVal ?? bedsVal === 0 ? (
+                        bedsVal
                       ) : (
                         <span style={{ color: text.subtle }}>-</span>
                       )}
                     </td>
                     <td style={{ padding: "10px 12px" }}>
-                      {(u as any).bathrooms ?? (u as any).bathrooms === 0 ? (
-                        (u as any).bathrooms
+                      {bathsVal ?? bathsVal === 0 ? (
+                        bathsVal
                       ) : (
                         <span style={{ color: text.subtle }}>-</span>
                       )}
                     </td>
                     <td style={{ padding: "10px 12px" }}>
-                      {(u as any).sqft ?? (u as any).sqft === 0 ? (
-                        (u as any).sqft
+                      {sqftVal ?? sqftVal === 0 ? (
+                        sqftVal
                       ) : (
                         <span style={{ color: text.subtle }}>-</span>
                       )}
@@ -751,13 +778,21 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                       <button
                         type="button"
                         onClick={() => setEditingUnit(u)}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = "rgba(15,23,42,0.06)";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = "#fff";
+                        }}
                         style={{
                           padding: "6px 10px",
                           borderRadius: 8,
                           border: "1px solid #e5e7eb",
                           background: "#fff",
+                          color: text.primary,
                           cursor: "pointer",
                           fontSize: "0.85rem",
+                          transition: "background 150ms ease",
                         }}
                       >
                         Edit
@@ -766,14 +801,22 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                         <button
                           type="button"
                           onClick={() => setSendAppUnit(u)}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = "rgba(15,23,42,0.06)";
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = "#fff";
+                          }}
                           style={{
                             padding: "6px 10px",
                             borderRadius: 8,
                             border: "1px solid #e5e7eb",
                             background: "#fff",
+                            color: text.primary,
                             cursor: "pointer",
                             fontSize: "0.85rem",
                             marginLeft: 8,
+                            transition: "background 150ms ease",
                           }}
                         >
                           Send application

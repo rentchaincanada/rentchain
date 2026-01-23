@@ -231,8 +231,15 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
 
     setIsSubmitting(true);
     try {
+      if (import.meta.env.DEV) {
+        console.debug("create property payload", payload);
+      }
       const { property } = await createProperty(payload);
-      setSuccessText("Property created and units captured successfully.");
+      showToast({
+        message: "Property created",
+        description: "Property created and units captured successfully.",
+        variant: "success",
+      });
       if (onCreated) {
         onCreated(property);
       }
@@ -291,6 +298,14 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
       <button
         type="button"
         onClick={() => setExpanded((prev) => !prev)}
+        onMouseEnter={(e) => {
+          if (e.currentTarget.disabled) return;
+          e.currentTarget.style.background = "rgba(15,23,42,0.06)";
+        }}
+        onMouseLeave={(e) => {
+          if (e.currentTarget.disabled) return;
+          e.currentTarget.style.background = colors.card;
+        }}
         style={{
           alignSelf: "flex-start",
           padding: "6px 12px",
@@ -299,6 +314,7 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
           background: colors.card,
           color: text.primary,
           cursor: "pointer",
+          transition: "background 150ms ease",
         }}
       >
         {expanded ? "Hide form" : "Show form"}
@@ -665,6 +681,13 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
       <button
         type="submit"
         disabled={isSubmitting}
+        onMouseEnter={(e) => {
+          if (e.currentTarget.disabled) return;
+          e.currentTarget.style.filter = "brightness(1.05)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.filter = "none";
+        }}
         style={{
           alignSelf: "flex-start",
           padding: "8px 20px",
@@ -676,6 +699,7 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
           fontWeight: 500,
           cursor: isSubmitting ? "default" : "pointer",
           opacity: isSubmitting ? 0.7 : 1,
+          transition: "filter 150ms ease",
         }}
       >
         {isSubmitting ? "Saving..." : "Add property"}

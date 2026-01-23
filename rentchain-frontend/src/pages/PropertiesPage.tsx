@@ -422,6 +422,14 @@ const PropertiesPage: React.FC = () => {
                 const el = document.getElementById("action-requests-panel");
                 el?.scrollIntoView({ behavior: "smooth", block: "start" });
               }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background =
+                  actionReqCount > 0 ? "rgba(239,68,68,0.18)" : "rgba(148,163,184,0.18)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background =
+                  actionReqCount > 0 ? "rgba(239,68,68,0.12)" : "rgba(148,163,184,0.1)";
+              }}
               style={{
                 padding: "6px 10px",
                 borderRadius: 999,
@@ -440,6 +448,7 @@ const PropertiesPage: React.FC = () => {
                 display: "inline-flex",
                 alignItems: "center",
                 gap: 6,
+                transition: "background 150ms ease",
               }}
               title={
                 actionReqCount > 0
@@ -464,6 +473,12 @@ const PropertiesPage: React.FC = () => {
           <button
             type="button"
             onClick={() => setActionCenterOpen(true)}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "rgba(15,23,42,0.06)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "transparent";
+            }}
             style={{
               padding: "8px 10px",
               borderRadius: 12,
@@ -475,6 +490,7 @@ const PropertiesPage: React.FC = () => {
               display: "inline-flex",
               alignItems: "center",
               gap: 8,
+              transition: "background 150ms ease",
             }}
             title="Open Action Center"
           >
@@ -534,6 +550,12 @@ const PropertiesPage: React.FC = () => {
 
               URL.revokeObjectURL(url);
             }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "rgba(15,23,42,0.06)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "transparent";
+            }}
             style={{
               padding: "8px 10px",
               borderRadius: 12,
@@ -542,6 +564,7 @@ const PropertiesPage: React.FC = () => {
               cursor: "pointer",
               fontWeight: 900,
               fontSize: 12,
+              transition: "background 150ms ease",
             }}
             title="Download board-ready monthly operations snapshot"
           >
@@ -656,12 +679,30 @@ const PropertiesPage: React.FC = () => {
                       : 0;
                     const isActive = id === String(selectedPropertyId);
                     const openCount = actionCounts[id] || 0;
+                    const displayName = p.name || p.addressLine1 || "Property";
+                    const addressParts = [
+                      p.addressLine1,
+                      p.addressLine2,
+                      p.city,
+                      p.province,
+                      p.postalCode,
+                    ].filter(Boolean);
+                    const addressLabel = addressParts.join(", ");
+                    const showAddress = addressLabel && addressLabel !== displayName;
 
                   return (
                     <button
                       key={id}
                       type="button"
                       onClick={() => handleSelectProperty(id)}
+                      onMouseEnter={(e) => {
+                        if (isActive) return;
+                        e.currentTarget.style.background = "rgba(15,23,42,0.04)";
+                      }}
+                      onMouseLeave={(e) => {
+                        if (isActive) return;
+                        e.currentTarget.style.background = colors.card;
+                      }}
                       style={{
                         textAlign: "left",
                         borderRadius: radius.md,
@@ -678,11 +719,12 @@ const PropertiesPage: React.FC = () => {
                         boxShadow: isActive ? shadows.sm : "none",
                       }}
                     >
-                      <div style={{ fontWeight: 600 }}>{p.name || p.addressLine1}</div>
-                      <div style={{ color: text.muted, fontSize: 12 }}>
-                        {p.addressLine1}
-                        {p.city ? `, ${p.city}` : ""}
-                      </div>
+                      <div style={{ fontWeight: 600 }}>{displayName}</div>
+                      {showAddress ? (
+                        <div style={{ color: text.muted, fontSize: 12 }}>
+                          {addressLabel}
+                        </div>
+                      ) : null}
                       <div
                         style={{ color: text.muted, fontSize: 12, marginTop: 4 }}
                       >
@@ -780,6 +822,12 @@ const PropertiesPage: React.FC = () => {
                         ]);
                         setIsUnitsModalOpen(true);
                       }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.filter = "brightness(0.96)";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.filter = "none";
+                      }}
                     >
                       Add units
                     </Button>
@@ -873,6 +921,12 @@ const PropertiesPage: React.FC = () => {
                           status as ActionRequestStatus | "all"
                         )
                       }
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.filter = "brightness(0.96)";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.filter = "none";
+                      }}
                       style={{ padding: "4px 10px", fontSize: 12 }}
                     >
                       {status === "all"
@@ -906,6 +960,12 @@ const PropertiesPage: React.FC = () => {
                         setNote(req.resolutionNote || "");
                         setActionRequestUpdateError(null);
                       }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = "rgba(15,23,42,0.04)";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = colors.card;
+                      }}
                       style={{
                         border: `1px solid ${colors.border}`,
                         borderRadius: radius.md,
@@ -917,6 +977,7 @@ const PropertiesPage: React.FC = () => {
                         justifyContent: "space-between",
                         alignItems: "center",
                         gap: 8,
+                        transition: "background 150ms ease",
                       }}
                     >
                       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -1053,7 +1114,16 @@ const ActionRequestModal: React.FC<ActionRequestModalProps> = ({
           <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>
             Action Request
           </div>
-          <Button variant="ghost" onClick={onClose}>
+          <Button
+            variant="ghost"
+            onClick={onClose}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.filter = "brightness(0.96)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.filter = "none";
+            }}
+          >
             Close
           </Button>
         </div>
@@ -1108,6 +1178,12 @@ const ActionRequestModal: React.FC<ActionRequestModalProps> = ({
               variant="secondary"
               onClick={onAcknowledge}
               disabled={updating}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.filter = "brightness(0.96)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.filter = "none";
+              }}
             >
               Acknowledge
             </Button>
@@ -1115,6 +1191,12 @@ const ActionRequestModal: React.FC<ActionRequestModalProps> = ({
               variant="primary"
               onClick={onResolve}
               disabled={updating}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.filter = "brightness(0.96)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.filter = "none";
+              }}
             >
               Resolve
             </Button>
@@ -1190,12 +1272,19 @@ const UnitsModal = ({
           <div style={{ fontWeight: 800, fontSize: "1rem" }}>Add Units</div>
           <button
             onClick={onClose}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "rgba(15,23,42,0.06)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "transparent";
+            }}
             style={{
               border: "1px solid rgba(148,163,184,0.35)",
               background: "transparent",
               borderRadius: 10,
               padding: "6px 10px",
               cursor: "pointer",
+              transition: "background 150ms ease",
             }}
           >
             Close
@@ -1329,12 +1418,20 @@ const UnitsModal = ({
             <button
               type="button"
               onClick={onClose}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "rgba(15,23,42,0.06)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "transparent";
+              }}
               style={{
                 padding: "8px 12px",
                 borderRadius: 10,
                 border: "1px solid rgba(148,163,184,0.35)",
                 background: "transparent",
+                color: text.primary,
                 cursor: "pointer",
+                transition: "background 150ms ease",
               }}
             >
               Cancel
@@ -1343,6 +1440,14 @@ const UnitsModal = ({
               type="button"
               onClick={onSave}
               disabled={saving}
+              onMouseEnter={(e) => {
+                if (e.currentTarget.disabled) return;
+                e.currentTarget.style.background = "rgba(59,130,246,0.18)";
+              }}
+              onMouseLeave={(e) => {
+                if (e.currentTarget.disabled) return;
+                e.currentTarget.style.background = "rgba(59,130,246,0.12)";
+              }}
               style={{
                 padding: "8px 12px",
                 borderRadius: 10,
@@ -1351,6 +1456,7 @@ const UnitsModal = ({
                 color: "#2563eb",
                 cursor: saving ? "not-allowed" : "pointer",
                 opacity: saving ? 0.7 : 1,
+                transition: "background 150ms ease",
               }}
             >
               {saving ? "Saving" : "Save units"}

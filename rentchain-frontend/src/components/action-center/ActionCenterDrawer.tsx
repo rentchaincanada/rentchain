@@ -244,6 +244,14 @@ export function ActionCenterDrawer({
               <button
                 onClick={load}
                 disabled={loading}
+                onMouseEnter={(e) => {
+                  if (e.currentTarget.disabled) return;
+                  e.currentTarget.style.background = "rgba(15,23,42,0.06)";
+                }}
+                onMouseLeave={(e) => {
+                  if (e.currentTarget.disabled) return;
+                  e.currentTarget.style.background = "transparent";
+                }}
                 style={{
                   padding: "8px 10px",
                   borderRadius: 12,
@@ -253,6 +261,7 @@ export function ActionCenterDrawer({
                   fontWeight: 850,
                   fontSize: 12,
                   opacity: loading ? 0.7 : 1,
+                  transition: "background 150ms ease",
                 }}
                 title="Refresh"
               >
@@ -287,6 +296,14 @@ export function ActionCenterDrawer({
                   downloadCsv(`rentchain-action-center-${stamp}.csv`, rows);
                 }}
                 disabled={filtered.length === 0}
+                onMouseEnter={(e) => {
+                  if (e.currentTarget.disabled) return;
+                  e.currentTarget.style.background = "rgba(15,23,42,0.06)";
+                }}
+                onMouseLeave={(e) => {
+                  if (e.currentTarget.disabled) return;
+                  e.currentTarget.style.background = "transparent";
+                }}
                 style={{
                   padding: "8px 10px",
                   borderRadius: 12,
@@ -296,6 +313,7 @@ export function ActionCenterDrawer({
                   fontWeight: 900,
                   fontSize: 12,
                   opacity: filtered.length === 0 ? 0.5 : 1,
+                  transition: "background 150ms ease",
                 }}
                 title="Export current view to CSV"
               >
@@ -304,6 +322,12 @@ export function ActionCenterDrawer({
 
               <button
                 onClick={onClose}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "rgba(15,23,42,0.06)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "transparent";
+                }}
                 style={{
                   padding: "8px 10px",
                   borderRadius: 12,
@@ -312,6 +336,7 @@ export function ActionCenterDrawer({
                   cursor: "pointer",
                   fontWeight: 850,
                   fontSize: 12,
+                  transition: "background 150ms ease",
                 }}
                 title="Close"
               >
@@ -494,6 +519,12 @@ export function ActionCenterDrawer({
                       <button
                         type="button"
                         onClick={() => goToView(it)}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = "rgba(15,23,42,0.06)";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = "transparent";
+                        }}
                         style={{
                           padding: "8px 10px",
                           borderRadius: 12,
@@ -502,6 +533,7 @@ export function ActionCenterDrawer({
                           cursor: "pointer",
                           fontWeight: 850,
                           fontSize: 12,
+                          transition: "background 150ms ease",
                         }}
                         title="View"
                       >
@@ -512,6 +544,12 @@ export function ActionCenterDrawer({
                         <button
                           type="button"
                           onClick={() => goToFix(it)}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = "rgba(239,68,68,0.18)";
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = "rgba(239,68,68,0.10)";
+                          }}
                           style={{
                             padding: "8px 10px",
                             borderRadius: 12,
@@ -521,6 +559,7 @@ export function ActionCenterDrawer({
                             fontWeight: 900,
                             fontSize: 12,
                             color: "#dc2626",
+                            transition: "background 150ms ease",
                           }}
                           title="Fix"
                         >
