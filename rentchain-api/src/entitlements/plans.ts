@@ -22,7 +22,7 @@ export interface PlanSpec {
 export const PLANS: Record<Plan, PlanSpec> = {
   starter: {
     plan: "starter",
-    limits: { maxProperties: 1, maxUnits: 10, screeningCreditsMonthly: 0 },
+    limits: { maxProperties: 999999, maxUnits: 999999, screeningCreditsMonthly: 0 },
     capabilities: {
       "ai.insights": false,
       "team.invites": false,

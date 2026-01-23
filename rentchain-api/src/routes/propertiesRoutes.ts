@@ -3,8 +3,6 @@ import { Router } from "express";
 import { requireCapability } from "../entitlements/entitlements.middleware";
 import { enforcePropertyCap, enforceUnitCap } from "../entitlements/limits.middleware";
 import { db, FieldValue } from "../config/firebase";
-import { PLANS } from "../config/plans";
-import { getLandlordPlan } from "../lib/getLandlordPlan";
 
 const router = Router();
 
@@ -88,27 +86,7 @@ router.post(
       console.log("[POST /api/properties] plan=", plan);
     }
 
-    try {
-      const resolvedPlan = getLandlordPlan(req.user);
-      const limits = PLANS[resolvedPlan];
-
-      const existingSnap = await db
-        .collection("properties")
-        .where("landlordId", "==", landlordId)
-        .get();
-
-      if (existingSnap.size >= limits.maxProperties) {
-        return res.status(403).json({
-          error: "PLAN_LIMIT",
-          message: "Starter plan allows only 1 property",
-          limit: limits.maxProperties,
-          limitType: "properties",
-        });
-      }
-    } catch (err) {
-      console.error("[POST /api/properties] plan check failed", err);
-      return res.status(500).json({ error: "PLAN_LIMIT_CHECK_FAILED" });
-    }
+    // Starter allows unlimited properties; cap enforcement is handled elsewhere if reintroduced.
 
     const { address, nickname, unitCount, totalUnits, units } = req.body ?? {};
     const createdAt = new Date().toISOString();

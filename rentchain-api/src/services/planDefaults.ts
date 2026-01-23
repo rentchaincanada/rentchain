@@ -4,8 +4,8 @@ export function entitlementsForPlan(plan: PlanTier): Entitlements {
   switch (plan) {
     case "starter":
       return {
-        propertiesMax: 1,
-        unitsMax: 5,
+        propertiesMax: 999999,
+        unitsMax: 999999,
         usersMax: 1,
         screening: true,
         automation: false,

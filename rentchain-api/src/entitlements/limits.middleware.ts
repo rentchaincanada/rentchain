@@ -26,6 +26,12 @@ export async function enforcePropertyCap(req: Request, res: Response, next: Next
 
   const planKey = getPlanKey(req);
   const limit = PLANS[planKey].limits.maxProperties;
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[limits] property cap", { plan: planKey, limit });
+  }
+  if (!Number.isFinite(limit) || limit <= 0) {
+    return next();
+  }
 
   try {
     const usage = await getUsage(landlordId);
