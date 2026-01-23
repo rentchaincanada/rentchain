@@ -240,13 +240,13 @@ const PropertiesPage: React.FC = () => {
 
   const handlePropertyCreated = (property: Property) => {
     if (property?.id) {
-      setProperties((prev) => [...prev, property]);
       setSelectedPropertyId(property.id);
       const next = new URLSearchParams(location.search);
       next.set("propertyId", property.id);
       // Onboarding: immediately guide to add units after creating a property
       next.set("openAddUnit", "1");
       navigate({ pathname: location.pathname, search: next.toString() }, { replace: true });
+      void loadProperties();
       return;
     }
     // fallback: do not mutate state if invalid property

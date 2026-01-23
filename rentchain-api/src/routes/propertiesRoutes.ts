@@ -22,6 +22,42 @@ function makeAddressKey(body: any) {
   return [street, city, province, postal].filter(Boolean).join("|");
 }
 
+function normalizeUnits(units: any[]): Array<{
+  unitNumber: string;
+  rent: number | null;
+  bedrooms: number | null;
+  bathrooms: number | null;
+  sqft: number | null;
+  utilitiesIncluded: string[];
+}> {
+  return (Array.isArray(units) ? units : [])
+    .map((u) => {
+      const unitNumber = String(u?.unitNumber ?? u?.unit ?? u?.label ?? "").trim();
+      if (!unitNumber) return null;
+      const rentRaw = u?.rent ?? u?.marketRent ?? u?.monthlyRent ?? u?.askingRent ?? null;
+      const bedroomsRaw = u?.bedrooms ?? u?.beds ?? null;
+      const bathroomsRaw = u?.bathrooms ?? u?.baths ?? null;
+      const sqftRaw = u?.sqft ?? u?.squareFeet ?? null;
+      const utilities = Array.isArray(u?.utilitiesIncluded) ? u.utilitiesIncluded : [];
+      return {
+        unitNumber,
+        rent: Number.isFinite(Number(rentRaw)) ? Number(rentRaw) : null,
+        bedrooms: Number.isFinite(Number(bedroomsRaw)) ? Number(bedroomsRaw) : null,
+        bathrooms: Number.isFinite(Number(bathroomsRaw)) ? Number(bathroomsRaw) : null,
+        sqft: Number.isFinite(Number(sqftRaw)) ? Number(sqftRaw) : null,
+        utilitiesIncluded: utilities,
+      };
+    })
+    .filter(Boolean) as Array<{
+      unitNumber: string;
+      rent: number | null;
+      bedrooms: number | null;
+      bathrooms: number | null;
+      sqft: number | null;
+      utilitiesIncluded: string[];
+    }>;
+}
+
 /**
  * GET /api/properties
  * Returns properties for the authenticated landlord.
@@ -88,17 +124,32 @@ router.post(
 
     // Starter allows unlimited properties; cap enforcement is handled elsewhere if reintroduced.
 
-    const { address, nickname, unitCount, totalUnits, units } = req.body ?? {};
+    const {
+      address,
+      nickname,
+      name,
+      addressLine1,
+      addressLine2,
+      city,
+      province,
+      postalCode,
+      country,
+      unitCount,
+      totalUnits,
+      amenities,
+      units,
+    } = req.body ?? {};
     const createdAt = new Date().toISOString();
     const addressKey = makeAddressKey(req.body);
 
+    const normalizedUnits = normalizeUnits(units);
     const resolvedUnitCount =
       typeof unitCount === "number"
         ? unitCount
         : typeof totalUnits === "number"
         ? totalUnits
-        : Array.isArray(units)
-        ? units.length
+        : normalizedUnits.length > 0
+        ? normalizedUnits.length
         : 0;
 
     if (addressKey) {
@@ -126,9 +177,20 @@ router.post(
     const propertyRef = db.collection("properties").doc();
     const propertyBase = {
       landlordId,
-      address: address || "",
+      name: name || nickname || addressLine1 || address || "",
+      address: address || addressLine1 || "",
+      addressLine1: addressLine1 || address || "",
+      addressLine2: addressLine2 || "",
+      city: city || "",
+      province: province || "",
+      postalCode: postalCode || "",
+      country: country || "Canada",
       nickname: nickname || "",
       unitCount: resolvedUnitCount,
+      unitsCount: resolvedUnitCount,
+      totalUnits: resolvedUnitCount,
+      amenities: Array.isArray(amenities) ? amenities : [],
+      units: normalizedUnits,
       createdAt,
       addressKey: addressKey || null,
     };
@@ -147,6 +209,44 @@ router.post(
           { merge: true }
         );
       });
+
+      if (resolvedUnitCount > 0) {
+        const unitsToCreate =
+          normalizedUnits.length > 0
+            ? normalizedUnits
+            : Array.from({ length: resolvedUnitCount }, (_, idx) => ({
+                unitNumber: `Unit ${idx + 1}`,
+                rent: null,
+                bedrooms: null,
+                bathrooms: null,
+                sqft: null,
+                utilitiesIncluded: [],
+              }));
+
+        const batch = db.batch();
+        const now = new Date();
+        for (const unit of unitsToCreate) {
+          const unitRef = db.collection("units").doc();
+          batch.set(unitRef, {
+            landlordId,
+            propertyId: propertyRef.id,
+            unitNumber: unit.unitNumber,
+            rent: unit.rent,
+            marketRent: unit.rent,
+            bedrooms: unit.bedrooms,
+            bathrooms: unit.bathrooms,
+            beds: unit.bedrooms,
+            baths: unit.bathrooms,
+            sqft: unit.sqft,
+            utilitiesIncluded: unit.utilitiesIncluded ?? [],
+            status: "vacant",
+            createdAt: now,
+            updatedAt: now,
+            updatedAtServer: FieldValue.serverTimestamp(),
+          });
+        }
+        await batch.commit();
+      }
 
       const property = { id: propertyRef.id, ...propertyBase };
       try {
