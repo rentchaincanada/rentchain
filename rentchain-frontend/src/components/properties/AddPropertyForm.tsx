@@ -231,6 +231,13 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
 
     setIsSubmitting(true);
     try {
+      if (import.meta.env.DEV) {
+        console.debug("create property payload", {
+          addressLine1: payload.addressLine1,
+          address: (payload as any).address,
+          unitsLength: payload.units?.length ?? 0,
+        });
+      }
       const { property } = await createProperty(payload);
       setSuccessText("Property created and units captured successfully.");
       if (onCreated) {
