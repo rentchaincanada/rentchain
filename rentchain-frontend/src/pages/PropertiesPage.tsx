@@ -679,16 +679,11 @@ const PropertiesPage: React.FC = () => {
                       : 0;
                     const isActive = id === String(selectedPropertyId);
                     const openCount = actionCounts[id] || 0;
-                    const displayName = p.name || p.addressLine1 || "Property";
-                    const addressParts = [
-                      p.addressLine1,
-                      p.addressLine2,
-                      p.city,
-                      p.province,
-                      p.postalCode,
-                    ].filter(Boolean);
-                    const addressLabel = addressParts.join(", ");
-                    const showAddress = addressLabel && addressLabel !== displayName;
+                    const primaryAddress = p.addressLine1 || "";
+                    const secondaryAddress = p.addressLine2 || "";
+                    const displayName = primaryAddress || p.name || "Property";
+                    const subLabel = displayName === primaryAddress ? secondaryAddress : primaryAddress;
+                    const showAddress = Boolean(subLabel);
 
                   return (
                     <button
@@ -722,7 +717,7 @@ const PropertiesPage: React.FC = () => {
                       <div style={{ fontWeight: 600 }}>{displayName}</div>
                       {showAddress ? (
                         <div style={{ color: text.muted, fontSize: 12 }}>
-                          {addressLabel}
+                          {subLabel}
                         </div>
                       ) : null}
                       <div
