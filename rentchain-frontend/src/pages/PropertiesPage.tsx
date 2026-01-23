@@ -1214,6 +1214,7 @@ const UnitsModal = ({
                       padding: "8px",
                       borderBottom: "1px solid rgba(148,163,184,0.35)",
                       fontSize: 12,
+                      color: text.secondary,
                     }}
                   >
                     {h}
@@ -1277,12 +1278,20 @@ const UnitsModal = ({
                     <button
                       type="button"
                       onClick={() => removeRow(idx)}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = "rgba(15,23,42,0.06)";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = "transparent";
+                      }}
                       style={{
                         padding: "6px 10px",
                         borderRadius: 8,
                         border: "1px solid rgba(148,163,184,0.35)",
                         background: "transparent",
+                        color: text.primary,
                         cursor: "pointer",
+                        transition: "background 150ms ease",
                       }}
                     >
                       Remove
@@ -1298,12 +1307,20 @@ const UnitsModal = ({
           <button
             type="button"
             onClick={addRow}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "rgba(15,23,42,0.06)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "transparent";
+            }}
             style={{
               padding: "8px 10px",
               borderRadius: 10,
               border: "1px solid rgba(148,163,184,0.35)",
               background: "transparent",
+              color: text.primary,
               cursor: "pointer",
+              transition: "background 150ms ease",
             }}
           >
             + Add row

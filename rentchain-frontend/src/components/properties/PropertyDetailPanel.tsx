@@ -18,13 +18,13 @@ import { SendApplicationModal } from "./SendApplicationModal";
 import { parseCsvPreview } from "../../utils/csvPreview";
 import { useToast } from "../ui/ToastProvider";
 import { setOnboardingStep } from "../../api/onboardingApi";
+import { text } from "../../styles/tokens";
+import { safeLocaleNumber } from "@/utils/format";
 
 interface PropertyDetailPanelProps {
   property: Property | null;
   onRefresh?: () => Promise<void> | void;
 }
-
-import { safeLocaleNumber } from "@/utils/format";
 
 const formatCurrency = (value: number): string => `$${safeLocaleNumber(value)}`;
 
@@ -328,6 +328,9 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
     [activeLeases]
   );
 
+  const occupancyText = unitCount === 0 ? "--" : `${occupancy.toFixed(0)}%`;
+  const collectionText = leaseRentRoll === 0 ? "--" : `${(collectionRate * 100).toFixed(0)}%`;
+
   const displayName = property?.name || property?.addressLine1 || "Property";
   const showEmpty = !property;
   const showLoading = !!property && (isLeasesLoading || isPaymentsLoading);
@@ -336,7 +339,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
 
   if (showEmpty) {
     return (
-      <div style={{ color: "#9ca3af", fontSize: "0.9rem" }}>
+      <div style={{ color: text.muted, fontSize: "0.9rem" }}>
         Select a property to view details and rent roll.
       </div>
     );
@@ -349,19 +352,19 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "#0f172a" }}>
+            <div style={{ fontSize: "1.1rem", fontWeight: 700, color: text.primary }}>
               {displayName}
             </div>
-            <div style={{ color: "#1f2937", fontSize: "0.9rem" }}>
+            <div style={{ color: text.secondary, fontSize: "0.9rem" }}>
               {property.addressLine1}
               {property.addressLine2 ? `, ${property.addressLine2}` : ""}
             </div>
-            <div style={{ color: "#475569", fontSize: "0.85rem" }}>
+            <div style={{ color: text.muted, fontSize: "0.85rem" }}>
               {[property.city, property.province, property.postalCode]
                 .filter(Boolean)
                 .join(", ")}
             </div>
-            <div style={{ color: "#6b7280", fontSize: "0.8rem" }}>
+            <div style={{ color: text.muted, fontSize: "0.8rem" }}>
               Added {formatDate(property.createdAt)}
             </div>
           </div>
@@ -375,7 +378,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                 borderRadius: 10,
                 border: "1px solid rgba(15,23,42,0.12)",
                 background: "rgba(0,0,0,0.02)",
-                color: "#6b7280",
+                color: text.muted,
                 cursor: "not-allowed",
               }}
             >
@@ -395,7 +398,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                 borderRadius: 10,
                 border: "1px solid rgba(15,23,42,0.12)",
                 background: "#fff",
-                color: "#111827",
+                color: text.primary,
                 cursor: "pointer",
               }}
             >
@@ -414,7 +417,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                 borderRadius: 10,
                 border: "1px solid rgba(15,23,42,0.12)",
                 background: "#fff",
-                color: "#0f172a",
+                color: text.primary,
                 cursor: "pointer",
               }}
             >
@@ -432,7 +435,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                 borderRadius: 10,
                 border: "1px solid rgba(15,23,42,0.12)",
                 background: "#fff",
-                color: "#0f172a",
+                color: text.primary,
                 cursor: "pointer",
               }}
             >
@@ -467,7 +470,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
           </div>
         </div>
         {showLoading && (
-          <div style={{ color: "#6b7280", fontSize: "0.85rem" }}>
+          <div style={{ color: text.subtle, fontSize: "0.85rem" }}>
             Loading leases/payments…
           </div>
         )}
@@ -494,8 +497,8 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             border: "1px solid rgba(148,163,184,0.15)",
           }}
         >
-          <div style={{ color: "#94a3b8", fontSize: "0.8rem" }}>Total units</div>
-          <div style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.1rem" }}>
+          <div style={{ color: text.subtle, fontSize: "0.8rem" }}>Total units</div>
+          <div style={{ color: text.primary, fontWeight: 700, fontSize: "1.1rem" }}>
             {unitCount}
           </div>
         </div>
@@ -507,8 +510,8 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             border: "1px solid rgba(148,163,184,0.15)",
           }}
         >
-          <div style={{ color: "#94a3b8", fontSize: "0.8rem" }}>Leased units</div>
-          <div style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.1rem" }}>
+          <div style={{ color: text.subtle, fontSize: "0.8rem" }}>Leased units</div>
+          <div style={{ color: text.primary, fontWeight: 700, fontSize: "1.1rem" }}>
             {leasedUnits}
           </div>
         </div>
@@ -520,9 +523,9 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             border: "1px solid rgba(148,163,184,0.15)",
           }}
         >
-          <div style={{ color: "#94a3b8", fontSize: "0.8rem" }}>Occupancy</div>
-          <div style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.05rem" }}>
-            {unitCount === 0 ? "--" : `${occupancy.toFixed(0)}%`}
+          <div style={{ color: text.subtle, fontSize: "0.8rem" }}>Occupancy</div>
+          <div style={{ color: text.primary, fontWeight: 700, fontSize: "1.05rem" }}>
+            {unitCount === 0 ? <span style={{ color: text.subtle }}>{occupancyText}</span> : occupancyText}
           </div>
         </div>
         <div
@@ -533,11 +536,11 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             border: "1px solid rgba(148,163,184,0.15)",
           }}
         >
-          <div style={{ color: "#94a3b8", fontSize: "0.8rem" }}>Lease rent roll</div>
-          <div style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.05rem" }}>
+          <div style={{ color: text.subtle, fontSize: "0.8rem" }}>Lease rent roll</div>
+          <div style={{ color: text.primary, fontWeight: 700, fontSize: "1.05rem" }}>
             {formatCurrency(leaseRentRoll)}
           </div>
-          <div style={{ color: "#6b7280", fontSize: "0.75rem", marginTop: 2 }}>
+          <div style={{ color: text.subtle, fontSize: "0.75rem", marginTop: 2 }}>
             Configured rent roll: {formatCurrency(totalRentConfigured)}
           </div>
         </div>
@@ -550,8 +553,8 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             border: "1px solid rgba(148,163,184,0.15)",
           }}
         >
-          <div style={{ color: "#94a3b8", fontSize: "0.8rem" }}>Collected this month</div>
-          <div style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.05rem" }}>
+          <div style={{ color: text.subtle, fontSize: "0.8rem" }}>Collected this month</div>
+          <div style={{ color: text.primary, fontWeight: 700, fontSize: "1.05rem" }}>
             {formatCurrency(totalCollectedThisMonth)}
           </div>
         </div>
@@ -564,9 +567,9 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             border: "1px solid rgba(148,163,184,0.15)",
           }}
         >
-          <div style={{ color: "#94a3b8", fontSize: "0.8rem" }}>Collection</div>
-          <div style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.05rem" }}>
-            {leaseRentRoll === 0 ? "--" : `${(collectionRate * 100).toFixed(0)}%`}
+          <div style={{ color: text.subtle, fontSize: "0.8rem" }}>Collection</div>
+          <div style={{ color: text.primary, fontWeight: 700, fontSize: "1.05rem" }}>
+            {leaseRentRoll === 0 ? <span style={{ color: text.subtle }}>{collectionText}</span> : collectionText}
           </div>
         </div>
       </div>
@@ -578,7 +581,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             borderRadius: 10,
             border: "1px solid rgba(59,130,246,0.35)",
             background: "rgba(59,130,246,0.08)",
-            color: "#0f172a",
+            color: text.primary,
             fontSize: "0.9rem",
           }}
         >
@@ -587,7 +590,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
       )}
 
       {activeLeases.length === 0 && (
-        <div style={{ color: "#6b7280", fontSize: "0.85rem" }}>
+        <div style={{ color: text.subtle, fontSize: "0.85rem" }}>
           No active leases recorded for this property yet.
         </div>
       )}
@@ -605,11 +608,11 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             width: "100%",
             borderCollapse: "collapse",
             fontSize: "0.9rem",
-            color: "#0f172a",
+            color: text.primary,
           }}
         >
           <thead>
-            <tr style={{ background: "rgba(255,255,255,0.03)", color: "#9ca3af" }}>
+            <tr style={{ background: "rgba(255,255,255,0.03)", color: text.secondary }}>
               <th style={{ textAlign: "left", padding: "10px 12px" }}>Unit #</th>
               <th style={{ textAlign: "left", padding: "10px 12px" }}>Rent</th>
               <th style={{ textAlign: "left", padding: "10px 12px" }}>Beds</th>
@@ -628,7 +631,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                   colSpan={7}
                   style={{
                     padding: "12px",
-                    color: "#1f2937",
+                    color: text.subtle,
                     textAlign: "center",
                   }}
                 >
@@ -654,7 +657,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                   colSpan={7}
                   style={{
                     padding: "12px",
-                    color: "#1f2937",
+                    color: text.subtle,
                     textAlign: "center",
                   }}
                 >
@@ -683,29 +686,39 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                     key={(u as any).id ?? `${unitNum}-${idx}`}
                     style={{
                       borderTop: "1px solid rgba(148,163,184,0.12)",
-                      color: "#e5e7eb",
+                      color: text.primary,
                     }}
                   >
-                    <td style={{ padding: "10px 12px" }}>{unitNum}</td>
                     <td style={{ padding: "10px 12px" }}>
-                      {rentVal !== null && rentVal !== undefined
-                        ? formatCurrency(Number(rentVal) || 0)
-                        : "--"}
+                      {unitNum === "--" ? <span style={{ color: text.subtle }}>{unitNum}</span> : unitNum}
                     </td>
                     <td style={{ padding: "10px 12px" }}>
-                      {(u as any).bedrooms ?? (u as any).bedrooms === 0
-                        ? (u as any).bedrooms
-                        : "—"}
+                      {rentVal !== null && rentVal !== undefined ? (
+                        formatCurrency(Number(rentVal) || 0)
+                      ) : (
+                        <span style={{ color: text.subtle }}>--</span>
+                      )}
                     </td>
                     <td style={{ padding: "10px 12px" }}>
-                      {(u as any).bathrooms ?? (u as any).bathrooms === 0
-                        ? (u as any).bathrooms
-                        : "—"}
+                      {(u as any).bedrooms ?? (u as any).bedrooms === 0 ? (
+                        (u as any).bedrooms
+                      ) : (
+                        <span style={{ color: text.subtle }}>-</span>
+                      )}
                     </td>
                     <td style={{ padding: "10px 12px" }}>
-                      {(u as any).sqft ?? (u as any).sqft === 0
-                        ? (u as any).sqft
-                        : "—"}
+                      {(u as any).bathrooms ?? (u as any).bathrooms === 0 ? (
+                        (u as any).bathrooms
+                      ) : (
+                        <span style={{ color: text.subtle }}>-</span>
+                      )}
+                    </td>
+                    <td style={{ padding: "10px 12px" }}>
+                      {(u as any).sqft ?? (u as any).sqft === 0 ? (
+                        (u as any).sqft
+                      ) : (
+                        <span style={{ color: text.subtle }}>-</span>
+                      )}
                     </td>
                     <td style={{ padding: "10px 12px" }}>
                       <span

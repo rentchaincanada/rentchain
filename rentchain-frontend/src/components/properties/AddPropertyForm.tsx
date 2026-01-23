@@ -452,7 +452,7 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
           <div style={{ fontSize: "0.85rem", fontWeight: 600 }}>
             Units &amp; Rents
           </div>
-          <div style={{ fontSize: "0.78rem", color: "#9ca3af" }}>
+          <div style={{ fontSize: "0.78rem", color: text.subtle }}>
             Optional: skip to auto-create numbered units from your total count.
           </div>
           <div
@@ -479,7 +479,7 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
                 style={{ display: "none" }}
               />
             </label>
-            <span style={{ color: "#9ca3af" }}>
+            <span style={{ color: text.subtle }}>
               Expected headers: unitNumber, rent, bedrooms, bathrooms, sqft
             </span>
           </div>
@@ -498,7 +498,7 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
             }}
           >
             <thead>
-              <tr style={{ fontSize: "0.78rem", textAlign: "left", color: "#9ca3af" }}>
+              <tr style={{ fontSize: "0.78rem", textAlign: "left", color: text.subtle }}>
                 <th style={{ padding: "4px 6px" }}>Unit #</th>
                 <th style={{ padding: "4px 6px" }}>Rent *</th>
                 <th style={{ padding: "4px 6px" }}>Beds</th>
@@ -601,14 +601,21 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
                     <button
                       type="button"
                       onClick={() => handleRemoveUnitRow(u.id)}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = "rgba(15,23,42,0.06)";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = "transparent";
+                      }}
                       style={{
                         fontSize: "0.75rem",
                         padding: "4px 8px",
                         borderRadius: 999,
                         border: "1px solid #6b7280",
                         background: "transparent",
-                        color: "#e5e7eb",
+                        color: text.primary,
                         cursor: "pointer",
+                        transition: "background 150ms ease",
                       }}
                     >
                       Remove
@@ -623,6 +630,12 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
         <button
           type="button"
           onClick={handleAddUnitRow}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "rgba(15,23,42,0.06)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "transparent";
+          }}
           style={{
             marginTop: 8,
             fontSize: "0.8rem",
@@ -630,9 +643,10 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
             borderRadius: 999,
             border: "1px dashed #4b5563",
             background: "transparent",
-            color: "#e5e7eb",
+            color: text.primary,
             cursor: "pointer",
             alignSelf: "flex-start",
+            transition: "background 150ms ease",
           }}
         >
           + Add unit row
