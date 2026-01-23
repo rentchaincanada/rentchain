@@ -118,6 +118,9 @@ router.post(
   requireCapability("properties.create"),
   enforcePropertyCap,
   async (req: any, res) => {
+    const requestId =
+      String(req.headers["x-request-id"] || req.headers["x-requestid"] || req.headers["x-correlation-id"] || "")
+        .trim() || `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const landlordId = req.user?.landlordId || req.user?.id;
     if (!landlordId) {
       return res.status(401).json({ error: "Unauthorized" });
@@ -125,6 +128,7 @@ router.post(
 
     const plan = req.user?.plan || "starter";
     if (process.env.NODE_ENV !== "production") {
+      console.log("[POST /api/properties] requestId=", requestId);
       console.log("[POST /api/properties] landlordId=", landlordId);
       console.log("[POST /api/properties] plan=", plan);
     }
@@ -160,6 +164,7 @@ router.post(
       addressLine2,
       addressObj?.line2,
       addressObj?.line_2,
+      addressObj?.addressLine2,
       addressObj?.unit,
       addressObj?.suite,
       req.body?.address2
@@ -169,11 +174,26 @@ router.post(
     const resolvedPostalCode = firstString(postalCode, addressObj?.postalCode, addressObj?.zip);
     const resolvedCountry = firstString(country, addressObj?.country) || "Canada";
     const createdAt = new Date().toISOString();
-    const addressKey = makeAddressKey(req.body);
+    const addressKey = makeAddressKeyFromParts(
+      resolvedAddressLine1,
+      resolvedCity,
+      resolvedProvince,
+      resolvedPostalCode
+    );
+    if (!resolvedAddressLine1) {
+      return res.status(400).json({
+        error: "missing_address",
+        message: "addressLine1 is required to create a property.",
+      });
+    }
 
     const normalizedUnits = normalizeUnits(units);
     const resolvedUnitCount =
-      typeof unitCount === "number"
+      normalizedUnits.length > 0
+        ? normalizedUnits.length
+        : submittedUnitsCount > 0
+        ? submittedUnitsCount
+        : typeof unitCount === "number"
         ? unitCount
         : typeof totalUnits === "number"
         ? totalUnits
@@ -215,6 +235,13 @@ router.post(
       postalCode: resolvedPostalCode,
       country: resolvedCountry,
       nickname: nickname || "",
+      address: resolvedAddressLine1,
+      addressLine1: resolvedAddressLine1,
+      addressLine2: resolvedAddressLine2,
+      city: resolvedCity,
+      province: resolvedProvince,
+      postalCode: resolvedPostalCode,
+      country: resolvedCountry,
       unitCount: resolvedUnitCount,
       unitsCount: resolvedUnitCount,
       totalUnits: resolvedUnitCount,
@@ -303,10 +330,11 @@ router.post(
       }
       return res.status(201).json(property);
     } catch (err: any) {
-      console.error("[POST /api/properties] failed to write", err);
+      console.error("[POST /api/properties] failed to write", err, "requestId=", requestId);
       return res.status(500).json({
         error: "db_failed",
         message: err?.message || "Failed to create property",
+        requestId,
       });
     }
   }
