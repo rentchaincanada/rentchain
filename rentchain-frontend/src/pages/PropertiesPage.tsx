@@ -68,15 +68,13 @@ const PropertiesPage: React.FC = () => {
     for (const p of arr<any>(properties)) {
       if (!p || !p.id) continue;
       const addressLine1 = str(p.addressLine1) || str(p.address) || "";
-      const nickname = str(p.nickname) || str(p.name) || "";
+      const name = str(p.name) || "";
+      const nickname = str(p.nickname) || "";
       const city = str(p.city) || "";
-      const name = addressLine1
-        ? city
-          ? `${addressLine1} (${city})`
-          : addressLine1
-        : nickname || "Property";
-      const subtitle = str(p.addressLine2) || "";
-      out[String(p.id)] = { name, subtitle };
+      const addressLine2 = str(p.addressLine2) || "";
+      const label = addressLine1 || str(p.address) || name || nickname || "Property";
+      const subtitle = city ? `(${city})` : addressLine2;
+      out[String(p.id)] = { name: label, subtitle };
     }
     return out;
   }, [properties]);
@@ -699,15 +697,9 @@ const PropertiesPage: React.FC = () => {
                     const isActive = id === String(selectedPropertyId);
                     const openCount = actionCounts[id] || 0;
                     const primaryAddress = p.addressLine1 || p.address || "";
-                    const secondaryAddress = p.addressLine2 || "";
-                    const nickname = p.nickname || p.name || "";
-                    const city = p.city || "";
-                    const displayName = primaryAddress
-                      ? city
-                        ? `${primaryAddress} (${city})`
-                        : primaryAddress
-                      : nickname || "Property";
-                    const subLabel = primaryAddress ? secondaryAddress : "";
+                    const displayName =
+                      primaryAddress || p.name || p.nickname || "Property";
+                    const subLabel = p.city ? `(${p.city})` : p.addressLine2 || "";
                     const showAddress = Boolean(subLabel);
 
                   return (

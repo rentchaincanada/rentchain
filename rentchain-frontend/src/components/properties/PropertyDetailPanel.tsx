@@ -678,7 +678,8 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
               }
 
               return displayedUnits.map((u, idx) => {
-                const unitNum = (u as any).unitNumber || "--";
+                const unitNumRaw = (u as any).unitNumber ?? (u as any).number ?? (u as any).unit;
+                const unitNum = unitNumRaw ? String(unitNumRaw) : "--";
                 const bedsVal =
                   (u as any).bedrooms ?? (u as any).beds ?? (u as any).bedroomsCount ?? null;
                 const bathsVal =
@@ -715,21 +716,21 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                       {bedsVal ?? bedsVal === 0 ? (
                         bedsVal
                       ) : (
-                        <span style={{ color: text.subtle }}>-</span>
+                        <span style={{ color: text.subtle }}>--</span>
                       )}
                     </td>
                     <td style={{ padding: "10px 12px" }}>
                       {bathsVal ?? bathsVal === 0 ? (
                         bathsVal
                       ) : (
-                        <span style={{ color: text.subtle }}>-</span>
+                        <span style={{ color: text.subtle }}>--</span>
                       )}
                     </td>
                     <td style={{ padding: "10px 12px" }}>
                       {sqftVal ?? sqftVal === 0 ? (
                         sqftVal
                       ) : (
-                        <span style={{ color: text.subtle }}>-</span>
+                        <span style={{ color: text.subtle }}>--</span>
                       )}
                     </td>
                     <td style={{ padding: "10px 12px" }}>

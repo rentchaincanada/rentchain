@@ -14,6 +14,13 @@ function normalize(value: any) {
     .replace(/[^\w\s]/g, "");
 }
 
+function firstString(...values: any[]) {
+  for (const v of values) {
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  return "";
+}
+
 function makeAddressKey(body: any) {
   const street = normalize(body?.street || body?.address1 || body?.address || body?.addressLine1 || "");
   const city = normalize(body?.city || "");
@@ -139,6 +146,28 @@ router.post(
       amenities,
       units,
     } = req.body ?? {};
+    const addressObj = req.body?.address || req.body?.location || {};
+    const resolvedAddressLine1 = firstString(
+      addressLine1,
+      address,
+      addressObj?.line1,
+      addressObj?.line_1,
+      addressObj?.street,
+      req.body?.street,
+      req.body?.address1
+    );
+    const resolvedAddressLine2 = firstString(
+      addressLine2,
+      addressObj?.line2,
+      addressObj?.line_2,
+      addressObj?.unit,
+      addressObj?.suite,
+      req.body?.address2
+    );
+    const resolvedCity = firstString(city, addressObj?.city);
+    const resolvedProvince = firstString(province, addressObj?.province, addressObj?.state);
+    const resolvedPostalCode = firstString(postalCode, addressObj?.postalCode, addressObj?.zip);
+    const resolvedCountry = firstString(country, addressObj?.country) || "Canada";
     const createdAt = new Date().toISOString();
     const addressKey = makeAddressKey(req.body);
 
@@ -177,14 +206,14 @@ router.post(
     const propertyRef = db.collection("properties").doc();
     const propertyBase = {
       landlordId,
-      name: name || nickname || addressLine1 || address || "",
-      address: address || addressLine1 || "",
-      addressLine1: addressLine1 || address || "",
-      addressLine2: addressLine2 || "",
-      city: city || "",
-      province: province || "",
-      postalCode: postalCode || "",
-      country: country || "Canada",
+      name: name || nickname || resolvedAddressLine1 || "",
+      address: address || resolvedAddressLine1 || "",
+      addressLine1: resolvedAddressLine1,
+      addressLine2: resolvedAddressLine2,
+      city: resolvedCity,
+      province: resolvedProvince,
+      postalCode: resolvedPostalCode,
+      country: resolvedCountry,
       nickname: nickname || "",
       unitCount: resolvedUnitCount,
       unitsCount: resolvedUnitCount,
@@ -211,6 +240,14 @@ router.post(
       });
 
       if (resolvedUnitCount > 0) {
+        if (process.env.NODE_ENV !== "production") {
+          console.log(
+            "[create property] unitsCount=",
+            normalizedUnits.length,
+            "propertyId=",
+            propertyRef.id
+          );
+        }
         const unitsToCreate =
           normalizedUnits.length > 0
             ? normalizedUnits

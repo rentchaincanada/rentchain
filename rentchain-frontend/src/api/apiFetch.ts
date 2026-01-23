@@ -105,6 +105,9 @@ export async function apiFetch<T = any>(
     : sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY);
 
   const url = normalizedPath;
+  if (import.meta.env?.DEV) {
+    console.debug("[apiFetch] hasToken=", Boolean(token), "url=", url);
+  }
 
   const { allowStatuses, allow404, suppressToasts, ...fetchInit } = init;
 
@@ -134,6 +137,7 @@ export async function apiFetch<T = any>(
     ...fetchInit,
     headers,
     body: bodyToSend,
+    credentials: "include",
   });
 
   const text = await res.text().catch(() => "");
