@@ -67,9 +67,16 @@ const PropertiesPage: React.FC = () => {
     const out: Record<string, { name: string; subtitle?: string }> = {};
     for (const p of arr<any>(properties)) {
       if (!p || !p.id) continue;
-      const name = str(p.name) || str(p.addressLine1) || "Property";
-      const subtitleParts = [p.addressLine1, p.city].filter(Boolean);
-      out[String(p.id)] = { name, subtitle: subtitleParts.join(", ") };
+      const addressLine1 = str(p.addressLine1) || str(p.address) || "";
+      const nickname = str(p.nickname) || str(p.name) || "";
+      const city = str(p.city) || "";
+      const name = addressLine1
+        ? city
+          ? `${addressLine1} (${city})`
+          : addressLine1
+        : nickname || "Property";
+      const subtitle = str(p.addressLine2) || "";
+      out[String(p.id)] = { name, subtitle };
     }
     return out;
   }, [properties]);
@@ -121,10 +128,22 @@ const PropertiesPage: React.FC = () => {
       setIsLoadingProperties(true);
       const res = await fetchProperties();
       const raw = res ?? null;
-      const normalized = arr(raw?.items ?? raw?.properties ?? (raw as any)).filter(
-        (p) => p && p.id
-      );
-      setProperties(normalized);
+      const normalized = arr(raw?.items ?? raw?.properties ?? (raw as any))
+        .map((p: any) => {
+          if (!p) return null;
+          const id = p.id || p.propertyId || p._id || p.uid || null;
+          if (!id) return null;
+          const addressLine1 = p.addressLine1 || p.address || "";
+          const name = p.name || p.nickname || addressLine1 || "";
+          return {
+            ...p,
+            id,
+            addressLine1,
+            name,
+          };
+        })
+        .filter(Boolean);
+      setProperties(normalized as Property[]);
     } catch (err) {
       console.error("[PropertiesPage] Failed to fetch properties", err);
       setProperties([]);
@@ -238,7 +257,7 @@ const PropertiesPage: React.FC = () => {
     void fetchActionRequests(propertyId, { openId: deepLinkId });
   }, [selectedProperty?.id, actionFilter, deepLinkId, fetchActionRequests]);
 
-  const handlePropertyCreated = (property: Property) => {
+  const handlePropertyCreated = async (property: Property) => {
     if (property?.id) {
       setSelectedPropertyId(property.id);
       const next = new URLSearchParams(location.search);
@@ -246,7 +265,7 @@ const PropertiesPage: React.FC = () => {
       // Onboarding: immediately guide to add units after creating a property
       next.set("openAddUnit", "1");
       navigate({ pathname: location.pathname, search: next.toString() }, { replace: true });
-      void loadProperties();
+      await loadProperties();
       return;
     }
     // fallback: do not mutate state if invalid property
@@ -679,10 +698,16 @@ const PropertiesPage: React.FC = () => {
                       : 0;
                     const isActive = id === String(selectedPropertyId);
                     const openCount = actionCounts[id] || 0;
-                    const primaryAddress = p.addressLine1 || "";
+                    const primaryAddress = p.addressLine1 || p.address || "";
                     const secondaryAddress = p.addressLine2 || "";
-                    const displayName = primaryAddress || p.name || "Property";
-                    const subLabel = displayName === primaryAddress ? secondaryAddress : primaryAddress;
+                    const nickname = p.nickname || p.name || "";
+                    const city = p.city || "";
+                    const displayName = primaryAddress
+                      ? city
+                        ? `${primaryAddress} (${city})`
+                        : primaryAddress
+                      : nickname || "Property";
+                    const subLabel = primaryAddress ? secondaryAddress : "";
                     const showAddress = Boolean(subLabel);
 
                   return (

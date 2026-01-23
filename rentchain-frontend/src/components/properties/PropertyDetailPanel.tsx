@@ -173,26 +173,18 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
           setUnits(res);
           return;
         }
-        const count = (property as any)?.unitCount ?? 0;
-        if (count > 0) {
-          setUnits(
-            Array.from({ length: count }, (_, i) => ({
-              id: `placeholder-${i}`,
-              unitNumber: String(i + 1),
-            }))
-          );
+        if (Array.isArray(property?.units) && property.units.length > 0) {
+          setUnits(property.units);
+          return;
         }
+        setUnits([]);
       } catch (e) {
         if (cancelled) return;
-        const count = (property as any)?.unitCount ?? 0;
-        if (count > 0) {
-          setUnits(
-            Array.from({ length: count }, (_, i) => ({
-              id: `placeholder-${i}`,
-              unitNumber: String(i + 1),
-            }))
-          );
+        if (Array.isArray(property?.units) && property.units.length > 0) {
+          setUnits(property.units);
+          return;
         }
+        setUnits([]);
       } finally {
         if (!cancelled) setUnitsLoading(false);
       }
@@ -666,14 +658,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                 );
               }
 
-              const derivedUnits =
-                units.length === 0 && unitCount > 0
-                  ? Array.from({ length: unitCount }, (_, i) => ({
-                      id: `placeholder-${i}`,
-                      unitNumber: String(i + 1),
-                    }))
-                  : [];
-              const displayedUnits = units.length > 0 ? units : derivedUnits;
+              const displayedUnits = units;
 
               if (displayedUnits.length === 0) {
                 return (
@@ -703,8 +688,8 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                 const rentVal =
                   (u as any).rent ??
                   (u as any).marketRent ??
-                  (u as any).askingRent ??
                   (u as any).monthlyRent ??
+                  (u as any).askingRent ??
                   null;
                 const statusVal = (u as any).status || (leasedUnitNumbers.has(unitNum) ? "occupied" : "vacant");
                 const isLeased = String(statusVal || "").toLowerCase() === "occupied";
