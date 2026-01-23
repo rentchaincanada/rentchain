@@ -14,14 +14,52 @@ function normalize(value: any) {
     .replace(/[^\w\s]/g, "");
 }
 
-function makeAddressKey(body: any) {
-  const street = normalize(body?.street || body?.address1 || body?.address || body?.addressLine1 || "");
-  const city = normalize(body?.city || "");
-  const province = normalize(body?.province || body?.state || "");
-  const postal = normalize(body?.postalCode || body?.zip || "");
-  return [street, city, province, postal].filter(Boolean).join("|");
+function firstString(...values: any[]) {
+  for (const v of values) {
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  return "";
 }
 
+function makeAddressKeyFromParts(street: string, city: string, province: string, postal: string) {
+  const streetKey = normalize(street);
+  const cityKey = normalize(city);
+  const provinceKey = normalize(province);
+  const postalKey = normalize(postal);
+  return [streetKey, cityKey, provinceKey, postalKey].filter(Boolean).join("|");
+}
+
+function normalizeUnits(units: any[]): Array<{
+  unitNumber: string;
+  rent: number | null;
+  bedrooms: number | null;
+  bathrooms: number | null;
+  sqft: number | null;
+}> {
+  return (Array.isArray(units) ? units : [])
+    .map((u) => {
+      const unitNumber = String(u?.unitNumber ?? u?.unit ?? u?.label ?? "").trim();
+      if (!unitNumber) return null;
+      const rentRaw = u?.rent ?? u?.marketRent ?? u?.monthlyRent ?? null;
+      const bedroomsRaw = u?.bedrooms ?? u?.beds ?? null;
+      const bathroomsRaw = u?.bathrooms ?? u?.baths ?? null;
+      const sqftRaw = u?.sqft ?? u?.squareFeet ?? null;
+      return {
+        unitNumber,
+        rent: Number.isFinite(Number(rentRaw)) ? Number(rentRaw) : null,
+        bedrooms: Number.isFinite(Number(bedroomsRaw)) ? Number(bedroomsRaw) : null,
+        bathrooms: Number.isFinite(Number(bathroomsRaw)) ? Number(bathroomsRaw) : null,
+        sqft: Number.isFinite(Number(sqftRaw)) ? Number(sqftRaw) : null,
+      };
+    })
+    .filter(Boolean) as Array<{
+      unitNumber: string;
+      rent: number | null;
+      bedrooms: number | null;
+      bathrooms: number | null;
+      sqft: number | null;
+    }>;
+}
 /**
  * GET /api/properties
  * Returns properties for the authenticated landlord.
@@ -75,6 +113,9 @@ router.post(
   requireCapability("properties.create"),
   enforcePropertyCap,
   async (req: any, res) => {
+    const requestId =
+      String(req.headers["x-request-id"] || req.headers["x-requestid"] || req.headers["x-correlation-id"] || "")
+        .trim() || `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const landlordId = req.user?.landlordId || req.user?.id;
     if (!landlordId) {
       return res.status(401).json({ error: "Unauthorized" });
@@ -82,23 +123,77 @@ router.post(
 
     const plan = req.user?.plan || "starter";
     if (process.env.NODE_ENV !== "production") {
+      console.log("[POST /api/properties] requestId=", requestId);
       console.log("[POST /api/properties] landlordId=", landlordId);
       console.log("[POST /api/properties] plan=", plan);
     }
 
     // Starter allows unlimited properties; cap enforcement is handled elsewhere if reintroduced.
 
-    const { address, nickname, unitCount, totalUnits, units } = req.body ?? {};
+    const {
+      address,
+      nickname,
+      name,
+      addressLine1,
+      addressLine2,
+      city,
+      province,
+      postalCode,
+      country,
+      unitCount,
+      totalUnits,
+      units,
+    } = req.body ?? {};
+    const addressObj =
+      typeof address === "object" && address !== null ? address : req.body?.location || {};
+    const resolvedAddressLine1 = firstString(
+      addressLine1,
+      typeof address === "string" ? address : "",
+      addressObj?.line1,
+      addressObj?.line_1,
+      addressObj?.addressLine1,
+      addressObj?.street,
+      req.body?.street,
+      req.body?.address1
+    );
+    const resolvedAddressLine2 = firstString(
+      addressLine2,
+      addressObj?.line2,
+      addressObj?.line_2,
+      addressObj?.addressLine2,
+      addressObj?.unit,
+      addressObj?.suite,
+      req.body?.address2
+    );
+    const resolvedCity = firstString(city, addressObj?.city);
+    const resolvedProvince = firstString(province, addressObj?.province, addressObj?.state);
+    const resolvedPostalCode = firstString(postalCode, addressObj?.postalCode, addressObj?.zip);
+    const resolvedCountry = firstString(country, addressObj?.country) || "Canada";
     const createdAt = new Date().toISOString();
-    const addressKey = makeAddressKey(req.body);
+    const addressKey = makeAddressKeyFromParts(
+      resolvedAddressLine1,
+      resolvedCity,
+      resolvedProvince,
+      resolvedPostalCode
+    );
+    if (!resolvedAddressLine1) {
+      return res.status(400).json({
+        error: "missing_address",
+        message: "addressLine1 is required to create a property.",
+      });
+    }
 
+    const normalizedUnits = normalizeUnits(units);
+    const submittedUnitsCount = Array.isArray(units) ? units.length : 0;
     const resolvedUnitCount =
-      typeof unitCount === "number"
+      normalizedUnits.length > 0
+        ? normalizedUnits.length
+        : submittedUnitsCount > 0
+        ? submittedUnitsCount
+        : typeof unitCount === "number"
         ? unitCount
         : typeof totalUnits === "number"
         ? totalUnits
-        : Array.isArray(units)
-        ? units.length
         : 0;
 
     if (addressKey) {
@@ -126,9 +221,18 @@ router.post(
     const propertyRef = db.collection("properties").doc();
     const propertyBase = {
       landlordId,
-      address: address || "",
+      name: name || nickname || resolvedAddressLine1 || "",
       nickname: nickname || "",
+      address: resolvedAddressLine1,
+      addressLine1: resolvedAddressLine1,
+      addressLine2: resolvedAddressLine2,
+      city: resolvedCity,
+      province: resolvedProvince,
+      postalCode: resolvedPostalCode,
+      country: resolvedCountry,
       unitCount: resolvedUnitCount,
+      unitsCount: resolvedUnitCount,
+      totalUnits: resolvedUnitCount,
       createdAt,
       addressKey: addressKey || null,
     };
@@ -148,7 +252,75 @@ router.post(
         );
       });
 
-      const property = { id: propertyRef.id, ...propertyBase };
+      if (process.env.NODE_ENV !== "production") {
+        console.log(
+          "[create property] unitsCount=",
+          normalizedUnits.length,
+          "submittedUnits=",
+          submittedUnitsCount,
+          "propertyId=",
+          propertyRef.id,
+          "requestId=",
+          requestId
+        );
+        console.log(
+          "[create property] addressLine1=",
+          resolvedAddressLine1,
+          "landlordId=",
+          landlordId,
+          "requestId=",
+          requestId
+        );
+      }
+
+      if (normalizedUnits.length > 0) {
+        const batch = db.batch();
+        const now = new Date();
+        for (const unit of normalizedUnits) {
+          const unitRef = db.collection("units").doc();
+          batch.set(unitRef, {
+            landlordId,
+            propertyId: propertyRef.id,
+            unitNumber: unit.unitNumber,
+            rent: unit.rent,
+            bedrooms: unit.bedrooms,
+            bathrooms: unit.bathrooms,
+            sqft: unit.sqft,
+            status: "vacant",
+            createdAt: now,
+            updatedAt: now,
+            updatedAtServer: FieldValue.serverTimestamp(),
+          });
+        }
+        try {
+          await batch.commit();
+          if (process.env.NODE_ENV !== "production") {
+            console.log(
+              "[create property] units write success propertyId=",
+              propertyRef.id,
+              "requestId=",
+              requestId
+            );
+          }
+        } catch (err: any) {
+          console.error("[POST /api/properties] failed to write units", err);
+          return res.status(500).json({
+            error: "units_write_failed",
+            message: err?.message || "Failed to create units",
+            requestId,
+          });
+        }
+      }
+
+      const property = { id: propertyRef.id, propertyId: propertyRef.id, ...propertyBase };
+      if (process.env.NODE_ENV !== "production") {
+        console.log(
+          "[create property] property write success propertyId=",
+          propertyRef.id,
+          "requestId=",
+          requestId
+        );
+      }
       try {
         const { emitLedgerEventV2 } = await import(
           "../services/ledgerEventsFirestoreService"
@@ -166,10 +338,11 @@ router.post(
       }
       return res.status(201).json(property);
     } catch (err: any) {
-      console.error("[POST /api/properties] failed to write", err);
+      console.error("[POST /api/properties] failed to write", err, "requestId=", requestId);
       return res.status(500).json({
         error: "db_failed",
         message: err?.message || "Failed to create property",
+        requestId,
       });
     }
   }
