@@ -1,0 +1,175 @@
+.rc-landlord-shell {
+  min-height: 100vh;
+  position: relative;
+}
+
+.rc-landlord-topnav {
+  display: block;
+}
+
+.rc-landlord-content {
+  padding: 12px 0 24px;
+}
+
+.rc-landlord-hamburger {
+  display: none;
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: #ffffff;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  z-index: 30;
+}
+
+.rc-landlord-hamburger span {
+  display: block;
+  width: 18px;
+  height: 2px;
+  background: #111827;
+}
+
+.rc-landlord-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.35);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  z-index: 40;
+}
+
+.rc-landlord-backdrop.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.rc-landlord-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100vh;
+  width: min(320px, 88vw);
+  background: #ffffff;
+  box-shadow: -12px 0 24px rgba(15, 23, 42, 0.12);
+  transform: translateX(100%);
+  transition: transform 0.2s ease;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  padding: 18px 16px;
+  gap: 18px;
+}
+
+.rc-landlord-drawer.is-open {
+  transform: translateX(0);
+}
+
+.rc-landlord-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 700;
+}
+
+.rc-landlord-drawer-header button {
+  border: none;
+  background: transparent;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.rc-landlord-drawer-links {
+  display: grid;
+  gap: 10px;
+}
+
+.rc-landlord-drawer-links button {
+  text-align: left;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  font-weight: 600;
+}
+
+.rc-landlord-drawer-links button.active {
+  border-color: rgba(37, 99, 235, 0.35);
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.rc-landlord-drawer-footer button {
+  border: none;
+  background: transparent;
+  font-weight: 600;
+  color: #ef4444;
+  cursor: pointer;
+}
+
+.rc-mobile-tabbar {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  background: #ffffff;
+  padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+  grid-template-columns: repeat(5, 1fr);
+  z-index: 20;
+}
+
+.rc-mobile-tabbar button {
+  border: none;
+  background: transparent;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 6px 4px;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 10px;
+}
+
+.rc-mobile-tabbar button.active {
+  color: #111827;
+  font-weight: 700;
+}
+
+.rc-mobile-tabbar-label {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.rc-mobile-tabbar-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 8px;
+  background: #ef4444;
+  margin-left: 4px;
+}
+
+@media (max-width: 768px) {
+  .rc-landlord-topnav {
+    display: none;
+  }
+
+  .rc-landlord-hamburger {
+    display: inline-flex;
+  }
+
+  .rc-landlord-content {
+    padding-bottom: 96px;
+  }
+
+  .rc-mobile-tabbar {
+    display: grid;
+  }
+}

@@ -9,6 +9,11 @@ function dispatchPlanLimit(detail: any) {
   }
 }
 
+function shouldIgnorePlanLimit(detail: any) {
+  const type = String(detail?.limitType ?? "").toLowerCase();
+  return type === "properties" || type === "property" || type === "units" || type === "unit";
+}
+
 function normalizePlanLimit(payload: any, status: number) {
   const raw = payload ?? {};
   if (status === 403 && raw?.error === "PLAN_LIMIT") {
@@ -141,7 +146,7 @@ export async function apiFetch<T = any>(
 
   if (!res.ok) {
     const detail = normalizePlanLimit(data, res.status);
-    if (detail) {
+    if (detail && !shouldIgnorePlanLimit(detail)) {
       dispatchPlanLimit(detail);
     }
     if (res.status === 404 && (allow404 || allowStatuses?.includes(404))) {

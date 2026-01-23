@@ -35,6 +35,7 @@ type SubscriptionFeatures = {
 type SubscriptionContextValue = {
   plan: SubscriptionPlan;
   features: SubscriptionFeatures;
+  loading: boolean;
   setPlan: (plan: SubscriptionPlan) => void;
 };
 
@@ -92,6 +93,7 @@ export function SubscriptionProvider({
   initialPlan?: SubscriptionPlan;
 }) {
   const [plan, setPlan] = useState<SubscriptionPlan>(initialPlan);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchMe()
@@ -99,17 +101,25 @@ export function SubscriptionProvider({
         const p = me?.plan;
         if (p === "starter" || p === "core" || p === "pro" || p === "elite") {
           setPlan(p);
+          return;
+        }
+
+        if (me?.role === "landlord") {
+          setPlan("starter");
         }
       })
       .catch(() => {
         // ignore fetch errors; keep current plan
+      })
+      .finally(() => {
+        setLoading(false);
       });
   }, []);
 
   const features = useMemo(() => computeFeatures(plan), [plan]);
 
   return (
-    <SubscriptionContext.Provider value={{ plan, features, setPlan }}>
+    <SubscriptionContext.Provider value={{ plan, features, loading, setPlan }}>
       {children}
     </SubscriptionContext.Provider>
   );

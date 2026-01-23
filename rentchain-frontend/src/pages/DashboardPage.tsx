@@ -11,8 +11,6 @@ import { debugApiBase } from "@/api/baseUrl";
 import { fetchProperties } from "../api/propertiesApi";
 import { unitsForProperty } from "../lib/propertyCounts";
 import { useApplications } from "../hooks/useApplications";
-import { useSubscription } from "../context/SubscriptionContext";
-import { planLabel } from "../lib/plan";
 import StarterOnboardingPanel from "../components/dashboard/StarterOnboardingPanel";
 
 function formatDate(ts: number | null): string {
@@ -33,7 +31,6 @@ function formatDate(ts: number | null): string {
 const DashboardPage: React.FC = () => {
   const { data, loading, error, refetch, lastUpdatedAt } = useDashboardSummary();
   const { applications, loading: applicationsLoading } = useApplications();
-  const { plan } = useSubscription();
   const navigate = useNavigate();
   const apiBase = debugApiBase();
   const showDebug =
@@ -73,6 +70,18 @@ const DashboardPage: React.FC = () => {
     }
   }, [showDebug, apiBase]);
 
+  React.useEffect(() => {
+    if (import.meta.env.DEV) {
+      console.debug("[dashboard gates]", {
+        loadingSummary: loading,
+        applicationsLoading,
+        propsLoading,
+        propertiesCount: properties?.length ?? null,
+        applicationsCount: applications?.length ?? null,
+      });
+    }
+  }, [loading, applicationsLoading, propsLoading, properties, applications]);
+
   const derivedPropertiesCount = properties.length;
   const derivedUnitsCount = properties.reduce((sum, p) => sum + unitsForProperty(p), 0);
   const applicationsCount = applications.length;
@@ -87,12 +96,15 @@ const DashboardPage: React.FC = () => {
   const actions = data?.actions ?? [];
   const events = data?.events ?? [];
 
-  const hasNoProperties = (kpis?.propertiesCount ?? 0) === 0;
-  const hasNoApplications = !applicationsLoading && applicationsCount === 0;
-  const showEmptyCTA = !loading && !propsLoading && !error && hasNoProperties;
-  const showStarterOnboarding = plan === "starter" || hasNoProperties;
+  const dataReady = !loading && !propsLoading && !applicationsLoading && !error;
+  const hasNoProperties = dataReady && (kpis?.propertiesCount ?? 0) === 0;
+  const hasNoApplications = dataReady && applicationsCount === 0;
+  const showEmptyCTA = hasNoProperties;
+  const progressLoading = !dataReady;
+  const showStarterOnboarding = progressLoading
+    ? true
+    : hasNoProperties || hasNoApplications || screeningStartedCount === 0;
   const showAdvancedCollapsed = showStarterOnboarding;
-  const planName = planLabel(plan);
 
   return (
     <MacShell title="RentChain · Dashboard" showTopNav={false}>
@@ -106,19 +118,37 @@ const DashboardPage: React.FC = () => {
       >
         {error ? (
           <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
-            <div style={{ fontWeight: 800, color: colors.danger, marginBottom: 8 }}>Couldn’t load dashboard</div>
+            <div style={{ fontWeight: 800, color: colors.danger, marginBottom: 8 }}>Couldn't load dashboard</div>
             <div style={{ marginBottom: 12 }}>{error}</div>
             <Button onClick={refetch}>Retry</Button>
+          </Card>
+        ) : null}
+
+        {!dataReady && !error ? (
+          <Card
+            style={{
+              padding: spacing.md,
+              border: `1px solid ${colors.border}`,
+              background: colors.card,
+            }}
+          >
+            <div style={{ fontWeight: 700, marginBottom: 10 }}>Loading your dashboard...</div>
+            <div style={{ display: "grid", gap: 10 }}>
+              <div style={{ height: 12, borderRadius: 999, background: "rgba(15,23,42,0.08)" }} />
+              <div style={{ height: 12, width: "80%", borderRadius: 999, background: "rgba(15,23,42,0.08)" }} />
+              <div style={{ height: 12, width: "60%", borderRadius: 999, background: "rgba(15,23,42,0.08)" }} />
+              <div style={{ height: 180, borderRadius: 12, background: "rgba(15,23,42,0.05)" }} />
+            </div>
           </Card>
         ) : null}
 
         {showStarterOnboarding ? (
           <>
             <StarterOnboardingPanel
-              planName={planName}
               propertiesCount={kpis.propertiesCount}
               applicationsCount={applicationsCount}
               screeningStartedCount={screeningStartedCount}
+              loading={progressLoading}
               onAddProperty={() => navigate("/properties")}
               onCreateApplication={() => navigate("/applications")}
               onStartScreening={() => navigate("/applications")}
@@ -127,13 +157,27 @@ const DashboardPage: React.FC = () => {
             <Card style={{ padding: spacing.md }}>
               <div style={{ fontWeight: 700, marginBottom: spacing.sm }}>Quick actions</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: spacing.sm }}>
-                <Button onClick={() => navigate("/properties")} aria-label="Add property">
+                <Button
+                  onClick={() => navigate("/properties")}
+                  aria-label="Add property"
+                  disabled={progressLoading}
+                >
                   Add property
                 </Button>
-                <Button variant="secondary" onClick={() => navigate("/applications")} aria-label="Start screening">
+                <Button
+                  variant="secondary"
+                  onClick={() => navigate("/applications")}
+                  aria-label="Start screening"
+                  disabled={progressLoading}
+                >
                   Start screening
                 </Button>
-                <Button variant="ghost" onClick={() => navigate("/site/legal")} aria-label="View templates">
+                <Button
+                  variant="ghost"
+                  onClick={() => navigate("/site/legal")}
+                  aria-label="View templates"
+                  disabled={progressLoading}
+                >
                   View templates
                 </Button>
               </div>
@@ -141,7 +185,7 @@ const DashboardPage: React.FC = () => {
           </>
         ) : null}
 
-        {showEmptyCTA ? (
+        {dataReady && showEmptyCTA ? (
           <Card
             style={{
               padding: spacing.md,
@@ -162,7 +206,7 @@ const DashboardPage: React.FC = () => {
           </Card>
         ) : null}
 
-        {!showEmptyCTA && hasNoApplications ? (
+        {dataReady && !showEmptyCTA && hasNoApplications ? (
           <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
             <div style={{ fontWeight: 700, marginBottom: 6 }}>Next: create an application</div>
             <div style={{ color: text.muted, marginBottom: 12 }}>
@@ -172,9 +216,9 @@ const DashboardPage: React.FC = () => {
           </Card>
         ) : null}
 
-        <KpiStrip kpis={kpis} loading={loading} />
+        {dataReady ? <KpiStrip kpis={kpis} loading={loading} /> : null}
 
-        {showAdvancedCollapsed ? (
+        {dataReady && showAdvancedCollapsed ? (
           <details
             style={{
               border: `1px solid ${colors.border}`,
@@ -196,7 +240,7 @@ const DashboardPage: React.FC = () => {
               <RecentEventsCard events={events} loading={loading} openLedgerEnabled={false} />
             </div>
           </details>
-        ) : (
+        ) : dataReady ? (
           <div
             style={{
               display: "grid",
@@ -207,7 +251,7 @@ const DashboardPage: React.FC = () => {
             <ActionRequiredPanel items={actions} loading={loading} viewAllEnabled={false} />
             <RecentEventsCard events={events} loading={loading} openLedgerEnabled={false} />
           </div>
-        )}
+        ) : null}
 
         <Section>
           <div style={{ color: text.muted, fontSize: 12, textAlign: "right" }}>

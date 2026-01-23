@@ -22,12 +22,54 @@ export const RequireAuth: React.FC<RequireAuthProps> = ({ children }) => {
           fontFamily:
             "system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', sans-serif",
           fontSize: "0.95rem",
-          color: "#e5e7eb",
+          color: "#0f172a",
           background:
-            "radial-gradient(circle at top left, #111827 0, #020617 45%, #000000 100%)",
+            "radial-gradient(circle at top left, rgba(37,99,235,0.08) 0, rgba(14,165,233,0.06) 45%, rgba(255,255,255,0.9) 100%)",
+          padding: "24px",
         }}
       >
-        Restoring session…
+        <div
+          style={{
+            width: "min(420px, 90vw)",
+            background: "rgba(255,255,255,0.9)",
+            border: "1px solid rgba(15,23,42,0.08)",
+            borderRadius: 16,
+            padding: "20px 22px",
+            boxShadow: "0 12px 30px rgba(15,23,42,0.12)",
+          }}
+        >
+          <div style={{ fontWeight: 700, marginBottom: 8 }}>
+            Loading your dashboard...
+          </div>
+          <div style={{ color: "#475569", marginBottom: 16 }}>
+            Restoring your session and syncing data.
+          </div>
+          <div style={{ display: "grid", gap: 10 }}>
+            <div
+              style={{
+                height: 12,
+                borderRadius: 999,
+                background: "rgba(15,23,42,0.08)",
+              }}
+            />
+            <div
+              style={{
+                height: 12,
+                borderRadius: 999,
+                background: "rgba(15,23,42,0.08)",
+                width: "80%",
+              }}
+            />
+            <div
+              style={{
+                height: 12,
+                borderRadius: 999,
+                background: "rgba(15,23,42,0.08)",
+                width: "60%",
+              }}
+            />
+          </div>
+        </div>
       </div>
     );
   }
