@@ -1,29 +1,9 @@
 import { getApiBaseUrl } from "../api/baseUrl";
+import { clearAuthToken, getAuthToken, setAuthToken } from "./authToken";
 
 let warnedMisconfig = false;
 
-export function getAuthToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return (
-    sessionStorage.getItem("rentchain_tenant_token") ||
-    sessionStorage.getItem("rentchain_token") ||
-    localStorage.getItem("rentchain_token") ||
-    sessionStorage.getItem("token") ||
-    localStorage.getItem("token") ||
-    null
-  );
-}
-
-export function setAuthToken(token: string) {
-  sessionStorage.setItem("rentchain_token", token);
-}
-
-export function clearAuthToken() {
-  sessionStorage.removeItem("rentchain_token");
-  localStorage.removeItem("rentchain_token");
-  sessionStorage.removeItem("token");
-  localStorage.removeItem("token");
-}
+export { getAuthToken, setAuthToken, clearAuthToken };
 
 export function resolveApiUrl(input: string) {
   const sRaw = String(input || "").trim();

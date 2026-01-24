@@ -1,9 +1,11 @@
 import axios from "axios";
 import { API_BASE_URL } from "./config";
-import { DEBUG_AUTH_KEY, JUST_LOGGED_IN_KEY, TENANT_TOKEN_KEY, TOKEN_KEY } from "../lib/authKeys";
+import { DEBUG_AUTH_KEY, JUST_LOGGED_IN_KEY } from "../lib/authKeys";
+import { clearAuthToken, getAuthToken, getTenantToken } from "../lib/authToken";
 
 const api = axios.create({
   baseURL: API_BASE_URL,
+  withCredentials: true,
 });
 
 function dispatchPlanLimit(detail: any) {
@@ -67,13 +69,13 @@ api.interceptors.request.use((config) => {
     path.startsWith("/tenant/") ||
     path.startsWith("/api/tenant/");
 
-  const token = isTenantPath
-    ? sessionStorage.getItem(TENANT_TOKEN_KEY) || localStorage.getItem(TENANT_TOKEN_KEY)
-    : sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY);
+  const token = isTenantPath ? getTenantToken() : getAuthToken();
   if (token) {
     config.headers = config.headers ?? {};
     (config.headers as any).Authorization = `Bearer ${token}`;
   }
+  config.headers = config.headers ?? {};
+  (config.headers as any)["x-rc-auth"] = token ? "bearer" : "missing";
   return config;
 });
 
@@ -89,6 +91,10 @@ api.interceptors.response.use(
     }
     if (status !== 401 && status !== 403) {
       return Promise.reject(err);
+    }
+
+    if (status === 401) {
+      clearAuthToken();
     }
 
     const graceRaw =
