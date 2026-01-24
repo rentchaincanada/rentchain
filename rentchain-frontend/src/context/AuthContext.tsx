@@ -13,8 +13,8 @@ import {
   logout as apiLogout,
   restoreSession as apiRestoreSession,
 } from "../api/authApi";
-import { DEBUG_AUTH_KEY, JUST_LOGGED_IN_KEY, TENANT_TOKEN_KEY, TOKEN_KEY } from "../lib/authKeys";
-import { clearAuthToken, setAuthToken } from "../lib/authToken";
+import { DEBUG_AUTH_KEY, JUST_LOGGED_IN_KEY, TENANT_TOKEN_KEY } from "../lib/authKeys";
+import { clearAuthToken, setAuthToken, TOKEN_KEY } from "../lib/authToken";
 
 const PUBLIC_ROUTE_ALLOWLIST = [
   "/",

@@ -1,4 +1,7 @@
-import { TENANT_TOKEN_KEY, TOKEN_KEY } from "./authKeys";
+import { TENANT_TOKEN_KEY } from "./authKeys";
+
+export const TOKEN_KEY = "rentchain_token";
+export const TOKEN_KEY_LEGACY = "token";
 
 let inMemoryToken: string | null = null;
 let inMemoryTenantToken: string | null = null;
@@ -39,7 +42,7 @@ export function getAuthToken(): string | null {
   return (
     normalizeToken(inMemoryToken) ||
     readStorage(TOKEN_KEY, true) ||
-    readStorage("token", true)
+    readStorage(TOKEN_KEY_LEGACY, true)
   );
 }
 
@@ -48,14 +51,14 @@ export function setAuthToken(token: string | null) {
   inMemoryToken = clean;
   writeStorage(TOKEN_KEY, clean);
   if (!clean) {
-    writeStorage("token", null);
+    writeStorage(TOKEN_KEY_LEGACY, null);
   }
 }
 
 export function clearAuthToken() {
   inMemoryToken = null;
   writeStorage(TOKEN_KEY, null);
-  writeStorage("token", null);
+  writeStorage(TOKEN_KEY_LEGACY, null);
 }
 
 export function getTenantToken(): string | null {

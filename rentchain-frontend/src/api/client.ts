@@ -109,10 +109,7 @@ api.interceptors.response.use(
       return Promise.reject(err);
     }
 
-    const tok =
-      sessionStorage.getItem(TOKEN_KEY) ||
-      localStorage.getItem(TOKEN_KEY) ||
-      "";
+    const tok = getAuthToken() || "";
     const parts = tok.split(".");
     let reason: "missing" | "expired" | "unauthorized" = "missing";
 
@@ -155,8 +152,7 @@ api.interceptors.response.use(
     }
 
     if (reason === "expired") {
-      sessionStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(TOKEN_KEY);
+      clearAuthToken();
       try {
         localStorage.removeItem(JUST_LOGGED_IN_KEY);
       } catch {
