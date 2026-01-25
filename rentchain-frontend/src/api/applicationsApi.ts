@@ -2,10 +2,10 @@
 // Canonical applications API wrapper (uses apiJson/apiFetch only)
 
 import { apiFetch, apiJson } from "@/lib/apiClient";
-import { API_BASE_URL } from "./config";
+import { apiUrl } from "./config";
 
 export function getApplicationPdfUrl(id: string): string {
-  return `${API_BASE_URL}/applications/${id}/pdf`;
+  return apiUrl(`/applications/${id}/pdf`);
 }
 
 /**

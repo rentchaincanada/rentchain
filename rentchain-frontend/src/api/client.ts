@@ -3,8 +3,9 @@ import { API_BASE_URL } from "./config";
 import { DEBUG_AUTH_KEY, JUST_LOGGED_IN_KEY } from "../lib/authKeys";
 import { clearAuthToken, getAuthToken, getTenantToken } from "../lib/authToken";
 
+const normalizedBase = API_BASE_URL.replace(/\/$/, "").replace(/\/api$/i, "");
 const api = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: `${normalizedBase}/api`,
   withCredentials: true,
 });
 

@@ -63,7 +63,7 @@ export async function apiFetch<T = any>(
   if (!API_BASE_URL) {
     throw new Error("API_BASE_URL is not configured");
   }
-  const base = API_BASE_URL.replace(/\/$/, "");
+  const base = API_BASE_URL.replace(/\/$/, "").replace(/\/api$/i, "");
   if (!(apiFetch as any)._loggedBase) {
     console.log("[apiFetch] API base:", base);
     (apiFetch as any)._loggedBase = true;
@@ -72,21 +72,21 @@ export async function apiFetch<T = any>(
   const normalizedPath = (() => {
     if (path.startsWith("http")) return path;
     let p = path;
-    if (p.startsWith("/api/")) {
-      if (!(apiFetch as any)._warnedApiPrefix) {
-        console.warn("Do not prefix /api in apiFetch calls. Normalizing path:", path);
-        (apiFetch as any)._warnedApiPrefix = true;
-      }
-      p = p.slice(4);
-    } else if (p.startsWith("api/")) {
-      if (!(apiFetch as any)._warnedApiPrefix) {
-        console.warn("Do not prefix /api in apiFetch calls. Normalizing path:", path);
-        (apiFetch as any)._warnedApiPrefix = true;
-      }
-      p = p.slice(3);
+    if (p.startsWith("/api/api/")) {
+      p = p.replace("/api/api/", "/api/");
+    } else if (p.startsWith("api/api/")) {
+      p = p.replace("api/api/", "api/");
     }
-    p = p.startsWith("/") ? p : `/${p}`;
-    return `${base}${p}`;
+    if (p.startsWith("/api/")) {
+      return `${base}${p}`;
+    }
+    if (p.startsWith("api/")) {
+      return `${base}/${p}`;
+    }
+    if (p.startsWith("/")) {
+      return `${base}/api${p}`;
+    }
+    return `${base}/api/${p}`;
   })();
 
   let pathForMatch = path;
