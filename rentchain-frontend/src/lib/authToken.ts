@@ -1,7 +1,7 @@
 import { TENANT_TOKEN_KEY } from "./authKeys";
 
 export const TOKEN_KEY = "rentchain_token";
-export const TOKEN_KEY_LEGACY = "token";
+const LEGACY_KEYS = ["rc_auth_token", "authToken", "token"];
 
 let inMemoryToken: string | null = null;
 let inMemoryTenantToken: string | null = null;
@@ -39,10 +39,29 @@ function writeStorage(key: string, value: string | null) {
 }
 
 export function getAuthToken(): string | null {
+  const direct = normalizeToken(inMemoryToken) || readStorage(TOKEN_KEY, true);
+  if (direct) {
+    inMemoryToken = direct;
+    return direct;
+  }
+
+  for (const key of LEGACY_KEYS) {
+    const legacy = readStorage(key, true);
+    if (legacy) {
+      inMemoryToken = legacy;
+      writeStorage(TOKEN_KEY, legacy);
+      for (const legacyKey of LEGACY_KEYS) {
+        if (legacyKey !== TOKEN_KEY) {
+          writeStorage(legacyKey, null);
+        }
+      }
+      return legacy;
+    }
+  }
+
   return (
     normalizeToken(inMemoryToken) ||
-    readStorage(TOKEN_KEY, true) ||
-    readStorage(TOKEN_KEY_LEGACY, true)
+    readStorage(TOKEN_KEY, true)
   );
 }
 
@@ -51,14 +70,18 @@ export function setAuthToken(token: string | null) {
   inMemoryToken = clean;
   writeStorage(TOKEN_KEY, clean);
   if (!clean) {
-    writeStorage(TOKEN_KEY_LEGACY, null);
+    for (const legacyKey of LEGACY_KEYS) {
+      writeStorage(legacyKey, null);
+    }
   }
 }
 
 export function clearAuthToken() {
   inMemoryToken = null;
   writeStorage(TOKEN_KEY, null);
-  writeStorage(TOKEN_KEY_LEGACY, null);
+  for (const legacyKey of LEGACY_KEYS) {
+    writeStorage(legacyKey, null);
+  }
 }
 
 export function getTenantToken(): string | null {
