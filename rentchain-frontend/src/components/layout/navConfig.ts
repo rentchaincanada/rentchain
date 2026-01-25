@@ -6,9 +6,8 @@ export type NavItem = {
   label: string;
   to: string;
   icon?: ComponentType<{ size?: number; strokeWidth?: number }>;
-  showInDesktopDrawer?: boolean;
-  showInMobileDrawer?: boolean;
-  showInBottomTabs?: boolean;
+  showInDrawer?: boolean;
+  showInTabs?: boolean;
   requiresAdmin?: boolean;
   requiresFeature?: string;
 };
@@ -19,95 +18,83 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Dashboard",
     to: "/dashboard",
     icon: LayoutDashboard,
-    showInDesktopDrawer: true,
-    showInMobileDrawer: true,
-    showInBottomTabs: true,
+    showInDrawer: true,
+    showInTabs: true,
   },
   {
     id: "properties",
     label: "Properties",
     to: "/properties",
     icon: Building2,
-    showInDesktopDrawer: true,
-    showInMobileDrawer: true,
-    showInBottomTabs: true,
+    showInDrawer: true,
+    showInTabs: true,
   },
   {
     id: "tenants",
     label: "Tenants",
     to: "/tenants",
     icon: Users,
-    showInDesktopDrawer: true,
-    showInMobileDrawer: true,
-    showInBottomTabs: true,
+    showInDrawer: true,
+    showInTabs: true,
   },
   {
     id: "applications",
     label: "Applications",
     to: "/applications",
     icon: ScrollText,
-    showInDesktopDrawer: true,
-    showInMobileDrawer: true,
-    showInBottomTabs: true,
+    showInDrawer: true,
+    showInTabs: true,
   },
   {
     id: "messages",
     label: "Messages",
     to: "/messages",
     icon: MessagesSquare,
-    showInDesktopDrawer: true,
-    showInMobileDrawer: true,
-    showInBottomTabs: true,
+    showInDrawer: true,
+    showInTabs: true,
   },
   {
     id: "payments",
     label: "Payments",
     to: "/payments",
-    showInDesktopDrawer: true,
-    showInMobileDrawer: true,
+    showInDrawer: true,
   },
   {
     id: "billing",
     label: "Billing",
     to: "/billing",
-    showInDesktopDrawer: true,
-    showInMobileDrawer: true,
+    showInDrawer: true,
   },
   {
     id: "maintenance",
     label: "Maintenance",
     to: "/maintenance",
-    showInDesktopDrawer: true,
-    showInMobileDrawer: true,
+    showInDrawer: true,
   },
   {
     id: "screening",
     label: "Screening",
     to: "/screening",
-    showInDesktopDrawer: true,
-    showInMobileDrawer: true,
+    showInDrawer: true,
   },
   {
     id: "pricing",
     label: "Pricing",
     to: "/site/pricing",
-    showInDesktopDrawer: true,
-    showInMobileDrawer: true,
+    showInDrawer: true,
   },
   {
     id: "admin",
     label: "Admin Dashboard",
     to: "/admin",
     requiresAdmin: true,
-    showInDesktopDrawer: true,
-    showInMobileDrawer: true,
+    showInDrawer: true,
   },
   {
     id: "verified-screenings",
     label: "Verified Screenings",
     to: "/admin/verified-screenings",
     requiresAdmin: true,
-    showInDesktopDrawer: true,
-    showInMobileDrawer: true,
+    showInDrawer: true,
   },
 ];

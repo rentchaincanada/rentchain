@@ -19,7 +19,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
     if (item.requiresAdmin && !isAdmin) return false;
     return true;
   });
-  const drawerItems = visibleItems.filter((item) => item.showInDesktopDrawer !== false);
+  const drawerItems = visibleItems.filter((item) => item.showInDrawer !== false);
 
   useEffect(() => {
     if (!open) return;
@@ -60,7 +60,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
           position: "relative",
           width: 320,
           maxWidth: "90vw",
-          maxHeight: "calc(100vh - env(safe-area-inset-top) - 16px)",
+          maxHeight: "calc(100vh - 24px)",
           background: colors.card,
           borderLeft: `1px solid ${colors.border}`,
           boxShadow: shadows.lg,

@@ -51,10 +51,11 @@
 
 .rc-landlord-drawer {
   position: fixed;
-  top: 0;
+  top: 12px;
+  bottom: 12px;
   right: 0;
-  height: min(100vh, 100dvh);
-  max-height: calc(100vh - env(safe-area-inset-top) - 16px);
+  height: auto;
+  max-height: calc(100vh - 24px);
   width: min(320px, 88vw);
   background: #ffffff;
   box-shadow: -12px 0 24px rgba(15, 23, 42, 0.12);

@@ -25,8 +25,8 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
     if (item.requiresAdmin && !isAdmin) return false;
     return true;
   });
-  const drawerItems = visibleItems.filter((item) => item.showInMobileDrawer !== false);
-  const tabItems = visibleItems.filter((item) => item.showInBottomTabs);
+  const drawerItems = visibleItems.filter((item) => item.showInDrawer !== false);
+  const tabItems = visibleItems.filter((item) => item.showInTabs);
 
   useEffect(() => {
     let mounted = true;
