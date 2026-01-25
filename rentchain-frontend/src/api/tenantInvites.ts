@@ -14,7 +14,7 @@ export type TenantInvite = {
 };
 
 export async function listTenantInvites(): Promise<{ items: TenantInvite[] }> {
-  const res = await api.get("/api/tenant-invites");
+  const res = await api.get("/tenant-invites");
   return res.data;
 }
 
@@ -23,7 +23,7 @@ export async function createTenantInvite(payload: {
   tenantEmail: string;
   tenantName?: string;
 }) {
-  const res = await api.post("/api/tenant-invites", payload);
+  const res = await api.post("/tenant-invites", payload);
   return res.data as {
     ok: boolean;
     token: string;
@@ -35,6 +35,6 @@ export async function createTenantInvite(payload: {
 }
 
 export async function redeemTenantInvite(token: string) {
-  const res = await api.post("/api/tenant-invites/redeem", { token });
+  const res = await api.post("/tenant-invites/redeem", { token });
   return res.data;
 }
