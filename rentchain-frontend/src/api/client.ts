@@ -76,6 +76,7 @@ api.interceptors.request.use((config) => {
   }
   config.headers = config.headers ?? {};
   (config.headers as any)["x-rc-auth"] = token ? "bearer" : "missing";
+  config.withCredentials = true;
   return config;
 });
 
