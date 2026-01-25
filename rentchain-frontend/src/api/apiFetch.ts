@@ -1,5 +1,5 @@
 import { API_BASE_URL } from "./config";
-import { TENANT_TOKEN_KEY, TOKEN_KEY } from "../lib/authKeys";
+import { clearAuthToken, clearTenantToken, getAuthToken, getTenantToken } from "../lib/authToken";
 
 function dispatchPlanLimit(detail: any) {
   try {
@@ -54,6 +54,8 @@ export type ApiFetchInit = Omit<RequestInit, "body"> & {
   suppressToasts?: boolean;
 };
 
+let redirectedOn401 = false;
+
 export async function apiFetch<T = any>(
   path: string,
   init: ApiFetchInit = {}
@@ -61,7 +63,7 @@ export async function apiFetch<T = any>(
   if (!API_BASE_URL) {
     throw new Error("API_BASE_URL is not configured");
   }
-  const base = API_BASE_URL.replace(/\/$/, "");
+  const base = API_BASE_URL.replace(/\/$/, "").replace(/\/api$/i, "");
   if (!(apiFetch as any)._loggedBase) {
     console.log("[apiFetch] API base:", base);
     (apiFetch as any)._loggedBase = true;
@@ -70,21 +72,21 @@ export async function apiFetch<T = any>(
   const normalizedPath = (() => {
     if (path.startsWith("http")) return path;
     let p = path;
-    if (p.startsWith("/api/")) {
-      if (!(apiFetch as any)._warnedApiPrefix) {
-        console.warn("Do not prefix /api in apiFetch calls. Normalizing path:", path);
-        (apiFetch as any)._warnedApiPrefix = true;
-      }
-      p = p.slice(4);
-    } else if (p.startsWith("api/")) {
-      if (!(apiFetch as any)._warnedApiPrefix) {
-        console.warn("Do not prefix /api in apiFetch calls. Normalizing path:", path);
-        (apiFetch as any)._warnedApiPrefix = true;
-      }
-      p = p.slice(3);
+    if (p.startsWith("/api/api/")) {
+      p = p.replace("/api/api/", "/api/");
+    } else if (p.startsWith("api/api/")) {
+      p = p.replace("api/api/", "api/");
     }
-    p = p.startsWith("/") ? p : `/${p}`;
-    return `${base}${p}`;
+    if (p.startsWith("/api/")) {
+      return `${base}${p}`;
+    }
+    if (p.startsWith("api/")) {
+      return `${base}/${p}`;
+    }
+    if (p.startsWith("/")) {
+      return `${base}/api${p}`;
+    }
+    return `${base}/api/${p}`;
   })();
 
   let pathForMatch = path;
@@ -100,9 +102,7 @@ export async function apiFetch<T = any>(
     pathForMatch === "/api/tenant" ||
     pathForMatch.startsWith("/tenant/") ||
     pathForMatch.startsWith("/api/tenant/");
-  const token = isTenantPath
-    ? sessionStorage.getItem(TENANT_TOKEN_KEY) || localStorage.getItem(TENANT_TOKEN_KEY)
-    : sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY);
+  const token = isTenantPath ? getTenantToken() : getAuthToken();
 
   const url = normalizedPath;
 
@@ -114,6 +114,7 @@ export async function apiFetch<T = any>(
 
   // Mark requests coming from our API helpers so the dev fetch-guard doesn't warn
   headers["X-Rentchain-ApiClient"] = "1";
+  headers["x-rc-auth"] = token ? "bearer" : "missing";
 
   if (token) headers.Authorization = `Bearer ${token}`;
 
@@ -134,6 +135,7 @@ export async function apiFetch<T = any>(
     ...fetchInit,
     headers,
     body: bodyToSend,
+    credentials: "include",
   });
 
   const text = await res.text().catch(() => "");
@@ -145,6 +147,17 @@ export async function apiFetch<T = any>(
   }
 
   if (!res.ok) {
+    if (res.status === 401) {
+      if (isTenantPath) {
+        clearTenantToken();
+      } else {
+        clearAuthToken();
+      }
+      if (!redirectedOn401 && typeof window !== "undefined" && window.location.pathname !== "/login") {
+        redirectedOn401 = true;
+        window.location.href = "/login?reason=expired";
+      }
+    }
     const detail = normalizePlanLimit(data, res.status);
     if (detail && !shouldIgnorePlanLimit(detail)) {
       dispatchPlanLimit(detail);

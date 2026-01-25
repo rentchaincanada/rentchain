@@ -1,5 +1,6 @@
 import { apiFetch } from "./http";
 import { resolveApiUrl } from "../lib/apiClient";
+import { getAuthToken } from "../lib/authToken";
 
 export interface CreditPeriod {
   period: string;
@@ -31,11 +32,7 @@ export async function downloadCreditHistory(tenantId: string, format: "csv" | "j
   const res = await fetch(url, {
     headers: {
       Accept: format === "csv" ? "text/csv" : "application/json",
-      Authorization: `Bearer ${
-        sessionStorage.getItem("rentchain_token") ||
-        localStorage.getItem("rentchain_token") ||
-        ""
-      }`,
+      Authorization: `Bearer ${getAuthToken() || ""}`,
     },
   });
   if (!res.ok) {

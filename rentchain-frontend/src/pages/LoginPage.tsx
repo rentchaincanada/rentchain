@@ -5,6 +5,7 @@ import { useAuth } from "../context/useAuth";
 import { colors, spacing, text } from "../styles/tokens";
 import { Card, Input, Button } from "../components/ui/Ui";
 import { DEBUG_AUTH_KEY, JUST_LOGGED_IN_KEY } from "../lib/authKeys";
+import { getAuthToken } from "../lib/authToken";
 
 export const LoginPage: React.FC = () => {
   const { login, loginDemo, user, isLoading, isTwoFactorRequired } = useAuth();
@@ -56,11 +57,9 @@ export const LoginPage: React.FC = () => {
         // ignore
       }
       if (dbg) {
-        const sTok = sessionStorage.getItem("rentchain_token");
-        const lTok = localStorage.getItem("rentchain_token");
+        const tok = getAuthToken();
         console.info("[auth debug] demo login stored", {
-          sessionLen: sTok?.length || 0,
-          localLen: lTok?.length || 0,
+          tokenLen: tok?.length || 0,
         });
       }
       await Promise.resolve();
@@ -101,11 +100,9 @@ export const LoginPage: React.FC = () => {
         // ignore
       }
       if (dbg) {
-        const sTok = sessionStorage.getItem("rentchain_token");
-        const lTok = localStorage.getItem("rentchain_token");
+        const tok = getAuthToken();
         console.info("[auth debug] login stored", {
-          sessionLen: sTok?.length || 0,
-          localLen: lTok?.length || 0,
+          tokenLen: tok?.length || 0,
         });
       }
       await Promise.resolve();

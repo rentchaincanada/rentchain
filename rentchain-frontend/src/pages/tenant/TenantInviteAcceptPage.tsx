@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useLocation } from "react-router-dom";
 import { apiFetch } from "../../api/apiFetch";
 import { setTenantToken } from "../../lib/tenantAuth";
+import { clearAuthToken } from "../../lib/authToken";
 import { DEBUG_AUTH_KEY, JUST_LOGGED_IN_KEY } from "../../lib/authKeys";
 
 type InvitePreview = {
@@ -110,8 +111,7 @@ export default function TenantInviteAcceptPage() {
       // store tenant token for portal access
       setTenantToken(jwt);
       try {
-        sessionStorage.removeItem("rentchain_token");
-        localStorage.removeItem("rentchain_token");
+        clearAuthToken();
       } catch {
         // ignore
       }

@@ -6,11 +6,17 @@ type TenantApiInit = Omit<RequestInit, "body"> & { body?: BodyInit | Jsonish };
 
 export async function tenantApiFetch<T = any>(path: string, init: TenantApiInit = {}): Promise<T> {
   if (!API_BASE_URL) throw new Error("API_BASE_URL is not configured");
-  const base = API_BASE_URL.replace(/\/$/, "");
+  const base = API_BASE_URL.replace(/\/$/, "").replace(/\/api$/i, "");
 
   const url = (() => {
     if (path.startsWith("http")) return path;
-    const p = path.startsWith("/") ? path : `/${path}`;
+    let p = path.startsWith("/") ? path : `/${path}`;
+    if (p.startsWith("/api/api/")) {
+      p = p.replace("/api/api/", "/api/");
+    }
+    if (!p.startsWith("/api/")) {
+      p = `/api${p}`;
+    }
     return `${base}${p}`;
   })();
 

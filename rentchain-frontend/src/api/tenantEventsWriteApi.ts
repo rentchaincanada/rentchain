@@ -1,4 +1,5 @@
 import { apiFetch } from "./http";
+import { getAuthToken } from "../lib/authToken";
 
 export type TenantEventType =
   | "LEASE_STARTED"
@@ -27,10 +28,7 @@ export type CreateTenantEventInput = {
 };
 
 export async function createTenantEvent(input: CreateTenantEventInput) {
-  const token =
-    sessionStorage.getItem("rentchain_token") ||
-    localStorage.getItem("rentchain_token") ||
-    undefined;
+  const token = getAuthToken() ?? undefined;
 
   const defaultTitleFromType = (type: string): string => {
     switch (type) {

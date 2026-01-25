@@ -600,26 +600,28 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
           overflow: "hidden",
         }}
       >
-        <table
-          style={{
-            width: "100%",
-            borderCollapse: "collapse",
-            fontSize: "0.9rem",
-            color: "#0f172a",
-          }}
-        >
-          <thead>
-            <tr style={{ background: "rgba(255,255,255,0.03)", color: "#9ca3af" }}>
-              <th style={{ textAlign: "left", padding: "10px 12px" }}>Unit #</th>
-              <th style={{ textAlign: "left", padding: "10px 12px" }}>Rent</th>
-              <th style={{ textAlign: "left", padding: "10px 12px" }}>Beds</th>
-              <th style={{ textAlign: "left", padding: "10px 12px" }}>Baths</th>
-              <th style={{ textAlign: "left", padding: "10px 12px" }}>Sqft</th>
-              <th style={{ textAlign: "left", padding: "10px 12px" }}>Status</th>
-              <th style={{ textAlign: "left", padding: "10px 12px" }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
+        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+          <table
+            style={{
+              width: "100%",
+              minWidth: 720,
+              borderCollapse: "collapse",
+              fontSize: "0.9rem",
+              color: "#0f172a",
+            }}
+          >
+            <thead>
+              <tr style={{ background: "rgba(255,255,255,0.03)", color: "#9ca3af" }}>
+                <th style={{ textAlign: "left", padding: "10px 12px", whiteSpace: "nowrap" }}>Unit #</th>
+                <th style={{ textAlign: "right", padding: "10px 12px", whiteSpace: "nowrap" }}>Rent</th>
+                <th style={{ textAlign: "center", padding: "10px 12px", whiteSpace: "nowrap" }}>Beds</th>
+                <th style={{ textAlign: "center", padding: "10px 12px", whiteSpace: "nowrap" }}>Baths</th>
+                <th style={{ textAlign: "center", padding: "10px 12px", whiteSpace: "nowrap" }}>Sqft</th>
+                <th style={{ textAlign: "left", padding: "10px 12px", whiteSpace: "nowrap" }}>Status</th>
+                <th style={{ textAlign: "left", padding: "10px 12px" }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
             {(() => {
               if (unitsLoading) {
                 return (
@@ -686,26 +688,26 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                       color: "#e5e7eb",
                     }}
                   >
-                    <td style={{ padding: "10px 12px" }}>{unitNum}</td>
-                    <td style={{ padding: "10px 12px" }}>
+                    <td style={{ padding: "10px 12px", whiteSpace: "nowrap" }}>{unitNum}</td>
+                    <td style={{ padding: "10px 12px", textAlign: "right", whiteSpace: "nowrap" }}>
                       {rentVal !== null && rentVal !== undefined
                         ? formatCurrency(Number(rentVal) || 0)
                         : "--"}
                     </td>
-                    <td style={{ padding: "10px 12px" }}>
+                    <td style={{ padding: "10px 12px", textAlign: "center", whiteSpace: "nowrap" }}>
                       {(u as any).bedrooms ?? (u as any).bedrooms === 0
                         ? (u as any).bedrooms
-                        : "—"}
+                        : "-"}
                     </td>
-                    <td style={{ padding: "10px 12px" }}>
+                    <td style={{ padding: "10px 12px", textAlign: "center", whiteSpace: "nowrap" }}>
                       {(u as any).bathrooms ?? (u as any).bathrooms === 0
                         ? (u as any).bathrooms
-                        : "—"}
+                        : "-"}
                     </td>
-                    <td style={{ padding: "10px 12px" }}>
+                    <td style={{ padding: "10px 12px", textAlign: "center", whiteSpace: "nowrap" }}>
                       {(u as any).sqft ?? (u as any).sqft === 0
                         ? (u as any).sqft
-                        : "—"}
+                        : "-"}
                     </td>
                     <td style={{ padding: "10px 12px" }}>
                       <span
@@ -735,6 +737,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                       </span>
                     </td>
                     <td style={{ padding: "10px 12px" }}>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                       <button
                         type="button"
                         onClick={() => setEditingUnit(u)}
@@ -760,19 +763,20 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                             background: "#fff",
                             cursor: "pointer",
                             fontSize: "0.85rem",
-                            marginLeft: 8,
                           }}
                         >
                           Send application
                         </button>
                       ) : null}
+                      </div>
                     </td>
                   </tr>
                 );
               });
             })()}
-          </tbody>
-        </table>
+            </tbody>
+          </table>
+        </div>
       </div>
       </div>
       <UnitEditModal

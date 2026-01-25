@@ -9,7 +9,7 @@ export function getApiBaseUrl(): string {
     raw = raw.replace(/^value:/i, "").trim();
   }
 
-  const normalized = raw.replace(/\/$/, "");
+  const normalized = raw.replace(/\/$/, "").replace(/\/api$/i, "");
 
   if (!normalized) {
     if (import.meta.env.PROD) {

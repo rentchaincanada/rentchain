@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { apiFetch } from "../../api/apiFetch";
 import { setTenantToken } from "../../lib/tenantAuth";
+import { clearAuthToken } from "../../lib/authToken";
 
 export default function TenantMagicRedeemPage() {
   const location = useLocation();
@@ -40,8 +41,7 @@ export default function TenantMagicRedeemPage() {
         }
         setTenantToken(res.tenantToken);
         try {
-          sessionStorage.removeItem("rentchain_token");
-          localStorage.removeItem("rentchain_token");
+          clearAuthToken();
         } catch {
           // ignore
         }

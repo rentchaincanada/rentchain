@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
-import { DEBUG_AUTH_KEY, TENANT_TOKEN_KEY, TOKEN_KEY } from "../../lib/authKeys";
+import { DEBUG_AUTH_KEY, TENANT_TOKEN_KEY } from "../../lib/authKeys";
+import { TOKEN_KEY } from "../../lib/authToken";
 
 function decodeJwtPayload(token: string): any | null {
   try {

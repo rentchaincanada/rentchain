@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { apiFetch } from "@/api/http";
 import { colors, radius, shadows, spacing, text } from "../../styles/tokens";
 import { useToast } from "../ui/ToastProvider";
+import { getAuthToken } from "../../lib/authToken";
 
 type Props = {
   open: boolean;
@@ -90,8 +91,7 @@ export const CreateNoticeModal: React.FC<Props> = ({ open, tenantId, onClose, on
 
     setSubmitting(true);
     try {
-      const token =
-        sessionStorage.getItem("rentchain_token") || localStorage.getItem("rentchain_token") || undefined;
+      const token = getAuthToken() ?? undefined;
       const eff = parseEffectiveAt();
       const res: any = await apiFetch("/tenant-notices", {
         method: "POST",

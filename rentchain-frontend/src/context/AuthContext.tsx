@@ -13,7 +13,8 @@ import {
   logout as apiLogout,
   restoreSession as apiRestoreSession,
 } from "../api/authApi";
-import { DEBUG_AUTH_KEY, JUST_LOGGED_IN_KEY, TENANT_TOKEN_KEY, TOKEN_KEY } from "../lib/authKeys";
+import { DEBUG_AUTH_KEY, JUST_LOGGED_IN_KEY, TENANT_TOKEN_KEY } from "../lib/authKeys";
+import { clearAuthToken, setAuthToken, TOKEN_KEY } from "../lib/authToken";
 
 const PUBLIC_ROUTE_ALLOWLIST = [
   "/",
@@ -142,8 +143,7 @@ function storeToken(token: string) {
   if (dbgStore) {
     window.sessionStorage.setItem("debugAuthStoredAt", String(Date.now()));
   }
-  window.sessionStorage.setItem(TOKEN_KEY, clean);
-  window.localStorage.setItem(TOKEN_KEY, clean);
+  setAuthToken(clean);
   try {
     window.localStorage.setItem(JUST_LOGGED_IN_KEY, String(Date.now()));
     window.sessionStorage.setItem(JUST_LOGGED_IN_KEY, String(Date.now()));
@@ -154,8 +154,7 @@ function storeToken(token: string) {
 
 function clearStoredToken() {
   if (typeof window === "undefined") return;
-  window.sessionStorage.removeItem(TOKEN_KEY);
-  window.localStorage.removeItem(TOKEN_KEY);
+  clearAuthToken();
   try {
     window.localStorage.removeItem(JUST_LOGGED_IN_KEY);
     window.sessionStorage.removeItem(JUST_LOGGED_IN_KEY);
@@ -224,10 +223,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         } catch {
           // ignore
         }
-        setUser(null);
-        setToken(null);
-        setAuthStatus("guest");
-        clearStoredToken();
+      setUser(null);
+      setToken(null);
+      setAuthStatus("guest");
+      clearStoredToken();
         setIsLoading(false);
         setReady(true);
         return;
@@ -250,6 +249,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
 
       setToken(storedToken);
+      setAuthToken(storedToken);
       setAuthStatus("authed");
 
       // Do not call /api/me on public routes; treat as logged-out view
@@ -326,11 +326,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           setTwoFactorPendingToken(null);
           setTwoFactorMethods([]);
           if (import.meta.env.DEV) {
-            const stored = window.sessionStorage.getItem(TOKEN_KEY);
-            console.info("[auth] login stored token", {
-              stored: !!stored,
-              len: stored?.length || 0,
-            });
+            const hasLocal = !!window.localStorage.getItem(TOKEN_KEY);
+            const hasSession = !!window.sessionStorage.getItem(TOKEN_KEY);
+            console.debug("[auth] token stored", { hasLocal, hasSession });
           }
           return { requires2fa: false };
         }

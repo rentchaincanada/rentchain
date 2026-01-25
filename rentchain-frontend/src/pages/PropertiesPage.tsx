@@ -658,14 +658,14 @@ const PropertiesPage: React.FC = () => {
                     const openCount = actionCounts[id] || 0;
 
                   return (
-                    <button
+                      <button
                       key={id}
                       type="button"
                       onClick={() => handleSelectProperty(id)}
                       style={{
                         textAlign: "left",
                         borderRadius: radius.md,
-                        padding: "10px 12px",
+                        padding: "14px 14px",
                         border: isActive
                           ? `1px solid ${colors.accent}`
                           : `1px solid ${colors.border}`,
@@ -678,8 +678,19 @@ const PropertiesPage: React.FC = () => {
                         boxShadow: isActive ? shadows.sm : "none",
                       }}
                     >
-                      <div style={{ fontWeight: 600 }}>{p.name || p.addressLine1}</div>
-                      <div style={{ color: text.muted, fontSize: 12 }}>
+                      <div
+                        style={{
+                          fontWeight: 700,
+                          lineHeight: 1.2,
+                          display: "-webkit-box",
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: "vertical",
+                          overflow: "hidden",
+                        }}
+                      >
+                        {p.addressLine1 || p.name || "Property"}
+                      </div>
+                      <div style={{ color: text.muted, fontSize: 12, marginTop: 4 }}>
                         {p.addressLine1}
                         {p.city ? `, ${p.city}` : ""}
                       </div>

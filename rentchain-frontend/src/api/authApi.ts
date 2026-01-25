@@ -1,6 +1,6 @@
 // src/api/authApi.ts
 import { apiFetch, apiJson } from "./http";
-import { getAuthToken, setAuthToken, resolveApiUrl } from "@/lib/apiClient";
+import { clearAuthToken, getAuthToken, setAuthToken, resolveApiUrl } from "@/lib/apiClient";
 
 export interface AuthUser {
   id: string;
@@ -178,9 +178,7 @@ export async function getCurrentUser(token: string): Promise<MeResponse> {
 export async function restoreSession(): Promise<{ user: any | null }> {
   // Fast path: if no token stored, skip any network calls
   if (typeof window !== "undefined") {
-    const raw =
-      sessionStorage.getItem("rentchain_token") ||
-      localStorage.getItem("rentchain_token");
+    const raw = getAuthToken();
     const t = (raw ?? "").trim();
     if (
       !t ||
@@ -238,6 +236,5 @@ export async function logout(token?: string): Promise<void> {
 }
 
 export function logoutLocal() {
-  localStorage.removeItem("rentchain_token");
-  sessionStorage.removeItem("rentchain_token");
+  clearAuthToken();
 }

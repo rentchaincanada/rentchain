@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Building2, Users, ScrollText, MessagesSquare } from "lucide-react";
 import TopNav from "./TopNav";
 import { useAuth } from "../../context/useAuth";
 import { fetchLandlordConversations } from "../../api/messagesApi";
+import { NAV_ITEMS } from "./navConfig";
 import "./LandlordNav.css";
 
 type Props = {
@@ -11,33 +11,22 @@ type Props = {
   unreadMessages?: boolean;
 };
 
-const tabs = [
-  { path: "/dashboard", label: "Dashboard", Icon: LayoutDashboard },
-  { path: "/properties", label: "Properties", Icon: Building2 },
-  { path: "/tenants", label: "Tenants", Icon: Users },
-  { path: "/applications", label: "Applications", Icon: ScrollText },
-  { path: "/messages", label: "Messages", Icon: MessagesSquare },
-];
-
-const topLinks = [
-  { path: "/pricing", label: "Pricing" },
-  { path: "/dashboard", label: "Dashboard" },
-  { path: "/properties", label: "Properties" },
-  { path: "/tenants", label: "Tenants" },
-  { path: "/billing", label: "Billing" },
-  { path: "/applications", label: "Applications" },
-  { path: "/payments", label: "Payments" },
-  { path: "/messages", label: "Messages" },
-];
-
 export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
   const nav = useNavigate();
   const loc = useLocation();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const [hasUnread, setHasUnread] = useState<boolean>(false);
   const unreadFlag = typeof unreadMessages === "boolean" ? unreadMessages : hasUnread;
   const [drawerOpen, setDrawerOpen] = useState(false);
   const lastFocusedRef = useRef<HTMLElement | null>(null);
+  const isAdmin = String(user?.role || "").toLowerCase() === "admin";
+
+  const visibleItems = NAV_ITEMS.filter((item) => {
+    if (item.requiresAdmin && !isAdmin) return false;
+    return true;
+  });
+  const drawerItems = visibleItems.filter((item) => item.showInDrawer !== false);
+  const tabItems = visibleItems.filter((item) => item.showInTabs);
 
   useEffect(() => {
     let mounted = true;
@@ -131,20 +120,21 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
             Close
           </button>
         </div>
-        <div className="rc-landlord-drawer-links">
-          {topLinks.map(({ path, label }) => (
-            <button
-              key={path}
-              type="button"
-              onClick={() => nav(path)}
-              className={loc.pathname.startsWith(path) ? "active" : ""}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        <div className="rc-landlord-drawer-footer">
-          <button type="button" onClick={logout}>
+        <div className="rc-landlord-drawer-scroll">
+          <div className="rc-landlord-drawer-links">
+            {drawerItems.map(({ to, label }) => (
+              <button
+                key={to}
+                type="button"
+                onClick={() => nav(to)}
+                className={loc.pathname.startsWith(to) ? "active" : ""}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="rc-landlord-drawer-divider" />
+          <button type="button" className="rc-landlord-drawer-signout" onClick={logout}>
             Sign out
           </button>
         </div>
@@ -153,13 +143,14 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
       <div className="rc-landlord-content">{children}</div>
 
       <nav className="rc-mobile-tabbar" aria-label="Bottom navigation">
-        {tabs.map(({ path, label, Icon }) => {
-          const active = loc.pathname.startsWith(path);
+        {tabItems.map(({ to, label, icon: Icon }) => {
+          if (!Icon) return null;
+          const active = loc.pathname.startsWith(to);
           return (
             <button
-              key={path}
+              key={to}
               type="button"
-              onClick={() => nav(path)}
+              onClick={() => nav(to)}
               className={active ? "active" : ""}
             >
               <Icon size={20} strokeWidth={2.2} />
