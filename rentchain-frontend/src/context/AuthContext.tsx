@@ -326,11 +326,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           setTwoFactorPendingToken(null);
           setTwoFactorMethods([]);
           if (import.meta.env.DEV) {
-            const stored = window.sessionStorage.getItem(TOKEN_KEY);
-            console.info("[auth] login stored token", {
-              stored: !!stored,
-              len: stored?.length || 0,
-            });
+            const hasLocal = !!window.localStorage.getItem(TOKEN_KEY);
+            const hasSession = !!window.sessionStorage.getItem(TOKEN_KEY);
+            console.debug("[auth] token stored", { hasLocal, hasSession });
           }
           return { requires2fa: false };
         }

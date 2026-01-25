@@ -3,16 +3,12 @@
 
 // Prefer Vite-style env var if available, otherwise fall back to localhost
 import API_BASE from "../config/apiBase";
+import { getAuthToken } from "../lib/authToken";
 
 const API_BASE_URL = API_BASE.replace(/\/$/, "");
 
 function authHeaders() {
-  const token =
-    sessionStorage.getItem("rentchain_token") ||
-    localStorage.getItem("rentchain_token") ||
-    sessionStorage.getItem("token") ||
-    localStorage.getItem("token") ||
-    null;
+  const token = getAuthToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 

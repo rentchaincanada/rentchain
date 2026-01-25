@@ -13,6 +13,7 @@ import { ErrorBoundary } from "./components/system/ErrorBoundary";
 import { UpgradeProvider } from "./context/UpgradeContext";
 import { API_BASE_URL } from "./api/config";
 import { AuthDebugOverlay } from "./components/debug/AuthDebugOverlay";
+import { getAuthToken } from "./lib/authToken";
 
 // Enforce canonical host (www) to keep storage/sessions consistent
 if (typeof window !== "undefined" && window.location.hostname === "rentchain.ai") {
@@ -36,12 +37,7 @@ window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
     initHeaders.get("X-Rentchain-ApiClient") === "1" ||
     initHeaders.get("x-rentchain-apiclient") === "1";
 
-  const token =
-    sessionStorage.getItem("rentchain_token") ||
-    localStorage.getItem("rentchain_token") ||
-    sessionStorage.getItem("token") ||
-    localStorage.getItem("token") ||
-    null;
+  const token = getAuthToken();
   const url =
     typeof input === "string" || input instanceof URL ? input.toString() : input.url;
   const clientHeader = initHeaders.get("x-api-client");

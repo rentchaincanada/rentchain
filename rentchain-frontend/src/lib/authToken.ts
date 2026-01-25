@@ -39,6 +39,12 @@ function writeStorage(key: string, value: string | null) {
 }
 
 export function getAuthToken(): string | null {
+  if (import.meta.env.DEV && typeof window !== "undefined") {
+    const hasLocal = !!window.localStorage.getItem(TOKEN_KEY);
+    const hasSession = !!window.sessionStorage.getItem(TOKEN_KEY);
+    console.debug("[authToken] read", { hasLocal, hasSession });
+  }
+
   const direct = normalizeToken(inMemoryToken) || readStorage(TOKEN_KEY, true);
   if (direct) {
     inMemoryToken = direct;

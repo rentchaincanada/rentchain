@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { setTenantToken } from "./tenantAuth";
 import { DEBUG_AUTH_KEY, JUST_LOGGED_IN_KEY } from "../lib/authKeys";
 import { apiFetch } from "../lib/apiClient";
+import { clearAuthToken } from "../lib/authToken";
 
 export default function TenantInviteRedeem() {
   const { token } = useParams();
@@ -32,8 +33,7 @@ export default function TenantInviteRedeem() {
         if (!res?.tenantToken) throw new Error("No tenant token returned");
         setTenantToken(res.tenantToken);
         try {
-          sessionStorage.removeItem("rentchain_token");
-          localStorage.removeItem("rentchain_token");
+          clearAuthToken();
         } catch {
           // ignore
         }
