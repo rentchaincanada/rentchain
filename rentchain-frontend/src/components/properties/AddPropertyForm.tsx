@@ -488,6 +488,9 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
                 style={{ display: "none" }}
               />
             </label>
+            <a className="rc-add-property-csv-link" href="/site/legal#templates">
+              CSV template
+            </a>
             <span style={{ color: "#9ca3af" }}>
               Expected headers: unitNumber, rent, bedrooms, bathrooms, sqft
             </span>

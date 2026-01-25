@@ -357,22 +357,25 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
     <>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {/* Header */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div className="rc-property-header" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "#0f172a" }}>
+            <div className="rc-property-title" style={{ fontSize: "1.1rem", fontWeight: 700, color: "#0f172a" }}>
               {displayName}
             </div>
-            <div style={{ color: "#1f2937", fontSize: "0.9rem" }}>
+            <div className="rc-property-address" style={{ color: "#1f2937", fontSize: "0.9rem" }}>
               {property.addressLine1}
               {property.addressLine2 ? `, ${property.addressLine2}` : ""}
             </div>
-            <div style={{ color: "#475569", fontSize: "0.85rem" }}>
+            <div className="rc-property-city" style={{ color: "#475569", fontSize: "0.85rem" }}>
               {[property.city, property.province, property.postalCode]
                 .filter(Boolean)
                 .join(", ")}
             </div>
-            <div style={{ color: "#6b7280", fontSize: "0.8rem" }}>
+            <div className="rc-property-unit-count" style={{ color: "#0f172a", fontSize: "0.8rem", fontWeight: 600 }}>
+              Units: {unitCount}
+            </div>
+            <div className="rc-property-meta" style={{ color: "#6b7280", fontSize: "0.8rem" }}>
               Added {formatDate(property.createdAt)}
             </div>
           </div>
@@ -480,12 +483,6 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
               }}
             />
           </div>
-          <a
-            className="rc-units-template-link"
-            href="/site/legal#templates"
-          >
-            Get CSV template
-          </a>
         </div>
         {showLoading && (
           <div style={{ color: "#6b7280", fontSize: "0.85rem" }}>
@@ -501,6 +498,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
 
     {/* KPI strip */}
       <div
+        className="rc-kpi-grid"
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
@@ -508,6 +506,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
         }}
       >
         <div
+          className="rc-kpi-card"
           style={{
             padding: 12,
             borderRadius: 12,
@@ -515,12 +514,15 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             border: "1px solid rgba(148,163,184,0.15)",
           }}
         >
-          <div style={{ color: "#94a3b8", fontSize: "0.8rem" }}>Total units</div>
-          <div style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.1rem" }}>
+          <div className="rc-kpi-label" style={{ color: "#94a3b8", fontSize: "0.8rem" }}>
+            Total units
+          </div>
+          <div className="rc-kpi-value" style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.1rem" }}>
             {unitCount}
           </div>
         </div>
         <div
+          className="rc-kpi-card"
           style={{
             padding: 12,
             borderRadius: 12,
@@ -528,12 +530,15 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             border: "1px solid rgba(148,163,184,0.15)",
           }}
         >
-          <div style={{ color: "#94a3b8", fontSize: "0.8rem" }}>Leased units</div>
-          <div style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.1rem" }}>
+          <div className="rc-kpi-label" style={{ color: "#94a3b8", fontSize: "0.8rem" }}>
+            Leased units
+          </div>
+          <div className="rc-kpi-value" style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.1rem" }}>
             {leasedUnits}
           </div>
         </div>
         <div
+          className="rc-kpi-card"
           style={{
             padding: 12,
             borderRadius: 12,
@@ -541,12 +546,15 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             border: "1px solid rgba(148,163,184,0.15)",
           }}
         >
-          <div style={{ color: "#94a3b8", fontSize: "0.8rem" }}>Occupancy</div>
-          <div style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.05rem" }}>
+          <div className="rc-kpi-label" style={{ color: "#94a3b8", fontSize: "0.8rem" }}>
+            Occupancy
+          </div>
+          <div className="rc-kpi-value" style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.05rem" }}>
             {unitCount === 0 ? "--" : `${occupancy.toFixed(0)}%`}
           </div>
         </div>
         <div
+          className="rc-kpi-card"
           style={{
             padding: 12,
             borderRadius: 12,
@@ -554,16 +562,19 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             border: "1px solid rgba(148,163,184,0.15)",
           }}
         >
-          <div style={{ color: "#94a3b8", fontSize: "0.8rem" }}>Lease rent roll</div>
-          <div style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.05rem" }}>
+          <div className="rc-kpi-label" style={{ color: "#94a3b8", fontSize: "0.8rem" }}>
+            Lease rent roll
+          </div>
+          <div className="rc-kpi-value" style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.05rem" }}>
             {formatCurrency(leaseRentRoll)}
           </div>
-          <div style={{ color: "#6b7280", fontSize: "0.75rem", marginTop: 2 }}>
+          <div className="rc-kpi-subtext" style={{ color: "#6b7280", fontSize: "0.75rem", marginTop: 2 }}>
             Configured rent roll: {formatCurrency(totalRentConfigured)}
           </div>
         </div>
 
         <div
+          className="rc-kpi-card"
           style={{
             padding: 12,
             borderRadius: 12,
@@ -571,13 +582,16 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             border: "1px solid rgba(148,163,184,0.15)",
           }}
         >
-          <div style={{ color: "#94a3b8", fontSize: "0.8rem" }}>Collected this month</div>
-          <div style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.05rem" }}>
+          <div className="rc-kpi-label" style={{ color: "#94a3b8", fontSize: "0.8rem" }}>
+            Collected this month
+          </div>
+          <div className="rc-kpi-value" style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.05rem" }}>
             {formatCurrency(totalCollectedThisMonth)}
           </div>
         </div>
 
         <div
+          className="rc-kpi-card"
           style={{
             padding: 12,
             borderRadius: 12,
@@ -585,8 +599,10 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             border: "1px solid rgba(148,163,184,0.15)",
           }}
         >
-          <div style={{ color: "#94a3b8", fontSize: "0.8rem" }}>Collection</div>
-          <div style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.05rem" }}>
+          <div className="rc-kpi-label" style={{ color: "#94a3b8", fontSize: "0.8rem" }}>
+            Collection
+          </div>
+          <div className="rc-kpi-value" style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.05rem" }}>
             {leaseRentRoll === 0 ? "--" : `${(collectionRate * 100).toFixed(0)}%`}
           </div>
         </div>
@@ -859,7 +875,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                     <div className="rc-unit-value">{isLeased ? "Occupied" : "Vacant"}</div>
                   </div>
                 </div>
-                <div className="rc-unit-card-row" style={{ marginTop: 8 }}>
+                <div className="rc-unit-card-row rc-unit-card-specs" style={{ marginTop: 8 }}>
                   <div>
                     <div className="rc-unit-label">Rent</div>
                     <div className={`rc-unit-value ${rentVal !== null && rentVal !== undefined ? "" : "rc-unit-placeholder"}`}>
