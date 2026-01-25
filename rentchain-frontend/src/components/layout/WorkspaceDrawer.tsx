@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { colors, radius, spacing, text, shadows } from "../../styles/tokens";
+import { NAV_ITEMS } from "./navConfig";
 
 type WorkspaceDrawerProps = {
   open: boolean;
@@ -10,19 +11,15 @@ type WorkspaceDrawerProps = {
   onSignOut?: () => void;
 };
 
-const links = [
-  { path: "/dashboard", label: "Dashboard" },
-  { path: "/properties", label: "Properties" },
-  { path: "/tenants", label: "Tenants" },
-  { path: "/payments", label: "Payments" },
-  { path: "/applications", label: "Applications" },
-  { path: "/billing", label: "Billing" },
-  { path: "/maintenance", label: "Maintenance" },
-];
-
 export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose, userEmail, userRole, onSignOut }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const isAdmin = String(userRole || "").toLowerCase() === "admin";
+  const visibleItems = NAV_ITEMS.filter((item) => {
+    if (item.requiresAdmin && !isAdmin) return false;
+    return true;
+  });
+  const drawerItems = visibleItems.filter((item) => item.showInDesktopDrawer !== false);
 
   useEffect(() => {
     if (!open) return;
@@ -63,18 +60,30 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
           position: "relative",
           width: 320,
           maxWidth: "90vw",
-          height: "100%",
+          maxHeight: "calc(100vh - env(safe-area-inset-top) - 16px)",
           background: colors.card,
           borderLeft: `1px solid ${colors.border}`,
           boxShadow: shadows.lg,
-          padding: spacing.lg,
+          padding: `${spacing.lg} ${spacing.lg} calc(${spacing.lg} + env(safe-area-inset-bottom))`,
           display: "flex",
           flexDirection: "column",
           gap: spacing.md,
           zIndex: 3001,
+          overflowY: "auto",
         }}
       >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            position: "sticky",
+            top: 0,
+            background: colors.card,
+            paddingBottom: spacing.sm,
+            zIndex: 1,
+          }}
+        >
           <div style={{ fontSize: "1.1rem", fontWeight: 800, color: text.primary }}>Workspace</div>
           <button
             type="button"
@@ -93,13 +102,13 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
 
         <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.02em", color: text.muted }}>Pages</div>
         <div style={{ display: "grid", gap: 8 }}>
-          {links.map((link) => {
-            const active = location.pathname.startsWith(link.path);
+          {drawerItems.map((link) => {
+            const active = location.pathname.startsWith(link.to);
             return (
               <button
-                key={link.path}
+                key={link.to}
                 type="button"
-                onClick={() => handleNav(link.path)}
+                onClick={() => handleNav(link.to)}
                 style={{
                   textAlign: "left",
                   padding: "10px 12px",
@@ -115,63 +124,27 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
               </button>
             );
           })}
-          {String(userRole || "").toLowerCase() === "admin" ? (
-            <>
-              <button
-                type="button"
-                onClick={() => handleNav("/admin")}
-                style={{
-                  textAlign: "left",
-                  padding: "10px 12px",
-                  borderRadius: radius.md,
-                  border: `1px solid ${location.pathname === "/admin" ? colors.accent : colors.border}`,
-                  background: location.pathname === "/admin" ? "rgba(37,99,235,0.08)" : colors.card,
-                  color: text.primary,
-                  fontWeight: location.pathname === "/admin" ? 700 : 600,
-                  cursor: "pointer",
-                }}
-              >
-                Admin Dashboard
-              </button>
-              <button
-                type="button"
-                onClick={() => handleNav("/admin/verified-screenings")}
-                style={{
-                  textAlign: "left",
-                  padding: "10px 12px",
-                  borderRadius: radius.md,
-                  border: `1px solid ${location.pathname.startsWith("/admin/verified-screenings") ? colors.accent : colors.border}`,
-                  background: location.pathname.startsWith("/admin/verified-screenings") ? "rgba(37,99,235,0.08)" : colors.card,
-                  color: text.primary,
-                  fontWeight: location.pathname.startsWith("/admin/verified-screenings") ? 700 : 600,
-                  cursor: "pointer",
-                }}
-              >
-                Verified Screenings
-              </button>
-            </>
-          ) : null}
         </div>
 
-        <div style={{ marginTop: "auto", display: "grid", gap: 8 }}>
-          {userEmail ? <div style={{ fontSize: 12, color: text.muted }}>{userEmail}</div> : null}
-          {onSignOut ? (
-            <button
-              type="button"
-              onClick={onSignOut}
-              style={{
-                borderRadius: radius.md,
-                border: `1px solid ${colors.border}`,
-                background: colors.panel,
-                padding: "8px 12px",
-                cursor: "pointer",
-                fontWeight: 700,
-              }}
-            >
-              Sign out
-            </button>
-          ) : null}
-        </div>
+        <div style={{ height: 1, background: colors.border, marginTop: spacing.sm }} />
+        {onSignOut ? (
+          <button
+            type="button"
+            onClick={onSignOut}
+            style={{
+              borderRadius: radius.md,
+              border: `1px solid ${colors.border}`,
+              background: colors.panel,
+              padding: "8px 12px",
+              cursor: "pointer",
+              fontWeight: 700,
+              textAlign: "left",
+            }}
+          >
+            Sign out
+          </button>
+        ) : null}
+        {userEmail ? <div style={{ fontSize: 12, color: text.muted }}>{userEmail}</div> : null}
       </div>
     </div>
   );
