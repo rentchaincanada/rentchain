@@ -26,6 +26,7 @@ import { setOnboardingStep } from "../api/onboardingApi";
 import { addUnitsManual, type UnitInput } from "../api/unitsApi";
 import { useToast } from "../components/ui/ToastProvider";
 import { unitsForProperty } from "../lib/propertyCounts";
+import "../styles/propertiesMobile.css";
 
 const PropertiesPage: React.FC = () => {
   const [properties, setProperties] = useState<Property[]>([]);
@@ -384,169 +385,175 @@ const PropertiesPage: React.FC = () => {
         className="page-content"
         style={{ display: "flex", flexDirection: "column", gap: spacing.lg }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ fontWeight: 800, fontSize: "1.2rem" }}>Properties</div>
-          <div
-            style={{
-              padding: "6px 10px",
-              borderRadius: 12,
-              border: "1px solid rgba(148,163,184,0.35)",
-              fontSize: 12,
-              fontWeight: 700,
-              color: text.muted,
-              display: "inline-flex",
-              gap: 8,
-              alignItems: "center",
-            }}
-            title={`Properties ${currentProperties} - Units ${unitsUsed}`}
-          >
+        <div className="rc-properties-header" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div className="rc-properties-title-row" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ fontWeight: 800, fontSize: "1.2rem" }}>Properties</div>
+            <div
+              className="rc-properties-counts"
+              style={{
+                padding: "6px 10px",
+                borderRadius: 12,
+                border: "1px solid rgba(148,163,184,0.35)",
+                fontSize: 12,
+                fontWeight: 700,
+                color: text.muted,
+                display: "inline-flex",
+                gap: 8,
+                alignItems: "center",
+              }}
+              title={`Properties ${currentProperties} - Units ${unitsUsed}`}
+            >
             <span>
               Props: {currentProperties}
             </span>
+            <span aria-hidden="true">·</span>
             <span>
               Units: {unitsUsed}
             </span>
+            </div>
           </div>
 
-          {selectedPropertyId ? (
+          <div className="rc-properties-header-actions" style={{ display: "flex", gap: 8 }}>
+            {selectedPropertyId ? (
+              <button
+                type="button"
+                onClick={() => {
+                  const next = new URLSearchParams(location.search);
+                  next.set("panel", "actionRequests");
+                  navigate(
+                    { pathname: location.pathname, search: next.toString() },
+                    { replace: true }
+                  );
+
+                  const el = document.getElementById("action-requests-panel");
+                  el?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 999,
+                  border:
+                    actionReqCount > 0
+                      ? "1px solid rgba(239,68,68,0.45)"
+                      : "1px solid rgba(148,163,184,0.35)",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  background:
+                    actionReqCount > 0
+                      ? "rgba(239,68,68,0.12)"
+                      : "rgba(148,163,184,0.1)",
+                  color: actionReqCount > 0 ? "#dc2626" : text.muted,
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+                title={
+                  actionReqCount > 0
+                    ? "Open action requests"
+                    : "No open action requests"
+                }
+              >
+                <span
+                  aria-hidden="true"
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: 999,
+                    background: actionReqCount > 0 ? "#dc2626" : "rgba(148,163,184,0.7)",
+                    display: "inline-block",
+                  }}
+                />
+                Action Required ({actionReqCount})
+              </button>
+            ) : null}
+
             <button
               type="button"
-              onClick={() => {
-                const next = new URLSearchParams(location.search);
-                next.set("panel", "actionRequests");
-                navigate(
-                  { pathname: location.pathname, search: next.toString() },
-                  { replace: true }
-                );
-
-                const el = document.getElementById("action-requests-panel");
-                el?.scrollIntoView({ behavior: "smooth", block: "start" });
-              }}
+              onClick={() => setActionCenterOpen(true)}
               style={{
-                padding: "6px 10px",
-                borderRadius: 999,
-                border:
-                  actionReqCount > 0
-                    ? "1px solid rgba(239,68,68,0.45)"
-                    : "1px solid rgba(148,163,184,0.35)",
-                fontSize: 12,
-                fontWeight: 600,
-                background:
-                  actionReqCount > 0
-                    ? "rgba(239,68,68,0.12)"
-                    : "rgba(148,163,184,0.1)",
-                color: actionReqCount > 0 ? "#dc2626" : text.muted,
+                padding: "8px 10px",
+                borderRadius: 12,
+                border: "1px solid rgba(148,163,184,0.35)",
+                background: "transparent",
                 cursor: "pointer",
+                fontWeight: 850,
+                fontSize: 12,
                 display: "inline-flex",
                 alignItems: "center",
-                gap: 6,
+                gap: 8,
               }}
-              title={
-                actionReqCount > 0
-                  ? "Open action requests"
-                  : "No open action requests"
-              }
+              title="Open Action Center"
             >
-              <span
-                aria-hidden="true"
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: 999,
-                  background: actionReqCount > 0 ? "#dc2626" : "rgba(148,163,184,0.7)",
-                  display: "inline-block",
-                }}
-              />
-              Action Required ({actionReqCount})
+              Action Center
+              {totalOpenAcrossPortfolio > 0 ? (
+                <span
+                  style={{
+                    padding: "2px 8px",
+                    borderRadius: 999,
+                    border: "1px solid rgba(239,68,68,0.45)",
+                    background: "rgba(239,68,68,0.12)",
+                    color: "#dc2626",
+                    fontWeight: 800,
+                    fontSize: 11,
+                  }}
+                >
+                  {totalOpenAcrossPortfolio}
+                </span>
+              ) : null}
             </button>
-          ) : null}
+            <button
+              type="button"
+              onClick={async () => {
+                const snap = await fetchMonthlyOpsSnapshot();
 
-          <button
-            type="button"
-            onClick={() => setActionCenterOpen(true)}
-            style={{
-              padding: "8px 10px",
-              borderRadius: 12,
-              border: "1px solid rgba(148,163,184,0.35)",
-              background: "transparent",
-              cursor: "pointer",
-              fontWeight: 850,
-              fontSize: 12,
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 8,
-            }}
-            title="Open Action Center"
-          >
-            Action Center
-            {totalOpenAcrossPortfolio > 0 ? (
-              <span
-                style={{
-                  padding: "2px 8px",
-                  borderRadius: 999,
-                  border: "1px solid rgba(239,68,68,0.45)",
-                  background: "rgba(239,68,68,0.12)",
-                  color: "#dc2626",
-                  fontWeight: 800,
-                  fontSize: 11,
-                }}
-              >
-                {totalOpenAcrossPortfolio}
-              </span>
-            ) : null}
-          </button>
-          <button
-            type="button"
-            onClick={async () => {
-              const snap = await fetchMonthlyOpsSnapshot();
+                const rows = Object.entries(snap.properties).map(([propertyId, data]) => {
+                  const label = propertyLabelById?.[propertyId];
+                  return {
+                    propertyName: label?.name || propertyId,
+                    propertyAddress: label?.subtitle || "",
+                    openRequests: data.openCount,
+                    highSeverity: data.highSeverity,
+                    oldestOpenDays: data.oldestDays ?? "",
+                  };
+                });
 
-              const rows = Object.entries(snap.properties).map(([propertyId, data]) => {
-                const label = propertyLabelById?.[propertyId];
-                return {
-                  propertyName: label?.name || propertyId,
-                  propertyAddress: label?.subtitle || "",
-                  openRequests: data.openCount,
-                  highSeverity: data.highSeverity,
-                  oldestOpenDays: data.oldestDays ?? "",
-                };
-              });
+                const header = [
+                  "propertyName",
+                  "propertyAddress",
+                  "openRequests",
+                  "highSeverity",
+                  "oldestOpenDays",
+                ];
 
-              const header = [
-                "propertyName",
-                "propertyAddress",
-                "openRequests",
-                "highSeverity",
-                "oldestOpenDays",
-              ];
+                const csv = [
+                  header.join(","),
+                  ...rows.map((r) => header.map((h) => `"${String((r as any)[h] ?? "")}"`).join(",")),
+                ].join("\n");
 
-              const csv = [
-                header.join(","),
-                ...rows.map((r) => header.map((h) => `"${String((r as any)[h] ?? "")}"`).join(",")),
-              ].join("\n");
+                const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+                const url = URL.createObjectURL(blob);
 
-              const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-              const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `rentchain-monthly-ops-${new Date().toISOString().slice(0, 10)}.csv`;
+                a.click();
 
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = `rentchain-monthly-ops-${new Date().toISOString().slice(0, 10)}.csv`;
-              a.click();
-
-              URL.revokeObjectURL(url);
-            }}
-            style={{
-              padding: "8px 10px",
-              borderRadius: 12,
-              border: "1px solid rgba(148,163,184,0.35)",
-              background: "transparent",
-              cursor: "pointer",
-              fontWeight: 900,
-              fontSize: 12,
-            }}
-            title="Download board-ready monthly operations snapshot"
-          >
-            Monthly Ops Snapshot
-          </button>
+                URL.revokeObjectURL(url);
+              }}
+              style={{
+                padding: "8px 10px",
+                borderRadius: 12,
+                border: "1px solid rgba(148,163,184,0.35)",
+                background: "transparent",
+                cursor: "pointer",
+                fontWeight: 900,
+                fontSize: 12,
+              }}
+              title="Download board-ready monthly operations snapshot"
+            >
+              Monthly Ops Snapshot
+            </button>
+          </div>
         </div>
 
         <Card elevated>
@@ -657,46 +664,36 @@ const PropertiesPage: React.FC = () => {
                     const isActive = id === String(selectedPropertyId);
                     const openCount = actionCounts[id] || 0;
 
-                  return (
+                    return (
                       <button
-                      key={id}
-                      type="button"
-                      onClick={() => handleSelectProperty(id)}
-                      style={{
-                        textAlign: "left",
-                        borderRadius: radius.md,
-                        padding: "14px 14px",
-                        border: isActive
-                          ? `1px solid ${colors.accent}`
-                          : `1px solid ${colors.border}`,
-                        background: isActive
-                          ? "rgba(96,165,250,0.12)"
-                          : colors.card,
-                        color: text.primary,
-                        cursor: "pointer",
-                        transition: "border-color 0.15s ease, background 0.15s ease",
-                        boxShadow: isActive ? shadows.sm : "none",
-                      }}
-                    >
-                      <div
+                        key={id}
+                        type="button"
+                        onClick={() => handleSelectProperty(id)}
+                        className="rc-properties-pill"
                         style={{
-                          fontWeight: 700,
-                          lineHeight: 1.2,
-                          display: "-webkit-box",
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: "vertical",
-                          overflow: "hidden",
+                          textAlign: "left",
+                          borderRadius: radius.md,
+                          padding: "10px 12px",
+                          border: isActive
+                            ? `1px solid ${colors.accent}`
+                            : `1px solid ${colors.border}`,
+                          background: isActive
+                            ? "rgba(96,165,250,0.12)"
+                            : colors.card,
+                          color: text.primary,
+                          cursor: "pointer",
+                          transition: "border-color 0.15s ease, background 0.15s ease",
+                          boxShadow: isActive ? shadows.sm : "none",
                         }}
                       >
-                        {p.addressLine1 || p.name || "Property"}
-                      </div>
-                      <div style={{ color: text.muted, fontSize: 12, marginTop: 4 }}>
+                        <div className="rc-properties-pill-title">
+                          {p.addressLine1 || p.name || "Property"}
+                        </div>
+                        <div className="rc-properties-pill-subtitle" style={{ color: text.muted, fontSize: 12, marginTop: 4 }}>
                         {p.addressLine1}
                         {p.city ? `, ${p.city}` : ""}
                       </div>
-                      <div
-                        style={{ color: text.muted, fontSize: 12, marginTop: 4 }}
-                      >
+                      <div className="rc-properties-pill-meta" style={{ color: text.muted, fontSize: 12, marginTop: 4 }}>
                         Units: {unitCount}  Occupancy: {occupancyPct}%
                         <span
                           style={{
@@ -874,7 +871,7 @@ const PropertiesPage: React.FC = () => {
                 }}
               >
                 <div style={{ fontWeight: 600 }}>Action Requests</div>
-                <div style={{ display: "flex", gap: 8 }}>
+                <div className="rc-action-requests-filters" style={{ display: "flex", gap: 8 }}>
                   {["all", "new", "acknowledged", "resolved"].map((status) => (
                     <Button
                       key={status}
@@ -1271,6 +1268,15 @@ const UnitsModal = ({
                       type="number"
                       value={u.marketRent}
                       onChange={(e) => updateUnit(idx, "marketRent", e.target.value)}
+                      onFocus={() => {
+                        if (
+                          typeof window !== "undefined" &&
+                          window.matchMedia("(max-width: 768px)").matches &&
+                          String(u.marketRent ?? "") === "0"
+                        ) {
+                          updateUnit(idx, "marketRent", "");
+                        }
+                      }}
                       style={{ width: "100%", padding: 6 }}
                     />
                   </td>
