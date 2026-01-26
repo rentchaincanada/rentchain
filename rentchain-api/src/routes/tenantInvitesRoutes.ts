@@ -3,7 +3,7 @@ import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { db } from "../config/firebase";
 import sgMail from "@sendgrid/mail";
-import { requireLandlord } from "../middleware/requireLandlord";
+import { requireLandlordOrAdmin } from "../middleware/requireLandlordOrAdmin";
 
 const router = Router();
 
@@ -15,7 +15,7 @@ function signTenantJwt(payload: any) {
 
 router.post(
   "/",
-  requireLandlord,
+  requireLandlordOrAdmin,
   async (req: any, res) => {
     try {
       res.setHeader("x-route-source", "tenantInvitesRoutes");
@@ -155,7 +155,7 @@ router.post(
 
 router.get(
   "/",
-  requireLandlord,
+  requireLandlordOrAdmin,
   async (req: any, res) => {
     res.setHeader("x-route-source", "tenantInvitesRoutes:getList");
 
