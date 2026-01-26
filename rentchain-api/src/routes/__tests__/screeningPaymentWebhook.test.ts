@@ -1,28 +1,39 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-const store = new Map<string, any>();
+const { store, dbMock } = vi.hoisted(() => {
+  const store = new Map<string, any>();
 
-const dbMock = {
-  collection: vi.fn(() => ({
-    doc: (id: string) => ({
-      get: async () => ({
-        exists: store.has(id),
-        data: () => store.get(id),
+  const dbMock = {
+    collection: vi.fn(() => ({
+      doc: (id: string) => ({
+        get: async () => ({
+          exists: store.has(id),
+          data: () => store.get(id),
+        }),
+        set: async (payload: Record<string, unknown>) => {
+          const existing = store.get(id) || {};
+          store.set(id, { ...existing, ...payload });
+        },
       }),
-      set: async (payload: Record<string, unknown>) => {
-        const existing = store.get(id) || {};
-        store.set(id, { ...existing, ...payload });
-      },
-    }),
-  })),
-};
+    })),
+  };
+
+  return { store, dbMock };
+});
 
 vi.mock("../../config/firebase", () => ({
   db: dbMock,
 }));
 
-import { __testing as webhookTesting } from "../stripeScreeningOrdersWebhookRoutes";
-import { __testing as rentalTesting } from "../rentalApplicationsRoutes";
+let webhookTesting: typeof import("../stripeScreeningOrdersWebhookRoutes").__testing;
+let rentalTesting: typeof import("../rentalApplicationsRoutes").__testing;
+
+beforeAll(async () => {
+  const webhookModule = await import("../stripeScreeningOrdersWebhookRoutes");
+  const rentalModule = await import("../rentalApplicationsRoutes");
+  webhookTesting = webhookModule.__testing;
+  rentalTesting = rentalModule.__testing;
+});
 
 describe("screening payment webhook updates", () => {
   beforeEach(() => {
