@@ -197,7 +197,11 @@ function evaluateEligibility(application: any) {
       reasonCode: "MISSING_TENANT_PROFILE",
     };
   }
-  return { eligible: true, detail: null };
+  return { eligible: true, detail: null, reasonCode: "ELIGIBLE" };
+}
+
+function isScreeningAlreadyPaid(application: any) {
+  return String(application?.screeningStatus || "").toLowerCase() === "paid";
 }
 
 function resolveServiceLevel(raw?: string | null) {
@@ -420,7 +424,20 @@ router.post(
         return res.status(401).json({ ok: false, error: "unauthorized" });
       }
 
+      if (isScreeningAlreadyPaid(data)) {
+        return res.status(400).json({ ok: false, error: "screening_already_paid" });
+      }
+
       const eligibility = evaluateEligibility(data);
+      const eligibilityCheckedAt = Date.now();
+      await db.collection("rentalApplications").doc(id).set(
+        {
+          screeningLastEligibilityReasonCode: eligibility.reasonCode || null,
+          screeningLastEligibilityCheckedAt: eligibilityCheckedAt,
+          screeningStatus: eligibility.eligible ? "unpaid" : "ineligible",
+        },
+        { merge: true }
+      );
       if (!eligibility.eligible) {
         return res.status(400).json({
           ok: false,
@@ -1037,6 +1054,7 @@ export const __testing = {
   normalizeOrigin,
   resolveFrontendOrigin,
   buildRedirectUrl,
+  isScreeningAlreadyPaid,
 };
 
 export default router;
