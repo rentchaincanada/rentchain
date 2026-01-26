@@ -19,6 +19,38 @@ export type RentalApplicationSummary = {
   submittedAt: number | null;
 };
 
+export type ScreeningPipelineStatus =
+  | "unpaid"
+  | "paid"
+  | "processing"
+  | "complete"
+  | "failed"
+  | "ineligible";
+
+export type ScreeningResultSummary = {
+  overall: "pass" | "review" | "fail" | "unknown";
+  scoreBand?: "A" | "B" | "C" | "D" | "E";
+  flags?: string[];
+  updatedAt?: number;
+};
+
+export type ScreeningPipeline = {
+  status: ScreeningPipelineStatus | null;
+  paidAt?: number | null;
+  startedAt?: number | null;
+  completedAt?: number | null;
+  lastUpdatedAt?: number | null;
+  provider?: string | null;
+  summary?: ScreeningResultSummary | null;
+  resultId?: string | null;
+};
+
+export type ScreeningResult = {
+  summary: ScreeningResultSummary | null;
+  reportUrl?: string | null;
+  reportText?: string | null;
+};
+
 export type RentalApplication = {
   id: string;
   landlordId: string;
@@ -135,8 +167,17 @@ export type RentalApplication = {
       notes?: string | null;
     } | null;
   };
-  screeningStatus?: "unpaid" | "paid" | "ineligible" | "processing";
+  screeningStatus?: "unpaid" | "paid" | "processing" | "complete" | "failed" | "ineligible";
   screeningPaidAt?: number | null;
+  screeningStartedAt?: number | null;
+  screeningCompletedAt?: number | null;
+  screeningFailedAt?: number | null;
+  screeningFailureCode?: string | null;
+  screeningFailureDetail?: string | null;
+  screeningProvider?: string | null;
+  screeningResultId?: string | null;
+  screeningResultSummary?: ScreeningResultSummary | null;
+  screeningLastUpdatedAt?: number | null;
   screeningSessionId?: string | null;
   screeningPaymentIntentId?: string | null;
   screeningLastEligibilityReasonCode?: string | null;
@@ -236,7 +277,38 @@ export async function createScreeningCheckout(
 
 export async function fetchScreening(
   id: string
-): Promise<{ ok: boolean; data?: RentalApplication["screening"]; error?: string }> {
+): Promise<{ ok: boolean; screening?: ScreeningPipeline; error?: string }> {
   const res: any = await apiFetch(`/rental-applications/${encodeURIComponent(id)}/screening`);
-  return res as { ok: boolean; data?: RentalApplication["screening"]; error?: string };
+  return res as { ok: boolean; screening?: ScreeningPipeline; error?: string };
+}
+
+export async function fetchScreeningResult(
+  id: string
+): Promise<{ ok: boolean; result?: ScreeningResult; error?: string }> {
+  const res: any = await apiFetch(`/rental-applications/${encodeURIComponent(id)}/screening/result`);
+  return res as { ok: boolean; result?: ScreeningResult; error?: string };
+}
+
+export async function adminMarkScreeningComplete(
+  id: string,
+  payload: { overall: "pass" | "review" | "fail"; scoreBand?: "A" | "B" | "C" | "D" | "E"; flags?: string[]; reportText?: string }
+): Promise<{ ok: boolean; resultId?: string; error?: string }> {
+  const res: any = await apiFetch(`/admin/rental-applications/${encodeURIComponent(id)}/screening/complete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return res as { ok: boolean; resultId?: string; error?: string };
+}
+
+export async function adminMarkScreeningFailed(
+  id: string,
+  payload: { failureCode: string; failureDetail?: string }
+): Promise<{ ok: boolean; error?: string }> {
+  const res: any = await apiFetch(`/admin/rental-applications/${encodeURIComponent(id)}/screening/fail`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return res as { ok: boolean; error?: string };
 }

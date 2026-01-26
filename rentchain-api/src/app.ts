@@ -61,6 +61,7 @@ import stripeScreeningOrdersWebhookRoutes, {
 } from "./routes/stripeScreeningOrdersWebhookRoutes";
 import screeningJobsAdminRoutes from "./routes/screeningJobsAdminRoutes";
 import adminRoutes from "./routes/adminRoutes";
+import adminScreeningResultsRoutes from "./routes/adminScreeningResultsRoutes";
 
 const app: Application = express();
 app.set("etag", false);
@@ -169,6 +170,7 @@ app.use("/api/admin", routeSource("screeningJobsAdminRoutes.ts"), screeningJobsA
 app.use("/api/admin", routeSource("adminRoutes.ts"), adminRoutes);
 app.use("/api/admin/demo", routeSource("adminDemoRoutes.ts"), adminDemoRoutes);
 app.use("/api/admin", routeSource("adminPropertiesRoutes.ts"), adminPropertiesRoutes);
+app.use("/api/admin", routeSource("adminScreeningResultsRoutes.ts"), adminScreeningResultsRoutes);
 app.use("/api", authzRoutes);
 app.use("/api", reportsExportRoutes);
 

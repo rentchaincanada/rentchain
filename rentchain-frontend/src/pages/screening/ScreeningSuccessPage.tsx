@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Card, Section, Button } from "../../components/ui/Ui";
 import { spacing, text } from "../../styles/tokens";
+import { fetchScreening, type ScreeningPipeline } from "../../api/rentalApplicationsApi";
 
 const ScreeningSuccessPage: React.FC = () => {
   const navigate = useNavigate();
@@ -9,6 +10,21 @@ const ScreeningSuccessPage: React.FC = () => {
   const applicationId = searchParams.get("applicationId") || "";
   const rawReturnTo = searchParams.get("returnTo") || "/dashboard";
   const returnTo = rawReturnTo.startsWith("/") ? rawReturnTo : "/dashboard";
+  const [status, setStatus] = useState<ScreeningPipeline | null>(null);
+
+  useEffect(() => {
+    if (!applicationId) return;
+    let active = true;
+    fetchScreening(applicationId)
+      .then((res) => {
+        if (!active) return;
+        if (res.ok) setStatus(res.screening || null);
+      })
+      .catch(() => null);
+    return () => {
+      active = false;
+    };
+  }, [applicationId]);
 
   return (
     <Section style={{ maxWidth: 680, margin: "0 auto" }}>
@@ -20,6 +36,11 @@ const ScreeningSuccessPage: React.FC = () => {
           <div style={{ color: text.muted, fontSize: "0.95rem" }}>
             We’re preparing the screening checks now.
           </div>
+          {status?.status ? (
+            <div style={{ color: text.subtle, fontSize: "0.9rem" }}>
+              Status: {status.status}
+            </div>
+          ) : null}
           <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
             {applicationId ? (
               <Button

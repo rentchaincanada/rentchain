@@ -6,6 +6,7 @@ import { STRIPE_WEBHOOK_SECRET } from "../config/screeningConfig";
 import { stripeNotConfiguredResponse, isStripeNotConfiguredError } from "../lib/stripeNotConfigured";
 import { finalizeStripePayment } from "../services/stripeFinalize";
 import { applyScreeningResultsFromOrder } from "../services/stripeScreeningProcessor";
+import { beginScreening } from "../services/screening/screeningOrchestrator";
 
 interface StripeWebhookRequest extends Request {
   rawBody?: Buffer;
@@ -56,6 +57,7 @@ async function markApplicationScreeningPaid(params: {
       screeningPaidAt: paidAt,
       screeningSessionId: sessionId,
       screeningPaymentIntentId: String(paymentIntentId || ""),
+      screeningLastUpdatedAt: paidAt,
     },
     { merge: true }
   );
@@ -97,6 +99,22 @@ async function handleScreeningPaidFromSession(params: {
     eventType,
     eventId,
   });
+  if (status === "paid_set") {
+    try {
+      const begin = await beginScreening(String(applicationId));
+      if (!begin.ok && begin.error === "invalid_state") {
+        console.log("[stripe_webhook]", {
+          route: "stripe_webhook",
+          eventType,
+          eventId,
+          applicationId,
+          status: "begin_invalid_state",
+        });
+      }
+    } catch (err: any) {
+      console.error("[stripe_webhook] begin screening failed", err?.message || err);
+    }
+  }
   return { status, missingApplicationId: false };
 }
 
