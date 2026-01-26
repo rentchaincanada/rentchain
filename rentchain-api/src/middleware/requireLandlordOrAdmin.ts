@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import { requireAuth } from "./requireAuth";
 
-export async function requireLandlord(req: Request, res: Response, next: NextFunction) {
+export async function requireLandlordOrAdmin(req: Request, res: Response, next: NextFunction) {
   return requireAuth(req, res, () => {
     try {
       const user: any = (req as any).user;
@@ -12,20 +12,23 @@ export async function requireLandlord(req: Request, res: Response, next: NextFun
         return res.status(401).json({ ok: false, error: "Unauthorized" });
       }
 
-      if (role !== "landlord") {
+      const isLandlord = role === "landlord";
+      const isAdmin = role === "admin";
+
+      if (!isLandlord && !isAdmin) {
         return res.status(403).json({ ok: false, error: "Forbidden" });
       }
 
       if (!landlordId || typeof landlordId !== "string" || !landlordId.trim()) {
-        console.warn("[requireLandlord] missing landlordId user=", user);
-        return res.status(401).json({ ok: false, error: "Unauthorized" });
+        console.warn("[requireLandlordOrAdmin] missing landlordId user=", user);
+        return res.status(401).json({ ok: false, error: "Missing landlord context" });
       }
 
       user.landlordId = landlordId;
       (req as any).user = user;
 
       return next();
-    } catch (e) {
+    } catch {
       return res.status(401).json({ ok: false, error: "Unauthorized" });
     }
   });
