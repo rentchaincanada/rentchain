@@ -29,6 +29,75 @@ const VERIFIED_ADD_ON_CENTS = 1000;
 const AI_ADD_ON_CENTS = 1000;
 const SCORE_ADD_ON_CENTS = 110;
 
+const ALLOWED_REDIRECT_ORIGINS = ["https://www.rentchain.ai", "https://rentchain.ai", "http://localhost:5173"];
+
+function isAllowedRedirectOrigin(origin: string) {
+  if (!origin) return false;
+  if (ALLOWED_REDIRECT_ORIGINS.includes(origin)) return true;
+  if (/^https:\/\/.+\.vercel\.app$/i.test(origin)) return true;
+  return false;
+}
+
+function normalizeOrigin(raw?: string | string[] | null) {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (!value || typeof value !== "string") return null;
+  try {
+    const url = new URL(value);
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+function resolveFrontendOrigin(req: any) {
+  const headerOrigin =
+    normalizeOrigin(req.headers?.["x-frontend-origin"]) ||
+    normalizeOrigin(req.headers?.origin) ||
+    normalizeOrigin(req.headers?.referer);
+  if (headerOrigin && isAllowedRedirectOrigin(headerOrigin)) {
+    return headerOrigin;
+  }
+  const envOrigin = normalizeOrigin(process.env.FRONTEND_ORIGIN || process.env.PUBLIC_APP_URL || "");
+  if (envOrigin && isAllowedRedirectOrigin(envOrigin)) {
+    return envOrigin;
+  }
+  return null;
+}
+
+function buildRedirectUrl(params: {
+  input?: string;
+  fallbackPath: string;
+  frontendOrigin: string | null;
+  applicationId: string;
+  returnTo?: string | null;
+}) {
+  const rawInput = String(params.input || "").trim();
+  const target = rawInput || params.fallbackPath;
+  if (!target) return null;
+
+  let url: URL;
+  if (/^https?:\/\//i.test(target)) {
+    try {
+      url = new URL(target);
+    } catch {
+      return null;
+    }
+    if (!isAllowedRedirectOrigin(url.origin)) {
+      return null;
+    }
+  } else {
+    if (!params.frontendOrigin) return null;
+    const path = target.startsWith("/") ? target : `/${target}`;
+    url = new URL(path, params.frontendOrigin);
+  }
+
+  url.searchParams.set("applicationId", params.applicationId);
+  if (params.returnTo) {
+    url.searchParams.set("returnTo", params.returnTo);
+  }
+  return url.toString();
+}
+
 function applicantName(app: any): string {
   const first = String(app?.firstName || "").trim();
   const last = String(app?.lastName || "").trim();
@@ -320,33 +389,54 @@ router.post(
   attachAccount,
   requireFeature("screening"),
   async (req: any, res) => {
+    const logBase = { route: "screening_checkout", applicationId: String(req.params?.id || "") };
     try {
       res.setHeader("x-route-source", "rentalApplicationsRoutes:screeningCheckout");
-      console.log("[screening/checkout] hit", { id: req.params?.id });
       const role = String(req.user?.role || "").toLowerCase();
       if (role !== "landlord" && role !== "admin") {
-        return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+        return res.status(401).json({ ok: false, error: "unauthorized" });
       }
       const landlordId = req.user?.landlordId || req.user?.id || null;
-      if (!landlordId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+      if (!landlordId) return res.status(401).json({ ok: false, error: "unauthorized" });
 
       const id = String(req.params?.id || "").trim();
-      if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+      if (!id) return res.status(404).json({ ok: false, error: "not_found" });
       const snap = await db.collection("rentalApplications").doc(id).get();
-      if (!snap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+      if (!snap.exists) return res.status(404).json({ ok: false, error: "not_found" });
       const data = snap.data() as any;
       if (data?.landlordId && data.landlordId !== landlordId) {
-        return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+        return res.status(401).json({ ok: false, error: "unauthorized" });
       }
 
       const eligibility = evaluateEligibility(data);
       if (!eligibility.eligible) {
-        return res.status(400).json({ ok: false, error: "NOT_ELIGIBLE", detail: eligibility.detail });
+        return res.status(400).json({ ok: false, error: "invalid_request", detail: eligibility.detail });
       }
 
       const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
       const serviceLevel = resolveServiceLevel(body?.serviceLevel);
       const scoreAddOn = body?.scoreAddOn === true;
+      const rawReturnTo = String(body?.returnTo || "/dashboard");
+      const returnTo = rawReturnTo.startsWith("/") ? rawReturnTo : "/dashboard";
+      const frontendOrigin = resolveFrontendOrigin(req);
+      const successUrl = buildRedirectUrl({
+        input: body?.successPath,
+        fallbackPath: "/screening/success",
+        frontendOrigin,
+        applicationId: id,
+        returnTo,
+      });
+      const cancelUrl = buildRedirectUrl({
+        input: body?.cancelPath,
+        fallbackPath: "/screening/cancel",
+        frontendOrigin,
+        applicationId: id,
+        returnTo,
+      });
+      if (!successUrl || !cancelUrl) {
+        console.warn("[screening_checkout] invalid redirect origin", logBase);
+        return res.status(400).json({ ok: false, error: "invalid_redirect_origin" });
+      }
       const pricing = computePricing(serviceLevel, scoreAddOn);
       let stripe: any;
       try {
@@ -436,14 +526,6 @@ router.post(
         });
       }
 
-      const baseUrl = (process.env.PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
-      const successUrl =
-        process.env.STRIPE_SUCCESS_URL ||
-        `${baseUrl}/applications?screening=success&orderId=${encodeURIComponent(orderId)}`;
-      const cancelUrl =
-        process.env.STRIPE_CANCEL_URL ||
-        `${baseUrl}/applications?screening=cancelled&orderId=${encodeURIComponent(orderId)}`;
-
       // Ensure Stripe-safe integers
       const safeInt = (n: unknown) => {
         const x = Number(n);
@@ -524,10 +606,22 @@ router.post(
         { merge: true }
       );
 
-      return res.json({ ok: true, checkoutUrl: session.url, orderId });
+      console.log("[screening_checkout] create_session_ok", {
+        ...logBase,
+        event: "create_session_ok",
+      });
+      return res.json({ ok: true, checkoutUrl: session.url });
     } catch (err: any) {
-      console.error("[rental-applications] screening checkout failed", err?.message || err);
-      return res.status(500).json({ ok: false, error: "SCREENING_CHECKOUT_FAILED" });
+      console.error("[screening_checkout] create_session_fail", {
+        ...logBase,
+        event: "create_session_fail",
+        error: err?.message || "unknown",
+      });
+      return res.status(500).json({
+        ok: false,
+        error: "internal_error",
+        detail: String(err?.message || ""),
+      });
     }
   }
 );
@@ -920,5 +1014,12 @@ function safeParse(raw: string) {
     return {};
   }
 }
+
+export const __testing = {
+  isAllowedRedirectOrigin,
+  normalizeOrigin,
+  resolveFrontendOrigin,
+  buildRedirectUrl,
+};
 
 export default router;

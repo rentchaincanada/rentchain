@@ -33,9 +33,9 @@ import { TwoFactorPage } from "./pages/TwoFactorPage";
 import { AccountSecurityPage } from "./pages/AccountSecurityPage";
 import { RequireAuth } from "./components/auth/RequireAuth";
 import { RequireAdmin } from "./components/auth/RequireAdmin";
-import ScreeningPage from "./pages/ScreeningPage";
-import ScreeningSuccessPage from "./pages/ScreeningSuccessPage";
-import ScreeningCancelPage from "./pages/ScreeningCancelPage";
+import ScreeningStartPage from "./pages/screening/ScreeningStartPage";
+import ScreeningSuccessPage from "./pages/screening/ScreeningSuccessPage";
+import ScreeningCancelPage from "./pages/screening/ScreeningCancelPage";
 import BillingPage from "./pages/BillingPage";
 import { DebugPanel } from "./components/DebugPanel";
 import MicroLiveInvitePage from "./pages/MicroLiveInvitePage";
@@ -209,7 +209,7 @@ function App() {
           element={
             <RequireAuth>
               <LandlordNav>
-                <ScreeningPage />
+                <ScreeningStartPage />
               </LandlordNav>
             </RequireAuth>
           }
