@@ -1054,7 +1054,6 @@ export const __testing = {
   normalizeOrigin,
   resolveFrontendOrigin,
   buildRedirectUrl,
-  isScreeningAlreadyPaid,
 };
 
 export default router;
