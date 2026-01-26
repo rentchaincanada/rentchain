@@ -1,5 +1,6 @@
 import { Request, Response, Router } from "express";
 import Stripe from "stripe";
+import { db } from "../config/firebase";
 import { getStripeClient } from "../services/stripeService";
 import { STRIPE_WEBHOOK_SECRET } from "../config/screeningConfig";
 import { stripeNotConfiguredResponse, isStripeNotConfiguredError } from "../lib/stripeNotConfigured";
@@ -11,6 +12,93 @@ interface StripeWebhookRequest extends Request {
 }
 
 const router = Router();
+
+type ScreeningPaidUpdateStatus = "paid_set" | "already_paid" | "ignored";
+
+async function markApplicationScreeningPaid(params: {
+  applicationId: string;
+  sessionId: string;
+  paymentIntentId?: string;
+  paidAt: number;
+  eventType: string;
+  eventId: string;
+}): Promise<ScreeningPaidUpdateStatus> {
+  const { applicationId, sessionId, paymentIntentId, paidAt, eventType, eventId } = params;
+  const appRef = db.collection("rentalApplications").doc(applicationId);
+  const snap = await appRef.get();
+  if (!snap.exists) {
+    console.log("[stripe_webhook]", {
+      route: "stripe_webhook",
+      eventType,
+      eventId,
+      applicationId,
+      status: "ignored",
+    });
+    return "ignored";
+  }
+  const data = snap.data() as any;
+  const existingStatus = String(data?.screeningStatus || "").toLowerCase();
+  const existingSessionId = String(data?.screeningSessionId || "");
+  if (existingStatus === "paid" || (existingSessionId && existingSessionId === sessionId)) {
+    console.log("[stripe_webhook]", {
+      route: "stripe_webhook",
+      eventType,
+      eventId,
+      applicationId,
+      status: "already_paid",
+    });
+    return "already_paid";
+  }
+
+  await appRef.set(
+    {
+      screeningStatus: "paid",
+      screeningPaidAt: paidAt,
+      screeningSessionId: sessionId,
+      screeningPaymentIntentId: String(paymentIntentId || ""),
+    },
+    { merge: true }
+  );
+
+  console.log("[stripe_webhook]", {
+    route: "stripe_webhook",
+    eventType,
+    eventId,
+    applicationId,
+    status: "paid_set",
+  });
+  return "paid_set";
+}
+
+async function handleScreeningPaidFromSession(params: {
+  session: Stripe.Checkout.Session;
+  eventType: string;
+  eventId: string;
+  paidAt: number;
+}): Promise<{ status: ScreeningPaidUpdateStatus; missingApplicationId: boolean }> {
+  const { session, eventType, eventId, paidAt } = params;
+  const applicationId = session.metadata?.applicationId || session.metadata?.rentalApplicationId;
+  if (!applicationId) {
+    console.log("[stripe_webhook]", {
+      route: "stripe_webhook",
+      eventType,
+      eventId,
+      applicationId: null,
+      status: "ignored",
+    });
+    return { status: "ignored", missingApplicationId: true };
+  }
+
+  const status = await markApplicationScreeningPaid({
+    applicationId: String(applicationId),
+    sessionId: session.id,
+    paymentIntentId: typeof session.payment_intent === "string" ? session.payment_intent : undefined,
+    paidAt,
+    eventType,
+    eventId,
+  });
+  return { status, missingApplicationId: false };
+}
 
 export const stripeWebhookHandler = async (req: StripeWebhookRequest, res: Response) => {
   let stripe: Stripe;
@@ -114,12 +202,25 @@ export const stripeWebhookHandler = async (req: StripeWebhookRequest, res: Respo
         orderId =
           (session.client_reference_id as string | null) ||
           (session.metadata?.orderId as string | undefined);
-        applicationId = session.metadata?.applicationId;
+        applicationId = session.metadata?.applicationId || session.metadata?.rentalApplicationId;
         landlordId = session.metadata?.landlordId;
         sessionId = session.id;
         paymentIntentId = typeof session.payment_intent === "string" ? session.payment_intent : undefined;
         amountTotalCents = typeof session.amount_total === "number" ? session.amount_total : undefined;
         currency = session.currency || undefined;
+
+        if (event.type === "checkout.session.completed") {
+          const paidAt = typeof event.created === "number" ? event.created * 1000 : Date.now();
+          const { missingApplicationId } = await handleScreeningPaidFromSession({
+            session,
+            eventType: event.type,
+            eventId: event.id,
+            paidAt,
+          });
+          if (missingApplicationId) {
+            return res.json({ received: true, ignored: true });
+          }
+        }
 
         if (!orderId) {
           console.log("[stripe-webhook-orders] ignore event (missing orderId)", {
@@ -194,3 +295,8 @@ export const stripeWebhookHandler = async (req: StripeWebhookRequest, res: Respo
 router.post("/", stripeWebhookHandler);
 
 export default router;
+
+export const __testing = {
+  markApplicationScreeningPaid,
+  handleScreeningPaidFromSession,
+};

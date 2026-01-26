@@ -9,6 +9,20 @@ type CheckoutResponse = {
   checkoutUrl?: string;
   error?: string;
   detail?: string;
+  reasonCode?: string;
+};
+
+const reasonCopy: Record<string, string> = {
+  MISSING_TENANT_PROFILE: "Tenant profile details are incomplete.",
+  APPLICATION_STATUS_NOT_READY: "The application must be submitted before screening.",
+  MISSING_CONSENT: "Applicant consent is required before screening.",
+  SCREENING_ALREADY_PAID: "Screening has already been paid for.",
+  LANDLORD_NOT_AUTHORIZED: "You don’t have access to start screening for this application.",
+};
+
+const mapReasonCopy = (code?: string | null) => {
+  if (!code) return null;
+  return reasonCopy[code] || null;
 };
 
 const mapErrorMessage = (code?: string | null) => {
@@ -23,7 +37,10 @@ const mapErrorMessage = (code?: string | null) => {
     return "Application not found.";
   }
   if (normalized === "not_eligible") {
-    return "This application is not eligible for screening yet.";
+    return "This application isn't ready for screening yet.";
+  }
+  if (normalized === "screening_already_paid") {
+    return "This application’s screening has already been paid. You can view the status in the application.";
   }
   if (normalized === "forbidden") {
     return "You don’t have access to start screening for this application.";
@@ -32,9 +49,17 @@ const mapErrorMessage = (code?: string | null) => {
     return "The redirect destination is not allowed. Please try again from the dashboard.";
   }
   if (normalized === "invalid_request") {
-    return "This application is not eligible for screening yet.";
+    return "This application isn't ready for screening yet.";
   }
   return "Unable to start screening checkout. Please try again.";
+};
+
+const mapErrorTitle = (code?: string | null) => {
+  const normalized = String(code || "").toLowerCase();
+  if (normalized === "screening_already_paid") {
+    return "Screening already paid";
+  }
+  return "Unable to start screening checkout";
 };
 
 const ScreeningStartPage: React.FC = () => {
@@ -42,6 +67,8 @@ const ScreeningStartPage: React.FC = () => {
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<string | null>(null);
+  const [reason, setReason] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const startedRef = useRef(false);
 
@@ -66,6 +93,8 @@ const ScreeningStartPage: React.FC = () => {
       setLoading(true);
       setError(null);
       setDetail(null);
+      setReason(null);
+      setErrorCode(null);
       try {
         const res = await apiFetch<CheckoutResponse>(
           `/rental-applications/${encodeURIComponent(applicationId)}/screening/checkout`,
@@ -81,7 +110,12 @@ const ScreeningStartPage: React.FC = () => {
           return;
         }
 
+        const normalizedError = String(res?.error || "").toLowerCase();
+        setErrorCode(normalizedError);
         setError(mapErrorMessage(res?.error));
+        if (normalizedError === "not_eligible") {
+          setReason(mapReasonCopy(res?.reasonCode) || "Eligibility requirements aren't complete yet.");
+        }
         if (import.meta.env.DEV && res?.detail) {
           setDetail(String(res.detail));
         }
@@ -113,21 +147,52 @@ const ScreeningStartPage: React.FC = () => {
         ) : (
           <div style={{ display: "grid", gap: spacing.sm }}>
             <h1 style={{ margin: 0, fontSize: "1.3rem", fontWeight: 700 }}>
-              Unable to start screening checkout
+              {mapErrorTitle(errorCode)}
             </h1>
             <div style={{ color: text.muted, fontSize: "0.95rem" }}>
               {error || "Something went wrong. Please try again."}
             </div>
+            {reason ? (
+              <div style={{ color: text.subtle, fontSize: "0.9rem" }}>Reason: {reason}</div>
+            ) : null}
             {detail ? (
               <div style={{ color: text.subtle, fontSize: "0.85rem" }}>{detail}</div>
             ) : null}
             <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
-              <Button type="button" onClick={() => navigate(returnTo)}>
-                Back
-              </Button>
-              <Button type="button" variant="secondary" onClick={() => navigate("/applications")}>
-                Go to applications
-              </Button>
+              {errorCode === "screening_already_paid" ? (
+                <>
+                  {applicationId ? (
+                    <Button
+                      type="button"
+                      onClick={() => navigate(`/applications?applicationId=${encodeURIComponent(applicationId)}`)}
+                    >
+                      Back to application
+                    </Button>
+                  ) : null}
+                  <Button type="button" variant="secondary" onClick={() => navigate("/applications")}>
+                    Go to applications
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button type="button" onClick={() => navigate(returnTo)}>
+                    Back
+                  </Button>
+                  {applicationId ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => navigate(`/applications?applicationId=${encodeURIComponent(applicationId)}`)}
+                    >
+                      Back to application
+                    </Button>
+                  ) : (
+                    <Button type="button" variant="secondary" onClick={() => navigate("/applications")}>
+                      Go to applications
+                    </Button>
+                  )}
+                </>
+              )}
             </div>
           </div>
         )}

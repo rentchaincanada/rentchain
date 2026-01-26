@@ -135,6 +135,12 @@ export type RentalApplication = {
       notes?: string | null;
     } | null;
   };
+  screeningStatus?: "unpaid" | "paid" | "ineligible" | "processing";
+  screeningPaidAt?: number | null;
+  screeningSessionId?: string | null;
+  screeningPaymentIntentId?: string | null;
+  screeningLastEligibilityReasonCode?: string | null;
+  screeningLastEligibilityCheckedAt?: number | null;
   landlordNote?: string | null;
 };
 

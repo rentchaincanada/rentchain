@@ -15,18 +15,26 @@ const ScreeningSuccessPage: React.FC = () => {
       <Card elevated>
         <div style={{ display: "flex", flexDirection: "column", gap: spacing.sm }}>
           <h1 style={{ margin: 0, fontSize: "1.4rem", fontWeight: 700 }}>
-            Screening payment successful.
+            Payment received.
           </h1>
           <div style={{ color: text.muted, fontSize: "0.95rem" }}>
-            We’re finalizing your screening report. You’ll see updates in the application and
-            receive an email when it’s ready.
+            We’re preparing the screening checks now.
           </div>
           <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
-            <Button type="button" onClick={() => navigate(returnTo, { replace: true })}>
-              Back to application
-            </Button>
-            <Button type="button" variant="secondary" onClick={() => navigate("/applications")}>
-              View applications
+            {applicationId ? (
+              <Button
+                type="button"
+                onClick={() => navigate(`/applications?applicationId=${encodeURIComponent(applicationId)}`)}
+              >
+                Back to application
+              </Button>
+            ) : (
+              <Button type="button" onClick={() => navigate(returnTo, { replace: true })}>
+                Go to dashboard
+              </Button>
+            )}
+            <Button type="button" variant="secondary" onClick={() => navigate("/dashboard")}>
+              Go to dashboard
             </Button>
           </div>
           {applicationId ? (

@@ -174,18 +174,34 @@ function buildAiVerification(applicationId: string, seed: number) {
 function evaluateEligibility(application: any) {
   const status = String(application?.status || "").toUpperCase();
   if (!ELIGIBLE_STATUS.includes(status)) {
-    return { eligible: false, detail: "Application must be submitted before screening." };
+    return {
+      eligible: false,
+      detail: "Application must be submitted before screening.",
+      reasonCode: "APPLICATION_STATUS_NOT_READY",
+    };
   }
   const consent = application?.consent || {};
   if (!consent?.creditConsent || !consent?.referenceConsent) {
-    return { eligible: false, detail: "Consent for credit and references is required." };
+    return {
+      eligible: false,
+      detail: "Consent for credit and references is required.",
+      reasonCode: "MISSING_CONSENT",
+    };
   }
   const dob = String(application?.applicant?.dob || "").trim();
   const currentAddress = String(application?.residentialHistory?.[0]?.address || "").trim();
   if (!dob || !currentAddress) {
-    return { eligible: false, detail: "DOB and current address are required." };
+    return {
+      eligible: false,
+      detail: "DOB and current address are required.",
+      reasonCode: "MISSING_TENANT_PROFILE",
+    };
   }
-  return { eligible: true, detail: null };
+  return { eligible: true, detail: null, reasonCode: "ELIGIBLE" };
+}
+
+function isScreeningAlreadyPaid(application: any) {
+  return String(application?.screeningStatus || "").toLowerCase() === "paid";
 }
 
 function resolveServiceLevel(raw?: string | null) {
@@ -408,9 +424,27 @@ router.post(
         return res.status(401).json({ ok: false, error: "unauthorized" });
       }
 
+      if (isScreeningAlreadyPaid(data)) {
+        return res.status(400).json({ ok: false, error: "screening_already_paid" });
+      }
+
       const eligibility = evaluateEligibility(data);
+      const eligibilityCheckedAt = Date.now();
+      await db.collection("rentalApplications").doc(id).set(
+        {
+          screeningLastEligibilityReasonCode: eligibility.reasonCode || null,
+          screeningLastEligibilityCheckedAt: eligibilityCheckedAt,
+          screeningStatus: eligibility.eligible ? "unpaid" : "ineligible",
+        },
+        { merge: true }
+      );
       if (!eligibility.eligible) {
-        return res.status(400).json({ ok: false, error: "invalid_request", detail: eligibility.detail });
+        return res.status(400).json({
+          ok: false,
+          error: "not_eligible",
+          detail: eligibility.detail,
+          reasonCode: eligibility.reasonCode,
+        });
       }
 
       const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
