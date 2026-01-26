@@ -12,13 +12,13 @@ export async function requireLandlord(req: Request, res: Response, next: NextFun
         return res.status(401).json({ ok: false, error: "Unauthorized" });
       }
 
-      if (role !== "landlord") {
+      if (role !== "landlord" && role !== "admin") {
         return res.status(403).json({ ok: false, error: "Forbidden" });
       }
 
       if (!landlordId || typeof landlordId !== "string" || !landlordId.trim()) {
         console.warn("[requireLandlord] missing landlordId user=", user);
-        return res.status(401).json({ ok: false, error: "Unauthorized" });
+        return res.status(401).json({ ok: false, error: "Missing landlord context" });
       }
 
       user.landlordId = landlordId;
