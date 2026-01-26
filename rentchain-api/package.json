@@ -11,7 +11,9 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/index.build.js",
     "test": "vitest",
-    "smoke": "node scripts/smoke-safe-build.js"
+    "smoke": "node scripts/smoke-safe-build.js",
+    "clean:win": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force; Start-Sleep -Seconds 1; if (Test-Path node_modules) { Remove-Item -Recurse -Force node_modules }; if (Test-Path package-lock.json) { Write-Host 'keeping lockfile' }; npm cache verify\"",
+    "reinstall:win": "npm run clean:win && npm ci"
   },
   "keywords": [],
   "author": "",
