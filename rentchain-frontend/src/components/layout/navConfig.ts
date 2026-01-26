@@ -90,7 +90,7 @@ export const NAV_ITEMS: NavItem[] = [
   },
   {
     id: "admin",
-    label: "Admin Dashboard",
+    label: "Admin",
     to: "/admin",
     requiresAdmin: true,
     showInDrawer: true,
