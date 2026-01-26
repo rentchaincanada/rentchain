@@ -387,7 +387,8 @@ const ApplicationsPage: React.FC = () => {
   };
 
   return (
-    <div style={{ display: "grid", gap: spacing.lg }}>
+    <>
+      <div style={{ display: "grid", gap: spacing.lg }}>
       <Card elevated>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing.md, flexWrap: "wrap" }}>
           <div>
@@ -706,8 +707,8 @@ const ApplicationsPage: React.FC = () => {
           )}
         </Section>
       </Card>
-    </div>
-    {resultModalOpen ? (
+      </div>
+      {resultModalOpen && (
       <div
         style={{
           position: "fixed",
@@ -796,8 +797,8 @@ const ApplicationsPage: React.FC = () => {
           ) : null}
         </Card>
       </div>
-    ) : null}
-    {manualCompleteOpen ? (
+      )}
+      {manualCompleteOpen && (
       <div
         style={{
           position: "fixed",
@@ -874,8 +875,8 @@ const ApplicationsPage: React.FC = () => {
           </div>
         </Card>
       </div>
-    ) : null}
-    {manualFailOpen ? (
+      )}
+      {manualFailOpen && (
       <div
         style={{
           position: "fixed",
@@ -936,7 +937,8 @@ const ApplicationsPage: React.FC = () => {
           </div>
         </Card>
       </div>
-    ) : null}
+      )}
+    </>
   );
 };
 
