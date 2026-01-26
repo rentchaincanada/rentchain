@@ -1,7 +1,7 @@
 import React, { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { colors, radius, spacing, text, shadows } from "../../styles/tokens";
-import { NAV_ITEMS } from "./navConfig";
+import { getVisibleNavItems } from "./navConfig";
 
 type WorkspaceDrawerProps = {
   open: boolean;
@@ -14,12 +14,10 @@ type WorkspaceDrawerProps = {
 export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose, userEmail, userRole, onSignOut }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const isAdmin = String(userRole || "").toLowerCase() === "admin";
-  const visibleItems = NAV_ITEMS.filter((item) => {
-    if (item.requiresAdmin && !isAdmin) return false;
-    return true;
-  });
+  const visibleItems = getVisibleNavItems(userRole);
   const drawerItems = visibleItems.filter((item) => item.showInDrawer !== false);
+  const primaryDrawerItems = drawerItems.filter((item) => !item.requiresAdmin);
+  const adminDrawerItems = drawerItems.filter((item) => item.requiresAdmin);
 
   useEffect(() => {
     if (!open) return;
@@ -102,7 +100,32 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
 
         <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.02em", color: text.muted }}>Pages</div>
         <div style={{ display: "grid", gap: 8 }}>
-          {drawerItems.map((link) => {
+          {primaryDrawerItems.map((link) => {
+            const active = location.pathname.startsWith(link.to);
+            return (
+              <button
+                key={link.to}
+                type="button"
+                onClick={() => handleNav(link.to)}
+                style={{
+                  textAlign: "left",
+                  padding: "10px 12px",
+                  borderRadius: radius.md,
+                  border: `1px solid ${active ? colors.accent : colors.border}`,
+                  background: active ? "rgba(37,99,235,0.08)" : colors.card,
+                  color: text.primary,
+                  fontWeight: active ? 700 : 600,
+                  cursor: "pointer",
+                }}
+              >
+                {link.label}
+              </button>
+            );
+          })}
+          {adminDrawerItems.length ? (
+            <div style={{ height: 1, background: colors.border, margin: `${spacing.xs} 0` }} />
+          ) : null}
+          {adminDrawerItems.map((link) => {
             const active = location.pathname.startsWith(link.to);
             return (
               <button

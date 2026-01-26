@@ -12,6 +12,11 @@ export type NavItem = {
   requiresFeature?: string;
 };
 
+export const getVisibleNavItems = (role?: string | null) => {
+  const isAdmin = String(role || "").toLowerCase() === "admin";
+  return NAV_ITEMS.filter((item) => !(item.requiresAdmin && !isAdmin));
+};
+
 export const NAV_ITEMS: NavItem[] = [
   {
     id: "dashboard",

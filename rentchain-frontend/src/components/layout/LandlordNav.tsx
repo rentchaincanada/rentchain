@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import TopNav from "./TopNav";
 import { useAuth } from "../../context/useAuth";
 import { fetchLandlordConversations } from "../../api/messagesApi";
-import { NAV_ITEMS } from "./navConfig";
+import { getVisibleNavItems } from "./navConfig";
 import "./LandlordNav.css";
 
 type Props = {
@@ -19,13 +19,10 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
   const unreadFlag = typeof unreadMessages === "boolean" ? unreadMessages : hasUnread;
   const [drawerOpen, setDrawerOpen] = useState(false);
   const lastFocusedRef = useRef<HTMLElement | null>(null);
-  const isAdmin = String(user?.role || "").toLowerCase() === "admin";
-
-  const visibleItems = NAV_ITEMS.filter((item) => {
-    if (item.requiresAdmin && !isAdmin) return false;
-    return true;
-  });
+  const visibleItems = getVisibleNavItems(user?.role);
   const drawerItems = visibleItems.filter((item) => item.showInDrawer !== false);
+  const primaryDrawerItems = drawerItems.filter((item) => !item.requiresAdmin);
+  const adminDrawerItems = drawerItems.filter((item) => item.requiresAdmin);
   const tabItems = visibleItems.filter((item) => item.showInTabs);
 
   useEffect(() => {
@@ -122,7 +119,20 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
         </div>
         <div className="rc-landlord-drawer-scroll">
           <div className="rc-landlord-drawer-links">
-            {drawerItems.map(({ to, label }) => (
+            {primaryDrawerItems.map(({ to, label }) => (
+              <button
+                key={to}
+                type="button"
+                onClick={() => nav(to)}
+                className={loc.pathname.startsWith(to) ? "active" : ""}
+              >
+                {label}
+              </button>
+            ))}
+            {adminDrawerItems.length ? (
+              <div className="rc-landlord-drawer-divider" />
+            ) : null}
+            {adminDrawerItems.map(({ to, label }) => (
               <button
                 key={to}
                 type="button"
