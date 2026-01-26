@@ -21,11 +21,13 @@ import { fetchActionRequestCounts } from "../api/actionRequestCountsApi";
 import { ActionCenterDrawer } from "../components/action-center/ActionCenterDrawer";
 import { fetchMonthlyOpsSnapshot } from "../api/actionSnapshotApi";
 import { asArray } from "../lib/asArray";
-import { arr, num, str } from "@/utils/safe";
+import { arr, str } from "@/utils/safe";
 import { setOnboardingStep } from "../api/onboardingApi";
 import { addUnitsManual, type UnitInput } from "../api/unitsApi";
 import { useToast } from "../components/ui/ToastProvider";
 import { unitsForProperty } from "../lib/propertyCounts";
+import { PropertySelector } from "../components/properties/PropertySelector";
+import "../styles/propertiesMobile.css";
 
 const PropertiesPage: React.FC = () => {
   const [properties, setProperties] = useState<Property[]>([]);
@@ -384,169 +386,175 @@ const PropertiesPage: React.FC = () => {
         className="page-content"
         style={{ display: "flex", flexDirection: "column", gap: spacing.lg }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ fontWeight: 800, fontSize: "1.2rem" }}>Properties</div>
-          <div
-            style={{
-              padding: "6px 10px",
-              borderRadius: 12,
-              border: "1px solid rgba(148,163,184,0.35)",
-              fontSize: 12,
-              fontWeight: 700,
-              color: text.muted,
-              display: "inline-flex",
-              gap: 8,
-              alignItems: "center",
-            }}
-            title={`Properties ${currentProperties} - Units ${unitsUsed}`}
-          >
+        <div className="rc-properties-header" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div className="rc-properties-title-row" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ fontWeight: 800, fontSize: "1.2rem" }}>Properties</div>
+            <div
+              className="rc-properties-counts"
+              style={{
+                padding: "6px 10px",
+                borderRadius: 12,
+                border: "1px solid rgba(148,163,184,0.35)",
+                fontSize: 12,
+                fontWeight: 700,
+                color: text.muted,
+                display: "inline-flex",
+                gap: 8,
+                alignItems: "center",
+              }}
+              title={`Properties ${currentProperties} - Units ${unitsUsed}`}
+            >
             <span>
               Props: {currentProperties}
             </span>
+            <span aria-hidden="true">·</span>
             <span>
               Units: {unitsUsed}
             </span>
+            </div>
           </div>
 
-          {selectedPropertyId ? (
+          <div className="rc-properties-header-actions" style={{ display: "flex", gap: 8 }}>
+            {selectedPropertyId ? (
+              <button
+                type="button"
+                onClick={() => {
+                  const next = new URLSearchParams(location.search);
+                  next.set("panel", "actionRequests");
+                  navigate(
+                    { pathname: location.pathname, search: next.toString() },
+                    { replace: true }
+                  );
+
+                  const el = document.getElementById("action-requests-panel");
+                  el?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 999,
+                  border:
+                    actionReqCount > 0
+                      ? "1px solid rgba(239,68,68,0.45)"
+                      : "1px solid rgba(148,163,184,0.35)",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  background:
+                    actionReqCount > 0
+                      ? "rgba(239,68,68,0.12)"
+                      : "rgba(148,163,184,0.1)",
+                  color: actionReqCount > 0 ? "#dc2626" : text.muted,
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+                title={
+                  actionReqCount > 0
+                    ? "Open action requests"
+                    : "No open action requests"
+                }
+              >
+                <span
+                  aria-hidden="true"
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: 999,
+                    background: actionReqCount > 0 ? "#dc2626" : "rgba(148,163,184,0.7)",
+                    display: "inline-block",
+                  }}
+                />
+                Action Required ({actionReqCount})
+              </button>
+            ) : null}
+
             <button
               type="button"
-              onClick={() => {
-                const next = new URLSearchParams(location.search);
-                next.set("panel", "actionRequests");
-                navigate(
-                  { pathname: location.pathname, search: next.toString() },
-                  { replace: true }
-                );
-
-                const el = document.getElementById("action-requests-panel");
-                el?.scrollIntoView({ behavior: "smooth", block: "start" });
-              }}
+              onClick={() => setActionCenterOpen(true)}
               style={{
-                padding: "6px 10px",
-                borderRadius: 999,
-                border:
-                  actionReqCount > 0
-                    ? "1px solid rgba(239,68,68,0.45)"
-                    : "1px solid rgba(148,163,184,0.35)",
-                fontSize: 12,
-                fontWeight: 600,
-                background:
-                  actionReqCount > 0
-                    ? "rgba(239,68,68,0.12)"
-                    : "rgba(148,163,184,0.1)",
-                color: actionReqCount > 0 ? "#dc2626" : text.muted,
+                padding: "8px 10px",
+                borderRadius: 12,
+                border: "1px solid rgba(148,163,184,0.35)",
+                background: "transparent",
                 cursor: "pointer",
+                fontWeight: 850,
+                fontSize: 12,
                 display: "inline-flex",
                 alignItems: "center",
-                gap: 6,
+                gap: 8,
               }}
-              title={
-                actionReqCount > 0
-                  ? "Open action requests"
-                  : "No open action requests"
-              }
+              title="Open Action Center"
             >
-              <span
-                aria-hidden="true"
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: 999,
-                  background: actionReqCount > 0 ? "#dc2626" : "rgba(148,163,184,0.7)",
-                  display: "inline-block",
-                }}
-              />
-              Action Required ({actionReqCount})
+              Action Center
+              {totalOpenAcrossPortfolio > 0 ? (
+                <span
+                  style={{
+                    padding: "2px 8px",
+                    borderRadius: 999,
+                    border: "1px solid rgba(239,68,68,0.45)",
+                    background: "rgba(239,68,68,0.12)",
+                    color: "#dc2626",
+                    fontWeight: 800,
+                    fontSize: 11,
+                  }}
+                >
+                  {totalOpenAcrossPortfolio}
+                </span>
+              ) : null}
             </button>
-          ) : null}
+            <button
+              type="button"
+              onClick={async () => {
+                const snap = await fetchMonthlyOpsSnapshot();
 
-          <button
-            type="button"
-            onClick={() => setActionCenterOpen(true)}
-            style={{
-              padding: "8px 10px",
-              borderRadius: 12,
-              border: "1px solid rgba(148,163,184,0.35)",
-              background: "transparent",
-              cursor: "pointer",
-              fontWeight: 850,
-              fontSize: 12,
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 8,
-            }}
-            title="Open Action Center"
-          >
-            Action Center
-            {totalOpenAcrossPortfolio > 0 ? (
-              <span
-                style={{
-                  padding: "2px 8px",
-                  borderRadius: 999,
-                  border: "1px solid rgba(239,68,68,0.45)",
-                  background: "rgba(239,68,68,0.12)",
-                  color: "#dc2626",
-                  fontWeight: 800,
-                  fontSize: 11,
-                }}
-              >
-                {totalOpenAcrossPortfolio}
-              </span>
-            ) : null}
-          </button>
-          <button
-            type="button"
-            onClick={async () => {
-              const snap = await fetchMonthlyOpsSnapshot();
+                const rows = Object.entries(snap.properties).map(([propertyId, data]) => {
+                  const label = propertyLabelById?.[propertyId];
+                  return {
+                    propertyName: label?.name || propertyId,
+                    propertyAddress: label?.subtitle || "",
+                    openRequests: data.openCount,
+                    highSeverity: data.highSeverity,
+                    oldestOpenDays: data.oldestDays ?? "",
+                  };
+                });
 
-              const rows = Object.entries(snap.properties).map(([propertyId, data]) => {
-                const label = propertyLabelById?.[propertyId];
-                return {
-                  propertyName: label?.name || propertyId,
-                  propertyAddress: label?.subtitle || "",
-                  openRequests: data.openCount,
-                  highSeverity: data.highSeverity,
-                  oldestOpenDays: data.oldestDays ?? "",
-                };
-              });
+                const header = [
+                  "propertyName",
+                  "propertyAddress",
+                  "openRequests",
+                  "highSeverity",
+                  "oldestOpenDays",
+                ];
 
-              const header = [
-                "propertyName",
-                "propertyAddress",
-                "openRequests",
-                "highSeverity",
-                "oldestOpenDays",
-              ];
+                const csv = [
+                  header.join(","),
+                  ...rows.map((r) => header.map((h) => `"${String((r as any)[h] ?? "")}"`).join(",")),
+                ].join("\n");
 
-              const csv = [
-                header.join(","),
-                ...rows.map((r) => header.map((h) => `"${String((r as any)[h] ?? "")}"`).join(",")),
-              ].join("\n");
+                const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+                const url = URL.createObjectURL(blob);
 
-              const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-              const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `rentchain-monthly-ops-${new Date().toISOString().slice(0, 10)}.csv`;
+                a.click();
 
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = `rentchain-monthly-ops-${new Date().toISOString().slice(0, 10)}.csv`;
-              a.click();
-
-              URL.revokeObjectURL(url);
-            }}
-            style={{
-              padding: "8px 10px",
-              borderRadius: 12,
-              border: "1px solid rgba(148,163,184,0.35)",
-              background: "transparent",
-              cursor: "pointer",
-              fontWeight: 900,
-              fontSize: 12,
-            }}
-            title="Download board-ready monthly operations snapshot"
-          >
-            Monthly Ops Snapshot
-          </button>
+                URL.revokeObjectURL(url);
+              }}
+              style={{
+                padding: "8px 10px",
+                borderRadius: 12,
+                border: "1px solid rgba(148,163,184,0.35)",
+                background: "transparent",
+                cursor: "pointer",
+                fontWeight: 900,
+                fontSize: 12,
+              }}
+              title="Download board-ready monthly operations snapshot"
+            >
+              Monthly Ops Snapshot
+            </button>
+          </div>
         </div>
 
         <Card elevated>
@@ -578,184 +586,37 @@ const PropertiesPage: React.FC = () => {
         <Card
           elevated
           style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 1.2fr) minmax(0, 2fr)",
+            display: "flex",
+            flexDirection: "column",
             gap: spacing.lg,
-            alignItems: "flex-start",
           }}
         >
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 12,
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-              }}
-            >
-              <div style={{ fontWeight: 600, color: "#ffffffff" }}>
-                Your Properties
-              </div>
-              <div style={{ color: text.muted, fontSize: 12 }}>
-                {properties.length} total
-              </div>
-            </div>
+          <PropertySelector
+            properties={safeProperties}
+            selectedId={selectedPropertyId}
+            onSelect={handleSelectProperty}
+          />
 
-            <div
-              style={{
-                border: `1px solid ${colors.border}`,
-                borderRadius: radius.lg,
-                background: colors.panel,
-                padding: spacing.sm,
-                maxHeight: 520,
-                overflowY: "auto",
-                display: "flex",
-                flexDirection: "column",
-                gap: spacing.xs,
-              }}
-            >
-              {isLoadingProperties && (
-                <Card style={{ padding: spacing.sm, margin: 0 }}>
-                  <div style={{ color: text.muted, fontSize: 13 }}>
-                    Loading properties
-                  </div>
-                </Card>
-              )}
-              {!isLoadingProperties && properties.length === 0 && (
-                <Card style={{ padding: spacing.sm, margin: 0 }}>
-                  <div style={{ color: text.muted, fontSize: 13 }}>
-                    No properties yet. Add your first property above.
-                  </div>
-                </Card>
-              )}
-              {!isLoadingProperties && properties.length > 0 && (
-                (properties ?? [])
-                  .filter(Boolean)
-                  .map((p: any) => {
-                    const id = String(p?.id ?? "");
-                    if (!id) return null;
-                    const unitCount = num(
-                      p?.unitCount ??
-                        p?.totalUnits ??
-                        (Array.isArray(p?.units) ? p.units.length : 0),
-                      0
-                    );
-                  const occupiedCount =
-                    p?.occupiedCount ??
-                    (p?.units
-                      ? p.units.filter((u: any) => u?.status === "occupied").length
-                      : 0);
-                  const occupancyPct =
-                    unitCount > 0
-                      ? Math.round((occupiedCount / unitCount) * 100)
-                      : 0;
-                    const isActive = id === String(selectedPropertyId);
-                    const openCount = actionCounts[id] || 0;
-
-                  return (
-                      <button
-                      key={id}
-                      type="button"
-                      onClick={() => handleSelectProperty(id)}
-                      style={{
-                        textAlign: "left",
-                        borderRadius: radius.md,
-                        padding: "14px 14px",
-                        border: isActive
-                          ? `1px solid ${colors.accent}`
-                          : `1px solid ${colors.border}`,
-                        background: isActive
-                          ? "rgba(96,165,250,0.12)"
-                          : colors.card,
-                        color: text.primary,
-                        cursor: "pointer",
-                        transition: "border-color 0.15s ease, background 0.15s ease",
-                        boxShadow: isActive ? shadows.sm : "none",
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontWeight: 700,
-                          lineHeight: 1.2,
-                          display: "-webkit-box",
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: "vertical",
-                          overflow: "hidden",
-                        }}
-                      >
-                        {p.addressLine1 || p.name || "Property"}
-                      </div>
-                      <div style={{ color: text.muted, fontSize: 12, marginTop: 4 }}>
-                        {p.addressLine1}
-                        {p.city ? `, ${p.city}` : ""}
-                      </div>
-                      <div
-                        style={{ color: text.muted, fontSize: 12, marginTop: 4 }}
-                      >
-                        Units: {unitCount}  Occupancy: {occupancyPct}%
-                        <span
-                          style={{
-                            marginLeft: 8,
-                            padding: "2px 8px",
-                            borderRadius: radius.pill,
-                            border: `1px solid ${colors.border}`,
-                            color: p.status === "draft" ? "#f59e0b" : "#22c55e",
-                            background:
-                              p.status === "draft"
-                                ? "rgba(245,158,11,0.1)"
-                                : "rgba(34,197,94,0.12)",
-                            fontSize: 11,
-                          }}
-                        >
-                          {p.status === "draft" ? "Draft" : "Active"}
-                        </span>
-                        {openCount > 0 ? (
-                          <span
-                            style={{
-                              marginLeft: 8,
-                              padding: "2px 8px",
-                              borderRadius: radius.pill,
-                              border: "1px solid rgba(239,68,68,0.45)",
-                              color: "#dc2626",
-                              background: "rgba(239,68,68,0.12)",
-                              fontSize: 11,
-                              fontWeight: 600,
-                              whiteSpace: "nowrap",
-                            }}
-                            title="Open action requests"
-                          >
-                            Action Required ({openCount})
-                          </span>
-                        ) : null}
-                      </div>
-                    </button>
-                  );
-                })
-              )}
+          {isLoadingProperties ? (
+            <div style={{ color: text.muted, fontSize: 13 }}>
+              Loading properties...
             </div>
-          </div>
+          ) : null}
+          {!isLoadingProperties && properties.length === 0 ? (
+            <div style={{ color: text.muted, fontSize: 13 }}>
+              No properties yet. Add your first property above.
+            </div>
+          ) : null}
 
           <div
+            className="mac-card-soft"
             style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 12,
+              background: colors.panel,
+              borderRadius: radius.lg,
+              border: `1px solid ${colors.border}`,
+              boxShadow: shadows.sm,
             }}
           >
-            <div
-              className="mac-card-soft"
-              style={{
-                background: colors.panel,
-                borderRadius: radius.lg,
-                border: `1px solid ${colors.border}`,
-                boxShadow: shadows.sm,
-              }}
-            >
               {openAddLease ? (
                 <div
                   style={{
@@ -824,8 +685,33 @@ const PropertiesPage: React.FC = () => {
 
               <PropertyDetailPanel property={selectedProperty} onRefresh={loadProperties} />
             </div>
+
+          <div
+            className="mac-card-soft"
+            style={{
+              background: colors.panel,
+              borderRadius: radius.lg,
+              border: `1px solid ${colors.border}`,
+              boxShadow: shadows.sm,
+            }}
+          >
+            {selectedProperty ? (
+              <PropertyActivityPanel
+                key={selectedProperty.id}
+                propertyId={selectedProperty.id}
+              />
+            ) : (
+              <Card style={{ padding: spacing.md, margin: 0 }}>
+                <div style={{ color: text.muted, fontSize: "0.95rem" }}>
+                  Select a property to view recent activity.
+                </div>
+              </Card>
+            )}
+          </div>
+          {selectedProperty ? (
             <div
               className="mac-card-soft"
+              id="action-requests-panel"
               style={{
                 background: colors.panel,
                 borderRadius: radius.lg,
@@ -833,151 +719,126 @@ const PropertiesPage: React.FC = () => {
                 boxShadow: shadows.sm,
               }}
             >
-              {selectedProperty ? (
-                <PropertyActivityPanel
-                  key={selectedProperty.id}
-                  propertyId={selectedProperty.id}
-                />
-              ) : (
-                <Card style={{ padding: spacing.md, margin: 0 }}>
-                  <div style={{ color: text.muted, fontSize: "0.95rem" }}>
-                    Select a property to view recent activity.
-                  </div>
-                </Card>
-              )}
+              <ActionRequestsPanel
+                propertyId={selectedProperty.id}
+                onCountChange={setActionReqCount}
+                onAfterRecompute={refreshActionCounts}
+              />
             </div>
-            {selectedProperty ? (
-              <div
-                className="mac-card-soft"
-                id="action-requests-panel"
-                style={{
-                  background: colors.panel,
-                  borderRadius: radius.lg,
-                  border: `1px solid ${colors.border}`,
-                  boxShadow: shadows.sm,
-                }}
-              >
-                <ActionRequestsPanel
-                  propertyId={selectedProperty.id}
-                  onCountChange={setActionReqCount}
-                  onAfterRecompute={refreshActionCounts}
-                />
+          ) : null}
+          <Section>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 8,
+              }}
+            >
+              <div style={{ fontWeight: 600 }}>Action Requests</div>
+              <div className="rc-action-requests-filters" style={{ display: "flex", gap: 8 }}>
+                {["all", "new", "acknowledged", "resolved"].map((status) => (
+                  <Button
+                    key={status}
+                    variant={actionFilter === status ? "primary" : "ghost"}
+                    onClick={() =>
+                      setActionFilter(
+                        status as ActionRequestStatus | "all"
+                      )
+                    }
+                    style={{ padding: "4px 10px", fontSize: 12 }}
+                  >
+                    {status === "all"
+                      ? "All"
+                      : status.charAt(0).toUpperCase() + status.slice(1)}
+                  </Button>
+                ))}
               </div>
-            ) : null}
-            <Section>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  marginBottom: 8,
-                }}
-              >
-                <div style={{ fontWeight: 600 }}>Action Requests</div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  {["all", "new", "acknowledged", "resolved"].map((status) => (
-                    <Button
-                      key={status}
-                      variant={actionFilter === status ? "primary" : "ghost"}
-                      onClick={() =>
-                        setActionFilter(
-                          status as ActionRequestStatus | "all"
-                        )
-                      }
-                      style={{ padding: "4px 10px", fontSize: 12 }}
-                    >
-                      {status === "all"
-                        ? "All"
-                        : status.charAt(0).toUpperCase() + status.slice(1)}
-                    </Button>
-                  ))}
-                </div>
+            </div>
+            {actionRequestsLoading ? (
+              <div style={{ color: text.muted, fontSize: 13 }}>
+                Loading requests
               </div>
-              {actionRequestsLoading ? (
-                <div style={{ color: text.muted, fontSize: 13 }}>
-                  Loading requests
-                </div>
-              ) : actionRequestsError ? (
-                <div style={{ color: colors.danger, fontSize: 13 }}>
-                  {actionRequestsError}
-                </div>
-              ) : actionRequests.length === 0 ? (
-                <div style={{ color: text.muted, fontSize: 13 }}>
-                  No action requests for this property.
-                </div>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {actionRequests.map((req) => (
-                    <button
-                      key={req.id}
-                      type="button"
-                      onClick={() => {
-                        setActiveRequest(req);
-                        setModalOpen(true);
-                        setNote(req.resolutionNote || "");
-                        setActionRequestUpdateError(null);
-                      }}
-                      style={{
-                        border: `1px solid ${colors.border}`,
-                        borderRadius: radius.md,
-                        padding: "8px 10px",
-                        background: colors.card,
-                        textAlign: "left",
-                        cursor: "pointer",
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        gap: 8,
-                      }}
-                    >
-                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                        <div style={{ fontWeight: 600, fontSize: 13 }}>
-                          {req.issueType}  {req.location}
-                        </div>
-                        <div style={{ fontSize: 12, color: text.muted }}>
-                          {safeLocaleDate(req.reportedAt)}
-                        </div>
+            ) : actionRequestsError ? (
+              <div style={{ color: colors.danger, fontSize: 13 }}>
+                {actionRequestsError}
+              </div>
+            ) : actionRequests.length === 0 ? (
+              <div style={{ color: text.muted, fontSize: 13 }}>
+                No action requests for this property.
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {actionRequests.map((req) => (
+                  <button
+                    key={req.id}
+                    type="button"
+                    onClick={() => {
+                      setActiveRequest(req);
+                      setModalOpen(true);
+                      setNote(req.resolutionNote || "");
+                      setActionRequestUpdateError(null);
+                    }}
+                    style={{
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: radius.md,
+                      padding: "8px 10px",
+                      background: colors.card,
+                      textAlign: "left",
+                      cursor: "pointer",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: 8,
+                    }}
+                  >
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      <div style={{ fontWeight: 600, fontSize: 13 }}>
+                        {req.issueType}  {req.location}
                       </div>
-                      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                        <span
-                          style={{
-                            padding: "2px 8px",
-                            borderRadius: radius.pill,
-                            border: `1px solid ${colors.border}`,
-                            color:
-                              req.severity === "urgent"
-                                ? colors.danger
-                                : req.severity === "medium"
-                                ? "#f59e0b"
-                                : "#22c55e",
-                            fontSize: 11,
-                          }}
-                        >
-                          {req.severity}
-                        </span>
-                        <span
-                          style={{
-                            padding: "2px 8px",
-                            borderRadius: radius.pill,
-                            border: `1px solid ${colors.border}`,
-                            fontSize: 11,
-                            color:
-                              req.status === "resolved"
-                                ? "#22c55e"
-                                : req.status === "acknowledged"
-                                ? "#f59e0b"
-                                : text.primary,
-                          }}
-                        >
-                          {req.status}
-                        </span>
+                      <div style={{ fontSize: 12, color: text.muted }}>
+                        {safeLocaleDate(req.reportedAt)}
                       </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </Section>
-          </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <span
+                        style={{
+                          padding: "2px 8px",
+                          borderRadius: radius.pill,
+                          border: `1px solid ${colors.border}`,
+                          color:
+                            req.severity === "urgent"
+                              ? colors.danger
+                              : req.severity === "medium"
+                              ? "#f59e0b"
+                              : "#22c55e",
+                          fontSize: 11,
+                        }}
+                      >
+                        {req.severity}
+                      </span>
+                      <span
+                        style={{
+                          padding: "2px 8px",
+                          borderRadius: radius.pill,
+                          border: `1px solid ${colors.border}`,
+                          fontSize: 11,
+                          color:
+                            req.status === "resolved"
+                              ? "#22c55e"
+                              : req.status === "acknowledged"
+                              ? "#f59e0b"
+                              : text.primary,
+                        }}
+                      >
+                        {req.status}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </Section>
         </Card>
       </div>
       <ActionRequestModal
@@ -1271,6 +1132,15 @@ const UnitsModal = ({
                       type="number"
                       value={u.marketRent}
                       onChange={(e) => updateUnit(idx, "marketRent", e.target.value)}
+                      onFocus={() => {
+                        if (
+                          typeof window !== "undefined" &&
+                          window.matchMedia("(max-width: 768px)").matches &&
+                          String(u.marketRent ?? "") === "0"
+                        ) {
+                          updateUnit(idx, "marketRent", "");
+                        }
+                      }}
                       style={{ width: "100%", padding: 6 }}
                     />
                   </td>

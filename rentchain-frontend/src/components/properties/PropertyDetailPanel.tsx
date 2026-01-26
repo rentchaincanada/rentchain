@@ -18,6 +18,7 @@ import { SendApplicationModal } from "./SendApplicationModal";
 import { parseCsvPreview } from "../../utils/csvPreview";
 import { useToast } from "../ui/ToastProvider";
 import { setOnboardingStep } from "../../api/onboardingApi";
+import "../../styles/propertiesMobile.css";
 
 interface PropertyDetailPanelProps {
   property: Property | null;
@@ -309,6 +310,16 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
       sum + (typeof (u as any).rent === "number" ? (u as any).rent : 0),
     0
   );
+  const displayedUnits = useMemo(() => {
+    if (Array.isArray(units) && units.length > 0) return units;
+    if (unitCount > 0) {
+      return Array.from({ length: unitCount }, (_, i) => ({
+        id: `placeholder-${i}`,
+        unitNumber: String(i + 1),
+      }));
+    }
+    return [];
+  }, [units, unitCount]);
 
   const activeLeases = useMemo(
     () => leases.filter((l) => l.status === "active"),
@@ -346,30 +357,34 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
     <>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {/* Header */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div className="rc-property-header" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "#0f172a" }}>
+            <div className="rc-property-title" style={{ fontSize: "1.1rem", fontWeight: 700, color: "#0f172a" }}>
               {displayName}
             </div>
-            <div style={{ color: "#1f2937", fontSize: "0.9rem" }}>
+            <div className="rc-property-address" style={{ color: "#1f2937", fontSize: "0.9rem" }}>
               {property.addressLine1}
               {property.addressLine2 ? `, ${property.addressLine2}` : ""}
             </div>
-            <div style={{ color: "#475569", fontSize: "0.85rem" }}>
+            <div className="rc-property-city" style={{ color: "#475569", fontSize: "0.85rem" }}>
               {[property.city, property.province, property.postalCode]
                 .filter(Boolean)
                 .join(", ")}
             </div>
-            <div style={{ color: "#6b7280", fontSize: "0.8rem" }}>
+            <div className="rc-property-unit-count" style={{ color: "#0f172a", fontSize: "0.8rem", fontWeight: 600 }}>
+              Units: {unitCount}
+            </div>
+            <div className="rc-property-meta" style={{ color: "#6b7280", fontSize: "0.8rem" }}>
               Added {formatDate(property.createdAt)}
             </div>
           </div>
-          <div style={{ display: "flex", gap: 6 }}>
+          <div className="rc-units-actions" style={{ display: "flex", gap: 6 }}>
             <button
               type="button"
               title="Edit property (coming soon)"
               disabled
+              className="rc-units-action"
               style={{
                 padding: "6px 10px",
                 borderRadius: 10,
@@ -390,6 +405,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                 fileInputRef.current?.click();
               }}
               disabled={!property}
+              className="rc-units-action"
               style={{
                 padding: "6px 10px",
                 borderRadius: 10,
@@ -409,6 +425,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                 fileInputRef.current?.click();
               }}
               disabled={isImporting || !property}
+              className="rc-units-action"
               style={{
                 padding: "6px 10px",
                 borderRadius: 10,
@@ -427,6 +444,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                 const csv = buildUnitsCsvTemplate();
                 downloadTextFile("rentchain-units-template.csv", csv);
               }}
+              className="rc-units-action rc-units-download"
               style={{
                 padding: "6px 10px",
                 borderRadius: 10,
@@ -480,6 +498,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
 
     {/* KPI strip */}
       <div
+        className="rc-kpi-grid"
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
@@ -487,6 +506,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
         }}
       >
         <div
+          className="rc-kpi-card"
           style={{
             padding: 12,
             borderRadius: 12,
@@ -494,12 +514,15 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             border: "1px solid rgba(148,163,184,0.15)",
           }}
         >
-          <div style={{ color: "#94a3b8", fontSize: "0.8rem" }}>Total units</div>
-          <div style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.1rem" }}>
+          <div className="rc-kpi-label" style={{ color: "#94a3b8", fontSize: "0.8rem" }}>
+            Total units
+          </div>
+          <div className="rc-kpi-value" style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.1rem" }}>
             {unitCount}
           </div>
         </div>
         <div
+          className="rc-kpi-card"
           style={{
             padding: 12,
             borderRadius: 12,
@@ -507,12 +530,15 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             border: "1px solid rgba(148,163,184,0.15)",
           }}
         >
-          <div style={{ color: "#94a3b8", fontSize: "0.8rem" }}>Leased units</div>
-          <div style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.1rem" }}>
+          <div className="rc-kpi-label" style={{ color: "#94a3b8", fontSize: "0.8rem" }}>
+            Leased units
+          </div>
+          <div className="rc-kpi-value" style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.1rem" }}>
             {leasedUnits}
           </div>
         </div>
         <div
+          className="rc-kpi-card"
           style={{
             padding: 12,
             borderRadius: 12,
@@ -520,12 +546,15 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             border: "1px solid rgba(148,163,184,0.15)",
           }}
         >
-          <div style={{ color: "#94a3b8", fontSize: "0.8rem" }}>Occupancy</div>
-          <div style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.05rem" }}>
+          <div className="rc-kpi-label" style={{ color: "#94a3b8", fontSize: "0.8rem" }}>
+            Occupancy
+          </div>
+          <div className="rc-kpi-value" style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.05rem" }}>
             {unitCount === 0 ? "--" : `${occupancy.toFixed(0)}%`}
           </div>
         </div>
         <div
+          className="rc-kpi-card"
           style={{
             padding: 12,
             borderRadius: 12,
@@ -533,16 +562,19 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             border: "1px solid rgba(148,163,184,0.15)",
           }}
         >
-          <div style={{ color: "#94a3b8", fontSize: "0.8rem" }}>Lease rent roll</div>
-          <div style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.05rem" }}>
+          <div className="rc-kpi-label" style={{ color: "#94a3b8", fontSize: "0.8rem" }}>
+            Lease rent roll
+          </div>
+          <div className="rc-kpi-value" style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.05rem" }}>
             {formatCurrency(leaseRentRoll)}
           </div>
-          <div style={{ color: "#6b7280", fontSize: "0.75rem", marginTop: 2 }}>
+          <div className="rc-kpi-subtext" style={{ color: "#6b7280", fontSize: "0.75rem", marginTop: 2 }}>
             Configured rent roll: {formatCurrency(totalRentConfigured)}
           </div>
         </div>
 
         <div
+          className="rc-kpi-card"
           style={{
             padding: 12,
             borderRadius: 12,
@@ -550,13 +582,16 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             border: "1px solid rgba(148,163,184,0.15)",
           }}
         >
-          <div style={{ color: "#94a3b8", fontSize: "0.8rem" }}>Collected this month</div>
-          <div style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.05rem" }}>
+          <div className="rc-kpi-label" style={{ color: "#94a3b8", fontSize: "0.8rem" }}>
+            Collected this month
+          </div>
+          <div className="rc-kpi-value" style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.05rem" }}>
             {formatCurrency(totalCollectedThisMonth)}
           </div>
         </div>
 
         <div
+          className="rc-kpi-card"
           style={{
             padding: 12,
             borderRadius: 12,
@@ -564,8 +599,10 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             border: "1px solid rgba(148,163,184,0.15)",
           }}
         >
-          <div style={{ color: "#94a3b8", fontSize: "0.8rem" }}>Collection</div>
-          <div style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.05rem" }}>
+          <div className="rc-kpi-label" style={{ color: "#94a3b8", fontSize: "0.8rem" }}>
+            Collection
+          </div>
+          <div className="rc-kpi-value" style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.05rem" }}>
             {leaseRentRoll === 0 ? "--" : `${(collectionRate * 100).toFixed(0)}%`}
           </div>
         </div>
@@ -600,8 +637,9 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
           overflow: "hidden",
         }}
       >
-        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+        <div className="rc-units-table-wrap" style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
           <table
+            className="rc-units-table"
             style={{
               width: "100%",
               minWidth: 720,
@@ -622,161 +660,283 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
               </tr>
             </thead>
             <tbody>
-            {(() => {
-              if (unitsLoading) {
-                return (
-              <tr>
-                <td
-                  colSpan={7}
-                  style={{
-                    padding: "12px",
-                    color: "#1f2937",
-                    textAlign: "center",
-                  }}
-                >
-                  Loading units...
-                </td>
-              </tr>
-                );
-              }
-
-              const derivedUnits =
-                units.length === 0 && unitCount > 0
-                  ? Array.from({ length: unitCount }, (_, i) => ({
-                      id: `placeholder-${i}`,
-                      unitNumber: String(i + 1),
-                    }))
-                  : [];
-              const displayedUnits = units.length > 0 ? units : derivedUnits;
-
-              if (displayedUnits.length === 0) {
-                return (
-              <tr>
-                <td
-                  colSpan={7}
-                  style={{
-                    padding: "12px",
-                    color: "#1f2937",
-                    textAlign: "center",
-                  }}
-                >
-                  No units recorded for this property yet.
-                </td>
-              </tr>
-                );
-              }
-
-              return displayedUnits.map((u, idx) => {
-                const unitNum = (u as any).unitNumber || "--";
-                const bedsVal =
-                  (u as any).beds ?? (u as any).bedrooms ?? (u as any).bedroomsCount ?? null;
-                const bathsVal =
-                  (u as any).baths ?? (u as any).bathrooms ?? (u as any).bathroomsCount ?? null;
-                const rentVal =
-                  (u as any).rent ??
-                  (u as any).marketRent ??
-                  (u as any).askingRent ??
-                  (u as any).monthlyRent ??
-                  null;
-                const statusVal = (u as any).status || (leasedUnitNumbers.has(unitNum) ? "occupied" : "vacant");
-                const isLeased = String(statusVal || "").toLowerCase() === "occupied";
-                return (
-                  <tr
-                    key={(u as any).id ?? `${unitNum}-${idx}`}
-                    style={{
-                      borderTop: "1px solid rgba(148,163,184,0.12)",
-                      color: "#e5e7eb",
-                    }}
-                  >
-                    <td style={{ padding: "10px 12px", whiteSpace: "nowrap" }}>{unitNum}</td>
-                    <td style={{ padding: "10px 12px", textAlign: "right", whiteSpace: "nowrap" }}>
-                      {rentVal !== null && rentVal !== undefined
-                        ? formatCurrency(Number(rentVal) || 0)
-                        : "--"}
-                    </td>
-                    <td style={{ padding: "10px 12px", textAlign: "center", whiteSpace: "nowrap" }}>
-                      {(u as any).bedrooms ?? (u as any).bedrooms === 0
-                        ? (u as any).bedrooms
-                        : "-"}
-                    </td>
-                    <td style={{ padding: "10px 12px", textAlign: "center", whiteSpace: "nowrap" }}>
-                      {(u as any).bathrooms ?? (u as any).bathrooms === 0
-                        ? (u as any).bathrooms
-                        : "-"}
-                    </td>
-                    <td style={{ padding: "10px 12px", textAlign: "center", whiteSpace: "nowrap" }}>
-                      {(u as any).sqft ?? (u as any).sqft === 0
-                        ? (u as any).sqft
-                        : "-"}
-                    </td>
-                    <td style={{ padding: "10px 12px" }}>
-                      <span
+              {(() => {
+                if (unitsLoading) {
+                  return (
+                    <tr>
+                      <td
+                        colSpan={7}
                         style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 6,
-                          padding: "4px 10px",
-                          borderRadius: 999,
-                          border: "1px solid rgba(148,163,184,0.35)",
-                          background: isLeased
-                            ? "rgba(34,197,94,0.1)"
-                            : "rgba(248,113,113,0.08)",
-                          color: isLeased ? "#166534" : "#f87171",
-                          fontSize: "0.8rem",
+                          padding: "12px",
+                          color: "#1f2937",
+                          textAlign: "center",
                         }}
                       >
+                        Loading units...
+                      </td>
+                    </tr>
+                  );
+                }
+
+                if (displayedUnits.length === 0) {
+                  return (
+                    <tr>
+                      <td
+                        colSpan={7}
+                        style={{
+                          padding: "12px",
+                          color: "#1f2937",
+                          textAlign: "center",
+                        }}
+                      >
+                        No units recorded for this property yet.
+                      </td>
+                    </tr>
+                  );
+                }
+
+                return displayedUnits.map((u, idx) => {
+                  const unitNum = (u as any).unitNumber || "--";
+                  const bedsVal =
+                    (u as any).beds ?? (u as any).bedrooms ?? (u as any).bedroomsCount ?? null;
+                  const bathsVal =
+                    (u as any).baths ?? (u as any).bathrooms ?? (u as any).bathroomsCount ?? null;
+                  const rentVal =
+                    (u as any).rent ??
+                    (u as any).marketRent ??
+                    (u as any).askingRent ??
+                    (u as any).monthlyRent ??
+                    null;
+                  const sqftVal = (u as any).sqft ?? null;
+                  const statusVal = (u as any).status || (leasedUnitNumbers.has(unitNum) ? "occupied" : "vacant");
+                  const isLeased = String(statusVal || "").toLowerCase() === "occupied";
+                  const rentDisplay =
+                    rentVal !== null && rentVal !== undefined
+                      ? formatCurrency(Number(rentVal) || 0)
+                      : "--";
+                  const bedsDisplay =
+                    (u as any).bedrooms ?? (u as any).bedrooms === 0
+                      ? (u as any).bedrooms
+                      : "-";
+                  const bathsDisplay =
+                    (u as any).bathrooms ?? (u as any).bathrooms === 0
+                      ? (u as any).bathrooms
+                      : "-";
+                  const sqftDisplay =
+                    sqftVal ?? sqftVal === 0
+                      ? sqftVal
+                      : "-";
+                  return (
+                    <tr
+                      key={(u as any).id ?? `${unitNum}-${idx}`}
+                      style={{
+                        borderTop: "1px solid rgba(148,163,184,0.12)",
+                        color: "#e5e7eb",
+                      }}
+                    >
+                      <td style={{ padding: "10px 12px", whiteSpace: "nowrap" }}>{unitNum}</td>
+                      <td style={{ padding: "10px 12px", textAlign: "right", whiteSpace: "nowrap" }}>
+                        <span className={rentVal !== null && rentVal !== undefined ? "" : "rc-unit-placeholder"}>
+                          {rentDisplay}
+                        </span>
+                      </td>
+                      <td style={{ padding: "10px 12px", textAlign: "center", whiteSpace: "nowrap" }}>
+                        <span className={bedsVal !== null && bedsVal !== undefined ? "" : "rc-unit-placeholder"}>
+                          {bedsDisplay}
+                        </span>
+                      </td>
+                      <td style={{ padding: "10px 12px", textAlign: "center", whiteSpace: "nowrap" }}>
+                        <span className={bathsVal !== null && bathsVal !== undefined ? "" : "rc-unit-placeholder"}>
+                          {bathsDisplay}
+                        </span>
+                      </td>
+                      <td style={{ padding: "10px 12px", textAlign: "center", whiteSpace: "nowrap" }}>
+                        <span className={sqftVal !== null && sqftVal !== undefined ? "" : "rc-unit-placeholder"}>
+                          {sqftDisplay}
+                        </span>
+                      </td>
+                      <td style={{ padding: "10px 12px" }}>
                         <span
                           style={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: "999px",
-                            backgroundColor: isLeased ? "#22c55e" : "#f87171",
-                          }}
-                        />
-                        {isLeased ? "Occupied" : "Vacant"}
-                      </span>
-                    </td>
-                    <td style={{ padding: "10px 12px" }}>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                      <button
-                        type="button"
-                        onClick={() => setEditingUnit(u)}
-                        style={{
-                          padding: "6px 10px",
-                          borderRadius: 8,
-                          border: "1px solid #e5e7eb",
-                          background: "#fff",
-                          cursor: "pointer",
-                          fontSize: "0.85rem",
-                        }}
-                      >
-                        Edit
-                      </button>
-                      {(u as any)?.id ? (
-                        <button
-                          type="button"
-                          onClick={() => setSendAppUnit(u)}
-                          style={{
-                            padding: "6px 10px",
-                            borderRadius: 8,
-                            border: "1px solid #e5e7eb",
-                            background: "#fff",
-                            cursor: "pointer",
-                            fontSize: "0.85rem",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 6,
+                            padding: "4px 10px",
+                            borderRadius: 999,
+                            border: "1px solid rgba(148,163,184,0.35)",
+                            background: isLeased
+                              ? "rgba(34,197,94,0.1)"
+                              : "rgba(248,113,113,0.08)",
+                            color: isLeased ? "#166534" : "#f87171",
+                            fontSize: "0.8rem",
                           }}
                         >
-                          Send application
-                        </button>
-                      ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              });
-            })()}
+                          <span
+                            style={{
+                              width: 8,
+                              height: 8,
+                              borderRadius: "999px",
+                              backgroundColor: isLeased ? "#22c55e" : "#f87171",
+                            }}
+                          />
+                          {isLeased ? "Occupied" : "Vacant"}
+                        </span>
+                      </td>
+                      <td style={{ padding: "10px 12px" }}>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                          <button
+                            type="button"
+                            onClick={() => setEditingUnit(u)}
+                            style={{
+                              padding: "6px 10px",
+                              borderRadius: 8,
+                              border: "1px solid #e5e7eb",
+                              background: "#fff",
+                              cursor: "pointer",
+                              fontSize: "0.85rem",
+                            }}
+                          >
+                            Edit
+                          </button>
+                          {(u as any)?.id ? (
+                            <button
+                              type="button"
+                              onClick={() => setSendAppUnit(u)}
+                              style={{
+                                padding: "6px 10px",
+                                borderRadius: 8,
+                                border: "1px solid #e5e7eb",
+                                background: "#fff",
+                                cursor: "pointer",
+                                fontSize: "0.85rem",
+                              }}
+                            >
+                              Send application
+                            </button>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                });
+              })()}
             </tbody>
           </table>
         </div>
+      </div>
+      <div className="rc-units-stack">
+        {unitsLoading ? (
+          <div style={{ color: "#6b7280", fontSize: "0.9rem" }}>Loading units...</div>
+        ) : displayedUnits.length === 0 ? (
+          <div style={{ color: "#6b7280", fontSize: "0.9rem" }}>
+            No units recorded for this property yet.
+          </div>
+        ) : (
+          displayedUnits.map((u, idx) => {
+            const unitNum = (u as any).unitNumber || "--";
+            const bedsVal =
+              (u as any).beds ?? (u as any).bedrooms ?? (u as any).bedroomsCount ?? null;
+            const bathsVal =
+              (u as any).baths ?? (u as any).bathrooms ?? (u as any).bathroomsCount ?? null;
+            const rentVal =
+              (u as any).rent ??
+              (u as any).marketRent ??
+              (u as any).askingRent ??
+              (u as any).monthlyRent ??
+              null;
+            const sqftVal = (u as any).sqft ?? null;
+            const statusVal = (u as any).status || (leasedUnitNumbers.has(unitNum) ? "occupied" : "vacant");
+            const isLeased = String(statusVal || "").toLowerCase() === "occupied";
+            const rentDisplay =
+              rentVal !== null && rentVal !== undefined
+                ? formatCurrency(Number(rentVal) || 0)
+                : "--";
+            const bedsDisplay =
+              (u as any).bedrooms ?? (u as any).bedrooms === 0
+                ? (u as any).bedrooms
+                : "-";
+            const bathsDisplay =
+              (u as any).bathrooms ?? (u as any).bathrooms === 0
+                ? (u as any).bathrooms
+                : "-";
+            const sqftDisplay =
+              sqftVal ?? sqftVal === 0
+                ? sqftVal
+                : "-";
+            return (
+              <div key={(u as any).id ?? `${unitNum}-${idx}`} className="rc-unit-card">
+                <div className="rc-unit-card-row">
+                  <div>
+                    <div className="rc-unit-label">Unit #</div>
+                    <div className="rc-unit-value">{unitNum}</div>
+                  </div>
+                  <div>
+                    <div className="rc-unit-label">Status</div>
+                    <div className="rc-unit-value">{isLeased ? "Occupied" : "Vacant"}</div>
+                  </div>
+                </div>
+                <div className="rc-unit-card-row rc-unit-card-specs" style={{ marginTop: 8 }}>
+                  <div>
+                    <div className="rc-unit-label">Rent</div>
+                    <div className={`rc-unit-value ${rentVal !== null && rentVal !== undefined ? "" : "rc-unit-placeholder"}`}>
+                      {rentDisplay}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="rc-unit-label">Beds</div>
+                    <div className={`rc-unit-value ${bedsVal !== null && bedsVal !== undefined ? "" : "rc-unit-placeholder"}`}>
+                      {bedsDisplay}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="rc-unit-label">Baths</div>
+                    <div className={`rc-unit-value ${bathsVal !== null && bathsVal !== undefined ? "" : "rc-unit-placeholder"}`}>
+                      {bathsDisplay}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="rc-unit-label">Sqft</div>
+                    <div className={`rc-unit-value ${sqftVal !== null && sqftVal !== undefined ? "" : "rc-unit-placeholder"}`}>
+                      {sqftDisplay}
+                    </div>
+                  </div>
+                </div>
+                <div className="rc-unit-actions">
+                  <button
+                    type="button"
+                    onClick={() => setEditingUnit(u)}
+                    style={{
+                      padding: "6px 10px",
+                      borderRadius: 8,
+                      border: "1px solid #e5e7eb",
+                      background: "#fff",
+                      cursor: "pointer",
+                      fontSize: "0.85rem",
+                    }}
+                  >
+                    Edit
+                  </button>
+                  {(u as any)?.id ? (
+                    <button
+                      type="button"
+                      onClick={() => setSendAppUnit(u)}
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 8,
+                        border: "1px solid #e5e7eb",
+                        background: "#fff",
+                        cursor: "pointer",
+                        fontSize: "0.85rem",
+                      }}
+                    >
+                      Send application
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
       </div>
       <UnitEditModal

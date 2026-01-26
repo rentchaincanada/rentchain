@@ -7,6 +7,7 @@ import {
 } from "../api/actionRequestsApi";
 import { fixActionForRequest } from "../services/actionRequestFixRouter";
 import { asArray } from "../lib/asArray";
+import "../styles/propertiesMobile.css";
 
 export function ActionRequestsPanel({
   propertyId,
@@ -122,7 +123,7 @@ export function ActionRequestsPanel({
       >
         <div style={{ fontWeight: 700 }}>Action requests</div>
 
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <div className="rc-action-requests-controls" style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <button
             onClick={load}
             disabled={loading || recomputing}

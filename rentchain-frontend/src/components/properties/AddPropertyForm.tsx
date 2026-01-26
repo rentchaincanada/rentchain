@@ -8,6 +8,7 @@ import {
 import { colors, radius, text } from "../../styles/tokens";
 import { setOnboardingStep } from "../../api/onboardingApi";
 import { useToast } from "@/components/ui/ToastProvider";
+import "../../styles/propertiesMobile.css";
 
 interface AddPropertyFormProps {
   onCreated?: (property: Property) => void;
@@ -313,6 +314,7 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
 
       {!expanded ? null : (
         <form
+          className="rc-add-property-form"
           onSubmit={handleSubmit}
           style={{
             display: "flex",
@@ -486,6 +488,9 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
                 style={{ display: "none" }}
               />
             </label>
+            <a className="rc-add-property-csv-link" href="/site/legal#templates">
+              CSV template
+            </a>
             <span style={{ color: "#9ca3af" }}>
               Expected headers: unitNumber, rent, bedrooms, bathrooms, sqft
             </span>
@@ -498,6 +503,7 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
           }}
         >
           <table
+            className="rc-add-property-units-table"
             style={{
               width: "100%",
               borderCollapse: "collapse",
@@ -542,6 +548,15 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
                       onChange={(e) =>
                         handleUnitChange(u.id, "rent", e.target.value)
                       }
+                      onFocus={() => {
+                        if (
+                          typeof window !== "undefined" &&
+                          window.matchMedia("(max-width: 768px)").matches &&
+                          String(u.rent ?? "") === "0"
+                        ) {
+                          handleUnitChange(u.id, "rent", "");
+                        }
+                      }}
                       placeholder="1800"
                       style={{
                         width: "100%",
@@ -608,6 +623,7 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
                     <button
                       type="button"
                       onClick={() => handleRemoveUnitRow(u.id)}
+                      className="rc-remove-unit-row"
                       style={{
                         fontSize: "0.75rem",
                         padding: "4px 8px",
@@ -630,6 +646,7 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
         <button
           type="button"
           onClick={handleAddUnitRow}
+          className="rc-add-unit-row"
           style={{
             marginTop: 8,
             fontSize: "0.8rem",

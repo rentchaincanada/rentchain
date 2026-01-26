@@ -124,6 +124,15 @@ export function UnitEditModal({ open, unit, onClose, onSaved }: Props) {
           <input
             value={rent}
             onChange={(e) => setRent(e.target.value)}
+            onFocus={() => {
+              if (
+                typeof window !== "undefined" &&
+                window.matchMedia("(max-width: 768px)").matches &&
+                String(rent ?? "") === "0"
+              ) {
+                setRent("");
+              }
+            }}
             type="number"
             style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #d1d5db" }}
           />
