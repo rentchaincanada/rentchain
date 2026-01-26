@@ -43,29 +43,32 @@ describe("screening payment webhook updates", () => {
   it("marks screening paid once and is idempotent on repeat delivery", async () => {
     store.set("app_1", { screeningStatus: "unpaid" });
 
-    const first = await webhookTesting.markApplicationScreeningPaid({
-      applicationId: "app_1",
-      sessionId: "sess_1",
-      paymentIntentId: "pi_1",
+    const session = {
+      id: "sess_1",
+      payment_intent: "pi_1",
+      metadata: { applicationId: "app_1" },
+    } as any;
+
+    const first = await webhookTesting.handleScreeningPaidFromSession({
+      session,
       paidAt: 1700000000000,
       eventType: "checkout.session.completed",
       eventId: "evt_1",
     });
 
-    expect(first).toBe("paid_set");
-    expect(store.get("app_1")?.screeningStatus).toBe("paid");
+    expect(first.status).toBe("paid_set");
+    expect(store.get("app_1")?.screeningStatus).toBe("processing");
+    expect(typeof store.get("app_1")?.screeningStartedAt).toBe("number");
     expect(store.get("app_1")?.screeningSessionId).toBe("sess_1");
 
-    const second = await webhookTesting.markApplicationScreeningPaid({
-      applicationId: "app_1",
-      sessionId: "sess_1",
-      paymentIntentId: "pi_1",
+    const second = await webhookTesting.handleScreeningPaidFromSession({
+      session,
       paidAt: 1700000000001,
       eventType: "checkout.session.completed",
       eventId: "evt_2",
     });
 
-    expect(second).toBe("already_paid");
+    expect(second.status).toBe("already_paid");
   });
 
   it("ignores checkout.session.completed when applicationId metadata is missing", async () => {

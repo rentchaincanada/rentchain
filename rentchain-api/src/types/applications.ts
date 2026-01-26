@@ -26,7 +26,31 @@ export interface Application {
   referencesContacted?: boolean;
   referencesContactedAt?: string | null;
   referencesNotes?: string | null;
-  screeningStatus?: "not_ready" | "ready" | "requested" | "paid" | "completed" | "failed";
+  screeningStatus?:
+    | "not_ready"
+    | "ready"
+    | "requested"
+    | "paid"
+    | "processing"
+    | "complete"
+    | "completed"
+    | "failed"
+    | "ineligible";
+  screeningPaidAt?: number | null;
+  screeningStartedAt?: number | null;
+  screeningCompletedAt?: number | null;
+  screeningFailedAt?: number | null;
+  screeningFailureCode?: string | null;
+  screeningFailureDetail?: string | null;
+  screeningProvider?: string | null;
+  screeningResultId?: string | null;
+  screeningResultSummary?: {
+    overall: "pass" | "review" | "fail" | "unknown";
+    scoreBand?: "A" | "B" | "C" | "D" | "E";
+    flags?: string[];
+    updatedAt?: number;
+  } | null;
+  screeningLastUpdatedAt?: number | null;
   screeningRequestId?: string;
   propertyId: string;
   propertyName: string;
