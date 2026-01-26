@@ -39,6 +39,9 @@ const mapErrorMessage = (code?: string | null) => {
   if (normalized === "not_eligible") {
     return "This application isn't ready for screening yet.";
   }
+  if (normalized === "screening_already_paid") {
+    return "This application’s screening has already been paid. You can view the status in the application.";
+  }
   if (normalized === "forbidden") {
     return "You don’t have access to start screening for this application.";
   }
@@ -51,12 +54,21 @@ const mapErrorMessage = (code?: string | null) => {
   return "Unable to start screening checkout. Please try again.";
 };
 
+const mapErrorTitle = (code?: string | null) => {
+  const normalized = String(code || "").toLowerCase();
+  if (normalized === "screening_already_paid") {
+    return "Screening already paid";
+  }
+  return "Unable to start screening checkout";
+};
+
 const ScreeningStartPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<string | null>(null);
   const [reason, setReason] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const startedRef = useRef(false);
 
@@ -82,6 +94,7 @@ const ScreeningStartPage: React.FC = () => {
       setError(null);
       setDetail(null);
       setReason(null);
+      setErrorCode(null);
       try {
         const res = await apiFetch<CheckoutResponse>(
           `/rental-applications/${encodeURIComponent(applicationId)}/screening/checkout`,
@@ -98,6 +111,7 @@ const ScreeningStartPage: React.FC = () => {
         }
 
         const normalizedError = String(res?.error || "").toLowerCase();
+        setErrorCode(normalizedError);
         setError(mapErrorMessage(res?.error));
         if (normalizedError === "not_eligible") {
           setReason(mapReasonCopy(res?.reasonCode) || "Eligibility requirements aren't complete yet.");
@@ -133,7 +147,7 @@ const ScreeningStartPage: React.FC = () => {
         ) : (
           <div style={{ display: "grid", gap: spacing.sm }}>
             <h1 style={{ margin: 0, fontSize: "1.3rem", fontWeight: 700 }}>
-              Unable to start screening checkout
+              {mapErrorTitle(errorCode)}
             </h1>
             <div style={{ color: text.muted, fontSize: "0.95rem" }}>
               {error || "Something went wrong. Please try again."}
@@ -145,21 +159,39 @@ const ScreeningStartPage: React.FC = () => {
               <div style={{ color: text.subtle, fontSize: "0.85rem" }}>{detail}</div>
             ) : null}
             <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
-              <Button type="button" onClick={() => navigate(returnTo)}>
-                Back
-              </Button>
-              {applicationId ? (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => navigate(`/applications?applicationId=${encodeURIComponent(applicationId)}`)}
-                >
-                  Back to application
-                </Button>
+              {errorCode === "screening_already_paid" ? (
+                <>
+                  {applicationId ? (
+                    <Button
+                      type="button"
+                      onClick={() => navigate(`/applications?applicationId=${encodeURIComponent(applicationId)}`)}
+                    >
+                      Back to application
+                    </Button>
+                  ) : null}
+                  <Button type="button" variant="secondary" onClick={() => navigate("/applications")}>
+                    Go to applications
+                  </Button>
+                </>
               ) : (
-                <Button type="button" variant="secondary" onClick={() => navigate("/applications")}>
-                  Go to applications
-                </Button>
+                <>
+                  <Button type="button" onClick={() => navigate(returnTo)}>
+                    Back
+                  </Button>
+                  {applicationId ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => navigate(`/applications?applicationId=${encodeURIComponent(applicationId)}`)}
+                    >
+                      Back to application
+                    </Button>
+                  ) : (
+                    <Button type="button" variant="secondary" onClick={() => navigate("/applications")}>
+                      Go to applications
+                    </Button>
+                  )}
+                </>
               )}
             </div>
           </div>

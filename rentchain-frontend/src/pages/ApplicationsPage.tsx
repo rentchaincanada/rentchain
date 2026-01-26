@@ -36,6 +36,25 @@ const AI_FLAG_LABELS: Record<string, string> = {
   IDENTITY_MISMATCH_HINT: "Identity mismatch hint",
 };
 
+const SCREENING_REASON_LABELS: Record<string, string> = {
+  ELIGIBLE: "Eligible for screening.",
+  MISSING_TENANT_PROFILE: "Tenant profile details are incomplete.",
+  APPLICATION_STATUS_NOT_READY: "Application must be submitted before screening.",
+  MISSING_CONSENT: "Applicant consent is required before screening.",
+  SCREENING_ALREADY_PAID: "Screening has already been paid for.",
+  LANDLORD_NOT_AUTHORIZED: "You don’t have access to start screening for this application.",
+};
+
+const formatScreeningStatus = (value?: string | null) => {
+  if (!value) return "unknown";
+  return value.replace(/_/g, " ");
+};
+
+const formatEligibilityReason = (value?: string | null) => {
+  if (!value) return null;
+  return SCREENING_REASON_LABELS[value] || value;
+};
+
 const ApplicationsPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -363,6 +382,18 @@ const ApplicationsPage: React.FC = () => {
 
               <Card>
                 <div style={{ fontWeight: 700, marginBottom: 8 }}>Screening</div>
+                <div style={{ display: "grid", gap: 4, fontSize: 13, color: text.muted, marginBottom: 8 }}>
+                  <div>Screening status: {formatScreeningStatus(detail.screeningStatus || detail.screening?.status)}</div>
+                  {detail.screeningPaidAt ? (
+                    <div>Paid at: {new Date(detail.screeningPaidAt).toLocaleString()}</div>
+                  ) : null}
+                  {detail.screeningLastEligibilityCheckedAt ? (
+                    <div>Eligibility checked: {new Date(detail.screeningLastEligibilityCheckedAt).toLocaleString()}</div>
+                  ) : null}
+                  {formatEligibilityReason(detail.screeningLastEligibilityReasonCode) ? (
+                    <div>Last eligibility reason: {formatEligibilityReason(detail.screeningLastEligibilityReasonCode)}</div>
+                  ) : null}
+                </div>
                 {!loadingCaps && features?.screening === false ? (
                   <div style={{ color: text.muted }}>
                     Screening is unavailable on your current plan.
