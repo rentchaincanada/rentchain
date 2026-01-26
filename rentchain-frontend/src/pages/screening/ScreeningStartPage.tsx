@@ -14,7 +14,7 @@ type CheckoutResponse = {
 const mapErrorMessage = (code?: string | null) => {
   const normalized = String(code || "").toLowerCase();
   if (normalized === "stripe_not_configured") {
-    return "Payments are temporarily unavailable. Please try again later or contact support.";
+    return "Payments are temporarily unavailable. Please contact support.";
   }
   if (normalized === "unauthorized") {
     return "Please log in to continue.";
@@ -30,6 +30,9 @@ const mapErrorMessage = (code?: string | null) => {
   }
   if (normalized === "invalid_redirect_origin") {
     return "The redirect destination is not allowed. Please try again from the dashboard.";
+  }
+  if (normalized === "invalid_request") {
+    return "This application is not eligible for screening yet.";
   }
   return "Unable to start screening checkout. Please try again.";
 };

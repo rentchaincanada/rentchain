@@ -394,29 +394,30 @@ router.post(
       res.setHeader("x-route-source", "rentalApplicationsRoutes:screeningCheckout");
       const role = String(req.user?.role || "").toLowerCase();
       if (role !== "landlord" && role !== "admin") {
-        return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+        return res.status(401).json({ ok: false, error: "unauthorized" });
       }
       const landlordId = req.user?.landlordId || req.user?.id || null;
-      if (!landlordId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+      if (!landlordId) return res.status(401).json({ ok: false, error: "unauthorized" });
 
       const id = String(req.params?.id || "").trim();
-      if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+      if (!id) return res.status(404).json({ ok: false, error: "not_found" });
       const snap = await db.collection("rentalApplications").doc(id).get();
-      if (!snap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+      if (!snap.exists) return res.status(404).json({ ok: false, error: "not_found" });
       const data = snap.data() as any;
       if (data?.landlordId && data.landlordId !== landlordId) {
-        return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+        return res.status(401).json({ ok: false, error: "unauthorized" });
       }
 
       const eligibility = evaluateEligibility(data);
       if (!eligibility.eligible) {
-        return res.status(400).json({ ok: false, error: "NOT_ELIGIBLE", detail: eligibility.detail });
+        return res.status(400).json({ ok: false, error: "invalid_request", detail: eligibility.detail });
       }
 
       const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
       const serviceLevel = resolveServiceLevel(body?.serviceLevel);
       const scoreAddOn = body?.scoreAddOn === true;
-      const returnTo = String(body?.returnTo || "/dashboard");
+      const rawReturnTo = String(body?.returnTo || "/dashboard");
+      const returnTo = rawReturnTo.startsWith("/") ? rawReturnTo : "/dashboard";
       const frontendOrigin = resolveFrontendOrigin(req);
       const successUrl = buildRedirectUrl({
         input: body?.successPath,
@@ -609,7 +610,7 @@ router.post(
         ...logBase,
         event: "create_session_ok",
       });
-      return res.json({ ok: true, checkoutUrl: session.url, orderId });
+      return res.json({ ok: true, checkoutUrl: session.url });
     } catch (err: any) {
       console.error("[screening_checkout] create_session_fail", {
         ...logBase,
@@ -618,7 +619,7 @@ router.post(
       });
       return res.status(500).json({
         ok: false,
-        error: "SCREENING_CHECKOUT_FAILED",
+        error: "internal_error",
         detail: String(err?.message || ""),
       });
     }
@@ -1013,5 +1014,12 @@ function safeParse(raw: string) {
     return {};
   }
 }
+
+export const __testing = {
+  isAllowedRedirectOrigin,
+  normalizeOrigin,
+  resolveFrontendOrigin,
+  buildRedirectUrl,
+};
 
 export default router;

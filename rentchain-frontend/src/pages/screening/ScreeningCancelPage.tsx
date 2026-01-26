@@ -15,18 +15,18 @@ const ScreeningCancelPage: React.FC = () => {
       <Card elevated>
         <div style={{ display: "flex", flexDirection: "column", gap: spacing.sm }}>
           <h1 style={{ margin: 0, fontSize: "1.4rem", fontWeight: 700 }}>
-            Payment cancelled
+            Checkout canceled.
           </h1>
           <div style={{ color: text.muted, fontSize: "0.95rem" }}>
             Your screening payment wasn’t completed. You can return to the application and try
             again whenever you’re ready.
           </div>
           <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
+            <Button type="button" onClick={() => navigate("/screening", { replace: true })}>
+              Try again
+            </Button>
             <Button type="button" variant="secondary" onClick={() => navigate(returnTo)}>
               Back
-            </Button>
-            <Button type="button" onClick={() => navigate("/applications")}>
-              Go to applications
             </Button>
           </div>
           {applicationId ? (
