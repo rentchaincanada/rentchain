@@ -9,13 +9,20 @@ import {
   updateRentalApplicationStatus,
   fetchScreeningQuote,
   createScreeningCheckout,
+  fetchScreening,
+  fetchScreeningResult,
+  adminMarkScreeningComplete,
+  adminMarkScreeningFailed,
   type RentalApplication,
   type RentalApplicationStatus,
   type RentalApplicationSummary,
   type ScreeningQuote,
+  type ScreeningPipeline,
+  type ScreeningResult,
 } from "@/api/rentalApplicationsApi";
 import { useToast } from "../components/ui/ToastProvider";
 import { useCapabilities } from "@/hooks/useCapabilities";
+import { useAuth } from "../context/useAuth";
 
 const statusOptions: RentalApplicationStatus[] = [
   "SUBMITTED",
@@ -70,18 +77,50 @@ const ApplicationsPage: React.FC = () => {
   const [propertyFilter, setPropertyFilter] = useState<string>("");
   const [properties, setProperties] = useState<PropertyOption[]>([]);
   const { features, loading: loadingCaps } = useCapabilities();
+  const { user } = useAuth();
   const [screeningQuote, setScreeningQuote] = useState<ScreeningQuote | null>(null);
   const [screeningQuoteDetail, setScreeningQuoteDetail] = useState<string | null>(null);
   const [screeningLoading, setScreeningLoading] = useState(false);
   const [screeningRunning, setScreeningRunning] = useState(false);
   const [scoreAddOn, setScoreAddOn] = useState(false);
   const [serviceLevel, setServiceLevel] = useState<"SELF_SERVE" | "VERIFIED" | "VERIFIED_AI">("SELF_SERVE");
+  const [screeningStatus, setScreeningStatus] = useState<ScreeningPipeline | null>(null);
+  const [screeningStatusLoading, setScreeningStatusLoading] = useState(false);
+  const [resultModalOpen, setResultModalOpen] = useState(false);
+  const [resultLoading, setResultLoading] = useState(false);
+  const [resultError, setResultError] = useState<string | null>(null);
+  const [resultData, setResultData] = useState<ScreeningResult | null>(null);
+  const [manualCompleteOpen, setManualCompleteOpen] = useState(false);
+  const [manualFailOpen, setManualFailOpen] = useState(false);
+  const [manualSubmitting, setManualSubmitting] = useState(false);
+  const [manualOverall, setManualOverall] = useState<"pass" | "review" | "fail">("pass");
+  const [manualScoreBand, setManualScoreBand] = useState("");
+  const [manualFlags, setManualFlags] = useState("");
+  const [manualReportText, setManualReportText] = useState("");
+  const [manualFailureCode, setManualFailureCode] = useState("");
+  const [manualFailureDetail, setManualFailureDetail] = useState("");
 
   const screeningOptions = [
     { value: "SELF_SERVE", label: "Self-serve screening", priceLabel: "$19.99" },
     { value: "VERIFIED", label: "Verified screening by RentChain", priceLabel: "$29.99" },
     { value: "VERIFIED_AI", label: "Verified + AI Verification", priceLabel: "$39.99" },
   ] as const;
+
+  const isAdmin = String(user?.role || "").toLowerCase() === "admin";
+
+  const loadScreeningStatus = async (applicationId: string) => {
+    setScreeningStatusLoading(true);
+    try {
+      const res = await fetchScreening(applicationId);
+      if (res?.ok) {
+        setScreeningStatus(res.screening || null);
+      }
+    } catch {
+      setScreeningStatus(null);
+    } finally {
+      setScreeningStatusLoading(false);
+    }
+  };
 
   useEffect(() => {
     let alive = true;
@@ -166,15 +205,34 @@ const ApplicationsPage: React.FC = () => {
   }, [selectedId]);
 
   useEffect(() => {
+    if (!detail?.id) {
+      setScreeningStatus(null);
+      return;
+    }
+    setScreeningStatus({
+      status: detail.screeningStatus ?? null,
+      paidAt: detail.screeningPaidAt ?? null,
+      startedAt: detail.screeningStartedAt ?? null,
+      completedAt: detail.screeningCompletedAt ?? null,
+      lastUpdatedAt: detail.screeningLastUpdatedAt ?? null,
+      provider: detail.screeningProvider ?? null,
+      summary: detail.screeningResultSummary ?? null,
+      resultId: detail.screeningResultId ?? null,
+    });
+    void loadScreeningStatus(detail.id);
+  }, [detail?.id]);
+
+  useEffect(() => {
     const params = new URLSearchParams(location.search);
     const screeningStatus = params.get("screening");
     if (!screeningStatus) return;
     if (screeningStatus === "success") {
-      showToast({ message: "Payment received. Screening completed.", variant: "success" });
+      showToast({ message: "Payment received. Screening is processing.", variant: "success" });
       if (selectedId) {
         fetchRentalApplication(selectedId)
           .then((app) => setDetail(app))
           .catch(() => null);
+        void loadScreeningStatus(selectedId);
       }
     } else if (screeningStatus === "cancelled") {
       showToast({ message: "Payment cancelled.", variant: "error" });
@@ -208,6 +266,33 @@ const ApplicationsPage: React.FC = () => {
     void loadQuote();
   }, [selectedId, serviceLevel, scoreAddOn]);
 
+  useEffect(() => {
+    if (!resultModalOpen || !detail?.id) return;
+    let active = true;
+    setResultLoading(true);
+    setResultError(null);
+    setResultData(null);
+    fetchScreeningResult(detail.id)
+      .then((res) => {
+        if (!active) return;
+        if (res.ok) {
+          setResultData(res.result || null);
+        } else {
+          setResultError(res.error || "Failed to load screening result.");
+        }
+      })
+      .catch((err: any) => {
+        if (!active) return;
+        setResultError(err?.message || "Failed to load screening result.");
+      })
+      .finally(() => {
+        if (active) setResultLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [detail?.id, resultModalOpen]);
+
   const filtered = useMemo(() => {
     if (!search.trim()) return applications;
     const q = search.toLowerCase();
@@ -217,6 +302,61 @@ const ApplicationsPage: React.FC = () => {
       return name.includes(q) || email.includes(q);
     });
   }, [applications, search]);
+
+  const handleManualComplete = async () => {
+    if (!detail?.id) return;
+    setManualSubmitting(true);
+    try {
+      const flags = manualFlags
+        .split(",")
+        .map((flag) => flag.trim())
+        .filter(Boolean);
+      const res = await adminMarkScreeningComplete(detail.id, {
+        overall: manualOverall,
+        scoreBand: manualScoreBand ? (manualScoreBand.toUpperCase() as any) : undefined,
+        flags: flags.length ? flags : undefined,
+        reportText: manualReportText.trim() || undefined,
+      });
+      if (!res.ok) {
+        showToast({ message: res.error || "Unable to mark screening complete.", variant: "error" });
+        return;
+      }
+      showToast({ message: "Screening marked complete.", variant: "success" });
+      setManualCompleteOpen(false);
+      setManualReportText("");
+      setManualFlags("");
+      setManualScoreBand("");
+      await loadScreeningStatus(detail.id);
+    } finally {
+      setManualSubmitting(false);
+    }
+  };
+
+  const handleManualFail = async () => {
+    if (!detail?.id) return;
+    if (!manualFailureCode.trim()) {
+      showToast({ message: "Failure code is required.", variant: "error" });
+      return;
+    }
+    setManualSubmitting(true);
+    try {
+      const res = await adminMarkScreeningFailed(detail.id, {
+        failureCode: manualFailureCode.trim(),
+        failureDetail: manualFailureDetail.trim() || undefined,
+      });
+      if (!res.ok) {
+        showToast({ message: res.error || "Unable to mark screening failed.", variant: "error" });
+        return;
+      }
+      showToast({ message: "Screening marked failed.", variant: "success" });
+      setManualFailOpen(false);
+      setManualFailureCode("");
+      setManualFailureDetail("");
+      await loadScreeningStatus(detail.id);
+    } finally {
+      setManualSubmitting(false);
+    }
+  };
 
   const setStatus = async (status: RentalApplicationStatus) => {
     if (!detail) return;
@@ -382,16 +522,71 @@ const ApplicationsPage: React.FC = () => {
 
               <Card>
                 <div style={{ fontWeight: 700, marginBottom: 8 }}>Screening</div>
-                <div style={{ display: "grid", gap: 4, fontSize: 13, color: text.muted, marginBottom: 8 }}>
-                  <div>Screening status: {formatScreeningStatus(detail.screeningStatus || detail.screening?.status)}</div>
-                  {detail.screeningPaidAt ? (
-                    <div>Paid at: {new Date(detail.screeningPaidAt).toLocaleString()}</div>
+                <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <Pill>{formatScreeningStatus(screeningStatus?.status || detail.screeningStatus || null)}</Pill>
+                    {screeningStatusLoading ? (
+                      <span style={{ fontSize: 12, color: text.subtle }}>Refreshing…</span>
+                    ) : null}
+                    {screeningStatus?.provider ? (
+                      <span style={{ fontSize: 12, color: text.subtle }}>Provider: {screeningStatus.provider}</span>
+                    ) : null}
+                  </div>
+                  <div style={{ fontSize: 12, color: text.muted }}>
+                    Last updated:{" "}
+                    {screeningStatus?.lastUpdatedAt
+                      ? new Date(screeningStatus.lastUpdatedAt).toLocaleString()
+                      : "—"}
+                  </div>
+                  {screeningStatus?.summary ? (
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: radius.md,
+                        padding: spacing.sm,
+                        background: colors.panel,
+                        display: "grid",
+                        gap: 4,
+                        fontSize: 13,
+                      }}
+                    >
+                      <div>Overall: {screeningStatus.summary.overall}</div>
+                      {screeningStatus.summary.scoreBand ? (
+                        <div>Score band: {screeningStatus.summary.scoreBand}</div>
+                      ) : null}
+                      {screeningStatus.summary.flags?.length ? (
+                        <div>Flags: {screeningStatus.summary.flags.join(", ")}</div>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 12, color: text.muted }}>No screening summary yet.</div>
+                  )}
+                  {screeningStatus?.status === "complete" && screeningStatus?.resultId ? (
+                    <div>
+                      <Button variant="secondary" onClick={() => setResultModalOpen(true)}>
+                        View screening result
+                      </Button>
+                    </div>
+                  ) : null}
+                  {isAdmin && (screeningStatus?.status === "paid" || screeningStatus?.status === "processing") ? (
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <Button variant="primary" onClick={() => setManualCompleteOpen(true)}>
+                        Mark screening complete
+                      </Button>
+                      <Button variant="secondary" onClick={() => setManualFailOpen(true)}>
+                        Mark screening failed
+                      </Button>
+                    </div>
                   ) : null}
                   {detail.screeningLastEligibilityCheckedAt ? (
-                    <div>Eligibility checked: {new Date(detail.screeningLastEligibilityCheckedAt).toLocaleString()}</div>
+                    <div style={{ fontSize: 12, color: text.muted }}>
+                      Eligibility checked: {new Date(detail.screeningLastEligibilityCheckedAt).toLocaleString()}
+                    </div>
                   ) : null}
                   {formatEligibilityReason(detail.screeningLastEligibilityReasonCode) ? (
-                    <div>Last eligibility reason: {formatEligibilityReason(detail.screeningLastEligibilityReasonCode)}</div>
+                    <div style={{ fontSize: 12, color: text.muted }}>
+                      Last eligibility reason: {formatEligibilityReason(detail.screeningLastEligibilityReasonCode)}
+                    </div>
                   ) : null}
                 </div>
                 {!loadingCaps && features?.screening === false ? (
@@ -512,6 +707,236 @@ const ApplicationsPage: React.FC = () => {
         </Section>
       </Card>
     </div>
+    {resultModalOpen ? (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(15,23,42,0.75)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+        }}
+      >
+        <Card
+          style={{
+            width: "min(560px, 95vw)",
+            maxHeight: "80vh",
+            overflowY: "auto",
+            padding: spacing.md,
+            border: `1px solid ${colors.border}`,
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: spacing.sm }}>
+            <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>Screening result</div>
+            <Button variant="ghost" onClick={() => setResultModalOpen(false)}>
+              Close
+            </Button>
+          </div>
+          {resultLoading ? (
+            <div style={{ color: text.muted }}>Loading…</div>
+          ) : resultError ? (
+            <div
+              style={{
+                background: "rgba(239,68,68,0.12)",
+                border: "1px solid rgba(239,68,68,0.4)",
+                color: colors.danger,
+                padding: spacing.sm,
+                borderRadius: radius.md,
+              }}
+            >
+              {resultError}
+            </div>
+          ) : resultData ? (
+            <div style={{ display: "grid", gap: spacing.sm }}>
+              {resultData.summary ? (
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: radius.md,
+                    padding: spacing.sm,
+                    background: colors.panel,
+                    display: "grid",
+                    gap: 4,
+                  }}
+                >
+                  <div>Overall: {resultData.summary.overall}</div>
+                  {resultData.summary.scoreBand ? (
+                    <div>Score band: {resultData.summary.scoreBand}</div>
+                  ) : null}
+                  {resultData.summary.flags?.length ? (
+                    <div>Flags: {resultData.summary.flags.join(", ")}</div>
+                  ) : null}
+                </div>
+              ) : (
+                <div style={{ color: text.muted }}>No summary provided.</div>
+              )}
+              {resultData.reportUrl ? (
+                <a href={resultData.reportUrl} target="_blank" rel="noreferrer">
+                  View report
+                </a>
+              ) : null}
+              {resultData.reportText ? (
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: radius.md,
+                    padding: spacing.sm,
+                    whiteSpace: "pre-wrap",
+                    fontSize: 13,
+                  }}
+                >
+                  {resultData.reportText}
+                </div>
+              ) : (
+                <div style={{ color: text.muted, fontSize: 12 }}>No report text available.</div>
+              )}
+            </div>
+          ) : null}
+        </Card>
+      </div>
+    ) : null}
+    {manualCompleteOpen ? (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(15,23,42,0.75)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+        }}
+      >
+        <Card
+          style={{
+            width: "min(560px, 95vw)",
+            maxHeight: "80vh",
+            overflowY: "auto",
+            padding: spacing.md,
+            border: `1px solid ${colors.border}`,
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: spacing.sm }}>
+            <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>Mark screening complete</div>
+            <Button variant="ghost" onClick={() => setManualCompleteOpen(false)}>
+              Close
+            </Button>
+          </div>
+          <div style={{ display: "grid", gap: spacing.sm }}>
+            <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
+              Overall
+              <select value={manualOverall} onChange={(e) => setManualOverall(e.target.value as any)}>
+                <option value="pass">Pass</option>
+                <option value="review">Review</option>
+                <option value="fail">Fail</option>
+              </select>
+            </label>
+            <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
+              Score band (optional)
+              <Input
+                value={manualScoreBand}
+                onChange={(e) => setManualScoreBand(e.target.value)}
+                placeholder="A, B, C..."
+              />
+            </label>
+            <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
+              Flags (comma-separated)
+              <Input
+                value={manualFlags}
+                onChange={(e) => setManualFlags(e.target.value)}
+                placeholder="identity_unverified, income_low"
+              />
+            </label>
+            <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
+              Report text (MVP)
+              <textarea
+                value={manualReportText}
+                onChange={(e) => setManualReportText(e.target.value)}
+                style={{
+                  borderRadius: radius.md,
+                  border: `1px solid ${colors.border}`,
+                  padding: spacing.sm,
+                  minHeight: 120,
+                  resize: "vertical",
+                }}
+              />
+            </label>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <Button variant="secondary" onClick={() => setManualCompleteOpen(false)}>
+                Cancel
+              </Button>
+              <Button variant="primary" onClick={() => void handleManualComplete()} disabled={manualSubmitting}>
+                {manualSubmitting ? "Saving..." : "Confirm complete"}
+              </Button>
+            </div>
+          </div>
+        </Card>
+      </div>
+    ) : null}
+    {manualFailOpen ? (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(15,23,42,0.75)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+        }}
+      >
+        <Card
+          style={{
+            width: "min(520px, 95vw)",
+            maxHeight: "80vh",
+            overflowY: "auto",
+            padding: spacing.md,
+            border: `1px solid ${colors.border}`,
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: spacing.sm }}>
+            <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>Mark screening failed</div>
+            <Button variant="ghost" onClick={() => setManualFailOpen(false)}>
+              Close
+            </Button>
+          </div>
+          <div style={{ display: "grid", gap: spacing.sm }}>
+            <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
+              Failure code
+              <Input
+                value={manualFailureCode}
+                onChange={(e) => setManualFailureCode(e.target.value)}
+                placeholder="provider_error"
+              />
+            </label>
+            <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
+              Failure detail (optional)
+              <textarea
+                value={manualFailureDetail}
+                onChange={(e) => setManualFailureDetail(e.target.value)}
+                style={{
+                  borderRadius: radius.md,
+                  border: `1px solid ${colors.border}`,
+                  padding: spacing.sm,
+                  minHeight: 100,
+                  resize: "vertical",
+                }}
+              />
+            </label>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <Button variant="secondary" onClick={() => setManualFailOpen(false)}>
+                Cancel
+              </Button>
+              <Button variant="primary" onClick={() => void handleManualFail()} disabled={manualSubmitting}>
+                {manualSubmitting ? "Saving..." : "Confirm failure"}
+              </Button>
+            </div>
+          </div>
+        </Card>
+      </div>
+    ) : null}
   );
 };
 
