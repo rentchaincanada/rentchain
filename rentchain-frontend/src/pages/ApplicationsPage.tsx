@@ -118,6 +118,14 @@ const ApplicationsPage: React.FC = () => {
   }, [propertyFilter, statusFilter, selectedId]);
 
   useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const requestedId = params.get("applicationId");
+    if (requestedId && requestedId !== selectedId) {
+      setSelectedId(requestedId);
+    }
+  }, [location.search, selectedId]);
+
+  useEffect(() => {
     const loadDetail = async () => {
       if (!selectedId) {
         setDetail(null);

@@ -174,16 +174,28 @@ function buildAiVerification(applicationId: string, seed: number) {
 function evaluateEligibility(application: any) {
   const status = String(application?.status || "").toUpperCase();
   if (!ELIGIBLE_STATUS.includes(status)) {
-    return { eligible: false, detail: "Application must be submitted before screening." };
+    return {
+      eligible: false,
+      detail: "Application must be submitted before screening.",
+      reasonCode: "APPLICATION_STATUS_NOT_READY",
+    };
   }
   const consent = application?.consent || {};
   if (!consent?.creditConsent || !consent?.referenceConsent) {
-    return { eligible: false, detail: "Consent for credit and references is required." };
+    return {
+      eligible: false,
+      detail: "Consent for credit and references is required.",
+      reasonCode: "MISSING_CONSENT",
+    };
   }
   const dob = String(application?.applicant?.dob || "").trim();
   const currentAddress = String(application?.residentialHistory?.[0]?.address || "").trim();
   if (!dob || !currentAddress) {
-    return { eligible: false, detail: "DOB and current address are required." };
+    return {
+      eligible: false,
+      detail: "DOB and current address are required.",
+      reasonCode: "MISSING_TENANT_PROFILE",
+    };
   }
   return { eligible: true, detail: null };
 }
@@ -410,7 +422,12 @@ router.post(
 
       const eligibility = evaluateEligibility(data);
       if (!eligibility.eligible) {
-        return res.status(400).json({ ok: false, error: "invalid_request", detail: eligibility.detail });
+        return res.status(400).json({
+          ok: false,
+          error: "not_eligible",
+          detail: eligibility.detail,
+          reasonCode: eligibility.reasonCode,
+        });
       }
 
       const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
