@@ -1,4 +1,4 @@
-import api from "./client";
+import { apiFetch } from "./apiFetch";
 
 export type TenantInvite = {
   id?: string;
@@ -14,27 +14,32 @@ export type TenantInvite = {
 };
 
 export async function listTenantInvites(): Promise<{ items: TenantInvite[] }> {
-  const res = await api.get("/tenant-invites");
-  return res.data;
+  return apiFetch<{ items: TenantInvite[] }>("/tenant-invites");
 }
 
 export async function createTenantInvite(payload: {
-  propertyId: string;
+  propertyId?: string | null;
   tenantEmail: string;
   tenantName?: string;
+  unitId?: string | null;
+  leaseId?: string | null;
 }) {
-  const res = await api.post("/tenant-invites", payload);
-  return res.data as {
+  return apiFetch<{
     ok: boolean;
     token: string;
     inviteUrl?: string;
     invite?: TenantInvite;
     expiresAt?: number;
     emailed?: boolean;
-  };
+  }>("/tenant-invites", {
+    method: "POST",
+    body: payload,
+  });
 }
 
 export async function redeemTenantInvite(token: string) {
-  const res = await api.post("/tenant-invites/redeem", { token });
-  return res.data;
+  return apiFetch("/tenant-invites/redeem", {
+    method: "POST",
+    body: { token },
+  });
 }

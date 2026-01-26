@@ -102,7 +102,8 @@ export async function apiFetch<T = any>(
     pathForMatch === "/api/tenant" ||
     pathForMatch.startsWith("/tenant/") ||
     pathForMatch.startsWith("/api/tenant/");
-  const token = isTenantPath ? getTenantToken() : getAuthToken();
+  const rawToken = isTenantPath ? getTenantToken() : getAuthToken();
+  const token = typeof rawToken === "string" ? rawToken.trim() : rawToken;
 
   const url = normalizedPath;
 
@@ -114,9 +115,26 @@ export async function apiFetch<T = any>(
 
   // Mark requests coming from our API helpers so the dev fetch-guard doesn't warn
   headers["X-Rentchain-ApiClient"] = "1";
-  headers["x-rc-auth"] = token ? "bearer" : "missing";
+  const hasToken = typeof token === "string" ? token.trim().length > 0 : false;
+  const authHeaderSet = hasToken;
+  headers["x-rc-auth"] = authHeaderSet ? "bearer" : "missing";
 
-  if (token) headers.Authorization = `Bearer ${token}`;
+  if (authHeaderSet) headers.Authorization = `Bearer ${token}`;
+
+  if (import.meta.env.DEV) {
+    const matchPath =
+      pathForMatch === "/tenant-invites" ||
+      pathForMatch === "/api/tenant-invites" ||
+      pathForMatch.startsWith("/tenant-invites/") ||
+      pathForMatch.startsWith("/api/tenant-invites/");
+    const isCreate =
+      matchPath &&
+      String(fetchInit.method || "GET").toUpperCase() === "POST" &&
+      (pathForMatch === "/tenant-invites" || pathForMatch === "/api/tenant-invites");
+    if (isCreate) {
+      console.debug("[tenant-invites] auth header check", { hasToken, authHeaderSet });
+    }
+  }
 
   let bodyToSend: any = (fetchInit as any).body;
   const isPlainObject =

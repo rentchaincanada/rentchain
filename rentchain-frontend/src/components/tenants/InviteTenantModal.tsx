@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { apiFetch } from "../../api/apiFetch";
+import { createTenantInvite } from "../../api/tenantInvites";
 import { Button } from "../ui/Ui";
 
 interface Props {
@@ -34,16 +34,12 @@ export const InviteTenantModal: React.FC<Props> = ({
     setInviteUrl("");
     setLoading(true);
     try {
-      const data: any = await apiFetch("/tenant-invites", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tenantEmail,
-          tenantName: tenantName || null,
-          propertyId: defaultPropertyId || null,
-          unitId: defaultUnitId || null,
-          leaseId: defaultLeaseId || null,
-        }),
+      const data: any = await createTenantInvite({
+        tenantEmail,
+        tenantName: tenantName || undefined,
+        propertyId: defaultPropertyId || null,
+        unitId: defaultUnitId || null,
+        leaseId: defaultLeaseId || null,
       });
 
       if (!data?.ok) {
