@@ -8,6 +8,7 @@ import { requireFeature } from "../middleware/entitlements";
 import { getStripeClient, isStripeConfigured } from "../services/stripeService";
 import { finalizeStripePayment } from "../services/stripeFinalize";
 import { applyScreeningResultsFromOrder } from "../services/stripeScreeningProcessor";
+import { buildScreeningStatusPayload } from "../services/screening/screeningPayload";
 
 const router = Router();
 
@@ -201,7 +202,8 @@ function evaluateEligibility(application: any) {
 }
 
 function isScreeningAlreadyPaid(application: any) {
-  return String(application?.screeningStatus || "").toLowerCase() === "paid";
+  const status = String(application?.screeningStatus || "").toLowerCase();
+  return status === "paid" || status === "processing" || status === "complete" || status === "completed";
 }
 
 function resolveServiceLevel(raw?: string | null) {
@@ -1014,29 +1016,55 @@ router.get(
         return res.status(403).json({ ok: false, error: "FORBIDDEN" });
       }
 
-      const screening =
-        data?.screening || {
-          requested: false,
-          requestedAt: null,
-          status: "NOT_REQUESTED",
-          provider: "STUB",
-          orderId: null,
-          result: null,
-          amountCents: null,
-          currency: "CAD",
-          paidAt: null,
-          scoreAddOn: false,
-          scoreAddOnCents: null,
-          totalAmountCents: null,
-          serviceLevel: "SELF_SERVE",
-          aiVerification: false,
-          ai: null,
-        };
-
-      return res.json({ ok: true, data: screening });
+      const screening = buildScreeningStatusPayload(data);
+      return res.json({ ok: true, screening });
     } catch (err: any) {
       console.error("[rental-applications] screening read failed", err?.message || err);
       return res.status(500).json({ ok: false, error: "SCREENING_READ_FAILED" });
+    }
+  }
+);
+
+router.get(
+  "/rental-applications/:id/screening/result",
+  attachAccount,
+  requireFeature("screening"),
+  async (req: any, res) => {
+    try {
+      const role = String(req.user?.role || "").toLowerCase();
+      if (role !== "landlord" && role !== "admin") {
+        return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+      }
+      const landlordId = req.user?.landlordId || req.user?.id || null;
+      if (!landlordId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+      const id = String(req.params?.id || "").trim();
+      if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+      const snap = await db.collection("rentalApplications").doc(id).get();
+      if (!snap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+      const data = snap.data() as any;
+      if (data?.landlordId && data.landlordId !== landlordId) {
+        return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+      }
+
+      const resultId = String(data?.screeningResultId || "");
+      if (!resultId) return res.status(404).json({ ok: false, error: "no_result" });
+
+      const resultSnap = await db.collection("screeningResults").doc(resultId).get();
+      if (!resultSnap.exists) return res.status(404).json({ ok: false, error: "no_result" });
+      const result = resultSnap.data() as any;
+
+      return res.json({
+        ok: true,
+        result: {
+          summary: result?.summary || null,
+          reportUrl: result?.reportUrl || null,
+          reportText: result?.reportText || null,
+        },
+      });
+    } catch (err: any) {
+      console.error("[rental-applications] screening result read failed", err?.message || err);
+      return res.status(500).json({ ok: false, error: "SCREENING_RESULT_READ_FAILED" });
     }
   }
 );
@@ -1055,6 +1083,7 @@ export const __testing = {
   resolveFrontendOrigin,
   buildRedirectUrl,
   isScreeningAlreadyPaid,
+  buildScreeningStatusPayload,
 };
 
 export default router;
