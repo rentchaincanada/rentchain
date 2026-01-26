@@ -21,11 +21,12 @@ import { fetchActionRequestCounts } from "../api/actionRequestCountsApi";
 import { ActionCenterDrawer } from "../components/action-center/ActionCenterDrawer";
 import { fetchMonthlyOpsSnapshot } from "../api/actionSnapshotApi";
 import { asArray } from "../lib/asArray";
-import { arr, num, str } from "@/utils/safe";
+import { arr, str } from "@/utils/safe";
 import { setOnboardingStep } from "../api/onboardingApi";
 import { addUnitsManual, type UnitInput } from "../api/unitsApi";
 import { useToast } from "../components/ui/ToastProvider";
 import { unitsForProperty } from "../lib/propertyCounts";
+import { PropertySelector } from "../components/properties/PropertySelector";
 import "../styles/propertiesMobile.css";
 
 const PropertiesPage: React.FC = () => {
@@ -585,174 +586,37 @@ const PropertiesPage: React.FC = () => {
         <Card
           elevated
           style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 1.2fr) minmax(0, 2fr)",
+            display: "flex",
+            flexDirection: "column",
             gap: spacing.lg,
-            alignItems: "flex-start",
           }}
         >
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 12,
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-              }}
-            >
-              <div style={{ fontWeight: 600, color: "#ffffffff" }}>
-                Your Properties
-              </div>
-              <div style={{ color: text.muted, fontSize: 12 }}>
-                {properties.length} total
-              </div>
-            </div>
+          <PropertySelector
+            properties={safeProperties}
+            selectedId={selectedPropertyId}
+            onSelect={handleSelectProperty}
+          />
 
-            <div
-              style={{
-                border: `1px solid ${colors.border}`,
-                borderRadius: radius.lg,
-                background: colors.panel,
-                padding: spacing.sm,
-                maxHeight: 520,
-                overflowY: "auto",
-                display: "flex",
-                flexDirection: "column",
-                gap: spacing.xs,
-              }}
-            >
-              {isLoadingProperties && (
-                <Card style={{ padding: spacing.sm, margin: 0 }}>
-                  <div style={{ color: text.muted, fontSize: 13 }}>
-                    Loading properties
-                  </div>
-                </Card>
-              )}
-              {!isLoadingProperties && properties.length === 0 && (
-                <Card style={{ padding: spacing.sm, margin: 0 }}>
-                  <div style={{ color: text.muted, fontSize: 13 }}>
-                    No properties yet. Add your first property above.
-                  </div>
-                </Card>
-              )}
-              {!isLoadingProperties && properties.length > 0 && (
-                (properties ?? [])
-                  .filter(Boolean)
-                  .map((p: any) => {
-                    const id = String(p?.id ?? "");
-                    if (!id) return null;
-                    const unitCount = num(
-                      p?.unitCount ??
-                        p?.totalUnits ??
-                        (Array.isArray(p?.units) ? p.units.length : 0),
-                      0
-                    );
-                  const occupiedCount =
-                    p?.occupiedCount ??
-                    (p?.units
-                      ? p.units.filter((u: any) => u?.status === "occupied").length
-                      : 0);
-                  const occupancyPct =
-                    unitCount > 0
-                      ? Math.round((occupiedCount / unitCount) * 100)
-                      : 0;
-                    const isActive = id === String(selectedPropertyId);
-                    const openCount = actionCounts[id] || 0;
-
-                    return (
-                      <button
-                        key={id}
-                        type="button"
-                        onClick={() => handleSelectProperty(id)}
-                        className="rc-properties-pill"
-                        style={{
-                          textAlign: "left",
-                          borderRadius: radius.md,
-                          padding: "10px 12px",
-                          border: isActive
-                            ? `1px solid ${colors.accent}`
-                            : `1px solid ${colors.border}`,
-                          background: isActive
-                            ? "rgba(96,165,250,0.12)"
-                            : colors.card,
-                          color: text.primary,
-                          cursor: "pointer",
-                          transition: "border-color 0.15s ease, background 0.15s ease",
-                          boxShadow: isActive ? shadows.sm : "none",
-                        }}
-                      >
-                        <div className="rc-properties-pill-title">
-                          {p.addressLine1 || p.name || "Property"}
-                        </div>
-                        <div className="rc-properties-pill-subtitle" style={{ color: text.muted, fontSize: 12, marginTop: 4 }}>
-                        {p.addressLine1}
-                        {p.city ? `, ${p.city}` : ""}
-                      </div>
-                      <div className="rc-properties-pill-meta" style={{ color: text.muted, fontSize: 12, marginTop: 4 }}>
-                        Units: {unitCount}  Occupancy: {occupancyPct}%
-                        <span
-                          style={{
-                            marginLeft: 8,
-                            padding: "2px 8px",
-                            borderRadius: radius.pill,
-                            border: `1px solid ${colors.border}`,
-                            color: p.status === "draft" ? "#f59e0b" : "#22c55e",
-                            background:
-                              p.status === "draft"
-                                ? "rgba(245,158,11,0.1)"
-                                : "rgba(34,197,94,0.12)",
-                            fontSize: 11,
-                          }}
-                        >
-                          {p.status === "draft" ? "Draft" : "Active"}
-                        </span>
-                        {openCount > 0 ? (
-                          <span
-                            style={{
-                              marginLeft: 8,
-                              padding: "2px 8px",
-                              borderRadius: radius.pill,
-                              border: "1px solid rgba(239,68,68,0.45)",
-                              color: "#dc2626",
-                              background: "rgba(239,68,68,0.12)",
-                              fontSize: 11,
-                              fontWeight: 600,
-                              whiteSpace: "nowrap",
-                            }}
-                            title="Open action requests"
-                          >
-                            Action Required ({openCount})
-                          </span>
-                        ) : null}
-                      </div>
-                    </button>
-                  );
-                })
-              )}
+          {isLoadingProperties ? (
+            <div style={{ color: text.muted, fontSize: 13 }}>
+              Loading properties...
             </div>
-          </div>
+          ) : null}
+          {!isLoadingProperties && properties.length === 0 ? (
+            <div style={{ color: text.muted, fontSize: 13 }}>
+              No properties yet. Add your first property above.
+            </div>
+          ) : null}
 
           <div
+            className="mac-card-soft"
             style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 12,
+              background: colors.panel,
+              borderRadius: radius.lg,
+              border: `1px solid ${colors.border}`,
+              boxShadow: shadows.sm,
             }}
           >
-            <div
-              className="mac-card-soft"
-              style={{
-                background: colors.panel,
-                borderRadius: radius.lg,
-                border: `1px solid ${colors.border}`,
-                boxShadow: shadows.sm,
-              }}
-            >
               {openAddLease ? (
                 <div
                   style={{
@@ -821,8 +685,33 @@ const PropertiesPage: React.FC = () => {
 
               <PropertyDetailPanel property={selectedProperty} onRefresh={loadProperties} />
             </div>
+
+          <div
+            className="mac-card-soft"
+            style={{
+              background: colors.panel,
+              borderRadius: radius.lg,
+              border: `1px solid ${colors.border}`,
+              boxShadow: shadows.sm,
+            }}
+          >
+            {selectedProperty ? (
+              <PropertyActivityPanel
+                key={selectedProperty.id}
+                propertyId={selectedProperty.id}
+              />
+            ) : (
+              <Card style={{ padding: spacing.md, margin: 0 }}>
+                <div style={{ color: text.muted, fontSize: "0.95rem" }}>
+                  Select a property to view recent activity.
+                </div>
+              </Card>
+            )}
+          </div>
+          {selectedProperty ? (
             <div
               className="mac-card-soft"
+              id="action-requests-panel"
               style={{
                 background: colors.panel,
                 borderRadius: radius.lg,
@@ -830,151 +719,126 @@ const PropertiesPage: React.FC = () => {
                 boxShadow: shadows.sm,
               }}
             >
-              {selectedProperty ? (
-                <PropertyActivityPanel
-                  key={selectedProperty.id}
-                  propertyId={selectedProperty.id}
-                />
-              ) : (
-                <Card style={{ padding: spacing.md, margin: 0 }}>
-                  <div style={{ color: text.muted, fontSize: "0.95rem" }}>
-                    Select a property to view recent activity.
-                  </div>
-                </Card>
-              )}
+              <ActionRequestsPanel
+                propertyId={selectedProperty.id}
+                onCountChange={setActionReqCount}
+                onAfterRecompute={refreshActionCounts}
+              />
             </div>
-            {selectedProperty ? (
-              <div
-                className="mac-card-soft"
-                id="action-requests-panel"
-                style={{
-                  background: colors.panel,
-                  borderRadius: radius.lg,
-                  border: `1px solid ${colors.border}`,
-                  boxShadow: shadows.sm,
-                }}
-              >
-                <ActionRequestsPanel
-                  propertyId={selectedProperty.id}
-                  onCountChange={setActionReqCount}
-                  onAfterRecompute={refreshActionCounts}
-                />
+          ) : null}
+          <Section>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 8,
+              }}
+            >
+              <div style={{ fontWeight: 600 }}>Action Requests</div>
+              <div className="rc-action-requests-filters" style={{ display: "flex", gap: 8 }}>
+                {["all", "new", "acknowledged", "resolved"].map((status) => (
+                  <Button
+                    key={status}
+                    variant={actionFilter === status ? "primary" : "ghost"}
+                    onClick={() =>
+                      setActionFilter(
+                        status as ActionRequestStatus | "all"
+                      )
+                    }
+                    style={{ padding: "4px 10px", fontSize: 12 }}
+                  >
+                    {status === "all"
+                      ? "All"
+                      : status.charAt(0).toUpperCase() + status.slice(1)}
+                  </Button>
+                ))}
               </div>
-            ) : null}
-            <Section>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  marginBottom: 8,
-                }}
-              >
-                <div style={{ fontWeight: 600 }}>Action Requests</div>
-                <div className="rc-action-requests-filters" style={{ display: "flex", gap: 8 }}>
-                  {["all", "new", "acknowledged", "resolved"].map((status) => (
-                    <Button
-                      key={status}
-                      variant={actionFilter === status ? "primary" : "ghost"}
-                      onClick={() =>
-                        setActionFilter(
-                          status as ActionRequestStatus | "all"
-                        )
-                      }
-                      style={{ padding: "4px 10px", fontSize: 12 }}
-                    >
-                      {status === "all"
-                        ? "All"
-                        : status.charAt(0).toUpperCase() + status.slice(1)}
-                    </Button>
-                  ))}
-                </div>
+            </div>
+            {actionRequestsLoading ? (
+              <div style={{ color: text.muted, fontSize: 13 }}>
+                Loading requests
               </div>
-              {actionRequestsLoading ? (
-                <div style={{ color: text.muted, fontSize: 13 }}>
-                  Loading requests
-                </div>
-              ) : actionRequestsError ? (
-                <div style={{ color: colors.danger, fontSize: 13 }}>
-                  {actionRequestsError}
-                </div>
-              ) : actionRequests.length === 0 ? (
-                <div style={{ color: text.muted, fontSize: 13 }}>
-                  No action requests for this property.
-                </div>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {actionRequests.map((req) => (
-                    <button
-                      key={req.id}
-                      type="button"
-                      onClick={() => {
-                        setActiveRequest(req);
-                        setModalOpen(true);
-                        setNote(req.resolutionNote || "");
-                        setActionRequestUpdateError(null);
-                      }}
-                      style={{
-                        border: `1px solid ${colors.border}`,
-                        borderRadius: radius.md,
-                        padding: "8px 10px",
-                        background: colors.card,
-                        textAlign: "left",
-                        cursor: "pointer",
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        gap: 8,
-                      }}
-                    >
-                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                        <div style={{ fontWeight: 600, fontSize: 13 }}>
-                          {req.issueType}  {req.location}
-                        </div>
-                        <div style={{ fontSize: 12, color: text.muted }}>
-                          {safeLocaleDate(req.reportedAt)}
-                        </div>
+            ) : actionRequestsError ? (
+              <div style={{ color: colors.danger, fontSize: 13 }}>
+                {actionRequestsError}
+              </div>
+            ) : actionRequests.length === 0 ? (
+              <div style={{ color: text.muted, fontSize: 13 }}>
+                No action requests for this property.
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {actionRequests.map((req) => (
+                  <button
+                    key={req.id}
+                    type="button"
+                    onClick={() => {
+                      setActiveRequest(req);
+                      setModalOpen(true);
+                      setNote(req.resolutionNote || "");
+                      setActionRequestUpdateError(null);
+                    }}
+                    style={{
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: radius.md,
+                      padding: "8px 10px",
+                      background: colors.card,
+                      textAlign: "left",
+                      cursor: "pointer",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: 8,
+                    }}
+                  >
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      <div style={{ fontWeight: 600, fontSize: 13 }}>
+                        {req.issueType}  {req.location}
                       </div>
-                      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                        <span
-                          style={{
-                            padding: "2px 8px",
-                            borderRadius: radius.pill,
-                            border: `1px solid ${colors.border}`,
-                            color:
-                              req.severity === "urgent"
-                                ? colors.danger
-                                : req.severity === "medium"
-                                ? "#f59e0b"
-                                : "#22c55e",
-                            fontSize: 11,
-                          }}
-                        >
-                          {req.severity}
-                        </span>
-                        <span
-                          style={{
-                            padding: "2px 8px",
-                            borderRadius: radius.pill,
-                            border: `1px solid ${colors.border}`,
-                            fontSize: 11,
-                            color:
-                              req.status === "resolved"
-                                ? "#22c55e"
-                                : req.status === "acknowledged"
-                                ? "#f59e0b"
-                                : text.primary,
-                          }}
-                        >
-                          {req.status}
-                        </span>
+                      <div style={{ fontSize: 12, color: text.muted }}>
+                        {safeLocaleDate(req.reportedAt)}
                       </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </Section>
-          </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <span
+                        style={{
+                          padding: "2px 8px",
+                          borderRadius: radius.pill,
+                          border: `1px solid ${colors.border}`,
+                          color:
+                            req.severity === "urgent"
+                              ? colors.danger
+                              : req.severity === "medium"
+                              ? "#f59e0b"
+                              : "#22c55e",
+                          fontSize: 11,
+                        }}
+                      >
+                        {req.severity}
+                      </span>
+                      <span
+                        style={{
+                          padding: "2px 8px",
+                          borderRadius: radius.pill,
+                          border: `1px solid ${colors.border}`,
+                          fontSize: 11,
+                          color:
+                            req.status === "resolved"
+                              ? "#22c55e"
+                              : req.status === "acknowledged"
+                              ? "#f59e0b"
+                              : text.primary,
+                        }}
+                      >
+                        {req.status}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </Section>
         </Card>
       </div>
       <ActionRequestModal
