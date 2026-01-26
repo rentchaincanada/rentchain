@@ -115,10 +115,11 @@ export async function apiFetch<T = any>(
 
   // Mark requests coming from our API helpers so the dev fetch-guard doesn't warn
   headers["X-Rentchain-ApiClient"] = "1";
-  const hasToken = !!token;
-  headers["x-rc-auth"] = hasToken ? "bearer" : "missing";
+  const hasToken = typeof token === "string" ? token.trim().length > 0 : false;
+  const authHeaderSet = hasToken;
+  headers["x-rc-auth"] = authHeaderSet ? "bearer" : "missing";
 
-  if (hasToken) headers.Authorization = `Bearer ${token}`;
+  if (authHeaderSet) headers.Authorization = `Bearer ${token}`;
 
   if (import.meta.env.DEV) {
     const matchPath =
@@ -126,9 +127,12 @@ export async function apiFetch<T = any>(
       pathForMatch === "/api/tenant-invites" ||
       pathForMatch.startsWith("/tenant-invites/") ||
       pathForMatch.startsWith("/api/tenant-invites/");
-    if (matchPath) {
-      const authPrefix = String(headers.Authorization || "").split(" ")[0] || "";
-      console.debug("[tenant-invites] auth header check", { hasToken, authPrefix });
+    const isCreate =
+      matchPath &&
+      String(fetchInit.method || "GET").toUpperCase() === "POST" &&
+      (pathForMatch === "/tenant-invites" || pathForMatch === "/api/tenant-invites");
+    if (isCreate) {
+      console.debug("[tenant-invites] auth header check", { hasToken, authHeaderSet });
     }
   }
 

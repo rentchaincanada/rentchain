@@ -70,13 +70,16 @@ api.interceptors.request.use((config) => {
     path.startsWith("/tenant/") ||
     path.startsWith("/api/tenant/");
 
-  const token = isTenantPath ? getTenantToken() : getAuthToken();
-  if (token) {
+  const rawToken = isTenantPath ? getTenantToken() : getAuthToken();
+  const token = typeof rawToken === "string" ? rawToken.trim() : rawToken;
+  const hasToken = typeof token === "string" ? token.trim().length > 0 : false;
+  const authHeaderSet = hasToken;
+  if (authHeaderSet) {
     config.headers = config.headers ?? {};
     (config.headers as any).Authorization = `Bearer ${token}`;
   }
   config.headers = config.headers ?? {};
-  (config.headers as any)["x-rc-auth"] = token ? "bearer" : "missing";
+  (config.headers as any)["x-rc-auth"] = authHeaderSet ? "bearer" : "missing";
   config.withCredentials = true;
   return config;
 });
