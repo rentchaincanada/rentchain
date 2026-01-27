@@ -687,6 +687,13 @@ const ApplicationsPage: React.FC = () => {
                       </div>
                     </div>
                   ) : null}
+                  {isAdmin ? (
+                    <div>
+                      <Button variant="ghost" onClick={() => void handleRecomputeScreening()} disabled={manualSubmitting}>
+                        {manualSubmitting ? "Recomputing..." : "Recompute screening status"}
+                      </Button>
+                    </div>
+                  ) : null}
                   {detail.screeningLastEligibilityCheckedAt ? (
                     <div style={{ fontSize: 12, color: text.muted }}>
                       Eligibility checked: {new Date(detail.screeningLastEligibilityCheckedAt).toLocaleString()}

@@ -1157,14 +1157,18 @@ router.get(
         }));
 
       return res.json({ ok: true, events });
-    } catch (err: any) {
-      console.error("[rental-applications] screening events read failed", {
-        route: "screening_events_read",
-        applicationId: id,
-        userRole: role || "unknown",
-        landlordId: landlordId || null,
-        error: String(err?.message || err),
-      });
+ catch (err: any) {
+  const role = String(req.user?.role || "").toLowerCase();
+  const landlordId = req.user?.landlordId || req.user?.id || null;
+  const id = String(req.params?.id || "").trim();
+
+  console.error("[rental-applications] screening events read failed", {
+    route: "screening_events_read",
+    applicationId: id,
+    userRole: role || "unknown",
+    landlordId: landlordId || null,
+    error: String(err?.message || err),
+  });
       return res.status(500).json({ ok: false, error: "SCREENING_EVENTS_READ_FAILED" });
     }
   }
