@@ -11,14 +11,17 @@ import {
   createScreeningCheckout,
   fetchScreening,
   fetchScreeningResult,
+  fetchScreeningEvents,
   adminMarkScreeningComplete,
   adminMarkScreeningFailed,
+  adminRecomputeScreening,
   type RentalApplication,
   type RentalApplicationStatus,
   type RentalApplicationSummary,
   type ScreeningQuote,
   type ScreeningPipeline,
   type ScreeningResult,
+  type ScreeningEvent,
 } from "@/api/rentalApplicationsApi";
 import { useToast } from "../components/ui/ToastProvider";
 import { useCapabilities } from "@/hooks/useCapabilities";
@@ -62,6 +65,33 @@ const formatEligibilityReason = (value?: string | null) => {
   return SCREENING_REASON_LABELS[value] || value;
 };
 
+const formatScreeningEventLabel = (value: ScreeningEvent["type"]) => {
+  switch (value) {
+    case "paid":
+      return "Paid";
+    case "processing_started":
+      return "Processing started";
+    case "completed":
+      return "Completed";
+    case "failed":
+      return "Failed";
+    case "eligibility_checked":
+      return "Eligibility checked";
+    case "checkout_blocked":
+      return "Checkout blocked";
+    case "webhook_ignored":
+      return "Webhook ignored";
+    case "manual_complete":
+      return "Manual complete";
+    case "manual_fail":
+      return "Manual fail";
+    case "recomputed":
+      return "Recomputed";
+    default:
+      return value.replace(/_/g, " ");
+  }
+};
+
 const ApplicationsPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -99,6 +129,8 @@ const ApplicationsPage: React.FC = () => {
   const [manualReportText, setManualReportText] = useState("");
   const [manualFailureCode, setManualFailureCode] = useState("");
   const [manualFailureDetail, setManualFailureDetail] = useState("");
+  const [screeningEvents, setScreeningEvents] = useState<ScreeningEvent[]>([]);
+  const [screeningEventsLoading, setScreeningEventsLoading] = useState(false);
 
   const screeningOptions = [
     { value: "SELF_SERVE", label: "Self-serve screening", priceLabel: "$19.99" },
@@ -119,6 +151,22 @@ const ApplicationsPage: React.FC = () => {
       setScreeningStatus(null);
     } finally {
       setScreeningStatusLoading(false);
+    }
+  };
+
+  const loadScreeningEvents = async (applicationId: string) => {
+    setScreeningEventsLoading(true);
+    try {
+      const res = await fetchScreeningEvents(applicationId, 50);
+      if (res?.ok) {
+        setScreeningEvents(res.events || []);
+      } else {
+        setScreeningEvents([]);
+      }
+    } catch {
+      setScreeningEvents([]);
+    } finally {
+      setScreeningEventsLoading(false);
     }
   };
 
@@ -207,6 +255,7 @@ const ApplicationsPage: React.FC = () => {
   useEffect(() => {
     if (!detail?.id) {
       setScreeningStatus(null);
+      setScreeningEvents([]);
       return;
     }
     setScreeningStatus({
@@ -220,6 +269,7 @@ const ApplicationsPage: React.FC = () => {
       resultId: detail.screeningResultId ?? null,
     });
     void loadScreeningStatus(detail.id);
+    void loadScreeningEvents(detail.id);
   }, [detail?.id]);
 
   useEffect(() => {
@@ -327,6 +377,7 @@ const ApplicationsPage: React.FC = () => {
       setManualFlags("");
       setManualScoreBand("");
       await loadScreeningStatus(detail.id);
+      await loadScreeningEvents(detail.id);
     } finally {
       setManualSubmitting(false);
     }
@@ -353,6 +404,24 @@ const ApplicationsPage: React.FC = () => {
       setManualFailureCode("");
       setManualFailureDetail("");
       await loadScreeningStatus(detail.id);
+      await loadScreeningEvents(detail.id);
+    } finally {
+      setManualSubmitting(false);
+    }
+  };
+
+  const handleRecomputeScreening = async () => {
+    if (!detail?.id) return;
+    setManualSubmitting(true);
+    try {
+      const res = await adminRecomputeScreening(detail.id);
+      if (!res.ok) {
+        showToast({ message: res.error || "Unable to recompute screening status.", variant: "error" });
+        return;
+      }
+      showToast({ message: `Screening recomputed: ${res.from} → ${res.to}`, variant: "success" });
+      await loadScreeningStatus(detail.id);
+      await loadScreeningEvents(detail.id);
     } finally {
       setManualSubmitting(false);
     }
@@ -579,6 +648,13 @@ const ApplicationsPage: React.FC = () => {
                       </Button>
                     </div>
                   ) : null}
+                  {isAdmin ? (
+                    <div>
+                      <Button variant="ghost" onClick={() => void handleRecomputeScreening()} disabled={manualSubmitting}>
+                        {manualSubmitting ? "Recomputing..." : "Recompute screening status"}
+                      </Button>
+                    </div>
+                  ) : null}
                   {detail.screeningLastEligibilityCheckedAt ? (
                     <div style={{ fontSize: 12, color: text.muted }}>
                       Eligibility checked: {new Date(detail.screeningLastEligibilityCheckedAt).toLocaleString()}
@@ -703,11 +779,53 @@ const ApplicationsPage: React.FC = () => {
                   </div>
                 )}
               </Card>
+              <Card>
+                <div style={{ fontWeight: 700, marginBottom: 8 }}>Timeline</div>
+                {screeningEventsLoading ? (
+                  <div style={{ color: text.muted, fontSize: 13 }}>Loading timeline...</div>
+                ) : screeningEvents.length ? (
+                  <div style={{ display: "grid", gap: 10 }}>
+                    {screeningEvents.map((event) => (
+                      <div
+                        key={event.id}
+                        style={{
+                          border: `1px solid ${colors.border}`,
+                          borderRadius: radius.md,
+                          padding: spacing.sm,
+                          background: colors.panel,
+                          display: "grid",
+                          gap: 4,
+                        }}
+                      >
+                        <div style={{ fontWeight: 600 }}>{formatScreeningEventLabel(event.type)}</div>
+                        <div style={{ fontSize: 12, color: text.muted }}>
+                          {event.at ? new Date(event.at).toLocaleString() : "—"}
+                        </div>
+                        {event.meta?.reasonCode ? (
+                          <div style={{ fontSize: 12, color: text.subtle }}>Reason: {event.meta.reasonCode}</div>
+                        ) : null}
+                        {event.meta?.status ? (
+                          <div style={{ fontSize: 12, color: text.subtle }}>Status: {event.meta.status}</div>
+                        ) : null}
+                        {event.meta?.from || event.meta?.to ? (
+                          <div style={{ fontSize: 12, color: text.subtle }}>
+                            {event.meta?.from ? `From: ${event.meta.from}` : null}
+                            {event.meta?.from && event.meta?.to ? " · " : null}
+                            {event.meta?.to ? `To: ${event.meta.to}` : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ color: text.muted, fontSize: 13 }}>No screening events recorded yet.</div>
+                )}
+              </Card>
             </div>
           )}
         </Section>
       </Card>
-      </div>
+    </div>
       {resultModalOpen && (
       <div
         style={{
