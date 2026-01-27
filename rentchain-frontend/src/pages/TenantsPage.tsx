@@ -99,22 +99,23 @@ export const TenantsPage: React.FC = () => {
 
   return (
     <div className="page-content" style={{ display: "flex", flexDirection: "column", gap: spacing.lg }}>
-      <Card elevated>
+      <Card elevated className="rc-tenants-header">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
-            <h1 style={{ margin: 0, fontSize: "1.4rem", fontWeight: 700 }}>Tenants</h1>
-            <div style={{ marginTop: 4, color: text.muted, fontSize: "0.95rem" }}>
+            <h1 style={{ margin: 0, fontSize: "1.35rem", fontWeight: 700 }}>Tenants</h1>
+            <div style={{ marginTop: 4, color: text.muted, fontSize: "0.95rem", lineHeight: 1.45 }}>
               Manage tenant records, ledgers, and unit occupancy.
             </div>
           </div>
           <button
             onClick={() => setInviteOpen(true)}
             style={{
-              padding: "8px 12px",
+              padding: "10px 12px",
               borderRadius: radius.sm,
               border: `1px solid ${colors.border}`,
               background: colors.panel,
               cursor: "pointer",
+              minHeight: 44,
             }}
           >
             Invite tenant
@@ -148,6 +149,7 @@ export const TenantsPage: React.FC = () => {
                 return (
                   <button
                     key={tenant.id}
+                    className="rc-tenants-list-item"
                     type="button"
                     onClick={() => handleSelectTenant(tenant.id)}
                     style={{
@@ -157,7 +159,7 @@ export const TenantsPage: React.FC = () => {
                       borderColor: isSelected ? colors.accent : colors.border,
                       background: isSelected ? "rgba(96,165,250,0.08)" : colors.card,
                       borderRadius: radius.md,
-                      padding: "10px 12px",
+                      padding: "12px 12px",
                       color: text.primary,
                       cursor: "pointer",
                       display: "flex",
@@ -172,10 +174,10 @@ export const TenantsPage: React.FC = () => {
                       e.currentTarget.style.borderColor = isSelected ? colors.accent : colors.border;
                     }}
                   >
-                    <span style={{ fontSize: 13, fontWeight: 600 }}>
+                    <span style={{ fontSize: 15, fontWeight: 600 }}>
                       {tenant.name || tenant.fullName || "Unnamed tenant"}
                     </span>
-                    <span style={{ fontSize: 11, color: text.muted }}>
+                    <span style={{ fontSize: 12, color: text.muted }}>
                       {(tenant.propertyName || tenant.propertyId || "Property") + " - " + (tenant.unitLabel || tenant.unit || "")}
                     </span>
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
