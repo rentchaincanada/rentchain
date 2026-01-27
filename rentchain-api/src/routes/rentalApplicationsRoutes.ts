@@ -1099,16 +1099,16 @@ router.get(
   attachAccount,
   requireFeature("screening"),
   async (req: any, res) => {
+    const role = String(req.user?.role || "").toLowerCase();
+    const landlordId = req.user?.landlordId || req.user?.id || null;
+    const id = String(req.params?.id || "").trim();
     try {
-      const role = String(req.user?.role || "").toLowerCase();
       if (role !== "landlord" && role !== "admin") {
         return res.status(403).json({ ok: false, error: "FORBIDDEN" });
       }
-      const landlordId = req.user?.landlordId || req.user?.id || null;
       if (role !== "admin" && !landlordId) {
         return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
       }
-      const id = String(req.params?.id || "").trim();
       if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
 
       const snap = await db.collection("rentalApplications").doc(id).get();
@@ -1119,19 +1119,52 @@ router.get(
       }
 
       const rawLimit = Number(req.query?.limit);
-      const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 100) : 50;
+      const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 200) : 50;
 
-      const eventsSnap = await db
-        .collection("screeningEvents")
-        .where("applicationId", "==", id)
-        .orderBy("at", "desc")
-        .limit(limit)
-        .get();
+      let eventsSnap: FirebaseFirestore.QuerySnapshot | null = null;
+      try {
+        eventsSnap = await db
+          .collection("screeningEvents")
+          .where("applicationId", "==", id)
+          .orderBy("at", "desc")
+          .limit(limit)
+          .get();
+      } catch (err: any) {
+        console.warn("[screening_events_read] orderBy failed, falling back to unordered query", {
+          applicationId: id,
+          error: err?.message || err,
+        });
+        eventsSnap = await db
+          .collection("screeningEvents")
+          .where("applicationId", "==", id)
+          .limit(limit)
+          .get();
+      }
 
-      const events = eventsSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as any) }));
+      const events = (eventsSnap?.docs || [])
+        .map((doc) => ({ id: doc.id, ...(doc.data() as any) }))
+        .sort((a, b) => {
+          const aAt = Number(a.at ?? a.createdAt ?? 0);
+          const bAt = Number(b.at ?? b.createdAt ?? 0);
+          return bAt - aAt;
+        })
+        .map((event) => ({
+          id: event.id,
+          type: event.type,
+          at: event.at ?? event.createdAt ?? 0,
+          actor: event.actor,
+          meta: event.meta || {},
+        }));
+
       return res.json({ ok: true, events });
     } catch (err: any) {
-      console.error("[rental-applications] screening events read failed", err?.message || err);
+      console.error("[rental-applications] screening events read failed", {
+        route: "screening_events_read",
+        applicationId: id,
+        userRole: role || "unknown",
+        landlordId: landlordId || null,
+        error: String(err?.message || err),
+      });
       return res.status(500).json({ ok: false, error: "SCREENING_EVENTS_READ_FAILED" });
     }
   }
