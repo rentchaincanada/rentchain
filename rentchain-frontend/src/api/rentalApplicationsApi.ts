@@ -51,6 +51,33 @@ export type ScreeningResult = {
   reportText?: string | null;
 };
 
+export type ScreeningEvent = {
+  id: string;
+  applicationId: string;
+  landlordId: string;
+  type:
+    | "paid"
+    | "processing_started"
+    | "completed"
+    | "failed"
+    | "eligibility_checked"
+    | "checkout_blocked"
+    | "webhook_ignored"
+    | "manual_complete"
+    | "manual_fail"
+    | "recomputed";
+  at: number;
+  meta?: {
+    reasonCode?: string;
+    status?: string;
+    stripeEventId?: string;
+    sessionId?: string;
+    from?: string;
+    to?: string;
+  };
+  actor?: "system" | "admin" | "landlord";
+};
+
 export type RentalApplication = {
   id: string;
   landlordId: string;
@@ -289,6 +316,16 @@ export async function fetchScreeningResult(
   return res as { ok: boolean; result?: ScreeningResult; error?: string };
 }
 
+export async function fetchScreeningEvents(
+  id: string,
+  limit = 50
+): Promise<{ ok: boolean; events?: ScreeningEvent[]; error?: string }> {
+  const res: any = await apiFetch(
+    `/rental-applications/${encodeURIComponent(id)}/screening/events?limit=${encodeURIComponent(String(limit))}`
+  );
+  return res as { ok: boolean; events?: ScreeningEvent[]; error?: string };
+}
+
 export async function adminMarkScreeningComplete(
   id: string,
   payload: { overall: "pass" | "review" | "fail"; scoreBand?: "A" | "B" | "C" | "D" | "E"; flags?: string[]; reportText?: string }
@@ -311,4 +348,13 @@ export async function adminMarkScreeningFailed(
     body: JSON.stringify(payload),
   });
   return res as { ok: boolean; error?: string };
+}
+
+export async function adminRecomputeScreening(
+  id: string
+): Promise<{ ok: boolean; from?: string; to?: string; error?: string }> {
+  const res: any = await apiFetch(`/admin/rental-applications/${encodeURIComponent(id)}/screening/recompute`, {
+    method: "POST",
+  });
+  return res as { ok: boolean; from?: string; to?: string; error?: string };
 }

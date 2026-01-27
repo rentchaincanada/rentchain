@@ -7,6 +7,7 @@ import { stripeNotConfiguredResponse, isStripeNotConfiguredError } from "../lib/
 import { finalizeStripePayment } from "../services/stripeFinalize";
 import { applyScreeningResultsFromOrder } from "../services/stripeScreeningProcessor";
 import { beginScreening } from "../services/screening/screeningOrchestrator";
+import { writeScreeningEvent } from "../services/screening/screeningEvents";
 
 interface StripeWebhookRequest extends Request {
   rawBody?: Buffer;
@@ -28,6 +29,14 @@ async function markApplicationScreeningPaid(params: {
   const appRef = db.collection("rentalApplications").doc(applicationId);
   const snap = await appRef.get();
   if (!snap.exists) {
+    await writeScreeningEvent({
+      applicationId,
+      landlordId: null,
+      type: "webhook_ignored",
+      at: paidAt,
+      meta: { status: "application_missing", stripeEventId: eventId, sessionId },
+      actor: "system",
+    });
     console.log("[stripe_webhook]", {
       route: "stripe_webhook",
       eventType,
@@ -41,6 +50,14 @@ async function markApplicationScreeningPaid(params: {
   const existingStatus = String(data?.screeningStatus || "").toLowerCase();
   const existingSessionId = String(data?.screeningSessionId || "");
   if (existingStatus === "paid" || (existingSessionId && existingSessionId === sessionId)) {
+    await writeScreeningEvent({
+      applicationId,
+      landlordId: data?.landlordId || null,
+      type: "webhook_ignored",
+      at: paidAt,
+      meta: { status: "already_paid", stripeEventId: eventId, sessionId },
+      actor: "system",
+    });
     console.log("[stripe_webhook]", {
       route: "stripe_webhook",
       eventType,
@@ -61,6 +78,15 @@ async function markApplicationScreeningPaid(params: {
     },
     { merge: true }
   );
+
+  await writeScreeningEvent({
+    applicationId,
+    landlordId: data?.landlordId || null,
+    type: "paid",
+    at: paidAt,
+    meta: { stripeEventId: eventId, sessionId },
+    actor: "system",
+  });
 
   console.log("[stripe_webhook]", {
     route: "stripe_webhook",

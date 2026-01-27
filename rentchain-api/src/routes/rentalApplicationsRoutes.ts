@@ -9,6 +9,7 @@ import { getStripeClient, isStripeConfigured } from "../services/stripeService";
 import { finalizeStripePayment } from "../services/stripeFinalize";
 import { applyScreeningResultsFromOrder } from "../services/stripeScreeningProcessor";
 import { buildScreeningStatusPayload } from "../services/screening/screeningPayload";
+import { writeScreeningEvent } from "../services/screening/screeningEvents";
 
 const router = Router();
 
@@ -374,6 +375,14 @@ router.post(
       }
 
       const eligibility = evaluateEligibility(data);
+      await writeScreeningEvent({
+        applicationId: id,
+        landlordId: data?.landlordId || null,
+        type: "eligibility_checked",
+        at: Date.now(),
+        meta: { reasonCode: eligibility.reasonCode, status: eligibility.eligible ? "eligible" : "ineligible" },
+        actor: role === "admin" ? "admin" : "landlord",
+      });
       if (!eligibility.eligible) {
         return res.json({ ok: false, error: "NOT_ELIGIBLE", detail: eligibility.detail });
       }
@@ -427,11 +436,27 @@ router.post(
       }
 
       if (isScreeningAlreadyPaid(data)) {
+        await writeScreeningEvent({
+          applicationId: id,
+          landlordId: data?.landlordId || null,
+          type: "checkout_blocked",
+          at: Date.now(),
+          meta: { status: "already_paid" },
+          actor: role === "admin" ? "admin" : "landlord",
+        });
         return res.status(400).json({ ok: false, error: "screening_already_paid" });
       }
 
       const eligibility = evaluateEligibility(data);
       const eligibilityCheckedAt = Date.now();
+      await writeScreeningEvent({
+        applicationId: id,
+        landlordId: data?.landlordId || null,
+        type: "eligibility_checked",
+        at: eligibilityCheckedAt,
+        meta: { reasonCode: eligibility.reasonCode, status: eligibility.eligible ? "eligible" : "ineligible" },
+        actor: role === "admin" ? "admin" : "landlord",
+      });
       await db.collection("rentalApplications").doc(id).set(
         {
           screeningLastEligibilityReasonCode: eligibility.reasonCode || null,
@@ -1065,6 +1090,47 @@ router.get(
     } catch (err: any) {
       console.error("[rental-applications] screening result read failed", err?.message || err);
       return res.status(500).json({ ok: false, error: "SCREENING_RESULT_READ_FAILED" });
+    }
+  }
+);
+
+router.get(
+  "/rental-applications/:id/screening/events",
+  attachAccount,
+  requireFeature("screening"),
+  async (req: any, res) => {
+    try {
+      const role = String(req.user?.role || "").toLowerCase();
+      if (role !== "landlord" && role !== "admin") {
+        return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+      }
+      const landlordId = req.user?.landlordId || req.user?.id || null;
+      if (!landlordId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+      const id = String(req.params?.id || "").trim();
+      if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+      const snap = await db.collection("rentalApplications").doc(id).get();
+      if (!snap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+      const data = snap.data() as any;
+      if (data?.landlordId && data.landlordId !== landlordId) {
+        return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+      }
+
+      const rawLimit = Number(req.query?.limit);
+      const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 100) : 50;
+
+      const eventsSnap = await db
+        .collection("screeningEvents")
+        .where("applicationId", "==", id)
+        .orderBy("at", "desc")
+        .limit(limit)
+        .get();
+
+      const events = eventsSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as any) }));
+      return res.json({ ok: true, events });
+    } catch (err: any) {
+      console.error("[rental-applications] screening events read failed", err?.message || err);
+      return res.status(500).json({ ok: false, error: "SCREENING_EVENTS_READ_FAILED" });
     }
   }
 );
