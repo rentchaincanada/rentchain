@@ -941,10 +941,10 @@ router.post(
       if (role !== "landlord" && role !== "admin") {
         return res.status(403).json({ ok: false, error: "FORBIDDEN" });
       }
-        const sessionId = String(req.body?.sessionId || "").trim();
-        if (!sessionId) {
-          return res.status(400).json({ ok: false, error: "missing_session_id" });
-        }
+      const sessionId = String(req.body?.sessionId || "").trim();
+      if (!sessionId) {
+        return res.status(400).json({ ok: false, error: "missing_session_id" });
+      }
 
       let stripe: any;
       try {
@@ -959,14 +959,14 @@ router.post(
       const session = await stripe.checkout.sessions.retrieve(sessionId, {
         expand: ["payment_intent"],
       });
-        if (!session || session.payment_status !== "paid") {
-          return res.status(409).json({
-            ok: false,
-            error: "not_paid",
-            payment_status: session?.payment_status || null,
-            status: session?.status || null,
-          });
-        }
+      if (!session || session.payment_status !== "paid") {
+        return res.status(409).json({
+          ok: false,
+          error: "not_paid",
+          payment_status: session?.payment_status || null,
+          status: session?.status || null,
+        });
+      }
 
       const paymentIntent =
         typeof session.payment_intent === "string"
@@ -975,43 +975,43 @@ router.post(
       const paymentIntentId =
         typeof session.payment_intent === "string" ? session.payment_intent : paymentIntent?.id;
 
-        const orderId =
-          (session.client_reference_id as string | null) ||
-          (session.metadata?.orderId as string | undefined);
-        const applicationId = session.metadata?.applicationId;
-        const landlordId = session.metadata?.landlordId;
+      const orderId =
+        (session.client_reference_id as string | null) ||
+        (session.metadata?.orderId as string | undefined);
+      const applicationId = session.metadata?.applicationId;
+      const landlordId = session.metadata?.landlordId;
 
-        const finalize = await finalizeStripePayment({
-          eventId: `manual_confirm_${session.id}_${paymentIntentId || "na"}`,
-          eventType: "manual.confirm",
-          orderId: orderId || undefined,
-          sessionId: session.id,
-          paymentIntentId,
-          amountTotalCents: typeof session.amount_total === "number" ? session.amount_total : undefined,
-          currency: session.currency || undefined,
-          landlordId: landlordId || undefined,
-          applicationId: applicationId || undefined,
+      const finalize = await finalizeStripePayment({
+        eventId: `manual_confirm_${session.id}_${paymentIntentId || "na"}`,
+        eventType: "manual.confirm",
+        orderId: orderId || undefined,
+        sessionId: session.id,
+        paymentIntentId,
+        amountTotalCents: typeof session.amount_total === "number" ? session.amount_total : undefined,
+        currency: session.currency || undefined,
+        landlordId: landlordId || undefined,
+        applicationId: applicationId || undefined,
+      });
+
+      if (!finalize.ok) {
+        return res.status(404).json({ ok: false, error: finalize.error || "finalize_failed" });
+      }
+
+      const resolvedOrderId = finalize.orderIdResolved || orderId;
+      if (!finalize.alreadyFinalized && resolvedOrderId && applicationId) {
+        await applyScreeningResultsFromOrder({
+          orderId: resolvedOrderId,
+          applicationId: String(applicationId),
         });
+      }
 
-        if (!finalize.ok) {
-          return res.status(404).json({ ok: false, error: finalize.error || "finalize_failed" });
-        }
-
-        const resolvedOrderId = finalize.orderIdResolved || orderId;
-        if (!finalize.alreadyFinalized && resolvedOrderId && applicationId) {
-          await applyScreeningResultsFromOrder({
-            orderId: resolvedOrderId,
-            applicationId: String(applicationId),
-          });
-        }
-
-        return res.json({
-          ok: true,
-          orderId: resolvedOrderId || null,
-          applicationId: applicationId || null,
-          alreadyProcessed: finalize.alreadyProcessed,
-          alreadyFinalized: finalize.alreadyFinalized,
-        });
+      return res.json({
+        ok: true,
+        orderId: resolvedOrderId || null,
+        applicationId: applicationId || null,
+        alreadyProcessed: finalize.alreadyProcessed,
+        alreadyFinalized: finalize.alreadyFinalized,
+      });
     } catch (err: any) {
       console.error("[screening/stripe/confirm] failed", err?.message || err);
       return res.status(500).json({ ok: false, error: "STRIPE_CONFIRM_FAILED" });
@@ -1094,85 +1094,82 @@ router.get(
   }
 );
 
-router.get(
-  "/rental-applications/:id/screening/events",
-  attachAccount,
-  requireFeature("screening"),
-  async (req: any, res) => {
+router.get("/rental-applications/:id/screening/events", attachAccount, requireFeature("screening"), async (req, res) => {
+  try {
     const role = String(req.user?.role || "").toLowerCase();
     const landlordId = req.user?.landlordId || req.user?.id || null;
     const id = String(req.params?.id || "").trim();
-    try {
-      if (role !== "landlord" && role !== "admin") {
-        return res.status(403).json({ ok: false, error: "FORBIDDEN" });
-      }
-      if (role !== "admin" && !landlordId) {
-        return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
-      }
-      if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
 
-      const snap = await db.collection("rentalApplications").doc(id).get();
-      if (!snap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
-      const data = snap.data() as any;
-      if (role !== "admin" && data?.landlordId && data.landlordId !== landlordId) {
-        return res.status(403).json({ ok: false, error: "FORBIDDEN" });
-      }
-
-      const rawLimit = Number(req.query?.limit);
-      const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 200) : 50;
-
-      let eventsSnap: FirebaseFirestore.QuerySnapshot | null = null;
-      try {
-        eventsSnap = await db
-          .collection("screeningEvents")
-          .where("applicationId", "==", id)
-          .orderBy("at", "desc")
-          .limit(limit)
-          .get();
-      } catch (err: any) {
-        console.warn("[screening_events_read] orderBy failed, falling back to unordered query", {
-          applicationId: id,
-          error: err?.message || err,
-        });
-        eventsSnap = await db
-          .collection("screeningEvents")
-          .where("applicationId", "==", id)
-          .limit(limit)
-          .get();
-      }
-
-      const events = (eventsSnap?.docs || [])
-        .map((doc) => ({ id: doc.id, ...(doc.data() as any) }))
-        .sort((a, b) => {
-          const aAt = Number(a.at ?? a.createdAt ?? 0);
-          const bAt = Number(b.at ?? b.createdAt ?? 0);
-          return bAt - aAt;
-        })
-        .map((event) => ({
-          id: event.id,
-          type: event.type,
-          at: event.at ?? event.createdAt ?? 0,
-          actor: event.actor,
-          meta: event.meta || {},
-        }));
-
-      return res.json({ ok: true, events });
- catch (err: any) {
-  const role = String(req.user?.role || "").toLowerCase();
-  const landlordId = req.user?.landlordId || req.user?.id || null;
-  const id = String(req.params?.id || "").trim();
-
-  console.error("[rental-applications] screening events read failed", {
-    route: "screening_events_read",
-    applicationId: id,
-    userRole: role || "unknown",
-    landlordId: landlordId || null,
-    error: String(err?.message || err),
-  });
-      return res.status(500).json({ ok: false, error: "SCREENING_EVENTS_READ_FAILED" });
+    if (role !== "landlord" && role !== "admin") {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
     }
+    if (role !== "admin" && !landlordId) {
+      return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    }
+    if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+    const snap = await db.collection("rentalApplications").doc(id).get();
+    if (!snap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+    const data = snap.data() as any;
+    if (role !== "admin" && data?.landlordId && data.landlordId !== landlordId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const rawLimit = Number(req.query?.limit);
+    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 200) : 50;
+
+    let eventsDocs: Array<{ id: string; [k: string]: any }> = [];
+
+    try {
+      const eventsSnap = await db
+        .collection("screeningEvents")
+        .where("applicationId", "==", id)
+        .orderBy("at", "desc")
+        .limit(limit)
+        .get();
+      eventsDocs = eventsSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as any) }));
+    } catch (err: any) {
+      console.warn("[screening_events_read] orderBy failed, falling back to unordered query", {
+        applicationId: id,
+        error: String(err?.message || err),
+      });
+      const eventsSnap = await db
+        .collection("screeningEvents")
+        .where("applicationId", "==", id)
+        .limit(limit)
+        .get();
+      eventsDocs = eventsSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as any) }));
+    }
+
+    const events = eventsDocs
+      .sort((a, b) => Number(b.at ?? b.createdAt ?? 0) - Number(a.at ?? a.createdAt ?? 0))
+      .map((e) => ({
+        id: e.id,
+        type: e.type,
+        at: e.at ?? e.createdAt ?? 0,
+        actor: e.actor,
+        meta: e.meta || {},
+      }));
+
+    return res.json({ ok: true, events });
+  } catch (err: any) {
+    const role = String(req.user?.role || "").toLowerCase();
+    const landlordId = req.user?.landlordId || req.user?.id || null;
+    const id = String(req.params?.id || "").trim();
+
+    console.error("[rental-applications] screening events read failed", {
+      route: "screening_events_read",
+      applicationId: id,
+      userRole: role || "unknown",
+      landlordId: landlordId || null,
+      error: String(err?.message || err),
+    });
+
+    return res.status(500).json({ ok: false, error: "SCREENING_EVENTS_READ_FAILED" });
   }
-);
+});
+
 
 function safeParse(raw: string) {
   try {
