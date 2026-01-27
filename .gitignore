@@ -10,3 +10,6 @@
 sendgrid.env
 rentchain-api/sendgrid.env
 
+# nvm-windows
+nvm/
+
