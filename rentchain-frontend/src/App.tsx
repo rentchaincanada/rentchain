@@ -36,6 +36,7 @@ import { RequireAdmin } from "./components/auth/RequireAdmin";
 import ScreeningStartPage from "./pages/screening/ScreeningStartPage";
 import ScreeningSuccessPage from "./pages/screening/ScreeningSuccessPage";
 import ScreeningCancelPage from "./pages/screening/ScreeningCancelPage";
+import ScreeningReportPage from "./pages/screening/ScreeningReportPage";
 import BillingPage from "./pages/BillingPage";
 import { DebugPanel } from "./components/DebugPanel";
 import MicroLiveInvitePage from "./pages/MicroLiveInvitePage";
@@ -234,6 +235,7 @@ function App() {
             </RequireAuth>
           }
         />
+        <Route path="/screening/report" element={<ScreeningReportPage />} />
         <Route
           path="/payments"
           element={

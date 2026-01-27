@@ -358,3 +358,12 @@ export async function adminRecomputeScreening(
   });
   return res as { ok: boolean; from?: string; to?: string; error?: string };
 }
+
+export async function exportScreeningReport(
+  id: string
+): Promise<{ ok: boolean; exportId?: string; shareUrl?: string; expiresAt?: number; error?: string }> {
+  const res: any = await apiFetch(`/rental-applications/${encodeURIComponent(id)}/screening/export`, {
+    method: "POST",
+  });
+  return res as { ok: boolean; exportId?: string; shareUrl?: string; expiresAt?: number; error?: string };
+}
