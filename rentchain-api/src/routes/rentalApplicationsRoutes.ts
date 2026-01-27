@@ -1121,7 +1121,7 @@ router.get("/rental-applications/:id/screening/events", attachAccount, requireFe
     const rawLimit = Number(req.query?.limit);
     const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 200) : 50;
 
-    let eventsDocs: Array<{ id: string; [k: string]: any }> = [];
+    let eventsDocs: Array<{ id: string;[k: string]: any }> = [];
 
     try {
       const eventsSnap = await db
