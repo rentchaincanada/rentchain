@@ -27,6 +27,7 @@ import {
 import { useToast } from "../components/ui/ToastProvider";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { useAuth } from "../context/useAuth";
+import "./ApplicationsPage.css";
 
 const statusOptions: RentalApplicationStatus[] = [
   "SUBMITTED",
@@ -545,15 +546,8 @@ const ApplicationsPage: React.FC = () => {
         </div>
       </Card>
 
-      <Card
-        elevated
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(260px, 1fr) minmax(0, 2fr)",
-          gap: spacing.lg,
-        }}
-      >
-        <div style={{ display: "grid", gap: 8 }}>
+      <Card elevated className="rc-applications-grid">
+        <div className="rc-applications-list">
           {loading ? (
             <div style={{ color: text.muted }}>Loading applications...</div>
           ) : error ? (
@@ -587,7 +581,7 @@ const ApplicationsPage: React.FC = () => {
           )}
         </div>
 
-        <Section>
+        <Section className="rc-applications-detail">
           {loadingDetail ? (
             <div style={{ color: text.muted }}>Loading application...</div>
           ) : !detail ? (
@@ -596,8 +590,8 @@ const ApplicationsPage: React.FC = () => {
             <div style={{ display: "grid", gap: spacing.md }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div>
-                  <div style={{ fontSize: "1.2rem", fontWeight: 700 }}>{detail.applicant.firstName} {detail.applicant.lastName}</div>
-                  <div style={{ color: text.muted }}>{detail.applicant.email}</div>
+                  <div style={{ fontSize: "1.35rem", fontWeight: 700 }}>{detail.applicant.firstName} {detail.applicant.lastName}</div>
+                  <div style={{ color: text.muted, fontSize: 13 }}>{detail.applicant.email}</div>
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
                   {statusOptions.map((s) => (
@@ -607,32 +601,6 @@ const ApplicationsPage: React.FC = () => {
                   ))}
                 </div>
               </div>
-
-              <Card>
-                <div style={{ fontWeight: 700, marginBottom: 8 }}>Consent</div>
-                <div style={{ display: "grid", gap: 4 }}>
-                  <div>Credit consent: {detail.consent.creditConsent ? "Yes" : "No"}</div>
-                  <div>Reference consent: {detail.consent.referenceConsent ? "Yes" : "No"}</div>
-                  <div>Data sharing consent: {detail.consent.dataSharingConsent ? "Yes" : "No"}</div>
-                  <div>Accepted at: {detail.consent.acceptedAt ? new Date(detail.consent.acceptedAt).toLocaleString() : "-"}</div>
-                </div>
-              </Card>
-
-              <Card>
-                <div style={{ fontWeight: 700, marginBottom: 8 }}>Residential history</div>
-                <div style={{ display: "grid", gap: 8 }}>
-                  {detail.residentialHistory?.length ? detail.residentialHistory.map((h, idx) => (
-                    <div key={idx} style={{ border: `1px solid ${colors.border}`, borderRadius: radius.md, padding: 10 }}>
-                      <div style={{ fontWeight: 600 }}>{h.address}</div>
-                      <div style={{ color: text.muted, fontSize: 12 }}>
-                        {h.durationMonths ? `${h.durationMonths} months` : ""}{h.rentAmountCents ? ` · $${(h.rentAmountCents / 100).toFixed(0)}` : ""}
-                      </div>
-                      <div style={{ fontSize: 12 }}>Landlord: {h.landlordName || "-"} {h.landlordPhone ? `(${h.landlordPhone})` : ""}</div>
-                      {h.reasonForLeaving ? <div style={{ fontSize: 12 }}>Reason: {h.reasonForLeaving}</div> : null}
-                    </div>
-                  )) : <div style={{ color: text.muted }}>No history provided.</div>}
-                </div>
-              </Card>
 
               <Card>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing.sm, marginBottom: 8 }}>
@@ -896,6 +864,32 @@ const ApplicationsPage: React.FC = () => {
                 ) : (
                   <div style={{ color: text.muted, fontSize: 13 }}>No screening events recorded yet.</div>
                 )}
+              </Card>
+
+              <Card>
+                <div style={{ fontWeight: 700, marginBottom: 8 }}>Consent</div>
+                <div style={{ display: "grid", gap: 6, fontSize: 13 }}>
+                  <div>Credit consent: {detail.consent.creditConsent ? "Yes" : "No"}</div>
+                  <div>Reference consent: {detail.consent.referenceConsent ? "Yes" : "No"}</div>
+                  <div>Data sharing consent: {detail.consent.dataSharingConsent ? "Yes" : "No"}</div>
+                  <div>Accepted at: {detail.consent.acceptedAt ? new Date(detail.consent.acceptedAt).toLocaleString() : "-"}</div>
+                </div>
+              </Card>
+
+              <Card>
+                <div style={{ fontWeight: 700, marginBottom: 8 }}>Residential history</div>
+                <div style={{ display: "grid", gap: 8 }}>
+                  {detail.residentialHistory?.length ? detail.residentialHistory.map((h, idx) => (
+                    <div key={idx} style={{ border: `1px solid ${colors.border}`, borderRadius: radius.md, padding: 12 }}>
+                      <div style={{ fontWeight: 600 }}>{h.address}</div>
+                      <div style={{ color: text.muted, fontSize: 12 }}>
+                        {h.durationMonths ? `${h.durationMonths} months` : ""}{h.rentAmountCents ? ` · $${(h.rentAmountCents / 100).toFixed(0)}` : ""}
+                      </div>
+                      <div style={{ fontSize: 12 }}>Landlord: {h.landlordName || "-"} {h.landlordPhone ? `(${h.landlordPhone})` : ""}</div>
+                      {h.reasonForLeaving ? <div style={{ fontSize: 12 }}>Reason: {h.reasonForLeaving}</div> : null}
+                    </div>
+                  )) : <div style={{ color: text.muted }}>No history provided.</div>}
+                </div>
               </Card>
             </div>
           )}

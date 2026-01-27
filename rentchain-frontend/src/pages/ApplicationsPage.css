@@ -1,0 +1,25 @@
+.rc-applications-grid {
+  display: grid;
+  grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+  gap: 24px;
+  min-height: 0;
+}
+
+.rc-applications-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rc-applications-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+}
+
+@media (max-width: 900px) {
+  .rc-applications-grid {
+    grid-template-columns: 1fr;
+  }
+}

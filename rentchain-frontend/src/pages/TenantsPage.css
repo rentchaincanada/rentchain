@@ -1,0 +1,47 @@
+.rc-tenants-grid {
+  display: grid;
+  grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+  gap: 24px;
+  min-height: 0;
+}
+
+.rc-tenants-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+.rc-tenants-search {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: transparent;
+  padding-top: 2px;
+}
+
+.rc-tenants-list-scroll {
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  padding-bottom: 8px;
+}
+
+.rc-tenants-detail {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+@media (max-width: 900px) {
+  .rc-tenants-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .rc-tenants-list-scroll {
+    overflow: visible;
+  }
+}

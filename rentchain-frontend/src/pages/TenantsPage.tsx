@@ -10,6 +10,7 @@ import { Card, Section, Input } from "../components/ui/Ui";
 import { InviteTenantModal } from "../components/tenants/InviteTenantModal";
 import { TenantScorePill } from "../components/tenant/TenantScorePill";
 import { hydrateTenantSummariesBatch, getCachedTenantSummary } from "../lib/tenantSummaryCache";
+import "./TenantsPage.css";
 
 export const TenantsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -121,23 +122,17 @@ export const TenantsPage: React.FC = () => {
         </div>
       </Card>
 
-      <Card
-        elevated
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 1.3fr) minmax(0, 2fr)",
-          gap: spacing.lg,
-          minHeight: 0,
-        }}
-      >
-        <div style={{ display: "flex", flexDirection: "column", gap: spacing.sm, minHeight: 0 }}>
-          <Input
-            type="text"
-            placeholder="Search by name, property, unit"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{ borderRadius: radius.pill }}
-          />
+      <Card elevated className="rc-tenants-grid">
+        <div className="rc-tenants-list">
+          <div className="rc-tenants-search">
+            <Input
+              type="text"
+              placeholder="Search by name, property, unit"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{ borderRadius: radius.pill }}
+            />
+          </div>
 
           {loading ? (
             <div style={{ fontSize: 13, color: text.muted }}>Loading tenants.</div>
@@ -146,15 +141,7 @@ export const TenantsPage: React.FC = () => {
           ) : filteredTenants.length === 0 ? (
             <div style={{ fontSize: 13, color: text.muted }}>No tenants found.</div>
           ) : (
-            <div
-              style={{
-                marginTop: 4,
-                display: "flex",
-                flexDirection: "column",
-                gap: 6,
-                overflowY: "auto",
-              }}
-            >
+            <div className="rc-tenants-list-scroll">
               {filteredTenants.map((tenant: any) => {
                 const isSelected = tenant.id === selectedTenantId;
                 const summary = getCachedTenantSummary(tenant.id);
@@ -201,14 +188,7 @@ export const TenantsPage: React.FC = () => {
           )}
         </div>
 
-        <div
-          style={{
-            minHeight: 0,
-            display: "flex",
-            flexDirection: "column",
-            gap: 12,
-          }}
-        >
+        <div className="rc-tenants-detail">
           <Section style={{ minHeight: 0 }}>
             {!selectedTenantId && <div style={{ fontSize: 13, color: text.muted }}>Select a tenant from the list to see details.</div>}
             {selectedTenantId && !tenantExists && !loading && (
