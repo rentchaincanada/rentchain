@@ -12,8 +12,6 @@ import { buildScreeningStatusPayload } from "../services/screening/screeningPayl
 import { writeScreeningEvent } from "../services/screening/screeningEvents";
 import { buildScreeningPdf } from "../services/screening/reportPdf";
 import { buildShareUrl, createReportExport } from "../services/screening/reportExportService";
-import { buildScreeningPdf } from "../services/screening/reportPdf";
-import { buildShareUrl, createReportExport } from "../services/screening/reportExportService";
 
 const router = Router();
 
