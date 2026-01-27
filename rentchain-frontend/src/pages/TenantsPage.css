@@ -1,7 +1,7 @@
 .rc-tenants-grid {
   display: grid;
-  grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
-  gap: 24px;
+  grid-template-columns: minmax(320px, 360px) minmax(0, 1fr);
+  gap: 16px;
   min-height: 0;
 }
 
@@ -15,18 +15,23 @@
 .rc-tenants-search {
   position: sticky;
   top: 0;
-  z-index: 2;
-  background: transparent;
-  padding-top: 2px;
+  z-index: 5;
+  background: #ffffff;
+  padding: 8px 0 10px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+}
+
+.rc-tenants-search input {
+  min-height: 44px;
 }
 
 .rc-tenants-list-scroll {
-  margin-top: 4px;
+  margin-top: 6px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   overflow-y: auto;
-  padding-bottom: 8px;
+  padding-bottom: 12px;
 }
 
 .rc-tenants-detail {
@@ -36,12 +41,29 @@
   gap: 12px;
 }
 
-@media (max-width: 900px) {
+.rc-tenants-list-item {
+  min-height: 44px;
+}
+
+@media (max-width: 768px) {
   .rc-tenants-grid {
     grid-template-columns: 1fr;
+    gap: 12px;
   }
 
   .rc-tenants-list-scroll {
     overflow: visible;
+  }
+
+  .rc-tenants-search {
+    top: 0;
+    padding-top: 6px;
+    padding-bottom: 8px;
+  }
+
+  .rc-tenants-header {
+    position: sticky;
+    top: 0;
+    z-index: 6;
   }
 }

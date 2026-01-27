@@ -502,23 +502,25 @@ const ApplicationsPage: React.FC = () => {
 
   return (
     <>
-      <div style={{ display: "grid", gap: spacing.lg }}>
-      <Card elevated>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing.md, flexWrap: "wrap" }}>
+      <div className="rc-applications-page" style={{ display: "grid", gap: spacing.lg }}>
+      <Card elevated className="rc-applications-header">
+        <div className="rc-applications-header-row" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing.md, flexWrap: "wrap" }}>
           <div>
             <h1 style={{ margin: 0, fontSize: "1.4rem", fontWeight: 700 }}>Applications</h1>
             <div style={{ color: text.muted, fontSize: "0.95rem" }}>
               Review submitted rental applications.
             </div>
           </div>
-          <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
+          <div className="rc-applications-filters" style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
             <Input
+              className="rc-applications-search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search name or email"
               style={{ width: 240 }}
             />
             <select
+              className="rc-applications-filter"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
               style={{ padding: "8px 10px", borderRadius: radius.md, border: `1px solid ${colors.border}` }}
@@ -531,6 +533,7 @@ const ApplicationsPage: React.FC = () => {
               ))}
             </select>
             <select
+              className="rc-applications-filter"
               value={propertyFilter}
               onChange={(e) => setPropertyFilter(e.target.value)}
               style={{ padding: "8px 10px", borderRadius: radius.md, border: `1px solid ${colors.border}` }}
@@ -555,29 +558,32 @@ const ApplicationsPage: React.FC = () => {
           ) : filtered.length === 0 ? (
             <div style={{ color: text.muted }}>No applications found.</div>
           ) : (
-            filtered.map((app) => (
-              <button
-                key={app.id}
-                type="button"
-                onClick={() => setSelectedId(app.id)}
-                style={{
-                  textAlign: "left",
-                  border: `1px solid ${app.id === selectedId ? colors.accent : colors.border}`,
-                  background: app.id === selectedId ? "rgba(37,99,235,0.08)" : colors.card,
-                  borderRadius: radius.md,
-                  padding: "10px 12px",
-                  cursor: "pointer",
-                  display: "grid",
-                  gap: 4,
-                }}
-              >
-                <div style={{ fontWeight: 700, color: text.primary }}>{app.applicantName || "Applicant"}</div>
-                <div style={{ color: text.muted, fontSize: 12 }}>{app.email || "No email"}</div>
-                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                  <Pill>{app.status}</Pill>
-                </div>
-              </button>
-            ))
+            <div className="rc-applications-list-scroll">
+              {filtered.map((app) => (
+                <button
+                  key={app.id}
+                  type="button"
+                  className="rc-applications-list-item"
+                  onClick={() => setSelectedId(app.id)}
+                  style={{
+                    textAlign: "left",
+                    border: `1px solid ${app.id === selectedId ? colors.accent : colors.border}`,
+                    background: app.id === selectedId ? "rgba(37,99,235,0.08)" : colors.card,
+                    borderRadius: radius.md,
+                    padding: "12px 12px",
+                    cursor: "pointer",
+                    display: "grid",
+                    gap: 4,
+                  }}
+                >
+                  <div style={{ fontWeight: 700, color: text.primary, fontSize: 15 }}>{app.applicantName || "Applicant"}</div>
+                  <div style={{ color: text.muted, fontSize: 12 }}>{app.email || "No email"}</div>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <Pill>{app.status}</Pill>
+                  </div>
+                </button>
+              ))}
+            </div>
           )}
         </div>
 
