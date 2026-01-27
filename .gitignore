@@ -10,17 +10,6 @@
 sendgrid.env
 rentchain-api/sendgrid.env
 
-nvm/v24.12.0/corepack
-nvm/v24.12.0/install_tools.bat
-nvm/v24.12.0/node.exe
-nvm/v24.12.0/nodevars.bat
-nvm/v24.12.0/npm
-nvm/v24.12.0/npm.cmd
-nvm/v24.12.0/npm.ps1
-nvm/v24.12.0/npx
-nvm/v24.12.0/npx.cmd
-nvm/v24.12.0/npx.ps1
-
 # nvm-windows
 nvm/
 
