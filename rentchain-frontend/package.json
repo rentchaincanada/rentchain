@@ -8,7 +8,7 @@
   },
   "engineStrict": true,
   "scripts": {
-    "preflight": "node ../scripts/check-node.js",
+    "preflight": "node ./scripts/check-node.js",
     "dev": "npm run preflight && vite --host",
     "build": "npm run preflight && node scripts/build.mjs",
     "build:app": "vite build",
