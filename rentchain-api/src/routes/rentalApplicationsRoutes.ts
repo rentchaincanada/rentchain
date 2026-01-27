@@ -1105,14 +1105,16 @@ router.get(
         return res.status(403).json({ ok: false, error: "FORBIDDEN" });
       }
       const landlordId = req.user?.landlordId || req.user?.id || null;
-      if (!landlordId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+      if (role !== "admin" && !landlordId) {
+        return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+      }
       const id = String(req.params?.id || "").trim();
       if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
 
       const snap = await db.collection("rentalApplications").doc(id).get();
       if (!snap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
       const data = snap.data() as any;
-      if (data?.landlordId && data.landlordId !== landlordId) {
+      if (role !== "admin" && data?.landlordId && data.landlordId !== landlordId) {
         return res.status(403).json({ ok: false, error: "FORBIDDEN" });
       }
 

@@ -131,6 +131,7 @@ const ApplicationsPage: React.FC = () => {
   const [manualFailureDetail, setManualFailureDetail] = useState("");
   const [screeningEvents, setScreeningEvents] = useState<ScreeningEvent[]>([]);
   const [screeningEventsLoading, setScreeningEventsLoading] = useState(false);
+  const [screeningEventsRefreshedAt, setScreeningEventsRefreshedAt] = useState<number | null>(null);
 
   const screeningOptions = [
     { value: "SELF_SERVE", label: "Self-serve screening", priceLabel: "$19.99" },
@@ -179,6 +180,7 @@ const ApplicationsPage: React.FC = () => {
       setDetail(app);
       await loadScreeningStatus(id);
       await loadScreeningEvents(id);
+      setScreeningEventsRefreshedAt(Date.now());
       if (app?.screeningStatus === "complete" && app?.screeningResultId) {
         const res = await fetchScreeningResult(id);
         if (res.ok) {
@@ -810,7 +812,14 @@ const ApplicationsPage: React.FC = () => {
                 )}
               </Card>
               <Card>
-                <div style={{ fontWeight: 700, marginBottom: 8 }}>Timeline</div>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm, marginBottom: 8 }}>
+                  <div style={{ fontWeight: 700 }}>Timeline</div>
+                  {isAdmin && screeningEventsRefreshedAt ? (
+                    <div style={{ fontSize: 12, color: text.subtle }}>
+                      Last refreshed: {new Date(screeningEventsRefreshedAt).toLocaleTimeString()}
+                    </div>
+                  ) : null}
+                </div>
                 {screeningEventsLoading ? (
                   <div style={{ color: text.muted, fontSize: 13 }}>Loading timeline...</div>
                 ) : screeningEvents.length ? (
