@@ -610,7 +610,7 @@ const ApplicationsPage: React.FC = () => {
 
               <Card>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing.sm, marginBottom: 8 }}>
-                  <div style={{ fontWeight: 700 }}>Screening</div>
+                  <div style={{ fontWeight: 700, fontSize: 16 }}>Screening</div>
                   <Button
                     variant="ghost"
                     onClick={() => void refreshSelectedApplication(detail.id)}
@@ -629,7 +629,7 @@ const ApplicationsPage: React.FC = () => {
                       <span style={{ fontSize: 12, color: text.subtle }}>Provider: {screeningStatus.provider}</span>
                     ) : null}
                   </div>
-                  <div style={{ fontSize: 12, color: text.muted }}>
+                  <div style={{ fontSize: 13, color: text.muted }}>
                     Last updated:{" "}
                     {screeningStatus?.lastUpdatedAt
                       ? new Date(screeningStatus.lastUpdatedAt).toLocaleString()
@@ -644,7 +644,7 @@ const ApplicationsPage: React.FC = () => {
                         background: colors.panel,
                         display: "grid",
                         gap: 4,
-                        fontSize: 13,
+                        fontSize: 14,
                       }}
                     >
                       <div>Overall: {screeningStatus.summary.overall}</div>
@@ -667,7 +667,7 @@ const ApplicationsPage: React.FC = () => {
                   ) : null}
                   {isAdmin ? (
                     <div>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: text.subtle, marginBottom: 6 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: text.subtle, marginBottom: 6 }}>
                         Admin screening controls
                       </div>
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -699,12 +699,12 @@ const ApplicationsPage: React.FC = () => {
                     </div>
                   ) : null}
                   {detail.screeningLastEligibilityCheckedAt ? (
-                    <div style={{ fontSize: 12, color: text.muted }}>
+                    <div style={{ fontSize: 13, color: text.muted }}>
                       Eligibility checked: {new Date(detail.screeningLastEligibilityCheckedAt).toLocaleString()}
                     </div>
                   ) : null}
                   {formatEligibilityReason(detail.screeningLastEligibilityReasonCode) ? (
-                    <div style={{ fontSize: 12, color: text.muted }}>
+                    <div style={{ fontSize: 13, color: text.muted }}>
                       Last eligibility reason: {formatEligibilityReason(detail.screeningLastEligibilityReasonCode)}
                     </div>
                   ) : null}
@@ -824,7 +824,7 @@ const ApplicationsPage: React.FC = () => {
               </Card>
               <Card>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm, marginBottom: 8 }}>
-                  <div style={{ fontWeight: 700 }}>Timeline</div>
+                  <div style={{ fontWeight: 700, fontSize: 16 }}>Timeline</div>
                   {isAdmin && screeningEventsRefreshedAt ? (
                     <div style={{ fontSize: 12, color: text.subtle }}>
                       Last refreshed: {new Date(screeningEventsRefreshedAt).toLocaleTimeString()}
@@ -847,18 +847,18 @@ const ApplicationsPage: React.FC = () => {
                           gap: 4,
                         }}
                       >
-                        <div style={{ fontWeight: 600 }}>{formatScreeningEventLabel(event.type)}</div>
-                        <div style={{ fontSize: 12, color: text.muted }}>
+                        <div style={{ fontWeight: 600, fontSize: 14 }}>{formatScreeningEventLabel(event.type)}</div>
+                        <div style={{ fontSize: 13, color: text.muted }}>
                           {event.at ? new Date(event.at).toLocaleString() : "—"}
                         </div>
                         {event.meta?.reasonCode ? (
-                          <div style={{ fontSize: 12, color: text.subtle }}>Reason: {event.meta.reasonCode}</div>
+                          <div style={{ fontSize: 13, color: text.subtle }}>Reason: {event.meta.reasonCode}</div>
                         ) : null}
                         {event.meta?.status ? (
-                          <div style={{ fontSize: 12, color: text.subtle }}>Status: {event.meta.status}</div>
+                          <div style={{ fontSize: 13, color: text.subtle }}>Status: {event.meta.status}</div>
                         ) : null}
                         {event.meta?.from || event.meta?.to ? (
-                          <div style={{ fontSize: 12, color: text.subtle }}>
+                          <div style={{ fontSize: 13, color: text.subtle }}>
                             {event.meta?.from ? `From: ${event.meta.from}` : null}
                             {event.meta?.from && event.meta?.to ? " · " : null}
                             {event.meta?.to ? `To: ${event.meta.to}` : null}
@@ -873,8 +873,8 @@ const ApplicationsPage: React.FC = () => {
               </Card>
 
               <Card>
-                <div style={{ fontWeight: 700, marginBottom: 8 }}>Consent</div>
-                <div style={{ display: "grid", gap: 6, fontSize: 13 }}>
+                <div style={{ fontWeight: 700, marginBottom: 8, fontSize: 16 }}>Consent</div>
+                <div style={{ display: "grid", gap: 6, fontSize: 14 }}>
                   <div>Credit consent: {detail.consent.creditConsent ? "Yes" : "No"}</div>
                   <div>Reference consent: {detail.consent.referenceConsent ? "Yes" : "No"}</div>
                   <div>Data sharing consent: {detail.consent.dataSharingConsent ? "Yes" : "No"}</div>
@@ -883,16 +883,16 @@ const ApplicationsPage: React.FC = () => {
               </Card>
 
               <Card>
-                <div style={{ fontWeight: 700, marginBottom: 8 }}>Residential history</div>
+                <div style={{ fontWeight: 700, marginBottom: 8, fontSize: 16 }}>Residential history</div>
                 <div style={{ display: "grid", gap: 8 }}>
                   {detail.residentialHistory?.length ? detail.residentialHistory.map((h, idx) => (
                     <div key={idx} style={{ border: `1px solid ${colors.border}`, borderRadius: radius.md, padding: 12 }}>
-                      <div style={{ fontWeight: 600 }}>{h.address}</div>
-                      <div style={{ color: text.muted, fontSize: 12 }}>
+                      <div style={{ fontWeight: 600, fontSize: 14 }}>{h.address}</div>
+                      <div style={{ color: text.muted, fontSize: 13 }}>
                         {h.durationMonths ? `${h.durationMonths} months` : ""}{h.rentAmountCents ? ` · $${(h.rentAmountCents / 100).toFixed(0)}` : ""}
                       </div>
-                      <div style={{ fontSize: 12 }}>Landlord: {h.landlordName || "-"} {h.landlordPhone ? `(${h.landlordPhone})` : ""}</div>
-                      {h.reasonForLeaving ? <div style={{ fontSize: 12 }}>Reason: {h.reasonForLeaving}</div> : null}
+                      <div style={{ fontSize: 13 }}>Landlord: {h.landlordName || "-"} {h.landlordPhone ? `(${h.landlordPhone})` : ""}</div>
+                      {h.reasonForLeaving ? <div style={{ fontSize: 13 }}>Reason: {h.reasonForLeaving}</div> : null}
                     </div>
                   )) : <div style={{ color: text.muted }}>No history provided.</div>}
                 </div>

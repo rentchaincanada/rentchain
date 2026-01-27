@@ -17,8 +17,8 @@
   flex-direction: column;
   gap: 16px;
   min-height: 0;
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: 15px;
+  line-height: 1.55;
 }
 
 .rc-applications-list-scroll {
@@ -74,5 +74,13 @@
 
   .rc-applications-list-scroll {
     overflow: visible;
+  }
+}
+
+@media (min-width: 769px) {
+  .rc-applications-list,
+  .rc-applications-detail {
+    max-height: 70vh;
+    overflow-y: auto;
   }
 }
