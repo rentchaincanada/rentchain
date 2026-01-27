@@ -1,5 +1,6 @@
 import { db } from "../../config/firebase";
 import type { ScreeningResultSummary } from "./providers/types";
+import { writeScreeningEvent } from "./screeningEvents";
 
 type ScreeningStatus =
   | "unpaid"
@@ -19,7 +20,7 @@ const RESULTS_COLLECTION = "screeningResults";
 
 export async function beginScreening(
   applicationId: string,
-  _actorUser?: any
+  actorUser?: any
 ): Promise<{ ok: boolean; status?: ScreeningStatus; error?: string; idempotent?: boolean }> {
   const appRef = db.collection("rentalApplications").doc(applicationId);
   const snap = await appRef.get();
@@ -46,13 +47,22 @@ export async function beginScreening(
     { merge: true }
   );
 
+  await writeScreeningEvent({
+    applicationId,
+    landlordId: data?.landlordId || null,
+    type: "processing_started",
+    at: now,
+    meta: { status: "processing" },
+    actor: String(actorUser?.role || "").toLowerCase() === "admin" ? "admin" : "system",
+  });
+
   return { ok: true, status: "processing", idempotent: false };
 }
 
 export async function markScreeningComplete(
   applicationId: string,
   payload: { summary: ScreeningResultSummary; reportText?: string },
-  _actorUser?: any
+  actorUser?: any
 ): Promise<{ ok: boolean; resultId?: string; error?: string; idempotent?: boolean }> {
   const appRef = db.collection("rentalApplications").doc(applicationId);
   const snap = await appRef.get();
@@ -95,13 +105,22 @@ export async function markScreeningComplete(
     { merge: true }
   );
 
+  await writeScreeningEvent({
+    applicationId,
+    landlordId: data?.landlordId || null,
+    type: "completed",
+    at: now,
+    meta: { status: "complete" },
+    actor: String(actorUser?.role || "").toLowerCase() === "admin" ? "admin" : "system",
+  });
+
   return { ok: true, resultId: resultRef.id, idempotent: false };
 }
 
 export async function markScreeningFailed(
   applicationId: string,
   failure: ScreeningFailure,
-  _actorUser?: any
+  actorUser?: any
 ): Promise<{ ok: boolean; error?: string; idempotent?: boolean }> {
   const appRef = db.collection("rentalApplications").doc(applicationId);
   const snap = await appRef.get();
@@ -125,6 +144,15 @@ export async function markScreeningFailed(
     },
     { merge: true }
   );
+
+  await writeScreeningEvent({
+    applicationId,
+    landlordId: data?.landlordId || null,
+    type: "failed",
+    at: now,
+    meta: { status: "failed", reasonCode: failure.code },
+    actor: String(actorUser?.role || "").toLowerCase() === "admin" ? "admin" : "system",
+  });
 
   return { ok: true, idempotent: false };
 }
