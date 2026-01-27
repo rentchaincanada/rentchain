@@ -170,6 +170,31 @@ const ApplicationsPage: React.FC = () => {
     }
   };
 
+  const refreshSelectedApplication = async (applicationId?: string | null) => {
+    const id = String(applicationId || "").trim();
+    if (!id) return;
+    setLoadingDetail(true);
+    try {
+      const app = await fetchRentalApplication(id);
+      setDetail(app);
+      await loadScreeningStatus(id);
+      await loadScreeningEvents(id);
+      if (app?.screeningStatus === "complete" && app?.screeningResultId) {
+        const res = await fetchScreeningResult(id);
+        if (res.ok) {
+          setResultData(res.result || null);
+          setResultError(null);
+        }
+      } else {
+        setResultData(null);
+      }
+    } catch (err: any) {
+      setError(err?.message || "Failed to load application details.");
+    } finally {
+      setLoadingDetail(false);
+    }
+  };
+
   useEffect(() => {
     let alive = true;
     const loadProperties = async () => {
@@ -226,30 +251,23 @@ const ApplicationsPage: React.FC = () => {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const requestedId = params.get("applicationId");
-    if (requestedId && requestedId !== selectedId) {
+    if (!requestedId) return;
+    if (requestedId !== selectedId) {
       setSelectedId(requestedId);
+      void refreshSelectedApplication(requestedId);
+      return;
     }
+    void refreshSelectedApplication(requestedId);
   }, [location.search, selectedId]);
 
   useEffect(() => {
-    const loadDetail = async () => {
-      if (!selectedId) {
-        setDetail(null);
-        setScreeningQuote(null);
-        setScreeningQuoteDetail(null);
-        return;
-      }
-      setLoadingDetail(true);
-      try {
-        const app = await fetchRentalApplication(selectedId);
-        setDetail(app);
-      } catch (err: any) {
-        setError(err?.message || "Failed to load application details.");
-      } finally {
-        setLoadingDetail(false);
-      }
-    };
-    void loadDetail();
+    if (!selectedId) {
+      setDetail(null);
+      setScreeningQuote(null);
+      setScreeningQuoteDetail(null);
+      return;
+    }
+    void refreshSelectedApplication(selectedId);
   }, [selectedId]);
 
   useEffect(() => {
@@ -279,10 +297,7 @@ const ApplicationsPage: React.FC = () => {
     if (screeningStatus === "success") {
       showToast({ message: "Payment received. Screening is processing.", variant: "success" });
       if (selectedId) {
-        fetchRentalApplication(selectedId)
-          .then((app) => setDetail(app))
-          .catch(() => null);
-        void loadScreeningStatus(selectedId);
+        void refreshSelectedApplication(selectedId);
       }
     } else if (screeningStatus === "cancelled") {
       showToast({ message: "Payment cancelled.", variant: "error" });
@@ -376,8 +391,7 @@ const ApplicationsPage: React.FC = () => {
       setManualReportText("");
       setManualFlags("");
       setManualScoreBand("");
-      await loadScreeningStatus(detail.id);
-      await loadScreeningEvents(detail.id);
+      await refreshSelectedApplication(detail.id);
     } finally {
       setManualSubmitting(false);
     }
@@ -403,8 +417,7 @@ const ApplicationsPage: React.FC = () => {
       setManualFailOpen(false);
       setManualFailureCode("");
       setManualFailureDetail("");
-      await loadScreeningStatus(detail.id);
-      await loadScreeningEvents(detail.id);
+      await refreshSelectedApplication(detail.id);
     } finally {
       setManualSubmitting(false);
     }
@@ -420,8 +433,7 @@ const ApplicationsPage: React.FC = () => {
         return;
       }
       showToast({ message: `Screening recomputed: ${res.from} → ${res.to}`, variant: "success" });
-      await loadScreeningStatus(detail.id);
-      await loadScreeningEvents(detail.id);
+      await refreshSelectedApplication(detail.id);
     } finally {
       setManualSubmitting(false);
     }
@@ -591,7 +603,16 @@ const ApplicationsPage: React.FC = () => {
               </Card>
 
               <Card>
-                <div style={{ fontWeight: 700, marginBottom: 8 }}>Screening</div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing.sm, marginBottom: 8 }}>
+                  <div style={{ fontWeight: 700 }}>Screening</div>
+                  <Button
+                    variant="ghost"
+                    onClick={() => void refreshSelectedApplication(detail.id)}
+                    disabled={!detail?.id || loadingDetail}
+                  >
+                    Refresh
+                  </Button>
+                </div>
                 <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
                   <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                     <Pill>{formatScreeningStatus(screeningStatus?.status || detail.screeningStatus || null)}</Pill>
@@ -638,21 +659,30 @@ const ApplicationsPage: React.FC = () => {
                       </Button>
                     </div>
                   ) : null}
-                  {isAdmin && (screeningStatus?.status === "paid" || screeningStatus?.status === "processing") ? (
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <Button variant="primary" onClick={() => setManualCompleteOpen(true)}>
-                        Mark screening complete
-                      </Button>
-                      <Button variant="secondary" onClick={() => setManualFailOpen(true)}>
-                        Mark screening failed
-                      </Button>
-                    </div>
-                  ) : null}
                   {isAdmin ? (
                     <div>
-                      <Button variant="ghost" onClick={() => void handleRecomputeScreening()} disabled={manualSubmitting}>
-                        {manualSubmitting ? "Recomputing..." : "Recompute screening status"}
-                      </Button>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: text.subtle, marginBottom: 6 }}>
+                        Admin screening controls
+                      </div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <Button
+                          variant="primary"
+                          onClick={() => setManualCompleteOpen(true)}
+                          disabled={manualSubmitting || !["paid", "processing"].includes(String(screeningStatus?.status || ""))}
+                        >
+                          Mark complete
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          onClick={() => setManualFailOpen(true)}
+                          disabled={manualSubmitting || !["paid", "processing"].includes(String(screeningStatus?.status || ""))}
+                        >
+                          Mark failed
+                        </Button>
+                        <Button variant="ghost" onClick={() => void handleRecomputeScreening()} disabled={manualSubmitting}>
+                          {manualSubmitting ? "Recomputing..." : "Recompute status"}
+                        </Button>
+                      </div>
                     </div>
                   ) : null}
                   {detail.screeningLastEligibilityCheckedAt ? (
