@@ -15,6 +15,7 @@ import {
   adminMarkScreeningComplete,
   adminMarkScreeningFailed,
   adminRecomputeScreening,
+  exportScreeningReport,
   type RentalApplication,
   type RentalApplicationStatus,
   type RentalApplicationSummary,
@@ -132,6 +133,9 @@ const ApplicationsPage: React.FC = () => {
   const [screeningEvents, setScreeningEvents] = useState<ScreeningEvent[]>([]);
   const [screeningEventsLoading, setScreeningEventsLoading] = useState(false);
   const [screeningEventsRefreshedAt, setScreeningEventsRefreshedAt] = useState<number | null>(null);
+  const [exportingReport, setExportingReport] = useState(false);
+  const [exportShareUrl, setExportShareUrl] = useState<string | null>(null);
+  const [exportExpiresAt, setExportExpiresAt] = useState<number | null>(null);
 
   const screeningOptions = [
     { value: "SELF_SERVE", label: "Self-serve screening", priceLabel: "$19.99" },
@@ -174,6 +178,8 @@ const ApplicationsPage: React.FC = () => {
   const refreshSelectedApplication = async (applicationId?: string | null) => {
     const id = String(applicationId || "").trim();
     if (!id) return;
+    setExportShareUrl(null);
+    setExportExpiresAt(null);
     setLoadingDetail(true);
     try {
       const app = await fetchRentalApplication(id);
@@ -438,6 +444,30 @@ const ApplicationsPage: React.FC = () => {
       await refreshSelectedApplication(detail.id);
     } finally {
       setManualSubmitting(false);
+    }
+  };
+
+  const handleExportReport = async (copyOnly: boolean) => {
+    if (!detail?.id) return;
+    setExportingReport(true);
+    try {
+      const res = await exportScreeningReport(detail.id);
+      if (!res.ok || !res.shareUrl) {
+        showToast({ message: res.error || "Unable to export report.", variant: "error" });
+        return;
+      }
+      setExportShareUrl(res.shareUrl || null);
+      setExportExpiresAt(res.expiresAt || null);
+      if (copyOnly) {
+        await navigator.clipboard?.writeText(res.shareUrl);
+        showToast({ message: "Link copied.", variant: "success" });
+      } else {
+        window.open(res.shareUrl, "_blank", "noopener,noreferrer");
+      }
+    } catch (err: any) {
+      showToast({ message: err?.message || "Unable to export report.", variant: "error" });
+    } finally {
+      setExportingReport(false);
     }
   };
 
@@ -937,6 +967,20 @@ const ApplicationsPage: React.FC = () => {
               ) : (
                 <div style={{ color: text.muted }}>No summary provided.</div>
               )}
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <Button variant="primary" onClick={() => void handleExportReport(false)} disabled={exportingReport}>
+                  {exportingReport ? "Preparing..." : "Download PDF"}
+                </Button>
+                <Button variant="secondary" onClick={() => void handleExportReport(true)} disabled={exportingReport}>
+                  Copy share link
+                </Button>
+              </div>
+              {exportShareUrl ? (
+                <div style={{ fontSize: 12, color: text.subtle }}>
+                  Share link ready
+                  {exportExpiresAt ? ` · Expires ${new Date(exportExpiresAt).toLocaleString()}` : ""}
+                </div>
+              ) : null}
               {resultData.reportUrl ? (
                 <a href={resultData.reportUrl} target="_blank" rel="noreferrer">
                   View report

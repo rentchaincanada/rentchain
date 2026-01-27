@@ -62,6 +62,7 @@ import stripeScreeningOrdersWebhookRoutes, {
 import screeningJobsAdminRoutes from "./routes/screeningJobsAdminRoutes";
 import adminRoutes from "./routes/adminRoutes";
 import adminScreeningResultsRoutes from "./routes/adminScreeningResultsRoutes";
+import screeningReportRoutes from "./routes/screeningReportRoutes";
 
 const app: Application = express();
 app.set("etag", false);
@@ -173,6 +174,7 @@ app.use("/api/admin", routeSource("adminPropertiesRoutes.ts"), adminPropertiesRo
 app.use("/api/admin", routeSource("adminScreeningResultsRoutes.ts"), adminScreeningResultsRoutes);
 app.use("/api", authzRoutes);
 app.use("/api", reportsExportRoutes);
+app.use("/api", routeSource("screeningReportRoutes.ts"), screeningReportRoutes);
 
 // Core API mounts
 app.use("/health", routeSource("healthRoutes.ts"), healthRoutes);
