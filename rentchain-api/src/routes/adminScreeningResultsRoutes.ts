@@ -102,6 +102,27 @@ router.post("/rental-applications/:id/screening/fail", async (req: any, res) => 
   }
 });
 
+router.post("/screening/report/revoke", async (req: any, res) => {
+  try {
+    const exportId = String(req.body?.exportId || "").trim();
+    if (!exportId) return res.status(400).json({ ok: false, error: "INVALID_EXPORT_ID" });
+
+    await db.collection("screeningReportExports").doc(exportId).set(
+      {
+        status: "revoked",
+        updatedAt: Date.now(),
+      },
+      { merge: true }
+    );
+
+    console.log("[screening_export]", { route: "screening_report_revoke", exportId, status: "revoked" });
+    return res.json({ ok: true });
+  } catch (err: any) {
+    console.error("[screening_export] revoke failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "REVOKE_FAILED" });
+  }
+});
+
 router.post("/rental-applications/:id/screening/recompute", async (req: any, res) => {
   try {
     const applicationId = String(req.params?.id || "").trim();

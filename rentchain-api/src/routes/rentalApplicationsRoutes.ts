@@ -10,6 +10,10 @@ import { finalizeStripePayment } from "../services/stripeFinalize";
 import { applyScreeningResultsFromOrder } from "../services/stripeScreeningProcessor";
 import { buildScreeningStatusPayload } from "../services/screening/screeningPayload";
 import { writeScreeningEvent } from "../services/screening/screeningEvents";
+import { buildScreeningPdf } from "../services/screening/reportPdf";
+import { buildShareUrl, createReportExport } from "../services/screening/reportExportService";
+import { buildScreeningPdf } from "../services/screening/reportPdf";
+import { buildShareUrl, createReportExport } from "../services/screening/reportExportService";
 
 const router = Router();
 
@@ -1170,6 +1174,72 @@ router.get("/rental-applications/:id/screening/events", attachAccount, requireFe
   }
 });
 
+
+
+router.post("/rental-applications/:id/screening/export", attachAccount, requireFeature("screening"), async (req: any, res) => {
+  try {
+    const role = String(req.user?.role || "").toLowerCase();
+    if (role !== "landlord" && role !== "admin") {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+    const landlordId = req.user?.landlordId || req.user?.id || null;
+    if (!landlordId && role !== "admin") {
+      return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    }
+    const id = String(req.params?.id || "").trim();
+    if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+    const snap = await db.collection("rentalApplications").doc(id).get();
+    if (!snap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    const data = snap.data() as any;
+    if (role !== "admin" && data?.landlordId && data.landlordId !== landlordId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const status = String(data?.screeningStatus || "").toLowerCase();
+    if (status !== "complete" || !data?.screeningResultId) {
+      return res.status(400).json({ ok: false, error: "SCREENING_NOT_COMPLETE" });
+    }
+
+    const resultSnap = await db.collection("screeningResults").doc(String(data.screeningResultId)).get();
+    if (!resultSnap.exists) {
+      return res.status(404).json({ ok: false, error: "RESULT_NOT_FOUND" });
+    }
+    const result = resultSnap.data() as any;
+
+    const pdfBuffer = await buildScreeningPdf({
+      summary: result?.summary || null,
+      reportText: result?.reportText || null,
+      applicationId: id,
+    });
+
+    const exportRecord = await createReportExport({
+      applicationId: id,
+      landlordId: data?.landlordId || null,
+      resultId: String(data.screeningResultId),
+      pdfBuffer,
+    });
+
+    const shareUrl = buildShareUrl(exportRecord.exportId, exportRecord.token);
+
+    console.log("[screening_export]", {
+      route: "screening_export",
+      applicationId: id,
+      exportId: exportRecord.exportId,
+      status: "ready",
+    });
+
+    return res.json({
+      ok: true,
+      exportId: exportRecord.exportId,
+      shareUrl,
+      expiresAt: exportRecord.expiresAt,
+    });
+  } catch (err: any) {
+    console.error("[screening_export] failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "SCREENING_EXPORT_FAILED" });
+  }
+});
 
 function safeParse(raw: string) {
   try {
