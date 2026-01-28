@@ -1,50 +1,6 @@
 import { API_BASE_URL } from "./config";
 import { clearAuthToken, clearTenantToken, getAuthToken, getTenantToken } from "../lib/authToken";
-
-function dispatchPlanLimit(detail: any) {
-  try {
-    window.dispatchEvent(new CustomEvent("upgrade:plan-limit", { detail }));
-  } catch {
-    // no-op
-  }
-}
-
-function shouldIgnorePlanLimit(detail: any) {
-  const type = String(detail?.limitType ?? "").toLowerCase();
-  return type === "properties" || type === "property" || type === "units" || type === "unit";
-}
-
-function normalizePlanLimit(payload: any, status: number) {
-  const raw = payload ?? {};
-  if (status === 403 && raw?.error === "PLAN_LIMIT") {
-    return {
-      message: raw?.message || "Plan limit reached.",
-      limitType: raw?.limitType,
-      limit: raw?.limit,
-      existing: raw?.existing,
-      attempted: raw?.attempted,
-      plan: raw?.plan,
-      raw,
-    };
-  }
-  if (status === 409 && raw?.code === "LIMIT_REACHED") {
-    const d = raw?.details || {};
-    return {
-      message: raw?.error || "Plan limit reached.",
-      limitType: raw?.limitType || "units",
-      limit: d?.limit,
-      existing: d?.current,
-      attempted: d?.adding,
-      plan: d?.plan,
-      raw,
-    };
-  }
-  const msg = String(raw?.message || raw?.error || "");
-  if ((status === 403 || status === 409) && /plan limit/i.test(msg)) {
-    return { message: msg || "Plan limit reached.", raw };
-  }
-  return null;
-}
+import { maybeDispatchUpgradePrompt } from "../lib/upgradePrompt";
 
 type Jsonish = Record<string, any>;
 export type ApiFetchInit = Omit<RequestInit, "body"> & {
@@ -176,14 +132,11 @@ export async function apiFetch<T = any>(
         window.location.href = "/login?reason=expired";
       }
     }
-    const detail = normalizePlanLimit(data, res.status);
-    if (detail && !shouldIgnorePlanLimit(detail)) {
-      dispatchPlanLimit(detail);
-    }
     if (res.status === 404 && (allow404 || allowStatuses?.includes(404))) {
       return null as T;
     }
     const msg = data?.message || data?.error || text || `apiFetch ${res.status}`;
+    maybeDispatchUpgradePrompt(data, res.status);
     if (allowStatuses?.includes(res.status)) {
       return (data as T) ?? (text as unknown as T);
     }

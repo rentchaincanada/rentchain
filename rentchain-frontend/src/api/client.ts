@@ -2,57 +2,13 @@ import axios from "axios";
 import { API_BASE_URL } from "./config";
 import { DEBUG_AUTH_KEY, JUST_LOGGED_IN_KEY } from "../lib/authKeys";
 import { clearAuthToken, getAuthToken, getTenantToken } from "../lib/authToken";
+import { maybeDispatchUpgradePrompt } from "../lib/upgradePrompt";
 
 const normalizedBase = API_BASE_URL.replace(/\/$/, "").replace(/\/api$/i, "");
 const api = axios.create({
   baseURL: `${normalizedBase}/api`,
   withCredentials: true,
 });
-
-function dispatchPlanLimit(detail: any) {
-  try {
-    window.dispatchEvent(new CustomEvent("upgrade:plan-limit", { detail }));
-  } catch {
-    // no-op
-  }
-}
-
-function shouldIgnorePlanLimit(detail: any) {
-  const type = String(detail?.limitType ?? "").toLowerCase();
-  return type === "properties" || type === "property" || type === "units" || type === "unit";
-}
-
-function normalizePlanLimit(payload: any, status: number) {
-  const raw = payload ?? {};
-  if (status === 403 && raw?.error === "PLAN_LIMIT") {
-    return {
-      message: raw?.message || "Plan limit reached.",
-      limitType: raw?.limitType,
-      limit: raw?.limit,
-      existing: raw?.existing,
-      attempted: raw?.attempted,
-      plan: raw?.plan,
-      raw,
-    };
-  }
-  if (status === 409 && raw?.code === "LIMIT_REACHED") {
-    const d = raw?.details || {};
-    return {
-      message: raw?.error || "Plan limit reached.",
-      limitType: raw?.limitType || "units",
-      limit: d?.limit,
-      existing: d?.current,
-      attempted: d?.adding,
-      plan: d?.plan,
-      raw,
-    };
-  }
-  const msg = String(raw?.message || raw?.error || "");
-  if ((status === 403 || status === 409) && /plan limit/i.test(msg)) {
-    return { message: msg || "Plan limit reached.", raw };
-  }
-  return null;
-}
 
 api.interceptors.request.use((config) => {
   const rawUrl = config.url || "";
@@ -90,10 +46,7 @@ api.interceptors.response.use(
     const status = err?.response?.status;
     const data = err?.response?.data;
     const url = err?.config?.url || "";
-    const detail = normalizePlanLimit(data, status);
-    if (detail && !shouldIgnorePlanLimit(detail)) {
-      dispatchPlanLimit(detail);
-    }
+    maybeDispatchUpgradePrompt(data, status);
     if (status !== 401 && status !== 403) {
       return Promise.reject(err);
     }

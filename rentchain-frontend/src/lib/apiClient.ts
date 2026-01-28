@@ -1,5 +1,6 @@
 import { getApiBaseUrl } from "../api/baseUrl";
 import { clearAuthToken, getAuthToken, setAuthToken } from "./authToken";
+import { maybeDispatchUpgradePrompt } from "./upgradePrompt";
 
 let warnedMisconfig = false;
 
@@ -63,10 +64,12 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
   const isJson = ct.includes("application/json");
   if (!res.ok) {
     const payload = isJson ? await res.json().catch(() => null) : await res.text().catch(() => "");
+    maybeDispatchUpgradePrompt(payload, res.status);
     const err = new Error(
       `apiFetch ${res.status}: ${isJson ? JSON.stringify(payload) : String(payload)}`
     );
     (err as any).payload = payload;
+    (err as any).status = res.status;
     throw err;
   }
 

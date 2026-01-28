@@ -139,11 +139,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
         /plan limit/i.test(errMsg);
 
       if (isPlanLimit) {
-        showToast({
-          message: "Import unsuccessful",
-          description: data?.message || "Plan limit reached. Please try again later.",
-          variant: "error",
-        });
+        // UpgradePromptModal is dispatched via API error handlers.
         return;
       }
 

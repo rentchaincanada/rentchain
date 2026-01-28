@@ -1,4 +1,5 @@
 import { resolveApiUrl } from "../lib/apiClient";
+import { maybeDispatchUpgradePrompt } from "../lib/upgradePrompt";
 
 export type ApiError = Error & { status?: number; body?: any };
 
@@ -29,6 +30,7 @@ export async function apiFetch<T>(
   }
 
   if (!res.ok) {
+    maybeDispatchUpgradePrompt(json, res.status);
     const err: ApiError = Object.assign(new Error(json?.message || `Request failed (${res.status})`), {
       status: res.status,
       body: json ?? { raw: text },
@@ -72,6 +74,8 @@ export async function apiGetJson<T>(
   if (res.ok) {
     return { ok: true, data: (json as T) ?? ({} as T) };
   }
+
+  maybeDispatchUpgradePrompt(json, res.status);
 
   if (allow.includes(res.status)) {
     return {
