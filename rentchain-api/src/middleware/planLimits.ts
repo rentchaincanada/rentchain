@@ -19,7 +19,7 @@ export function PlanLimits(configs: LimitConfig[]): RequestHandler {
     const account = req.account;
     if (!account) return res.status(500).json({ error: "Account not loaded" });
 
-    const plan = account.plan || req.user?.plan || "starter";
+    const plan = account.plan || req.user?.plan || "screening";
     const ent = account.entitlements;
     const usage = account.usage;
 
@@ -238,7 +238,7 @@ async function getScreeningsThisMonthCount(params: { landlordId: string }): Prom
 export function enforcePropertyCreateCap(req: any, res: Response, next: NextFunction) {
   const ent = req.account?.entitlements;
   const usage = req.account?.usage;
-  const plan = req.account?.plan || req.user?.plan || "starter";
+  const plan = req.account?.plan || req.user?.plan || "screening";
 
   if (!ent || !usage) return res.status(500).json({ error: "Account not loaded" });
 
@@ -275,7 +275,7 @@ export function enforceUnitsCreateCap(req: any, res: Response, next: NextFunctio
   const delta = Math.max(0, Number(unitsToAdd) || 0);
   const max = account.entitlements.unitsMax;
   const current = account.usage.units;
-  const plan = account.plan || req.user?.plan || "starter";
+  const plan = account.plan || req.user?.plan || "screening";
 
   if (typeof max === "number" && wouldExceed(current, delta, max)) {
     return res.status(402).json(

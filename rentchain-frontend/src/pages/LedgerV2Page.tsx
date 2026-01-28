@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createLedgerNoteV2, getLedgerEventV2, listLedgerV2, LedgerEventV2 } from "../api/ledgerV2";
+import { useCapabilities } from "@/hooks/useCapabilities";
+import { useUpgrade } from "@/context/UpgradeContext";
+import { colors, spacing } from "@/styles/tokens";
 
 type Filters = {
   eventType: string;
@@ -21,6 +24,9 @@ const EVENT_TYPES = [
 ] as const;
 
 export default function LedgerV2Page() {
+  const { features, loading: capsLoading } = useCapabilities();
+  const { openUpgrade } = useUpgrade();
+  const ledgerEnabled = features?.ledger !== false;
   const [filters, setFilters] = useState<Filters>({
     eventType: "ALL",
     search: "",
@@ -50,6 +56,7 @@ export default function LedgerV2Page() {
   }, [items, filters]);
 
   async function load() {
+    if (!ledgerEnabled) return;
     setLoading(true);
     setError(null);
     try {
@@ -70,7 +77,7 @@ export default function LedgerV2Page() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [ledgerEnabled]);
 
   async function openDetail(id: string) {
     try {
@@ -94,6 +101,54 @@ export default function LedgerV2Page() {
     } finally {
       setAdding(false);
     }
+  }
+
+  if (!capsLoading && !ledgerEnabled) {
+    return (
+      <div style={{ padding: 20 }}>
+        <div
+          style={{
+            border: "1px solid rgba(148,163,184,0.35)",
+            borderRadius: 16,
+            padding: spacing.lg,
+            background: "#fff",
+            maxWidth: 640,
+          }}
+        >
+          <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>
+            Upgrade to manage your rentals
+          </div>
+          <div style={{ color: "#64748b", fontSize: 14, marginBottom: 12 }}>
+            RentChain Screening is free. Rental management starts on Starter.
+          </div>
+          <button
+            type="button"
+            onClick={() =>
+              openUpgrade({
+                reason: "screening",
+                plan: "Screening",
+                copy: {
+                  title: "Upgrade to manage your rentals",
+                  body: "RentChain Screening is free. Rental management starts on Starter.",
+                },
+                ctaLabel: "Upgrade to Starter",
+              })
+            }
+            style={{
+              padding: "10px 14px",
+              borderRadius: 12,
+              border: "1px solid rgba(59,130,246,0.45)",
+              background: "rgba(59,130,246,0.12)",
+              color: colors.accent,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            Upgrade to Starter
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (

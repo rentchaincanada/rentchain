@@ -1,6 +1,7 @@
-export type SubscriptionPlan = "starter" | "core" | "pro" | "elite";
+export type SubscriptionPlan = "screening" | "starter" | "core" | "pro" | "elite";
 
 export const PLAN_ORDER: SubscriptionPlan[] = [
+  "screening",
   "starter",
   "core",
   "pro",

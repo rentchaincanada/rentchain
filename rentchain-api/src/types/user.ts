@@ -1,4 +1,4 @@
-export type SubscriptionPlan = "starter" | "core" | "pro" | "elite";
+export type SubscriptionPlan = "screening" | "starter" | "core" | "pro" | "elite";
 
 export interface User {
   id: string;

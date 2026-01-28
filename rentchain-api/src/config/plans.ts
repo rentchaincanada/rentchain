@@ -1,7 +1,19 @@
 export const PLANS = {
+  screening: {
+    maxProperties: Number.MAX_SAFE_INTEGER,
+    maxUnits: Number.MAX_SAFE_INTEGER,
+  },
   starter: {
-    maxProperties: 999999,
-    maxUnits: 999999,
+    maxProperties: Number.MAX_SAFE_INTEGER,
+    maxUnits: Number.MAX_SAFE_INTEGER,
+  },
+  pro: {
+    maxProperties: Number.MAX_SAFE_INTEGER,
+    maxUnits: Number.MAX_SAFE_INTEGER,
+  },
+  elite: {
+    maxProperties: Number.MAX_SAFE_INTEGER,
+    maxUnits: Number.MAX_SAFE_INTEGER,
   },
 } as const;
 

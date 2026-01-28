@@ -2,6 +2,7 @@ import { Router } from "express";
 import { authenticateJwt } from "../middleware/authMiddleware";
 import { requireLandlord } from "../middleware/requireLandlord";
 import { db, FieldValue } from "../config/firebase";
+import { requireCapability } from "../services/capabilityGuard";
 
 const router = Router();
 router.use(authenticateJwt);
@@ -59,11 +60,22 @@ async function addMessage(params: {
   return { id: docRef.id, conversationId, senderRole, body, createdAt: now };
 }
 
+async function enforceMessagingCapability(landlordId: string, res: any): Promise<boolean> {
+  const cap = await requireCapability(landlordId, "messaging");
+  if (!cap.ok) {
+    res.status(403).json({ ok: false, error: "Upgrade required", capability: "messaging", plan: cap.plan });
+    return false;
+  }
+  return true;
+}
+
 /**
  * Landlord endpoints
  */
 router.get("/landlord/messages/conversations", requireLandlord, async (req: any, res) => {
   const landlordId = req.user?.landlordId || req.user?.id;
+  if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+  if (!(await enforceMessagingCapability(landlordId, res))) return;
   try {
     const snap = await db
       .collection("conversations")
@@ -88,6 +100,8 @@ router.get("/landlord/messages/conversations", requireLandlord, async (req: any,
 
 router.get("/landlord/messages/conversations/:id", requireLandlord, async (req: any, res) => {
   const landlordId = req.user?.landlordId || req.user?.id;
+  if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+  if (!(await enforceMessagingCapability(landlordId, res))) return;
   const id = String(req.params?.id || "").trim();
   const limitRaw = Number(req.query?.limit ?? 50);
   const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 200) : 50;
@@ -115,6 +129,8 @@ router.get("/landlord/messages/conversations/:id", requireLandlord, async (req: 
 
 router.post("/landlord/messages/conversations/:id", requireLandlord, async (req: any, res) => {
   const landlordId = req.user?.landlordId || req.user?.id;
+  if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+  if (!(await enforceMessagingCapability(landlordId, res))) return;
   const id = String(req.params?.id || "").trim();
   const body = String(req.body?.body || "").trim();
   if (!body) return res.status(400).json({ ok: false, error: "body required" });
@@ -136,6 +152,8 @@ router.post("/landlord/messages/conversations/:id", requireLandlord, async (req:
 
 router.post("/landlord/messages/conversations/:id/read", requireLandlord, async (req: any, res) => {
   const landlordId = req.user?.landlordId || req.user?.id;
+  if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+  if (!(await enforceMessagingCapability(landlordId, res))) return;
   const id = String(req.params?.id || "").trim();
   try {
     const convoSnap = await db.collection("conversations").doc(id).get();
@@ -176,6 +194,7 @@ function getTenantContext(req: any) {
 router.get("/tenant/messages/conversation", requireTenant, async (req: any, res) => {
   const ctx = getTenantContext(req);
   if (!ctx.tenantId || !ctx.landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+  if (!(await enforceMessagingCapability(ctx.landlordId, res))) return;
 
   const docId = `${ctx.landlordId}__${ctx.tenantId}__${ctx.unitId || "na"}`;
   try {
@@ -208,6 +227,7 @@ router.get("/tenant/messages/conversation/:id", requireTenant, async (req: any, 
   const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 200) : 50;
 
   if (!ctx.tenantId || !ctx.landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+  if (!(await enforceMessagingCapability(ctx.landlordId, res))) return;
 
   try {
     const convoSnap = await db.collection("conversations").doc(id).get();
@@ -237,6 +257,7 @@ router.post("/tenant/messages/conversation/:id", requireTenant, async (req: any,
   const id = String(req.params?.id || "").trim();
   const body = String(req.body?.body || "").trim();
   if (!ctx.tenantId || !ctx.landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+  if (!(await enforceMessagingCapability(ctx.landlordId, res))) return;
   if (!body) return res.status(400).json({ ok: false, error: "body required" });
   if (body.length > 4000) return res.status(400).json({ ok: false, error: "body too long" });
 
@@ -260,6 +281,7 @@ router.post("/tenant/messages/conversation/:id/read", requireTenant, async (req:
   const ctx = getTenantContext(req);
   const id = String(req.params?.id || "").trim();
   if (!ctx.tenantId || !ctx.landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+  if (!(await enforceMessagingCapability(ctx.landlordId, res))) return;
 
   try {
     const convoSnap = await db.collection("conversations").doc(id).get();

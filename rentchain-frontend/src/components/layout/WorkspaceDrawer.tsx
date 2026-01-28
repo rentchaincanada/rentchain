@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { colors, radius, spacing, text, shadows } from "../../styles/tokens";
 import { getVisibleNavItems } from "./navConfig";
+import { useCapabilities } from "@/hooks/useCapabilities";
 
 type WorkspaceDrawerProps = {
   open: boolean;
@@ -14,7 +15,8 @@ type WorkspaceDrawerProps = {
 export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose, userEmail, userRole, onSignOut }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const visibleItems = getVisibleNavItems(userRole);
+  const { features } = useCapabilities();
+  const visibleItems = getVisibleNavItems(userRole, features);
   const drawerItems = visibleItems.filter((item) => item.showInDrawer !== false);
   const primaryDrawerItems = drawerItems.filter((item) => !item.requiresAdmin);
   const adminDrawerItems = drawerItems.filter((item) => item.requiresAdmin);

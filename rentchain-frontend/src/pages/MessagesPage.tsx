@@ -8,8 +8,10 @@ import {
   type Conversation,
   type Message,
 } from "@/api/messagesApi";
-import { spacing, colors, text } from "@/styles/tokens";
+import { spacing, colors, text, radius } from "@/styles/tokens";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import { useCapabilities } from "@/hooks/useCapabilities";
+import { useUpgrade } from "@/context/UpgradeContext";
 import "./MessagesPage.css";
 
 const POLL_CONVERSATIONS_MS = 15000;
@@ -26,6 +28,9 @@ export default function MessagesPage() {
   const location = useLocation();
   const isMobile = useIsMobile();
   const [mobileView, setMobileView] = useState<"list" | "chat">("list");
+  const { features, loading: capsLoading } = useCapabilities();
+  const { openUpgrade } = useUpgrade();
+  const messagingEnabled = features?.messaging !== false;
 
   const loadConversations = async (preferredId?: string | null) => {
     try {
@@ -62,21 +67,24 @@ export default function MessagesPage() {
     const params = new URLSearchParams(location.search);
     const deepLinkId = params.get("c");
     void (async () => {
+      if (!messagingEnabled) return;
       await loadConversations(deepLinkId);
       if (deepLinkId) {
         await loadThread(deepLinkId);
       }
     })();
+    if (!messagingEnabled) return;
     const t = window.setInterval(() => void loadConversations(selectedId), POLL_CONVERSATIONS_MS);
     return () => window.clearInterval(t);
-  }, [location.search, selectedId]);
+  }, [location.search, selectedId, messagingEnabled]);
 
   useEffect(() => {
     if (!selectedId) return;
+    if (!messagingEnabled) return;
     void loadThread(selectedId);
     const t = window.setInterval(() => void loadThread(selectedId), POLL_THREAD_MS);
     return () => window.clearInterval(t);
-  }, [selectedId]);
+  }, [selectedId, messagingEnabled]);
 
   useEffect(() => {
     if (!isMobile) return;
@@ -103,6 +111,49 @@ export default function MessagesPage() {
     <div className="rc-messages-page">
       <h1 style={{ marginBottom: spacing.md }}>Messages</h1>
       {error && <div style={{ color: colors.danger, marginBottom: spacing.sm }}>{error}</div>}
+      {!capsLoading && !messagingEnabled ? (
+        <div
+          style={{
+            border: `1px solid ${colors.border}`,
+            borderRadius: radius.lg,
+            padding: spacing.lg,
+            background: colors.card,
+            maxWidth: 640,
+          }}
+        >
+          <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>
+            Upgrade to manage your rentals
+          </div>
+          <div style={{ color: text.muted, fontSize: 14, marginBottom: 12 }}>
+            RentChain Screening is free. Rental management starts on Starter.
+          </div>
+          <button
+            type="button"
+            onClick={() =>
+              openUpgrade({
+                reason: "screening",
+                plan: "Screening",
+                copy: {
+                  title: "Upgrade to manage your rentals",
+                  body: "RentChain Screening is free. Rental management starts on Starter.",
+                },
+                ctaLabel: "Upgrade to Starter",
+              })
+            }
+            style={{
+              padding: "10px 14px",
+              borderRadius: 12,
+              border: `1px solid ${colors.border}`,
+              background: "rgba(59,130,246,0.12)",
+              color: colors.accent,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            Upgrade to Starter
+          </button>
+        </div>
+      ) : (
       <div className="rc-messages-grid">
         {(!isMobile || mobileView === "list") && (
           <div className="rc-messages-list">
@@ -226,6 +277,7 @@ export default function MessagesPage() {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }

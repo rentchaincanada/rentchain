@@ -9,6 +9,7 @@ type UpgradeContextValue = {
           reason: UpgradeReason;
           copy?: { title?: string; body?: string };
           plan?: string;
+          ctaLabel?: string;
         }
   ) => void;
 };
@@ -19,16 +20,19 @@ export function UpgradeProvider({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState<UpgradeReason>("propertiesMax");
   const [copy, setCopy] = useState<{ title?: string; body?: string } | undefined>(undefined);
-  const [plan, setPlan] = useState<string>("Starter");
+  const [plan, setPlan] = useState<string>("Screening");
+  const [ctaLabel, setCtaLabel] = useState<string | undefined>(undefined);
 
   const openUpgrade: UpgradeContextValue["openUpgrade"] = (r) => {
     if (typeof r === "string") {
       setReason(r);
       setCopy(undefined);
+      setCtaLabel(undefined);
     } else {
       setReason(r.reason);
       setCopy(r.copy);
       if (r.plan) setPlan(r.plan);
+      setCtaLabel(r.ctaLabel);
     }
     setOpen(true);
   };
@@ -75,6 +79,7 @@ export function UpgradeProvider({ children }: { children: React.ReactNode }) {
         reason={reason}
         copy={copy}
         currentPlan={plan}
+        ctaLabel={ctaLabel}
         onClose={() => setOpen(false)}
       />
     </UpgradeContext.Provider>

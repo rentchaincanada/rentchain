@@ -1,4 +1,4 @@
-export type Plan = "starter" | "core" | "pro" | "elite";
+export type Plan = "screening" | "starter" | "core" | "pro" | "elite";
 
 export type Capability =
   | "ai.insights"
@@ -20,9 +20,20 @@ export interface PlanSpec {
 }
 
 export const PLANS: Record<Plan, PlanSpec> = {
+  screening: {
+    plan: "screening",
+    limits: { maxProperties: Number.MAX_SAFE_INTEGER, maxUnits: Number.MAX_SAFE_INTEGER, screeningCreditsMonthly: 0 },
+    capabilities: {
+      "ai.insights": false,
+      "team.invites": false,
+      "screening": true,
+      "properties.create": true,
+      "units.create": false,
+    },
+  },
   starter: {
     plan: "starter",
-    limits: { maxProperties: 999999, maxUnits: 999999, screeningCreditsMonthly: 0 },
+    limits: { maxProperties: Number.MAX_SAFE_INTEGER, maxUnits: Number.MAX_SAFE_INTEGER, screeningCreditsMonthly: 0 },
     capabilities: {
       "ai.insights": false,
       "team.invites": false,
@@ -33,9 +44,9 @@ export const PLANS: Record<Plan, PlanSpec> = {
   },
   core: {
     plan: "core",
-    limits: { maxProperties: 3, maxUnits: 50, screeningCreditsMonthly: 10 },
+    limits: { maxProperties: Number.MAX_SAFE_INTEGER, maxUnits: Number.MAX_SAFE_INTEGER, screeningCreditsMonthly: 0 },
     capabilities: {
-      "ai.insights": true,
+      "ai.insights": false,
       "team.invites": false,
       "screening": true,
       "properties.create": true,
@@ -44,7 +55,7 @@ export const PLANS: Record<Plan, PlanSpec> = {
   },
   pro: {
     plan: "pro",
-    limits: { maxProperties: 25, maxUnits: 500, screeningCreditsMonthly: 50 },
+    limits: { maxProperties: Number.MAX_SAFE_INTEGER, maxUnits: Number.MAX_SAFE_INTEGER, screeningCreditsMonthly: 0 },
     capabilities: {
       "ai.insights": true,
       "team.invites": true,
@@ -55,7 +66,7 @@ export const PLANS: Record<Plan, PlanSpec> = {
   },
   elite: {
     plan: "elite",
-    limits: { maxProperties: 9999, maxUnits: 999999, screeningCreditsMonthly: 9999 },
+    limits: { maxProperties: Number.MAX_SAFE_INTEGER, maxUnits: Number.MAX_SAFE_INTEGER, screeningCreditsMonthly: 0 },
     capabilities: {
       "ai.insights": true,
       "team.invites": true,
@@ -68,6 +79,6 @@ export const PLANS: Record<Plan, PlanSpec> = {
 
 export function resolvePlan(input?: string | null): Plan {
   const p = (input ?? "").toLowerCase().trim();
-  if (p === "starter" || p === "core" || p === "pro" || p === "elite") return p;
-  return (process.env.RENTCHAIN_DEFAULT_PLAN as Plan) || "starter";
+  if (p === "starter" || p === "core" || p === "pro" || p === "elite" || p === "screening") return p;
+  return (process.env.RENTCHAIN_DEFAULT_PLAN as Plan) || "screening";
 }

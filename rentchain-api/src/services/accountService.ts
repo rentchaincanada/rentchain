@@ -19,7 +19,7 @@ export async function getOrCreateAccount(landlordId: string): Promise<Account> {
     return data;
   }
 
-  const plan: PlanTier = "starter";
+  const plan: PlanTier = "screening";
 
   const account: Account = {
     id: landlordId,

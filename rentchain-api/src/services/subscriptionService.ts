@@ -10,11 +10,11 @@ export { SubscriptionPlan, PLAN_ORDER, planAtLeast };
 export function resolvePlanFromRequest(req: Request): SubscriptionPlan {
   const header = (req.headers["x-demo-plan"] as string | undefined)?.toLowerCase();
   const envDefault =
-    (process.env.DEFAULT_PLAN as SubscriptionPlan | undefined) || "pro";
+    (process.env.DEFAULT_PLAN as SubscriptionPlan | undefined) || "screening";
 
   const candidate = (header || envDefault) as SubscriptionPlan;
   if (PLAN_ORDER.includes(candidate)) return candidate;
-  return "pro";
+  return "screening";
 }
 
 /**

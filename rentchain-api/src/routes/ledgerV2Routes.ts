@@ -6,6 +6,7 @@ import {
   listLedgerEventsV2,
 } from "../services/ledgerEventsFirestoreService";
 import { computeLedgerEventHashV1 } from "../utils/ledgerHash";
+import { requireCapability } from "../services/capabilityGuard";
 
 const router = Router();
 router.use(authenticateJwt);
@@ -14,10 +15,25 @@ router.use((req, _res, next) => {
   next();
 });
 
+async function enforceLedgerCapability(req: any, res: any): Promise<boolean> {
+  const landlordId = req.user?.landlordId || req.user?.id;
+  if (!landlordId) {
+    res.status(401).json({ ok: false, error: "Unauthorized" });
+    return false;
+  }
+  const cap = await requireCapability(landlordId, "ledger");
+  if (!cap.ok) {
+    res.status(403).json({ ok: false, error: "Upgrade required", capability: "ledger", plan: cap.plan });
+    return false;
+  }
+  return true;
+}
+
 router.get("/", async (req: any, res) => {
   res.setHeader("x-route-source", "ledgerV2Routes");
   const landlordId = req.user?.landlordId || req.user?.id;
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+  if (!(await enforceLedgerCapability(req, res))) return;
 
   const started = Date.now();
   const limitRaw = Number(req.query?.limit ?? 50);
@@ -62,6 +78,7 @@ router.post("/", async (req: any, res) => {
   res.setHeader("x-route-source", "ledgerV2Routes");
   const landlordId = req.user?.landlordId || req.user?.id;
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+  if (!(await enforceLedgerCapability(req, res))) return;
 
   const { title, summary, propertyId, tenantId, occurredAt } = req.body || {};
   if (!title || typeof title !== "string") {
@@ -89,6 +106,7 @@ router.get("/verify", async (req: any, res) => {
   res.setHeader("x-route-source", "ledgerV2Routes");
   const landlordId = req.user?.landlordId || req.user?.id;
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+  if (!(await enforceLedgerCapability(req, res))) return;
 
   const limitRaw = Number(req.query?.limit ?? 100);
   const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 200) : 100;
@@ -137,6 +155,7 @@ router.get("/:id", async (req: any, res) => {
   res.setHeader("x-route-source", "ledgerV2Routes");
   const landlordId = req.user?.landlordId || req.user?.id;
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+  if (!(await enforceLedgerCapability(req, res))) return;
   const id = String(req.params.id || "");
   const item = await getLedgerEventV2(id, landlordId);
   if (!item) return res.status(404).json({ ok: false, error: "Not found" });

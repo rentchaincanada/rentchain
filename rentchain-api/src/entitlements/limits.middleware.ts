@@ -14,8 +14,8 @@ function getPlanKey(req: Request): Plan {
     (anyReq.plan?.key as Plan | undefined) ||
     (anyReq.plan as Plan | undefined) ||
     (anyReq.user?.plan as Plan | undefined) ||
-    ("starter" as Plan);
-  return PLANS[plan] ? plan : "starter";
+    ("screening" as Plan);
+  return PLANS[plan] ? plan : "screening";
 }
 
 export async function enforcePropertyCap(req: Request, res: Response, next: NextFunction) {

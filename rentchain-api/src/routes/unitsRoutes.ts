@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db, FieldValue } from "../config/firebase";
 import { authenticateJwt } from "../middleware/authMiddleware";
+import { requireCapability } from "../services/capabilityGuard";
 
 const router = Router();
 
@@ -10,6 +11,20 @@ function requireLandlord(req: any, res: any, next: any) {
     return res.status(403).json({ ok: false, error: "Forbidden" });
   }
   return next();
+}
+
+async function enforceUnitsCapability(req: any, res: any): Promise<boolean> {
+  const landlordId = req.user?.landlordId || req.user?.id;
+  if (!landlordId) {
+    res.status(401).json({ ok: false, error: "Unauthorized" });
+    return false;
+  }
+  const cap = await requireCapability(landlordId, "unitsTable");
+  if (!cap.ok) {
+    res.status(403).json({ ok: false, error: "Upgrade required", capability: "unitsTable", plan: cap.plan });
+    return false;
+  }
+  return true;
 }
 
 async function ensurePropertyOwned(propertyId: string, landlordId: string) {
@@ -32,6 +47,7 @@ router.get(
     const propertyId = String(req.params.propertyId || "");
     if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
     if (!propertyId) return res.status(400).json({ ok: false, error: "Missing propertyId" });
+    if (!(await enforceUnitsCapability(req, res))) return;
 
     const ownership = await ensurePropertyOwned(propertyId, landlordId);
     if (!ownership.ok) {
@@ -79,6 +95,7 @@ router.get("/units", authenticateJwt, requireLandlord, async (req: any, res) => 
   const propertyId = String(req.query?.propertyId || "");
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
   if (!propertyId) return res.status(400).json({ ok: false, error: "Missing propertyId" });
+  if (!(await enforceUnitsCapability(req, res))) return;
 
   const ownership = await ensurePropertyOwned(propertyId, landlordId);
   if (!ownership.ok) {
@@ -129,6 +146,7 @@ router.post(
     const propertyId = String(req.params.propertyId || "");
     if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
     if (!propertyId) return res.status(400).json({ ok: false, error: "Missing propertyId" });
+    if (!(await enforceUnitsCapability(req, res))) return;
 
     const ownership = await ensurePropertyOwned(propertyId, landlordId);
     if (!ownership.ok) {
@@ -198,6 +216,7 @@ router.patch("/units/:unitId", authenticateJwt, requireLandlord, async (req: any
   const unitId = String(req.params?.unitId || "");
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
   if (!unitId) return res.status(400).json({ ok: false, error: "Missing unitId" });
+  if (!(await enforceUnitsCapability(req, res))) return;
 
   const ref = db.collection("units").doc(unitId);
   const snap = await ref.get();

@@ -21,7 +21,7 @@ router.post("/auth/token", async (req, res) => {
   const role = String(req.body?.role ?? "landlord");
   const sub = String(req.body?.sub ?? DEMO_LANDLORD.id);
   const landlordId = String(req.body?.landlordId ?? sub);
-  const plan = String(req.body?.plan ?? "starter");
+  const plan = String(req.body?.plan ?? "screening");
 
   const token = jwt.sign({ sub, email, role, landlordId, plan }, secret, {
     expiresIn: "24h",

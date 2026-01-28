@@ -19,6 +19,8 @@ import { parseCsvPreview } from "../../utils/csvPreview";
 import { useToast } from "../ui/ToastProvider";
 import { setOnboardingStep } from "../../api/onboardingApi";
 import "../../styles/propertiesMobile.css";
+import { useCapabilities } from "@/hooks/useCapabilities";
+import { useUpgrade } from "@/context/UpgradeContext";
 
 interface PropertyDetailPanelProps {
   property: Property | null;
@@ -47,6 +49,9 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { features, loading: capsLoading } = useCapabilities();
+  const { openUpgrade } = useUpgrade();
+  const unitsEnabled = features?.unitsTable !== false;
   const [leases, setLeases] = useState<Lease[]>([]);
   const [isLeasesLoading, setIsLeasesLoading] = useState(false);
   const [leasesError, setLeasesError] = useState<string | null>(null);
@@ -166,6 +171,10 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
         setUnits([]);
         return;
       }
+      if (!unitsEnabled) {
+        setUnits([]);
+        return;
+      }
       try {
         setUnitsLoading(true);
         const res = await fetchUnitsForProperty(pid);
@@ -203,7 +212,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [property?.id, property?.units]);
+  }, [property?.id, property?.units, unitsEnabled]);
 
   useEffect(() => {
     let cancelled = false;
@@ -379,7 +388,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
               Added {formatDate(property.createdAt)}
             </div>
           </div>
-          <div className="rc-units-actions" style={{ display: "flex", gap: 6 }}>
+          <div className="rc-units-actions" style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             <button
               type="button"
               title="Edit property (coming soon)"
@@ -396,92 +405,121 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             >
               Edit
             </button>
-            <button
-              type="button"
-              title="Use Upload CSV to add units"
-              onClick={() => {
-                // No manual modal exists; direct to CSV flow (open file picker)
-                setImportMessage(null);
-                fileInputRef.current?.click();
-              }}
-              disabled={!property}
-              className="rc-units-action"
-              style={{
-                padding: "6px 10px",
-                borderRadius: 10,
-                border: "1px solid rgba(15,23,42,0.12)",
-                background: "#fff",
-                color: "#111827",
-                cursor: "pointer",
-              }}
-            >
-              Add units
-            </button>
-            <button
-              type="button"
-              title="Upload units CSV"
-              onClick={() => {
-                setImportMessage(null);
-                fileInputRef.current?.click();
-              }}
-              disabled={isImporting || !property}
-              className="rc-units-action"
-              style={{
-                padding: "6px 10px",
-                borderRadius: 10,
-                border: "1px solid rgba(15,23,42,0.12)",
-                background: "#fff",
-                color: "#0f172a",
-                cursor: "pointer",
-              }}
-            >
-              {isImporting ? "Uploading…" : "Upload CSV"}
-            </button>
-            <button
-              type="button"
-              title="Download a CSV template for units import"
-              onClick={() => {
-                const csv = buildUnitsCsvTemplate();
-                downloadTextFile("rentchain-units-template.csv", csv);
-              }}
-              className="rc-units-action rc-units-download"
-              style={{
-                padding: "6px 10px",
-                borderRadius: 10,
-                border: "1px solid rgba(15,23,42,0.12)",
-                background: "#fff",
-                color: "#0f172a",
-                cursor: "pointer",
-              }}
-            >
-              Download CSV template
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".csv"
-              style={{ display: "none" }}
-              onChange={async (e) => {
-                const file = e.target.files?.[0];
-                e.target.value = "";
-                if (!file || !property) return;
-                try {
-                  const text = await readFileText(file);
-                  const { headers, rows } = parseCsvPreview(text, 10);
-                  setPendingFile(file);
-                  setPendingFilename(file.name);
-                  setPreviewHeaders(headers);
-                  setPreviewRows(rows);
-                  setPreviewOpen(true);
-                } catch (err: any) {
-                  showToast({
-                    message: "Failed to read CSV file",
-                    description: err?.message,
-                    variant: "error",
-                  });
+            {capsLoading || unitsEnabled ? (
+              <>
+                <button
+                  type="button"
+                  title="Use Upload CSV to add units"
+                  onClick={() => {
+                    setImportMessage(null);
+                    fileInputRef.current?.click();
+                  }}
+                  disabled={!property}
+                  className="rc-units-action"
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 10,
+                    border: "1px solid rgba(15,23,42,0.12)",
+                    background: "#fff",
+                    color: "#111827",
+                    cursor: "pointer",
+                  }}
+                >
+                  Add units
+                </button>
+                <button
+                  type="button"
+                  title="Upload units CSV"
+                  onClick={() => {
+                    setImportMessage(null);
+                    fileInputRef.current?.click();
+                  }}
+                  disabled={isImporting || !property}
+                  className="rc-units-action"
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 10,
+                    border: "1px solid rgba(15,23,42,0.12)",
+                    background: "#fff",
+                    color: "#0f172a",
+                    cursor: "pointer",
+                  }}
+                >
+                  {isImporting ? "Uploading…" : "Upload CSV"}
+                </button>
+                <button
+                  type="button"
+                  title="Download a CSV template for units import"
+                  onClick={() => {
+                    const csv = buildUnitsCsvTemplate();
+                    downloadTextFile("rentchain-units-template.csv", csv);
+                  }}
+                  className="rc-units-action rc-units-download"
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 10,
+                    border: "1px solid rgba(15,23,42,0.12)",
+                    background: "#fff",
+                    color: "#0f172a",
+                    cursor: "pointer",
+                  }}
+                >
+                  Download CSV template
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".csv"
+                  style={{ display: "none" }}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    if (!file || !property) return;
+                    try {
+                      const text = await readFileText(file);
+                      const { headers, rows } = parseCsvPreview(text, 10);
+                      setPendingFile(file);
+                      setPendingFilename(file.name);
+                      setPreviewHeaders(headers);
+                      setPreviewRows(rows);
+                      setPreviewOpen(true);
+                    } catch (err: any) {
+                      showToast({
+                        message: "Failed to read CSV file",
+                        description: err?.message,
+                        variant: "error",
+                      });
+                    }
+                  }}
+                />
+              </>
+            ) : (
+              <button
+                type="button"
+                className="rc-units-action"
+                onClick={() =>
+                  openUpgrade({
+                    reason: "screening",
+                    plan: "Screening",
+                    copy: {
+                      title: "Upgrade to manage your rentals",
+                      body: "RentChain Screening is free. Rental management starts on Starter.",
+                    },
+                    ctaLabel: "Upgrade to Starter",
+                  })
                 }
-              }}
-            />
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 10,
+                  border: "1px solid rgba(59,130,246,0.35)",
+                  background: "rgba(59,130,246,0.12)",
+                  color: "#2563eb",
+                  cursor: "pointer",
+                }}
+              >
+                Upgrade to add units
+              </button>
+            )}
           </div>
         </div>
         {showLoading && (
@@ -630,24 +668,66 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
       )}
 
       {/* Units table */}
-      <div
-        style={{
-          borderRadius: 12,
-          border: "1px solid rgba(148,163,184,0.2)",
-          overflow: "hidden",
-        }}
-      >
-        <div className="rc-units-table-wrap" style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-          <table
-            className="rc-units-table"
+      {!capsLoading && !unitsEnabled ? (
+        <div
+          style={{
+            borderRadius: 12,
+            border: "1px solid rgba(59,130,246,0.35)",
+            background: "rgba(59,130,246,0.08)",
+            padding: 12,
+            color: "#0f172a",
+          }}
+        >
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>Upgrade to manage your rentals</div>
+          <div style={{ fontSize: "0.9rem", color: "#475569", marginBottom: 10 }}>
+            RentChain Screening is free. Rental management starts on Starter.
+          </div>
+          <button
+            type="button"
+            onClick={() =>
+              openUpgrade({
+                reason: "screening",
+                plan: "Screening",
+                copy: {
+                  title: "Upgrade to manage your rentals",
+                  body: "RentChain Screening is free. Rental management starts on Starter.",
+                },
+                ctaLabel: "Upgrade to Starter",
+              })
+            }
             style={{
-              width: "100%",
-              minWidth: 720,
-              borderCollapse: "collapse",
-              fontSize: "0.9rem",
-              color: "#0f172a",
+              padding: "8px 12px",
+              borderRadius: 10,
+              border: "1px solid rgba(59,130,246,0.45)",
+              background: "rgba(59,130,246,0.12)",
+              color: "#2563eb",
+              cursor: "pointer",
+              fontWeight: 700,
             }}
           >
+            Upgrade to Starter
+          </button>
+        </div>
+      ) : (
+        <>
+          <div
+            style={{
+              borderRadius: 12,
+              border: "1px solid rgba(148,163,184,0.2)",
+              overflow: "hidden",
+            }}
+          >
+            <div className="rc-units-table-wrap" style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+              <table
+                className="rc-units-table"
+                style={{
+                  width: "100%",
+                  minWidth: 720,
+                  borderCollapse: "collapse",
+                  fontSize: "0.9rem",
+                  color: "#0f172a",
+                }}
+              >
             <thead>
               <tr style={{ background: "rgba(255,255,255,0.03)", color: "#9ca3af" }}>
                 <th style={{ textAlign: "left", padding: "10px 12px", whiteSpace: "nowrap" }}>Unit #</th>
@@ -938,6 +1018,8 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
           })
         )}
       </div>
+        </>
+      )}
       </div>
       <UnitEditModal
         open={!!editingUnit}

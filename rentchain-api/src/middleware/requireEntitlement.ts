@@ -58,8 +58,8 @@ export function requireEntitlement(resource: "properties" | "units" | "tenants" 
       const landlordId = req.user?.id;
       if (!landlordId) return res.status(401).json({ error: "Unauthorized" });
 
-      const plan: PlanTier = (req.account?.plan as PlanTier) || "starter";
-      const limits = ENTITLEMENTS[plan] || ENTITLEMENTS["starter"];
+      const plan: PlanTier = (req.account?.plan as PlanTier) || "screening";
+      const limits = ENTITLEMENTS[plan] || ENTITLEMENTS["screening"];
 
       const count = await countResource(resource, landlordId);
 

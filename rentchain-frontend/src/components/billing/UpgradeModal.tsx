@@ -16,12 +16,14 @@ export function UpgradeModal({
   reason,
   currentPlan = "Starter",
   copy: propCopy,
+  ctaLabel,
 }: {
   open: boolean;
   onClose: () => void;
   reason: UpgradeReason;
   currentPlan?: string;
   copy?: { title?: string; body?: string };
+  ctaLabel?: string;
 }) {
   if (!open) return null;
 
@@ -42,8 +44,8 @@ export function UpgradeModal({
       body: "Starter plan allows up to 10 units total. Upgrade to add more.",
     },
     screening: {
-      title: "Upgrade required",
-      body: "Tenant screening is limited on Starter. Upgrade to unlock automation and higher volumes.",
+      title: "Upgrade to manage your rentals",
+      body: "RentChain Screening is free. Rental management starts on Starter.",
     },
     exports: {
       title: "Upgrade required",
@@ -96,10 +98,10 @@ export function UpgradeModal({
           </div>
 
           <div style={{ marginTop: 20, display: "grid", gap: 10 }}>
-            <PlanRow name={currentPlan} active description="Great for small portfolios" />
-            <PlanRow name="Core" highlight description="Automation, analytics, higher limits" />
-            <PlanRow name="Pro" description="Team workflows and scale" />
-            <PlanRow name="Elite" description="Institutional-grade operations" />
+            <PlanRow name={currentPlan} active description="Current plan" />
+            <PlanRow name="Starter" highlight description="Rental management + maintenance" />
+            <PlanRow name="Pro" description="Team workflows and ledger exports" />
+            <PlanRow name="Elite (Coming Soon)" description="Institutional-grade operations" />
           </div>
 
           <div
@@ -138,7 +140,7 @@ export function UpgradeModal({
                 boxShadow: "0 10px 30px rgba(37,99,235,0.2)",
               }}
             >
-              View plans
+              {ctaLabel || "View plans"}
             </button>
           </div>
         </div>

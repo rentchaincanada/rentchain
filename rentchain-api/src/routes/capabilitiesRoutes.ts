@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { CAPABILITIES, resolvePlanTier } from "../config/capabilities";
 
 const router = Router();
 
@@ -8,9 +9,9 @@ const router = Router();
  * If you want it authenticated only, add authenticateJwt middleware here.
  */
 router.get("/", (req: any, res) => {
-  const plan = req.user?.plan || "public";
-
+  const plan = resolvePlanTier(req.user?.plan);
   const features = {
+    ...CAPABILITIES[plan],
     microLive: false,
     tenantPdfReport: false,
     creditHistoryExport: false,

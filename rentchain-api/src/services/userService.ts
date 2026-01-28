@@ -13,7 +13,7 @@ export async function createUser(
     id,
     email,
     passwordHash,
-    plan: "starter",
+    plan: "screening",
     createdAt: new Date().toISOString(),
     twoFactorEnabled: false,
     twoFactorMethods: [],

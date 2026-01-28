@@ -4,6 +4,7 @@ import TopNav from "./TopNav";
 import { useAuth } from "../../context/useAuth";
 import { fetchLandlordConversations } from "../../api/messagesApi";
 import { getVisibleNavItems } from "./navConfig";
+import { useCapabilities } from "@/hooks/useCapabilities";
 import "./LandlordNav.css";
 
 type Props = {
@@ -15,11 +16,12 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
   const nav = useNavigate();
   const loc = useLocation();
   const { logout, user } = useAuth();
+  const { features } = useCapabilities();
   const [hasUnread, setHasUnread] = useState<boolean>(false);
   const unreadFlag = typeof unreadMessages === "boolean" ? unreadMessages : hasUnread;
   const [drawerOpen, setDrawerOpen] = useState(false);
   const lastFocusedRef = useRef<HTMLElement | null>(null);
-  const visibleItems = getVisibleNavItems(user?.role);
+  const visibleItems = getVisibleNavItems(user?.role, features);
   const drawerItems = visibleItems.filter((item) => item.showInDrawer !== false);
   const primaryDrawerItems = drawerItems.filter((item) => !item.requiresAdmin);
   const adminDrawerItems = drawerItems.filter((item) => item.requiresAdmin);
@@ -27,6 +29,12 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
 
   useEffect(() => {
     let mounted = true;
+    if (features?.messaging === false) {
+      setHasUnread(false);
+      return () => {
+        mounted = false;
+      };
+    }
     const load = async () => {
       try {
         const list = await fetchLandlordConversations();
@@ -46,7 +54,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
       mounted = false;
       window.clearInterval(t);
     };
-  }, []);
+  }, [features?.messaging]);
 
   useEffect(() => {
     setDrawerOpen(false);

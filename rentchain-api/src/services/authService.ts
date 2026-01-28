@@ -53,11 +53,11 @@ export async function validateLandlordCredentials(
         landlordId: fb.uid,
         email: fb.email,
         role: "landlord",
-        plan: "starter",
+        plan: "screening",
         screeningCredits: 0,
       };
 
-      await ref.set({ ...landlord, createdAt }, { merge: true });
+      await ref.set({ ...landlord, createdAt, planStartedAt: createdAt }, { merge: true });
       return landlord;
     }
 
@@ -69,7 +69,7 @@ export async function validateLandlordCredentials(
       landlordId: data?.landlordId || fb.uid,
       email: data?.email || fb.email,
       role: data?.role || "landlord",
-      plan: data?.plan || "starter",
+      plan: data?.plan || "screening",
       screeningCredits: data?.screeningCredits ?? 0,
     };
   } catch (err: any) {
@@ -82,7 +82,7 @@ export function generateJwtForLandlord(
   user: LandlordUser,
   expiresIn?: string
 ): string {
-  const plan = user.plan || "starter";
+  const plan = user.plan || "screening";
   const payload: JwtPayload = {
     sub: user.id,
     email: user.email,

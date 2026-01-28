@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { endLease, getLeasesForTenant, Lease } from "../../api/leasesApi";
+import { useCapabilities } from "@/hooks/useCapabilities";
+import { useUpgrade } from "@/context/UpgradeContext";
 
 function isNotFound(err: any): boolean {
   return (
@@ -18,10 +20,21 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [endingLeaseId, setEndingLeaseId] = useState<string | null>(null);
+  const { features, loading: capsLoading } = useCapabilities();
+  const { openUpgrade } = useUpgrade();
+  const leasesEnabled = features?.leases !== false;
 
   useEffect(() => {
     let cancelled = false;
     if (!tenantId) {
+      setLeases([]);
+      setError(null);
+      setIsLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+    if (!leasesEnabled) {
       setLeases([]);
       setError(null);
       setIsLoading(false);
@@ -60,7 +73,7 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
     return () => {
       cancelled = true;
     };
-  }, [tenantId]);
+  }, [tenantId, leasesEnabled]);
 
   const activeLease = useMemo(
     () => leases.find((l) => l.status === "active") ?? null,
@@ -104,6 +117,48 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
     content = (
       <div style={{ color: "#9ca3af", fontSize: "0.9rem" }}>
         Select a tenant to view lease information.
+      </div>
+    );
+  } else if (!capsLoading && !leasesEnabled) {
+    content = (
+      <div
+        style={{
+          border: "1px solid rgba(148,163,184,0.25)",
+          borderRadius: 12,
+          padding: 12,
+          background: "rgba(15,23,42,0.55)",
+          color: "#e2e8f0",
+        }}
+      >
+        <div style={{ fontWeight: 700, marginBottom: 6 }}>Upgrade to manage your rentals</div>
+        <div style={{ color: "#94a3b8", fontSize: 13, marginBottom: 10 }}>
+          RentChain Screening is free. Rental management starts on Starter.
+        </div>
+        <button
+          type="button"
+          onClick={() =>
+            openUpgrade({
+              reason: "screening",
+              plan: "Screening",
+              copy: {
+                title: "Upgrade to manage your rentals",
+                body: "RentChain Screening is free. Rental management starts on Starter.",
+              },
+              ctaLabel: "Upgrade to Starter",
+            })
+          }
+          style={{
+            padding: "8px 12px",
+            borderRadius: 10,
+            border: "1px solid rgba(59,130,246,0.45)",
+            background: "rgba(59,130,246,0.12)",
+            color: "#2563eb",
+            cursor: "pointer",
+            fontWeight: 700,
+          }}
+        >
+          Upgrade to Starter
+        </button>
       </div>
     );
   } else if (isLoading) {

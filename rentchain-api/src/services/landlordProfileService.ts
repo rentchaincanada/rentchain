@@ -8,6 +8,7 @@ export interface LandlordProfile {
   createdAt: string;
   updatedAt: string;
   plan?: string;
+  planStartedAt?: string;
   role?: string;
   landlordId?: string;
 }
@@ -106,7 +107,8 @@ export async function getOrCreateLandlordProfile(input: {
       screeningCredits: 0,
       createdAt: now,
       updatedAt: now,
-      plan: "starter",
+      plan: "screening",
+      planStartedAt: now,
       role: "landlord",
     };
     await ref.set(profile, { merge: true });
@@ -121,7 +123,8 @@ export async function getOrCreateLandlordProfile(input: {
     screeningCredits: data?.screeningCredits ?? 0,
     createdAt: data?.createdAt || data?.created_at || "",
     updatedAt: data?.updatedAt || data?.updated_at || "",
-    plan: data?.plan || "starter",
+    plan: data?.plan || "screening",
+    planStartedAt: data?.planStartedAt || data?.plan_started_at || null,
     role: data?.role || "landlord",
   };
 }
