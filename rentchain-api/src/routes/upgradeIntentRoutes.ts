@@ -35,7 +35,7 @@ router.post(
       const doc = {
         landlordId,
         accountId: req.account?.id ?? landlordId,
-        currentPlan: req.account?.plan ?? "starter",
+        currentPlan: req.account?.plan ?? "screening",
         desiredPlan,
         email,
         context,

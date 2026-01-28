@@ -6,7 +6,7 @@ import React, {
   ReactNode,
 } from "react";
 
-export type SubscriptionPlan = "starter" | "core" | "pro" | "elite";
+export type SubscriptionPlan = "screening" | "starter" | "core" | "pro" | "elite";
 
 type SubscriptionFeatures = {
   plan: SubscriptionPlan;
@@ -36,7 +36,8 @@ const SubscriptionContext = createContext<SubscriptionContextValue | null>(
 
 function computeFeatures(plan: SubscriptionPlan): SubscriptionFeatures {
   const planRank: Record<SubscriptionPlan, number> = {
-    starter: 0,
+    screening: 0,
+    starter: 1,
     core: 1,
     pro: 2,
     elite: 3,

@@ -12,9 +12,13 @@ export type NavItem = {
   requiresFeature?: string;
 };
 
-export const getVisibleNavItems = (role?: string | null) => {
+export const getVisibleNavItems = (role?: string | null, features?: Record<string, boolean>) => {
   const isAdmin = String(role || "").toLowerCase() === "admin";
-  return NAV_ITEMS.filter((item) => !(item.requiresAdmin && !isAdmin));
+  return NAV_ITEMS.filter((item) => {
+    if (item.requiresAdmin && !isAdmin) return false;
+    if (item.requiresFeature && features && features[item.requiresFeature] === false) return false;
+    return true;
+  });
 };
 
 export const NAV_ITEMS: NavItem[] = [
@@ -57,6 +61,7 @@ export const NAV_ITEMS: NavItem[] = [
     icon: MessagesSquare,
     showInDrawer: true,
     showInTabs: true,
+    requiresFeature: "messaging",
   },
   {
     id: "payments",
@@ -75,6 +80,7 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Maintenance",
     to: "/maintenance",
     showInDrawer: true,
+    requiresFeature: "maintenance",
   },
   {
     id: "screening",

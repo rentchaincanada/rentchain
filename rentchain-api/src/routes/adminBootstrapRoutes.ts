@@ -136,7 +136,7 @@ router.post(
     const email = String(req.body?.email || "").trim().toLowerCase();
     const password = String(req.body?.password || "");
     const role = String(req.body?.role || "landlord");
-    const plan = String(req.body?.plan || "starter");
+    const plan = String(req.body?.plan || "screening");
 
     if (!email || !password || password.length < 8) {
       return res

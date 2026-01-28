@@ -8,7 +8,7 @@ import React, {
 } from "react";
 import { fetchMe } from "../api/meApi";
 
-export type SubscriptionPlan = "starter" | "core" | "pro" | "elite";
+export type SubscriptionPlan = "screening" | "starter" | "core" | "pro" | "elite";
 
 type SubscriptionFeatures = {
   plan: SubscriptionPlan;
@@ -48,15 +48,17 @@ function computeFeatures(plan: SubscriptionPlan): SubscriptionFeatures {
     SubscriptionPlan,
     { properties: number; units: number }
   > = {
-    starter: { properties: 1, units: 5 },
-    core: { properties: 5, units: 50 },
-    pro: { properties: 25, units: 250 },
+    screening: { properties: Infinity, units: Infinity },
+    starter: { properties: Infinity, units: Infinity },
+    core: { properties: Infinity, units: Infinity },
+    pro: { properties: Infinity, units: Infinity },
     elite: { properties: Infinity, units: Infinity },
   };
 
   const caps = capsByPlan[plan] || capsByPlan.starter;
   const planRank: Record<SubscriptionPlan, number> = {
-    starter: 0,
+    screening: 0,
+    starter: 1,
     core: 1,
     pro: 2,
     elite: 3,
@@ -76,7 +78,7 @@ function computeFeatures(plan: SubscriptionPlan): SubscriptionFeatures {
 
     hasTenants: true,
     hasProperties: true,
-    hasApplications: atLeast("core"),
+    hasApplications: true,
     hasTenantAI: atLeast("pro"),
     hasPropertyAI: atLeast("pro"),
     hasPortfolioAI: atLeast("pro"),
@@ -87,7 +89,7 @@ function computeFeatures(plan: SubscriptionPlan): SubscriptionFeatures {
 
 export function SubscriptionProvider({
   children,
-  initialPlan = "starter",
+  initialPlan = "screening",
 }: {
   children: ReactNode;
   initialPlan?: SubscriptionPlan;
@@ -99,13 +101,13 @@ export function SubscriptionProvider({
     fetchMe()
       .then((me) => {
         const p = me?.plan;
-        if (p === "starter" || p === "core" || p === "pro" || p === "elite") {
+        if (p === "screening" || p === "starter" || p === "core" || p === "pro" || p === "elite") {
           setPlan(p);
           return;
         }
 
         if (me?.role === "landlord") {
-          setPlan("starter");
+          setPlan("screening");
         }
       })
       .catch(() => {

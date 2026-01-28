@@ -1,11 +1,23 @@
 import { Entitlements, PlanTier } from "../types/account";
 
 export function entitlementsForPlan(plan: PlanTier): Entitlements {
+  const unlimited = Number.MAX_SAFE_INTEGER;
   switch (plan) {
+    case "screening":
+      return {
+        propertiesMax: unlimited,
+        unitsMax: unlimited,
+        usersMax: 1,
+        screening: true,
+        automation: false,
+        exports: "csv",
+        notifications: false,
+        apiAccess: false,
+      };
     case "starter":
       return {
-        propertiesMax: 999999,
-        unitsMax: 999999,
+        propertiesMax: unlimited,
+        unitsMax: unlimited,
         usersMax: 1,
         screening: true,
         automation: false,
@@ -16,20 +28,20 @@ export function entitlementsForPlan(plan: PlanTier): Entitlements {
 
     case "core":
       return {
-        propertiesMax: 20,
-        unitsMax: 200,
-        usersMax: 2,
+        propertiesMax: unlimited,
+        unitsMax: unlimited,
+        usersMax: 1,
         screening: true,
-        automation: true,
-        exports: "pdf",
-        notifications: true,
+        automation: false,
+        exports: "csv",
+        notifications: false,
         apiAccess: false,
       };
 
     case "pro":
       return {
-        propertiesMax: 100,
-        unitsMax: 2000,
+        propertiesMax: unlimited,
+        unitsMax: unlimited,
         usersMax: 10,
         screening: true,
         automation: true,
@@ -40,8 +52,8 @@ export function entitlementsForPlan(plan: PlanTier): Entitlements {
 
     case "elite":
       return {
-        propertiesMax: 100000,
-        unitsMax: 1000000,
+        propertiesMax: unlimited,
+        unitsMax: unlimited,
         usersMax: 1000,
         screening: true,
         automation: true,

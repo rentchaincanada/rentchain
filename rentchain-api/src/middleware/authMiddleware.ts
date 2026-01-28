@@ -93,7 +93,7 @@ export const authenticateJwt: RequestHandler = (req, res, next): void => {
       landlordId: landlordId || (role === "landlord" || role === "admin" ? String(sub) : undefined),
       tenantId: tenantId || undefined,
       leaseId: leaseId || undefined,
-      plan: plan ?? "starter",
+      plan: plan ?? "screening",
       actorRole: actorRole ?? null,
       actorLandlordId: actorLandlordId ?? null,
     };

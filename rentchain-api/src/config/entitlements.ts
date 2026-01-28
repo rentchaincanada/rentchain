@@ -1,4 +1,4 @@
-export type PlanTier = "starter" | "core" | "pro" | "elite";
+export type PlanTier = "screening" | "starter" | "core" | "pro" | "elite";
 
 export const ENTITLEMENTS: Record<
   PlanTier,
@@ -9,28 +9,34 @@ export const ENTITLEMENTS: Record<
     maxActiveLeases: number;
   }
 > = {
+  screening: {
+    maxProperties: Number.MAX_SAFE_INTEGER,
+    maxUnits: Number.MAX_SAFE_INTEGER,
+    maxTenants: Number.MAX_SAFE_INTEGER,
+    maxActiveLeases: Number.MAX_SAFE_INTEGER,
+  },
   starter: {
-    maxProperties: 999999,
-    maxUnits: 999999,
-    maxTenants: 10,
-    maxActiveLeases: 10,
+    maxProperties: Number.MAX_SAFE_INTEGER,
+    maxUnits: Number.MAX_SAFE_INTEGER,
+    maxTenants: Number.MAX_SAFE_INTEGER,
+    maxActiveLeases: Number.MAX_SAFE_INTEGER,
   },
   core: {
-    maxProperties: 5,
-    maxUnits: 50,
-    maxTenants: 50,
-    maxActiveLeases: 50,
+    maxProperties: Number.MAX_SAFE_INTEGER,
+    maxUnits: Number.MAX_SAFE_INTEGER,
+    maxTenants: Number.MAX_SAFE_INTEGER,
+    maxActiveLeases: Number.MAX_SAFE_INTEGER,
   },
   pro: {
-    maxProperties: 25,
-    maxUnits: 250,
-    maxTenants: 250,
-    maxActiveLeases: 250,
+    maxProperties: Number.MAX_SAFE_INTEGER,
+    maxUnits: Number.MAX_SAFE_INTEGER,
+    maxTenants: Number.MAX_SAFE_INTEGER,
+    maxActiveLeases: Number.MAX_SAFE_INTEGER,
   },
   elite: {
-    maxProperties: 999999,
-    maxUnits: 999999,
-    maxTenants: 999999,
-    maxActiveLeases: 999999,
+    maxProperties: Number.MAX_SAFE_INTEGER,
+    maxUnits: Number.MAX_SAFE_INTEGER,
+    maxTenants: Number.MAX_SAFE_INTEGER,
+    maxActiveLeases: Number.MAX_SAFE_INTEGER,
   },
 };

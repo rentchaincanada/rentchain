@@ -1,9 +1,13 @@
 export type CapabilityKey =
-  | "ai.insights"
-  | "team.invites"
   | "screening"
-  | "properties.create"
-  | "units.create";
+  | "unitsTable"
+  | "leases"
+  | "ledger"
+  | "maintenance"
+  | "notices"
+  | "messaging"
+  | "tenantPortal"
+  | "exports";
 
 export type AccountLimitsResponse = {
   status: "ok";

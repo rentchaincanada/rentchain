@@ -4,8 +4,23 @@ import {
   leaseService,
   UpdateLeasePayload,
 } from "../services/leaseService";
+import { requireCapability } from "../services/capabilityGuard";
 
 const router = Router();
+
+async function enforceLeaseCapability(req: any, res: Response): Promise<boolean> {
+  const landlordId = req.user?.landlordId || req.user?.id;
+  if (!landlordId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return false;
+  }
+  const cap = await requireCapability(landlordId, "leases");
+  if (!cap.ok) {
+    res.status(403).json({ error: "Upgrade required", capability: "leases", plan: cap.plan });
+    return false;
+  }
+  return true;
+}
 
 router.get("/", (_req: Request, res: Response) => {
   const leases = leaseService.getAll();
@@ -38,8 +53,9 @@ router.get("/property/:propertyId", (req: Request, res: Response) => {
   res.json({ leases });
 });
 
-router.post("/", (req: Request, res: Response) => {
+router.post("/", async (req: Request, res: Response) => {
   try {
+    if (!(await enforceLeaseCapability(req, res))) return;
     const body = req.body as Partial<CreateLeasePayload>;
     if (!body.tenantId || !body.propertyId || !body.unitNumber) {
       return res.status(400).json({
@@ -83,8 +99,9 @@ router.post("/", (req: Request, res: Response) => {
   }
 });
 
-router.put("/:id", (req: Request, res: Response) => {
+router.put("/:id", async (req: Request, res: Response) => {
   try {
+    if (!(await enforceLeaseCapability(req, res))) return;
     const payload = req.body as UpdateLeasePayload;
     const lease = leaseService.update(req.params.id, payload);
     if (!lease) {
@@ -97,8 +114,9 @@ router.put("/:id", (req: Request, res: Response) => {
   }
 });
 
-router.post("/:id/end", (req: Request, res: Response) => {
+router.post("/:id/end", async (req: Request, res: Response) => {
   try {
+    if (!(await enforceLeaseCapability(req, res))) return;
     const endDate: string = req.body?.endDate || new Date().toISOString();
     const lease = leaseService.endLease(req.params.id, endDate);
     if (!lease) {

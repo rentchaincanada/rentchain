@@ -7,6 +7,7 @@ import { SUPPORT_EMAIL } from "../config/support";
 import { BillingPreviewCard } from "../components/billing/BillingPreviewCard";
 import { fetchBillingUsage } from "../api/billingPreviewApi";
 import { asArray } from "../lib/asArray";
+import { useCapabilities } from "@/hooks/useCapabilities";
 
 const formatAmount = (amountCents: number, currency: string) => {
   const amount = (amountCents || 0) / 100;
@@ -19,6 +20,8 @@ const BillingPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [usage, setUsage] = useState<any | null>(null);
+  const { caps } = useCapabilities();
+  const currentPlan = String(caps?.plan || "screening").toLowerCase();
 
   const load = async () => {
     try {
@@ -58,6 +61,44 @@ const BillingPage: React.FC = () => {
       </Card>
 
       <BillingPreviewCard usage={usage} />
+
+      <Card>
+        <div style={{ fontWeight: 700, fontSize: "1.05rem", marginBottom: 12 }}>
+          Plans
+        </div>
+        <div style={{ display: "grid", gap: 10 }}>
+          {[
+            { id: "screening", label: "Screening (Free)", desc: "Run screenings only.", highlight: currentPlan === "screening" },
+            { id: "starter", label: "Starter", desc: "Rental management + maintenance.", highlight: currentPlan === "starter" },
+            { id: "pro", label: "Pro", desc: "Messaging, ledger, exports.", highlight: currentPlan === "pro" },
+            { id: "elite", label: "Elite (Coming Soon)", desc: "Institutional-grade operations.", highlight: currentPlan === "elite" },
+          ].map((plan) => (
+            <div
+              key={plan.id}
+              style={{
+                borderRadius: radius.lg,
+                border: plan.highlight
+                  ? "1px solid rgba(59,130,246,0.45)"
+                  : "1px solid rgba(148,163,184,0.25)",
+                background: plan.highlight ? "rgba(59,130,246,0.08)" : "rgba(148,163,184,0.06)",
+                padding: 12,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+              }}
+            >
+              <div>
+                <div style={{ fontWeight: 800 }}>{plan.label}</div>
+                <div style={{ fontSize: 12, color: text.muted }}>{plan.desc}</div>
+              </div>
+              {plan.highlight ? (
+                <span style={{ fontSize: 12, fontWeight: 700, color: colors.accent }}>Current</span>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      </Card>
 
       <Card>
         {loading ? (

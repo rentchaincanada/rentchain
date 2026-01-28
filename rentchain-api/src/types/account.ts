@@ -1,4 +1,4 @@
-export type PlanTier = "starter" | "core" | "pro" | "elite";
+export type PlanTier = "screening" | "starter" | "core" | "pro" | "elite";
 export type PlanStatus = "active" | "trial" | "pending";
 
 export type ExportTier = "csv" | "pdf" | "advanced";

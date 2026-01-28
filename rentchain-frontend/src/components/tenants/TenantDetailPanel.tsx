@@ -11,6 +11,8 @@ import { RecordTenantEventModal } from "./RecordTenantEventModal";
 import { CreateNoticeModal } from "./CreateNoticeModal";
 import { useToast } from "../ui/ToastProvider";
 import { colors, radius, spacing, text, shadows } from "../../styles/tokens";
+import { useCapabilities } from "@/hooks/useCapabilities";
+import { useUpgrade } from "@/context/UpgradeContext";
 
 interface TenantDetailPanelProps {
   tenantId: string | null;
@@ -75,6 +77,9 @@ interface LayoutProps {
 const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { features, loading: capsLoading } = useCapabilities();
+  const { openUpgrade } = useUpgrade();
+  const ledgerEnabled = features?.ledger !== false;
 
   const tenant = bundle.tenant || bundle;
   const lease = bundle.lease;
@@ -121,6 +126,10 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
       setLedgerItems([]);
       return;
     }
+    if (!ledgerEnabled) {
+      setLedgerItems([]);
+      return;
+    }
     setLedgerLoading(true);
     setLedgerError(null);
     try {
@@ -131,7 +140,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
     } finally {
       if (!cancelledRef.current) setLedgerLoading(false);
     }
-  }, [tenantId]);
+  }, [tenantId, ledgerEnabled]);
 
   useEffect(() => {
     cancelledRef.current = false;
@@ -296,25 +305,27 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
                 >
                   <span>Create notice</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setRecordOpen(true)}
-                  style={{
-                    borderRadius: radius.pill,
-                    border: `1px solid ${colors.border}`,
-                    padding: "6px 10px",
-                    background: colors.accent,
-                    color: "white",
-                    fontSize: 12,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    cursor: "pointer",
-                    boxShadow: shadows.sm,
-                  }}
-                >
-                  <span>Record event</span>
-                </button>
+                {capsLoading || ledgerEnabled ? (
+                  <button
+                    type="button"
+                    onClick={() => setRecordOpen(true)}
+                    style={{
+                      borderRadius: radius.pill,
+                      border: `1px solid ${colors.border}`,
+                      padding: "6px 10px",
+                      background: colors.accent,
+                      color: "white",
+                      fontSize: 12,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      cursor: "pointer",
+                      boxShadow: shadows.sm,
+                    }}
+                  >
+                    <span>Record event</span>
+                  </button>
+                ) : null}
               </>
             ) : null}
           </div>
@@ -351,33 +362,75 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
         <DetailField label="Status" value={tenant.status ?? "—"} />
       </div>
 
-      {/* Ledger quick actions */}
-      <div
-        style={{
-          marginTop: "0.5rem",
-          display: "flex",
-          justifyContent: "flex-end",
-          gap: 8,
-          flexWrap: "wrap",
-        }}
-      >
-        <button
-          type="button"
-          onClick={handleViewInLedger}
+      {!capsLoading && !ledgerEnabled ? (
+        <div
           style={{
-            fontSize: "0.8rem",
-            padding: "0.4rem 0.85rem",
-            borderRadius: radius.pill,
-            border: `1px solid ${colors.border}`,
-            background: colors.panel,
-            color: text.primary,
-            cursor: "pointer",
-            boxShadow: shadows.sm,
+            border: "1px solid rgba(148,163,184,0.25)",
+            borderRadius: 12,
+            padding: 12,
+            background: "rgba(15,23,42,0.55)",
+            color: "#e2e8f0",
           }}
         >
-          View all ledger events →
-        </button>
-      </div>
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>Upgrade to manage your rentals</div>
+          <div style={{ color: "#94a3b8", fontSize: 13, marginBottom: 10 }}>
+            RentChain Screening is free. Rental management starts on Starter.
+          </div>
+          <button
+            type="button"
+            onClick={() =>
+              openUpgrade({
+                reason: "screening",
+                plan: "Screening",
+                copy: {
+                  title: "Upgrade to manage your rentals",
+                  body: "RentChain Screening is free. Rental management starts on Starter.",
+                },
+                ctaLabel: "Upgrade to Starter",
+              })
+            }
+            style={{
+              padding: "8px 12px",
+              borderRadius: 10,
+              border: "1px solid rgba(59,130,246,0.45)",
+              background: "rgba(59,130,246,0.12)",
+              color: "#2563eb",
+              cursor: "pointer",
+              fontWeight: 700,
+            }}
+          >
+            Upgrade to Starter
+          </button>
+        </div>
+      ) : (
+        <>
+          {/* Ledger quick actions */}
+          <div
+            style={{
+              marginTop: "0.5rem",
+              display: "flex",
+              justifyContent: "flex-end",
+              gap: 8,
+              flexWrap: "wrap",
+            }}
+          >
+            <button
+              type="button"
+              onClick={handleViewInLedger}
+              style={{
+                fontSize: "0.8rem",
+                padding: "0.4rem 0.85rem",
+                borderRadius: radius.pill,
+                border: `1px solid ${colors.border}`,
+                background: colors.panel,
+                color: text.primary,
+                cursor: "pointer",
+                boxShadow: shadows.sm,
+              }}
+            >
+              View all ledger events →
+            </button>
+          </div>
 
       {/* Signals block */}
       <div
@@ -454,6 +507,8 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
           <LedgerTimeline items={ledgerItems || []} compact />
         )}
       </div>
+        </>
+      )}
 
       <RecordTenantEventModal
         open={recordOpen}

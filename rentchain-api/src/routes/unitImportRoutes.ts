@@ -4,7 +4,6 @@ import { jsonError } from "../lib/httpResponse";
 import { parseUnitsCsv } from "../imports/unitCsvImport.service";
 import { fetchExistingUnitNumbersForProperty } from "../imports/unitConflictCheck";
 import { commitInBatches } from "../imports/firestoreBatch";
-import { assertCanAddUnits } from "../entitlements/checkUnitCap";
 import {
   getImportJob,
   startImportJob,
@@ -17,8 +16,7 @@ import { uploadCsv } from "../middleware/uploadCsv";
 import { uploadBufferToGcs } from "../lib/gcs";
 import { gzipSync } from "zlib";
 import { sha256Hex } from "../lib/hash";
-import { PLANS } from "../config/plans";
-import { getLandlordPlan } from "../lib/getLandlordPlan";
+import { requireCapability } from "../services/capabilityGuard";
 
 const router = Router({ mergeParams: true });
 
@@ -37,6 +35,10 @@ router.get("/", requireLandlord, async (req: any, res) => {
 
     if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
     if (!propertyId) return res.status(400).json({ ok: false, error: "Missing propertyId" });
+    const cap = await requireCapability(landlordId, "unitsTable");
+    if (!cap.ok) {
+      return res.status(403).json({ ok: false, error: "Upgrade required", capability: "unitsTable", plan: cap.plan });
+    }
 
     const propSnap = await db.collection("properties").doc(propertyId).get();
     if (!propSnap.exists) return res.status(404).json({ ok: false, error: "Property not found" });
@@ -72,6 +74,10 @@ router.post("/", requireLandlord, async (req: any, res) => {
     const propertyId = String(req.params?.propertyId || "");
     if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
     if (!propertyId) return res.status(400).json({ ok: false, error: "Missing propertyId" });
+    const cap = await requireCapability(landlordId, "unitsTable");
+    if (!cap.ok) {
+      return res.status(403).json({ ok: false, error: "Upgrade required", capability: "unitsTable", plan: cap.plan });
+    }
 
     const propRef = db.collection("properties").doc(propertyId);
     const propSnap = await propRef.get();
@@ -250,73 +256,7 @@ async function runUnitImport(opts: {
     };
   }
 
-  // Plan: Starter cap on total units (existing + incoming)
-  const planKey = getLandlordPlan(opts.user);
-  const limits = PLANS[planKey];
-  const existingUnitsSnap = await db
-    .collection("units")
-    .where("landlordId", "==", landlordId)
-    .get();
-  const existingCount = existingUnitsSnap.size;
-  const incomingCount = parsed.candidates.length;
-  if (existingCount + incomingCount > limits.maxUnits) {
-    const body = {
-      error: "PLAN_LIMIT",
-      message: "Starter plan allows up to 10 units total",
-      limit: limits.maxUnits,
-      existing: existingCount,
-      attempted: incomingCount,
-      limitType: "units",
-    };
-    if (jobRef) {
-      await failImportJob(jobRef, {
-        totalRows: parsed.totalRows,
-        attemptedValid: parsed.candidates.length,
-        errorCount: issues.length,
-      });
-    }
-    return {
-      httpStatus: 403,
-      body,
-      report: { ok: false, mode, summary, issues, limit: body },
-    };
-  }
-
   const wouldInsert = insertable.length;
-  const cap = await assertCanAddUnits(
-    { plan: opts.plan, user: opts.user } as any,
-    landlordId,
-    wouldInsert
-  );
-  if (!cap.ok) {
-    const message = `Starter plan allows up to ${cap.limit} units total`;
-    if (jobRef) {
-      await failImportJob(jobRef, {
-        totalRows: parsed.totalRows,
-        attemptedValid: parsed.candidates.length,
-        errorCount: issues.length,
-      });
-    }
-    return {
-      httpStatus: 403,
-      body: {
-        ok: false,
-        error: "PLAN_LIMIT",
-        message,
-        limit: cap.limit,
-        existing: cap.current,
-        attempted: cap.adding,
-        requestId,
-      },
-      report: {
-        ok: false,
-        mode,
-        summary,
-        issues,
-        limit: { limit: cap.limit, existing: cap.current, attempted: cap.adding, plan: cap.plan },
-      },
-    };
-  }
 
   const ops: any[] = [];
   for (const c of insertable) {

@@ -14,7 +14,7 @@ router.get("/account/limits", requireAuth, async (_req: any, res) => {
   return res.json({
     ok: true,
     data: {
-      plan: "starter",
+      plan: "screening",
       propertiesCap: 1,
       unitsCap: 25,
       propertiesUsed: 0,

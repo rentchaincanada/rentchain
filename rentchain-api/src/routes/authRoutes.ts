@@ -214,7 +214,7 @@ router.post("/login", async (req, res) => {
     }
 
     step = "ensure_profile";
-    const plan = resolvePlan(String(u?.plan || "starter"));
+    const plan = resolvePlan(String(u?.plan || "screening"));
 
     const user = ensureLandlordEntry({
       id: userDoc.id,
@@ -327,10 +327,13 @@ router.post("/login/demo", async (_req, res) => {
   }
 
   const demoPlan =
-    process.env.DEMO_PLAN === "starter" || process.env.DEMO_PLAN === "elite"
+    process.env.DEMO_PLAN === "screening" ||
+    process.env.DEMO_PLAN === "starter" ||
+    process.env.DEMO_PLAN === "pro" ||
+    process.env.DEMO_PLAN === "elite"
       ? (process.env.DEMO_PLAN as any)
       : process.env.NODE_ENV === "production"
-      ? "starter"
+      ? "screening"
       : "elite";
 
   const user = ensureLandlordEntry({

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { requireAuth } from "../middleware/requireAuth";
 import { appendLedgerEvent, verifyLedgerChain } from "../services/ledger/ledgerService";
 import { db } from "../config/firebase";
+import { requireCapability } from "../services/capabilityGuard";
 
 const router = Router();
 
@@ -18,6 +19,10 @@ function getLandlordId(req: any): string | null {
 router.get("/", requireAuth, async (req: any, res) => {
   const landlordId = getLandlordId(req);
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+  const cap = await requireCapability(landlordId, "ledger");
+  if (!cap.ok) {
+    return res.status(403).json({ ok: false, error: "Upgrade required", capability: "ledger", plan: cap.plan });
+  }
 
   const limit = parseLimit(req.query?.limit, 50, 200);
   let tenantId = req.query?.tenantId ? String(req.query.tenantId) : null;
@@ -72,6 +77,10 @@ router.get("/ping", requireAuth, (req: any, res) => {
 router.post("/events", requireAuth, async (req: any, res) => {
   const landlordId = getLandlordId(req);
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+  const cap = await requireCapability(landlordId, "ledger");
+  if (!cap.ok) {
+    return res.status(403).json({ ok: false, error: "Upgrade required", capability: "ledger", plan: cap.plan });
+  }
   if (req.user?.role === "tenant") {
     return res.status(403).json({ ok: false, error: "Tenants cannot write ledger events" });
   }
@@ -118,6 +127,10 @@ router.post("/events", requireAuth, async (req: any, res) => {
 router.get("/verify", requireAuth, async (req: any, res) => {
   const landlordId = getLandlordId(req);
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+  const cap = await requireCapability(landlordId, "ledger");
+  if (!cap.ok) {
+    return res.status(403).json({ ok: false, error: "Upgrade required", capability: "ledger", plan: cap.plan });
+  }
   if (req.user?.role === "tenant") {
     return res.status(403).json({ ok: false, error: "Tenants cannot verify ledger" });
   }

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { PLANS, resolvePlan } from "../entitlements/plans";
+import { CAPABILITIES, resolvePlanTier } from "../config/capabilities";
 import { db } from "../config/firebase";
 
 const router = Router();
@@ -17,8 +17,8 @@ router.get("/limits", async (req: any, res) => {
   res.setHeader("Pragma", "no-cache");
   res.setHeader("Expires", "0");
 
-  const plan = resolvePlan(req.user?.plan);
-  const spec = PLANS[plan];
+  const plan = resolvePlanTier(req.user?.plan);
+  const capabilities = CAPABILITIES[plan];
 
   // Compute usage from Firestore where available
   const landlordId = req.user?.landlordId || req.user?.id;
@@ -44,8 +44,12 @@ router.get("/limits", async (req: any, res) => {
   return res.json({
     status: "ok",
     plan,
-    limits: spec.limits,
-    capabilities: spec.capabilities,
+    limits: {
+      maxProperties: Number.MAX_SAFE_INTEGER,
+      maxUnits: Number.MAX_SAFE_INTEGER,
+      screeningCreditsMonthly: 0,
+    },
+    capabilities,
     usage,
   });
 });

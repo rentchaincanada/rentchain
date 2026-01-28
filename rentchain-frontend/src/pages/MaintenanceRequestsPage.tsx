@@ -3,6 +3,8 @@ import { Card, Section, Button } from "../components/ui/Ui";
 import { spacing, text, colors, radius, shadows } from "../styles/tokens";
 import { apiFetch } from "@/api/http";
 import { useToast } from "../components/ui/ToastProvider";
+import { useCapabilities } from "@/hooks/useCapabilities";
+import { useUpgrade } from "@/context/UpgradeContext";
 
 type MaintItem = {
   id: string;
@@ -29,8 +31,12 @@ const MaintenanceRequestsPage: React.FC = () => {
   const [status, setStatus] = useState<string>("NEW");
   const [note, setNote] = useState<string>("");
   const [saving, setSaving] = useState(false);
+  const { features, loading: capsLoading } = useCapabilities();
+  const { openUpgrade } = useUpgrade();
+  const maintenanceEnabled = features?.maintenance !== false;
 
   const load = async () => {
+    if (!maintenanceEnabled) return;
     setLoading(true);
     setError(null);
     try {
@@ -53,7 +59,7 @@ const MaintenanceRequestsPage: React.FC = () => {
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [maintenanceEnabled]);
 
   const selectRow = (item: MaintItem) => {
     setSelected(item);
@@ -97,6 +103,32 @@ const MaintenanceRequestsPage: React.FC = () => {
         </div>
       </Card>
 
+      {!capsLoading && !maintenanceEnabled ? (
+        <Card elevated style={{ maxWidth: 640 }}>
+          <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>
+            Upgrade to manage your rentals
+          </div>
+          <div style={{ color: text.muted, fontSize: 14, marginBottom: 12 }}>
+            RentChain Screening is free. Rental management starts on Starter.
+          </div>
+          <Button
+            variant="secondary"
+            onClick={() =>
+              openUpgrade({
+                reason: "screening",
+                plan: "Screening",
+                copy: {
+                  title: "Upgrade to manage your rentals",
+                  body: "RentChain Screening is free. Rental management starts on Starter.",
+                },
+                ctaLabel: "Upgrade to Starter",
+              })
+            }
+          >
+            Upgrade to Starter
+          </Button>
+        </Card>
+      ) : (
       <Card
         elevated
         style={{
@@ -221,6 +253,7 @@ const MaintenanceRequestsPage: React.FC = () => {
           )}
         </Section>
       </Card>
+      )}
     </div>
   );
 };
