@@ -211,133 +211,134 @@ const LedgerPage: React.FC = () => {
               </button>
             </div>
           ) : (
+            <>
+              {loading ? (
+                <div
+                  style={{
+                    fontSize: 13,
+                    color: "#9ca3af",
+                  }}
+                >
+                  Loading ledger...
+                </div>
+              ) : error ? (
+                <div
+                  style={{
+                    fontSize: 13,
+                    color: "#f97316",
+                  }}
+                >
+                  {error}
+                </div>
+              ) : sortedEntries.length === 0 ? (
+                <div
+                  style={{
+                    fontSize: 13,
+                    color: "#9ca3af",
+                  }}
+                >
+                  {emptyMessage}
+                </div>
+              ) : (
+                <div
+                  style={{
+                    borderRadius: 16,
+                    border: "1px solid rgba(31,41,55,1)",
+                    backgroundColor: "rgba(15,23,42,0.95)",
+                    padding: 12,
+                    maxHeight: "calc(100vh - 120px)",
+                    overflowY: "auto",
+                  }}
+                >
+                  {sortedEntries.map((entry) => {
+                    const dt = getEventDate(entry);
+                    const label = getLabel(entry);
+                    const notes = getNotes(entry);
+                    const amount = getAmount(entry);
+                    const running = getRunningBalance(entry);
+                    const isPayment =
+                      entry.type === "payment" || entry.type === "PAYMENT_RECORDED";
+                    const isCharge =
+                      entry.type === "charge" || entry.type === "RENT_CHARGED";
 
-          {loading ? (
-            <div
-              style={{
-                fontSize: 13,
-                color: "#9ca3af",
-              }}
-            >
-              Loading ledger...
-            </div>
-          ) : error ? (
-            <div
-              style={{
-                fontSize: 13,
-                color: "#f97316",
-              }}
-            >
-              {error}
-            </div>
-          ) : sortedEntries.length === 0 ? (
-            <div
-              style={{
-                fontSize: 13,
-                color: "#9ca3af",
-              }}
-            >
-              {emptyMessage}
-            </div>
-          ) : (
-            <div
-              style={{
-                borderRadius: 16,
-                border: "1px solid rgba(31,41,55,1)",
-                backgroundColor: "rgba(15,23,42,0.95)",
-                padding: 12,
-                maxHeight: "calc(100vh - 120px)",
-                overflowY: "auto",
-              }}
-            >
-              {sortedEntries.map((entry) => {
-                const dt = getEventDate(entry);
-                const label = getLabel(entry);
-                const notes = getNotes(entry);
-                const amount = getAmount(entry);
-                const running = getRunningBalance(entry);
-                const isPayment =
-                  entry.type === "payment" || entry.type === "PAYMENT_RECORDED";
-                const isCharge =
-                  entry.type === "charge" || entry.type === "RENT_CHARGED";
-
-                return (
-                  <div
-                    key={entry.id}
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "flex-start",
-                      padding: "6px 8px",
-                      borderBottom: "1px solid rgba(31,41,55,1)",
-                      fontSize: 12,
-                    }}
-                  >
-                    <div>
+                    return (
                       <div
+                        key={entry.id}
                         style={{
-                          fontWeight: 500,
-                          color: "#e5e7eb",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "flex-start",
+                          padding: "6px 8px",
+                          borderBottom: "1px solid rgba(31,41,55,1)",
+                          fontSize: 12,
                         }}
                       >
-                        {dt.toLocaleString()} — {entry.type || "entry"}
+                        <div>
+                          <div
+                            style={{
+                              fontWeight: 500,
+                              color: "#e5e7eb",
+                            }}
+                          >
+                            {dt.toLocaleString()} — {entry.type || "entry"}
+                          </div>
+                          {label ? (
+                            <div
+                              style={{
+                                color: "#9ca3af",
+                              }}
+                            >
+                              {label}
+                            </div>
+                          ) : null}
+                          {notes ? (
+                            <div
+                              style={{
+                                color: "#6b7280",
+                                fontSize: 11,
+                                marginTop: 2,
+                              }}
+                            >
+                              {notes}
+                            </div>
+                          ) : null}
+                        </div>
+                        <div
+                          style={{
+                            textAlign: "right",
+                            minWidth: 110,
+                          }}
+                        >
+                          <div
+                            style={{
+                              color: isPayment
+                                ? "#22c55e"
+                                : isCharge
+                                ? "#f97316"
+                                : "#e5e7eb",
+                              fontWeight: 500,
+                            }}
+                          >
+                            {isPayment ? "+" : ""}
+                            ${amount.toFixed(2)}
+                          </div>
+                          {running !== null ? (
+                            <div
+                              style={{
+                                fontSize: 11,
+                                color: "#9ca3af",
+                              }}
+                            >
+                              Bal: ${Number(running).toFixed(2)}
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
-                      {label ? (
-                        <div
-                          style={{
-                            color: "#9ca3af",
-                          }}
-                        >
-                          {label}
-                        </div>
-                      ) : null}
-                      {notes ? (
-                        <div
-                          style={{
-                            color: "#6b7280",
-                            fontSize: 11,
-                            marginTop: 2,
-                          }}
-                        >
-                          {notes}
-                        </div>
-                      ) : null}
-                    </div>
-                    <div
-                      style={{
-                        textAlign: "right",
-                        minWidth: 110,
-                      }}
-                    >
-                      <div
-                        style={{
-                          color: isPayment
-                            ? "#22c55e"
-                            : isCharge
-                            ? "#f97316"
-                            : "#e5e7eb",
-                          fontWeight: 500,
-                        }}
-                      >
-                        {isPayment ? "+" : ""}
-                        ${amount.toFixed(2)}
-                      </div>
-                      {running !== null ? (
-                        <div
-                          style={{
-                            fontSize: 11,
-                            color: "#9ca3af",
-                          }}
-                        >
-                          Bal: ${Number(running).toFixed(2)}
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                    );
+                  })}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
