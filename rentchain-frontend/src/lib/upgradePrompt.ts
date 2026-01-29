@@ -2,6 +2,8 @@ export type UpgradePromptDetail = {
   featureKey: string;
   currentPlan?: string;
   requiredPlan?: string;
+  source?: string;
+  redirectTo?: string;
 };
 
 const PLAN_ORDER = ["screening", "starter", "core", "pro", "elite"] as const;
@@ -99,7 +101,18 @@ export function getUpgradePromptDetail(payload: any, status?: number): UpgradePr
   const requiredPlan =
     normalizePlanName(payload?.requiredPlan) || resolveRequiredPlan(resolvedFeatureKey, currentPlan);
 
-  return { featureKey: resolvedFeatureKey, currentPlan, requiredPlan };
+  const source =
+    String(payload?.source || payload?.context || payload?.detail?.source || payload?.meta?.source || "")
+      .trim() || undefined;
+  const redirectTo =
+    String(
+      payload?.redirectTo ||
+        payload?.detail?.redirectTo ||
+        payload?.meta?.redirectTo ||
+        ""
+    ).trim() || undefined;
+
+  return { featureKey: resolvedFeatureKey, currentPlan, requiredPlan, source, redirectTo };
 }
 
 export function dispatchUpgradePrompt(detail: UpgradePromptDetail) {

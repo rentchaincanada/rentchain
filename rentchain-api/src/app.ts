@@ -47,6 +47,7 @@ import reportsExportRoutes from "./routes/reportsExportRoutes";
 import propertiesRoutes from "./routes/propertiesRoutes";
 import accountRoutes from "./routes/accountRoutes";
 import compatRoutes from "./routes/compatRoutes";
+import billingRoutes from "./routes/billingRoutes";
 import unitsRoutes from "./routes/unitsRoutes";
 import adminPropertiesRoutes from "./routes/adminPropertiesRoutes";
 import ledgerRoutes from "./routes/ledgerRoutes";
@@ -238,6 +239,7 @@ app.get("/api/__probe/version", (_req, res) =>
 );
 app.use("/api/tenants", routeSource("tenantsRoutes.ts"), tenantsRoutes);
 app.use("/api/account", accountRoutes);
+app.use("/api/billing", billingRoutes);
 app.use("/api", routeSource("messagesRoutes.ts"), messagesRoutes);
 
 process.on("unhandledRejection", (reason) => {

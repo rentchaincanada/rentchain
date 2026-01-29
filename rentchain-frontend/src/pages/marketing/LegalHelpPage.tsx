@@ -1,6 +1,5 @@
 import React, { useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Link } from "react-router-dom";
 import AskRentChainWidget from "../../components/help/AskRentChainWidget";
 import { Card } from "../../components/ui/Ui";
 import { spacing, text } from "../../styles/tokens";

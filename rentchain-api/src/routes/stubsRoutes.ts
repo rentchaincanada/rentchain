@@ -16,6 +16,12 @@ if (!STUBS_ENABLED) {
   r.post("/billing/upgrade-intent", (req, res) =>
     res.json({ ok: true, received: req.body || null })
   );
+  r.post("/billing/checkout", (req, res) =>
+    res.json({
+      ok: true,
+      url: `/pricing?stub=1&feature=${encodeURIComponent(String(req.body?.featureKey || "unknown"))}`,
+    })
+  );
   r.get("/landlord/billing/usage", (_req, res) =>
     res.json({ ok: true, usage: { screeningCreditsUsed: 0, period: "month" } })
   );

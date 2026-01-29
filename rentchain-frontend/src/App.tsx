@@ -10,6 +10,7 @@ import ApplicationsPage from "./pages/ApplicationsPage";
 import ApplicantApplyPage from "./pages/ApplicantApplyPage";
 import CosignPage from "./pages/CosignPage";
 import LoginPage from "./pages/LoginPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import TenantLoginPageV2 from "./pages/tenant/TenantLoginPage.v2";
 import LandingPage from "./pages/marketing/LandingPage";
 import AboutPage from "./pages/marketing/AboutPage";
@@ -38,6 +39,7 @@ import ScreeningSuccessPage from "./pages/screening/ScreeningSuccessPage";
 import ScreeningCancelPage from "./pages/screening/ScreeningCancelPage";
 import ScreeningReportPage from "./pages/screening/ScreeningReportPage";
 import BillingPage from "./pages/BillingPage";
+import BillingCheckoutSuccessPage from "./pages/BillingCheckoutSuccessPage";
 import { DebugPanel } from "./components/DebugPanel";
 import MicroLiveInvitePage from "./pages/MicroLiveInvitePage";
 import TenantInviteRedeem from "./tenant/TenantInviteRedeem";
@@ -79,6 +81,7 @@ function App() {
         <Route path="/site" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/app/login" element={<LoginPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route
           path="/tenant/login"
           element={TENANT_PORTAL_ENABLED ? <TenantLoginPageV2 /> : <TenantPortalComingSoon />}
@@ -139,6 +142,16 @@ function App() {
             <RequireAuth>
               <LandlordNav>
                 <BillingPage />
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/billing/checkout-success"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <BillingCheckoutSuccessPage />
               </LandlordNav>
             </RequireAuth>
           }
