@@ -32,6 +32,10 @@ function sanitizeRedirectTo(raw: any): string {
   if (value.includes("://")) return fallback;
   return value;
 }
+router.use((req, res, next) => {
+  res.setHeader("x-billing-routes", "present");
+  next();
+});
 
 router.get(
   "/",
