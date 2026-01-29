@@ -1,5 +1,7 @@
-import React from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useEffect, useMemo, useRef } from "react";
+import { getUpgradeCopy } from "@/billing/upgradeCopy";
+import { normalizePlanLabel } from "@/billing/planLabel";
+import { startCheckout } from "@/billing/startCheckout";
 
 export function UpgradePromptModal({
   open,
@@ -7,29 +9,79 @@ export function UpgradePromptModal({
   featureKey,
   currentPlan,
   requiredPlan,
+  source,
+  redirectTo,
 }: {
   open: boolean;
   onClose: () => void;
   featureKey: string;
   currentPlan?: string;
   requiredPlan?: string;
+  source?: string;
+  redirectTo?: string;
 }) {
-  const navigate = useNavigate();
   if (!open) return null;
 
-  const normalizedFeature = String(featureKey || "").trim();
-  const featureLabel = labelForFeature(normalizedFeature);
-  const currentLabel = planLabel(currentPlan);
-  const requiredLabel = planLabel(requiredPlan);
+  const copy = useMemo(() => getUpgradeCopy(featureKey), [featureKey]);
+  const requiredPlanKey = requiredPlan;
+  const requiredLabel = copy.requiredPlanLabel || normalizePlanLabel(requiredPlan || "");
+  const currentLabel = normalizePlanLabel(currentPlan || "");
+  const primaryLabel =
+    copy.primaryCta || (requiredLabel ? `Upgrade to ${requiredLabel}` : "Upgrade now");
+  const secondaryLabel = copy.secondaryCta || "Not now";
+  const title = copy.title;
+  const subtitle = copy.subtitle;
+  const bullets = copy.bullets?.slice(0, 3) || [];
 
-  const featureText = featureLabel || "this feature";
-  const title = featureLabel ? `Upgrade to unlock ${featureLabel}` : "Upgrade required";
-  const body =
-    requiredLabel && currentLabel
-      ? `Your ${currentLabel} plan does not include ${featureText}. Upgrade to ${requiredLabel} to continue.`
-      : requiredLabel
-      ? `Upgrade to ${requiredLabel} to continue.`
-      : "Upgrade to continue.";
+  const primaryRef = useRef<HTMLButtonElement | null>(null);
+  const modalRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const t = window.setTimeout(() => primaryRef.current?.focus(), 0);
+    return () => window.clearTimeout(t);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const root = modalRef.current;
+      if (!root) return;
+      const focusable = Array.from(
+        root.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        )
+      ).filter((el) => {
+        if (el.hasAttribute("disabled")) return false;
+        if (el.getAttribute("aria-hidden") === "true") return false;
+        if (el.offsetParent === null) return false;
+        return true;
+      });
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!root.contains(document.activeElement)) {
+        e.preventDefault();
+        first.focus();
+        return;
+      }
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, onClose]);
 
   return (
     <>
@@ -44,154 +96,136 @@ export function UpgradePromptModal({
       />
 
       <div
+        ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
         style={{
           position: "fixed",
           top: "50%",
           left: "50%",
           transform: "translate(-50%, -50%)",
-          width: "min(520px, 92vw)",
+          width: "min(560px, 92vw)",
           background: "white",
-          borderRadius: 20,
+          borderRadius: 22,
           zIndex: 121,
           boxShadow: "0 30px 80px rgba(2,6,23,0.45)",
         }}
       >
-        <div style={{ padding: 24 }}>
-          <div style={{ fontWeight: 900, fontSize: 18 }}>{title}</div>
-          <div style={{ marginTop: 8, fontSize: 14, opacity: 0.85 }}>{body}</div>
-
-          <div style={{ marginTop: 20, display: "grid", gap: 10 }}>
-            {currentLabel ? (
-              <PlanRow name={currentLabel} active description="Current plan" />
-            ) : null}
-            {requiredLabel ? (
-              <PlanRow name={requiredLabel} highlight description="Required plan" />
-            ) : null}
+        <div style={{ padding: 28, display: "grid", gap: 18 }}>
+          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            <div
+              aria-hidden
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: 14,
+                background: "linear-gradient(135deg, rgba(37,99,235,0.15), rgba(56,189,248,0.25))",
+                border: "1px solid rgba(37,99,235,0.35)",
+                display: "grid",
+                placeItems: "center",
+                color: "#1d4ed8",
+              fontWeight: 900,
+              fontSize: 18,
+            }}
+          >
+              ^
+            </div>
+            <div>
+              <div style={{ fontWeight: 900, fontSize: 20 }}>{title}</div>
+              <div style={{ marginTop: 4, fontSize: 14, opacity: 0.82 }}>{subtitle}</div>
+            </div>
           </div>
+
+          {bullets.length ? (
+            <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 6, fontSize: 14 }}>
+              {bullets.map((b) => (
+                <li key={b} style={{ color: "#0f172a" }}>
+                  {b}
+                </li>
+              ))}
+            </ul>
+          ) : null}
 
           <div
             style={{
-              marginTop: 24,
               display: "flex",
-              justifyContent: "flex-end",
               alignItems: "center",
+              justifyContent: "space-between",
               gap: 10,
+              padding: "10px 12px",
+              borderRadius: 14,
+              border: "1px solid rgba(148,163,184,0.25)",
+              background: "rgba(148,163,184,0.08)",
+              fontSize: 13,
+              fontWeight: 700,
+              color: "#1f2937",
             }}
           >
-            <button
-              onClick={onClose}
-              style={{
-                padding: "10px 14px",
-                borderRadius: 12,
-                border: "1px solid rgba(148,163,184,0.35)",
-                background: "transparent",
-                cursor: "pointer",
-                fontWeight: 800,
-              }}
-            >
-              Not now
-            </button>
+            <span>Current: {currentLabel}</span>
+            <span style={{ opacity: 0.6 }}>-&gt;</span>
+            <span>Needed: {requiredLabel}</span>
+          </div>
 
+          {copy.trustNote ? (
+            <div style={{ fontSize: 12, color: "rgba(71,85,105,0.9)" }}>{copy.trustNote}</div>
+          ) : null}
+
+          <div style={{ display: "grid", gap: 10 }}>
             <button
-              onClick={() => navigate("/pricing")}
+              ref={primaryRef}
+              onClick={() =>
+                startCheckout({
+                  requiredPlan: requiredPlanKey,
+                  featureKey,
+                  source,
+                  redirectTo,
+                })
+              }
               style={{
-                padding: "10px 16px",
-                borderRadius: 12,
-                border: "1px solid rgba(59,130,246,0.45)",
-                background: "rgba(59,130,246,0.12)",
-                color: "#2563eb",
+                padding: "12px 16px",
+                borderRadius: 14,
+                border: "1px solid rgba(37,99,235,0.45)",
+                background: "linear-gradient(135deg, rgba(37,99,235,0.95), rgba(14,165,233,0.95))",
+                color: "white",
                 cursor: "pointer",
                 fontWeight: 900,
-                boxShadow: "0 10px 30px rgba(37,99,235,0.2)",
+                fontSize: 14,
+                boxShadow: "0 18px 40px rgba(37,99,235,0.28)",
               }}
             >
-              View plans
+              {primaryLabel}
             </button>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+              <button
+                onClick={onClose}
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: 12,
+                  border: "1px solid rgba(148,163,184,0.35)",
+                  background: "transparent",
+                  cursor: "pointer",
+                  fontWeight: 800,
+                }}
+              >
+                {secondaryLabel}
+              </button>
+              <a
+                href="/pricing"
+                style={{
+                  alignSelf: "center",
+                  color: "#2563eb",
+                  fontWeight: 700,
+                  fontSize: 13,
+                  textDecoration: "none",
+                }}
+              >
+                Learn more
+              </a>
+            </div>
           </div>
         </div>
       </div>
     </>
-  );
-}
-
-function planLabel(plan?: string) {
-  const raw = String(plan || "").trim().toLowerCase();
-  if (!raw) return undefined;
-  if (raw === "screening") return "Screening";
-  if (raw === "starter") return "Starter";
-  if (raw === "core") return "Core";
-  if (raw === "pro") return "Pro";
-  if (raw === "elite") return "Elite";
-  return raw[0].toUpperCase() + raw.slice(1);
-}
-
-function labelForFeature(featureKey: string) {
-  const key = String(featureKey || "").trim();
-  if (!key) return undefined;
-  const normalized = key.toLowerCase();
-  const map: Record<string, string> = {
-    unitstable: "Units",
-    units: "Units",
-    properties: "Properties",
-    leases: "Leases",
-    maintenance: "Maintenance",
-    notices: "Notices",
-    tenantportal: "Tenant portal",
-    messaging: "Messaging",
-    ledger: "Ledger",
-    exports: "Exports",
-    screening: "Screening",
-    "ai.insights": "AI insights",
-    "ai.summary": "AI summary",
-    "portfolio.ai": "Portfolio AI",
-  };
-  if (map[normalized]) return map[normalized];
-  return key
-    .replace(/[._]/g, " ")
-    .replace(/\s+/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-function PlanRow({
-  name,
-  description,
-  active,
-  highlight,
-}: {
-  name: string;
-  description: string;
-  active?: boolean;
-  highlight?: boolean;
-}) {
-  return (
-    <div
-      style={{
-        padding: "10px 12px",
-        borderRadius: 14,
-        border: active
-          ? "1px solid rgba(34,197,94,0.45)"
-          : highlight
-          ? "1px solid rgba(59,130,246,0.45)"
-          : "1px solid rgba(148,163,184,0.25)",
-        background: active
-          ? "rgba(34,197,94,0.10)"
-          : highlight
-          ? "rgba(59,130,246,0.10)"
-          : "rgba(148,163,184,0.06)",
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-      }}
-    >
-      <div>
-        <div style={{ fontWeight: 900 }}>{name}</div>
-        <div style={{ fontSize: 12, opacity: 0.75 }}>{description}</div>
-      </div>
-      {active ? (
-        <span style={{ fontSize: 12, fontWeight: 900, color: "#16a34a" }}>
-          Current
-        </span>
-      ) : null}
-    </div>
   );
 }

@@ -1,6 +1,6 @@
 // src/pages/LoginPage.tsx
 import React, { useEffect, useRef, useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
 import { colors, spacing, text } from "../styles/tokens";
 import { Card, Input, Button } from "../components/ui/Ui";
@@ -194,6 +194,14 @@ export const LoginPage: React.FC = () => {
               required
             />
           </label>
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <Link
+              to="/forgot-password"
+              style={{ color: colors.accent, fontWeight: 600, fontSize: "0.9rem" }}
+            >
+              Forgot password?
+            </Link>
+          </div>
 
           <Button
             type="submit"

@@ -1,4 +1,11 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { UpgradeModal, type UpgradeReason } from "../components/billing/UpgradeModal";
 import { UpgradePromptModal } from "../components/billing/UpgradePromptModal";
 import { resolveRequiredPlan } from "../lib/upgradePrompt";
@@ -28,8 +35,10 @@ export function UpgradeProvider({ children }: { children: React.ReactNode }) {
   const [promptFeatureKey, setPromptFeatureKey] = useState<string>("screening");
   const [promptCurrentPlan, setPromptCurrentPlan] = useState<string | undefined>(undefined);
   const [promptRequiredPlan, setPromptRequiredPlan] = useState<string | undefined>(undefined);
+  const [promptSource, setPromptSource] = useState<string | undefined>(undefined);
+  const [promptRedirectTo, setPromptRedirectTo] = useState<string | undefined>(undefined);
 
-  const openUpgrade: UpgradeContextValue["openUpgrade"] = (r) => {
+  const openUpgrade = useCallback<UpgradeContextValue["openUpgrade"]>((r) => {
     if (typeof r === "string") {
       setReason(r);
       setCopy(undefined);
@@ -41,46 +50,69 @@ export function UpgradeProvider({ children }: { children: React.ReactNode }) {
       setCtaLabel(r.ctaLabel);
     }
     setOpen(true);
-  };
-
-  useEffect(() => {
-    const handler = (evt: Event) => {
-      const detail = (evt as CustomEvent<any>).detail || {};
-      const featureKey = String(detail.featureKey || detail.limitType || detail.capability || "").trim();
-      if (!featureKey) return;
-      const currentPlan = detail.currentPlan || detail.plan;
-      const requiredPlan = detail.requiredPlan || resolveRequiredPlan(featureKey, currentPlan);
-      setPromptFeatureKey(featureKey);
-      setPromptCurrentPlan(currentPlan);
-      setPromptRequiredPlan(requiredPlan);
-      setPromptOpen(true);
-    };
-    window.addEventListener("upgrade:prompt", handler as EventListener);
-    window.addEventListener("upgrade:plan-limit", handler as EventListener);
-    return () => {
-      window.removeEventListener("upgrade:prompt", handler as EventListener);
-      window.removeEventListener("upgrade:plan-limit", handler as EventListener);
-    };
   }, []);
 
+  const closeUpgradeModal = useCallback(() => {
+    setOpen(false);
+  }, []);
+
+  const closePromptModal = useCallback(() => {
+    setPromptOpen(false);
+  }, []);
+
+  const handleUpgradeEvent = useCallback((evt: Event) => {
+    const detail = (evt as CustomEvent<any>).detail || {};
+    const featureKey = String(detail.featureKey || detail.limitType || detail.capability || "").trim();
+    if (!featureKey) return;
+    const currentPlan = detail.currentPlan || detail.plan;
+    const requiredPlan = detail.requiredPlan || resolveRequiredPlan(featureKey, currentPlan);
+    const source = detail.source || "unknown";
+    const fallbackRedirect =
+      typeof window !== "undefined"
+        ? `${window.location.pathname}${window.location.search}`
+        : "/dashboard";
+    const redirectTo = detail.redirectTo || fallbackRedirect;
+    setPromptFeatureKey(featureKey);
+    setPromptCurrentPlan(currentPlan);
+    setPromptRequiredPlan(requiredPlan);
+    setPromptSource(source);
+    setPromptRedirectTo(redirectTo);
+    setPromptOpen(true);
+  }, []);
+
+  const ctxValue = useMemo(() => ({ openUpgrade }), [openUpgrade]);
+
+  useEffect(() => {
+    window.addEventListener("upgrade:prompt", handleUpgradeEvent as EventListener);
+    window.addEventListener("upgrade:plan-limit", handleUpgradeEvent as EventListener);
+    return () => {
+      window.removeEventListener("upgrade:prompt", handleUpgradeEvent as EventListener);
+      window.removeEventListener("upgrade:plan-limit", handleUpgradeEvent as EventListener);
+    };
+  }, [handleUpgradeEvent]);
+
   return (
-    <UpgradeContext.Provider value={{ openUpgrade }}>
-      {children}
-      <UpgradeModal
-        open={open}
-        reason={reason}
-        copy={copy}
-        currentPlan={plan}
-        ctaLabel={ctaLabel}
-        onClose={() => setOpen(false)}
-      />
-      <UpgradePromptModal
-        open={promptOpen}
-        featureKey={promptFeatureKey}
-        currentPlan={promptCurrentPlan}
-        requiredPlan={promptRequiredPlan}
-        onClose={() => setPromptOpen(false)}
-      />
+    <UpgradeContext.Provider value={ctxValue}>
+      <>
+        {children}
+        <UpgradeModal
+          open={open}
+          reason={reason}
+          copy={copy}
+          currentPlan={plan}
+          ctaLabel={ctaLabel}
+          onClose={closeUpgradeModal}
+        />
+        <UpgradePromptModal
+          open={promptOpen}
+          featureKey={promptFeatureKey}
+          currentPlan={promptCurrentPlan}
+          requiredPlan={promptRequiredPlan}
+          source={promptSource}
+          redirectTo={promptRedirectTo}
+          onClose={closePromptModal}
+        />
+      </>
     </UpgradeContext.Provider>
   );
 }
