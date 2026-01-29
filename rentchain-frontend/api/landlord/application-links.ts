@@ -1,14 +1,20 @@
+import { getApiBaseUrl } from "../getApiBaseUrl";
+
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     return res.status(405).json({ ok: false, error: "Method Not Allowed" });
   }
 
-  const upstream =
-    process.env.VITE_API_BASE_URL ||
-    process.env.API_BASE_URL ||
-    process.env.RENTCHAIN_API_BASE_URL ||
-    "https://rentchain-landlord-api-915921057662.us-central1.run.app";
+  let upstream = "";
+  try {
+    upstream = getApiBaseUrl();
+  } catch (err: any) {
+    console.error("[vercel] missing api base", err?.message || err);
+    return res
+      .status(500)
+      .json({ ok: false, error: "API_BASE_URL_MISSING", detail: String(err?.message || err) });
+  }
 
   const auth = req.headers.authorization || req.headers.Authorization;
   const bodyObj = typeof req.body === "string" ? safeParse(req.body) : req.body || {};

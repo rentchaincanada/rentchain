@@ -21,6 +21,7 @@ import { setOnboardingStep } from "../../api/onboardingApi";
 import "../../styles/propertiesMobile.css";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { useUpgrade } from "@/context/UpgradeContext";
+import { dispatchUpgradePrompt } from "@/lib/upgradePrompt";
 
 interface PropertyDetailPanelProps {
   property: Property | null;
@@ -49,9 +50,10 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const navigate = useNavigate();
   const { showToast } = useToast();
-  const { features, loading: capsLoading } = useCapabilities();
+  const { caps, features, loading: capsLoading } = useCapabilities();
   const { openUpgrade } = useUpgrade();
   const unitsEnabled = features?.unitsTable !== false;
+  const applicationsEnabled = features?.applications !== false;
   const [leases, setLeases] = useState<Lease[]>([]);
   const [isLeasesLoading, setIsLeasesLoading] = useState(false);
   const [leasesError, setLeasesError] = useState<string | null>(null);
@@ -152,6 +154,26 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
       setIsImporting(false);
     }
   }, [navigate, onRefresh, pendingFile, property?.id, readFileText, showToast]);
+
+  const handleSendApplication = useCallback(
+    (u: any) => {
+      if (!applicationsEnabled) {
+        const redirectTo =
+          typeof window !== "undefined"
+            ? `${window.location.pathname}${window.location.search}`
+            : "/properties";
+        dispatchUpgradePrompt({
+          featureKey: "applications",
+          currentPlan: caps?.plan,
+          source: "property_detail_panel",
+          redirectTo,
+        });
+        return;
+      }
+      setSendAppUnit(u);
+    },
+    [applicationsEnabled, caps?.plan]
+  );
   const setLeasesLoadingStates = (loading: boolean, error: string | null) => {
     setIsLeasesLoading(loading);
     setLeasesError(error);
@@ -877,7 +899,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                           {(u as any)?.id ? (
                             <button
                               type="button"
-                              onClick={() => setSendAppUnit(u)}
+                            onClick={() => handleSendApplication(u)}
                               style={{
                                 padding: "6px 10px",
                                 borderRadius: 8,
@@ -995,7 +1017,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                   {(u as any)?.id ? (
                     <button
                       type="button"
-                      onClick={() => setSendAppUnit(u)}
+                    onClick={() => handleSendApplication(u)}
                       style={{
                         padding: "6px 10px",
                         borderRadius: 8,

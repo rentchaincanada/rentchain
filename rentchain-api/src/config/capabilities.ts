@@ -1,5 +1,6 @@
 export type CapabilityKey =
   | "screening"
+  | "applications"
   | "unitsTable"
   | "leases"
   | "ledger"
@@ -14,6 +15,7 @@ export type PlanTier = "screening" | "starter" | "pro" | "elite";
 export const CAPABILITIES: Record<PlanTier, Record<CapabilityKey, boolean>> = {
   screening: {
     screening: true,
+    applications: false,
     unitsTable: false,
     leases: false,
     ledger: false,
@@ -25,6 +27,7 @@ export const CAPABILITIES: Record<PlanTier, Record<CapabilityKey, boolean>> = {
   },
   starter: {
     screening: true,
+    applications: true,
     unitsTable: true,
     leases: true,
     ledger: false,
@@ -36,6 +39,7 @@ export const CAPABILITIES: Record<PlanTier, Record<CapabilityKey, boolean>> = {
   },
   pro: {
     screening: true,
+    applications: true,
     unitsTable: true,
     leases: true,
     ledger: true,
@@ -47,6 +51,7 @@ export const CAPABILITIES: Record<PlanTier, Record<CapabilityKey, boolean>> = {
   },
   elite: {
     screening: true,
+    applications: true,
     unitsTable: true,
     leases: true,
     ledger: true,

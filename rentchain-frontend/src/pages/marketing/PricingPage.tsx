@@ -28,6 +28,7 @@ const PricingPage: React.FC = () => {
             <p style={{ color: text.muted, marginTop: 0 }}>For individual landlords and small portfolios.</p>
             <ul style={{ paddingLeft: "1.1rem", color: text.muted, lineHeight: 1.7 }}>
               <li>Property and unit management</li>
+              <li>Send application links</li>
               <li>Tenant invitations and onboarding</li>
               <li>Lease and tenant lifecycle tracking</li>
               <li>Core rental event records</li>
@@ -41,9 +42,9 @@ const PricingPage: React.FC = () => {
             <div style={{ color: text.muted, fontWeight: 600, marginTop: spacing.sm }}>Everything in Starter, plus:</div>
             <ul style={{ paddingLeft: "1.1rem", color: text.muted, lineHeight: 1.7 }}>
               <li>Tenant screening access</li>
-              <li>Structured rental event ledger</li>
-              <li>Documented notices and lease events</li>
-              <li>Clear event timelines for reference and disputes</li>
+              <li>Ledger tools for audit-ready events</li>
+              <li>Exports for reporting and audits</li>
+              <li>Compliance-ready notices and timelines</li>
             </ul>
             <div style={{ fontWeight: 700, fontSize: "1.1rem" }}>$XX / month</div>
             <div style={{ color: text.subtle, marginTop: spacing.xs }}>Screening: Pay-per-applicant</div>

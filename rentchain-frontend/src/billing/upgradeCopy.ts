@@ -93,6 +93,14 @@ const COPY_MAP: Record<string, UpgradeCopy> = {
     secondaryCta: "Not now",
     requiredPlanLabel: "Starter",
   },
+  applications: {
+    title: "Upgrade to send applications",
+    subtitle: "Application links are available on Starter.",
+    bullets: ["Send secure application links", "Track applicants in one place", "Keep applications tied to the property"],
+    primaryCta: "Upgrade to Starter",
+    secondaryCta: "Not now",
+    requiredPlanLabel: "Starter",
+  },
   leases: {
     title: "Upgrade to manage leases",
     subtitle: "Lease management starts on Starter.",
@@ -135,6 +143,7 @@ export function getUpgradeCopy(featureKey?: string): UpgradeCopy {
   if (key === "units.create") return COPY_MAP.units;
   if (key === "portfolio.ai" || key === "ai.summary") return COPY_MAP["ai.insights"];
   if (key.includes("screening")) return COPY_MAP.tenant_screening;
+  if (key.includes("application") || key.includes("apply")) return COPY_MAP.applications;
   if (key.includes("property")) return COPY_MAP.properties;
   if (key.includes("unit")) return COPY_MAP.units;
 

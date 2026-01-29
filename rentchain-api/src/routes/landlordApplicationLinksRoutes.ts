@@ -3,6 +3,7 @@ import sgMail from "@sendgrid/mail";
 import { createHash, randomBytes } from "crypto";
 import { authenticateJwt } from "../middleware/authMiddleware";
 import { db } from "../config/firebase";
+import { requireCapability } from "../services/capabilityGuard";
 
 const router = Router();
 
@@ -33,6 +34,16 @@ router.post("/", authenticateJwt, async (req: any, res) => {
     const applicantEmail = typeof applicantEmailRaw === "string" ? applicantEmailRaw.trim() : "";
 
     if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+
+    const cap = await requireCapability(landlordId, "applications");
+    if (!cap.ok) {
+      return res.status(403).json({
+        ok: false,
+        error: "Upgrade required",
+        capability: "applications",
+        plan: cap.plan,
+      });
+    }
     if (!propertyId) {
       return res.status(400).json({ ok: false, error: "propertyId is required" });
     }

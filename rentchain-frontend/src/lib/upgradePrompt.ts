@@ -10,6 +10,8 @@ const PLAN_ORDER = ["screening", "starter", "core", "pro", "elite"] as const;
 
 const FEATURE_REQUIRED_PLAN: Record<string, string> = {
   screening: "screening",
+  applications: "starter",
+  application_links: "starter",
   unitstable: "starter",
   units: "starter",
   properties: "starter",
