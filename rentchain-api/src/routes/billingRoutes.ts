@@ -72,13 +72,16 @@ router.post("/checkout", requireAuth, async (req: any, res) => {
   const userId = req.user?.id || null;
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
 
-  const planInput = req.body?.plan || req.body?.requiredPlan;
-  const plan = normalizePlan(String(planInput || ""));
+  const { plan, featureKey, source, redirectTo } = req.body || {};
   if (!plan) {
+    return res.status(400).json({ ok: false, error: "missing_plan" });
+  }
+  const normalizedPlan = normalizePlan(String(plan || ""));
+  if (!normalizedPlan) {
     return res.status(400).json({ ok: false, error: "invalid_plan" });
   }
 
-  const priceId = resolvePriceId(plan);
+  const priceId = resolvePriceId(normalizedPlan);
   if (!priceId) {
     return res.status(400).json({ ok: false, error: "price_not_configured" });
   }
@@ -93,9 +96,9 @@ router.post("/checkout", requireAuth, async (req: any, res) => {
     throw err;
   }
 
-  const featureKey = String(req.body?.featureKey || "unknown").trim().slice(0, 80);
-  const source = String(req.body?.source || "unknown").trim().slice(0, 80);
-  const redirectTo = sanitizeRedirectTo(req.body?.redirectTo);
+  const featureKeyValue = String(featureKey || "unknown").trim().slice(0, 80);
+  const sourceValue = String(source || "unknown").trim().slice(0, 80);
+  const redirectToValue = sanitizeRedirectTo(redirectTo);
   const frontendUrl = (process.env.FRONTEND_URL || FRONTEND_URL || "").replace(/\/$/, "");
   if (!frontendUrl) {
     return res.status(400).json({ ok: false, error: "frontend_not_configured" });
@@ -109,14 +112,16 @@ router.post("/checkout", requireAuth, async (req: any, res) => {
       metadata: {
         landlordId: String(landlordId),
         userId: String(userId || ""),
-        plan,
-        featureKey,
-        source,
+        plan: normalizedPlan,
+        featureKey: featureKeyValue,
+        source: sourceValue,
       },
       success_url: `${frontendUrl}/billing/checkout-success?session_id={CHECKOUT_SESSION_ID}&redirectTo=${encodeURIComponent(
-        redirectTo
+        redirectToValue
       )}`,
-      cancel_url: `${frontendUrl}/billing?checkout=cancel&redirectTo=${encodeURIComponent(redirectTo)}`,
+      cancel_url: `${frontendUrl}/billing?checkout=cancel&redirectTo=${encodeURIComponent(
+        redirectToValue
+      )}`,
     });
 
     return res.status(200).json({ ok: true, url: session.url });
