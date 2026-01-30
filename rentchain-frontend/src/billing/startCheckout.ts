@@ -1,5 +1,4 @@
 import { apiFetch } from "@/lib/apiClient";
-import { trackUpgradeIntent } from "@/api/upgradeIntentApi";
 
 export type StartCheckoutArgs = {
   requiredPlan?: string;
@@ -26,6 +25,19 @@ function sanitizeRedirectTo(raw: string) {
   return raw;
 }
 
+function showCheckoutError(message: string) {
+  if (typeof window === "undefined") {
+    console.error(message);
+    return;
+  }
+  const toast = (window as any)?.toast;
+  if (toast && typeof toast.error === "function") {
+    toast.error(message);
+    return;
+  }
+  window.alert(message);
+}
+
 export async function startCheckout({
   requiredPlan,
   featureKey,
@@ -42,15 +54,6 @@ export async function startCheckout({
   const safeRedirectTo = sanitizeRedirectTo(redirectTo || fallbackRedirect);
 
   try {
-    await trackUpgradeIntent({
-      desiredPlan: planKey === "starter" ? "core" : planKey,
-      context: `${safeSource}:${safeFeature}`.slice(0, 120),
-    });
-  } catch {
-    // ignore tracking errors
-  }
-
-  try {
     const res: any = await apiFetch("/billing/checkout", {
       method: "POST",
       body: JSON.stringify({
@@ -65,9 +68,8 @@ export async function startCheckout({
       window.location.assign(url);
       return;
     }
-  } catch {
-    // ignore errors and fall back to pricing
+    showCheckoutError("Unable to start checkout. Please try again.");
+  } catch (err: any) {
+    showCheckoutError(err?.message || "Unable to start checkout. Please try again.");
   }
-
-  window.location.assign("/pricing");
 }
