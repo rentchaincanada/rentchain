@@ -17,6 +17,15 @@ router.get("/health", (_req, res) => {
   res.json({ ok: true, service: "rentchain-api", ts: Date.now() });
 });
 
+router.get("/_probe/billing", (_req, res) => {
+  res.setHeader("x-route-source", "publicRoutes.ts");
+  res.json({
+    ok: true,
+    billingExpectedPath: "/api/billing/checkout",
+    hint: "If POST /api/billing/checkout is 404, billingRoutes is not mounted in this build.",
+  });
+});
+
 router.get("/health/stripe", (_req, res) => {
   res.setHeader("x-route-source", "publicRoutes.ts");
   res.json({

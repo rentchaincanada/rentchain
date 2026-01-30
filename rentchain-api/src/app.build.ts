@@ -203,6 +203,7 @@ app.use("/api/tenants", routeSource("tenantsRoutes.ts"), tenantsRoutes);
 app.use("/api/account", accountRoutes);
 app.use("/api/onboarding", onboardingRoutes);
 app.use("/api/billing", billingRoutes);
+console.log("[boot] billing routes mounted at /api/billing");
 app.use("/api", routeSource("messagesRoutes.ts"), messagesRoutes);
 console.log(
   "[routes] /api/properties, /api/properties/:propertyId/units, /api/action-requests, /api/applications"

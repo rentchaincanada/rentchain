@@ -8,6 +8,10 @@ import { FRONTEND_URL } from "../config/screeningConfig";
 
 const router = express.Router();
 
+router.get("/health", (_req, res) => {
+  res.json({ ok: true, service: "billing", ts: Date.now() });
+});
+
 function normalizePlan(input: string): "starter" | "pro" | "elite" | null {
   const raw = String(input || "").trim().toLowerCase();
   if (!raw || raw === "free" || raw === "screening") return null;
