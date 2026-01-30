@@ -82,6 +82,7 @@ const corsOptions: cors.CorsOptions = {
     "https://rentchain.ai",
     "http://localhost:5173",
     "http://localhost:5174",
+    "http://localhost:3000",
   ],
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -89,9 +90,13 @@ const corsOptions: cors.CorsOptions = {
     "Content-Type",
     "Authorization",
     "x-rc-auth",
+    "x-api-client",
     "x-requested-with",
   ],
 };
+
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 
 app.post(
   "/api/webhooks/stripe",
@@ -107,8 +112,7 @@ const jsonParser = express.json({
     }
   },
 });
-app.use(cors(corsOptions));
-app.options("*", cors(corsOptions));
+app.use(jsonParser);
 
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(cookieParser());

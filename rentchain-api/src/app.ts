@@ -1,16 +1,22 @@
 // Backend: rentchain-api/src/app.ts
-import express, { Application, Request, Response, NextFunction } from "express";
+import express, { Application, Request } from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
-import { requestBreadcrumbs, getCrumbs } from "./middleware/requestBreadcrumbs";
-import publicRoutes from "./routes/publicRoutes";
-import { requestContext } from "./middleware/requestContext";
+import { requestBreadcrumbs } from "./middleware/requestBreadcrumbs";
 import { routeSource } from "./middleware/routeSource";
+import { authenticateJwt } from "./middleware/authMiddleware";
+
+import publicRoutes from "./routes/publicRoutes";
+import authRoutes from "./routes/authRoutes";
+import billingRoutes from "./routes/billingRoutes";
+import stripeScreeningOrdersWebhookRoutes, {
+  stripeWebhookHandler,
+} from "./routes/stripeScreeningOrdersWebhookRoutes";
+import { requestContext } from "./middleware/requestContext";
 import "./types/auth";
 import "./types/http";
-import { authenticateJwt } from "./middleware/authMiddleware";
-import authRoutes from "./routes/authRoutes";
 import paymentsRoutes from "./routes/paymentsRoutes";
 import applicationsRoutes from "./routes/applicationsRoutes";
 import applicationsConversionRoutes from "./routes/applicationsConversionRoutes";
@@ -47,7 +53,6 @@ import reportsExportRoutes from "./routes/reportsExportRoutes";
 import propertiesRoutes from "./routes/propertiesRoutes";
 import accountRoutes from "./routes/accountRoutes";
 import compatRoutes from "./routes/compatRoutes";
-import billingRoutes from "./routes/billingRoutes";
 import unitsRoutes from "./routes/unitsRoutes";
 import adminPropertiesRoutes from "./routes/adminPropertiesRoutes";
 import ledgerRoutes from "./routes/ledgerRoutes";
@@ -57,9 +62,6 @@ import messagesRoutes from "./routes/messagesRoutes";
 import tenantsRoutes from "./routes/tenantsRoutes";
 import rentalApplicationsRoutes from "./routes/rentalApplicationsRoutes";
 import verifiedScreeningRoutes from "./routes/verifiedScreeningRoutes";
-import stripeScreeningOrdersWebhookRoutes, {
-  stripeWebhookHandler,
-} from "./routes/stripeScreeningOrdersWebhookRoutes";
 import screeningJobsAdminRoutes from "./routes/screeningJobsAdminRoutes";
 import adminRoutes from "./routes/adminRoutes";
 import adminScreeningResultsRoutes from "./routes/adminScreeningResultsRoutes";
@@ -71,27 +73,50 @@ app.set("etag", false);
 /**
  * Middleware
  */
+
+const corsOptions: cors.CorsOptions = {
+  origin: [
+    "https://www.rentchain.ai",
+    "https://rentchain.ai",
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://localhost:3000",
+  ],
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "x-rc-auth",
+    "x-api-client",
+    "x-requested-with",
+  ],
+};
+
 app.use(requestBreadcrumbs);
-app.use(
-  cors({
-    origin: ["https://www.rentchain.ai", "http://localhost:5173", "http://localhost:3000"],
-    credentials: true,
-  })
-);
-app.options("*", cors({ origin: true, credentials: true }));
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
+// ---- Stripe webhook (raw body) must come before JSON parsing ----
 app.post(
   "/api/webhooks/stripe",
   express.raw({ type: "application/json" }),
   routeSource("stripeScreeningOrdersWebhookRoutes.ts"),
   stripeWebhookHandler
 );
+
+// ---- Body parsing (JSON/urlencoded) ----
 const jsonParser = express.json({
+  limit: "10mb",
   verify: (req: Request & { rawBody?: Buffer }, _res, buf) => {
-    if (req.originalUrl.startsWith("/api/stripe/webhook")) {
+    // Keep this if you still use /api/stripe/webhook elsewhere
+    if (req.originalUrl?.startsWith("/api/stripe/webhook")) {
       req.rawBody = Buffer.from(buf);
     }
   },
 });
+app.use(jsonParser);
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+app.use(cookieParser());
 app.use((req, res, next) => {
   if (req.originalUrl.startsWith("/api/webhooks/stripe")) {
     return next();
@@ -99,7 +124,7 @@ app.use((req, res, next) => {
   return jsonParser(req, res, next);
 });
 app.use(express.urlencoded({ extended: true }));
-app.use(cookieParser());
+// ---- Auth  ----
 app.use(requestContext);
 app.use((err: any, req: any, res: any, next: any) => {
   if (err && err.type === "entity.parse.failed") {
@@ -129,6 +154,7 @@ app.use("/api/public", routeSource("publicRoutes.ts"), publicRoutes);
 app.use("/api", routeSource("publicRoutes.ts"), publicRoutes);
 app.use("/api/public", tenantHistorySharePublicRouter);
 app.use("/api/auth", authRoutes);
+app.use("/api/billing", billingRoutes);
 app.use("/api/capabilities", routeSource("capabilitiesRoutes.ts"), capabilitiesRoutes);
 app.use("/api/public", routeSource("publicApplicationLinksRoutes.ts"), publicApplicationLinksRoutes);
 
@@ -278,8 +304,9 @@ app.use(notFoundHandler);
 /**
  * Generic error handler
  */
+app.use(notFoundHandler);
 app.use(errorHandler);
 
 export default app;
+export { app };
 // src/app.build.ts
-// build stamp: 2025-12-29TXX:YY
