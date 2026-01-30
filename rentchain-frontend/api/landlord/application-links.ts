@@ -1,6 +1,4 @@
-import { getApiBaseUrl } from "../../src/config/getApiBaseUrl.js";
-
-
+import { getApiBaseUrl } from "../getApiBaseUrl.js";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
