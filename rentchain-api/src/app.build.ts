@@ -76,7 +76,12 @@ process.on("uncaughtException", (err) => {
 export const app = express();
 app.set("etag", false);
 
-app.use(cors({ origin: true, credentials: true }));
+app.use(cors({
+  origin: true,
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+}));
 app.post(
   "/api/webhooks/stripe",
   express.raw({ type: "application/json" }),
@@ -106,7 +111,7 @@ app.use((err: any, req: any, res: any, next: any) => {
   }
   return next(err);
 });
-
+app.options("*", cors());
 // Redirect accidental double /api/api/... to /api/...
 app.use("/api/api", (req, res) => {
   const fixed = "/api" + req.url;
