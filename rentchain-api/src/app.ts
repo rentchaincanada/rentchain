@@ -141,6 +141,11 @@ app.use("/api/api", (req, res) => {
   return res.redirect(307, fixed);
 });
 
+// Direct billing probe before any /api mounts
+app.get("/api/billing/_probe", (_req, res) =>
+  res.json({ ok: true, via: "app direct probe" })
+);
+
 // Dev tooling routes should not be blocked by auth
 /**
  * Route registration
@@ -155,7 +160,7 @@ app.use("/api/public", routeSource("publicRoutes.ts"), publicRoutes);
 app.use("/api", routeSource("publicRoutes.ts"), publicRoutes);
 app.use("/api/public", tenantHistorySharePublicRouter);
 app.use("/api/auth", authRoutes);
-app.use("/api/billing", billingRoutes);
+app.use("/api/billing", routeSource("billingRoutes.ts"), billingRoutes);
 app.use("/api/capabilities", routeSource("capabilitiesRoutes.ts"), capabilitiesRoutes);
 app.use("/api/public", routeSource("publicApplicationLinksRoutes.ts"), publicApplicationLinksRoutes);
 
@@ -266,7 +271,7 @@ app.get("/api/__probe/version", (_req, res) =>
 );
 app.use("/api/tenants", routeSource("tenantsRoutes.ts"), tenantsRoutes);
 app.use("/api/account", accountRoutes);
-app.use("/api/billing", billingRoutes);
+app.use("/api/billing", routeSource("billingRoutes.ts"), billingRoutes);
 app.use("/api", routeSource("messagesRoutes.ts"), messagesRoutes);
 
 process.on("unhandledRejection", (reason) => {

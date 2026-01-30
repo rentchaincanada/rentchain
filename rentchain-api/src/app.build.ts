@@ -134,6 +134,11 @@ app.use("/api/api", (req, res) => {
 // Health
 app.use("/health", healthRoutes);
 
+// Direct billing probe before any /api mounts
+app.get("/api/billing/_probe", (_req, res) =>
+  res.json({ ok: true, via: "app.build direct probe" })
+);
+
 // Public + Auth (MUST be before authenticateJwt)
 app.use("/api", routeSource("publicRoutes.ts"), publicRoutes);
 app.use("/api/public", routeSource("publicRoutes.ts"), publicRoutes);
@@ -220,7 +225,7 @@ app.get("/api/__probe/version", (_req, res) =>
 app.use("/api/tenants", routeSource("tenantsRoutes.ts"), tenantsRoutes);
 app.use("/api/account", accountRoutes);
 app.use("/api/onboarding", onboardingRoutes);
-app.use("/api/billing", billingRoutes);
+app.use("/api/billing", routeSource("billingRoutes.ts"), billingRoutes);
 console.log("[boot] billing routes mounted at /api/billing");
 app.use("/api", routeSource("messagesRoutes.ts"), messagesRoutes);
 console.log(
