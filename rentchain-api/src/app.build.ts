@@ -109,8 +109,7 @@ const jsonParser = express.json({
 });
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
-});
-app.options("*", cors(corsOptions));
+
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(cookieParser());
 app.use((err: any, req: any, res: any, next: any) => {
