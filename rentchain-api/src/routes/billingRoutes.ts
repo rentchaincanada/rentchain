@@ -40,6 +40,7 @@ router.use((req, res, next) => {
   res.setHeader("x-billing-routes", "present");
   next();
 });
+router.get("/_probe", (_req, res) => res.json({ ok: true, billingRoutes: true }));
 
 router.get(
   "/",
