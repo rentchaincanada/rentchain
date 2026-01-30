@@ -145,6 +145,8 @@ app.use("/api/api", (req, res) => {
 app.get("/api/billing/_probe", (_req, res) =>
   res.json({ ok: true, via: "app direct probe" })
 );
+app.use("/api/billing", routeSource("billingRoutes.ts"), billingRoutes);
+console.log("[boot] mounted billingRoutes at /api/billing");
 
 // Dev tooling routes should not be blocked by auth
 /**
@@ -160,7 +162,6 @@ app.use("/api/public", routeSource("publicRoutes.ts"), publicRoutes);
 app.use("/api", routeSource("publicRoutes.ts"), publicRoutes);
 app.use("/api/public", tenantHistorySharePublicRouter);
 app.use("/api/auth", authRoutes);
-app.use("/api/billing", routeSource("billingRoutes.ts"), billingRoutes);
 app.use("/api/capabilities", routeSource("capabilitiesRoutes.ts"), capabilitiesRoutes);
 app.use("/api/public", routeSource("publicApplicationLinksRoutes.ts"), publicApplicationLinksRoutes);
 
@@ -271,7 +272,6 @@ app.get("/api/__probe/version", (_req, res) =>
 );
 app.use("/api/tenants", routeSource("tenantsRoutes.ts"), tenantsRoutes);
 app.use("/api/account", accountRoutes);
-app.use("/api/billing", routeSource("billingRoutes.ts"), billingRoutes);
 app.use("/api", routeSource("messagesRoutes.ts"), messagesRoutes);
 
 process.on("unhandledRejection", (reason) => {
