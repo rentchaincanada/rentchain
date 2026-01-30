@@ -89,6 +89,7 @@ const corsOptions: cors.CorsOptions = {
     "Authorization",
     "x-rc-auth",
     "x-api-client",
+    "x-rentchain-apiclient",
     "x-requested-with",
   ],
 };
