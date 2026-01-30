@@ -11,6 +11,7 @@ const router = express.Router();
 router.get("/health", (_req, res) => {
   res.json({ ok: true, service: "billing", ts: Date.now() });
 });
+router.get("/_probe", (_req, res) => res.json({ ok: true, billingRoutes: true }));
 
 function normalizePlan(input: string): "starter" | "pro" | "elite" | null {
   const raw = String(input || "").trim().toLowerCase();
@@ -40,7 +41,6 @@ router.use((req, res, next) => {
   res.setHeader("x-billing-routes", "present");
   next();
 });
-router.get("/_probe", (_req, res) => res.json({ ok: true, billingRoutes: true }));
 
 router.get(
   "/",
