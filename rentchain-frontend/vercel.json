@@ -1,12 +1,12 @@
 {
   "rewrites": [
     {
-      "source": "/api/health",
-      "destination": "https://rentchain-landlord-api-cyaabkl54a-uc.a.run.app/health"
+      "source": "/health",
+      "destination": "https://rentchain-landlord-api-915921057662.us-central1.run.app/health"
     },
     {
       "source": "/api/:path*",
-      "destination": "https://rentchain-landlord-api-cyaabkl54a-uc.a.run.app/api/:path*"
+      "destination": "https://rentchain-landlord-api-915921057662.us-central1.run.app/api/:path*"
     },
     {
       "source": "/:path*",
