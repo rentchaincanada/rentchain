@@ -76,13 +76,23 @@ process.on("uncaughtException", (err) => {
 export const app = express();
 app.set("etag", false);
 
-app.use(cors({
-  origin: true,
+const corsOptions: cors.CorsOptions = {
+  origin: [
+    "https://www.rentchain.ai",
+    "https://rentchain.ai",
+    "http://localhost:5173",
+    "http://localhost:5174",
+  ],
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-}));
-app.options("*", cors());
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "x-rc-auth",
+    "x-requested-with",
+  ],
+};
+
 app.post(
   "/api/webhooks/stripe",
   express.raw({ type: "application/json" }),
@@ -97,12 +107,10 @@ const jsonParser = express.json({
     }
   },
 });
-app.use((req, res, next) => {
-  if (req.originalUrl?.startsWith("/api/webhooks/stripe")) {
-    return next();
-  }
-  return jsonParser(req, res, next);
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 });
+app.options("*", cors(corsOptions));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(cookieParser());
 app.use((err: any, req: any, res: any, next: any) => {
