@@ -70,7 +70,7 @@ export async function apiFetch<T = any>(
   };
 
   // Mark requests coming from our API helpers so the dev fetch-guard doesn't warn
-  headers["X-Rentchain-ApiClient"] = "1";
+  headers["x-api-client"] = "web";
   const hasToken = typeof token === "string" ? token.trim().length > 0 : false;
   const authHeaderSet = hasToken;
   headers["x-rc-auth"] = authHeaderSet ? "bearer" : "missing";

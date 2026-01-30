@@ -10,8 +10,7 @@ export async function apiFetch<T>(
   const token = (opts as any)?.token;
   const headers = new Headers(opts.headers || {});
   headers.set("Accept", "application/json");
-  headers.set("x-api-client", "apiFetch");
-  headers.set("X-Rentchain-ApiClient", "1");
+  headers.set("x-api-client", "web");
   if (!headers.has("Content-Type") && opts.body) headers.set("Content-Type", "application/json");
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
@@ -59,7 +58,7 @@ export async function apiGetJson<T>(
     signal: opts.signal,
     headers: {
       Accept: "application/json",
-      "X-Rentchain-ApiClient": "1",
+      "x-api-client": "web",
     },
   });
 

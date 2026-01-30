@@ -35,6 +35,7 @@ api.interceptors.request.use((config) => {
     (config.headers as any).Authorization = `Bearer ${token}`;
   }
   config.headers = config.headers ?? {};
+  (config.headers as any)["x-api-client"] = "web";
   (config.headers as any)["x-rc-auth"] = authHeaderSet ? "bearer" : "missing";
   config.withCredentials = true;
   return config;

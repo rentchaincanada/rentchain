@@ -33,16 +33,14 @@ window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
       (input instanceof Request ? input.headers : undefined) ||
       undefined
   );
-  const marked =
-    initHeaders.get("X-Rentchain-ApiClient") === "1" ||
-    initHeaders.get("x-rentchain-apiclient") === "1";
+  const clientHeader = initHeaders.get("x-api-client");
+  const marked = clientHeader === "web";
 
   const token = getAuthToken();
   const url =
     typeof input === "string" || input instanceof URL ? input.toString() : input.url;
-  const clientHeader = initHeaders.get("x-api-client");
 
-  if (import.meta.env.DEV && !marked && clientHeader !== "apiFetch" && url.includes("/api/")) {
+  if (import.meta.env.DEV && !marked && url.includes("/api/")) {
     console.error("🚫 Direct fetch() forbidden for /api. Use apiFetch/apiJson.", url);
   }
 

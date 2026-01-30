@@ -51,7 +51,7 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
   const token = getAuthToken();
   const headers = new Headers(init.headers || {});
   headers.set("Accept", "application/json");
-  headers.set("X-Rentchain-ApiClient", "1");
+  headers.set("x-api-client", "web");
   if (init.body && typeof init.body === "string" && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
