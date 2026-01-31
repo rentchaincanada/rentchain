@@ -22,10 +22,12 @@ function normalizePlan(input: string): "starter" | "pro" | "elite" | null {
   return null;
 }
 
-function resolvePriceId(plan: "starter" | "pro" | "elite"): string | null {
-  if (plan === "starter") return process.env.STRIPE_PRICE_STARTER || null;
-  if (plan === "pro") return process.env.STRIPE_PRICE_PRO || null;
-  return process.env.STRIPE_PRICE_BUSINESS || null;
+function resolvePriceId(
+  plan: "starter" | "pro" | "elite"
+): { priceId: string | null; envKey: string } {
+  if (plan === "starter") return { priceId: process.env.STRIPE_PRICE_STARTER || null, envKey: "STRIPE_PRICE_STARTER" };
+  if (plan === "pro") return { priceId: process.env.STRIPE_PRICE_PRO || null, envKey: "STRIPE_PRICE_PRO" };
+  return { priceId: process.env.STRIPE_PRICE_BUSINESS || null, envKey: "STRIPE_PRICE_BUSINESS" };
 }
 
 function sanitizeRedirectTo(raw: any): string {
@@ -82,9 +84,15 @@ router.post("/checkout", requireAuth, async (req: any, res) => {
     return res.status(400).json({ ok: false, error: "invalid_plan" });
   }
 
-  const priceId = resolvePriceId(normalizedPlan);
-  if (!priceId) {
-    return res.status(400).json({ ok: false, error: "price_not_configured" });
+  const { priceId: rawPriceId, envKey } = resolvePriceId(normalizedPlan);
+  const priceId = String(rawPriceId || "").trim();
+  if (!priceId || !priceId.startsWith("price_")) {
+    console.error("[billing/checkout] price not configured or invalid", { envKey });
+    return res.status(400).json({
+      ok: false,
+      error: "price_not_configured",
+      detail: `invalid_${envKey}`,
+    });
   }
 
   let stripe: any;
