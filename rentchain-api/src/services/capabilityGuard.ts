@@ -10,7 +10,7 @@ export async function requireCapability(
   capability: CapabilityKey
 ): Promise<CapabilityCheck> {
   const snap = await db.collection("landlords").doc(landlordId).get();
-  const plan = resolvePlanTier((snap.data() as any)?.plan || "screening");
+  const plan = resolvePlanTier((snap.data() as any)?.plan || "free");
   const allowed = CAPABILITIES[plan]?.[capability] === true;
   if (!allowed) {
     return { ok: false, plan, error: "forbidden" };

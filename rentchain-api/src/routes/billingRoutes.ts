@@ -13,21 +13,60 @@ router.get("/health", (_req, res) => {
 });
 router.get("/_probe", (_req, res) => res.json({ ok: true, billingRoutes: true }));
 
-function normalizePlan(input: string): "starter" | "pro" | "elite" | null {
+type BillingTier = "starter" | "pro" | "business";
+type BillingInterval = "monthly" | "yearly";
+
+function normalizeTier(input: any): BillingTier | "free" | null {
   const raw = String(input || "").trim().toLowerCase();
-  if (!raw || raw === "free" || raw === "screening") return null;
+  if (!raw) return null;
+  if (raw === "free" || raw === "screening") return "free";
   if (raw === "starter" || raw === "core") return "starter";
   if (raw === "pro") return "pro";
-  if (raw === "business" || raw === "elite" || raw === "enterprise") return "elite";
+  if (raw === "business" || raw === "elite" || raw === "enterprise") return "business";
   return null;
 }
 
+function normalizeInterval(input: any): BillingInterval {
+  const raw = String(input || "").trim().toLowerCase();
+  if (raw === "yearly" || raw === "annual" || raw === "annually") return "yearly";
+  return "monthly";
+}
+
 function resolvePriceId(
-  plan: "starter" | "pro" | "elite"
-): { priceId: string | null; envKey: string } {
-  if (plan === "starter") return { priceId: process.env.STRIPE_PRICE_STARTER || null, envKey: "STRIPE_PRICE_STARTER" };
-  if (plan === "pro") return { priceId: process.env.STRIPE_PRICE_PRO || null, envKey: "STRIPE_PRICE_PRO" };
-  return { priceId: process.env.STRIPE_PRICE_BUSINESS || null, envKey: "STRIPE_PRICE_BUSINESS" };
+  tier: BillingTier,
+  interval: BillingInterval
+): { priceId: string | null; envKey: string; hadValue: boolean } {
+  const preferredKey =
+    tier === "starter"
+      ? interval === "yearly"
+        ? "STRIPE_PRICE_STARTER_YEARLY"
+        : "STRIPE_PRICE_STARTER_MONTHLY"
+      : tier === "pro"
+      ? interval === "yearly"
+        ? "STRIPE_PRICE_PRO_YEARLY"
+        : "STRIPE_PRICE_PRO_MONTHLY"
+      : interval === "yearly"
+      ? "STRIPE_PRICE_BUSINESS_YEARLY"
+      : "STRIPE_PRICE_BUSINESS_MONTHLY";
+  const legacyKey =
+    tier === "starter"
+      ? "STRIPE_PRICE_STARTER"
+      : tier === "pro"
+      ? "STRIPE_PRICE_PRO"
+      : "STRIPE_PRICE_BUSINESS";
+  const keys = interval === "monthly" ? [preferredKey, legacyKey] : [preferredKey];
+
+  for (const key of keys) {
+    const raw = process.env[key];
+    if (raw === undefined || raw === null || String(raw).trim() === "") continue;
+    const trimmed = String(raw).trim();
+    if (trimmed.startsWith("price_")) {
+      return { priceId: trimmed, envKey: key, hadValue: true };
+    }
+    return { priceId: null, envKey: key, hadValue: true };
+  }
+
+  return { priceId: null, envKey: preferredKey, hadValue: false };
 }
 
 function sanitizeRedirectTo(raw: any): string {
@@ -75,23 +114,24 @@ router.post("/checkout", requireAuth, async (req: any, res) => {
   const userId = req.user?.id || null;
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
 
-  const { plan, featureKey, source, redirectTo } = req.body || {};
-  if (!plan) {
-    return res.status(400).json({ ok: false, error: "missing_plan" });
+  const { tier, interval, plan, requiredPlan, featureKey, source, redirectTo } =
+    req.body || {};
+  const resolvedTier = normalizeTier(tier || plan || requiredPlan);
+  if (!resolvedTier) {
+    return res.status(400).json({ ok: false, error: "missing_tier" });
   }
-  const normalizedPlan = normalizePlan(String(plan || ""));
-  if (!normalizedPlan) {
-    return res.status(400).json({ ok: false, error: "invalid_plan" });
+  if (resolvedTier === "free") {
+    return res.status(400).json({ ok: false, error: "invalid_tier" });
   }
+  const resolvedInterval = normalizeInterval(interval);
 
-  const { priceId: rawPriceId, envKey } = resolvePriceId(normalizedPlan);
-  const priceId = String(rawPriceId || "").trim();
-  if (!priceId || !priceId.startsWith("price_")) {
+  const { priceId, envKey } = resolvePriceId(resolvedTier, resolvedInterval);
+  if (!priceId) {
     console.error("[billing/checkout] price not configured or invalid", { envKey });
     return res.status(400).json({
       ok: false,
       error: "price_not_configured",
-      detail: `invalid_${envKey}`,
+      detail: `${envKey} must be Stripe price id price_...`,
     });
   }
 
@@ -121,7 +161,8 @@ router.post("/checkout", requireAuth, async (req: any, res) => {
       metadata: {
         landlordId: String(landlordId),
         userId: String(userId || ""),
-        plan: normalizedPlan,
+        tier: resolvedTier,
+        interval: resolvedInterval,
         featureKey: featureKeyValue,
         source: sourceValue,
       },
