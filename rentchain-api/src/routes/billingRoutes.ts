@@ -166,6 +166,16 @@ router.post("/checkout", requireAuth, async (req: any, res) => {
         featureKey: featureKeyValue,
         source: sourceValue,
       },
+      subscription_data: {
+        metadata: {
+          landlordId: String(landlordId),
+          userId: String(userId || ""),
+          tier: resolvedTier,
+          interval: resolvedInterval,
+          featureKey: featureKeyValue,
+          source: sourceValue,
+        },
+      },
       success_url: `${frontendUrl}/billing/checkout-success?session_id={CHECKOUT_SESSION_ID}&redirectTo=${encodeURIComponent(
         redirectToValue
       )}`,

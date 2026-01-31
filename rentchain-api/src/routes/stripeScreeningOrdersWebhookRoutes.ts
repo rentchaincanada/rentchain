@@ -15,7 +15,87 @@ interface StripeWebhookRequest extends Request {
 
 const router = Router();
 
+type BillingTier = "starter" | "pro" | "business";
+
 type ScreeningPaidUpdateStatus = "paid_set" | "already_paid" | "ignored";
+
+function resolveTierFromPriceId(priceId?: string | null): BillingTier | null {
+  const id = String(priceId || "").trim();
+  if (!id) return null;
+
+  const envMap: Array<{ key: string; tier: BillingTier }> = [
+    { key: "STRIPE_PRICE_STARTER_MONTHLY", tier: "starter" },
+    { key: "STRIPE_PRICE_STARTER_YEARLY", tier: "starter" },
+    { key: "STRIPE_PRICE_PRO_MONTHLY", tier: "pro" },
+    { key: "STRIPE_PRICE_PRO_YEARLY", tier: "pro" },
+    { key: "STRIPE_PRICE_BUSINESS_MONTHLY", tier: "business" },
+    { key: "STRIPE_PRICE_BUSINESS_YEARLY", tier: "business" },
+    { key: "STRIPE_PRICE_STARTER", tier: "starter" },
+    { key: "STRIPE_PRICE_PRO", tier: "pro" },
+    { key: "STRIPE_PRICE_BUSINESS", tier: "business" },
+  ];
+
+  for (const entry of envMap) {
+    const raw = process.env[entry.key];
+    if (!raw) continue;
+    const trimmed = String(raw).trim();
+    if (trimmed && trimmed === id) {
+      return entry.tier;
+    }
+  }
+
+  return null;
+}
+
+async function resolveLandlordIdFromCustomer(
+  customerId?: string | null
+): Promise<string | null> {
+  const id = String(customerId || "").trim();
+  if (!id) return null;
+  try {
+    const snap = await db.collection("landlords").where("stripeCustomerId", "==", id).limit(1).get();
+    if (snap.empty) return null;
+    return snap.docs[0].id;
+  } catch (err) {
+    console.warn("[stripe-webhook-subscription] landlord lookup failed", {
+      customerId: id,
+      err: (err as any)?.message || err,
+    });
+    return null;
+  }
+}
+
+async function updateLandlordSubscription(params: {
+  landlordId: string;
+  tier: BillingTier | "free";
+  stripeCustomerId?: string | null;
+  stripeSubscriptionId?: string | null;
+  subscriptionStatus?: string | null;
+  currentPeriodEnd?: number | null;
+}) {
+  const {
+    landlordId,
+    tier,
+    stripeCustomerId,
+    stripeSubscriptionId,
+    subscriptionStatus,
+    currentPeriodEnd,
+  } = params;
+  await db
+    .collection("landlords")
+    .doc(landlordId)
+    .set(
+      {
+        plan: tier,
+        stripeCustomerId: stripeCustomerId || null,
+        stripeSubscriptionId: stripeSubscriptionId || null,
+        subscriptionStatus: subscriptionStatus || null,
+        currentPeriodEnd: currentPeriodEnd ?? null,
+        subscriptionUpdatedAt: Date.now(),
+      },
+      { merge: true }
+    );
+}
 
 async function markApplicationScreeningPaid(params: {
   applicationId: string;
@@ -180,6 +260,65 @@ export const stripeWebhookHandler = async (req: StripeWebhookRequest, res: Respo
   } catch (err: any) {
     console.error("[stripe-webhook-orders] signature verification failed", err?.message || err);
     return res.status(400).send("Signature verification failed");
+  }
+
+  if (
+    event.type === "customer.subscription.created" ||
+    event.type === "customer.subscription.updated" ||
+    event.type === "customer.subscription.deleted"
+  ) {
+    try {
+      const subscription = event.data.object as Stripe.Subscription;
+      const customerId =
+        typeof subscription.customer === "string"
+          ? subscription.customer
+          : subscription.customer?.id || null;
+      const priceId = subscription.items?.data?.[0]?.price?.id || null;
+      const tier = resolveTierFromPriceId(priceId);
+      const subscriptionStatus = subscription.status || "unknown";
+      const currentPeriodEnd =
+        typeof (subscription as any).current_period_end === "number"
+          ? (subscription as any).current_period_end * 1000
+          : null;
+
+      if (!tier && event.type !== "customer.subscription.deleted") {
+        console.warn("[stripe-webhook-subscription] unknown price id", {
+          eventId: event.id,
+          priceId,
+        });
+        return res.json({ received: true, ignored: true });
+      }
+
+      const metadataLandlordId = String(subscription.metadata?.landlordId || "").trim() || null;
+      const landlordId =
+        metadataLandlordId || (await resolveLandlordIdFromCustomer(customerId));
+      if (!landlordId) {
+        console.warn("[stripe-webhook-subscription] landlord not resolved", {
+          eventId: event.id,
+          customerId,
+        });
+        return res.json({ received: true, ignored: true });
+      }
+
+      const resolvedTier = event.type === "customer.subscription.deleted" ? "free" : tier || "free";
+      await updateLandlordSubscription({
+        landlordId,
+        tier: resolvedTier,
+        stripeCustomerId: customerId,
+        stripeSubscriptionId: subscription.id,
+        subscriptionStatus,
+        currentPeriodEnd,
+      });
+      console.log("[stripe-webhook-subscription] updated landlord", {
+        eventId: event.id,
+        landlordId,
+        tier: resolvedTier,
+        status: subscriptionStatus,
+      });
+    } catch (err: any) {
+      console.error("[stripe-webhook-subscription] handler failed", err?.message || err);
+    }
+    return res.json({ received: true });
   }
 
   if (

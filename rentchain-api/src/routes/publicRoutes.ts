@@ -28,10 +28,25 @@ router.get("/_probe/billing", (_req, res) => {
 
 router.get("/health/stripe", (_req, res) => {
   res.setHeader("x-route-source", "publicRoutes.ts");
+  const has = (key: string) => {
+    const raw = process.env[key];
+    return Boolean(raw && String(raw).trim());
+  };
   res.json({
     ok: true,
     stripeConfigured: isStripeConfigured(),
     webhookSecretConfigured: Boolean(process.env.STRIPE_WEBHOOK_SECRET),
+    priceEnv: {
+      STRIPE_PRICE_STARTER_MONTHLY: has("STRIPE_PRICE_STARTER_MONTHLY"),
+      STRIPE_PRICE_STARTER_YEARLY: has("STRIPE_PRICE_STARTER_YEARLY"),
+      STRIPE_PRICE_PRO_MONTHLY: has("STRIPE_PRICE_PRO_MONTHLY"),
+      STRIPE_PRICE_PRO_YEARLY: has("STRIPE_PRICE_PRO_YEARLY"),
+      STRIPE_PRICE_BUSINESS_MONTHLY: has("STRIPE_PRICE_BUSINESS_MONTHLY"),
+      STRIPE_PRICE_BUSINESS_YEARLY: has("STRIPE_PRICE_BUSINESS_YEARLY"),
+      STRIPE_PRICE_STARTER: has("STRIPE_PRICE_STARTER"),
+      STRIPE_PRICE_PRO: has("STRIPE_PRICE_PRO"),
+      STRIPE_PRICE_BUSINESS: has("STRIPE_PRICE_BUSINESS"),
+    },
     apiRevision: process.env.K_REVISION || null,
   });
 });

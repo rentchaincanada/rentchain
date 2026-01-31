@@ -61,6 +61,7 @@ import verifiedScreeningRoutes from "./routes/verifiedScreeningRoutes";
 import stripeScreeningOrdersWebhookRoutes, {
   stripeWebhookHandler,
 } from "./routes/stripeScreeningOrdersWebhookRoutes";
+import { db } from "./config/firebase";
 import screeningJobsAdminRoutes from "./routes/screeningJobsAdminRoutes";
 import adminRoutes from "./routes/adminRoutes";
 import adminScreeningResultsRoutes from "./routes/adminScreeningResultsRoutes";
@@ -153,7 +154,7 @@ app.use("/api/capabilities", routeSource("capabilitiesRoutes.ts"), capabilitiesR
 app.use(authenticateJwt);
 
 // Current user info
-app.get("/api/me", (req: any, res) => {
+app.get("/api/me", async (req: any, res) => {
   res.setHeader("x-route-source", "app.build.ts:/api/me");
   const hasAuthHeader = Boolean(req.get("authorization"));
   if (!hasAuthHeader) {
@@ -162,7 +163,22 @@ app.get("/api/me", (req: any, res) => {
   if (!req.user) {
     return res.status(401).json({ ok: false, error: "Unauthorized" });
   }
-  return res.json({ ok: true, user: req.user });
+  let user = req.user;
+  try {
+    const landlordId = user.landlordId || (user.role === "landlord" ? user.id : null);
+    if (landlordId) {
+      const snap = await db.collection("landlords").doc(String(landlordId)).get();
+      if (snap.exists) {
+        const data = snap.data() as any;
+        if (data?.plan) {
+          user = { ...user, plan: data.plan };
+        }
+      }
+    }
+  } catch {
+    // ignore lookup errors
+  }
+  return res.json({ ok: true, user });
 });
 
 // Ledger V2 (after auth decode)
