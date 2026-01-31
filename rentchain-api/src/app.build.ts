@@ -228,7 +228,7 @@ app.use("/api", stubsRoutes);
 app.use("/api", routeSource("screeningReportRoutes.ts"), screeningReportRoutes);
 
 // Core APIs
-app.use("/api", paymentsRoutes);
+app.use("/api", routeSource("paymentsRoutes.ts"), paymentsRoutes);
 app.use("/api/leases", leaseRoutes);
 app.use("/api", tenantOnboardRoutes);
 app.use("/api/events", eventsRoutes);

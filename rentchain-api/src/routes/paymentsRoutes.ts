@@ -24,6 +24,7 @@ const parseYearMonth = (req: Request): { year: number; month: number } | null =>
 
 // GET /api/payments?tenantId=...
 router.get("/payments", (req: Request, res: Response) => {
+  res.setHeader("x-route-source", "paymentsRoutes.ts");
   const tenantId = (req.query.tenantId as string | undefined) ?? undefined;
 
   let results: Payment[] = [];

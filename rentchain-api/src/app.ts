@@ -270,7 +270,7 @@ app.get("/api/__debug/ping-application-links", (_req, res) => {
   return res.json({ ok: true });
 });
 
-app.use("/api", paymentsRoutes);
+app.use("/api", routeSource("paymentsRoutes.ts"), paymentsRoutes);
 app.use("/api/leases", leaseRoutes);
 app.use("/api", tenantOnboardRoutes);
 app.use("/api/events", eventsRoutes);
