@@ -66,6 +66,7 @@ export function UpgradeProvider({ children }: { children: React.ReactNode }) {
     if (!featureKey) return;
     const currentPlan = detail.currentPlan || detail.plan;
     const requiredPlan = detail.requiredPlan || resolveRequiredPlan(featureKey, currentPlan);
+    if (requiredPlan === "free") return;
     const source = detail.source || "unknown";
     const fallbackRedirect =
       typeof window !== "undefined"

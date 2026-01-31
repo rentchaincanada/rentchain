@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { getUpgradeCopy } from "@/billing/upgradeCopy";
 import { normalizePlanLabel } from "@/billing/planLabel";
 import { startCheckout } from "@/billing/startCheckout";
@@ -35,6 +35,16 @@ export function UpgradePromptModal({
 
   const primaryRef = useRef<HTMLButtonElement | null>(null);
   const modalRef = useRef<HTMLDivElement | null>(null);
+  const [interval, setInterval] = useState<"monthly" | "yearly">("monthly");
+
+  const resolveTier = (input?: string) => {
+    const raw = String(input || "").trim().toLowerCase();
+    if (raw === "starter" || raw === "core") return "starter";
+    if (raw === "pro") return "pro";
+    if (raw === "business" || raw === "elite" || raw === "enterprise") return "business";
+    return "pro";
+  };
+  const requiredTier = resolveTier(requiredPlanKey);
 
   useEffect(() => {
     if (!open) return;
@@ -171,11 +181,54 @@ export function UpgradePromptModal({
             <div style={{ fontSize: 12, color: "rgba(71,85,105,0.9)" }}>{copy.trustNote}</div>
           ) : null}
 
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              type="button"
+              onClick={() => setInterval("monthly")}
+              style={{
+                padding: "8px 12px",
+                borderRadius: 10,
+                border:
+                  interval === "monthly"
+                    ? "1px solid rgba(37,99,235,0.6)"
+                    : "1px solid rgba(148,163,184,0.35)",
+                background: interval === "monthly" ? "rgba(37,99,235,0.12)" : "transparent",
+                color: "#0f172a",
+                fontWeight: 800,
+                fontSize: 12,
+                cursor: "pointer",
+              }}
+            >
+              Monthly
+            </button>
+            <button
+              type="button"
+              onClick={() => setInterval("yearly")}
+              style={{
+                padding: "8px 12px",
+                borderRadius: 10,
+                border:
+                  interval === "yearly"
+                    ? "1px solid rgba(37,99,235,0.6)"
+                    : "1px solid rgba(148,163,184,0.35)",
+                background: interval === "yearly" ? "rgba(37,99,235,0.12)" : "transparent",
+                color: "#0f172a",
+                fontWeight: 800,
+                fontSize: 12,
+                cursor: "pointer",
+              }}
+            >
+              Yearly
+            </button>
+          </div>
+
           <div style={{ display: "grid", gap: 10 }}>
             <button
               ref={primaryRef}
               onClick={() =>
                 startCheckout({
+                  tier: requiredTier,
+                  interval,
                   requiredPlan: requiredPlanKey,
                   featureKey,
                   source,

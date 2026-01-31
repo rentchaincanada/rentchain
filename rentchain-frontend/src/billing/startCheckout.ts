@@ -1,19 +1,28 @@
 import { apiFetch } from "@/lib/apiClient";
 
 export type StartCheckoutArgs = {
+  tier?: "starter" | "pro" | "business";
+  interval?: "monthly" | "yearly";
   requiredPlan?: string;
   featureKey: string;
   source?: string;
   redirectTo?: string;
 };
 
-function normalizePlanKey(plan?: string): "starter" | "pro" | "elite" | null {
-  const raw = String(plan || "").trim().toLowerCase();
-  if (!raw || raw === "free" || raw === "screening") return "starter";
+function normalizeTier(input?: string): "starter" | "pro" | "business" | "free" | null {
+  const raw = String(input || "").trim().toLowerCase();
+  if (!raw) return null;
+  if (raw === "free" || raw === "screening") return "free";
   if (raw === "starter" || raw === "core") return "starter";
   if (raw === "pro") return "pro";
-  if (raw === "business" || raw === "elite" || raw === "enterprise") return "elite";
+  if (raw === "business" || raw === "elite" || raw === "enterprise") return "business";
   return null;
+}
+
+function normalizeInterval(input?: string): "monthly" | "yearly" {
+  const raw = String(input || "").trim().toLowerCase();
+  if (raw === "yearly" || raw === "annual" || raw === "annually") return "yearly";
+  return "monthly";
 }
 
 function sanitizeRedirectTo(raw: string) {
@@ -39,12 +48,20 @@ function showCheckoutError(message: string) {
 }
 
 export async function startCheckout({
+  tier,
+  interval,
   requiredPlan,
   featureKey,
   source,
   redirectTo,
 }: StartCheckoutArgs) {
-  const planKey = normalizePlanKey(requiredPlan) || "starter";
+  const resolvedTier =
+    normalizeTier(tier) || normalizeTier(requiredPlan) || "pro";
+  if (resolvedTier === "free") {
+    showCheckoutError("No upgrade required for this feature.");
+    return;
+  }
+  const resolvedInterval = normalizeInterval(interval);
   const safeSource = String(source || "unknown").trim() || "unknown";
   const safeFeature = String(featureKey || "unknown").trim() || "unknown";
   const fallbackRedirect =
@@ -57,7 +74,8 @@ export async function startCheckout({
     const res: any = await apiFetch("/billing/checkout", {
       method: "POST",
       body: JSON.stringify({
-        plan: planKey,
+        tier: resolvedTier,
+        interval: resolvedInterval,
         featureKey: safeFeature,
         source: safeSource,
         redirectTo: safeRedirectTo,

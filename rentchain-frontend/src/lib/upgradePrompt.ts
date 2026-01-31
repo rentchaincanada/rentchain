@@ -6,32 +6,46 @@ export type UpgradePromptDetail = {
   redirectTo?: string;
 };
 
-const PLAN_ORDER = ["screening", "starter", "core", "pro", "elite"] as const;
+const PLAN_ORDER = ["free", "starter", "pro", "business"] as const;
 
 const FEATURE_REQUIRED_PLAN: Record<string, string> = {
-  screening: "screening",
-  applications: "starter",
-  application_links: "starter",
-  unitstable: "starter",
-  units: "starter",
-  properties: "starter",
+  screening: "free",
+  applications: "free",
+  application_links: "free",
+  tenant_invites: "free",
+  "team.invites": "free",
+  properties_unlimited: "free",
+  units_unlimited: "free",
+  unitstable: "free",
+  units: "free",
+  properties: "free",
   leases: "starter",
   maintenance: "starter",
   notices: "starter",
   tenantportal: "starter",
   messaging: "pro",
-  ledger: "pro",
+  ledger_basic: "starter",
+  ledger_verified: "pro",
+  ledger: "starter",
+  exports_basic: "pro",
+  exports_advanced: "business",
   exports: "pro",
-  "ai.insights": "pro",
-  "ai.summary": "pro",
-  "portfolio.ai": "pro",
+  compliance_reports: "business",
+  audit_logs: "business",
+  ai_summaries: "business",
+  "ai.insights": "business",
+  "ai.summary": "business",
+  portfolio_analytics: "business",
+  "portfolio.ai": "business",
 };
 
 export function normalizePlanName(input?: any): string | undefined {
   const raw = String(input ?? "").trim().toLowerCase();
   if (!raw) return undefined;
   if (PLAN_ORDER.includes(raw as (typeof PLAN_ORDER)[number])) return raw;
-  if (raw === "core") return "core";
+  if (raw === "screening") return "free";
+  if (raw === "core") return "starter";
+  if (raw === "elite" || raw === "enterprise") return "business";
   return undefined;
 }
 
@@ -41,10 +55,10 @@ export function resolveRequiredPlan(featureKey?: string, currentPlan?: string): 
   const required = FEATURE_REQUIRED_PLAN[key];
   if (required) return required;
   const current = normalizePlanName(currentPlan);
-  if (!current) return undefined;
+  if (!current) return "pro";
   const idx = PLAN_ORDER.indexOf(current as (typeof PLAN_ORDER)[number]);
   if (idx >= 0 && idx < PLAN_ORDER.length - 1) return PLAN_ORDER[idx + 1];
-  return current;
+  return current || "pro";
 }
 
 function extractPlanFromPayload(payload: any): string | undefined {
