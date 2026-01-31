@@ -37,6 +37,7 @@ const ALLOWED_REDIRECT_ORIGINS = ["https://www.rentchain.ai", "https://rentchain
 
 function isAllowedRedirectOrigin(origin: string) {
   if (!origin) return false;
+  if (process.env.NODE_ENV === "production" && origin.includes("localhost")) return false;
   if (ALLOWED_REDIRECT_ORIGINS.includes(origin)) return true;
   if (/^https:\/\/.+\.vercel\.app$/i.test(origin)) return true;
   return false;
@@ -65,7 +66,12 @@ function resolveFrontendOrigin(req: any) {
   if (envOrigin && isAllowedRedirectOrigin(envOrigin)) {
     return envOrigin;
   }
-  return null;
+  const fallback =
+    process.env.NODE_ENV === "production"
+      ? "https://www.rentchain.ai"
+      : "http://localhost:5173";
+  const base = String(process.env.FRONTEND_URL || fallback).trim();
+  return normalizeOrigin(base) || null;
 }
 
 function buildRedirectUrl(params: {

@@ -18,7 +18,6 @@ import { getStripeClient, isStripeConfigured } from "../services/stripeService";
 import { stripeNotConfiguredResponse, isStripeNotConfiguredError } from "../lib/stripeNotConfigured";
 import {
   FRONTEND_URL,
-  FRONTEND_URL_CONFIGURED,
   SCREENING_CURRENCY,
   SCREENING_PRICE_CENTS,
 } from "../config/screeningConfig";
@@ -195,7 +194,15 @@ router.post(
   async (req: AuthenticatedRequest, res: Response) => {
     const { id } = req.params;
     const screeningRequest = getScreeningRequestById(id);
-    const frontendUrl = process.env.FRONTEND_URL || FRONTEND_URL;
+    const frontendUrl = String(
+      process.env.FRONTEND_URL ||
+        FRONTEND_URL ||
+        (process.env.NODE_ENV === "production"
+          ? "https://www.rentchain.ai"
+          : "http://localhost:5173")
+    )
+      .trim()
+      .replace(/\/$/, "");
 
     if (!screeningRequest) {
       return res.status(404).json({ error: "Screening request not found" });
@@ -205,7 +212,7 @@ router.post(
       return res.status(403).json({ error: "Forbidden" });
     }
 
-    if (!isStripeConfigured() || !FRONTEND_URL_CONFIGURED) {
+    if (!isStripeConfigured()) {
       return res.status(400).json(stripeNotConfiguredResponse());
     }
 

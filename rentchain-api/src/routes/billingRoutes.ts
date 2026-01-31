@@ -78,6 +78,21 @@ function sanitizeRedirectTo(raw: any): string {
   if (value.includes("://")) return fallback;
   return value;
 }
+
+function resolveFrontendBase(): string {
+  const fallback =
+    process.env.NODE_ENV === "production"
+      ? "https://www.rentchain.ai"
+      : "http://localhost:5173";
+  const base = String(process.env.FRONTEND_URL || FRONTEND_URL || fallback).trim();
+  return base.replace(/\/$/, "");
+}
+
+function appendBillingCanceled(path: string): string {
+  if (!path) return "/dashboard?billing=canceled=1";
+  if (path.includes("?")) return `${path}&billing=canceled=1`;
+  return `${path}?billing=canceled=1`;
+}
 router.use((req, res, next) => {
   res.setHeader("x-billing-routes", "present");
   next();
@@ -148,10 +163,7 @@ router.post("/checkout", requireAuth, async (req: any, res) => {
   const featureKeyValue = String(featureKey || "unknown").trim().slice(0, 80);
   const sourceValue = String(source || "unknown").trim().slice(0, 80);
   const redirectToValue = sanitizeRedirectTo(redirectTo);
-  const frontendUrl = (process.env.FRONTEND_URL || FRONTEND_URL || "").replace(/\/$/, "");
-  if (!frontendUrl) {
-    return res.status(400).json({ ok: false, error: "frontend_not_configured" });
-  }
+  const frontendUrl = resolveFrontendBase();
 
   try {
     const session = await stripe.checkout.sessions.create({
@@ -179,9 +191,7 @@ router.post("/checkout", requireAuth, async (req: any, res) => {
       success_url: `${frontendUrl}/billing/checkout-success?session_id={CHECKOUT_SESSION_ID}&redirectTo=${encodeURIComponent(
         redirectToValue
       )}`,
-      cancel_url: `${frontendUrl}/billing?checkout=cancel&redirectTo=${encodeURIComponent(
-        redirectToValue
-      )}`,
+      cancel_url: `${frontendUrl}${appendBillingCanceled(redirectToValue)}`,
     });
 
     return res.status(200).json({ ok: true, url: session.url });
