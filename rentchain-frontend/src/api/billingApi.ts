@@ -25,6 +25,7 @@ export async function fetchBillingHistory(): Promise<BillingRecord[]> {
     const data = res.data;
     if (Array.isArray(data)) return data as BillingRecord[];
     if (Array.isArray(data?.items)) return data.items as BillingRecord[];
+    if (Array.isArray(data?.records)) return data.records as BillingRecord[];
     return [];
   } catch {
     return [];

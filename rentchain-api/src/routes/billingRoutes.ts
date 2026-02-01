@@ -1,7 +1,6 @@
 import express from "express";
 import { listRecordsForLandlord } from "../services/billingService";
 import { requireAuth } from "../middleware/requireAuth";
-import { requirePermission } from "../middleware/requireAuthz";
 import { getStripeClient } from "../services/stripeService";
 import { stripeNotConfiguredResponse, isStripeNotConfiguredError } from "../lib/stripeNotConfigured";
 import { FRONTEND_URL } from "../config/screeningConfig";
@@ -100,7 +99,6 @@ router.use((req, res, next) => {
 router.get(
   "/",
   requireAuth,
-  requirePermission("reports.view"),
   async (req: any, res) => {
     const landlordId = req.user?.landlordId || req.user?.id;
     if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
@@ -108,7 +106,7 @@ router.get(
       ...record,
       type: record.kind,
     }));
-    res.json({ ok: true, items: records, records });
+    res.json({ ok: true, records, ts: Date.now() });
   }
 );
 
