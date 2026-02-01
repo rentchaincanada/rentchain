@@ -142,15 +142,9 @@ app.use("/api/api", (req, res) => {
   return res.redirect(307, fixed);
 });
 
-// Direct billing probe before any /api mounts
-app.get("/api/billing/_probe", (_req, res) =>
-  res.json({ ok: true, via: "app direct probe" })
-);
+// Billing routes
 app.use("/api/billing", routeSource("billingRoutes.ts"), billingRoutes);
 console.log("[boot] mounted billingRoutes at /api/billing");
-app.get("/api/payments/_probe", (_req, res) =>
-  res.json({ ok: true, via: "payments direct probe" })
-);
 app.use("/api", routeSource("paymentsRoutes.ts"), paymentsRoutes);
 
 // Dev tooling routes should not be blocked by auth

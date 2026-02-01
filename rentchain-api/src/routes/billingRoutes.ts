@@ -11,7 +11,6 @@ const router = express.Router();
 router.get("/health", (_req, res) => {
   res.json({ ok: true, service: "billing", ts: Date.now() });
 });
-router.get("/_probe", (_req, res) => res.json({ ok: true, billingRoutes: true }));
 
 type BillingTier = "starter" | "pro" | "business";
 type BillingInterval = "monthly" | "yearly";
