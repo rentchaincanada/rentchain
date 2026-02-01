@@ -1,5 +1,6 @@
 import express from "express";
 import { listRecordsForLandlord } from "../services/billingService";
+import { db } from "../config/firebase";
 import { requireAuth } from "../middleware/requireAuth";
 import { getStripeClient } from "../services/stripeService";
 import { stripeNotConfiguredResponse, isStripeNotConfiguredError } from "../lib/stripeNotConfigured";
@@ -113,7 +114,6 @@ router.get(
 router.get(
   "/receipts/:id",
   requireAuth,
-  requirePermission("reports.view"),
   async (req: any, res) => {
     // NOTE: ensure the receipt belongs to this landlordId before exposing content
     res.type("html").send(`
@@ -201,6 +201,49 @@ router.post("/checkout", requireAuth, async (req: any, res) => {
     });
     return res.status(500).json({ ok: false, error: "checkout_failed" });
   }
+});
+
+router.post("/portal", requireAuth, async (req: any, res) => {
+  const landlordId = req.user?.landlordId || req.user?.id;
+  if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+
+  let stripe: any;
+  try {
+    stripe = getStripeClient();
+  } catch (err) {
+    if (isStripeNotConfiguredError(err)) {
+      return res.status(400).json(stripeNotConfiguredResponse());
+    }
+    throw err;
+  }
+
+  const landlordRef = db.collection("landlords").doc(String(landlordId));
+  const landlordSnap = await landlordRef.get();
+  if (!landlordSnap.exists) {
+    return res.status(404).json({ ok: false, error: "landlord_not_found" });
+  }
+  const landlord = landlordSnap.data() as any;
+
+  let stripeCustomerId = String(landlord?.stripeCustomerId || "").trim();
+  if (!stripeCustomerId) {
+    const email = String(landlord?.email || req.user?.email || "").trim() || undefined;
+    const name = String(landlord?.name || landlord?.companyName || "").trim() || undefined;
+    const customer = await stripe.customers.create({
+      email,
+      name,
+      metadata: { landlordId: String(landlordId) },
+    });
+    stripeCustomerId = customer.id;
+    await landlordRef.set({ stripeCustomerId }, { merge: true });
+  }
+
+  const frontendUrl = resolveFrontendBase();
+  const session = await stripe.billingPortal.sessions.create({
+    customer: stripeCustomerId,
+    return_url: `${frontendUrl}/billing`,
+  });
+
+  return res.status(200).json({ ok: true, url: session.url });
 });
 
 export default router;
