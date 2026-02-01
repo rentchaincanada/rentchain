@@ -141,6 +141,10 @@ app.get("/api/billing/_probe", (_req, res) =>
 );
 app.use("/api/billing", routeSource("billingRoutes.ts"), billingRoutes);
 console.log("[boot] mounted billingRoutes at /api/billing");
+app.get("/api/payments/_probe", (_req, res) =>
+  res.json({ ok: true, via: "payments direct probe" })
+);
+app.use("/api", routeSource("paymentsRoutes.ts"), paymentsRoutes);
 
 // Public + Auth (MUST be before authenticateJwt)
 app.use("/api", routeSource("publicRoutes.ts"), publicRoutes);
@@ -228,7 +232,6 @@ app.use("/api", stubsRoutes);
 app.use("/api", routeSource("screeningReportRoutes.ts"), screeningReportRoutes);
 
 // Core APIs
-app.use("/api", routeSource("paymentsRoutes.ts"), paymentsRoutes);
 app.use("/api/leases", leaseRoutes);
 app.use("/api", tenantOnboardRoutes);
 app.use("/api/events", eventsRoutes);

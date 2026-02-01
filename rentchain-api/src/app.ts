@@ -148,6 +148,10 @@ app.get("/api/billing/_probe", (_req, res) =>
 );
 app.use("/api/billing", routeSource("billingRoutes.ts"), billingRoutes);
 console.log("[boot] mounted billingRoutes at /api/billing");
+app.get("/api/payments/_probe", (_req, res) =>
+  res.json({ ok: true, via: "payments direct probe" })
+);
+app.use("/api", routeSource("paymentsRoutes.ts"), paymentsRoutes);
 
 // Dev tooling routes should not be blocked by auth
 /**
@@ -270,7 +274,6 @@ app.get("/api/__debug/ping-application-links", (_req, res) => {
   return res.json({ ok: true });
 });
 
-app.use("/api", routeSource("paymentsRoutes.ts"), paymentsRoutes);
 app.use("/api/leases", leaseRoutes);
 app.use("/api", tenantOnboardRoutes);
 app.use("/api/events", eventsRoutes);
