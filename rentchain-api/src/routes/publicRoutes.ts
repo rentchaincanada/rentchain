@@ -7,7 +7,7 @@ import { sendWaitlistConfirmation } from "../services/emailService";
 import { authenticateJwt } from "../middleware/authMiddleware";
 import { requireLandlord } from "../middleware/requireLandlord";
 import { getTenantsList, getTenantDetailBundle } from "../services/tenantDetailsService";
-import { isStripeConfigured, STRIPE_API_VERSION } from "../services/stripeService";
+import { getStripeClient, isStripeConfigured, STRIPE_API_VERSION } from "../services/stripeService";
 import { requireCapability } from "../services/capabilityGuard";
 
 const router = Router();
@@ -26,12 +26,48 @@ router.get("/_probe/billing", (_req, res) => {
   });
 });
 
-router.get("/health/stripe", (_req, res) => {
+router.get("/health/stripe", async (_req, res) => {
   res.setHeader("x-route-source", "publicRoutes.ts");
   const has = (key: string) => {
     const raw = process.env[key];
     return Boolean(raw && String(raw).trim());
   };
+  const getTrimmed = (key: string) => {
+    const raw = process.env[key];
+    return raw ? String(raw).trim() : "";
+  };
+  const priceKeys = [
+    "STRIPE_PRICE_STARTER_MONTHLY",
+    "STRIPE_PRICE_STARTER_YEARLY",
+    "STRIPE_PRICE_PRO_MONTHLY",
+    "STRIPE_PRICE_PRO_YEARLY",
+    "STRIPE_PRICE_BUSINESS_MONTHLY",
+    "STRIPE_PRICE_BUSINESS_YEARLY",
+    "STRIPE_PRICE_STARTER",
+    "STRIPE_PRICE_PRO",
+    "STRIPE_PRICE_BUSINESS",
+  ];
+
+  const deepCheckEnabled = String(process.env.STRIPE_HEALTH_DEEP || "") === "1";
+  if (deepCheckEnabled) {
+    try {
+      const stripe = getStripeClient();
+      for (const key of priceKeys) {
+        if (!has(key)) continue;
+        const priceId = getTrimmed(key);
+        if (!priceId.startsWith("price_")) {
+          return res.json({ ok: false, error: "price_invalid", key });
+        }
+        try {
+          await stripe.prices.retrieve(priceId);
+        } catch (err) {
+          return res.json({ ok: false, error: "price_invalid", key });
+        }
+      }
+    } catch (err) {
+      return res.json({ ok: false, error: "stripe_not_configured" });
+    }
+  }
   res.json({
     ok: true,
     stripeConfigured: isStripeConfigured(),
@@ -47,6 +83,7 @@ router.get("/health/stripe", (_req, res) => {
       STRIPE_PRICE_PRO: has("STRIPE_PRICE_PRO"),
       STRIPE_PRICE_BUSINESS: has("STRIPE_PRICE_BUSINESS"),
     },
+    deepChecked: deepCheckEnabled,
     apiRevision: process.env.K_REVISION || null,
   });
 });
