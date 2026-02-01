@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { CAPABILITIES, resolvePlanTier } from "../config/capabilities";
-import { db } from "../config/firebase";
+import { resolveLandlordAndTier } from "../lib/landlordResolver";
 
 const router = Router();
 
@@ -10,10 +10,6 @@ const router = Router();
  * If you want it authenticated only, add authenticateJwt middleware here.
  */
 router.get("/", (req: any, res) => {
-  const planFromToken = resolvePlanTier(req.user?.plan);
-  const landlordId =
-    req.user?.landlordId || (req.user?.role === "landlord" ? req.user?.id : null);
-
   const respondWithPlan = (plan: ReturnType<typeof resolvePlanTier>) => {
     const features = {
       ...CAPABILITIES[plan],
@@ -33,23 +29,34 @@ router.get("/", (req: any, res) => {
       ts: Date.now(),
     });
   };
-
-  if (!landlordId) {
-    return respondWithPlan(planFromToken);
-  }
-
-  return db
-    .collection("landlords")
-    .doc(String(landlordId))
-    .get()
-    .then((snap) => {
-      const data = snap.exists ? (snap.data() as any) : null;
-      const plan = resolvePlanTier(data?.plan || req.user?.plan);
-      respondWithPlan(plan);
+  resolveLandlordAndTier(req.user)
+    .then((resolved) => {
+      respondWithPlan(resolved.tier);
     })
     .catch(() => {
+      const planFromToken = resolvePlanTier(req.user?.plan);
       respondWithPlan(planFromToken);
     });
+});
+
+router.get("/_debug", async (req: any, res) => {
+  if (req.user?.role !== "admin") {
+    return res.status(403).json({ ok: false, error: "Forbidden" });
+  }
+  const tokenPlan = resolvePlanTier(req.user?.plan);
+  const tokenLandlordId = req.user?.landlordId || req.user?.id || null;
+  const resolved = await resolveLandlordAndTier(req.user);
+
+  return res.json({
+    ok: true,
+    tokenPlan,
+    tokenLandlordId,
+    resolvedLandlordId: resolved.landlordIdResolved,
+    landlordDocId: resolved.landlordDocId,
+    landlordPlan: resolved.landlordPlan,
+    returnedTier: resolved.tier,
+    source: resolved.source,
+  });
 });
 
 export default router;

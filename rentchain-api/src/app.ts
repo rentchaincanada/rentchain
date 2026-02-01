@@ -17,7 +17,7 @@ import stripeScreeningOrdersWebhookRoutes, {
 import { requestContext } from "./middleware/requestContext";
 import "./types/auth";
 import "./types/http";
-import { db } from "./config/firebase";
+import { resolveLandlordAndTier } from "./lib/landlordResolver";
 import paymentsRoutes from "./routes/paymentsRoutes";
 import applicationsRoutes from "./routes/applicationsRoutes";
 import applicationsConversionRoutes from "./routes/applicationsConversionRoutes";
@@ -226,21 +226,8 @@ app.get("/api/me", async (req, res) => {
   if (!req.user) {
     return res.status(401).json({ ok: false, error: "Unauthorized" });
   }
-  let user = req.user;
-  try {
-    const landlordId = user.landlordId || (user.role === "landlord" ? user.id : null);
-    if (landlordId) {
-      const snap = await db.collection("landlords").doc(String(landlordId)).get();
-      if (snap.exists) {
-        const data = snap.data() as any;
-        if (data?.plan) {
-          user = { ...user, plan: data.plan };
-        }
-      }
-    }
-  } catch {
-    // ignore lookup errors
-  }
+  const resolved = await resolveLandlordAndTier(req.user);
+  const user = { ...req.user, plan: resolved.tier };
   return res.json({ ok: true, user });
 });
 app.get("/api/_build", (req, res) => {
