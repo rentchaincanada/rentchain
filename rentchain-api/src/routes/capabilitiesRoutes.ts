@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { CAPABILITIES, resolvePlanTier } from "../config/capabilities";
 import { resolveLandlordAndTier } from "../lib/landlordResolver";
+import { authenticateJwt } from "../middleware/authMiddleware";
+import { requireAuth } from "../middleware/requireAuth";
 
 const router = Router();
 
@@ -9,34 +11,45 @@ const router = Router();
  * Keep it safe: do not reveal secrets, just feature flags.
  * If you want it authenticated only, add authenticateJwt middleware here.
  */
-router.get("/", (req: any, res) => {
-  const respondWithPlan = (plan: ReturnType<typeof resolvePlanTier>) => {
-    const features = {
-      ...CAPABILITIES[plan],
-      microLive: false,
-      tenantPdfReport: false,
-      creditHistoryExport: false,
-      dashboardAiSummary: true,
-      tenantInvites: true,
-      ledgerV2: true,
-      waitlistEmail: true,
-    };
+router.use(authenticateJwt, requireAuth);
 
-    res.json({
+function buildFeatures(plan: ReturnType<typeof resolvePlanTier>) {
+  return {
+    ...CAPABILITIES[plan],
+    microLive: false,
+    tenantPdfReport: false,
+    creditHistoryExport: false,
+    dashboardAiSummary: true,
+    tenantInvites: true,
+    ledgerV2: true,
+    waitlistEmail: true,
+  };
+}
+
+router.get("/", async (req: any, res) => {
+  try {
+    const resolved = await resolveLandlordAndTier(req.user);
+    const tier = resolved.tier;
+    return res.json({
       ok: true,
-      plan,
-      features,
+      plan: tier,
+      features: buildFeatures(tier),
       ts: Date.now(),
     });
-  };
-  resolveLandlordAndTier(req.user)
-    .then((resolved) => {
-      respondWithPlan(resolved.tier);
-    })
-    .catch(() => {
-      const planFromToken = resolvePlanTier(req.user?.plan);
-      respondWithPlan(planFromToken);
+  } catch (err: any) {
+    const tokenPlan = resolvePlanTier(req.user?.plan);
+    console.warn("[capabilities] resolver fallback", {
+      tokenLandlordId: req.user?.landlordId || null,
+      tokenPlan,
+      err: err?.message || String(err),
     });
+    return res.json({
+      ok: true,
+      plan: tokenPlan,
+      features: buildFeatures(tokenPlan),
+      ts: Date.now(),
+    });
+  }
 });
 
 router.get("/_debug", async (req: any, res) => {
@@ -46,10 +59,12 @@ router.get("/_debug", async (req: any, res) => {
 
   return res.json({
     ok: true,
+    tokenPlan: req.user?.plan || tokenPlan,
     tokenLandlordId,
+    resolvedTier: resolved.tier,
     resolvedLandlordId: resolved.landlordIdResolved,
-    landlordPlan: resolved.landlordPlan,
-    tokenPlan,
+    landlordDocId: resolved.landlordDocId,
+    landlordPlanRaw: resolved.landlordPlanRaw,
     source: resolved.source,
   });
 });

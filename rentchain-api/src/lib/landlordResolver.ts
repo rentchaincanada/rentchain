@@ -1,12 +1,12 @@
 import { db } from "../config/firebase";
 import { resolvePlanTier } from "../config/capabilities";
 
-type ResolveSource = "landlordDoc" | "tokenFallback";
+type ResolveSource = "landlordId" | "email" | "ownerUid" | "tokenFallback";
 
 export type ResolvedLandlordTier = {
   landlordIdResolved: string | null;
   landlordDocId: string | null;
-  landlordPlan: string | null;
+  landlordPlanRaw: string | null;
   tier: ReturnType<typeof resolvePlanTier>;
   source: ResolveSource;
 };
@@ -38,11 +38,14 @@ export async function resolveLandlordAndTier(user: any): Promise<ResolvedLandlor
 
   try {
     let resolved = landlordId ? await loadLandlordDocById(String(landlordId)) : null;
+    let source: ResolveSource = "landlordId";
     if (!resolved && email) {
       resolved = await loadLandlordDocByEmail(email);
+      source = "email";
     }
     if (!resolved && user?.id) {
       resolved = await loadLandlordDocByOwnerUid(String(user.id));
+      source = "ownerUid";
     }
 
     if (resolved?.data?.plan) {
@@ -50,9 +53,9 @@ export async function resolveLandlordAndTier(user: any): Promise<ResolvedLandlor
       return {
         landlordIdResolved: String(landlordId || resolved.id || ""),
         landlordDocId: resolved.id,
-        landlordPlan: String(resolved.data.plan || ""),
+        landlordPlanRaw: String(resolved.data.plan || ""),
         tier,
-        source: "landlordDoc",
+        source,
       };
     }
   } catch {
@@ -62,7 +65,7 @@ export async function resolveLandlordAndTier(user: any): Promise<ResolvedLandlor
   return {
     landlordIdResolved: landlordId ? String(landlordId) : null,
     landlordDocId: null,
-    landlordPlan: null,
+    landlordPlanRaw: null,
     tier: tokenPlan,
     source: "tokenFallback",
   };
