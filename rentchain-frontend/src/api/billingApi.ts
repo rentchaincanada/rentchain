@@ -6,12 +6,16 @@ export type BillingRecord = {
   landlordId: string;
   provider: string;
   type: string;
+  kind?: string;
   amountCents: number;
+  totalAmountCents?: number;
   currency: string;
   description: string;
   status: "paid" | "pending" | "failed";
   receiptUrl?: string | null;
   createdAt: string;
+  screeningTier?: "basic" | "verify" | "verify_ai";
+  addons?: string[];
 };
 
 export async function fetchBillingHistory(): Promise<BillingRecord[]> {

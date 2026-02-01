@@ -218,6 +218,7 @@ export type ScreeningQuote = {
   aiAddOnCents: number;
   currency: string;
   scoreAddOnCents: number;
+  expeditedAddOnCents?: number;
   totalAmountCents: number;
   eligible: boolean;
 };
@@ -268,7 +269,13 @@ export async function updateRentalApplicationStatus(
 
 export async function fetchScreeningQuote(
   id: string,
-  params?: { serviceLevel?: "SELF_SERVE" | "VERIFIED" | "VERIFIED_AI"; scoreAddOn?: boolean }
+  params?: {
+    screeningTier?: "basic" | "verify" | "verify_ai";
+    addons?: string[];
+    totalAmount?: number;
+    serviceLevel?: "SELF_SERVE" | "VERIFIED" | "VERIFIED_AI";
+    scoreAddOn?: boolean;
+  }
 ): Promise<{ ok: boolean; data?: ScreeningQuote; error?: string; detail?: string }> {
   const res: any = await apiFetch(`/rental-applications/${encodeURIComponent(id)}/screening/quote`, {
     method: "POST",
@@ -280,7 +287,13 @@ export async function fetchScreeningQuote(
 
 export async function runScreening(
   id: string,
-  params: { scoreAddOn: boolean; serviceLevel: "SELF_SERVE" | "VERIFIED" | "VERIFIED_AI" }
+  params: {
+    screeningTier?: "basic" | "verify" | "verify_ai";
+    addons?: string[];
+    totalAmount?: number;
+    scoreAddOn: boolean;
+    serviceLevel: "SELF_SERVE" | "VERIFIED" | "VERIFIED_AI";
+  }
 ): Promise<{ ok: boolean; data?: ScreeningRunResult; error?: string; detail?: string }> {
   const res: any = await apiFetch(`/rental-applications/${encodeURIComponent(id)}/screening/run`, {
     method: "POST",
@@ -292,7 +305,13 @@ export async function runScreening(
 
 export async function createScreeningCheckout(
   id: string,
-  params: { scoreAddOn: boolean; serviceLevel: "SELF_SERVE" | "VERIFIED" | "VERIFIED_AI" }
+  params: {
+    screeningTier?: "basic" | "verify" | "verify_ai";
+    addons?: string[];
+    totalAmount?: number;
+    scoreAddOn: boolean;
+    serviceLevel: "SELF_SERVE" | "VERIFIED" | "VERIFIED_AI";
+  }
 ): Promise<{ ok: boolean; checkoutUrl?: string; orderId?: string; error?: string; detail?: string }> {
   const res: any = await apiFetch(`/rental-applications/${encodeURIComponent(id)}/screening/checkout`, {
     method: "POST",

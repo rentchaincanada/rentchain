@@ -115,7 +115,8 @@ const ApplicationsPage: React.FC = () => {
   const [screeningLoading, setScreeningLoading] = useState(false);
   const [screeningRunning, setScreeningRunning] = useState(false);
   const [scoreAddOn, setScoreAddOn] = useState(false);
-  const [serviceLevel, setServiceLevel] = useState<"SELF_SERVE" | "VERIFIED" | "VERIFIED_AI">("SELF_SERVE");
+  const [expeditedAddOn, setExpeditedAddOn] = useState(false);
+  const [screeningTier, setScreeningTier] = useState<"basic" | "verify" | "verify_ai">("verify_ai");
   const [screeningStatus, setScreeningStatus] = useState<ScreeningPipeline | null>(null);
   const [screeningStatusLoading, setScreeningStatusLoading] = useState(false);
   const [resultModalOpen, setResultModalOpen] = useState(false);
@@ -139,10 +140,18 @@ const ApplicationsPage: React.FC = () => {
   const [exportExpiresAt, setExportExpiresAt] = useState<number | null>(null);
 
   const screeningOptions = [
-    { value: "SELF_SERVE", label: "Self-serve screening", priceLabel: "$19.99" },
-    { value: "VERIFIED", label: "Verified screening by RentChain", priceLabel: "$29.99" },
-    { value: "VERIFIED_AI", label: "Verified + AI Verification", priceLabel: "$39.99" },
+    { value: "basic", label: "Basic", priceLabel: "$19.99" },
+    { value: "verify", label: "Verify", priceLabel: "$29.99" },
+    { value: "verify_ai", label: "Verify + AI", priceLabel: "$39.99", recommended: true },
   ] as const;
+
+  const totalCents = useMemo(() => {
+    const base =
+      screeningTier === "basic" ? 1999 : screeningTier === "verify" ? 2999 : 3999;
+    const score = scoreAddOn ? 499 : 0;
+    const expedited = expeditedAddOn ? 999 : 0;
+    return base + score + expedited;
+  }, [screeningTier, scoreAddOn, expeditedAddOn]);
 
   const isAdmin = String(user?.role || "").toLowerCase() === "admin";
 
@@ -323,7 +332,20 @@ const ApplicationsPage: React.FC = () => {
       setScreeningQuote(null);
       setScreeningQuoteDetail(null);
       try {
-        const res = await fetchScreeningQuote(selectedId, { serviceLevel, scoreAddOn });
+        const res = await fetchScreeningQuote(selectedId, {
+          screeningTier,
+          addons: [scoreAddOn ? "credit_score" : null, expeditedAddOn ? "expedited" : null].filter(
+            Boolean
+          ) as string[],
+          totalAmount: totalCents / 100,
+          serviceLevel:
+            screeningTier === "basic"
+              ? "SELF_SERVE"
+              : screeningTier === "verify"
+              ? "VERIFIED"
+              : "VERIFIED_AI",
+          scoreAddOn,
+        });
         if (res.ok) {
           setScreeningQuote(res.data || null);
         } else {
@@ -338,7 +360,7 @@ const ApplicationsPage: React.FC = () => {
       }
     };
     void loadQuote();
-  }, [selectedId, serviceLevel, scoreAddOn]);
+  }, [selectedId, screeningTier, scoreAddOn, expeditedAddOn, totalCents]);
 
   useEffect(() => {
     if (!resultModalOpen || !detail?.id) return;
@@ -488,7 +510,21 @@ const ApplicationsPage: React.FC = () => {
     if (!detail) return;
     setScreeningRunning(true);
     try {
-      const res = await createScreeningCheckout(detail.id, { scoreAddOn, serviceLevel });
+      const addons = [scoreAddOn ? "credit_score" : null, expeditedAddOn ? "expedited" : null].filter(
+        Boolean
+      ) as string[];
+      const res = await createScreeningCheckout(detail.id, {
+        screeningTier,
+        addons,
+        totalAmount: totalCents / 100,
+        scoreAddOn,
+        serviceLevel:
+          screeningTier === "basic"
+            ? "SELF_SERVE"
+            : screeningTier === "verify"
+            ? "VERIFIED"
+            : "VERIFIED_AI",
+      });
       if (!res.ok || !res.checkoutUrl) {
         throw new Error(res.detail || res.error || "Unable to start checkout");
       }
@@ -776,37 +812,40 @@ const ApplicationsPage: React.FC = () => {
                           <div style={{ color: text.muted }}>Checking eligibility...</div>
                         ) : screeningQuote ? (
                           <div style={{ display: "grid", gap: 6 }}>
-                            <div>Price: ${(screeningQuote.totalAmountCents / 100).toFixed(2)} {screeningQuote.currency}</div>
+                            <div>Price: ${(totalCents / 100).toFixed(2)} {screeningQuote.currency}</div>
                             <div style={{ fontSize: 12, color: text.muted }}>
-                              Base ${(screeningQuote.baseAmountCents / 100).toFixed(2)}
-                              {screeningQuote.verifiedAddOnCents ? ` + Verified ${(screeningQuote.verifiedAddOnCents / 100).toFixed(2)}` : ""}
-                              {screeningQuote.aiAddOnCents ? ` + AI ${(screeningQuote.aiAddOnCents / 100).toFixed(2)}` : ""}
-                              {screeningQuote.scoreAddOnCents ? ` + Score ${(screeningQuote.scoreAddOnCents / 100).toFixed(2)}` : ""}
+                              Base {screeningTier === "basic" ? "$19.99" : screeningTier === "verify" ? "$29.99" : "$39.99"}
+                              {scoreAddOn ? " + Credit score $4.99" : ""}
+                              {expeditedAddOn ? " + Expedited $9.99" : ""}
                             </div>
                             <div style={{ display: "grid", gap: 6 }}>
-                              <div style={{ fontSize: 12, fontWeight: 600 }}>Screening type</div>
+                              <div style={{ fontSize: 12, fontWeight: 600 }}>Screening tier</div>
                               {screeningOptions.map((opt) => (
                                 <label key={opt.value} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>
                                   <input
                                     type="radio"
                                     name="screeningType"
-                                    checked={serviceLevel === opt.value}
-                                    onChange={() => setServiceLevel(opt.value)}
+                                    checked={screeningTier === opt.value}
+                                    onChange={() => setScreeningTier(opt.value)}
                                   />
-                                  {opt.label} — {opt.priceLabel}
+                                  {opt.label} — {opt.priceLabel}{opt.recommended ? " (recommended)" : ""}
                                 </label>
                               ))}
                             </div>
                             <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>
                               <input type="checkbox" checked={scoreAddOn} onChange={(e) => setScoreAddOn(e.target.checked)} />
-                              Include credit score (+${(screeningQuote.scoreAddOnCents / 100).toFixed(2)})
+                              Credit score (+$4.99)
+                            </label>
+                            <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>
+                              <input type="checkbox" checked={expeditedAddOn} onChange={(e) => setExpeditedAddOn(e.target.checked)} />
+                              Expedited processing (+$9.99)
                             </label>
                             <Button
                               variant="primary"
                               onClick={() => void runScreeningRequest()}
                               disabled={screeningRunning}
                             >
-                              {screeningRunning ? "Running..." : "Run screening ($19.99)"}
+                              {screeningRunning ? "Running..." : `Run screening ($${(totalCents / 100).toFixed(2)})`}
                             </Button>
                           </div>
                         ) : (

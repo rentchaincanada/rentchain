@@ -15,6 +15,34 @@ const formatAmount = (amountCents: number, currency: string) => {
   return `${amount.toFixed(2)} ${label}`;
 };
 
+const formatTierLabel = (tier?: string | null) => {
+  switch (String(tier || "").toLowerCase()) {
+    case "basic":
+      return "Basic";
+    case "verify":
+      return "Verify";
+    case "verify_ai":
+      return "Verify + AI";
+    default:
+      return tier || "—";
+  }
+};
+
+const formatAddonsLabel = (addons?: string[] | null) => {
+  if (!addons?.length) return "None";
+  const labels = addons.map((addon) => {
+    switch (addon) {
+      case "credit_score":
+        return "Credit score";
+      case "expedited":
+        return "Expedited processing";
+      default:
+        return addon;
+    }
+  });
+  return labels.join(", ");
+};
+
 const BillingPage: React.FC = () => {
   const [records, setRecords] = useState<BillingRecord[]>([]);
   const [loading, setLoading] = useState(false);
@@ -129,7 +157,22 @@ const BillingPage: React.FC = () => {
                     </td>
                     <td style={{ padding: "8px" }}>{formatAmount(record.amountCents, record.currency)}</td>
                     <td style={{ padding: "8px" }}>{record.currency?.toUpperCase?.() || "CAD"}</td>
-                    <td style={{ padding: "8px" }}>{record.description || "Charge"}</td>
+                    <td style={{ padding: "8px" }}>
+                      <div>{record.description || "Charge"}</div>
+                      {record.screeningTier || record.addons?.length ? (
+                        <div style={{ fontSize: 12, color: text.muted }}>
+                          Tier: {formatTierLabel(record.screeningTier)}
+                          {" · "}
+                          Add-ons: {formatAddonsLabel(record.addons)}
+                          {" · "}
+                          Total:{" "}
+                          {formatAmount(
+                            record.totalAmountCents ?? record.amountCents,
+                            record.currency
+                          )}
+                        </div>
+                      ) : null}
+                    </td>
                     <td style={{ padding: "8px" }}>
                       {record.receiptUrl ? (
                         <a href={record.receiptUrl} target="_blank" rel="noopener noreferrer" style={{ color: colors.accent }}>
