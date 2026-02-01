@@ -8,7 +8,8 @@ import React, {
 } from "react";
 import { UpgradeModal, type UpgradeReason } from "../components/billing/UpgradeModal";
 import { UpgradePromptModal } from "../components/billing/UpgradePromptModal";
-import { resolveRequiredPlan } from "../lib/upgradePrompt";
+import { normalizePlanName, resolveRequiredPlan } from "../lib/upgradePrompt";
+import { getCachedCapabilities } from "../lib/entitlements";
 
 type UpgradeContextValue = {
   openUpgrade: (
@@ -21,6 +22,7 @@ type UpgradeContextValue = {
           ctaLabel?: string;
         }
   ) => void;
+  clearUpgradePrompt: () => void;
 };
 
 const UpgradeContext = createContext<UpgradeContextValue | null>(null);
@@ -60,13 +62,35 @@ export function UpgradeProvider({ children }: { children: React.ReactNode }) {
     setPromptOpen(false);
   }, []);
 
+  const clearUpgradePrompt = useCallback(() => {
+    setPromptOpen(false);
+    setPromptFeatureKey("screening");
+    setPromptCurrentPlan(undefined);
+    setPromptRequiredPlan(undefined);
+    setPromptSource(undefined);
+    setPromptRedirectTo(undefined);
+  }, []);
+
+  const isAtLeast = useCallback((current?: string, required?: string) => {
+    const order = ["free", "starter", "pro", "business"] as const;
+    const currentNorm = normalizePlanName(current);
+    const requiredNorm = normalizePlanName(required);
+    if (!currentNorm || !requiredNorm) return false;
+    return (
+      order.indexOf(currentNorm as (typeof order)[number]) >=
+      order.indexOf(requiredNorm as (typeof order)[number])
+    );
+  }, []);
+
   const handleUpgradeEvent = useCallback((evt: Event) => {
     const detail = (evt as CustomEvent<any>).detail || {};
     const featureKey = String(detail.featureKey || detail.limitType || detail.capability || "").trim();
     if (!featureKey) return;
-    const currentPlan = detail.currentPlan || detail.plan;
+    const cachedPlan = getCachedCapabilities()?.plan;
+    const currentPlan = detail.currentPlan || detail.plan || cachedPlan;
     const requiredPlan = detail.requiredPlan || resolveRequiredPlan(featureKey, currentPlan);
     if (requiredPlan === "free") return;
+    if (isAtLeast(currentPlan, requiredPlan)) return;
     const source = detail.source || "unknown";
     const fallbackRedirect =
       typeof window !== "undefined"
@@ -79,9 +103,12 @@ export function UpgradeProvider({ children }: { children: React.ReactNode }) {
     setPromptSource(source);
     setPromptRedirectTo(redirectTo);
     setPromptOpen(true);
-  }, []);
+  }, [isAtLeast]);
 
-  const ctxValue = useMemo(() => ({ openUpgrade }), [openUpgrade]);
+  const ctxValue = useMemo(
+    () => ({ openUpgrade, clearUpgradePrompt }),
+    [openUpgrade, clearUpgradePrompt]
+  );
 
   useEffect(() => {
     window.addEventListener("upgrade:prompt", handleUpgradeEvent as EventListener);

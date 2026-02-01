@@ -1,15 +1,14 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/apiClient";
+import { getCachedCapabilities, setCachedCapabilities, type CapabilitiesResponse } from "@/lib/entitlements";
 
-type Capabilities = {
-  ok: boolean;
-  plan?: string;
-  features: Record<string, boolean>;
-  ts?: number;
-};
+type Capabilities = CapabilitiesResponse & { ok: boolean };
 
 export function useCapabilities() {
-  const [caps, setCaps] = useState<Capabilities | null>(null);
+  const [caps, setCaps] = useState<Capabilities | null>(() => {
+    const cached = getCachedCapabilities();
+    return cached ? { ok: Boolean(cached.ok), ...cached } : null;
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -19,7 +18,16 @@ export function useCapabilities() {
         setLoading(true);
         const res = await apiFetch("/capabilities");
         if (!alive) return;
-        setCaps(res as Capabilities);
+        const next = res as Capabilities;
+        setCaps(next);
+        if (next && typeof next === "object") {
+          setCachedCapabilities({
+            ok: next.ok,
+            plan: next.plan,
+            features: next.features || {},
+            ts: next.ts,
+          });
+        }
       } catch {
         if (!alive) return;
         setCaps({ ok: false, features: {} });
@@ -27,8 +35,22 @@ export function useCapabilities() {
         if (alive) setLoading(false);
       }
     })();
+
+    const onUpdated = (evt: Event) => {
+      if (!alive) return;
+      const detail = (evt as CustomEvent<CapabilitiesResponse>).detail;
+      if (detail && typeof detail === "object") {
+        setCaps({ ok: Boolean(detail.ok), ...detail });
+      }
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener("capabilities:updated", onUpdated as EventListener);
+    }
     return () => {
       alive = false;
+      if (typeof window !== "undefined") {
+        window.removeEventListener("capabilities:updated", onUpdated as EventListener);
+      }
     };
   }, []);
 

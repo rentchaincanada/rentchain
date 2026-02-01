@@ -2,6 +2,9 @@ import React, { useEffect, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Card, Section, Button } from "@/components/ui/Ui";
 import { spacing, text } from "@/styles/tokens";
+import { refreshEntitlements } from "@/lib/entitlements";
+import { useAuth } from "@/context/useAuth";
+import { useUpgrade } from "@/context/UpgradeContext";
 
 function sanitizeRedirectTo(raw: string | null): string | null {
   if (!raw) return null;
@@ -16,14 +19,32 @@ const BillingCheckoutSuccessPage: React.FC = () => {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const redirectTo = useMemo(() => sanitizeRedirectTo(params.get("redirectTo")), [params]);
+  const { updateUser } = useAuth();
+  const { clearUpgradePrompt } = useUpgrade();
 
   useEffect(() => {
     if (!redirectTo) return;
-    const t = window.setTimeout(() => {
-      navigate(redirectTo);
-    }, 900);
-    return () => window.clearTimeout(t);
-  }, [navigate, redirectTo]);
+    let alive = true;
+    const run = async () => {
+      try {
+        await Promise.race([
+          refreshEntitlements(updateUser),
+          new Promise((resolve) => setTimeout(resolve, 1200)),
+        ]);
+      } catch {
+        // ignore refresh errors
+      } finally {
+        if (alive) {
+          clearUpgradePrompt();
+          navigate(redirectTo);
+        }
+      }
+    };
+    void run();
+    return () => {
+      alive = false;
+    };
+  }, [navigate, redirectTo, updateUser, clearUpgradePrompt]);
 
   return (
     <Section style={{ maxWidth: 560, margin: "0 auto" }}>
