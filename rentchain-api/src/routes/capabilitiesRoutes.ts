@@ -40,22 +40,16 @@ router.get("/", (req: any, res) => {
 });
 
 router.get("/_debug", async (req: any, res) => {
-  const tokenLandlordId = req.user?.landlordId || req.user?.id || null;
-  const allowSelf = Boolean(req.query?.landlordId) && String(req.query.landlordId) === String(tokenLandlordId || "");
-  if (req.user?.role !== "admin" && !allowSelf) {
-    return res.status(403).json({ ok: false, error: "Forbidden" });
-  }
   const tokenPlan = resolvePlanTier(req.user?.plan);
+  const tokenLandlordId = req.user?.landlordId || req.user?.id || null;
   const resolved = await resolveLandlordAndTier(req.user);
 
   return res.json({
     ok: true,
-    tokenPlan,
     tokenLandlordId,
     resolvedLandlordId: resolved.landlordIdResolved,
-    landlordDocId: resolved.landlordDocId,
     landlordPlan: resolved.landlordPlan,
-    returnedTier: resolved.tier,
+    tokenPlan,
     source: resolved.source,
   });
 });
