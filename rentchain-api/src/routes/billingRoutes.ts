@@ -1,5 +1,5 @@
 import express from "express";
-import { listBillingRecords } from "../billing/billingService";
+import { listRecordsForLandlord } from "../services/billingService";
 import { requireAuth } from "../middleware/requireAuth";
 import { requirePermission } from "../middleware/requireAuthz";
 import { getStripeClient } from "../services/stripeService";
@@ -104,8 +104,11 @@ router.get(
   async (req: any, res) => {
     const landlordId = req.user?.landlordId || req.user?.id;
     if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
-    const records = await listBillingRecords(landlordId);
-    res.json({ ok: true, records });
+    const records = listRecordsForLandlord(landlordId).map((record) => ({
+      ...record,
+      type: record.kind,
+    }));
+    res.json({ ok: true, items: records, records });
   }
 );
 

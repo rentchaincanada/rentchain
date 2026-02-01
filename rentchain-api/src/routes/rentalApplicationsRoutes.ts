@@ -31,7 +31,8 @@ const SERVICE_LEVELS = ["SELF_SERVE", "VERIFIED", "VERIFIED_AI"] as const;
 const BASE_AMOUNT_CENTS = 1999;
 const VERIFIED_ADD_ON_CENTS = 1000;
 const AI_ADD_ON_CENTS = 1000;
-const SCORE_ADD_ON_CENTS = 110;
+const SCORE_ADD_ON_CENTS = 499;
+const EXPEDITED_ADD_ON_CENTS = 999;
 
 const ALLOWED_REDIRECT_ORIGINS = ["https://www.rentchain.ai", "https://rentchain.ai", "http://localhost:5173"];
 
@@ -221,19 +222,49 @@ function resolveServiceLevel(raw?: string | null) {
   return "SELF_SERVE";
 }
 
-function computePricing(serviceLevel: string, scoreAddOn: boolean) {
+function resolveScreeningTier(raw?: string | null): "basic" | "verify" | "verify_ai" {
+  const val = String(raw || "").trim().toLowerCase();
+  if (val === "verify" || val === "verified") return "verify";
+  if (val === "verify_ai" || val === "verified_ai" || val === "verify+ai") return "verify_ai";
+  return "basic";
+}
+
+function normalizeAddons(raw: any): string[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw.map((v) => String(v || "").trim().toLowerCase()).filter(Boolean);
+  if (typeof raw === "string") {
+    return raw
+      .split(",")
+      .map((v) => v.trim().toLowerCase())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function computePricing(args: {
+  screeningTier?: "basic" | "verify" | "verify_ai";
+  serviceLevel?: string;
+  addons?: string[];
+}) {
+  const tier = args.screeningTier || "basic";
+  const serviceLevel = args.serviceLevel || (tier === "basic" ? "SELF_SERVE" : tier === "verify" ? "VERIFIED" : "VERIFIED_AI");
   const isVerified = serviceLevel === "VERIFIED" || serviceLevel === "VERIFIED_AI";
   const isAi = serviceLevel === "VERIFIED_AI";
   const verifiedAddOn = isVerified ? VERIFIED_ADD_ON_CENTS : 0;
   const aiAddOn = isAi ? AI_ADD_ON_CENTS : 0;
-  const scoreAddOnCents = scoreAddOn ? SCORE_ADD_ON_CENTS : 0;
-  const totalAmountCents = BASE_AMOUNT_CENTS + verifiedAddOn + aiAddOn + scoreAddOnCents;
+  const hasScore = (args.addons || []).includes("credit_score");
+  const hasExpedited = (args.addons || []).includes("expedited");
+  const scoreAddOnCents = hasScore ? SCORE_ADD_ON_CENTS : 0;
+  const expeditedAddOnCents = hasExpedited ? EXPEDITED_ADD_ON_CENTS : 0;
+  const totalAmountCents = BASE_AMOUNT_CENTS + verifiedAddOn + aiAddOn + scoreAddOnCents + expeditedAddOnCents;
   return {
     baseAmountCents: BASE_AMOUNT_CENTS,
     verifiedAddOnCents: verifiedAddOn,
     aiAddOnCents: aiAddOn,
     scoreAddOnCents,
+    expeditedAddOnCents,
     totalAmountCents,
+    serviceLevel,
   };
 }
 
@@ -396,9 +427,12 @@ router.post(
       }
 
       const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
-      const serviceLevel = resolveServiceLevel(body?.serviceLevel);
-      const scoreAddOn = body?.scoreAddOn === true;
-      const pricing = computePricing(serviceLevel, scoreAddOn);
+      const screeningTier = resolveScreeningTier(body?.screeningTier);
+      const addons = normalizeAddons(body?.addons);
+      const serviceLevel = resolveServiceLevel(body?.serviceLevel || (screeningTier === "basic" ? "SELF_SERVE" : screeningTier === "verify" ? "VERIFIED" : "VERIFIED_AI"));
+      const scoreAddOn = addons.includes("credit_score") || body?.scoreAddOn === true;
+      const expeditedAddOn = addons.includes("expedited");
+      const pricing = computePricing({ screeningTier, serviceLevel, addons });
 
       return res.json({
         ok: true,
@@ -407,6 +441,7 @@ router.post(
           verifiedAddOnCents: pricing.verifiedAddOnCents,
           aiAddOnCents: pricing.aiAddOnCents,
           scoreAddOnCents: pricing.scoreAddOnCents,
+          expeditedAddOnCents: pricing.expeditedAddOnCents || 0,
           totalAmountCents: pricing.totalAmountCents,
           currency: "CAD",
           eligible: true,
@@ -483,8 +518,14 @@ router.post(
       }
 
       const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
-      const serviceLevel = resolveServiceLevel(body?.serviceLevel);
-      const scoreAddOn = body?.scoreAddOn === true;
+      const screeningTier = resolveScreeningTier(body?.screeningTier);
+      const addons = normalizeAddons(body?.addons);
+      const serviceLevel = resolveServiceLevel(
+        body?.serviceLevel ||
+          (screeningTier === "basic" ? "SELF_SERVE" : screeningTier === "verify" ? "VERIFIED" : "VERIFIED_AI")
+      );
+      const scoreAddOn = addons.includes("credit_score") || body?.scoreAddOn === true;
+      const expeditedAddOn = addons.includes("expedited");
       const rawReturnTo = String(body?.returnTo || "/dashboard");
       const returnTo = rawReturnTo.startsWith("/") ? rawReturnTo : "/dashboard";
       const frontendOrigin = resolveFrontendOrigin(req);
@@ -506,7 +547,7 @@ router.post(
         console.warn("[screening_checkout] invalid redirect origin", logBase);
         return res.status(400).json({ ok: false, error: "invalid_redirect_origin" });
       }
-      const pricing = computePricing(serviceLevel, scoreAddOn);
+      const pricing = computePricing({ screeningTier, serviceLevel, addons });
       let stripe: any;
       try {
         stripe = getStripeClient();
@@ -536,8 +577,12 @@ router.post(
         finalizedAt: null,
         lastStripeEventId: null,
         amountTotalCents: pricing.totalAmountCents,
+        screeningTier,
+        addons,
         scoreAddOn,
         scoreAddOnCents: pricing.scoreAddOnCents,
+        expeditedAddOn,
+        expeditedAddOnCents: pricing.expeditedAddOnCents,
         provider: "STUB",
         providerRequestId: null,
         paidAt: null,
@@ -594,6 +639,16 @@ router.post(
           quantity: 1,
         });
       }
+      if (pricing.expeditedAddOnCents) {
+        lineItems.push({
+          price_data: {
+            currency,
+            product_data: { name: "Expedited processing add-on" },
+            unit_amount: pricing.expeditedAddOnCents,
+          },
+          quantity: 1,
+        });
+      }
 
       // Ensure Stripe-safe integers
       const safeInt = (n: unknown) => {
@@ -632,6 +687,9 @@ router.post(
           landlordId,
           serviceLevel,
           scoreAddOn: String(scoreAddOn),
+          screeningTier,
+          addons: addons.join(","),
+          totalAmountCents: String(pricing.totalAmountCents),
         },
 
         // Recommended: also stamp the PaymentIntent so webhook handling is simpler
@@ -642,6 +700,9 @@ router.post(
             landlordId,
             serviceLevel,
             scoreAddOn: String(scoreAddOn),
+            screeningTier,
+            addons: addons.join(","),
+            totalAmountCents: String(pricing.totalAmountCents),
           },
         },
       });
@@ -662,8 +723,12 @@ router.post(
             amountCents: pricing.baseAmountCents,
             currency: "CAD",
             paidAt: null,
+            screeningTier,
+            addons,
             scoreAddOn,
             scoreAddOnCents: pricing.scoreAddOnCents,
+            expeditedAddOn,
+            expeditedAddOnCents: pricing.expeditedAddOnCents,
             totalAmountCents: pricing.totalAmountCents,
             serviceLevel,
             aiVerification,
@@ -726,9 +791,15 @@ router.post(
       }
 
       const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
-      const serviceLevel = resolveServiceLevel(body?.serviceLevel);
-      const scoreAddOn = body?.scoreAddOn === true;
-      const pricing = computePricing(serviceLevel, scoreAddOn);
+      const screeningTier = resolveScreeningTier(body?.screeningTier);
+      const addons = normalizeAddons(body?.addons);
+      const serviceLevel = resolveServiceLevel(
+        body?.serviceLevel ||
+          (screeningTier === "basic" ? "SELF_SERVE" : screeningTier === "verify" ? "VERIFIED" : "VERIFIED_AI")
+      );
+      const scoreAddOn = addons.includes("credit_score") || body?.scoreAddOn === true;
+      const expeditedAddOn = addons.includes("expedited");
+      const pricing = computePricing({ screeningTier, serviceLevel, addons });
       const now = Date.now();
       const orderRef = db.collection("screeningOrders").doc();
       const orderId = orderRef.id;
@@ -743,8 +814,12 @@ router.post(
         amountCents: pricing.baseAmountCents,
         currency: "CAD",
         status: "CREATED",
+        screeningTier,
+        addons,
         scoreAddOn,
         scoreAddOnCents: pricing.scoreAddOnCents,
+        expeditedAddOn,
+        expeditedAddOnCents: pricing.expeditedAddOnCents,
         provider: "STUB",
         providerRequestId: null,
         paidAt: null,
@@ -771,8 +846,12 @@ router.post(
         amountCents: pricing.baseAmountCents,
         currency: orderPayload.currency,
         paidAt: now,
+        screeningTier,
+        addons,
         scoreAddOn,
         scoreAddOnCents: pricing.scoreAddOnCents,
+        expeditedAddOn,
+        expeditedAddOnCents: pricing.expeditedAddOnCents,
         totalAmountCents: pricing.totalAmountCents,
         serviceLevel,
         aiVerification,

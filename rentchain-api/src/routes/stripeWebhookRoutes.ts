@@ -30,6 +30,25 @@ interface StripeWebhookRequest extends Request {
 const router = Router();
 const isDev = process.env.NODE_ENV !== "production";
 
+type ScreeningTier = "basic" | "verify" | "verify_ai";
+
+const normalizeScreeningTier = (raw?: string | null): ScreeningTier | undefined => {
+  const value = String(raw || "").trim().toLowerCase();
+  if (!value) return undefined;
+  if (value === "verify_ai" || value === "verified_ai" || value === "verify+ai") return "verify_ai";
+  if (value === "verify" || value === "verified") return "verify";
+  if (value === "basic" || value === "self_serve" || value === "selfserve") return "basic";
+  return undefined;
+};
+
+const parseAddons = (raw?: string | null): string[] => {
+  if (!raw) return [];
+  return String(raw)
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+};
+
 router.post(
   "/webhook",
   async (req: StripeWebhookRequest, res: Response): Promise<void> => {
@@ -192,6 +211,14 @@ router.post(
         }
         const amountCents =
           typeof session.amount_total === "number" ? session.amount_total : 0;
+        const screeningTier = normalizeScreeningTier(session.metadata?.screeningTier);
+        const addons = parseAddons(session.metadata?.addons);
+        const totalAmountCents =
+          typeof session.metadata?.totalAmountCents === "string" &&
+          session.metadata.totalAmountCents.trim() !== "" &&
+          !Number.isNaN(Number(session.metadata.totalAmountCents))
+            ? Number(session.metadata.totalAmountCents)
+            : amountCents;
         const record: Omit<BillingRecord, "id" | "createdAt"> = {
           landlordId:
             landlordId ||
@@ -200,9 +227,12 @@ router.post(
           provider: "stripe",
           kind: "screening_purchase",
           screeningRequestId,
+          screeningTier,
+          addons: addons.length ? addons : undefined,
           stripeSessionId: session.id,
           stripePaymentIntentId: paymentIntentId,
           amountCents,
+          totalAmountCents,
           currency: (session.currency || "cad").toLowerCase(),
           status: "paid",
           receiptUrl,

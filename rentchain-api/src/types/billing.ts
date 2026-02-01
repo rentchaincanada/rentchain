@@ -6,9 +6,12 @@ export interface BillingRecord {
   provider: "stripe";
   kind: "screening_purchase";
   screeningRequestId?: string;
+  screeningTier?: "basic" | "verify" | "verify_ai";
+  addons?: string[];
   stripeSessionId: string;
   stripePaymentIntentId?: string | null;
   amountCents: number;
+  totalAmountCents?: number;
   currency: string;
   createdAt: string;
   status: BillingRecordStatus;
