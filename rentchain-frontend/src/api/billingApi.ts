@@ -57,6 +57,11 @@ export async function createCheckoutSession(): Promise<{ checkoutUrl: string }> 
   return { checkoutUrl: data?.checkoutUrl ?? "" };
 }
 
+export async function createBillingPortalSession(): Promise<{ url: string }> {
+  const data = await apiJson<any>("/billing/portal", { method: "POST" });
+  return { url: data?.url ?? "" };
+}
+
 export async function simulateCreditPull(
   tenantId: string
 ): Promise<{ reportId: string; message: string }> {

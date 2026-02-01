@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React, { useEffect, useState } from "react";
 import { Card, Section, Button } from "../components/ui/Ui";
-import { fetchBillingHistory, type BillingRecord } from "../api/billingApi";
+import { createBillingPortalSession, fetchBillingHistory, type BillingRecord } from "../api/billingApi";
 import { spacing, text, colors, radius } from "../styles/tokens";
 import { SUPPORT_EMAIL } from "../config/support";
 import { BillingPreviewCard } from "../components/billing/BillingPreviewCard";
@@ -46,6 +46,7 @@ const formatAddonsLabel = (addons?: string[] | null) => {
 const BillingPage: React.FC = () => {
   const [records, setRecords] = useState<BillingRecord[]>([]);
   const [loading, setLoading] = useState(false);
+  const [portalLoading, setPortalLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [usage, setUsage] = useState<any | null>(null);
   const { caps } = useCapabilities();
@@ -74,6 +75,21 @@ const BillingPage: React.FC = () => {
     void load();
   }, []);
 
+  const handlePortal = async () => {
+    try {
+      setPortalLoading(true);
+      const res = await createBillingPortalSession();
+      if (!res?.url) {
+        throw new Error("Missing portal URL");
+      }
+      window.location.assign(res.url);
+    } catch (err: any) {
+      setError(err?.message || "Unable to open billing portal.");
+    } finally {
+      setPortalLoading(false);
+    }
+  };
+
   return (
     <Section style={{ display: "flex", flexDirection: "column", gap: spacing.md, maxWidth: 900, margin: "0 auto" }}>
       <Card elevated>
@@ -82,9 +98,14 @@ const BillingPage: React.FC = () => {
             <h1 style={{ margin: 0, fontSize: "1.3rem", fontWeight: 700 }}>Billing & Receipts</h1>
             <div style={{ color: text.muted, fontSize: "0.95rem" }}>Screening charges and receipts.</div>
           </div>
-          <Button type="button" variant="secondary" onClick={load} disabled={loading}>
-            Refresh
-          </Button>
+          <div style={{ display: "flex", gap: spacing.xs }}>
+            <Button type="button" variant="secondary" onClick={load} disabled={loading}>
+              Refresh
+            </Button>
+            <Button type="button" variant="primary" onClick={handlePortal} disabled={portalLoading}>
+              {portalLoading ? "Opening..." : "Manage subscription"}
+            </Button>
+          </div>
         </div>
       </Card>
 
