@@ -53,6 +53,9 @@ router.get("/", async (req: any, res) => {
 });
 
 router.get("/_debug", async (req: any, res) => {
+  if (req.user?.role !== "admin") {
+    return res.status(403).json({ ok: false, error: "Forbidden" });
+  }
   const tokenPlan = resolvePlanTier(req.user?.plan);
   const tokenLandlordId = req.user?.landlordId || req.user?.id || null;
   const resolved = await resolveLandlordAndTier(req.user);
