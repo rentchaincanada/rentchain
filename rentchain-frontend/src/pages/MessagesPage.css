@@ -4,9 +4,7 @@
 }
 
 .rc-messages-grid {
-  display: grid;
-  grid-template-columns: minmax(300px, 340px) minmax(0, 1fr);
-  gap: 16px;
+  display: block;
   min-height: 480px;
 }
 
@@ -138,6 +136,10 @@
   align-items: center;
   border-top: 1px solid rgba(148, 163, 184, 0.25);
   padding-top: 10px;
+  padding-bottom: calc(8px + env(safe-area-inset-bottom));
+  background: #ffffff;
+  position: sticky;
+  bottom: 0;
 }
 
 .rc-messages-composer-input {
@@ -162,8 +164,7 @@
   }
 
   .rc-messages-grid {
-    grid-template-columns: 1fr;
-    gap: 12px;
+    min-height: auto;
   }
 
   .rc-messages-list,
@@ -177,10 +178,7 @@
   }
 
   .rc-messages-composer {
-    position: sticky;
-    bottom: 0;
-    background: #ffffff;
-    padding-bottom: 4px;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom));
   }
 
   .rc-messages-composer-input {

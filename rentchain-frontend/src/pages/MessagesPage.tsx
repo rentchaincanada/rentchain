@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   fetchLandlordConversations,
   fetchLandlordConversationMessages,
@@ -9,7 +9,7 @@ import {
   type Message,
 } from "@/api/messagesApi";
 import { spacing, colors, text, radius } from "@/styles/tokens";
-import { useIsMobile } from "@/hooks/useIsMobile";
+import { ResponsiveMasterDetail } from "@/components/layout/ResponsiveMasterDetail";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { useUpgrade } from "@/context/UpgradeContext";
 import "./MessagesPage.css";
@@ -26,8 +26,7 @@ export default function MessagesPage() {
   const [loadingThread, setLoadingThread] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const location = useLocation();
-  const isMobile = useIsMobile();
-  const [mobileView, setMobileView] = useState<"list" | "chat">("list");
+  const navigate = useNavigate();
   const { features, loading: capsLoading } = useCapabilities();
   const { openUpgrade } = useUpgrade();
   const messagingEnabled = features?.messaging !== false;
@@ -39,7 +38,6 @@ export default function MessagesPage() {
       setConversations(data);
       if (preferredId) {
         setSelectedId(preferredId);
-        if (isMobile) setMobileView("chat");
       } else if (!selectedId && data.length > 0) {
         setSelectedId(data[0].id);
       }
@@ -65,7 +63,7 @@ export default function MessagesPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    const deepLinkId = params.get("c");
+    const deepLinkId = params.get("threadId") || params.get("c");
     void (async () => {
       if (!messagingEnabled) return;
       await loadConversations(deepLinkId);
@@ -86,12 +84,6 @@ export default function MessagesPage() {
     return () => window.clearInterval(t);
   }, [selectedId, messagingEnabled]);
 
-  useEffect(() => {
-    if (!isMobile) return;
-    if (selectedId) {
-      setMobileView("chat");
-    }
-  }, [isMobile, selectedId]);
 
   const handleSend = async () => {
     if (!selectedId || !composer.trim()) return;
@@ -155,127 +147,144 @@ export default function MessagesPage() {
         </div>
       ) : (
       <div className="rc-messages-grid">
-        {(!isMobile || mobileView === "list") && (
-          <div className="rc-messages-list">
-            <div className="rc-messages-list-header">Conversations</div>
-            {loadingList ? (
-              <div style={{ color: text.muted }}>Loading…</div>
-            ) : conversations.length === 0 ? (
-              <div style={{ color: text.muted }}>No conversations yet.</div>
-            ) : (
-              conversations.map((c) => {
-                const isActive = c.id === selectedId;
-                return (
-                  <button
-                    key={c.id}
-                    className="rc-messages-list-item"
-                    onClick={() => {
-                      setSelectedId(c.id);
-                      if (isMobile) setMobileView("chat");
-                      window.history.replaceState({}, "", `/messages?c=${c.id}`);
-                    }}
-                    style={{
-                      border: `1px solid ${isActive ? colors.accent : colors.border}`,
-                      background: isActive ? colors.accentSoft : colors.panel,
-                    }}
-                  >
-                    <div className="rc-messages-list-item-row">
-                      <div className="rc-messages-list-item-title">
-                        Tenant {c.tenantId || "unknown"}
-                      </div>
-                      {c.hasUnread ? (
-                        <span className="rc-messages-unread-dot" />
-                      ) : null}
-                    </div>
-                    <div className="rc-messages-list-item-meta">
-                      Unit {c.unitId || "n/a"}
-                    </div>
-                  </button>
-                );
-              })
-            )}
-          </div>
-        )}
-
-        {(!isMobile || mobileView === "chat") && (
-          <div className="rc-messages-thread">
-            {selectedConversation ? (
-              <>
-                <div className="rc-messages-thread-header">
-                  {isMobile ? (
+        <ResponsiveMasterDetail
+          masterTitle="Conversations"
+          hasSelection={Boolean(selectedId)}
+          selectedLabel={`Tenant ${selectedConversation?.tenantId || "unknown"}`}
+          onClearSelection={() => {
+            setSelectedId(null);
+            navigate("/messages");
+          }}
+          masterDropdown={
+            conversations.length ? (
+              <select
+                value={selectedId || ""}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  if (!next) return;
+                  setSelectedId(next);
+                  navigate(`/messages?threadId=${next}`);
+                }}
+              >
+                <option value="">Select conversation</option>
+                {conversations.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    Tenant {c.tenantId || "unknown"}
+                  </option>
+                ))}
+              </select>
+            ) : null
+          }
+          master={
+            <div className="rc-messages-list">
+              {loadingList ? (
+                <div style={{ color: text.muted }}>Loading…</div>
+              ) : conversations.length === 0 ? (
+                <div style={{ color: text.muted }}>No conversations yet.</div>
+              ) : (
+                conversations.map((c) => {
+                  const isActive = c.id === selectedId;
+                  return (
                     <button
-                      type="button"
-                      className="rc-messages-back"
-                      onClick={() => setMobileView("list")}
+                      key={c.id}
+                      className="rc-messages-list-item"
+                      onClick={() => {
+                        setSelectedId(c.id);
+                        navigate(`/messages?threadId=${c.id}`);
+                      }}
+                      style={{
+                        border: `1px solid ${isActive ? colors.accent : colors.border}`,
+                        background: isActive ? colors.accentSoft : colors.panel,
+                      }}
                     >
-                      Back
+                      <div className="rc-messages-list-item-row">
+                        <div className="rc-messages-list-item-title">
+                          Tenant {c.tenantId || "unknown"}
+                        </div>
+                        {c.hasUnread ? (
+                          <span className="rc-messages-unread-dot" />
+                        ) : null}
+                      </div>
+                      <div className="rc-messages-list-item-meta">
+                        Unit {c.unitId || "n/a"}
+                      </div>
                     </button>
-                  ) : null}
-                  <div className="rc-messages-thread-title">
-                    Conversation with tenant {selectedConversation.tenantId || "unknown"}
+                  );
+                })
+              )}
+            </div>
+          }
+          detail={
+            <div className="rc-messages-thread">
+              {selectedConversation ? (
+                <>
+                  <div className="rc-messages-thread-header">
+                    <div className="rc-messages-thread-title">
+                      Conversation with tenant {selectedConversation.tenantId || "unknown"}
+                    </div>
                   </div>
-                </div>
-                <div className="rc-messages-thread-body">
-                  {loadingThread ? (
-                    <div style={{ color: text.muted }}>Loading messages…</div>
-                  ) : messages.length === 0 ? (
-                    <div style={{ color: text.muted }}>No messages yet.</div>
-                  ) : (
-                    messages
-                      .slice()
-                      .sort(
-                        (a, b) =>
-                          (a.createdAtMs || 0) - (b.createdAtMs || 0)
-                      )
-                      .map((m) => {
-                        const isSender = m.senderRole === "landlord";
-                        return (
-                          <div
-                            key={m.id}
-                            className={`rc-messages-bubble ${isSender ? "is-sent" : "is-received"}`}
-                            style={{
-                              alignSelf: isSender ? "flex-end" : "flex-start",
-                              background: isSender ? colors.accentSoft : colors.panel,
-                              border: `1px solid ${colors.border}`,
-                            }}
-                          >
-                            <div className="rc-messages-bubble-meta">
-                              {m.senderRole} •{" "}
-                              {m.createdAtMs ? new Date(m.createdAtMs).toLocaleString() : ""}
+                  <div className="rc-messages-thread-body">
+                    {loadingThread ? (
+                      <div style={{ color: text.muted }}>Loading messages…</div>
+                    ) : messages.length === 0 ? (
+                      <div style={{ color: text.muted }}>No messages yet.</div>
+                    ) : (
+                      messages
+                        .slice()
+                        .sort(
+                          (a, b) =>
+                            (a.createdAtMs || 0) - (b.createdAtMs || 0)
+                        )
+                        .map((m) => {
+                          const isSender = m.senderRole === "landlord";
+                          return (
+                            <div
+                              key={m.id}
+                              className={`rc-messages-bubble ${isSender ? "is-sent" : "is-received"}`}
+                              style={{
+                                alignSelf: isSender ? "flex-end" : "flex-start",
+                                background: isSender ? colors.accentSoft : colors.panel,
+                                border: `1px solid ${colors.border}`,
+                              }}
+                            >
+                              <div className="rc-messages-bubble-meta">
+                                {m.senderRole} •{" "}
+                                {m.createdAtMs ? new Date(m.createdAtMs).toLocaleString() : ""}
+                              </div>
+                              <div className="rc-messages-bubble-text">{m.body}</div>
                             </div>
-                            <div className="rc-messages-bubble-text">{m.body}</div>
-                          </div>
-                        );
-                      })
-                  )}
-                </div>
-                <div className="rc-messages-composer">
-                  <textarea
-                    value={composer}
-                    onChange={(e) => setComposer(e.target.value)}
-                    placeholder="Write a message"
-                    className="rc-messages-composer-input"
-                  />
-                  <button
-                    onClick={handleSend}
-                    disabled={!composer.trim()}
-                    className="rc-messages-composer-send"
-                    style={{
-                      background: colors.accent,
-                      border: `1px solid ${colors.border}`,
-                      cursor: composer.trim() ? "pointer" : "not-allowed",
-                      opacity: composer.trim() ? 1 : 0.6,
-                    }}
-                  >
-                    Send
-                  </button>
-                </div>
-              </>
-            ) : (
-              <div style={{ color: text.muted }}>Select a conversation.</div>
-            )}
-          </div>
-        )}
+                          );
+                        })
+                    )}
+                  </div>
+                  <div className="rc-messages-composer">
+                    <textarea
+                      value={composer}
+                      onChange={(e) => setComposer(e.target.value)}
+                      placeholder="Write a message"
+                      className="rc-messages-composer-input"
+                    />
+                    <button
+                      onClick={handleSend}
+                      disabled={!composer.trim()}
+                      className="rc-messages-composer-send"
+                      style={{
+                        background: colors.accent,
+                        border: `1px solid ${colors.border}`,
+                        cursor: composer.trim() ? "pointer" : "not-allowed",
+                        opacity: composer.trim() ? 1 : 0.6,
+                      }}
+                    >
+                      Send
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div style={{ color: text.muted }}>Select a conversation.</div>
+              )}
+            </div>
+          }
+        />
       </div>
       )}
     </div>
