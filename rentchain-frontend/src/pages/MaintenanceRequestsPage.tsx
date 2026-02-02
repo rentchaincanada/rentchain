@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { Card, Section, Button } from "../components/ui/Ui";
+import { Card, Section, Button, Input } from "../components/ui/Ui";
 import { spacing, text, colors, radius, shadows } from "../styles/tokens";
 import { apiFetch } from "@/api/http";
 import { useToast } from "../components/ui/ToastProvider";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { useUpgrade } from "@/context/UpgradeContext";
+import { ResponsiveMasterDetail } from "@/components/layout/ResponsiveMasterDetail";
 
 type MaintItem = {
   id: string;
@@ -31,6 +32,7 @@ const MaintenanceRequestsPage: React.FC = () => {
   const [status, setStatus] = useState<string>("NEW");
   const [note, setNote] = useState<string>("");
   const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState("");
   const { features, loading: capsLoading } = useCapabilities();
   const { openUpgrade } = useUpgrade();
   const maintenanceEnabled = features?.maintenance !== false;
@@ -66,6 +68,17 @@ const MaintenanceRequestsPage: React.FC = () => {
     setStatus(item.status || "NEW");
     setNote(item.landlordNote || "");
   };
+
+  const filtered = items.filter((item) => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return (
+      String(item.title || "").toLowerCase().includes(q) ||
+      String(item.tenantId || "").toLowerCase().includes(q) ||
+      String(item.propertyId || "").toLowerCase().includes(q) ||
+      String(item.unitId || "").toLowerCase().includes(q)
+    );
+  });
 
   const save = async () => {
     if (!selected) return;
@@ -129,129 +142,158 @@ const MaintenanceRequestsPage: React.FC = () => {
           </Button>
         </Card>
       ) : (
-      <Card
-        elevated
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 1.5fr) minmax(0, 2fr)",
-          gap: spacing.lg,
-          minHeight: 0,
-        }}
-      >
-        <div style={{ minHeight: 0, display: "flex", flexDirection: "column", gap: spacing.sm }}>
-          {loading ? (
-            <div style={{ color: text.muted }}>Loading requests...</div>
-          ) : error ? (
-            <div style={{ color: colors.danger }}>{error}</div>
-          ) : items.length === 0 ? (
-            <div style={{ color: text.muted }}>No maintenance requests yet.</div>
-          ) : (
-            <div style={{ overflowY: "auto", display: "grid", gap: spacing.xs }}>
-              {items.map((item) => {
-                const active = selected?.id === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => selectRow(item)}
-                    style={{
-                      textAlign: "left",
-                      border: `1px solid ${active ? colors.accent : colors.border}`,
-                      background: active ? "rgba(37,99,235,0.08)" : colors.card,
-                      borderRadius: radius.md,
-                      padding: "10px 12px",
-                      cursor: "pointer",
-                      display: "grid",
-                      gap: 4,
-                    }}
-                  >
-                    <div style={{ fontWeight: 700, color: text.primary }}>{item.title || "Untitled"}</div>
-                    <div style={{ fontSize: 12, color: text.muted }}>
-                      {item.status} • {item.priority} • {item.category}
-                    </div>
-                    <div style={{ fontSize: 12, color: text.secondary }}>
-                      Tenant: {item.tenantId || "-"} | Property: {item.propertyId || "-"}
-                    </div>
-                  </button>
-                );
-              })}
+      <Card elevated className="rc-maintenance-grid">
+        <ResponsiveMasterDetail
+          title={undefined}
+          searchSlot={
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search maintenance requests"
+              style={{ width: "100%" }}
+            />
+          }
+          masterTitle="Requests"
+          master={
+            <div style={{ minHeight: 0, display: "flex", flexDirection: "column", gap: spacing.sm }}>
+              {loading ? (
+                <div style={{ color: text.muted }}>Loading requests...</div>
+              ) : error ? (
+                <div style={{ color: colors.danger }}>{error}</div>
+              ) : filtered.length === 0 ? (
+                <div style={{ color: text.muted }}>No maintenance requests yet.</div>
+              ) : (
+                <div style={{ overflowY: "auto", display: "grid", gap: spacing.xs }}>
+                  {filtered.map((item) => {
+                    const active = selected?.id === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => selectRow(item)}
+                        style={{
+                          textAlign: "left",
+                          border: `1px solid ${active ? colors.accent : colors.border}`,
+                          background: active ? "rgba(37,99,235,0.08)" : colors.card,
+                          borderRadius: radius.md,
+                          padding: "10px 12px",
+                          cursor: "pointer",
+                          display: "grid",
+                          gap: 4,
+                        }}
+                      >
+                        <div style={{ fontWeight: 700, color: text.primary }}>{item.title || "Untitled"}</div>
+                        <div style={{ fontSize: 12, color: text.muted }}>
+                          {item.status} • {item.priority} • {item.category}
+                        </div>
+                        <div style={{ fontSize: 12, color: text.secondary }}>
+                          Tenant: {item.tenantId || "-"} | Property: {item.propertyId || "-"}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          }
+          masterDropdown={
+            filtered.length ? (
+              <select
+                value={selected?.id || ""}
+                onChange={(e) => {
+                  const next = filtered.find((item) => item.id === e.target.value);
+                  if (next) selectRow(next);
+                }}
+                className="rc-full-width-mobile"
+              >
+                <option value="">Select request</option>
+                {filtered.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.title || "Untitled"}
+                  </option>
+                ))}
+              </select>
+            ) : null
+          }
+          hasSelection={Boolean(selected)}
+          selectedLabel={selected?.title || "Request"}
+          onClearSelection={() => setSelected(null)}
+          detail={
+            <Section style={{ minHeight: 0 }}>
+              {!selected ? (
+                <div style={{ color: text.muted }}>Select a request to view details.</div>
+              ) : (
+                <div style={{ display: "grid", gap: spacing.sm }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                    <div>
+                      <div style={{ fontSize: "1.1rem", fontWeight: 700, color: text.primary }}>{selected.title}</div>
+                      <div style={{ fontSize: 12, color: text.muted }}>
+                        {selected.status} • {selected.priority} • {selected.category}
+                      </div>
+                    </div>
+                    <Button onClick={save} disabled={saving}>
+                      {saving ? "Saving..." : "Save"}
+                    </Button>
+                  </div>
 
-        <Section style={{ minHeight: 0 }}>
-          {!selected ? (
-            <div style={{ color: text.muted }}>Select a request to view details.</div>
-          ) : (
-            <div style={{ display: "grid", gap: spacing.sm }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div>
-                  <div style={{ fontSize: "1.1rem", fontWeight: 700, color: text.primary }}>{selected.title}</div>
-                  <div style={{ fontSize: 12, color: text.muted }}>
-                    {selected.status} • {selected.priority} • {selected.category}
+                  <label style={{ display: "grid", gap: 4 }}>
+                    <span style={{ fontSize: 12, color: text.muted }}>Status</span>
+                    <select
+                      value={status}
+                      onChange={(e) => setStatus(e.target.value)}
+                      style={{
+                        padding: "8px 10px",
+                        borderRadius: radius.md,
+                        border: `1px solid ${colors.border}`,
+                        background: colors.panel,
+                        color: text.primary,
+                      }}
+                    >
+                      {statuses.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label style={{ display: "grid", gap: 4 }}>
+                    <span style={{ fontSize: 12, color: text.muted }}>Landlord note</span>
+                    <textarea
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                      rows={4}
+                      style={{
+                        padding: "10px",
+                        borderRadius: radius.md,
+                        border: `1px solid ${colors.border}`,
+                        background: colors.panel,
+                        color: text.primary,
+                        resize: "vertical",
+                      }}
+                    />
+                  </label>
+
+                  <div style={{ display: "grid", gap: 4 }}>
+                    <span style={{ fontSize: 12, color: text.muted }}>Description</span>
+                    <div
+                      style={{
+                        padding: "10px",
+                        borderRadius: radius.md,
+                        border: `1px solid ${colors.border}`,
+                        background: colors.card,
+                        color: text.primary,
+                        whiteSpace: "pre-wrap",
+                      }}
+                    >
+                      {selected.description || "No description"}
+                    </div>
                   </div>
                 </div>
-                <Button onClick={save} disabled={saving}>
-                  {saving ? "Saving..." : "Save"}
-                </Button>
-              </div>
-
-              <label style={{ display: "grid", gap: 4 }}>
-                <span style={{ fontSize: 12, color: text.muted }}>Status</span>
-                <select
-                  value={status}
-                  onChange={(e) => setStatus(e.target.value)}
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: radius.md,
-                    border: `1px solid ${colors.border}`,
-                    background: colors.panel,
-                    color: text.primary,
-                  }}
-                >
-                  {statuses.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label style={{ display: "grid", gap: 4 }}>
-                <span style={{ fontSize: 12, color: text.muted }}>Landlord note</span>
-                <textarea
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  rows={4}
-                  style={{
-                    padding: "10px",
-                    borderRadius: radius.md,
-                    border: `1px solid ${colors.border}`,
-                    background: colors.panel,
-                    color: text.primary,
-                    resize: "vertical",
-                  }}
-                />
-              </label>
-
-              <div style={{ display: "grid", gap: 4 }}>
-                <span style={{ fontSize: 12, color: text.muted }}>Description</span>
-                <div
-                  style={{
-                    padding: "10px",
-                    borderRadius: radius.md,
-                    border: `1px solid ${colors.border}`,
-                    background: colors.card,
-                    color: text.primary,
-                    whiteSpace: "pre-wrap",
-                  }}
-                >
-                  {selected.description || "No description"}
-                </div>
-              </div>
-            </div>
-          )}
-        </Section>
+              )}
+            </Section>
+          }
+        />
       </Card>
       )}
     </div>
