@@ -256,11 +256,6 @@ const ApplicationsPage: React.FC = () => {
         });
         if (!alive) return;
         setApplications(list || []);
-        if (!selectedId && list?.length) {
-          const firstId = list[0].id;
-          setSelectedId(firstId);
-          navigate(`/applications?applicationId=${firstId}`, { replace: true });
-        }
       } catch (err: any) {
         if (!alive) return;
         setError(err?.message || "Failed to load applications.");
@@ -717,7 +712,7 @@ const ApplicationsPage: React.FC = () => {
                   <div style={{ fontSize: "1.35rem", fontWeight: 700 }}>{detail.applicant.firstName} {detail.applicant.lastName}</div>
                   <div style={{ color: text.muted, fontSize: 13 }}>{detail.applicant.email}</div>
                 </div>
-                <div style={{ display: "flex", gap: 8 }}>
+                <div className="rc-applications-status-row">
                   {statusOptions.map((s) => (
                     <Button key={s} variant={detail.status === s ? "primary" : "secondary"} onClick={() => void setStatus(s)}>
                       {s.replace("_", " ")}
@@ -727,7 +722,7 @@ const ApplicationsPage: React.FC = () => {
               </div>
 
               <Card>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing.sm, marginBottom: 8 }}>
+                <div className="rc-applications-card-header" style={{ marginBottom: 8 }}>
                   <div style={{ fontWeight: 700, fontSize: 16 }}>Screening</div>
                   <Button
                     variant="ghost"
@@ -738,7 +733,7 @@ const ApplicationsPage: React.FC = () => {
                   </Button>
                 </div>
                 <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <div className="rc-wrap-row">
                     <Pill>{formatScreeningStatus(screeningStatus?.status || detail.screeningStatus || null)}</Pill>
                     {screeningStatusLoading ? (
                       <span style={{ fontSize: 12, color: text.subtle }}>Refreshing…</span>

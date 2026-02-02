@@ -8,6 +8,7 @@
   flex-direction: column;
   gap: 12px;
   min-height: 0;
+  min-width: 0;
 }
 
 .rc-applications-detail {
@@ -17,6 +18,8 @@
   min-height: 0;
   font-size: 15px;
   line-height: 1.55;
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 .rc-applications-list-scroll {
@@ -37,6 +40,39 @@
 
 .rc-applications-filter {
   min-height: 44px;
+}
+
+.rc-applications-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.rc-applications-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rc-applications-detail * {
+  max-width: 100%;
+}
+
+.rc-applications-detail .pill,
+.rc-applications-detail .rc-applications-status-row {
+  flex-wrap: wrap;
+}
+
+.rc-applications-detail .rc-applications-status-row button {
+  white-space: nowrap;
+}
+
+.rc-applications-detail .rc-applications-text {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 @media (max-width: 768px) {
@@ -67,6 +103,10 @@
 
   .rc-applications-list-scroll {
     overflow: visible;
+  }
+
+  .rc-applications-card-header {
+    align-items: flex-start;
   }
 }
 

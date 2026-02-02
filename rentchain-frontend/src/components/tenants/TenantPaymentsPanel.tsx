@@ -7,6 +7,7 @@ import {
   type PaymentRecord,
   type UpdatePaymentPayload,
 } from "@/api/paymentsApi";
+import "./TenantPaymentsPanel.css";
 
 type Props = {
   tenantId?: string | null;
@@ -151,7 +152,7 @@ export function TenantPaymentsPanel({ tenantId }: Props) {
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <div className="rc-tenant-payments-controls">
           <label style={{ fontSize: 12, opacity: 0.8 }}>Year</label>
           <input
             value={year}
@@ -193,7 +194,7 @@ export function TenantPaymentsPanel({ tenantId }: Props) {
       {editingId ? (
         <div style={{ marginTop: 12, padding: 10, border: "1px solid #e6e6e6" }}>
           <div style={{ fontWeight: 600, marginBottom: 8 }}>Edit payment</div>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <div className="rc-tenant-payments-controls rc-tenant-payments-controls--edit">
             <label style={{ fontSize: 12, opacity: 0.8 }}>Amount</label>
             <input
               value={editAmount}

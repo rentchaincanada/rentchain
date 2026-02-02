@@ -1,6 +1,7 @@
 .rc-messages-page {
   min-height: 100%;
   padding: 20px 24px;
+  overflow-x: hidden;
 }
 
 .rc-messages-grid {
@@ -15,6 +16,7 @@
   padding: 12px;
   background: #ffffff;
   min-height: 0;
+  min-width: 0;
 }
 
 .rc-messages-list {
@@ -106,6 +108,7 @@
   flex-direction: column;
   gap: 8px;
   padding-bottom: 4px;
+  min-width: 0;
 }
 
 .rc-messages-bubble {
@@ -127,6 +130,8 @@
   line-height: 1.45;
   white-space: pre-wrap;
   color: #0f172a;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .rc-messages-composer {
