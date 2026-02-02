@@ -1,7 +1,5 @@
 .rc-tenants-grid {
-  display: grid;
-  grid-template-columns: minmax(320px, 360px) minmax(0, 1fr);
-  gap: 16px;
+  display: block;
   min-height: 0;
 }
 
@@ -46,11 +44,6 @@
 }
 
 @media (max-width: 768px) {
-  .rc-tenants-grid {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-
   .rc-tenants-list-scroll {
     overflow: visible;
   }

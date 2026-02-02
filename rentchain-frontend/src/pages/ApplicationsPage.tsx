@@ -26,8 +26,9 @@ import {
 } from "@/api/rentalApplicationsApi";
 import { useToast } from "../components/ui/ToastProvider";
 import { useCapabilities } from "@/hooks/useCapabilities";
-import { dispatchUpgradePrompt } from "@/lib/upgradePrompt";
+import { track } from "@/lib/analytics";
 import { useAuth } from "../context/useAuth";
+import { ResponsiveMasterDetail } from "@/components/layout/ResponsiveMasterDetail";
 import "./ApplicationsPage.css";
 
 const statusOptions: RentalApplicationStatus[] = [
@@ -157,6 +158,9 @@ const ApplicationsPage: React.FC = () => {
   const effectiveTotalCents = screeningQuote?.totalAmountCents ?? computedTotalCents;
 
   const isAdmin = String(user?.role || "").toLowerCase() === "admin";
+  const selectedLabel = detail
+    ? `${detail.applicant.firstName} ${detail.applicant.lastName}`.trim()
+    : "Application";
 
   const loadScreeningStatus = async (applicationId: string) => {
     setScreeningStatusLoading(true);
@@ -253,7 +257,9 @@ const ApplicationsPage: React.FC = () => {
         if (!alive) return;
         setApplications(list || []);
         if (!selectedId && list?.length) {
-          setSelectedId(list[0].id);
+          const firstId = list[0].id;
+          setSelectedId(firstId);
+          navigate(`/applications?applicationId=${firstId}`, { replace: true });
         }
       } catch (err: any) {
         if (!alive) return;
@@ -402,6 +408,11 @@ const ApplicationsPage: React.FC = () => {
     });
   }, [applications, search]);
 
+  const handleSelectApplication = (applicationId: string) => {
+    setSelectedId(applicationId);
+    navigate(`/applications?applicationId=${applicationId}`);
+  };
+
   const handleManualComplete = async () => {
     if (!detail?.id) return;
     setManualSubmitting(true);
@@ -488,6 +499,7 @@ const ApplicationsPage: React.FC = () => {
       }
       setExportShareUrl(res.shareUrl || null);
       setExportExpiresAt(res.expiresAt || null);
+      track("exports_export_success", { source: "applications" });
       if (copyOnly) {
         await navigator.clipboard?.writeText(res.shareUrl);
         showToast({ message: "Link copied.", variant: "success" });
@@ -501,6 +513,11 @@ const ApplicationsPage: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    if (!exportPreviewOpen) return;
+    track("exports_preview_opened", { source: "applications", gated: !features?.exports_basic && !isAdmin });
+  }, [exportPreviewOpen, features?.exports_basic, isAdmin]);
+
   const previewText = useMemo(() => {
     const raw =
       resultData?.reportText ||
@@ -512,18 +529,19 @@ const ApplicationsPage: React.FC = () => {
     return lines.slice(0, 10).join("\n");
   }, [detail?.screening?.result?.notes, detail?.screeningResultSummary, resultData?.reportText]);
 
-  const handleExportUpgrade = () => {
-    const redirectTo =
-      typeof window !== "undefined"
-        ? `${window.location.pathname}${window.location.search}`
-        : "/applications";
-    dispatchUpgradePrompt({
-      featureKey: "exports_basic",
-      requiredPlan: "pro",
-      source: "screening_export",
-      redirectTo,
-    });
-    setExportPreviewOpen(false);
+  const handleOpenPricing = () => {
+    const url = "/pricing?plan=pro&source=screening_export_preview";
+    track("exports_upgrade_clicked", { source: "applications", capability: "exports_basic" });
+    if (typeof window !== "undefined") {
+      window.location.assign(url);
+    }
+  };
+
+  const handleSampleOpen = () => {
+    track("exports_sample_opened", { source: "applications" });
+    if (typeof window !== "undefined") {
+      window.open("/sample/screening_report_sample.pdf", "_blank", "noopener,noreferrer");
+    }
   };
 
   const setStatus = async (status: RentalApplicationStatus) => {
@@ -579,89 +597,121 @@ const ApplicationsPage: React.FC = () => {
               Review submitted rental applications.
             </div>
           </div>
-          <div className="rc-applications-filters" style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
-            <Input
-              className="rc-applications-search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search name or email"
-              style={{ width: 240 }}
-            />
-            <select
-              className="rc-applications-filter"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              style={{ padding: "8px 10px", borderRadius: radius.md, border: `1px solid ${colors.border}` }}
-            >
-              <option value="">All statuses</option>
-              {statusOptions.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-            <select
-              className="rc-applications-filter"
-              value={propertyFilter}
-              onChange={(e) => setPropertyFilter(e.target.value)}
-              style={{ padding: "8px 10px", borderRadius: radius.md, border: `1px solid ${colors.border}` }}
-            >
-              <option value="">All properties</option>
-              {properties.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </div>
         </div>
       </Card>
 
       <Card elevated className="rc-applications-grid">
-        <div className="rc-applications-list">
-          {loading ? (
-            <div style={{ color: text.muted }}>Loading applications...</div>
-          ) : error ? (
-            <div style={{ color: colors.danger }}>{error}</div>
-          ) : filtered.length === 0 ? (
-            <div style={{ color: text.muted }}>No applications found.</div>
-          ) : (
-            <div className="rc-applications-list-scroll">
-              {filtered.map((app) => (
-                <button
-                  key={app.id}
-                  type="button"
-                  className="rc-applications-list-item"
-                  onClick={() => setSelectedId(app.id)}
-                  style={{
-                    textAlign: "left",
-                    border: `1px solid ${app.id === selectedId ? colors.accent : colors.border}`,
-                    background: app.id === selectedId ? "rgba(37,99,235,0.08)" : colors.card,
-                    borderRadius: radius.md,
-                    padding: "12px 12px",
-                    cursor: "pointer",
-                    display: "grid",
-                    gap: 4,
-                  }}
-                >
-                  <div style={{ fontWeight: 700, color: text.primary, fontSize: 15 }}>{app.applicantName || "Applicant"}</div>
-                  <div style={{ color: text.muted, fontSize: 12 }}>{app.email || "No email"}</div>
-                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                    <Pill>{app.status}</Pill>
-                  </div>
-                </button>
-              ))}
+        <ResponsiveMasterDetail
+          title={undefined}
+          searchSlot={
+            <div className="rc-applications-filters" style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
+              <Input
+                className="rc-applications-search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search name or email"
+                style={{ width: 240 }}
+              />
+              <select
+                className="rc-applications-filter"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                style={{ padding: "8px 10px", borderRadius: radius.md, border: `1px solid ${colors.border}` }}
+              >
+                <option value="">All statuses</option>
+                {statusOptions.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="rc-applications-filter"
+                value={propertyFilter}
+                onChange={(e) => setPropertyFilter(e.target.value)}
+                style={{ padding: "8px 10px", borderRadius: radius.md, border: `1px solid ${colors.border}` }}
+              >
+                <option value="">All properties</option>
+                {properties.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
             </div>
-          )}
-        </div>
-
-        <Section className="rc-applications-detail">
-          {loadingDetail ? (
-            <div style={{ color: text.muted }}>Loading application...</div>
-          ) : !detail ? (
-            <div style={{ color: text.muted }}>Select an application to view details.</div>
-          ) : (
-            <div style={{ display: "grid", gap: spacing.md }}>
+          }
+          masterTitle="Applications"
+          master={
+            <div className="rc-applications-list">
+              {loading ? (
+                <div style={{ color: text.muted }}>Loading applications...</div>
+              ) : error ? (
+                <div style={{ color: colors.danger }}>{error}</div>
+              ) : filtered.length === 0 ? (
+                <div style={{ color: text.muted }}>No applications found.</div>
+              ) : (
+                <div className="rc-applications-list-scroll">
+                  {filtered.map((app) => (
+                    <button
+                      key={app.id}
+                      type="button"
+                      className="rc-applications-list-item"
+                      onClick={() => handleSelectApplication(app.id)}
+                      style={{
+                        textAlign: "left",
+                        border: `1px solid ${app.id === selectedId ? colors.accent : colors.border}`,
+                        background: app.id === selectedId ? "rgba(37,99,235,0.08)" : colors.card,
+                        borderRadius: radius.md,
+                        padding: "12px 12px",
+                        cursor: "pointer",
+                        display: "grid",
+                        gap: 4,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.primary, fontSize: 15 }}>{app.applicantName || "Applicant"}</div>
+                      <div style={{ color: text.muted, fontSize: 12 }}>{app.email || "No email"}</div>
+                      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                        <Pill>{app.status}</Pill>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          }
+          masterDropdown={
+            filtered.length ? (
+              <select
+                value={selectedId || ""}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  if (!next) return;
+                  handleSelectApplication(next);
+                }}
+              >
+                <option value="">Select application</option>
+                {filtered.map((app) => (
+                  <option key={app.id} value={app.id}>
+                    {app.applicantName || "Applicant"}
+                  </option>
+                ))}
+              </select>
+            ) : null
+          }
+          hasSelection={Boolean(selectedId)}
+          selectedLabel={selectedLabel}
+          onClearSelection={() => {
+            setSelectedId(null);
+            navigate("/applications");
+          }}
+          detail={
+            <Section className="rc-applications-detail">
+              {loadingDetail ? (
+                <div style={{ color: text.muted }}>Loading application...</div>
+              ) : !detail ? (
+                <div style={{ color: text.muted }}>Select an application to view details.</div>
+              ) : (
+                <div style={{ display: "grid", gap: spacing.md }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div>
                   <div style={{ fontSize: "1.35rem", fontWeight: 700 }}>{detail.applicant.firstName} {detail.applicant.lastName}</div>
@@ -969,8 +1019,10 @@ const ApplicationsPage: React.FC = () => {
                 </div>
               </Card>
             </div>
-          )}
-        </Section>
+              )}
+            </Section>
+          }
+        />
       </Card>
     </div>
       {resultModalOpen && (
@@ -1099,14 +1151,22 @@ const ApplicationsPage: React.FC = () => {
           }}
         >
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: spacing.sm }}>
-            <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>Export preview</div>
+            <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>Export Screening Report (Pro)</div>
             <Button variant="ghost" onClick={() => setExportPreviewOpen(false)}>
               Close
             </Button>
           </div>
           <div style={{ fontSize: 13, color: text.muted, marginBottom: spacing.sm }}>
-            Preview is available for all users. Full PDF export requires Pro.
+            Download a shareable PDF for your records and compliance.
           </div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: text.subtle, marginBottom: 6 }}>
+            Included with Pro
+          </div>
+          <ul style={{ margin: "0 0 12px 18px", padding: 0, fontSize: 13, color: text.subtle, lineHeight: 1.6 }}>
+            <li>Downloadable PDF export</li>
+            <li>Share with partners or file securely</li>
+            <li>Consistent formatting for audits</li>
+          </ul>
           <div
             style={{
               border: `1px solid ${colors.border}`,
@@ -1120,12 +1180,17 @@ const ApplicationsPage: React.FC = () => {
           >
             {previewText || "Preview not available yet. Upgrade to Pro to export the full report."}
           </div>
-          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: spacing.sm }}>
-            <Button variant="secondary" onClick={() => window.open("/pricing", "_blank")}>
-              Learn more
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: spacing.sm }}>
+            <Button variant="secondary" onClick={handleSampleOpen}>
+              See a sample PDF
             </Button>
-            <Button variant="primary" onClick={handleExportUpgrade}>
-              Upgrade to Pro to export
+          </div>
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: spacing.sm }}>
+            <Button variant="secondary" onClick={handleOpenPricing}>
+              View Pro features
+            </Button>
+            <Button variant="primary" onClick={handleOpenPricing}>
+              Upgrade to Pro to export PDF
             </Button>
           </div>
         </Card>
