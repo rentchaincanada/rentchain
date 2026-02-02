@@ -26,7 +26,7 @@ import {
 } from "@/api/rentalApplicationsApi";
 import { useToast } from "../components/ui/ToastProvider";
 import { useCapabilities } from "@/hooks/useCapabilities";
-import { dispatchUpgradePrompt } from "@/lib/upgradePrompt";
+import { track } from "@/lib/analytics";
 import { useAuth } from "../context/useAuth";
 import "./ApplicationsPage.css";
 
@@ -488,6 +488,7 @@ const ApplicationsPage: React.FC = () => {
       }
       setExportShareUrl(res.shareUrl || null);
       setExportExpiresAt(res.expiresAt || null);
+      track("exports_export_success", { source: "applications" });
       if (copyOnly) {
         await navigator.clipboard?.writeText(res.shareUrl);
         showToast({ message: "Link copied.", variant: "success" });
@@ -501,6 +502,11 @@ const ApplicationsPage: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    if (!exportPreviewOpen) return;
+    track("exports_preview_opened", { source: "applications", gated: !features?.exports_basic && !isAdmin });
+  }, [exportPreviewOpen, features?.exports_basic, isAdmin]);
+
   const previewText = useMemo(() => {
     const raw =
       resultData?.reportText ||
@@ -512,18 +518,19 @@ const ApplicationsPage: React.FC = () => {
     return lines.slice(0, 10).join("\n");
   }, [detail?.screening?.result?.notes, detail?.screeningResultSummary, resultData?.reportText]);
 
-  const handleExportUpgrade = () => {
-    const redirectTo =
-      typeof window !== "undefined"
-        ? `${window.location.pathname}${window.location.search}`
-        : "/applications";
-    dispatchUpgradePrompt({
-      featureKey: "exports_basic",
-      requiredPlan: "pro",
-      source: "screening_export",
-      redirectTo,
-    });
-    setExportPreviewOpen(false);
+  const handleOpenPricing = () => {
+    const url = "/pricing?plan=pro&source=screening_export_preview";
+    track("exports_upgrade_clicked", { source: "applications", capability: "exports_basic" });
+    if (typeof window !== "undefined") {
+      window.location.assign(url);
+    }
+  };
+
+  const handleSampleOpen = () => {
+    track("exports_sample_opened", { source: "applications" });
+    if (typeof window !== "undefined") {
+      window.open("/sample/screening_report_sample.pdf", "_blank", "noopener,noreferrer");
+    }
   };
 
   const setStatus = async (status: RentalApplicationStatus) => {
@@ -1099,14 +1106,22 @@ const ApplicationsPage: React.FC = () => {
           }}
         >
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: spacing.sm }}>
-            <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>Export preview</div>
+            <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>Export Screening Report (Pro)</div>
             <Button variant="ghost" onClick={() => setExportPreviewOpen(false)}>
               Close
             </Button>
           </div>
           <div style={{ fontSize: 13, color: text.muted, marginBottom: spacing.sm }}>
-            Preview is available for all users. Full PDF export requires Pro.
+            Download a shareable PDF for your records and compliance.
           </div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: text.subtle, marginBottom: 6 }}>
+            Included with Pro
+          </div>
+          <ul style={{ margin: "0 0 12px 18px", padding: 0, fontSize: 13, color: text.subtle, lineHeight: 1.6 }}>
+            <li>Downloadable PDF export</li>
+            <li>Share with partners or file securely</li>
+            <li>Consistent formatting for audits</li>
+          </ul>
           <div
             style={{
               border: `1px solid ${colors.border}`,
@@ -1120,12 +1135,17 @@ const ApplicationsPage: React.FC = () => {
           >
             {previewText || "Preview not available yet. Upgrade to Pro to export the full report."}
           </div>
-          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: spacing.sm }}>
-            <Button variant="secondary" onClick={() => window.open("/pricing", "_blank")}>
-              Learn more
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: spacing.sm }}>
+            <Button variant="secondary" onClick={handleSampleOpen}>
+              See a sample PDF
             </Button>
-            <Button variant="primary" onClick={handleExportUpgrade}>
-              Upgrade to Pro to export
+          </div>
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: spacing.sm }}>
+            <Button variant="secondary" onClick={handleOpenPricing}>
+              View Pro features
+            </Button>
+            <Button variant="primary" onClick={handleOpenPricing}>
+              Upgrade to Pro to export PDF
             </Button>
           </div>
         </Card>
