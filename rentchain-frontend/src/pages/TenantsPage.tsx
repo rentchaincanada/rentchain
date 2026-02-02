@@ -202,6 +202,7 @@ export const TenantsPage: React.FC = () => {
               <select
                 value={selectedTenantId || ""}
                 onChange={(e) => handleSelectTenant(e.target.value)}
+                className="rc-full-width-mobile"
               >
                 <option value="">Select tenant</option>
                 {filteredTenants.map((tenant: any) => (

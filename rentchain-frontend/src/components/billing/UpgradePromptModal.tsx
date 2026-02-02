@@ -110,19 +110,19 @@ export function UpgradePromptModal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
+        className="rc-modal-shell"
         style={{
           position: "fixed",
           top: "50%",
           left: "50%",
           transform: "translate(-50%, -50%)",
-          width: "min(560px, 92vw)",
           background: "white",
           borderRadius: 22,
           zIndex: 121,
           boxShadow: "0 30px 80px rgba(2,6,23,0.45)",
         }}
       >
-        <div style={{ padding: 28, display: "grid", gap: 18 }}>
+        <div className="rc-modal-body" style={{ padding: 28, display: "grid", gap: 18 }}>
           <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
             <div
               aria-hidden
@@ -181,7 +181,7 @@ export function UpgradePromptModal({
             <div style={{ fontSize: 12, color: "rgba(71,85,105,0.9)" }}>{copy.trustNote}</div>
           ) : null}
 
-          <div style={{ display: "flex", gap: 8 }}>
+          <div className="rc-wrap-row">
             <button
               type="button"
               onClick={() => setInterval("monthly")}
@@ -249,7 +249,7 @@ export function UpgradePromptModal({
             >
               {primaryLabel}
             </button>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+            <div className="rc-wrap-row" style={{ justifyContent: "space-between" }}>
               <button
                 onClick={onClose}
                 style={{
