@@ -6,6 +6,7 @@ import { authenticateJwt } from "../middleware/authMiddleware";
 import { attachAccount } from "../middleware/attachAccount";
 import { requireFeature } from "../middleware/entitlements";
 import { getStripeClient, isStripeConfigured } from "../services/stripeService";
+import { getScreeningPricing } from "../billing/screeningPricing";
 import { finalizeStripePayment } from "../services/stripeFinalize";
 import { applyScreeningResultsFromOrder } from "../services/stripeScreeningProcessor";
 import { buildScreeningStatusPayload } from "../services/screening/screeningPayload";
@@ -27,12 +28,6 @@ const ALLOWED_STATUS = [
 
 const ELIGIBLE_STATUS = ["SUBMITTED", "IN_REVIEW"];
 const SERVICE_LEVELS = ["SELF_SERVE", "VERIFIED", "VERIFIED_AI"] as const;
-
-const BASE_AMOUNT_CENTS = 1999;
-const VERIFIED_ADD_ON_CENTS = 1000;
-const AI_ADD_ON_CENTS = 1000;
-const SCORE_ADD_ON_CENTS = 499;
-const EXPEDITED_ADD_ON_CENTS = 999;
 
 const ALLOWED_REDIRECT_ORIGINS = ["https://www.rentchain.ai", "https://rentchain.ai", "http://localhost:5173"];
 
@@ -241,31 +236,21 @@ function normalizeAddons(raw: any): string[] {
   return [];
 }
 
-function computePricing(args: {
-  screeningTier?: "basic" | "verify" | "verify_ai";
-  serviceLevel?: string;
-  addons?: string[];
-}) {
-  const tier = args.screeningTier || "basic";
-  const serviceLevel = args.serviceLevel || (tier === "basic" ? "SELF_SERVE" : tier === "verify" ? "VERIFIED" : "VERIFIED_AI");
-  const isVerified = serviceLevel === "VERIFIED" || serviceLevel === "VERIFIED_AI";
-  const isAi = serviceLevel === "VERIFIED_AI";
-  const verifiedAddOn = isVerified ? VERIFIED_ADD_ON_CENTS : 0;
-  const aiAddOn = isAi ? AI_ADD_ON_CENTS : 0;
-  const hasScore = (args.addons || []).includes("credit_score");
-  const hasExpedited = (args.addons || []).includes("expedited");
-  const scoreAddOnCents = hasScore ? SCORE_ADD_ON_CENTS : 0;
-  const expeditedAddOnCents = hasExpedited ? EXPEDITED_ADD_ON_CENTS : 0;
-  const totalAmountCents = BASE_AMOUNT_CENTS + verifiedAddOn + aiAddOn + scoreAddOnCents + expeditedAddOnCents;
-  return {
-    baseAmountCents: BASE_AMOUNT_CENTS,
-    verifiedAddOnCents: verifiedAddOn,
-    aiAddOnCents: aiAddOn,
-    scoreAddOnCents,
-    expeditedAddOnCents,
-    totalAmountCents,
-    serviceLevel,
-  };
+function resolvePricingInput(body: any) {
+  const screeningTier = resolveScreeningTier(body?.screeningTier);
+  const addons = normalizeAddons(body?.addons);
+  const serviceLevel = resolveServiceLevel(
+    body?.serviceLevel ||
+      (screeningTier === "basic"
+        ? "SELF_SERVE"
+        : screeningTier === "verify"
+        ? "VERIFIED"
+        : "VERIFIED_AI")
+  );
+  const scoreAddOn = addons.includes("credit_score") || body?.scoreAddOn === true;
+  const expeditedAddOn = addons.includes("expedited");
+  const pricing = getScreeningPricing({ screeningTier, addons, currency: "CAD" });
+  return { screeningTier, addons, serviceLevel, scoreAddOn, expeditedAddOn, pricing };
 }
 
 router.use(authenticateJwt);
@@ -427,12 +412,8 @@ router.post(
       }
 
       const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
-      const screeningTier = resolveScreeningTier(body?.screeningTier);
-      const addons = normalizeAddons(body?.addons);
-      const serviceLevel = resolveServiceLevel(body?.serviceLevel || (screeningTier === "basic" ? "SELF_SERVE" : screeningTier === "verify" ? "VERIFIED" : "VERIFIED_AI"));
-      const scoreAddOn = addons.includes("credit_score") || body?.scoreAddOn === true;
-      const expeditedAddOn = addons.includes("expedited");
-      const pricing = computePricing({ screeningTier, serviceLevel, addons });
+      const { screeningTier, addons, serviceLevel, scoreAddOn, expeditedAddOn, pricing } =
+        resolvePricingInput(body);
 
       return res.json({
         ok: true,
@@ -443,7 +424,7 @@ router.post(
           scoreAddOnCents: pricing.scoreAddOnCents,
           expeditedAddOnCents: pricing.expeditedAddOnCents || 0,
           totalAmountCents: pricing.totalAmountCents,
-          currency: "CAD",
+          currency: pricing.currency,
           eligible: true,
         },
       });
@@ -518,14 +499,8 @@ router.post(
       }
 
       const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
-      const screeningTier = resolveScreeningTier(body?.screeningTier);
-      const addons = normalizeAddons(body?.addons);
-      const serviceLevel = resolveServiceLevel(
-        body?.serviceLevel ||
-          (screeningTier === "basic" ? "SELF_SERVE" : screeningTier === "verify" ? "VERIFIED" : "VERIFIED_AI")
-      );
-      const scoreAddOn = addons.includes("credit_score") || body?.scoreAddOn === true;
-      const expeditedAddOn = addons.includes("expedited");
+      const { screeningTier, addons, serviceLevel, scoreAddOn, expeditedAddOn, pricing } =
+        resolvePricingInput(body);
       const rawReturnTo = String(body?.returnTo || "/dashboard");
       const returnTo = rawReturnTo.startsWith("/") ? rawReturnTo : "/dashboard";
       const frontendOrigin = resolveFrontendOrigin(req);
@@ -547,7 +522,6 @@ router.post(
         console.warn("[screening_checkout] invalid redirect origin", logBase);
         return res.status(400).json({ ok: false, error: "invalid_redirect_origin" });
       }
-      const pricing = computePricing({ screeningTier, serviceLevel, addons });
       let stripe: any;
       try {
         stripe = getStripeClient();
@@ -791,15 +765,8 @@ router.post(
       }
 
       const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
-      const screeningTier = resolveScreeningTier(body?.screeningTier);
-      const addons = normalizeAddons(body?.addons);
-      const serviceLevel = resolveServiceLevel(
-        body?.serviceLevel ||
-          (screeningTier === "basic" ? "SELF_SERVE" : screeningTier === "verify" ? "VERIFIED" : "VERIFIED_AI")
-      );
-      const scoreAddOn = addons.includes("credit_score") || body?.scoreAddOn === true;
-      const expeditedAddOn = addons.includes("expedited");
-      const pricing = computePricing({ screeningTier, serviceLevel, addons });
+      const { screeningTier, addons, serviceLevel, scoreAddOn, expeditedAddOn, pricing } =
+        resolvePricingInput(body);
       const now = Date.now();
       const orderRef = db.collection("screeningOrders").doc();
       const orderId = orderRef.id;

@@ -145,13 +145,14 @@ const ApplicationsPage: React.FC = () => {
     { value: "verify_ai", label: "Verify + AI", priceLabel: "$39.99", recommended: true },
   ] as const;
 
-  const totalCents = useMemo(() => {
+  const computedTotalCents = useMemo(() => {
     const base =
       screeningTier === "basic" ? 1999 : screeningTier === "verify" ? 2999 : 3999;
     const score = scoreAddOn ? 499 : 0;
     const expedited = expeditedAddOn ? 999 : 0;
     return base + score + expedited;
   }, [screeningTier, scoreAddOn, expeditedAddOn]);
+  const effectiveTotalCents = screeningQuote?.totalAmountCents ?? computedTotalCents;
 
   const isAdmin = String(user?.role || "").toLowerCase() === "admin";
 
@@ -337,7 +338,7 @@ const ApplicationsPage: React.FC = () => {
           addons: [scoreAddOn ? "credit_score" : null, expeditedAddOn ? "expedited" : null].filter(
             Boolean
           ) as string[],
-          totalAmount: totalCents / 100,
+          totalAmount: computedTotalCents / 100,
           serviceLevel:
             screeningTier === "basic"
               ? "SELF_SERVE"
@@ -360,7 +361,7 @@ const ApplicationsPage: React.FC = () => {
       }
     };
     void loadQuote();
-  }, [selectedId, screeningTier, scoreAddOn, expeditedAddOn, totalCents]);
+  }, [selectedId, screeningTier, scoreAddOn, expeditedAddOn, computedTotalCents]);
 
   useEffect(() => {
     if (!resultModalOpen || !detail?.id) return;
@@ -516,7 +517,7 @@ const ApplicationsPage: React.FC = () => {
       const res = await createScreeningCheckout(detail.id, {
         screeningTier,
         addons,
-        totalAmount: totalCents / 100,
+        totalAmount: effectiveTotalCents / 100,
         scoreAddOn,
         serviceLevel:
           screeningTier === "basic"
@@ -812,7 +813,7 @@ const ApplicationsPage: React.FC = () => {
                           <div style={{ color: text.muted }}>Checking eligibility...</div>
                         ) : screeningQuote ? (
                           <div style={{ display: "grid", gap: 6 }}>
-                            <div>Price: ${(totalCents / 100).toFixed(2)} {screeningQuote.currency}</div>
+                            <div>Price: ${(effectiveTotalCents / 100).toFixed(2)} {screeningQuote.currency}</div>
                             <div style={{ fontSize: 12, color: text.muted }}>
                               Base {screeningTier === "basic" ? "$19.99" : screeningTier === "verify" ? "$29.99" : "$39.99"}
                               {scoreAddOn ? " + Credit score $4.99" : ""}
@@ -845,7 +846,7 @@ const ApplicationsPage: React.FC = () => {
                               onClick={() => void runScreeningRequest()}
                               disabled={screeningRunning}
                             >
-                              {screeningRunning ? "Running..." : `Run screening ($${(totalCents / 100).toFixed(2)})`}
+                              {screeningRunning ? "Running..." : `Run screening ($${(effectiveTotalCents / 100).toFixed(2)})`}
                             </Button>
                           </div>
                         ) : (
