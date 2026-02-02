@@ -7,6 +7,7 @@ import { TenantPaymentsPanel } from "../components/tenants/TenantPaymentsPanel";
 import { fetchTenants } from "@/api/tenantsApi";
 import { spacing, radius, colors, text } from "../styles/tokens";
 import { Card, Section, Input } from "../components/ui/Ui";
+import { ResponsiveMasterDetail } from "../components/layout/ResponsiveMasterDetail";
 import { InviteTenantModal } from "../components/tenants/InviteTenantModal";
 import { TenantScorePill } from "../components/tenant/TenantScorePill";
 import { hydrateTenantSummariesBatch, getCachedTenantSummary } from "../lib/tenantSummaryCache";
@@ -74,7 +75,10 @@ export const TenantsPage: React.FC = () => {
     navigate(`/tenants?tenantId=${tenantId}`);
   };
 
-  const tenantExists = selectedTenantId && tenants.some((t) => t.id === selectedTenantId);
+  const selectedTenant = selectedTenantId
+    ? tenants.find((t) => t.id === selectedTenantId) || null
+    : null;
+  const tenantExists = Boolean(selectedTenant);
 
   const filteredTenants = useMemo(() => {
     const base = tenants || [];
@@ -124,131 +128,158 @@ export const TenantsPage: React.FC = () => {
       </Card>
 
       <Card elevated className="rc-tenants-grid">
-        <div className="rc-tenants-list">
-          <div className="rc-tenants-search">
-            <Input
-              type="text"
-              placeholder="Search by name, property, unit"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{ borderRadius: radius.pill }}
-            />
-          </div>
-
-          {loading ? (
-            <div style={{ fontSize: 13, color: text.muted }}>Loading tenants.</div>
-          ) : error ? (
-            <div style={{ fontSize: 13, color: colors.danger }}>{error}</div>
-          ) : filteredTenants.length === 0 ? (
-            <div style={{ fontSize: 13, color: text.muted }}>No tenants found.</div>
-          ) : (
-            <div className="rc-tenants-list-scroll">
-              {filteredTenants.map((tenant: any) => {
-                const isSelected = tenant.id === selectedTenantId;
-                const summary = getCachedTenantSummary(tenant.id);
-                return (
-                  <button
-                    key={tenant.id}
-                    className="rc-tenants-list-item"
-                    type="button"
-                    onClick={() => handleSelectTenant(tenant.id)}
+        <ResponsiveMasterDetail
+          title={undefined}
+          searchSlot={
+            <div className="rc-tenants-search">
+              <Input
+                type="text"
+                placeholder="Search by name, property, unit"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{ borderRadius: radius.pill }}
+              />
+            </div>
+          }
+          masterTitle="Tenants"
+          master={
+            loading ? (
+              <div style={{ fontSize: 13, color: text.muted }}>Loading tenants.</div>
+            ) : error ? (
+              <div style={{ fontSize: 13, color: colors.danger }}>{error}</div>
+            ) : filteredTenants.length === 0 ? (
+              <div style={{ fontSize: 13, color: text.muted }}>No tenants found.</div>
+            ) : (
+              <div className="rc-tenants-list-scroll">
+                {filteredTenants.map((tenant: any) => {
+                  const isSelected = tenant.id === selectedTenantId;
+                  const summary = getCachedTenantSummary(tenant.id);
+                  return (
+                    <button
+                      key={tenant.id}
+                      className="rc-tenants-list-item"
+                      type="button"
+                      onClick={() => handleSelectTenant(tenant.id)}
+                      style={{
+                        width: "100%",
+                        textAlign: "left",
+                        border: "1px solid",
+                        borderColor: isSelected ? colors.accent : colors.border,
+                        background: isSelected ? "rgba(96,165,250,0.08)" : colors.card,
+                        borderRadius: radius.md,
+                        padding: "12px 12px",
+                        color: text.primary,
+                        cursor: "pointer",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 6,
+                        transition: "background 120ms ease, border-color 120ms ease",
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = colors.borderStrong;
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor = isSelected ? colors.accent : colors.border;
+                      }}
+                    >
+                      <span style={{ fontSize: 15, fontWeight: 600 }}>
+                        {tenant.name || tenant.fullName || "Unnamed tenant"}
+                      </span>
+                      <span style={{ fontSize: 12, color: text.muted }}>
+                        {(tenant.propertyName || tenant.propertyId || "Property") + " - " + (tenant.unitLabel || tenant.unit || "")}
+                      </span>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <TenantScorePill compact score={summary?.scoreV1 ?? null} tier={summary?.tierV1 ?? null} />
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )
+          }
+          masterDropdown={
+            filteredTenants.length ? (
+              <select
+                value={selectedTenantId || ""}
+                onChange={(e) => handleSelectTenant(e.target.value)}
+              >
+                <option value="">Select tenant</option>
+                {filteredTenants.map((tenant: any) => (
+                  <option key={tenant.id} value={tenant.id}>
+                    {tenant.name || tenant.fullName || "Tenant"}
+                  </option>
+                ))}
+              </select>
+            ) : null
+          }
+          hasSelection={Boolean(selectedTenantId)}
+          selectedLabel={selectedTenant?.name || selectedTenant?.fullName || "Tenant"}
+          onClearSelection={() => {
+            setSelectedTenantId(null);
+            navigate("/tenants");
+          }}
+          detail={
+            <div className="rc-tenants-detail">
+              <Section style={{ minHeight: 0 }}>
+                {!selectedTenantId && <div style={{ fontSize: 13, color: text.muted }}>Select a tenant from the list to see details.</div>}
+                {selectedTenantId && !tenantExists && !loading && (
+                  <div
                     style={{
-                      width: "100%",
-                      textAlign: "left",
-                      border: "1px solid",
-                      borderColor: isSelected ? colors.accent : colors.border,
-                      background: isSelected ? "rgba(96,165,250,0.08)" : colors.card,
-                      borderRadius: radius.md,
-                      padding: "12px 12px",
+                      fontSize: 13,
                       color: text.primary,
-                      cursor: "pointer",
                       display: "flex",
                       flexDirection: "column",
-                      gap: 6,
-                      transition: "background 120ms ease, border-color 120ms ease",
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = colors.borderStrong;
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = isSelected ? colors.accent : colors.border;
+                      gap: 8,
                     }}
                   >
-                    <span style={{ fontSize: 15, fontWeight: 600 }}>
-                      {tenant.name || tenant.fullName || "Unnamed tenant"}
-                    </span>
-                    <span style={{ fontSize: 12, color: text.muted }}>
-                      {(tenant.propertyName || tenant.propertyId || "Property") + " - " + (tenant.unitLabel || tenant.unit || "")}
-                    </span>
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      <TenantScorePill compact score={summary?.scoreV1 ?? null} tier={summary?.tierV1 ?? null} />
+                    <div style={{ fontWeight: 600 }}>Tenant not found.</div>
+                    <div style={{ color: text.muted }}>The tenant you're looking for could not be loaded.</div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedTenantId(null);
+                          navigate("/tenants");
+                        }}
+                        style={{
+                          padding: "6px 10px",
+                          borderRadius: radius.md,
+                          border: `1px solid ${colors.border}`,
+                          background: colors.card,
+                          color: text.primary,
+                        }}
+                      >
+                        Back to tenants list
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => navigate(0)}
+                        style={{
+                          padding: "6px 10px",
+                          borderRadius: radius.md,
+                          border: `1px solid ${colors.border}`,
+                          background: colors.card,
+                          color: text.primary,
+                        }}
+                      >
+                        Retry
+                      </button>
                     </div>
-                  </button>
-                );
-              })}
+                  </div>
+                )}
+                {selectedTenantId && tenantExists && <TenantDetailPanel tenantId={selectedTenantId} />}
+              </Section>
+
+              <Section>
+                <TenantLeasePanel tenantId={tenantExists ? selectedTenantId : null} />
+              </Section>
+
+              <Section>
+                <TenantPaymentsPanel tenantId={tenantExists ? selectedTenantId : null} />
+              </Section>
             </div>
-          )}
-        </div>
-
-        <div className="rc-tenants-detail">
-          <Section style={{ minHeight: 0 }}>
-            {!selectedTenantId && <div style={{ fontSize: 13, color: text.muted }}>Select a tenant from the list to see details.</div>}
-            {selectedTenantId && !tenantExists && !loading && (
-              <div
-                style={{
-                  fontSize: 13,
-                  color: text.primary,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 8,
-                }}
-              >
-                <div style={{ fontWeight: 600 }}>Tenant not found.</div>
-                <div style={{ color: text.muted }}>The tenant you're looking for could not be loaded.</div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedTenantId(null);
-                      navigate("/tenants");
-                    }}
-                    style={{
-                      padding: "6px 10px",
-                      borderRadius: radius.md,
-                      border: `1px solid ${colors.border}`,
-                      background: colors.card,
-                      color: text.primary,
-                    }}
-                  >
-                    Back to tenants list
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => navigate(0)}
-                    style={{
-                      padding: "6px 10px",
-                      borderRadius: radius.md,
-                      border: `1px solid ${colors.border}`,
-                      background: colors.card,
-                      color: text.primary,
-                    }}
-                  >
-                    Retry
-                  </button>
-                </div>
-              </div>
-            )}
-            {selectedTenantId && tenantExists && <TenantDetailPanel tenantId={selectedTenantId} />}
-          </Section>
-
-          <Section>
-            <TenantLeasePanel tenantId={tenantExists ? selectedTenantId : null} />
-          </Section>
-
-          <Section>
-            <TenantPaymentsPanel tenantId={tenantExists ? selectedTenantId : null} />
-          </Section>
-        </div>
+          }
+        />
       </Card>
 
       <InviteTenantModal open={inviteOpen} onClose={() => setInviteOpen(false)} />
