@@ -28,6 +28,7 @@ import { useToast } from "../components/ui/ToastProvider";
 import { unitsForProperty } from "../lib/propertyCounts";
 import { PropertySelector } from "../components/properties/PropertySelector";
 import "../styles/propertiesMobile.css";
+import "./PropertiesPage.css";
 
 const PropertiesPage: React.FC = () => {
   const [properties, setProperties] = useState<Property[]>([]);
@@ -1049,16 +1050,15 @@ const UnitsModal = ({
       }}
     >
       <div
+        className="rc-modal-shell"
         style={{
-          width: "min(900px, 96vw)",
           background: "white",
           borderRadius: 16,
-          padding: 16,
           border: "1px solid rgba(148,163,184,0.35)",
           boxShadow: "0 25px 60px rgba(15,23,42,0.25)",
         }}
       >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ padding: 16, borderBottom: "1px solid rgba(148,163,184,0.2)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
           <div style={{ fontWeight: 800, fontSize: "1rem" }}>Add Units</div>
           <button
             onClick={onClose}
@@ -1074,108 +1074,110 @@ const UnitsModal = ({
           </button>
         </div>
 
-        <div style={{ overflowX: "auto", marginTop: 12 }}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr>
-                {["Unit #", "Beds", "Baths", "Sqft", "Market Rent", "Status", ""].map((h) => (
-                  <th
-                    key={h}
-                    style={{
-                      textAlign: "left",
-                      padding: "8px",
-                      borderBottom: "1px solid rgba(148,163,184,0.35)",
-                      fontSize: 12,
-                    }}
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {units.map((u, idx) => (
-                <tr key={idx}>
-                  <td style={{ padding: "6px" }}>
-                    <input
-                      value={u.unitNumber}
-                      onChange={(e) => updateUnit(idx, "unitNumber", e.target.value)}
-                      style={{ width: "100%", padding: 6 }}
-                    />
-                  </td>
-                  <td style={{ padding: "6px" }}>
-                    <input
-                      type="number"
-                      value={u.beds}
-                      onChange={(e) => updateUnit(idx, "beds", e.target.value)}
-                      style={{ width: "100%", padding: 6 }}
-                    />
-                  </td>
-                  <td style={{ padding: "6px" }}>
-                    <input
-                      type="number"
-                      value={u.baths}
-                      onChange={(e) => updateUnit(idx, "baths", e.target.value)}
-                      style={{ width: "100%", padding: 6 }}
-                    />
-                  </td>
-                  <td style={{ padding: "6px" }}>
-                    <input
-                      type="number"
-                      value={u.sqft}
-                      onChange={(e) => updateUnit(idx, "sqft", e.target.value)}
-                      style={{ width: "100%", padding: 6 }}
-                    />
-                  </td>
-                  <td style={{ padding: "6px" }}>
-                    <input
-                      type="number"
-                      value={u.marketRent}
-                      onChange={(e) => updateUnit(idx, "marketRent", e.target.value)}
-                      onFocus={() => {
-                        if (
-                          typeof window !== "undefined" &&
-                          window.matchMedia("(max-width: 768px)").matches &&
-                          String(u.marketRent ?? "") === "0"
-                        ) {
-                          updateUnit(idx, "marketRent", "");
-                        }
-                      }}
-                      style={{ width: "100%", padding: 6 }}
-                    />
-                  </td>
-                  <td style={{ padding: "6px" }}>
-                    <select
-                      value={u.status ?? "vacant"}
-                      onChange={(e) => updateUnit(idx, "status", e.target.value)}
-                      style={{ width: "100%", padding: 6 }}
-                    >
-                      <option value="vacant">Vacant</option>
-                      <option value="occupied">Occupied</option>
-                    </select>
-                  </td>
-                  <td style={{ padding: "6px" }}>
-                    <button
-                      type="button"
-                      onClick={() => removeRow(idx)}
+        <div className="rc-modal-body" style={{ padding: 16 }}>
+          <div style={{ overflowX: "auto" }}>
+            <table className="rc-units-edit-table" style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  {["Unit #", "Beds", "Baths", "Sqft", "Market Rent", "Status", ""].map((h) => (
+                    <th
+                      key={h}
                       style={{
-                        padding: "6px 10px",
-                        borderRadius: 8,
-                        border: "1px solid rgba(148,163,184,0.35)",
-                        background: "transparent",
-                        cursor: "pointer",
+                        textAlign: "left",
+                        padding: "8px",
+                        borderBottom: "1px solid rgba(148,163,184,0.35)",
+                        fontSize: 12,
                       }}
                     >
-                      Remove
-                    </button>
-                  </td>
+                      {h}
+                    </th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {units.map((u, idx) => (
+                  <tr key={idx}>
+                    <td style={{ padding: "6px" }}>
+                      <input
+                        value={u.unitNumber}
+                        onChange={(e) => updateUnit(idx, "unitNumber", e.target.value)}
+                        style={{ width: "100%", padding: 6 }}
+                      />
+                    </td>
+                    <td style={{ padding: "6px" }}>
+                      <input
+                        type="number"
+                        value={u.beds}
+                        onChange={(e) => updateUnit(idx, "beds", e.target.value)}
+                        style={{ width: "100%", padding: 6 }}
+                      />
+                    </td>
+                    <td style={{ padding: "6px" }}>
+                      <input
+                        type="number"
+                        value={u.baths}
+                        onChange={(e) => updateUnit(idx, "baths", e.target.value)}
+                        style={{ width: "100%", padding: 6 }}
+                      />
+                    </td>
+                    <td style={{ padding: "6px" }}>
+                      <input
+                        type="number"
+                        value={u.sqft}
+                        onChange={(e) => updateUnit(idx, "sqft", e.target.value)}
+                        style={{ width: "100%", padding: 6 }}
+                      />
+                    </td>
+                    <td style={{ padding: "6px" }}>
+                      <input
+                        type="number"
+                        value={u.marketRent}
+                        onChange={(e) => updateUnit(idx, "marketRent", e.target.value)}
+                        onFocus={() => {
+                          if (
+                            typeof window !== "undefined" &&
+                            window.matchMedia("(max-width: 768px)").matches &&
+                            String(u.marketRent ?? "") === "0"
+                          ) {
+                            updateUnit(idx, "marketRent", "");
+                          }
+                        }}
+                        style={{ width: "100%", padding: 6 }}
+                      />
+                    </td>
+                    <td style={{ padding: "6px" }}>
+                      <select
+                        value={u.status ?? "vacant"}
+                        onChange={(e) => updateUnit(idx, "status", e.target.value)}
+                        style={{ width: "100%", padding: 6 }}
+                      >
+                        <option value="vacant">Vacant</option>
+                        <option value="occupied">Occupied</option>
+                      </select>
+                    </td>
+                    <td style={{ padding: "6px" }}>
+                      <button
+                        type="button"
+                        onClick={() => removeRow(idx)}
+                        style={{
+                          padding: "6px 10px",
+                          borderRadius: 8,
+                          border: "1px solid rgba(148,163,184,0.35)",
+                          background: "transparent",
+                          cursor: "pointer",
+                        }}
+                      >
+                        Remove
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
 
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12 }}>
+        <div className="rc-modal-footer" style={{ padding: 16, borderTop: "1px solid rgba(148,163,184,0.2)", display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
           <button
             type="button"
             onClick={addRow}
@@ -1189,7 +1191,7 @@ const UnitsModal = ({
           >
             + Add row
           </button>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div className="rc-wrap-row">
             <button
               type="button"
               onClick={onClose}
