@@ -4,8 +4,6 @@ import { Card, Section, Button } from "../components/ui/Ui";
 import { createBillingPortalSession, fetchBillingHistory, type BillingRecord } from "../api/billingApi";
 import { spacing, text, colors, radius } from "../styles/tokens";
 import { SUPPORT_EMAIL } from "../config/support";
-import { BillingPreviewCard } from "../components/billing/BillingPreviewCard";
-import { fetchBillingUsage } from "../api/billingPreviewApi";
 import { asArray } from "../lib/asArray";
 import { useCapabilities } from "@/hooks/useCapabilities";
 
@@ -48,7 +46,6 @@ const BillingPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [usage, setUsage] = useState<any | null>(null);
   const { caps } = useCapabilities();
   const currentPlan = String(caps?.plan || "screening").toLowerCase();
 
@@ -56,9 +53,8 @@ const BillingPage: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      const [history, usageResp] = await Promise.all([fetchBillingHistory(), fetchBillingUsage()]);
+      const [history] = await Promise.all([fetchBillingHistory()]);
       setRecords(asArray(history));
-      setUsage(usageResp);
     } catch (err: any) {
       const msg = String(err?.message || "");
       if (msg.includes("404")) {
@@ -108,8 +104,6 @@ const BillingPage: React.FC = () => {
           </div>
         </div>
       </Card>
-
-      <BillingPreviewCard usage={usage} />
 
       <Card>
         <div style={{ fontWeight: 700, fontSize: "1.05rem", marginBottom: 12 }}>
