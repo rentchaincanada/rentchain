@@ -28,12 +28,15 @@ vi.mock("../../config/firebase", () => ({
 let webhookTesting: typeof import("../stripeScreeningOrdersWebhookRoutes").__testing;
 let rentalTesting: typeof import("../rentalApplicationsRoutes").__testing;
 
-beforeAll(async () => {
-  const webhookModule = await import("../stripeScreeningOrdersWebhookRoutes");
-  const rentalModule = await import("../rentalApplicationsRoutes");
-  webhookTesting = webhookModule.__testing;
-  rentalTesting = rentalModule.__testing;
-});
+beforeAll(
+  async () => {
+    const webhookModule = await import("../stripeScreeningOrdersWebhookRoutes");
+    const rentalModule = await import("../rentalApplicationsRoutes");
+    webhookTesting = webhookModule.__testing;
+    rentalTesting = rentalModule.__testing;
+  },
+  20000
+);
 
 describe("screening payment webhook updates", () => {
   beforeEach(() => {

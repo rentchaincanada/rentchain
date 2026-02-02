@@ -6,6 +6,7 @@ import { authenticateJwt } from "../middleware/authMiddleware";
 import { attachAccount } from "../middleware/attachAccount";
 import { requireFeature } from "../middleware/entitlements";
 import { getStripeClient, isStripeConfigured } from "../services/stripeService";
+import { requireCapability } from "../services/capabilityGuard";
 import { getScreeningPricing } from "../billing/screeningPricing";
 import { finalizeStripePayment } from "../services/stripeFinalize";
 import { applyScreeningResultsFromOrder } from "../services/stripeScreeningProcessor";
@@ -1244,6 +1245,20 @@ router.post("/rental-applications/:id/screening/export", attachAccount, requireF
     const data = snap.data() as any;
     if (role !== "admin" && data?.landlordId && data.landlordId !== landlordId) {
       return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    if (role !== "admin") {
+      const cap = await requireCapability(String(landlordId), "exports_basic");
+      if (!cap.ok) {
+        return res.status(402).json({
+          ok: false,
+          error: "upgrade_required",
+          capability: "exports_basic",
+          requiredPlan: "pro",
+          plan: cap.plan,
+          source: "screening_export",
+        });
+      }
     }
 
     const status = String(data?.screeningStatus || "").toLowerCase();

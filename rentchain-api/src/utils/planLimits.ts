@@ -18,7 +18,7 @@ export function limitError(args: {
 }) {
   const { plan, limitType, max, current, attempted } = args;
   return {
-    error: "Upgrade required",
+    error: "upgrade_required",
     code: "PLAN_LIMIT_EXCEEDED",
     plan,
     limitType,

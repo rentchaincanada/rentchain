@@ -26,6 +26,7 @@ import {
 } from "@/api/rentalApplicationsApi";
 import { useToast } from "../components/ui/ToastProvider";
 import { useCapabilities } from "@/hooks/useCapabilities";
+import { dispatchUpgradePrompt } from "@/lib/upgradePrompt";
 import { useAuth } from "../context/useAuth";
 import "./ApplicationsPage.css";
 
@@ -138,6 +139,7 @@ const ApplicationsPage: React.FC = () => {
   const [exportingReport, setExportingReport] = useState(false);
   const [exportShareUrl, setExportShareUrl] = useState<string | null>(null);
   const [exportExpiresAt, setExportExpiresAt] = useState<number | null>(null);
+  const [exportPreviewOpen, setExportPreviewOpen] = useState(false);
 
   const screeningOptions = [
     { value: "basic", label: "Basic", priceLabel: "$19.99" },
@@ -473,6 +475,10 @@ const ApplicationsPage: React.FC = () => {
 
   const handleExportReport = async (copyOnly: boolean) => {
     if (!detail?.id) return;
+    if (!features?.exports_basic) {
+      setExportPreviewOpen(true);
+      return;
+    }
     setExportingReport(true);
     try {
       const res = await exportScreeningReport(detail.id);
@@ -493,6 +499,31 @@ const ApplicationsPage: React.FC = () => {
     } finally {
       setExportingReport(false);
     }
+  };
+
+  const previewText = useMemo(() => {
+    const raw =
+      resultData?.reportText ||
+      detail?.screening?.result?.notes ||
+      detail?.screeningResultSummary ||
+      "";
+    if (!raw) return "";
+    const lines = String(raw).split("\n").filter(Boolean);
+    return lines.slice(0, 10).join("\n");
+  }, [detail?.screening?.result?.notes, detail?.screeningResultSummary, resultData?.reportText]);
+
+  const handleExportUpgrade = () => {
+    const redirectTo =
+      typeof window !== "undefined"
+        ? `${window.location.pathname}${window.location.search}`
+        : "/applications";
+    dispatchUpgradePrompt({
+      featureKey: "exports_basic",
+      requiredPlan: "pro",
+      source: "screening_export",
+      redirectTo,
+    });
+    setExportPreviewOpen(false);
   };
 
   const setStatus = async (status: RentalApplicationStatus) => {
@@ -1043,6 +1074,60 @@ const ApplicationsPage: React.FC = () => {
               )}
             </div>
           ) : null}
+        </Card>
+      </div>
+      )}
+      {exportPreviewOpen && (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(15,23,42,0.75)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+        }}
+      >
+        <Card
+          style={{
+            width: "min(620px, 95vw)",
+            maxHeight: "80vh",
+            overflowY: "auto",
+            padding: spacing.md,
+            border: `1px solid ${colors.border}`,
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: spacing.sm }}>
+            <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>Export preview</div>
+            <Button variant="ghost" onClick={() => setExportPreviewOpen(false)}>
+              Close
+            </Button>
+          </div>
+          <div style={{ fontSize: 13, color: text.muted, marginBottom: spacing.sm }}>
+            Preview is available for all users. Full PDF export requires Pro.
+          </div>
+          <div
+            style={{
+              border: `1px solid ${colors.border}`,
+              borderRadius: radius.md,
+              padding: spacing.sm,
+              background: colors.panel,
+              whiteSpace: "pre-wrap",
+              fontSize: 13,
+              minHeight: 120,
+            }}
+          >
+            {previewText || "Preview not available yet. Upgrade to Pro to export the full report."}
+          </div>
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: spacing.sm }}>
+            <Button variant="secondary" onClick={() => window.open("/pricing", "_blank")}>
+              Learn more
+            </Button>
+            <Button variant="primary" onClick={handleExportUpgrade}>
+              Upgrade to Pro to export
+            </Button>
+          </div>
         </Card>
       </div>
       )}

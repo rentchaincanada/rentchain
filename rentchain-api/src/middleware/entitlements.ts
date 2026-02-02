@@ -10,13 +10,25 @@ export function requireFeature<K extends keyof Entitlements>(key: K) {
 
     if (typeof value === "boolean") {
       if (!value) {
-        return res.status(403).json({ error: "Upgrade required", upgradePath: "/pricing" });
+        return res.status(402).json({
+          ok: false,
+          error: "upgrade_required",
+          capability: key,
+          upgradePath: "/pricing",
+        });
       }
       return next();
     }
 
     if (key === "exports") {
-      if (!value) return res.status(403).json({ error: "Upgrade required", upgradePath: "/pricing" });
+      if (!value) {
+        return res.status(402).json({
+          ok: false,
+          error: "upgrade_required",
+          capability: key,
+          upgradePath: "/pricing",
+        });
+      }
       return next();
     }
 

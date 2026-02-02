@@ -16,8 +16,8 @@ export function entitlementsForPlan(plan: PlanTier): Entitlements {
       };
     case "starter":
       return {
-        propertiesMax: unlimited,
-        unitsMax: unlimited,
+        propertiesMax: 1,
+        unitsMax: 5,
         usersMax: 1,
         screening: true,
         automation: false,
@@ -28,8 +28,8 @@ export function entitlementsForPlan(plan: PlanTier): Entitlements {
 
     case "core":
       return {
-        propertiesMax: unlimited,
-        unitsMax: unlimited,
+        propertiesMax: 1,
+        unitsMax: 5,
         usersMax: 1,
         screening: true,
         automation: false,

@@ -26,7 +26,7 @@ export function requirePlan(minPlan: SubscriptionPlan) {
     const currentPlan = resolvePlanFromRequest(req);
     if (!planAtLeast(currentPlan, minPlan)) {
       return res.status(402).json({
-        error: "Plan upgrade required",
+        error: "upgrade_required",
         requiredPlan: minPlan,
         currentPlan,
       });
