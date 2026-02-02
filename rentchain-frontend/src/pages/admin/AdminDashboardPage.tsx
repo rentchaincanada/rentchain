@@ -11,6 +11,7 @@ import {
 } from "../../api/adminDashboardApi";
 import { adminSystems } from "./adminSystems";
 import { colors, spacing, text, radius } from "../../styles/tokens";
+import "./AdminDashboardPage.css";
 
 const categories = ["All", ...Array.from(new Set(adminSystems.map((s) => s.category)))];
 
@@ -106,8 +107,8 @@ export const AdminDashboardPage: React.FC = () => {
 
   return (
     <MacShell title="Admin · Dashboard">
-      <Section style={{ display: "grid", gap: spacing.md }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm, alignItems: "center" }}>
+      <Section className="rc-admin-page" style={{ display: "grid", gap: spacing.md }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm, alignItems: "center", flexWrap: "wrap" }}>
           <div>
             <h1 style={{ margin: 0, fontSize: "1.4rem" }}>Admin Dashboard</h1>
             <div style={{ fontSize: 12, color: text.muted }}>
@@ -262,9 +263,8 @@ export const AdminDashboardPage: React.FC = () => {
                 expenses.map((expense) => (
                   <div
                     key={expense.id}
+                    className="rc-admin-expense-row"
                     style={{
-                      display: "grid",
-                      gridTemplateColumns: "120px 140px 140px 120px 1fr",
                       gap: spacing.sm,
                       padding: "8px 10px",
                       borderRadius: radius.sm,

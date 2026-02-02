@@ -1,0 +1,22 @@
+.rc-units-edit-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.rc-units-edit-table th,
+.rc-units-edit-table td {
+  word-break: break-word;
+}
+
+.rc-units-edit-table input,
+.rc-units-edit-table select {
+  min-width: 0;
+}
+
+@media (max-width: 768px) {
+  .rc-units-edit-table th,
+  .rc-units-edit-table td {
+    padding: 6px 4px;
+    font-size: 12px;
+  }
+}

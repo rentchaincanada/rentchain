@@ -212,11 +212,12 @@ export function ActionCenterDrawer({
       />
 
       <div
+        className="rc-safe-drawer"
         style={{
           position: "fixed",
           top: 0,
           right: 0,
-          height: "100vh",
+          height: "100dvh",
           width: "min(480px, 92vw)",
           background: "white",
           zIndex: 51,
@@ -229,7 +230,7 @@ export function ActionCenterDrawer({
         }}
       >
         <div style={{ padding: 16, borderBottom: "1px solid rgba(148,163,184,0.18)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <div>
               <div style={{ fontWeight: 950, fontSize: 16 }}>Action Center</div>
               <div style={{ fontSize: 12, opacity: 0.7 }}>
@@ -240,7 +241,7 @@ export function ActionCenterDrawer({
               </div>
             </div>
 
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <div className="rc-wrap-row">
               <button
                 onClick={load}
                 disabled={loading}
@@ -366,13 +367,13 @@ export function ActionCenterDrawer({
           </div>
         </div>
 
-        <div style={{ padding: "0 16px 12px 16px", display: "flex", gap: 10, alignItems: "center" }}>
+        <div style={{ padding: "0 16px 12px 16px", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search tasks…"
             style={{
-              flex: 1,
+              flex: "1 1 220px",
               padding: "10px 12px",
               borderRadius: 12,
               border: "1px solid rgba(148,163,184,0.35)",
@@ -392,6 +393,7 @@ export function ActionCenterDrawer({
               fontWeight: 750,
               fontSize: 13,
               cursor: "pointer",
+              minWidth: 140,
             }}
           >
             <option value="all">All</option>

@@ -683,6 +683,7 @@ const ApplicationsPage: React.FC = () => {
                   if (!next) return;
                   handleSelectApplication(next);
                 }}
+                className="rc-full-width-mobile"
               >
                 <option value="">Select application</option>
                 {filtered.map((app) => (
@@ -783,7 +784,7 @@ const ApplicationsPage: React.FC = () => {
                       <div style={{ fontSize: 13, fontWeight: 700, color: text.subtle, marginBottom: 6 }}>
                         Admin screening controls
                       </div>
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <div className="rc-wrap-row">
                         <Button
                           variant="primary"
                           onClick={() => setManualCompleteOpen(true)}
@@ -832,7 +833,7 @@ const ApplicationsPage: React.FC = () => {
                       {detail.screening?.status ? `Status: ${detail.screening.status}` : "Status: NOT_REQUESTED"}
                     </div>
                     {detail.screening?.status === "COMPLETE" && detail.screening.result ? (
-                      <div style={{ display: "grid", gap: 6 }}>
+                      <div className="rc-applications-screening-grid">
                         {detail.screening.serviceLevel ? (
                           <div>Service level: {detail.screening.serviceLevel.replace("_", " ")}</div>
                         ) : null}
@@ -863,7 +864,7 @@ const ApplicationsPage: React.FC = () => {
                           {detail.screening.result.notes || "This is a pre-approval report (stub)."}
                         </div>
                         {detail.screening.ai ? (
-                          <div style={{ borderTop: `1px solid ${colors.border}`, paddingTop: 8, display: "grid", gap: 6 }}>
+                          <div className="rc-applications-ai-panel" style={{ borderTop: `1px solid ${colors.border}`, paddingTop: 8 }}>
                             <div style={{ fontWeight: 600 }}>AI Verification</div>
                             <div>Risk assessment: <Pill>{detail.screening.ai.riskAssessment}</Pill></div>
                             <div>Confidence score: {detail.screening.ai.confidenceScore}/100</div>

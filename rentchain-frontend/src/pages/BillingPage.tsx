@@ -89,12 +89,12 @@ const BillingPage: React.FC = () => {
   return (
     <Section style={{ display: "flex", flexDirection: "column", gap: spacing.md, maxWidth: 900, margin: "0 auto" }}>
       <Card elevated>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: spacing.sm }}>
           <div>
             <h1 style={{ margin: 0, fontSize: "1.3rem", fontWeight: 700 }}>Billing & Receipts</h1>
             <div style={{ color: text.muted, fontSize: "0.95rem" }}>Screening charges and receipts.</div>
           </div>
-          <div style={{ display: "flex", gap: spacing.xs }}>
+          <div className="rc-wrap-row">
             <Button type="button" variant="secondary" onClick={load} disabled={loading}>
               Refresh
             </Button>
@@ -206,7 +206,7 @@ const BillingPage: React.FC = () => {
       </Card>
 
       <Card>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: spacing.sm }}>
           <div style={{ color: text.secondary }}>
             Need a receipt or have billing questions? Email{" "}
             <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: colors.accent }}>
@@ -214,7 +214,7 @@ const BillingPage: React.FC = () => {
             </a>
             .
           </div>
-          <Button variant="secondary" onClick={load} disabled={loading}>
+          <Button variant="secondary" onClick={load} disabled={loading} className="rc-full-width-mobile">
             Reload
           </Button>
         </div>

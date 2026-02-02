@@ -91,6 +91,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
         backgroundImage: colors.bgAmbient,
         color: text.primary,
         fontFamily: typography.fontFamily,
+        overflowX: "hidden",
       }}
     >
       <header
@@ -106,12 +107,14 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
         <div
           style={{
             maxWidth: layout.maxWidth,
+            width: "100%",
             margin: "0 auto",
             padding: `${spacing.md} ${layout.pagePadding}`,
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
             gap: spacing.lg,
+            minWidth: 0,
           }}
         >
           <div style={{ flex: "1 1 0", display: "flex", alignItems: "center" }}>
@@ -316,6 +319,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
           <div
             style={{
               maxWidth: layout.maxWidth,
+              width: "100%",
               margin: "0 auto",
               padding: `${spacing.md} ${layout.pagePadding}`,
               display: "flex",
@@ -439,13 +443,14 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
         </div>
       ) : null}
 
-      <main
-        style={{
-          maxWidth: layout.maxWidth,
-          margin: "0 auto",
-          padding: `${spacing.xl} ${layout.pagePadding}`,
-        }}
-      >
+        <main
+          style={{
+            maxWidth: layout.maxWidth,
+            width: "100%",
+            margin: "0 auto",
+            padding: `${spacing.xl} ${layout.pagePadding}`,
+          }}
+        >
         <div
           style={{
             background: colors.panel,
@@ -470,6 +475,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
         <div
           style={{
             maxWidth: layout.maxWidth,
+            width: "100%",
             margin: "0 auto",
             display: "flex",
             alignItems: "center",

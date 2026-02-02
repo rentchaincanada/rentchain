@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { MacShell } from "../components/layout/MacShell";
 import { Card, Section, Button, Pill, Input } from "../components/ui/Ui";
+import { ResponsiveMasterDetail } from "../components/layout/ResponsiveMasterDetail";
 import { useToast } from "../components/ui/ToastProvider";
 import { useAuth } from "../context/useAuth";
 import {
@@ -31,9 +32,6 @@ const AdminVerifiedScreeningsPage: React.FC = () => {
       setLoading(true);
       const list = await listVerifiedScreenings();
       setItems(list);
-      if (!selectedId && list.length) {
-        setSelectedId(list[0].id);
-      }
     } catch (err: any) {
       showToast({ message: "Failed to load queue", description: err?.message || "", variant: "error" });
     } finally {
@@ -116,138 +114,161 @@ const AdminVerifiedScreeningsPage: React.FC = () => {
           </div>
         </div>
 
-        <Card
-          elevated
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(260px, 1fr) minmax(0, 2fr)",
-            gap: spacing.lg,
-          }}
-        >
-          <div style={{ display: "grid", gap: 8 }}>
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search applicant or application ID"
-              style={{ width: "100%" }}
-            />
-            {loading ? (
-              <div style={{ color: text.muted }}>Loading queue...</div>
-            ) : filtered.length === 0 ? (
-              <div style={{ color: text.muted }}>No verified screenings.</div>
-            ) : (
-              filtered.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setSelectedId(item.id)}
-                  style={{
-                    textAlign: "left",
-                    border: `1px solid ${item.id === selectedId ? colors.accent : colors.border}`,
-                    background: item.id === selectedId ? "rgba(37,99,235,0.08)" : colors.card,
-                    borderRadius: radius.md,
-                    padding: "10px 12px",
-                    cursor: "pointer",
-                    display: "grid",
-                    gap: 4,
-                  }}
-                >
-                  <div style={{ fontWeight: 700, color: text.primary }}>{item.applicant?.name || "Applicant"}</div>
-                  <div style={{ color: text.muted, fontSize: 12 }}>{item.applicant?.email || "No email"}</div>
-                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                    <Pill>{item.status}</Pill>
-                    <Pill>{item.serviceLevel}</Pill>
-                  </div>
-                  <div style={{ fontSize: 12, color: text.muted }}>
-                    ${(item.totalAmountCents / 100).toFixed(2)} {item.currency}
-                  </div>
-                </button>
-              ))
-            )}
-          </div>
-
-          <Card>
-            {!detail ? (
-              <div style={{ color: text.muted }}>Select a queue item.</div>
-            ) : (
-              <div style={{ display: "grid", gap: spacing.md }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div>
-                    <div style={{ fontSize: "1.1rem", fontWeight: 700 }}>{detail.applicant?.name || "Applicant"}</div>
-                    <div style={{ color: text.muted }}>{detail.applicant?.email || "No email"}</div>
-                  </div>
-                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                    <Pill>{detail.serviceLevel}</Pill>
-                    <Pill>{detail.status}</Pill>
-                  </div>
-                </div>
-
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 8 }}>
-                  <div>Order ID: {detail.orderId}</div>
-                  <div>Application ID: {detail.applicationId}</div>
-                  <div>Property ID: {detail.propertyId}</div>
-                  <div>Unit ID: {detail.unitId || "n/a"}</div>
-                  <div>Paid: ${(detail.totalAmountCents / 100).toFixed(2)} {detail.currency}</div>
-                  <div>Created: {detail.createdAt ? new Date(detail.createdAt).toLocaleString() : "-"}</div>
-                </div>
-
-                <div style={{ display: "grid", gap: 8 }}>
-                  <label style={{ fontSize: 12, fontWeight: 600 }}>Status</label>
-                  <select
-                    value={detail.status}
-                    onChange={(e) => setDetail({ ...detail, status: e.target.value as any })}
-                    style={{ padding: "8px 10px", borderRadius: radius.md, border: `1px solid ${colors.border}` }}
-                  >
-                    {statusOptions.map((s) => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div style={{ display: "grid", gap: 8 }}>
-                  <label style={{ fontSize: 12, fontWeight: 600 }}>Recommendation</label>
-                  <select
-                    value={detail.recommendation || ""}
-                    onChange={(e) =>
-                      setDetail({ ...detail, recommendation: (e.target.value as any) || null })
-                    }
-                    style={{ padding: "8px 10px", borderRadius: radius.md, border: `1px solid ${colors.border}` }}
-                  >
-                    <option value="">Select</option>
-                    {recommendationOptions.map((r) => (
-                      <option key={r} value={r}>{r}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div style={{ display: "grid", gap: 8 }}>
-                  <label style={{ fontSize: 12, fontWeight: 600 }}>Internal notes</label>
-                  <textarea
-                    value={detail.notesInternal || ""}
-                    onChange={(e) => setDetail({ ...detail, notesInternal: e.target.value })}
-                    rows={4}
-                    style={{ padding: "8px 10px", borderRadius: radius.md, border: `1px solid ${colors.border}` }}
-                  />
-                </div>
-
-                <div style={{ display: "grid", gap: 8 }}>
-                  <label style={{ fontSize: 12, fontWeight: 600 }}>Result summary</label>
-                  <textarea
-                    value={detail.resultSummary || ""}
-                    onChange={(e) => setDetail({ ...detail, resultSummary: e.target.value })}
-                    rows={4}
-                    style={{ padding: "8px 10px", borderRadius: radius.md, border: `1px solid ${colors.border}` }}
-                  />
-                </div>
-
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: spacing.sm }}>
-                  <Button type="button" onClick={handleSave} disabled={saving}>
-                    {saving ? "Saving..." : "Save"}
-                  </Button>
-                </div>
+        <Card elevated>
+          <ResponsiveMasterDetail
+            title={undefined}
+            searchSlot={
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search applicant or application ID"
+                style={{ width: "100%" }}
+              />
+            }
+            masterTitle="Queue"
+            master={
+              <div style={{ display: "grid", gap: 8 }}>
+                {loading ? (
+                  <div style={{ color: text.muted }}>Loading queue...</div>
+                ) : filtered.length === 0 ? (
+                  <div style={{ color: text.muted }}>No verified screenings.</div>
+                ) : (
+                  filtered.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setSelectedId(item.id)}
+                      style={{
+                        textAlign: "left",
+                        border: `1px solid ${item.id === selectedId ? colors.accent : colors.border}`,
+                        background: item.id === selectedId ? "rgba(37,99,235,0.08)" : colors.card,
+                        borderRadius: radius.md,
+                        padding: "10px 12px",
+                        cursor: "pointer",
+                        display: "grid",
+                        gap: 4,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.primary }}>{item.applicant?.name || "Applicant"}</div>
+                      <div style={{ color: text.muted, fontSize: 12 }}>{item.applicant?.email || "No email"}</div>
+                      <div className="rc-wrap-row">
+                        <Pill>{item.status}</Pill>
+                        <Pill>{item.serviceLevel}</Pill>
+                      </div>
+                      <div style={{ fontSize: 12, color: text.muted }}>
+                        ${(item.totalAmountCents / 100).toFixed(2)} {item.currency}
+                      </div>
+                    </button>
+                  ))
+                )}
               </div>
-            )}
-          </Card>
+            }
+            masterDropdown={
+              filtered.length ? (
+                <select
+                  value={selectedId || ""}
+                  onChange={(e) => setSelectedId(e.target.value || null)}
+                  className="rc-full-width-mobile"
+                >
+                  <option value="">Select screening</option>
+                  {filtered.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.applicant?.name || "Applicant"}
+                    </option>
+                  ))}
+                </select>
+              ) : null
+            }
+            hasSelection={Boolean(selectedId)}
+            selectedLabel={detail?.applicant?.name || "Screening"}
+            onClearSelection={() => setSelectedId(null)}
+            detail={
+              <Card>
+                {!detail ? (
+                  <div style={{ color: text.muted }}>Select a queue item.</div>
+                ) : (
+                  <div style={{ display: "grid", gap: spacing.md }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                      <div>
+                        <div style={{ fontSize: "1.1rem", fontWeight: 700 }}>{detail.applicant?.name || "Applicant"}</div>
+                        <div style={{ color: text.muted }} className="rc-wrap-text">
+                          {detail.applicant?.email || "No email"}
+                        </div>
+                      </div>
+                      <div className="rc-wrap-row">
+                        <Pill>{detail.serviceLevel}</Pill>
+                        <Pill>{detail.status}</Pill>
+                      </div>
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 8 }}>
+                      <div className="rc-wrap-text">Order ID: {detail.orderId}</div>
+                      <div className="rc-wrap-text">Application ID: {detail.applicationId}</div>
+                      <div className="rc-wrap-text">Property ID: {detail.propertyId}</div>
+                      <div className="rc-wrap-text">Unit ID: {detail.unitId || "n/a"}</div>
+                      <div>Paid: ${(detail.totalAmountCents / 100).toFixed(2)} {detail.currency}</div>
+                      <div>Created: {detail.createdAt ? new Date(detail.createdAt).toLocaleString() : "-"}</div>
+                    </div>
+
+                    <div style={{ display: "grid", gap: 8 }}>
+                      <label style={{ fontSize: 12, fontWeight: 600 }}>Status</label>
+                      <select
+                        value={detail.status}
+                        onChange={(e) => setDetail({ ...detail, status: e.target.value as any })}
+                        style={{ padding: "8px 10px", borderRadius: radius.md, border: `1px solid ${colors.border}` }}
+                      >
+                        {statusOptions.map((s) => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div style={{ display: "grid", gap: 8 }}>
+                      <label style={{ fontSize: 12, fontWeight: 600 }}>Recommendation</label>
+                      <select
+                        value={detail.recommendation || ""}
+                        onChange={(e) =>
+                          setDetail({ ...detail, recommendation: (e.target.value as any) || null })
+                        }
+                        style={{ padding: "8px 10px", borderRadius: radius.md, border: `1px solid ${colors.border}` }}
+                      >
+                        <option value="">Select</option>
+                        {recommendationOptions.map((r) => (
+                          <option key={r} value={r}>{r}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div style={{ display: "grid", gap: 8 }}>
+                      <label style={{ fontSize: 12, fontWeight: 600 }}>Internal notes</label>
+                      <textarea
+                        value={detail.notesInternal || ""}
+                        onChange={(e) => setDetail({ ...detail, notesInternal: e.target.value })}
+                        rows={4}
+                        style={{ padding: "8px 10px", borderRadius: radius.md, border: `1px solid ${colors.border}` }}
+                      />
+                    </div>
+
+                    <div style={{ display: "grid", gap: 8 }}>
+                      <label style={{ fontSize: 12, fontWeight: 600 }}>Result summary</label>
+                      <textarea
+                        value={detail.resultSummary || ""}
+                        onChange={(e) => setDetail({ ...detail, resultSummary: e.target.value })}
+                        rows={4}
+                        style={{ padding: "8px 10px", borderRadius: radius.md, border: `1px solid ${colors.border}` }}
+                      />
+                    </div>
+
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: spacing.sm, flexWrap: "wrap" }}>
+                      <Button type="button" onClick={handleSave} disabled={saving}>
+                        {saving ? "Saving..." : "Save"}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </Card>
+            }
+          />
         </Card>
       </Section>
     </MacShell>
