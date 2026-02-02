@@ -25,46 +25,61 @@ const PricingPage: React.FC = () => {
 
         <Card>
           <div style={{ display: "flex", flexDirection: "column", gap: spacing.sm }}>
-            <h2 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 700 }}>Screening Credits</h2>
-            <div style={{ color: text.primary, fontSize: "1rem", fontWeight: 600 }}>
-              Pay-per-report: $29.99 CAD / screening
-            </div>
-            <div style={{ color: text.muted, fontSize: "0.95rem" }}>
-              Bundles (display only):
-              <ul style={{ margin: "6px 0 0 16px" }}>
-                <li>Starter Pack: 5 credits for $129</li>
-                <li>Pro Pack: 20 credits for $399</li>
-              </ul>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 4, color: text.primary }}>
-              <div style={{ fontWeight: 600 }}>What’s included:</div>
-              <ul style={{ margin: 0, paddingLeft: 16, color: text.muted }}>
-                <li>Tenant-consented credit screening</li>
-                <li>Secure report delivery</li>
-                <li>PDF download</li>
-                <li>Activity timeline</li>
-              </ul>
-            </div>
-            <div>
-              <Button type="button" onClick={() => navigate("/applications")}>
-                Start screening
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => {
-                  setNotifyPlan("core");
-                  setNotifyOpen(true);
+            <h2 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 700 }}>Plans</h2>
+            <div style={{ display: "grid", gap: spacing.sm }}>
+              <div
+                style={{
+                  padding: "12px 14px",
+                  borderRadius: 12,
+                  border: `1px solid ${text.muted}`,
+                  background: "#ffffff",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
                 }}
-                style={{ marginLeft: 8 }}
               >
-                Notify me about Core/Pro
-              </Button>
+                <div style={{ fontWeight: 700 }}>Starter</div>
+                <div style={{ color: text.muted, fontSize: 13 }}>Free</div>
+                <Button type="button" onClick={() => navigate(user ? "/billing" : "/login")}>
+                  Get started
+                </Button>
+              </div>
+              <div
+                style={{
+                  padding: "12px 14px",
+                  borderRadius: 12,
+                  border: `1px solid ${text.muted}`,
+                  background: "#ffffff",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                }}
+              >
+                <div style={{ fontWeight: 700 }}>Pro</div>
+                <div style={{ color: text.muted, fontSize: 13 }}>$29 / month • $290 / year</div>
+                <Button type="button" onClick={() => navigate(user ? "/billing" : "/login")}>
+                  Upgrade to Pro
+                </Button>
+              </div>
+              <div
+                style={{
+                  padding: "12px 14px",
+                  borderRadius: 12,
+                  border: `1px solid ${text.muted}`,
+                  background: "#ffffff",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                }}
+              >
+                <div style={{ fontWeight: 700 }}>Business</div>
+                <div style={{ color: text.muted, fontSize: 13 }}>$79 / month • $790 / year</div>
+                <Button type="button" onClick={() => navigate(user ? "/billing" : "/login")}>
+                  Get started
+                </Button>
+              </div>
             </div>
             <div style={{ fontSize: "0.85rem", color: text.subtle }}>
-              Credit screening requires applicant consent.
-            </div>
-            <div style={{ fontSize: "0.85rem", color: text.muted }}>
               Questions? <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>
             </div>
           </div>
