@@ -75,6 +75,32 @@
   word-break: break-word;
 }
 
+.rc-applications-screening-grid {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.rc-applications-screening-grid > div {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.rc-applications-ai-panel {
+  display: grid;
+  gap: 6px;
+}
+
+.rc-applications-ai-panel > div {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.rc-applications-ai-panel .pill {
+  display: inline-flex;
+  flex-wrap: wrap;
+}
+
 @media (max-width: 768px) {
   .rc-applications-header {
     position: sticky;
@@ -107,6 +133,10 @@
 
   .rc-applications-card-header {
     align-items: flex-start;
+  }
+
+  .rc-applications-screening-grid {
+    grid-template-columns: 1fr;
   }
 }
 
