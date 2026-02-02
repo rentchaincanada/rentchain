@@ -1,9 +1,13 @@
 import React, { useEffect } from "react";
-import { Card } from "../../components/ui/Ui";
+import { Card, Button } from "../../components/ui/Ui";
 import { spacing, text } from "../../styles/tokens";
 import { MarketingLayout } from "./MarketingLayout";
+import { useAuth } from "../../context/useAuth";
 
 const PricingPage: React.FC = () => {
+  const { user } = useAuth();
+  const isAuthed = Boolean(user?.id);
+
   useEffect(() => {
     document.title = "Pricing — RentChain";
   }, []);
@@ -22,7 +26,14 @@ const PricingPage: React.FC = () => {
           </p>
         </div>
 
-        <div style={{ display: "grid", gap: spacing.lg, gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
+        <div
+          style={{
+            display: "grid",
+            gap: spacing.lg,
+            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+            alignItems: "stretch",
+          }}
+        >
           <Card>
             <h2 style={{ marginTop: 0 }}>Starter</h2>
             <p style={{ color: text.muted, marginTop: 0 }}>For individual landlords and small portfolios.</p>
@@ -34,6 +45,11 @@ const PricingPage: React.FC = () => {
               <li>Core rental event records</li>
             </ul>
             <div style={{ fontWeight: 700, fontSize: "1.1rem" }}>$XX / month</div>
+            <div className="rc-wrap-row" style={{ marginTop: spacing.sm }}>
+              <Button type="button" onClick={() => (window.location.href = isAuthed ? "/billing" : "/login")}>
+                {isAuthed ? "Choose plan" : "Get started"}
+              </Button>
+            </div>
           </Card>
 
           <Card>
@@ -48,6 +64,11 @@ const PricingPage: React.FC = () => {
             </ul>
             <div style={{ fontWeight: 700, fontSize: "1.1rem" }}>$XX / month</div>
             <div style={{ color: text.subtle, marginTop: spacing.xs }}>Screening: Pay-per-applicant</div>
+            <div className="rc-wrap-row" style={{ marginTop: spacing.sm }}>
+              <Button type="button" onClick={() => (window.location.href = isAuthed ? "/billing" : "/login")}>
+                {isAuthed ? "Upgrade to Pro" : "Get started"}
+              </Button>
+            </div>
           </Card>
 
           <Card>
@@ -63,6 +84,11 @@ const PricingPage: React.FC = () => {
             </ul>
             <div style={{ fontWeight: 600 }}>Limited early access</div>
             <div style={{ fontWeight: 700, fontSize: "1.1rem", marginTop: spacing.xs }}>Contact us</div>
+            <div className="rc-wrap-row" style={{ marginTop: spacing.sm }}>
+              <Button type="button" variant="ghost" onClick={() => (window.location.href = "/contact")}>
+                Contact sales
+              </Button>
+            </div>
           </Card>
         </div>
 
