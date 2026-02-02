@@ -165,6 +165,7 @@ export default function MessagesPage() {
                   setSelectedId(next);
                   navigate(`/messages?threadId=${next}`);
                 }}
+                className="rc-full-width-mobile"
               >
                 <option value="">Select conversation</option>
                 {conversations.map((c) => (
