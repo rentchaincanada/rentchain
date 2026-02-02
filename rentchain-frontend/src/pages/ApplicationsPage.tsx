@@ -475,7 +475,7 @@ const ApplicationsPage: React.FC = () => {
 
   const handleExportReport = async (copyOnly: boolean) => {
     if (!detail?.id) return;
-    if (!features?.exports_basic) {
+    if (!features?.exports_basic && !isAdmin) {
       setExportPreviewOpen(true);
       return;
     }
@@ -1040,7 +1040,7 @@ const ApplicationsPage: React.FC = () => {
               )}
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <Button variant="primary" onClick={() => void handleExportReport(false)} disabled={exportingReport}>
-                  {exportingReport ? "Preparing..." : "Download PDF"}
+                  {exportingReport ? "Preparing..." : `Download PDF${!features?.exports_basic && !isAdmin ? " (Pro)" : ""}`}
                 </Button>
                 <Button variant="secondary" onClick={() => void handleExportReport(true)} disabled={exportingReport}>
                   Copy share link
