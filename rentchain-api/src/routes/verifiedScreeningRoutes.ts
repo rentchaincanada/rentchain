@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db } from "../config/firebase";
 import { authenticateJwt } from "../middleware/authMiddleware";
+import { handleScreeningReport } from "./screeningReportHandler";
 
 const router = Router();
 
@@ -14,6 +15,8 @@ function ensureAdmin(req: any, res: any) {
 }
 
 router.use(authenticateJwt);
+
+router.get("/screening/report", handleScreeningReport);
 
 router.get("/admin/verified-screenings", async (req: any, res) => {
   try {
