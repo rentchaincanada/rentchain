@@ -9,6 +9,7 @@ import { requireLandlord } from "../middleware/requireLandlord";
 import { getTenantsList, getTenantDetailBundle } from "../services/tenantDetailsService";
 import { getStripeClient, isStripeConfigured, STRIPE_API_VERSION } from "../services/stripeService";
 import { requireCapability } from "../services/capabilityGuard";
+import onboardingRoutes from "./onboardingRoutes";
 
 const router = Router();
 
@@ -108,6 +109,13 @@ router.get("/__probe/revision", (_req, res) => {
     ts: Date.now(),
   });
 });
+
+router.get("/__probe/onboarding-route", (_req, res) => {
+  res.setHeader("x-route-source", "publicRoutes.ts");
+  res.json({ ok: true, mounted: true });
+});
+
+router.use("/onboarding", onboardingRoutes);
 
 router.post("/notify-plan-interest", async (req: any, res) => {
   res.setHeader("x-route-source", "publicRoutes.ts");
