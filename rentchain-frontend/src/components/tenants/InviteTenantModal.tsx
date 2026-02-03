@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { createTenantInvite } from "../../api/tenantInvites";
+import { setOnboardingStep } from "../../api/onboardingApi";
 import { Button } from "../ui/Ui";
 
 interface Props {
@@ -56,6 +57,7 @@ export const InviteTenantModal: React.FC<Props> = ({
         setSuccessMsg("Invite link created (email failed)");
         setInfoMsg(emailError || "Email was not sent. You can copy or open the link below.");
       }
+      await setOnboardingStep("tenantInvited", true).catch(() => {});
     } catch (e: any) {
       const respDetail =
         (e as any)?.response?.data?.detail || (e as any)?.response?.data?.error;
@@ -89,17 +91,14 @@ export const InviteTenantModal: React.FC<Props> = ({
       }}
     >
       <div
+        className="rc-modal-shell"
         style={{
-          width: "100%",
-          maxWidth: 520,
           background: "#fff",
           borderRadius: 12,
           border: "1px solid #e5e7eb",
-          padding: 16,
-          display: "grid",
-          gap: 12,
         }}
       >
+        <div className="rc-modal-body" style={{ padding: 16, display: "grid", gap: 12 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ fontWeight: 700 }}>Invite tenant</div>
           <Button style={{ padding: "6px 10px" }} onClick={onClose}>
@@ -215,6 +214,7 @@ export const InviteTenantModal: React.FC<Props> = ({
           <Button onClick={sendInvite} disabled={loading || !tenantEmail} style={{ padding: "8px 12px" }}>
             {loading ? "Sending..." : "Send invite"}
           </Button>
+        </div>
         </div>
       </div>
     </div>

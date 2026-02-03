@@ -6,6 +6,17 @@ export async function fetchOnboarding() {
   });
 }
 
+export async function updateOnboarding(payload: {
+  dismissed?: boolean;
+  steps?: Record<string, boolean>;
+}) {
+  return apiFetch("/onboarding", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function setOnboardingStep(step: string, done: boolean) {
   return apiFetch("/onboarding", {
     method: "POST",

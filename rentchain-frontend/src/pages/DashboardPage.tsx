@@ -12,6 +12,12 @@ import { fetchProperties } from "../api/propertiesApi";
 import { unitsForProperty } from "../lib/propertyCounts";
 import { useApplications } from "../hooks/useApplications";
 import StarterOnboardingPanel from "../components/dashboard/StarterOnboardingPanel";
+import { useOnboardingState } from "../hooks/useOnboardingState";
+import { useTenants } from "../hooks/useTenants";
+import { listTenantInvites } from "../api/tenantInvites";
+import { track } from "../lib/analytics";
+import { useAuth } from "../context/useAuth";
+import { useToast } from "../components/ui/ToastProvider";
 
 function formatDate(ts: number | null): string {
   if (!ts) return "—";
@@ -31,12 +37,25 @@ function formatDate(ts: number | null): string {
 const DashboardPage: React.FC = () => {
   const { data, loading, error, refetch, lastUpdatedAt } = useDashboardSummary();
   const { applications, loading: applicationsLoading } = useApplications();
+  const { tenants, loading: tenantsLoading } = useTenants();
+  const { user } = useAuth();
+  const { showToast } = useToast();
   const navigate = useNavigate();
   const apiBase = debugApiBase();
   const showDebug =
     typeof window !== "undefined" && new URLSearchParams(window.location.search).get("debug") === "1";
   const [properties, setProperties] = React.useState<any[]>([]);
   const [propsLoading, setPropsLoading] = React.useState(false);
+  const [invitesCount, setInvitesCount] = React.useState(0);
+  const [invitesLoading, setInvitesLoading] = React.useState(false);
+  const onboarding = useOnboardingState();
+  const prevDerivedRef = React.useRef({
+    propertyAdded: false,
+    unitAdded: false,
+    tenantInvited: false,
+    applicationCreated: false,
+  });
+  const nudgeReadyRef = React.useRef(false);
 
   React.useEffect(() => {
     let alive = true;
@@ -65,6 +84,27 @@ const DashboardPage: React.FC = () => {
   }, []);
 
   React.useEffect(() => {
+    let alive = true;
+    const loadInvites = async () => {
+      try {
+        setInvitesLoading(true);
+        const res = await listTenantInvites();
+        if (alive) {
+          setInvitesCount(Array.isArray(res?.items) ? res.items.length : 0);
+        }
+      } catch {
+        if (alive) setInvitesCount(0);
+      } finally {
+        if (alive) setInvitesLoading(false);
+      }
+    };
+    void loadInvites();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  React.useEffect(() => {
     if (showDebug) {
       console.log("[debug] apiBase", apiBase);
     }
@@ -85,7 +125,7 @@ const DashboardPage: React.FC = () => {
   const derivedPropertiesCount = properties.length;
   const derivedUnitsCount = properties.reduce((sum, p) => sum + unitsForProperty(p), 0);
   const applicationsCount = applications.length;
-  const screeningStartedCount = applications.filter((app) => app.screeningId || app.screeningRequestId).length;
+  const tenantCount = tenants.length;
   const kpis = {
     propertiesCount: derivedPropertiesCount,
     unitsCount: derivedUnitsCount,
@@ -96,15 +136,65 @@ const DashboardPage: React.FC = () => {
   const actions = data?.actions ?? [];
   const events = data?.events ?? [];
 
-  const dataReady = !loading && !propsLoading && !applicationsLoading && !error;
+  const dataReady = !loading && !propsLoading && !applicationsLoading && !tenantsLoading && !invitesLoading && !error;
   const hasNoProperties = dataReady && (kpis?.propertiesCount ?? 0) === 0;
   const hasNoApplications = dataReady && applicationsCount === 0;
   const showEmptyCTA = hasNoProperties;
   const progressLoading = !dataReady;
-  const showStarterOnboarding = progressLoading
-    ? true
-    : hasNoProperties || hasNoApplications || screeningStartedCount === 0;
+  const showStarterOnboarding = progressLoading ? true : !onboarding.dismissed && !onboarding.allComplete;
   const showAdvancedCollapsed = showStarterOnboarding;
+  const isAdmin = String(user?.role || "").toLowerCase() === "admin";
+
+  const derivedSteps = {
+    propertyAdded: derivedPropertiesCount > 0,
+    unitAdded: derivedUnitsCount > 0,
+    tenantInvited: tenantCount > 0 || invitesCount > 0,
+    applicationCreated: applicationsCount > 0,
+  };
+
+  React.useEffect(() => {
+    if (progressLoading) return;
+    (Object.keys(derivedSteps) as Array<keyof typeof derivedSteps>).forEach((key) => {
+      if (derivedSteps[key] && !onboarding.steps[key]) {
+        onboarding.markStepComplete(key, "derived");
+      }
+    });
+  }, [derivedSteps, onboarding, progressLoading]);
+
+  React.useEffect(() => {
+    if (progressLoading) return;
+    if (!nudgeReadyRef.current) {
+      nudgeReadyRef.current = true;
+      prevDerivedRef.current = {
+        propertyAdded: derivedSteps.propertyAdded,
+        unitAdded: derivedSteps.unitAdded,
+        tenantInvited: derivedSteps.tenantInvited,
+        applicationCreated: derivedSteps.applicationCreated,
+      };
+      return;
+    }
+    const prev = prevDerivedRef.current;
+    if (!prev.propertyAdded && derivedSteps.propertyAdded) {
+      showToast({ message: "Nice — add units next.", variant: "success" });
+    } else if (!prev.unitAdded && derivedSteps.unitAdded) {
+      showToast({ message: "Great — invite a tenant next.", variant: "success" });
+    } else if (!prev.tenantInvited && derivedSteps.tenantInvited) {
+      showToast({ message: "Invite sent — create an application next.", variant: "success" });
+    } else if (!prev.applicationCreated && derivedSteps.applicationCreated) {
+      showToast({ message: "Application started — preview export next.", variant: "success" });
+    }
+    prevDerivedRef.current = {
+      propertyAdded: derivedSteps.propertyAdded,
+      unitAdded: derivedSteps.unitAdded,
+      tenantInvited: derivedSteps.tenantInvited,
+      applicationCreated: derivedSteps.applicationCreated,
+    };
+  }, [derivedSteps, progressLoading, showToast]);
+
+  React.useEffect(() => {
+    if (!showStarterOnboarding || onboarding.loading) return;
+    track("onboarding_viewed");
+  }, [showStarterOnboarding, onboarding.loading]);
 
   return (
     <MacShell title="RentChain · Dashboard" showTopNav={false}>
@@ -142,17 +232,69 @@ const DashboardPage: React.FC = () => {
           </Card>
         ) : null}
 
-        {showStarterOnboarding ? (
+        {showStarterOnboarding && !isAdmin ? (
           <>
             <StarterOnboardingPanel
-              propertiesCount={kpis.propertiesCount}
-              applicationsCount={applicationsCount}
-              screeningStartedCount={screeningStartedCount}
+              steps={[
+                {
+                  key: "propertyAdded",
+                  title: "Add your first property",
+                  description: "Create the property record to get started.",
+                  isComplete: !!onboarding.steps.propertyAdded,
+                  actionLabel: "Add property",
+                  onAction: () => {
+                    track("onboarding_step_clicked", { stepKey: "propertyAdded" });
+                    navigate("/properties?focus=addProperty");
+                  },
+                },
+                {
+                  key: "unitAdded",
+                  title: "Add units",
+                  description: "Add units so you can invite tenants and track rent.",
+                  isComplete: !!onboarding.steps.unitAdded,
+                  actionLabel: "Add units",
+                  onAction: () => {
+                    track("onboarding_step_clicked", { stepKey: "unitAdded" });
+                    navigate("/properties?openAddUnit=1");
+                  },
+                },
+                {
+                  key: "tenantInvited",
+                  title: "Invite a tenant",
+                  description: "Send your first tenant invite.",
+                  isComplete: !!onboarding.steps.tenantInvited,
+                  actionLabel: "Invite tenant",
+                  onAction: () => {
+                    track("onboarding_step_clicked", { stepKey: "tenantInvited" });
+                    navigate("/tenants?invite=1");
+                  },
+                },
+                {
+                  key: "applicationCreated",
+                  title: "Create an application",
+                  description: "Invite an applicant or start an application record.",
+                  isComplete: !!onboarding.steps.applicationCreated,
+                  actionLabel: "Create application",
+                  onAction: () => {
+                    track("onboarding_step_clicked", { stepKey: "applicationCreated" });
+                    navigate("/applications");
+                  },
+                  isPrimary: true,
+                },
+                {
+                  key: "exportPreviewed",
+                  title: "Preview export (Pro)",
+                  description: "See the export preview and unlock Pro when you're ready.",
+                  isComplete: !!onboarding.steps.exportPreviewed,
+                  actionLabel: "Preview export",
+                  onAction: () => {
+                    track("onboarding_step_clicked", { stepKey: "exportPreviewed" });
+                    navigate("/applications?exportPreview=1");
+                  },
+                },
+              ]}
               loading={progressLoading}
-              onAddProperty={() => navigate("/properties")}
-              onCreateApplication={() => navigate("/applications")}
-              onStartScreening={() => navigate("/applications")}
-              onUpgrade={() => navigate("/pricing")}
+              onDismiss={() => onboarding.dismissOnboarding()}
             />
             <Card style={{ padding: spacing.md }}>
               <div style={{ fontWeight: 700, marginBottom: spacing.sm }}>Quick actions</div>
@@ -167,10 +309,10 @@ const DashboardPage: React.FC = () => {
                 <Button
                   variant="secondary"
                   onClick={() => navigate("/applications")}
-                  aria-label="Start screening"
+                  aria-label="Create application"
                   disabled={progressLoading}
                 >
-                  Start screening
+                  Create application
                 </Button>
                 <Button
                   variant="ghost"
@@ -183,6 +325,26 @@ const DashboardPage: React.FC = () => {
               </div>
             </Card>
           </>
+        ) : null}
+
+        {!progressLoading && onboarding.dismissed && !isAdmin ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, color: text.muted }}>
+            <span>Onboarding hidden.</span>
+            <button
+              type="button"
+              onClick={() => onboarding.showOnboarding()}
+              style={{
+                border: "none",
+                background: "transparent",
+                padding: 0,
+                color: colors.accent,
+                cursor: "pointer",
+                fontWeight: 600,
+              }}
+            >
+              Show onboarding
+            </button>
+          </div>
         ) : null}
 
         {dataReady && showEmptyCTA ? (
@@ -203,6 +365,20 @@ const DashboardPage: React.FC = () => {
                 Learn more
               </Link>
             </div>
+          </Card>
+        ) : null}
+
+        {dataReady &&
+        !showStarterOnboarding &&
+        derivedSteps.propertyAdded &&
+        derivedSteps.unitAdded &&
+        derivedSteps.tenantInvited ? (
+          <Card style={{ padding: spacing.md }}>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>Your portfolio is set up 🎉</div>
+            <div style={{ color: text.muted, marginBottom: 12 }}>
+              Next up: create your first application.
+            </div>
+            <Button onClick={() => navigate("/applications")}>Create application</Button>
           </Card>
         ) : null}
 

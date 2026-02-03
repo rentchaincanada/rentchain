@@ -1,49 +1,103 @@
+import { db, FieldValue } from "../config/firebase";
 import { OnboardingState } from "../models/Onboarding";
 
-const store: Map<string, OnboardingState> =
-  (globalThis as any).__onboardingStore ||
-  ((globalThis as any).__onboardingStore = new Map<string, OnboardingState>());
+const STEP_KEYS: (keyof OnboardingState["steps"])[] = [
+  "propertyAdded",
+  "unitAdded",
+  "tenantInvited",
+  "applicationCreated",
+  "exportPreviewed",
+];
+
+function normalizeSteps(steps?: OnboardingState["steps"]) {
+  const base: OnboardingState["steps"] = {};
+  STEP_KEYS.forEach((k) => {
+    base[k] = Boolean(steps && (steps as any)[k]);
+  });
+  return base;
+}
 
 function defaultState(landlordId: string): OnboardingState {
   return {
     landlordId,
-    completed: false,
-    steps: {
-      addProperty: { done: false },
-      addUnits: { done: false },
-      viewDashboard: { done: false },
-    },
-    updatedAt: new Date().toISOString(),
+    dismissed: false,
+    steps: normalizeSteps(),
+    lastSeenAt: undefined,
   };
+}
+
+function docRef(landlordId: string) {
+  return db
+    .collection("landlords")
+    .doc(landlordId)
+    .collection("settings")
+    .doc("onboarding");
 }
 
 export async function getOrCreateDefault(
   landlordId: string
 ): Promise<OnboardingState> {
-  if (!store.has(landlordId)) {
-    store.set(landlordId, defaultState(landlordId));
+  const ref = docRef(landlordId);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    const state = defaultState(landlordId);
+    await ref.set(state, { merge: true });
+    return state;
   }
-  return store.get(landlordId)!;
+  const data = snap.data() as OnboardingState;
+  return {
+    landlordId,
+    dismissed: Boolean(data?.dismissed),
+    steps: normalizeSteps(data?.steps),
+    lastSeenAt: data?.lastSeenAt,
+  };
 }
 
 export async function upsert(state: OnboardingState) {
-  store.set(state.landlordId, state);
+  const ref = docRef(state.landlordId);
+  await ref.set(state, { merge: true });
 }
 
 export async function markStep(
   landlordId: string,
-  step: keyof OnboardingState["steps"],
+  step: string,
   value: boolean
 ): Promise<OnboardingState> {
   const state = await getOrCreateDefault(landlordId);
-  if (state.steps.hasOwnProperty(step)) {
-    state.steps[step] = {
-      done: value,
-      doneAt: value ? new Date().toISOString() : undefined,
-    };
-    state.completed = Object.values(state.steps).every((s) => !!s.done);
-    state.updatedAt = new Date().toISOString();
-    await upsert(state);
+  if (!STEP_KEYS.includes(step as keyof OnboardingState["steps"])) {
+    return state;
   }
-  return state;
+  const nextSteps = { ...state.steps, [step]: Boolean(value) };
+  await upsert({ ...state, steps: nextSteps });
+  return { ...state, steps: nextSteps };
+}
+
+export async function updateOnboarding(
+  landlordId: string,
+  patch: Partial<OnboardingState> & { touchLastSeen?: boolean }
+): Promise<OnboardingState> {
+  const ref = docRef(landlordId);
+  const state = await getOrCreateDefault(landlordId);
+  const next: OnboardingState = {
+    landlordId,
+    dismissed: patch.dismissed ?? state.dismissed ?? false,
+    steps: normalizeSteps({ ...state.steps, ...(patch.steps || {}) }),
+    lastSeenAt: state.lastSeenAt,
+  };
+  const payload: any = {
+    dismissed: next.dismissed,
+    steps: next.steps,
+  };
+  if (patch.touchLastSeen) {
+    payload.lastSeenAt = FieldValue.serverTimestamp();
+  }
+  await ref.set(payload, { merge: true });
+  const updated = await ref.get();
+  const data = updated.data() as OnboardingState;
+  return {
+    landlordId,
+    dismissed: Boolean(data?.dismissed),
+    steps: normalizeSteps(data?.steps),
+    lastSeenAt: data?.lastSeenAt,
+  };
 }

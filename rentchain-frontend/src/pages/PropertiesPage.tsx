@@ -1,6 +1,6 @@
 ﻿// @ts-nocheck
 // src/pages/PropertiesPage.tsx
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MacShell } from "../components/layout/MacShell";
 import { AddPropertyForm } from "../components/properties/AddPropertyForm";
 import { fetchProperties, Property } from "../api/propertiesApi";
@@ -29,6 +29,7 @@ import { unitsForProperty } from "../lib/propertyCounts";
 import { PropertySelector } from "../components/properties/PropertySelector";
 import "../styles/propertiesMobile.css";
 import "./PropertiesPage.css";
+import { track } from "../lib/analytics";
 
 const PropertiesPage: React.FC = () => {
   const [properties, setProperties] = useState<Property[]>([]);
@@ -39,6 +40,7 @@ const PropertiesPage: React.FC = () => {
   const [actionReqCount, setActionReqCount] = useState(0);
   const [actionRequests, setActionRequests] = useState<PropertyActionRequest[]>([]);
   const [actionRequestsLoading, setActionRequestsLoading] = useState(false);
+  const addPropertyRef = useRef<HTMLDivElement | null>(null);
   const [actionRequestsError, setActionRequestsError] = useState<string | null>(null);
   const [actionFilter, setActionFilter] = useState<ActionRequestStatus | "all">("all");
   const [activeRequest, setActiveRequest] = useState<PropertyActionRequest | null>(null);
@@ -118,6 +120,11 @@ const PropertiesPage: React.FC = () => {
     const el = document.getElementById("action-requests-panel");
     el?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [panel]);
+
+  useEffect(() => {
+    if (params.get("focus") !== "addProperty") return;
+    addPropertyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [params]);
 
   const loadProperties = useCallback(async () => {
     try {
@@ -264,7 +271,7 @@ const PropertiesPage: React.FC = () => {
 
   const handleManualUnitsComplete = async () => {
     try {
-      await setOnboardingStep("addUnits", true);
+      await setOnboardingStep("unitAdded", true);
     } catch {
       // ignore
     }
@@ -308,7 +315,7 @@ const PropertiesPage: React.FC = () => {
             : p
         )
       );
-      await setOnboardingStep("addUnits", true).catch(() => {});
+      await setOnboardingStep("unitAdded", true).catch(() => {});
       showToast({
         title: "Portfolio ready  dashboard is live.",
         variant: "success",
@@ -558,7 +565,7 @@ const PropertiesPage: React.FC = () => {
           </div>
         </div>
 
-        <Card elevated>
+        <Card elevated ref={addPropertyRef}>
           <h1 style={{ margin: 0, fontSize: "1.4rem", fontWeight: 700 }}>
             Add a new property
           </h1>
@@ -604,8 +611,29 @@ const PropertiesPage: React.FC = () => {
             </div>
           ) : null}
           {!isLoadingProperties && properties.length === 0 ? (
-            <div style={{ color: text.muted, fontSize: 13 }}>
-              No properties yet. Add your first property above.
+            <div style={{ display: "grid", gap: 8 }}>
+              <div style={{ color: text.muted, fontSize: 13 }}>
+                No properties yet. Add your first property above.
+              </div>
+              <div className="rc-wrap-row">
+                <Button
+                  onClick={() => {
+                    track("empty_state_cta_clicked", { pageKey: "properties", ctaKey: "add_property" });
+                    addPropertyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }}
+                >
+                  Add property
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    track("empty_state_cta_clicked", { pageKey: "properties", ctaKey: "import_csv" });
+                    addPropertyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }}
+                >
+                  Import CSV
+                </Button>
+              </div>
             </div>
           ) : null}
 
