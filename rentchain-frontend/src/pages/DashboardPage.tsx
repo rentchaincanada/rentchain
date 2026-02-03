@@ -3,11 +3,11 @@ import { Link, useNavigate } from "react-router-dom";
 import { MacShell } from "../components/layout/MacShell";
 import { Card, Section, Button } from "../components/ui/Ui";
 import { spacing, text, colors } from "../styles/tokens";
-import { useDashboardSummary } from "../hooks/useDashboardSummary";
 import { KpiStrip } from "../components/dashboard/KpiStrip";
 import { ActionRequiredPanel } from "../components/dashboard/ActionRequiredPanel";
 import { RecentEventsCard } from "../components/dashboard/RecentEventsCard";
 import { debugApiBase } from "@/api/baseUrl";
+import { fetchDashboardSummary } from "../api/dashboard";
 import { fetchProperties } from "../api/propertiesApi";
 import { unitsForProperty } from "../lib/propertyCounts";
 import { useApplications } from "../hooks/useApplications";
@@ -39,7 +39,10 @@ function formatDate(ts: number | null): string {
 }
 
 const DashboardPage: React.FC = () => {
-  const { data, loading, error, refetch, lastUpdatedAt } = useDashboardSummary();
+  const [data, setData] = React.useState<any | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = React.useState<number | null>(null);
   const { applications, loading: applicationsLoading } = useApplications();
   const { tenants, loading: tenantsLoading } = useTenants();
   const { user } = useAuth();
@@ -60,6 +63,26 @@ const DashboardPage: React.FC = () => {
     applicationCreated: false,
   });
   const nudgeReadyRef = React.useRef(false);
+  const loadDashboard = React.useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const summary = await fetchDashboardSummary();
+      setData(summary);
+      setLastUpdatedAt(Date.now());
+    } catch (err: any) {
+      setError(err?.message || "Failed to load dashboard");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  const refetch = React.useCallback(() => {
+    void loadDashboard();
+  }, [loadDashboard]);
+
+  React.useEffect(() => {
+    void loadDashboard();
+  }, [loadDashboard]);
 
   React.useEffect(() => {
     let alive = true;
