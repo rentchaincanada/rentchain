@@ -136,12 +136,13 @@ const DashboardPage: React.FC = () => {
   const actions = data?.actions ?? [];
   const events = data?.events ?? [];
 
-  const dataReady = !loading && !propsLoading && !applicationsLoading && !tenantsLoading && !invitesLoading && !error;
+  const dataReady =
+    !loading && !propsLoading && !applicationsLoading && !tenantsLoading && !invitesLoading && !error;
   const hasNoProperties = dataReady && (kpis?.propertiesCount ?? 0) === 0;
   const hasNoApplications = dataReady && applicationsCount === 0;
   const showEmptyCTA = hasNoProperties;
-  const progressLoading = !dataReady;
-  const showStarterOnboarding = progressLoading ? true : !onboarding.dismissed && !onboarding.allComplete;
+  const progressLoading = !dataReady || onboarding.loading;
+  const showStarterOnboarding = onboarding.loading ? true : !onboarding.dismissed && !onboarding.allComplete;
   const showAdvancedCollapsed = showStarterOnboarding;
   const isAdmin = String(user?.role || "").toLowerCase() === "admin";
 
@@ -277,7 +278,7 @@ const DashboardPage: React.FC = () => {
                   actionLabel: "Create application",
                   onAction: () => {
                     track("onboarding_step_clicked", { stepKey: "applicationCreated" });
-                    navigate("/applications");
+                    navigate("/properties?openSendApplication=1");
                   },
                   isPrimary: true,
                 },
@@ -308,7 +309,7 @@ const DashboardPage: React.FC = () => {
                 </Button>
                 <Button
                   variant="secondary"
-                  onClick={() => navigate("/applications")}
+                  onClick={() => navigate("/properties?openSendApplication=1")}
                   aria-label="Create application"
                   disabled={progressLoading}
                 >

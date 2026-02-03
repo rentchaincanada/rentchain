@@ -89,17 +89,19 @@ const PropertiesPage: React.FC = () => {
   const openAddUnit = params.get("openAddUnit") === "1";
   const openEditUnits = params.get("openEditUnits") === "1";
   const openEditProperty = params.get("openEditProperty") === "1";
+  const openSendApplication = params.get("openSendApplication") === "1";
   const deepLinkId = params.get("actionRequestId") || undefined;
   const panel = params.get("panel") || "";
 
   useEffect(() => {
-    if (!(openAddLease || openAddUnit || openEditUnits || openEditProperty)) return;
+    if (!(openAddLease || openAddUnit || openEditUnits || openEditProperty || openSendApplication)) return;
 
     const next = new URLSearchParams(location.search);
     next.delete("openAddLease");
     next.delete("openAddUnit");
     next.delete("openEditUnits");
     next.delete("openEditProperty");
+    next.delete("openSendApplication");
 
     navigate(
       { pathname: location.pathname, search: next.toString() },
@@ -110,6 +112,7 @@ const PropertiesPage: React.FC = () => {
     openAddUnit,
     openEditUnits,
     openEditProperty,
+    openSendApplication,
     location.pathname,
     location.search,
     navigate,
@@ -712,7 +715,16 @@ const PropertiesPage: React.FC = () => {
                 </div>
               ) : null}
 
-              <PropertyDetailPanel property={selectedProperty} onRefresh={loadProperties} />
+              <PropertyDetailPanel
+                property={selectedProperty}
+                onRefresh={loadProperties}
+                openSendApplication={openSendApplication}
+                onSendApplicationOpened={() => {
+                  const next = new URLSearchParams(location.search);
+                  next.delete("openSendApplication");
+                  navigate({ pathname: location.pathname, search: next.toString() }, { replace: true });
+                }}
+              />
             </div>
 
           <div
