@@ -26,6 +26,8 @@ import { dispatchUpgradePrompt } from "@/lib/upgradePrompt";
 interface PropertyDetailPanelProps {
   property: Property | null;
   onRefresh?: () => Promise<void> | void;
+  openSendApplication?: boolean;
+  onSendApplicationOpened?: () => void;
 }
 
 import { safeLocaleNumber } from "@/utils/format";
@@ -45,6 +47,8 @@ const formatDate = (iso: string): string => {
 export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   property,
   onRefresh,
+  openSendApplication = false,
+  onSendApplicationOpened,
 }) => {
   const propertyId = property?.id;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -72,6 +76,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   const [unitsLoading, setUnitsLoading] = useState(false);
   const [editingUnit, setEditingUnit] = useState<any | null>(null);
   const [sendAppUnit, setSendAppUnit] = useState<any | null>(null);
+  const sendApplicationOpenedRef = useRef(false);
 
   const readFileText = useCallback((file: File) => {
     return new Promise<string>((resolve, reject) => {
@@ -174,6 +179,29 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
     },
     [applicationsEnabled, caps?.plan]
   );
+
+  useEffect(() => {
+    if (!openSendApplication) return;
+    if (sendApplicationOpenedRef.current) return;
+    if (!propertyId) return;
+    sendApplicationOpenedRef.current = true;
+    if (!applicationsEnabled) {
+      const redirectTo =
+        typeof window !== "undefined"
+          ? `${window.location.pathname}${window.location.search}`
+          : "/properties";
+      dispatchUpgradePrompt({
+        featureKey: "applications",
+        currentPlan: caps?.plan,
+        source: "property_detail_panel",
+        redirectTo,
+      });
+      onSendApplicationOpened?.();
+      return;
+    }
+    setSendAppUnit({ id: null });
+    onSendApplicationOpened?.();
+  }, [openSendApplication, applicationsEnabled, caps?.plan, onSendApplicationOpened, propertyId]);
   const setLeasesLoadingStates = (loading: boolean, error: string | null) => {
     setIsLeasesLoading(loading);
     setLeasesError(error);
