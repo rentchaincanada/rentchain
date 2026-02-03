@@ -224,6 +224,16 @@ app.get("/api/__probe/tenants-mount", (_req, res) =>
 app.get("/api/__probe/version", (_req, res) =>
   res.json({ ok: true, ts: Date.now(), marker: "probe-v1" })
 );
+app.get("/api/__probe/revision", (_req, res) => {
+  res.setHeader("x-route-source", "app.build.ts:/api/__probe/revision");
+  return res.json({
+    ok: true,
+    service: "rentchain-landlord-api",
+    revision: process.env.K_REVISION || null,
+    commit: process.env.GIT_SHA || process.env.COMMIT_SHA || null,
+    ts: Date.now(),
+  });
+});
 app.use("/api/tenants", routeSource("tenantsRoutes.ts"), tenantsRoutes);
 app.use("/api/account", accountRoutes);
 app.use("/api/onboarding", routeSource("onboardingRoutes.ts"), onboardingRoutes);

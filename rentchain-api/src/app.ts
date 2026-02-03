@@ -255,6 +255,16 @@ app.get("/api/__debug/ping-application-links", (_req, res) => {
   res.setHeader("x-route-source", "debugPingApplicationLinks");
   return res.json({ ok: true });
 });
+app.get("/api/__probe/revision", (_req, res) => {
+  res.setHeader("x-route-source", "app.ts:/api/__probe/revision");
+  return res.json({
+    ok: true,
+    service: "rentchain-landlord-api",
+    revision: process.env.K_REVISION || null,
+    commit: process.env.GIT_SHA || process.env.COMMIT_SHA || null,
+    ts: Date.now(),
+  });
+});
 
 app.use("/api/leases", leaseRoutes);
 app.use("/api", tenantOnboardRoutes);
