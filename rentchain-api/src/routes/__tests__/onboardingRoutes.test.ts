@@ -20,7 +20,7 @@ vi.mock("../../db/onboardingRepo", () => ({
   markStep: vi.fn(),
 }));
 
-describe("GET /api/onboarding", () => {
+describe("onboarding routes", () => {
   it("returns 200 when authed", async () => {
     const router = (await import("../onboardingRoutes")).default;
     const app = express();
@@ -28,5 +28,14 @@ describe("GET /api/onboarding", () => {
     const res = await request(app).get("/api/onboarding");
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
+  });
+
+  it("returns 200 for probe when authed", async () => {
+    const router = (await import("../onboardingRoutes")).default;
+    const app = express();
+    app.use("/api", router);
+    const res = await request(app).get("/api/__probe/onboarding");
+    expect(res.status).toBe(200);
+    expect(res.body.mounted).toBe(true);
   });
 });

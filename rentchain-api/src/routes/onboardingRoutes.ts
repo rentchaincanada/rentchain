@@ -5,6 +5,11 @@ import { getOrCreateDefault, markStep, updateOnboarding } from "../db/onboarding
 
 const router = express.Router();
 
+router.get("/__probe/onboarding", authenticateJwt, (_req, res) => {
+  res.setHeader("x-route-source", "onboardingRoutes.ts");
+  res.json({ ok: true, mounted: true, ts: Date.now() });
+});
+
 router.get("/", authenticateJwt, async (req, res) => {
   const landlordId = req.user?.landlordId || req.user?.id;
   if (!landlordId) return res.status(401).json({ error: "Unauthorized" });
