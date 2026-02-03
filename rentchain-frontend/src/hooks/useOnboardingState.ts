@@ -28,6 +28,12 @@ export function useOnboardingState() {
     try {
       setLoading(true);
       const res: any = await fetchOnboarding();
+      if (!res) {
+        if (import.meta.env.DEV) {
+          console.warn("[onboarding] /api/onboarding returned 404 or empty response");
+        }
+        return;
+      }
       setDismissed(Boolean(res?.dismissed));
       setSteps({ ...defaultSteps, ...(res?.steps || {}) });
       setLastSeenAt(res?.lastSeenAt || null);

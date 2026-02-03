@@ -67,6 +67,7 @@ import screeningJobsAdminRoutes from "./routes/screeningJobsAdminRoutes";
 import adminRoutes from "./routes/adminRoutes";
 import adminScreeningResultsRoutes from "./routes/adminScreeningResultsRoutes";
 import screeningReportRoutes from "./routes/screeningReportRoutes";
+import onboardingRoutes from "./routes/onboardingRoutes";
 
 const app: Application = express();
 app.set("etag", false);
@@ -272,6 +273,7 @@ app.get("/api/__probe/version", (_req, res) =>
 );
 app.use("/api/tenants", routeSource("tenantsRoutes.ts"), tenantsRoutes);
 app.use("/api/account", accountRoutes);
+app.use("/api/onboarding", routeSource("onboardingRoutes.ts"), onboardingRoutes);
 app.use("/api", routeSource("messagesRoutes.ts"), messagesRoutes);
 
 process.on("unhandledRejection", (reason) => {
