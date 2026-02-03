@@ -1,6 +1,8 @@
 import React from "react";
 import { createApplicationLink } from "../../api/applicationLinksApi";
 import { useToast } from "../ui/ToastProvider";
+import { setOnboardingStep } from "../../api/onboardingApi";
+import { track } from "../../lib/analytics";
 
 type Props = {
   open: boolean;
@@ -77,6 +79,8 @@ export function SendApplicationModal({ open, propertyId, unit, onClose }: Props)
       setLink(fullUrl);
       setEmailed(Boolean((res as any)?.emailed));
       setEmailError(((res as any)?.emailError as string) || null);
+      await setOnboardingStep("applicationCreated", true).catch(() => {});
+      track("onboarding_step_completed", { stepKey: "applicationCreated", method: "explicit" });
       if ((res as any)?.emailed) {
         showToast({
           message: "Application link sent",

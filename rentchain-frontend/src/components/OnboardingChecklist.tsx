@@ -11,7 +11,12 @@ export function OnboardingChecklist() {
   if (!state) return null;
 
   const steps = state.steps || {};
-  const completed = state.completed;
+  const completed =
+    steps.propertyAdded &&
+    steps.unitAdded &&
+    steps.tenantInvited &&
+    steps.applicationCreated &&
+    steps.exportPreviewed;
 
   return (
     <div style={{ padding: 16, borderRadius: 12, border: "1px solid #e5e7eb" }}>
@@ -21,9 +26,11 @@ export function OnboardingChecklist() {
       </div>
 
       <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
-        <Row label="Add a property" done={!!steps.addProperty?.done} />
-        <Row label="Add your first units" done={!!steps.addUnits?.done} />
-        <Row label="View dashboard" done={!!steps.viewDashboard?.done} />
+        <Row label="Add a property" done={!!steps.propertyAdded} />
+        <Row label="Add units" done={!!steps.unitAdded} />
+        <Row label="Invite tenant" done={!!steps.tenantInvited} />
+        <Row label="Create application" done={!!steps.applicationCreated} />
+        <Row label="Preview export" done={!!steps.exportPreviewed} />
       </div>
 
       {completed && (

@@ -125,7 +125,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
         await onRefresh();
       }
       try {
-        await setOnboardingStep("addUnits", true);
+        await setOnboardingStep("unitAdded", true);
       } catch {
         // ignore onboarding errors
       }

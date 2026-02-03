@@ -245,7 +245,7 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
         onCreated(property);
       }
       try {
-        await setOnboardingStep("addProperty", true);
+        await setOnboardingStep("propertyAdded", true);
       } catch {
         // ignore onboarding errors
       }

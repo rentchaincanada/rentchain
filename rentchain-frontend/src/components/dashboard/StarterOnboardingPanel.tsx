@@ -2,16 +2,20 @@ import React from "react";
 import { Button, Card } from "../ui/Ui";
 import { colors, radius, spacing, text } from "../../styles/tokens";
 
+type ChecklistStep = {
+  key: string;
+  title: string;
+  description: string;
+  isComplete: boolean;
+  actionLabel: string;
+  onAction: () => void;
+  isPrimary?: boolean;
+};
+
 type StarterOnboardingPanelProps = {
-  planName?: string;
-  propertiesCount: number;
-  applicationsCount: number;
-  screeningStartedCount: number;
+  steps: ChecklistStep[];
   loading?: boolean;
-  onAddProperty: () => void;
-  onCreateApplication: () => void;
-  onStartScreening: () => void;
-  onUpgrade?: () => void;
+  onDismiss?: () => void;
 };
 
 type ChecklistItemProps = {
@@ -77,71 +81,51 @@ const ChecklistItem: React.FC<ChecklistItemProps> = ({
 };
 
 export const StarterOnboardingPanel: React.FC<StarterOnboardingPanelProps> = ({
-  planName = "Starter",
-  propertiesCount,
-  applicationsCount,
-  screeningStartedCount,
+  steps,
   loading = false,
-  onAddProperty,
-  onCreateApplication,
-  onStartScreening,
-  onUpgrade,
+  onDismiss,
 }) => {
   return (
     <Card>
       <div style={{ display: "flex", flexDirection: "column", gap: spacing.md }}>
-        <div>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: spacing.sm,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
           <h2 style={{ margin: 0 }}>Get started</h2>
-          <p style={{ marginTop: spacing.xs, marginBottom: 0, color: text.muted }}>
-            Complete these steps to screen your first tenant.
-          </p>
+          {onDismiss ? (
+            <Button variant="ghost" onClick={onDismiss}>
+              Hide
+            </Button>
+          ) : null}
         </div>
+        <p style={{ marginTop: spacing.xs, marginBottom: 0, color: text.muted }}>
+          Complete these steps to reach your first success.
+        </p>
 
         <div style={{ display: "grid", gap: spacing.sm }}>
-          <ChecklistItem
-            title="Add a property"
-            description="Set up your first unit to begin."
-            isComplete={propertiesCount > 0}
-            loading={loading}
-            actionLabel="Add property"
-            onAction={onAddProperty}
-          />
-          <ChecklistItem
-            title="Create an application"
-            description="Invite a tenant or start an application."
-            isComplete={applicationsCount > 0}
-            loading={loading}
-            actionLabel="Go to applications"
-            onAction={onCreateApplication}
-          />
-          <ChecklistItem
-            title="Order screening"
-            description="Run screening to verify your applicant."
-            isComplete={screeningStartedCount > 0}
-            loading={loading}
-            actionLabel="Start screening"
-            onAction={onStartScreening}
-            isPrimary
-          />
+          {steps.map((step) => (
+            <ChecklistItem
+              key={step.key}
+              title={step.title}
+              description={step.description}
+              isComplete={step.isComplete}
+              loading={loading}
+              actionLabel={step.actionLabel}
+              onAction={step.onAction}
+              isPrimary={step.isPrimary}
+            />
+          ))}
         </div>
 
         <div style={{ color: text.muted, fontSize: "0.9rem" }}>
-          Screening and records are handled securely. No hidden scoring.
+          Onboarding never blocks core actions — it’s here to guide you.
         </div>
-
-        {onUpgrade ? (
-          <div style={{ color: text.subtle, fontSize: "0.85rem" }}>
-            Upgrade to unlock advanced property management, automation, and portfolio tools.
-            <Button
-              variant="ghost"
-              onClick={onUpgrade}
-              style={{ marginLeft: spacing.sm, padding: "6px 10px" }}
-              aria-label="See upgrades"
-            >
-              See upgrades
-            </Button>
-          </div>
-        ) : null}
       </div>
     </Card>
   );

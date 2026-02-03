@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, Section, Button, Input } from "../components/ui/Ui";
 import { spacing, text, colors, radius, shadows } from "../styles/tokens";
 import { apiFetch } from "@/api/http";
@@ -6,6 +7,7 @@ import { useToast } from "../components/ui/ToastProvider";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { useUpgrade } from "@/context/UpgradeContext";
 import { ResponsiveMasterDetail } from "@/components/layout/ResponsiveMasterDetail";
+import { track } from "@/lib/analytics";
 
 type MaintItem = {
   id: string;
@@ -25,6 +27,7 @@ const statuses = ["NEW", "IN_PROGRESS", "WAITING_ON_TENANT", "SCHEDULED", "RESOL
 
 const MaintenanceRequestsPage: React.FC = () => {
   const { showToast } = useToast();
+  const navigate = useNavigate();
   const [items, setItems] = useState<MaintItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -161,7 +164,21 @@ const MaintenanceRequestsPage: React.FC = () => {
               ) : error ? (
                 <div style={{ color: colors.danger }}>{error}</div>
               ) : filtered.length === 0 ? (
-                <div style={{ color: text.muted }}>No maintenance requests yet.</div>
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div style={{ color: text.muted }}>No maintenance requests yet.</div>
+                  <div style={{ fontSize: 12, color: text.subtle }}>
+                    Tenants can submit maintenance from their portal once invited.
+                  </div>
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      track("empty_state_cta_clicked", { pageKey: "maintenance", ctaKey: "invite_tenant" });
+                      navigate("/tenants?invite=1");
+                    }}
+                  >
+                    Invite a tenant
+                  </Button>
+                </div>
               ) : (
                 <div style={{ overflowY: "auto", display: "grid", gap: spacing.xs }}>
                   {filtered.map((item) => {

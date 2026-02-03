@@ -11,6 +11,7 @@ import { ResponsiveMasterDetail } from "../components/layout/ResponsiveMasterDet
 import { InviteTenantModal } from "../components/tenants/InviteTenantModal";
 import { TenantScorePill } from "../components/tenant/TenantScorePill";
 import { hydrateTenantSummariesBatch, getCachedTenantSummary } from "../lib/tenantSummaryCache";
+import { track } from "../lib/analytics";
 import "./TenantsPage.css";
 
 export const TenantsPage: React.FC = () => {
@@ -69,6 +70,12 @@ export const TenantsPage: React.FC = () => {
       setSelectedTenantId(selectedTenantIdFromUrl);
     }
   }, [selectedTenantIdFromUrl, tenants]);
+
+  useEffect(() => {
+    if (searchParams.get("invite") === "1") {
+      setInviteOpen(true);
+    }
+  }, [searchParams]);
 
   const handleSelectTenant = (tenantId: string) => {
     setSelectedTenantId(tenantId);
@@ -148,7 +155,27 @@ export const TenantsPage: React.FC = () => {
             ) : error ? (
               <div style={{ fontSize: 13, color: colors.danger }}>{error}</div>
             ) : filteredTenants.length === 0 ? (
-              <div style={{ fontSize: 13, color: text.muted }}>No tenants found.</div>
+              <div style={{ display: "grid", gap: 8 }}>
+                <div style={{ fontSize: 13, color: text.muted }}>No tenants found.</div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    track("empty_state_cta_clicked", { pageKey: "tenants", ctaKey: "invite_tenant" });
+                    setInviteOpen(true);
+                  }}
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: radius.md,
+                    border: `1px solid ${colors.border}`,
+                    background: colors.card,
+                    color: text.primary,
+                    cursor: "pointer",
+                    width: "fit-content",
+                  }}
+                >
+                  Invite your first tenant
+                </button>
+              </div>
             ) : (
               <div className="rc-tenants-list-scroll">
                 {filteredTenants.map((tenant: any) => {

@@ -29,6 +29,7 @@ import { useCapabilities } from "@/hooks/useCapabilities";
 import { track } from "@/lib/analytics";
 import { useAuth } from "../context/useAuth";
 import { ResponsiveMasterDetail } from "@/components/layout/ResponsiveMasterDetail";
+import { useOnboardingState } from "../hooks/useOnboardingState";
 import "./ApplicationsPage.css";
 
 const statusOptions: RentalApplicationStatus[] = [
@@ -141,6 +142,8 @@ const ApplicationsPage: React.FC = () => {
   const [exportShareUrl, setExportShareUrl] = useState<string | null>(null);
   const [exportExpiresAt, setExportExpiresAt] = useState<number | null>(null);
   const [exportPreviewOpen, setExportPreviewOpen] = useState(false);
+  const [exportPreviewSource, setExportPreviewSource] = useState<"applications" | "onboarding">("applications");
+  const onboarding = useOnboardingState();
 
   const screeningOptions = [
     { value: "basic", label: "Basic", priceLabel: "$19.99" },
@@ -281,6 +284,14 @@ const ApplicationsPage: React.FC = () => {
     }
     void refreshSelectedApplication(requestedId);
   }, [location.search, selectedId]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("exportPreview") === "1") {
+      setExportPreviewSource("onboarding");
+      setExportPreviewOpen(true);
+    }
+  }, [location.search]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -482,6 +493,7 @@ const ApplicationsPage: React.FC = () => {
   const handleExportReport = async (copyOnly: boolean) => {
     if (!detail?.id) return;
     if (!features?.exports_basic && !isAdmin) {
+      setExportPreviewSource("applications");
       setExportPreviewOpen(true);
       return;
     }
@@ -495,6 +507,7 @@ const ApplicationsPage: React.FC = () => {
       setExportShareUrl(res.shareUrl || null);
       setExportExpiresAt(res.expiresAt || null);
       track("exports_export_success", { source: "applications" });
+      onboarding.markStepComplete("exportPreviewed", "explicit");
       if (copyOnly) {
         await navigator.clipboard?.writeText(res.shareUrl);
         showToast({ message: "Link copied.", variant: "success" });
@@ -510,8 +523,9 @@ const ApplicationsPage: React.FC = () => {
 
   useEffect(() => {
     if (!exportPreviewOpen) return;
-    track("exports_preview_opened", { source: "applications", gated: !features?.exports_basic && !isAdmin });
-  }, [exportPreviewOpen, features?.exports_basic, isAdmin]);
+    track("exports_preview_opened", { source: exportPreviewSource, gated: !features?.exports_basic && !isAdmin });
+    onboarding.markStepComplete("exportPreviewed", "explicit");
+  }, [exportPreviewOpen, exportPreviewSource, features?.exports_basic, isAdmin]);
 
   const previewText = useMemo(() => {
     const raw =
@@ -573,6 +587,7 @@ const ApplicationsPage: React.FC = () => {
       if (!res.ok || !res.checkoutUrl) {
         throw new Error(res.detail || res.error || "Unable to start checkout");
       }
+      onboarding.markStepComplete("applicationCreated", "explicit");
       window.location.href = res.checkoutUrl;
     } catch (err: any) {
       showToast({ message: "Screening failed", description: err?.message || "", variant: "error" });
@@ -643,7 +658,19 @@ const ApplicationsPage: React.FC = () => {
               ) : error ? (
                 <div style={{ color: colors.danger }}>{error}</div>
               ) : filtered.length === 0 ? (
-                <div style={{ color: text.muted }}>No applications found.</div>
+                <div style={{ display: "grid", gap: 8 }}>
+                  <div style={{ color: text.muted }}>No applications found.</div>
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      track("empty_state_cta_clicked", { pageKey: "applications", ctaKey: "create_application" });
+                      navigate("/applications");
+                    }}
+                    style={{ width: "fit-content" }}
+                  >
+                    Create application
+                  </Button>
+                </div>
               ) : (
                 <div className="rc-applications-list-scroll">
                   {filtered.map((app) => (
