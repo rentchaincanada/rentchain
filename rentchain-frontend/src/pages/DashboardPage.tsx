@@ -18,6 +18,7 @@ import { listTenantInvites } from "../api/tenantInvites";
 import { track } from "../lib/analytics";
 import { useAuth } from "../context/useAuth";
 import { useToast } from "../components/ui/ToastProvider";
+import { buildOnboardingSteps } from "../lib/onboardingSteps";
 
 function formatDate(ts: number | null): string {
   if (!ts) return "—";
@@ -249,64 +250,7 @@ const DashboardPage: React.FC = () => {
         {showStarterOnboarding && !isAdmin ? (
           <>
             <StarterOnboardingPanel
-              steps={[
-                {
-                  key: "propertyAdded",
-                  title: "Add your first property",
-                  description: "Create the property record to get started.",
-                  isComplete: !!onboarding.steps.propertyAdded,
-                  actionLabel: "Add property",
-                  onAction: () => {
-                    track("onboarding_step_clicked", { stepKey: "propertyAdded" });
-                    navigate("/properties?focus=addProperty");
-                  },
-                },
-                {
-                  key: "unitAdded",
-                  title: "Add units",
-                  description: "Add units so you can invite tenants and track rent.",
-                  isComplete: !!onboarding.steps.unitAdded,
-                  actionLabel: "Add units",
-                  onAction: () => {
-                    track("onboarding_step_clicked", { stepKey: "unitAdded" });
-                    navigate("/properties?openAddUnit=1");
-                  },
-                },
-                {
-                  key: "tenantInvited",
-                  title: "Invite a tenant",
-                  description: "Send your first tenant invite.",
-                  isComplete: !!onboarding.steps.tenantInvited,
-                  actionLabel: "Invite tenant",
-                  onAction: () => {
-                    track("onboarding_step_clicked", { stepKey: "tenantInvited" });
-                    navigate("/tenants?invite=1");
-                  },
-                },
-                {
-                  key: "applicationCreated",
-                  title: "Create an application",
-                  description: "Invite an applicant or start an application record.",
-                  isComplete: !!onboarding.steps.applicationCreated,
-                  actionLabel: "Create application",
-                  onAction: () => {
-                    track("onboarding_step_clicked", { stepKey: "applicationCreated" });
-                    navigate("/applications?openSendApplication=1");
-                  },
-                  isPrimary: true,
-                },
-                {
-                  key: "exportPreviewed",
-                  title: "Preview export (Pro)",
-                  description: "See the export preview and unlock Pro when you're ready.",
-                  isComplete: !!onboarding.steps.exportPreviewed,
-                  actionLabel: "Preview export",
-                  onAction: () => {
-                    track("onboarding_step_clicked", { stepKey: "exportPreviewed" });
-                    navigate("/applications?exportPreview=1");
-                  },
-                },
-              ]}
+              steps={buildOnboardingSteps({ onboarding, navigate, track })}
               loading={progressLoading}
               onDismiss={() => onboarding.dismissOnboarding()}
             />
