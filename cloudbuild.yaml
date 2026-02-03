@@ -7,7 +7,8 @@ steps:
         '--source', './rentchain-api',
         '--region', 'us-central1',
         '--platform', 'managed',
-        '--allow-unauthenticated'
+        '--allow-unauthenticated',
+        '--set-env-vars', 'COMMIT_SHA=$COMMIT_SHA'
       ]
 
 options:
