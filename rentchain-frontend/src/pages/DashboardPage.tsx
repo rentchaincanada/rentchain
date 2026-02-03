@@ -11,7 +11,6 @@ import { debugApiBase } from "@/api/baseUrl";
 import { fetchProperties } from "../api/propertiesApi";
 import { unitsForProperty } from "../lib/propertyCounts";
 import { useApplications } from "../hooks/useApplications";
-import StarterOnboardingPanel from "../components/dashboard/StarterOnboardingPanel";
 import { useOnboardingState } from "../hooks/useOnboardingState";
 import { useTenants } from "../hooks/useTenants";
 import { listTenantInvites } from "../api/tenantInvites";
@@ -19,6 +18,10 @@ import { track } from "../lib/analytics";
 import { useAuth } from "../context/useAuth";
 import { useToast } from "../components/ui/ToastProvider";
 import { buildOnboardingSteps } from "../lib/onboardingSteps";
+
+const StarterOnboardingPanel = React.lazy(
+  () => import("../components/dashboard/StarterOnboardingPanel")
+);
 
 function formatDate(ts: number | null): string {
   if (!ts) return "—";
@@ -249,11 +252,25 @@ const DashboardPage: React.FC = () => {
 
         {showStarterOnboarding && !isAdmin ? (
           <>
-            <StarterOnboardingPanel
-              steps={buildOnboardingSteps({ onboarding, navigate, track })}
-              loading={progressLoading}
-              onDismiss={() => onboarding.dismissOnboarding()}
-            />
+            <React.Suspense
+              fallback={
+                <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
+                  <div style={{ fontWeight: 700, marginBottom: 10 }}>Get started</div>
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <div style={{ height: 12, borderRadius: 999, background: "rgba(15,23,42,0.08)" }} />
+                    <div style={{ height: 12, width: "70%", borderRadius: 999, background: "rgba(15,23,42,0.08)" }} />
+                    <div style={{ height: 12, width: "85%", borderRadius: 999, background: "rgba(15,23,42,0.08)" }} />
+                    <div style={{ height: 12, width: "55%", borderRadius: 999, background: "rgba(15,23,42,0.08)" }} />
+                  </div>
+                </Card>
+              }
+            >
+              <StarterOnboardingPanel
+                steps={buildOnboardingSteps({ onboarding, navigate, track })}
+                loading={progressLoading}
+                onDismiss={() => onboarding.dismissOnboarding()}
+              />
+            </React.Suspense>
             <Card style={{ padding: spacing.md }}>
               <div style={{ fontWeight: 700, marginBottom: spacing.sm }}>Quick actions</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: spacing.sm }}>
