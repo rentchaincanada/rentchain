@@ -274,6 +274,7 @@ app.get("/api/__probe/version", (_req, res) =>
 app.use("/api/tenants", routeSource("tenantsRoutes.ts"), tenantsRoutes);
 app.use("/api/account", accountRoutes);
 app.use("/api/onboarding", routeSource("onboardingRoutes.ts"), onboardingRoutes);
+app.use("/api", routeSource("onboardingRoutes.ts"), onboardingRoutes);
 app.use("/api", routeSource("messagesRoutes.ts"), messagesRoutes);
 
 process.on("unhandledRejection", (reason) => {
