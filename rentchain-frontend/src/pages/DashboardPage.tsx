@@ -328,18 +328,23 @@ const DashboardPage: React.FC = () => {
         ) : null}
 
         {!progressLoading && onboarding.dismissed && !isAdmin ? (
-          <Card style={{ padding: spacing.md }}>
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>Onboarding hidden</div>
-            <div style={{ color: text.muted, marginBottom: 12 }}>
-              Show the checklist again whenever you’re ready.
-            </div>
-            <Button
-              variant="secondary"
+          <div style={{ display: "flex", alignItems: "center", gap: 10, color: text.muted }}>
+            <span>Onboarding hidden.</span>
+            <button
+              type="button"
               onClick={() => onboarding.showOnboarding()}
+              style={{
+                border: "none",
+                background: "transparent",
+                padding: 0,
+                color: colors.accent,
+                cursor: "pointer",
+                fontWeight: 600,
+              }}
             >
               Show onboarding
-            </Button>
-          </Card>
+            </button>
+          </div>
         ) : null}
 
         {dataReady && showEmptyCTA ? (

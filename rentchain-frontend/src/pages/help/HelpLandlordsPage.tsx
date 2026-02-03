@@ -1,13 +1,27 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { spacing, text } from "../../styles/tokens";
 import { MarketingLayout } from "../marketing/MarketingLayout";
 import { templateUrl } from "../../utils/templateUrl";
 import AskRentChainWidget from "../../components/help/AskRentChainWidget";
+import { updateOnboarding } from "../../api/onboardingApi";
+import { useAuth } from "../../context/useAuth";
 
 const HelpLandlordsPage: React.FC = () => {
+  const { user } = useAuth();
+  const [showing, setShowing] = useState(false);
   useEffect(() => {
     document.title = "Help for Landlords - RentChain";
   }, []);
+
+  const handleShowOnboarding = async () => {
+    if (!user) return;
+    setShowing(true);
+    try {
+      await updateOnboarding({ dismissed: false });
+    } finally {
+      setShowing(false);
+    }
+  };
 
   return (
     <MarketingLayout>
@@ -17,6 +31,29 @@ const HelpLandlordsPage: React.FC = () => {
           Resources to help you screen applicants, manage tenants, and keep records organized.
         </p>
         <AskRentChainWidget audience="landlord" compact defaultOpen={false} />
+        {user ? (
+          <>
+            <h2 style={{ marginTop: spacing.lg }}>Onboarding</h2>
+            <div style={{ color: text.muted }}>
+              <button
+                type="button"
+                onClick={handleShowOnboarding}
+                disabled={showing}
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  padding: 0,
+                  color: "inherit",
+                  textDecoration: "underline",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                }}
+              >
+                Show onboarding checklist
+              </button>
+            </div>
+          </>
+        ) : null}
         <h2 style={{ marginTop: spacing.lg }}>Getting Started</h2>
         <ul style={{ margin: 0, paddingLeft: "1.1rem", color: text.muted }}>
           <li>Account setup and onboarding</li>
