@@ -167,12 +167,12 @@ const DashboardPage: React.FC = () => {
     !loading && !propsLoading && !applicationsLoading && !tenantsLoading && !invitesLoading && !error;
   const hasNoProperties = dataReady && (kpis?.propertiesCount ?? 0) === 0;
   const hasNoApplications = dataReady && applicationsCount === 0;
+  const isAdmin = String(user?.role || "").toLowerCase() === "admin";
   const showEmptyCTA = hasNoProperties;
   const progressLoading = !dataReady || onboarding.loading;
   const showOnboardingSkeleton = onboarding.loading && !isAdmin;
   const showStarterOnboarding = !onboarding.loading && !onboarding.dismissed && !onboarding.allComplete;
   const showAdvancedCollapsed = showStarterOnboarding;
-  const isAdmin = String(user?.role || "").toLowerCase() === "admin";
 
   const derivedSteps = {
     propertyAdded: derivedPropertiesCount > 0,
