@@ -4,6 +4,7 @@ import cookieParser from "cookie-parser";
 import { authenticateJwt } from "./middleware/authMiddleware";
 import { routeSource } from "./middleware/routeSource";
 import { notFoundHandler, errorHandler } from "./middleware/errorHandler";
+import { corsOptions } from "./lib/cors";
 
 import publicRoutes from "./routes/publicRoutes";
 import authRoutes from "./routes/authRoutes";
@@ -76,26 +77,6 @@ process.on("uncaughtException", (err) => {
 
 export const app = express();
 app.set("etag", false);
-
-const corsOptions: cors.CorsOptions = {
-  origin: [
-    "https://www.rentchain.ai",
-    "https://rentchain.ai",
-    "http://localhost:5173",
-    "http://localhost:5174",
-    "http://localhost:3000",
-  ],
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: [
-    "Content-Type",
-    "Authorization",
-    "x-rc-auth",
-    "x-api-client",
-    "x-rentchain-apiclient",
-    "x-requested-with",
-  ],
-};
 
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));

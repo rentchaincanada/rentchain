@@ -7,6 +7,7 @@ import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
 import { requestBreadcrumbs } from "./middleware/requestBreadcrumbs";
 import { routeSource } from "./middleware/routeSource";
 import { authenticateJwt } from "./middleware/authMiddleware";
+import { corsOptions } from "./lib/cors";
 
 import publicRoutes from "./routes/publicRoutes";
 import authRoutes from "./routes/authRoutes";
@@ -75,26 +76,6 @@ app.set("etag", false);
 /**
  * Middleware
  */
-
-const corsOptions: cors.CorsOptions = {
-  origin: [
-    "https://www.rentchain.ai",
-    "https://rentchain.ai",
-    "http://localhost:5173",
-    "http://localhost:5174",
-    "http://localhost:3000",
-  ],
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: [
-    "Content-Type",
-    "Authorization",
-    "x-rc-auth",
-    "x-api-client",
-    "x-rentchain-apiclient",
-    "x-requested-with",
-  ],
-};
 
 app.use(requestBreadcrumbs);
 app.use(cors(corsOptions));
