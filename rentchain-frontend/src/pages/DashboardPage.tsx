@@ -142,7 +142,8 @@ const DashboardPage: React.FC = () => {
   const hasNoApplications = dataReady && applicationsCount === 0;
   const showEmptyCTA = hasNoProperties;
   const progressLoading = !dataReady || onboarding.loading;
-  const showStarterOnboarding = onboarding.loading ? true : !onboarding.dismissed && !onboarding.allComplete;
+  const showOnboardingSkeleton = onboarding.loading && !isAdmin;
+  const showStarterOnboarding = !onboarding.loading && !onboarding.dismissed && !onboarding.allComplete;
   const showAdvancedCollapsed = showStarterOnboarding;
   const isAdmin = String(user?.role || "").toLowerCase() === "admin";
 
@@ -233,6 +234,18 @@ const DashboardPage: React.FC = () => {
           </Card>
         ) : null}
 
+        {showOnboardingSkeleton ? (
+          <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
+            <div style={{ fontWeight: 700, marginBottom: 10 }}>Get started</div>
+            <div style={{ display: "grid", gap: 8 }}>
+              <div style={{ height: 12, borderRadius: 999, background: "rgba(15,23,42,0.08)" }} />
+              <div style={{ height: 12, width: "70%", borderRadius: 999, background: "rgba(15,23,42,0.08)" }} />
+              <div style={{ height: 12, width: "85%", borderRadius: 999, background: "rgba(15,23,42,0.08)" }} />
+              <div style={{ height: 12, width: "55%", borderRadius: 999, background: "rgba(15,23,42,0.08)" }} />
+            </div>
+          </Card>
+        ) : null}
+
         {showStarterOnboarding && !isAdmin ? (
           <>
             <StarterOnboardingPanel
@@ -278,7 +291,7 @@ const DashboardPage: React.FC = () => {
                   actionLabel: "Create application",
                   onAction: () => {
                     track("onboarding_step_clicked", { stepKey: "applicationCreated" });
-                    navigate("/properties?openSendApplication=1");
+                    navigate("/applications?openSendApplication=1");
                   },
                   isPrimary: true,
                 },
@@ -309,7 +322,7 @@ const DashboardPage: React.FC = () => {
                 </Button>
                 <Button
                   variant="secondary"
-                  onClick={() => navigate("/properties?openSendApplication=1")}
+                  onClick={() => navigate("/applications?openSendApplication=1")}
                   aria-label="Create application"
                   disabled={progressLoading}
                 >
@@ -379,7 +392,7 @@ const DashboardPage: React.FC = () => {
             <div style={{ color: text.muted, marginBottom: 12 }}>
               Next up: create your first application.
             </div>
-            <Button onClick={() => navigate("/properties?openSendApplication=1")}>Create application</Button>
+            <Button onClick={() => navigate("/applications?openSendApplication=1")}>Create application</Button>
           </Card>
         ) : null}
 
@@ -389,7 +402,7 @@ const DashboardPage: React.FC = () => {
             <div style={{ color: text.muted, marginBottom: 12 }}>
               Invite a tenant or start an application to begin screening.
             </div>
-            <Button onClick={() => navigate("/properties?openSendApplication=1")}>Create application</Button>
+            <Button onClick={() => navigate("/applications?openSendApplication=1")}>Create application</Button>
           </Card>
         ) : null}
 

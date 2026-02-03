@@ -30,6 +30,7 @@ import { track } from "@/lib/analytics";
 import { useAuth } from "../context/useAuth";
 import { ResponsiveMasterDetail } from "@/components/layout/ResponsiveMasterDetail";
 import { useOnboardingState } from "../hooks/useOnboardingState";
+import { SendApplicationModal } from "../components/properties/SendApplicationModal";
 import "./ApplicationsPage.css";
 
 const statusOptions: RentalApplicationStatus[] = [
@@ -143,6 +144,8 @@ const ApplicationsPage: React.FC = () => {
   const [exportExpiresAt, setExportExpiresAt] = useState<number | null>(null);
   const [exportPreviewOpen, setExportPreviewOpen] = useState(false);
   const [exportPreviewSource, setExportPreviewSource] = useState<"applications" | "onboarding">("applications");
+  const [sendAppOpen, setSendAppOpen] = useState(false);
+  const [sendAppPropertyId, setSendAppPropertyId] = useState<string | null>(null);
   const onboarding = useOnboardingState();
 
   const screeningOptions = [
@@ -292,6 +295,22 @@ const ApplicationsPage: React.FC = () => {
       setExportPreviewOpen(true);
     }
   }, [location.search]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("openSendApplication") !== "1") return;
+    if (!properties.length) {
+      showToast({ message: "Add a property first.", variant: "error" });
+      params.delete("openSendApplication");
+      navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
+      return;
+    }
+    const nextPropertyId = propertyFilter || properties[0]?.id || null;
+    setSendAppPropertyId(nextPropertyId);
+    setSendAppOpen(true);
+    params.delete("openSendApplication");
+    navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
+  }, [location.pathname, location.search, navigate, properties, propertyFilter, showToast]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -1225,6 +1244,12 @@ const ApplicationsPage: React.FC = () => {
         </Card>
       </div>
       )}
+      <SendApplicationModal
+        open={sendAppOpen}
+        propertyId={sendAppPropertyId}
+        unit={null}
+        onClose={() => setSendAppOpen(false)}
+      />
       {manualCompleteOpen && (
       <div
         style={{
