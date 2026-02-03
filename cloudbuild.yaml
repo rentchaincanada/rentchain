@@ -8,7 +8,7 @@ steps:
         '--region', 'us-central1',
         '--platform', 'managed',
         '--allow-unauthenticated',
-        '--set-env-vars', 'COMMIT_SHA=$COMMIT_SHA'
+        '--set-env-vars', 'COMMIT_SHA=${COMMIT_SHA}'
       ]
 
 options:
