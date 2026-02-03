@@ -686,13 +686,19 @@ const ApplicationsPage: React.FC = () => {
                         borderRadius: radius.md,
                         padding: "12px 12px",
                         cursor: "pointer",
-                        display: "grid",
+                        display: "flex",
+                        flexDirection: "column",
                         gap: 4,
+                        minWidth: 0,
                       }}
                     >
-                      <div style={{ fontWeight: 700, color: text.primary, fontSize: 15 }}>{app.applicantName || "Applicant"}</div>
-                      <div style={{ color: text.muted, fontSize: 12 }}>{app.email || "No email"}</div>
-                      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <div style={{ fontWeight: 700, color: text.primary, fontSize: 15, overflowWrap: "anywhere" }}>
+                        {app.applicantName || "Applicant"}
+                      </div>
+                      <div style={{ color: text.muted, fontSize: 12, overflowWrap: "anywhere" }}>
+                        {app.email || "No email"}
+                      </div>
+                      <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                         <Pill>{app.status}</Pill>
                       </div>
                     </button>

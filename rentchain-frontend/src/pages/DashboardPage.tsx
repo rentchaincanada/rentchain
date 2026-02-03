@@ -278,7 +278,7 @@ const DashboardPage: React.FC = () => {
                   actionLabel: "Create application",
                   onAction: () => {
                     track("onboarding_step_clicked", { stepKey: "applicationCreated" });
-                    navigate("/applications");
+                    navigate("/properties?openSendApplication=1");
                   },
                   isPrimary: true,
                 },
@@ -309,7 +309,7 @@ const DashboardPage: React.FC = () => {
                 </Button>
                 <Button
                   variant="secondary"
-                  onClick={() => navigate("/applications")}
+                  onClick={() => navigate("/properties?openSendApplication=1")}
                   aria-label="Create application"
                   disabled={progressLoading}
                 >
