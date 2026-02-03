@@ -379,7 +379,7 @@ const DashboardPage: React.FC = () => {
             <div style={{ color: text.muted, marginBottom: 12 }}>
               Next up: create your first application.
             </div>
-            <Button onClick={() => navigate("/applications")}>Create application</Button>
+            <Button onClick={() => navigate("/properties?openSendApplication=1")}>Create application</Button>
           </Card>
         ) : null}
 
@@ -389,7 +389,7 @@ const DashboardPage: React.FC = () => {
             <div style={{ color: text.muted, marginBottom: 12 }}>
               Invite a tenant or start an application to begin screening.
             </div>
-            <Button onClick={() => navigate("/applications")}>Go to applications</Button>
+            <Button onClick={() => navigate("/properties?openSendApplication=1")}>Create application</Button>
           </Card>
         ) : null}
 

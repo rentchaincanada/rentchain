@@ -3,6 +3,7 @@ import { apiFetch } from "./apiFetch";
 export async function fetchOnboarding() {
   return apiFetch("/onboarding", {
     method: "GET",
+    allow404: true,
   });
 }
 
