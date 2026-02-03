@@ -90,7 +90,23 @@ router.get("/health/stripe", async (_req, res) => {
 
 router.get("/__probe/version", (_req, res) => {
   res.setHeader("x-route-source", "publicRoutes.ts");
-  res.json({ ok: true, marker: "probe-v1", ts: Date.now() });
+  res.json({
+    ok: true,
+    marker: "probe-v1",
+    commit: process.env.COMMIT_SHA || null,
+    ts: Date.now(),
+  });
+});
+
+router.get("/__probe/revision", (_req, res) => {
+  res.setHeader("x-route-source", "publicRoutes.ts");
+  res.json({
+    ok: true,
+    service: "rentchain-landlord-api",
+    revision: process.env.K_REVISION || null,
+    commit: process.env.COMMIT_SHA || null,
+    ts: Date.now(),
+  });
 });
 
 router.post("/notify-plan-interest", async (req: any, res) => {
