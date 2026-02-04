@@ -16,9 +16,32 @@ type BuildArgs = {
   onboarding: OnboardingState;
   navigate: (path: string) => void;
   track: (eventName: string, props?: Record<string, unknown>) => void;
+  propertiesCount?: number;
+  unitsCount?: number;
 };
 
-export function buildOnboardingSteps({ onboarding, navigate, track }: BuildArgs): OnboardingStep[] {
+export function buildOnboardingSteps({
+  onboarding,
+  navigate,
+  track,
+  propertiesCount = 0,
+  unitsCount = 0,
+}: BuildArgs): OnboardingStep[] {
+  const routeToCreateApplication = () => {
+    if (propertiesCount === 0) {
+      track("onboarding_step_clicked", { stepKey: "applicationCreated", blockedBy: "no_property" });
+      navigate("/properties?focus=addProperty");
+      return;
+    }
+    if (unitsCount === 0) {
+      track("onboarding_step_clicked", { stepKey: "applicationCreated", blockedBy: "no_units" });
+      navigate("/properties?openAddUnit=1");
+      return;
+    }
+    track("onboarding_step_clicked", { stepKey: "applicationCreated" });
+    navigate("/applications?openSendApplication=1");
+  };
+
   return [
     {
       key: "propertyAdded",
@@ -59,10 +82,7 @@ export function buildOnboardingSteps({ onboarding, navigate, track }: BuildArgs)
       description: "Invite an applicant or start an application record.",
       isComplete: !!onboarding.steps.applicationCreated,
       actionLabel: "Create application",
-      onAction: () => {
-        track("onboarding_step_clicked", { stepKey: "applicationCreated" });
-        navigate("/applications?openSendApplication=1");
-      },
+      onAction: routeToCreateApplication,
       isPrimary: true,
     },
     {
