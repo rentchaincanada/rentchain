@@ -19,9 +19,10 @@ import { setPlan } from "../services/accountService";
 import { resolvePlan } from "../entitlements/plans";
 import { z } from "zod";
 import { maybeGrantMicroLiveFromLead } from "../services/microLiveGrant";
-import { db } from "../firebase";
-import { verifyPassword } from "../utils/password";
 import { signAuthToken } from "../auth/jwt";
+import { validateLandlordCredentials } from "../services/authService";
+import { getOrCreateAccount } from "../services/accountService";
+import { getOrCreateLandlordProfile } from "../services/landlordProfileService";
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
@@ -54,6 +55,15 @@ function jsonError(res: any, status: number, error: string, code?: string, detai
   if (code) payload.code = code;
   if (details !== undefined) payload.details = details;
   return res.status(status).json(payload);
+}
+
+function loginError(res: any, status: number, code: string, detail?: string) {
+  return res.status(status).json({
+    ok: false,
+    code,
+    error: status === 401 ? "UNAUTHORIZED" : "LOGIN_FAILED",
+    detail,
+  });
 }
 
 const LoginSchema = z.object({
@@ -163,12 +173,12 @@ router.post("/login", async (req, res) => {
       .toLowerCase() === "true";
 
   if (!loginEnabled) {
-    return jsonError(res, 403, "Login disabled", "LOGIN_DISABLED");
+    return loginError(res, 403, "LOGIN_DISABLED");
   }
 
   const parsed = LoginSchema.safeParse(req.body ?? {});
   if (!parsed.success) {
-    return jsonError(res, 400, "Invalid request payload", "BAD_REQUEST", parsed.error.flatten());
+    return loginError(res, 400, "BAD_REQUEST", "Invalid request payload");
   }
 
   const email = String(parsed.data.email || "").trim().toLowerCase();
@@ -191,40 +201,29 @@ router.post("/login", async (req, res) => {
     });
 
     if (!passwordLoginEnabled) {
-      return jsonError(res, 403, "Login disabled", "LOGIN_DISABLED");
+      return loginError(res, 403, "LOGIN_DISABLED");
     }
 
-    step = "user_lookup";
-    const snap = await db.collection("users").where("email", "==", email).limit(1).get();
-    if (snap.empty) {
-      return jsonError(res, 401, "Unauthorized", "INVALID_CREDENTIALS");
-    }
-
-    const userDoc = snap.docs[0];
-    const u = userDoc.data() as any;
-
-    if (u?.disabled === true) {
-      return jsonError(res, 403, "Account disabled", "ACCOUNT_DISABLED");
-    }
-
-    step = "password_verify";
-    const ok = await verifyPassword(password, String(u?.passwordHash || ""));
-    if (!ok) {
-      return jsonError(res, 401, "Unauthorized", "INVALID_CREDENTIALS");
+    step = "firebase_signin";
+    const fbUser = await validateLandlordCredentials(email, password);
+    if (!fbUser) {
+      return loginError(res, 401, "INVALID_CREDENTIALS");
     }
 
     step = "ensure_profile";
-    const plan = resolvePlan(String(u?.plan || "screening"));
+    const profile = await getOrCreateLandlordProfile({ uid: fbUser.id, email: fbUser.email });
+    const account = await getOrCreateAccount(profile.landlordId || fbUser.id);
+    const plan = resolvePlan(String(profile.plan || account.plan || "screening"));
 
     const user = ensureLandlordEntry({
-      id: userDoc.id,
-      email: u.email || email,
-      role: u.role || "landlord",
-      landlordId: u.landlordId || userDoc.id,
+      id: profile.id || fbUser.id,
+      email: profile.email || fbUser.email,
+      role: profile.role || "landlord",
+      landlordId: profile.landlordId || fbUser.id,
       plan,
-      screeningCredits: u?.screeningCredits,
-      permissions: u?.permissions ?? [],
-      revokedPermissions: u?.revokedPermissions ?? [],
+      screeningCredits: profile?.screeningCredits ?? fbUser?.screeningCredits,
+      permissions: [],
+      revokedPermissions: [],
     } as any);
 
     step = "jwt_sign";
@@ -254,13 +253,16 @@ router.post("/login", async (req, res) => {
       token,
       user: {
         ...user,
-        screeningCredits: u?.screeningCredits ?? (user as any)?.screeningCredits ?? 0,
+        screeningCredits: profile?.screeningCredits ?? (user as any)?.screeningCredits ?? 0,
       },
     });
   } catch (err: any) {
     try {
       const msg = String(err?.message || "");
       const code = String(err?.code || "");
+      if (code === "FIREBASE_API_KEY_NOT_CONFIGURED") {
+        return loginError(res, 500, "FIREBASE_API_KEY_MISSING");
+      }
       const looksLikeAuthFailure =
         code.includes("auth/") ||
         code === "UNAUTHORIZED" ||
@@ -268,7 +270,7 @@ router.post("/login", async (req, res) => {
         /invalid|expired|revoked|credential|password|token|unauthorized/i.test(msg);
 
       if (looksLikeAuthFailure) {
-        return jsonError(res, 401, "Unauthorized", "UNAUTHORIZED");
+        return loginError(res, 401, "UNAUTHORIZED", msg || code || undefined);
       }
     } catch {
       // fall through to generic error
