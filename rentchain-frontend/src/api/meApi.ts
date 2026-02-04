@@ -1,6 +1,6 @@
-import api from "./client";
+import { apiFetch } from "./apiFetch";
 
 export async function fetchMe() {
-  const res = await api.get("/me");
-  return res.data as { landlordId?: string; email?: string; role?: string; plan?: string };
+  const res = await apiFetch("/me", { method: "GET" });
+  return res as { landlordId?: string; email?: string; role?: string; plan?: string };
 }

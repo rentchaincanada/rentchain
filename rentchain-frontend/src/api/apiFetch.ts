@@ -1,5 +1,6 @@
 import { API_BASE_URL } from "./config";
 import { clearAuthToken, clearTenantToken, getAuthToken, getTenantToken } from "../lib/authToken";
+import { getFirebaseIdToken, warnIfFirebaseDomainMismatch } from "../lib/firebaseAuthToken";
 import { maybeDispatchUpgradePrompt } from "../lib/upgradePrompt";
 
 type Jsonish = Record<string, any>;
@@ -16,6 +17,7 @@ export async function apiFetch<T = any>(
   path: string,
   init: ApiFetchInit = {}
 ): Promise<T> {
+  warnIfFirebaseDomainMismatch();
   if (!API_BASE_URL) {
     throw new Error("API_BASE_URL is not configured");
   }
@@ -58,8 +60,10 @@ export async function apiFetch<T = any>(
     pathForMatch === "/api/tenant" ||
     pathForMatch.startsWith("/tenant/") ||
     pathForMatch.startsWith("/api/tenant/");
+  const firebaseToken = !isTenantPath ? await getFirebaseIdToken() : null;
   const rawToken = isTenantPath ? getTenantToken() : getAuthToken();
   const token = typeof rawToken === "string" ? rawToken.trim() : rawToken;
+  const effectiveToken = firebaseToken || token;
 
   const url = normalizedPath;
 
@@ -71,11 +75,14 @@ export async function apiFetch<T = any>(
 
   // Mark requests coming from our API helpers so the dev fetch-guard doesn't warn
   headers["x-api-client"] = "web";
-  const hasToken = typeof token === "string" ? token.trim().length > 0 : false;
+  const hasToken = typeof effectiveToken === "string" ? effectiveToken.trim().length > 0 : false;
   const authHeaderSet = hasToken;
-  headers["x-rc-auth"] = authHeaderSet ? "bearer" : "missing";
+  headers["x-rc-auth"] = firebaseToken ? "firebase" : authHeaderSet ? "bearer" : "missing";
 
-  if (authHeaderSet) headers.Authorization = `Bearer ${token}`;
+  if (authHeaderSet) headers.Authorization = `Bearer ${effectiveToken}`;
+  if (import.meta.env.DEV && !authHeaderSet && !isTenantPath) {
+    console.warn("[apiFetch] missing auth token for request", { path });
+  }
 
   if (import.meta.env.DEV) {
     const matchPath =

@@ -1,5 +1,6 @@
 import { resolveApiUrl } from "../lib/apiClient";
 import { maybeDispatchUpgradePrompt } from "../lib/upgradePrompt";
+import { getFirebaseIdToken, warnIfFirebaseDomainMismatch } from "../lib/firebaseAuthToken";
 
 export type ApiError = Error & { status?: number; body?: any };
 
@@ -7,12 +8,23 @@ export async function apiFetch<T>(
   path: string,
   opts: RequestInit & { token?: string } = {}
 ): Promise<T> {
+  warnIfFirebaseDomainMismatch();
+  const firebaseToken = await getFirebaseIdToken();
   const token = (opts as any)?.token;
+  const effectiveToken = firebaseToken || token;
   const headers = new Headers(opts.headers || {});
   headers.set("Accept", "application/json");
   headers.set("x-api-client", "web");
   if (!headers.has("Content-Type") && opts.body) headers.set("Content-Type", "application/json");
-  if (token) headers.set("Authorization", `Bearer ${token}`);
+  if (effectiveToken) {
+    headers.set("Authorization", `Bearer ${effectiveToken}`);
+    headers.set("x-rc-auth", firebaseToken ? "firebase" : "bearer");
+  } else {
+    headers.set("x-rc-auth", "missing");
+    if (import.meta.env.DEV) {
+      console.warn("[api/http] missing auth token for request", { path });
+    }
+  }
 
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   const res = await fetch(resolveApiUrl(normalizedPath), {

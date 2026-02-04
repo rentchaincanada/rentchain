@@ -2,6 +2,7 @@ import axios from "axios";
 import { API_BASE_URL } from "./config";
 import { DEBUG_AUTH_KEY, JUST_LOGGED_IN_KEY } from "../lib/authKeys";
 import { clearAuthToken, getAuthToken, getTenantToken } from "../lib/authToken";
+import { getFirebaseIdToken, warnIfFirebaseDomainMismatch } from "../lib/firebaseAuthToken";
 import { maybeDispatchUpgradePrompt } from "../lib/upgradePrompt";
 
 const normalizedBase = API_BASE_URL.replace(/\/$/, "").replace(/\/api$/i, "");
@@ -10,7 +11,8 @@ const api = axios.create({
   withCredentials: true,
 });
 
-api.interceptors.request.use((config) => {
+api.interceptors.request.use(async (config) => {
+  warnIfFirebaseDomainMismatch();
   const rawUrl = config.url || "";
   let path = rawUrl;
   try {
@@ -26,17 +28,22 @@ api.interceptors.request.use((config) => {
     path.startsWith("/tenant/") ||
     path.startsWith("/api/tenant/");
 
+  const firebaseToken = !isTenantPath ? await getFirebaseIdToken() : null;
   const rawToken = isTenantPath ? getTenantToken() : getAuthToken();
   const token = typeof rawToken === "string" ? rawToken.trim() : rawToken;
-  const hasToken = typeof token === "string" ? token.trim().length > 0 : false;
+  const effectiveToken = firebaseToken || token;
+  const hasToken = typeof effectiveToken === "string" ? effectiveToken.trim().length > 0 : false;
   const authHeaderSet = hasToken;
   if (authHeaderSet) {
     config.headers = config.headers ?? {};
-    (config.headers as any).Authorization = `Bearer ${token}`;
+    (config.headers as any).Authorization = `Bearer ${effectiveToken}`;
   }
   config.headers = config.headers ?? {};
   (config.headers as any)["x-api-client"] = "web";
-  (config.headers as any)["x-rc-auth"] = authHeaderSet ? "bearer" : "missing";
+  (config.headers as any)["x-rc-auth"] = firebaseToken ? "firebase" : authHeaderSet ? "bearer" : "missing";
+  if (import.meta.env.DEV && !authHeaderSet && !isTenantPath) {
+    console.warn("[api/axios] missing auth token for request", { path });
+  }
   config.withCredentials = true;
   return config;
 });

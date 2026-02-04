@@ -1,6 +1,7 @@
 // src/api/authApi.ts
 import { apiFetch, apiJson } from "./http";
 import { clearAuthToken, getAuthToken, setAuthToken, resolveApiUrl } from "@/lib/apiClient";
+import { awaitFirebaseAuthReady } from "@/lib/firebaseAuthToken";
 
 export interface AuthUser {
   id: string;
@@ -180,13 +181,11 @@ export async function restoreSession(): Promise<{ user: any | null }> {
   if (typeof window !== "undefined") {
     const raw = getAuthToken();
     const t = (raw ?? "").trim();
-    if (
-      !t ||
-      t === "null" ||
-      t === "undefined" ||
-      t.split(".").length !== 3
-    ) {
-      return { user: null };
+    if (!t || t === "null" || t === "undefined" || t.split(".").length !== 3) {
+      const fb = await awaitFirebaseAuthReady().catch(() => ({ ready: true, user: null }));
+      if (!fb?.user) {
+        return { user: null };
+      }
     }
   }
 
