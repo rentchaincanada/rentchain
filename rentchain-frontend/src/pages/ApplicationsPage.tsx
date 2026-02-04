@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Card, Section, Input, Button, Pill } from "../components/ui/Ui";
 import { spacing, colors, text, radius } from "../styles/tokens";
-import { apiFetch } from "@/api/http";
+import { fetchProperties } from "../api/propertiesApi";
 import {
   fetchRentalApplications,
   fetchRentalApplication,
@@ -243,19 +243,29 @@ const ApplicationsPage: React.FC = () => {
     const loadProperties = async () => {
       try {
         setPropertiesLoading(true);
-        const res: any = await apiFetch("/properties");
+        const res: any = await fetchProperties();
         const list = Array.isArray(res?.properties)
           ? res.properties
+          : Array.isArray(res?.items)
+          ? res.items
           : Array.isArray(res)
           ? res
           : [];
         if (!alive) return;
+        if (import.meta.env.DEV) {
+          console.debug("[applications] properties", {
+            count: list.length,
+            sample: list[0],
+          });
+        }
         setPropertyRecords(list);
         setProperties(
-          list.map((p: any) => ({
-            id: String(p.id || p.propertyId || p.uid || ""),
-            name: p.name || p.addressLine1 || p.label || "Property",
-          }))
+          list
+            .map((p: any) => ({
+              id: String(p.id || p.propertyId || p.uid || ""),
+              name: p.name || p.addressLine1 || p.label || "Property",
+            }))
+            .filter((p: PropertyOption) => Boolean(p.id))
         );
       } catch {
         if (!alive) return;
