@@ -165,13 +165,14 @@ const DashboardPage: React.FC = () => {
 
   const dataReady =
     !loading && !propsLoading && !applicationsLoading && !tenantsLoading && !invitesLoading && !error;
+  const countsReady = !propsLoading && !applicationsLoading && !tenantsLoading && !invitesLoading;
   const hasNoProperties = dataReady && (kpis?.propertiesCount ?? 0) === 0;
   const hasNoApplications = dataReady && applicationsCount === 0;
   const isAdmin = String(user?.role || "").toLowerCase() === "admin";
   const showEmptyCTA = hasNoProperties;
   const progressLoading = !dataReady || onboarding.loading;
   const showOnboardingSkeleton = onboarding.loading && !isAdmin;
-  const showStarterOnboarding = !onboarding.loading && !onboarding.dismissed && !onboarding.allComplete;
+  const showStarterOnboarding = !onboarding.loading && !onboarding.dismissed;
   const showAdvancedCollapsed = showStarterOnboarding;
 
   const derivedSteps = {
@@ -182,16 +183,16 @@ const DashboardPage: React.FC = () => {
   };
 
   React.useEffect(() => {
-    if (progressLoading) return;
+    if (progressLoading || !countsReady) return;
     (Object.keys(derivedSteps) as Array<keyof typeof derivedSteps>).forEach((key) => {
       if (derivedSteps[key] && !onboarding.steps[key]) {
         onboarding.markStepComplete(key, "derived");
       }
     });
-  }, [derivedSteps, onboarding, progressLoading]);
+  }, [derivedSteps, onboarding, progressLoading, countsReady]);
 
   React.useEffect(() => {
-    if (progressLoading) return;
+    if (progressLoading || !countsReady) return;
     if (!nudgeReadyRef.current) {
       nudgeReadyRef.current = true;
       prevDerivedRef.current = {
@@ -218,7 +219,7 @@ const DashboardPage: React.FC = () => {
       tenantInvited: derivedSteps.tenantInvited,
       applicationCreated: derivedSteps.applicationCreated,
     };
-  }, [derivedSteps, progressLoading, showToast]);
+  }, [derivedSteps, progressLoading, showToast, countsReady]);
 
   React.useEffect(() => {
     if (!showStarterOnboarding || onboarding.loading) return;
@@ -289,7 +290,13 @@ const DashboardPage: React.FC = () => {
               }
             >
               <StarterOnboardingPanel
-                steps={buildOnboardingSteps({ onboarding, navigate, track })}
+                steps={buildOnboardingSteps({
+                  onboarding,
+                  navigate,
+                  track,
+                  propertiesCount: derivedPropertiesCount,
+                  unitsCount: derivedUnitsCount,
+                })}
                 loading={progressLoading}
                 onDismiss={() => onboarding.dismissOnboarding()}
               />
@@ -306,7 +313,31 @@ const DashboardPage: React.FC = () => {
                 </Button>
                 <Button
                   variant="secondary"
-                  onClick={() => navigate("/applications?openSendApplication=1")}
+                  onClick={() => {
+                    if (derivedPropertiesCount === 0) {
+                      track("onboarding_step_clicked", {
+                        stepKey: "applicationCreated",
+                        blockedBy: "no_property",
+                        source: "dashboard_quick_action",
+                      });
+                      navigate("/properties?focus=addProperty");
+                      return;
+                    }
+                    if (derivedUnitsCount === 0) {
+                      track("onboarding_step_clicked", {
+                        stepKey: "applicationCreated",
+                        blockedBy: "no_units",
+                        source: "dashboard_quick_action",
+                      });
+                      navigate("/properties?openAddUnit=1");
+                      return;
+                    }
+                    track("onboarding_step_clicked", {
+                      stepKey: "applicationCreated",
+                      source: "dashboard_quick_action",
+                    });
+                    navigate("/applications?openSendApplication=1");
+                  }}
                   aria-label="Create application"
                   disabled={progressLoading}
                 >
