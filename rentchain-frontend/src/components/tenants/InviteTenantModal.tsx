@@ -6,6 +6,7 @@ import { Button } from "../ui/Ui";
 interface Props {
   open: boolean;
   onClose: () => void;
+  onInviteCreated?: (payload: any) => void;
   defaultPropertyId?: string;
   defaultUnitId?: string;
   defaultLeaseId?: string;
@@ -14,6 +15,7 @@ interface Props {
 export const InviteTenantModal: React.FC<Props> = ({
   open,
   onClose,
+  onInviteCreated,
   defaultPropertyId,
   defaultUnitId,
   defaultLeaseId,
@@ -58,6 +60,7 @@ export const InviteTenantModal: React.FC<Props> = ({
         setInfoMsg(emailError || "Email was not sent. You can copy or open the link below.");
       }
       await setOnboardingStep("tenantInvited", true).catch(() => {});
+      onInviteCreated?.(data);
     } catch (e: any) {
       const respDetail =
         (e as any)?.response?.data?.detail || (e as any)?.response?.data?.error;
