@@ -1,3 +1,5 @@
+import { getApplicationPrereqState } from "./applicationPrereqs";
+
 export type OnboardingStep = {
   key: string;
   title: string;
@@ -27,19 +29,20 @@ export function buildOnboardingSteps({
   propertiesCount = 0,
   unitsCount = 0,
 }: BuildArgs): OnboardingStep[] {
+  const prereq = getApplicationPrereqState({ propertiesCount, unitsCount });
   const routeToCreateApplication = () => {
-    if (propertiesCount === 0) {
+    if (prereq.missingProperty) {
       track("onboarding_step_clicked", { stepKey: "applicationCreated", blockedBy: "no_property" });
       navigate("/properties?focus=addProperty");
       return;
     }
-    if (unitsCount === 0) {
+    if (prereq.missingUnit) {
       track("onboarding_step_clicked", { stepKey: "applicationCreated", blockedBy: "no_units" });
       navigate("/properties?openAddUnit=1");
       return;
     }
     track("onboarding_step_clicked", { stepKey: "applicationCreated" });
-    navigate("/applications?openSendApplication=1");
+    navigate("/applications?autoSelectProperty=1&openSendApplication=1");
   };
 
   return [

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useToast } from "../components/ui/ToastProvider";
 import { TenantDetailPanel } from "../components/tenants/TenantDetailPanel";
@@ -28,37 +28,28 @@ export const TenantsPage: React.FC = () => {
   const selectedTenantIdFromUrl = searchParams.get("tenantId");
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(selectedTenantIdFromUrl);
 
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const data = await fetchTenants();
-        if (!cancelled) {
-          setTenants(data);
-        }
-      } catch (err) {
-        console.error("[TenantsPage] Failed to load tenants", err);
-        if (!cancelled) {
-          setError("Failed to load tenants");
-          showToast({
-            message: "Failed to load tenants",
-            description: "An error occurred while fetching the tenant list.",
-            variant: "error",
-          });
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-    void load();
-    return () => {
-      cancelled = true;
-    };
+  const loadTenants = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await fetchTenants();
+      setTenants(data);
+    } catch (err) {
+      console.error("[TenantsPage] Failed to load tenants", err);
+      setError("Failed to load tenants");
+      showToast({
+        message: "Failed to load tenants",
+        description: "An error occurred while fetching the tenant list.",
+        variant: "error",
+      });
+    } finally {
+      setLoading(false);
+    }
   }, [showToast]);
+
+  useEffect(() => {
+    void loadTenants();
+  }, [loadTenants]);
 
   useEffect(() => {
     if (!selectedTenantIdFromUrl) {
@@ -310,7 +301,13 @@ export const TenantsPage: React.FC = () => {
         />
       </Card>
 
-      <InviteTenantModal open={inviteOpen} onClose={() => setInviteOpen(false)} />
+      <InviteTenantModal
+        open={inviteOpen}
+        onClose={() => setInviteOpen(false)}
+        onInviteCreated={() => {
+          void loadTenants();
+        }}
+      />
     </div>
   );
 };

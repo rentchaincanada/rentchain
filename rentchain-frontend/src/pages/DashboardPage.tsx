@@ -18,6 +18,7 @@ import { track } from "../lib/analytics";
 import { useAuth } from "../context/useAuth";
 import { useToast } from "../components/ui/ToastProvider";
 import { buildOnboardingSteps } from "../lib/onboardingSteps";
+import { getApplicationPrereqState } from "../lib/applicationPrereqs";
 
 const StarterOnboardingPanel = React.lazy(
   () => import("../components/dashboard/StarterOnboardingPanel")
@@ -314,7 +315,11 @@ const DashboardPage: React.FC = () => {
                 <Button
                   variant="secondary"
                   onClick={() => {
-                    if (derivedPropertiesCount === 0) {
+                    const prereq = getApplicationPrereqState({
+                      propertiesCount: derivedPropertiesCount,
+                      unitsCount: derivedUnitsCount,
+                    });
+                    if (prereq.missingProperty) {
                       track("onboarding_step_clicked", {
                         stepKey: "applicationCreated",
                         blockedBy: "no_property",
@@ -323,7 +328,7 @@ const DashboardPage: React.FC = () => {
                       navigate("/properties?focus=addProperty");
                       return;
                     }
-                    if (derivedUnitsCount === 0) {
+                    if (prereq.missingUnit) {
                       track("onboarding_step_clicked", {
                         stepKey: "applicationCreated",
                         blockedBy: "no_units",
@@ -336,7 +341,7 @@ const DashboardPage: React.FC = () => {
                       stepKey: "applicationCreated",
                       source: "dashboard_quick_action",
                     });
-                    navigate("/applications?openSendApplication=1");
+                    navigate("/applications?autoSelectProperty=1&openSendApplication=1");
                   }}
                   aria-label="Create application"
                   disabled={progressLoading}
@@ -407,7 +412,9 @@ const DashboardPage: React.FC = () => {
             <div style={{ color: text.muted, marginBottom: 12 }}>
               Next up: create your first application.
             </div>
-            <Button onClick={() => navigate("/applications?openSendApplication=1")}>Create application</Button>
+            <Button onClick={() => navigate("/applications?autoSelectProperty=1&openSendApplication=1")}>
+              Create application
+            </Button>
           </Card>
         ) : null}
 
@@ -417,7 +424,9 @@ const DashboardPage: React.FC = () => {
             <div style={{ color: text.muted, marginBottom: 12 }}>
               Invite a tenant or start an application to begin screening.
             </div>
-            <Button onClick={() => navigate("/applications?openSendApplication=1")}>Create application</Button>
+            <Button onClick={() => navigate("/applications?autoSelectProperty=1&openSendApplication=1")}>
+              Create application
+            </Button>
           </Card>
         ) : null}
 

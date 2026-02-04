@@ -31,6 +31,8 @@ import { useAuth } from "../context/useAuth";
 import { ResponsiveMasterDetail } from "@/components/layout/ResponsiveMasterDetail";
 import { useOnboardingState } from "../hooks/useOnboardingState";
 import { SendApplicationModal } from "../components/properties/SendApplicationModal";
+import { unitsForProperty } from "../lib/propertyCounts";
+import { getApplicationPrereqState } from "../lib/applicationPrereqs";
 import "./ApplicationsPage.css";
 
 const statusOptions: RentalApplicationStatus[] = [
@@ -112,6 +114,8 @@ const ApplicationsPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [propertyFilter, setPropertyFilter] = useState<string>("");
   const [properties, setProperties] = useState<PropertyOption[]>([]);
+  const [propertyRecords, setPropertyRecords] = useState<any[]>([]);
+  const [propertiesLoading, setPropertiesLoading] = useState(false);
   const { features, loading: loadingCaps } = useCapabilities();
   const { user } = useAuth();
   const [screeningQuote, setScreeningQuote] = useState<ScreeningQuote | null>(null);
@@ -147,6 +151,14 @@ const ApplicationsPage: React.FC = () => {
   const [sendAppOpen, setSendAppOpen] = useState(false);
   const [sendAppPropertyId, setSendAppPropertyId] = useState<string | null>(null);
   const onboarding = useOnboardingState();
+  const propertiesCount = propertyRecords.length;
+  const unitsCount = propertyRecords.reduce((sum, p) => sum + unitsForProperty(p), 0);
+  const prereqState = getApplicationPrereqState({
+    propertiesCount,
+    unitsCount,
+    selectedPropertyId: propertyFilter || null,
+    requireSelection: true,
+  });
 
   const screeningOptions = [
     { value: "basic", label: "Basic", priceLabel: "$19.99" },
@@ -230,9 +242,15 @@ const ApplicationsPage: React.FC = () => {
     let alive = true;
     const loadProperties = async () => {
       try {
+        setPropertiesLoading(true);
         const res: any = await apiFetch("/properties");
-        const list = Array.isArray(res?.properties) ? res.properties : [];
+        const list = Array.isArray(res?.properties)
+          ? res.properties
+          : Array.isArray(res)
+          ? res
+          : [];
         if (!alive) return;
+        setPropertyRecords(list);
         setProperties(
           list.map((p: any) => ({
             id: String(p.id || p.propertyId || p.uid || ""),
@@ -241,7 +259,10 @@ const ApplicationsPage: React.FC = () => {
         );
       } catch {
         if (!alive) return;
+        setPropertyRecords([]);
         setProperties([]);
+      } finally {
+        if (alive) setPropertiesLoading(false);
       }
     };
     void loadProperties();
@@ -299,18 +320,51 @@ const ApplicationsPage: React.FC = () => {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (params.get("openSendApplication") !== "1") return;
-    if (!properties.length) {
+    if (propertiesLoading) return;
+
+    const autoSelect = params.get("autoSelectProperty") === "1";
+    if (prereqState.missingProperty) {
       showToast({ message: "Add a property first.", variant: "error" });
       params.delete("openSendApplication");
+      params.delete("autoSelectProperty");
       navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
       return;
     }
+    if (prereqState.missingUnit) {
+      showToast({ message: "Add a unit first.", variant: "error" });
+      params.delete("openSendApplication");
+      params.delete("autoSelectProperty");
+      navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
+      return;
+    }
+    if (prereqState.missingSelectedProperty) {
+      if (autoSelect && properties[0]?.id) {
+        setPropertyFilter(properties[0].id);
+      } else {
+        showToast({ message: "Select a property to continue.", variant: "error" });
+        params.delete("openSendApplication");
+        params.delete("autoSelectProperty");
+        navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
+        return;
+      }
+    }
+
     const nextPropertyId = propertyFilter || properties[0]?.id || null;
     setSendAppPropertyId(nextPropertyId);
     setSendAppOpen(true);
     params.delete("openSendApplication");
+    params.delete("autoSelectProperty");
     navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
-  }, [location.pathname, location.search, navigate, properties, propertyFilter, showToast]);
+  }, [
+    location.pathname,
+    location.search,
+    navigate,
+    properties,
+    propertyFilter,
+    propertiesLoading,
+    prereqState,
+    showToast,
+  ]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -509,6 +563,34 @@ const ApplicationsPage: React.FC = () => {
     }
   };
 
+  const handleCreateApplication = (autoSelectProperty: boolean = false) => {
+    if (propertiesLoading) {
+      showToast({ message: "Loading properties…", variant: "info" });
+      return;
+    }
+    if (prereqState.missingProperty) {
+      showToast({ message: "Add a property first.", variant: "error" });
+      navigate("/properties?focus=addProperty");
+      return;
+    }
+    if (prereqState.missingUnit) {
+      showToast({ message: "Add a unit first.", variant: "error" });
+      navigate("/properties?openAddUnit=1");
+      return;
+    }
+    if (prereqState.missingSelectedProperty) {
+      if (autoSelectProperty && properties[0]?.id) {
+        setPropertyFilter(properties[0].id);
+      } else {
+        showToast({ message: "Select a property to continue.", variant: "error" });
+        return;
+      }
+    }
+    const nextPropertyId = propertyFilter || properties[0]?.id || null;
+    setSendAppPropertyId(nextPropertyId);
+    setSendAppOpen(true);
+  };
+
   const handleExportReport = async (copyOnly: boolean) => {
     if (!detail?.id) return;
     if (!features?.exports_basic && !isAdmin) {
@@ -568,7 +650,8 @@ const ApplicationsPage: React.FC = () => {
   const handleSampleOpen = () => {
     track("exports_sample_opened", { source: "applications" });
     if (typeof window !== "undefined") {
-      window.open("/sample/screening_report_sample.pdf", "_blank", "noopener,noreferrer");
+      const base = window.location.origin;
+      window.open(`${base}/sample/screening_report_sample.pdf`, "_blank", "noopener,noreferrer");
     }
   };
 
@@ -683,7 +766,7 @@ const ApplicationsPage: React.FC = () => {
                     variant="secondary"
                     onClick={() => {
                       track("empty_state_cta_clicked", { pageKey: "applications", ctaKey: "create_application" });
-                      navigate("/applications");
+                      handleCreateApplication(false);
                     }}
                     style={{ width: "fit-content" }}
                   >
