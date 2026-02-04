@@ -1,5 +1,6 @@
 import { getApiBaseUrl } from "../api/baseUrl";
 import { clearAuthToken, getAuthToken, setAuthToken } from "./authToken";
+import { getFirebaseIdToken, warnIfFirebaseDomainMismatch } from "./firebaseAuthToken";
 import { maybeDispatchUpgradePrompt } from "./upgradePrompt";
 
 let warnedMisconfig = false;
@@ -36,6 +37,7 @@ export function resolveApiUrl(input: string) {
 }
 
 export async function apiFetch(path: string, init: RequestInit = {}) {
+  warnIfFirebaseDomainMismatch();
   // 1) normalize accidental double /api/api
   let p = String(path || "");
   p = p.replace(/^\/api\/api\//, "/api/").replace(/^api\/api\//, "api/");
@@ -48,15 +50,23 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
 
   const url = resolveApiUrl(p);
 
+  const firebaseToken = await getFirebaseIdToken();
   const token = getAuthToken();
+  const effectiveToken = firebaseToken || token;
   const headers = new Headers(init.headers || {});
   headers.set("Accept", "application/json");
   headers.set("x-api-client", "web");
   if (init.body && typeof init.body === "string" && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  if (token) {
-    headers.set("Authorization", `Bearer ${token}`);
+  if (effectiveToken) {
+    headers.set("Authorization", `Bearer ${effectiveToken}`);
+    headers.set("x-rc-auth", firebaseToken ? "firebase" : "bearer");
+  } else {
+    headers.set("x-rc-auth", "missing");
+    if (import.meta.env.DEV) {
+      console.warn("[apiClient] missing auth token for request", { path });
+    }
   }
   const res = await fetch(url, { ...init, headers, credentials: "include" });
 

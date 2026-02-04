@@ -4,12 +4,20 @@
 // Prefer Vite-style env var if available, otherwise fall back to localhost
 import API_BASE from "../config/apiBase";
 import { getAuthToken } from "../lib/authToken";
+import { getFirebaseIdToken } from "../lib/firebaseAuthToken";
 
 const API_BASE_URL = API_BASE.replace(/\/$/, "");
 
-function authHeaders() {
-  const token = getAuthToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
+async function authHeaders() {
+  const firebaseToken = await getFirebaseIdToken();
+  const token = firebaseToken || getAuthToken();
+  if (token) {
+    return {
+      Authorization: `Bearer ${token}`,
+      "x-rc-auth": firebaseToken ? "firebase" : "bearer",
+    };
+  }
+  return { "x-rc-auth": "missing" };
 }
 
 export type DashboardAiInsightType = "info" | "warning" | "opportunity";
@@ -41,7 +49,7 @@ export async function fetchDashboardAiInsights(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      ...authHeaders(),
+      ...(await authHeaders()),
     },
     body: JSON.stringify(payload),
   });
