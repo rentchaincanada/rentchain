@@ -1,4 +1,5 @@
 import { Router } from "express";
+import admin from "firebase-admin";
 import { db } from "../config/firebase";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { getCountersSummary } from "../services/telemetryService";
@@ -7,6 +8,102 @@ import { getStripeClient, isStripeConfigured } from "../services/stripeService";
 const router = Router();
 
 router.get("/ping", requireAdmin, (_req, res) => res.json({ ok: true }));
+
+router.post("/users/create-landlord", requireAdmin, async (req, res) => {
+  try {
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    const password = String(req.body?.password || "").trim();
+    const planRaw = String(req.body?.plan || "free").trim().toLowerCase();
+    const plan = planRaw === "starter" || planRaw === "pro" || planRaw === "free" ? planRaw : "free";
+
+    if (!email || !password) {
+      return res.status(400).json({ ok: false, error: "missing_email_or_password" });
+    }
+
+    const user = await admin.auth().createUser({
+      email,
+      password,
+      emailVerified: false,
+      disabled: false,
+    });
+
+    const uid = user.uid;
+    const createdAt = admin.firestore.FieldValue.serverTimestamp();
+
+    await db.collection("accounts").doc(uid).set({
+      id: uid,
+      email,
+      role: "landlord",
+      landlordId: uid,
+      status: "active",
+      plan,
+      createdAt,
+    });
+
+    await db.collection("landlords").doc(uid).set({
+      id: uid,
+      plan,
+      createdAt,
+    });
+
+    await db
+      .collection("landlords")
+      .doc(uid)
+      .collection("settings")
+      .doc("onboarding")
+      .set({
+        dismissed: false,
+        steps: {
+          propertyAdded: false,
+          unitAdded: false,
+          tenantInvited: false,
+          applicationCreated: false,
+          exportPreviewed: false,
+        },
+        lastSeenAt: null,
+        createdAt,
+      });
+
+    return res.json({ ok: true, uid, email, landlordId: uid });
+  } catch (err: any) {
+    console.error("[admin/create-landlord] error", err?.message || err);
+    return res.status(500).json({ ok: false, error: "create_landlord_failed" });
+  }
+});
+
+router.post("/users/reset-onboarding", requireAdmin, async (req, res) => {
+  try {
+    const landlordId = String(req.body?.landlordId || "").trim();
+    if (!landlordId) {
+      return res.status(400).json({ ok: false, error: "missing_landlordId" });
+    }
+
+    await db
+      .collection("landlords")
+      .doc(landlordId)
+      .collection("settings")
+      .doc("onboarding")
+      .set(
+        {
+          dismissed: false,
+          steps: {
+            propertyAdded: false,
+            unitAdded: false,
+            tenantInvited: false,
+            applicationCreated: false,
+            exportPreviewed: false,
+          },
+          lastSeenAt: null,
+        },
+        { merge: true }
+      );
+
+    return res.json({ ok: true, landlordId });
+  } catch (err: any) {
+    console.error("[admin/reset-onboarding] error", err?.message || err);
+    return res.status(500).json({ ok: false, error: "reset_onboarding_failed" });
+  }
+});
 
 function toDayString(d: Date) {
   const y = d.getUTCFullYear();
