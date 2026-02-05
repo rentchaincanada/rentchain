@@ -19,7 +19,7 @@ export const SCREENING_REQUESTS_INTERNAL = SCREENING_REQUESTS;
 function normalizedPriceCents(): number {
   const parsed = Number(SCREENING_PRICE_CENTS);
   if (!Number.isFinite(parsed) || parsed <= 0) {
-    return 2999;
+    return 1999;
   }
   return Math.floor(parsed);
 }
