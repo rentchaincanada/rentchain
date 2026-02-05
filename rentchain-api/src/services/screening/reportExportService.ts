@@ -32,21 +32,13 @@ export async function createReportExport(opts: {
       ? opts.expiresAt
       : createdAt + DEFAULT_EXPIRES_DAYS * 24 * 60 * 60 * 1000;
 
-  let storagePath: string | null = null;
-  let storageBucket: string | null = null;
-  let pdfBase64: string | null = null;
-
-  try {
-    const uploaded = await uploadBufferToGcs({
-      path: `screening-exports/${exportId}.pdf`,
-      contentType: "application/pdf",
-      buffer: opts.pdfBuffer,
-    });
-    storagePath = uploaded.path;
-    storageBucket = uploaded.bucket;
-  } catch {
-    pdfBase64 = opts.pdfBuffer.toString("base64");
-  }
+  const uploaded = await uploadBufferToGcs({
+    path: `screening-exports/${exportId}.pdf`,
+    contentType: "application/pdf",
+    buffer: opts.pdfBuffer,
+  });
+  const storagePath = uploaded.path;
+  const storageBucket = uploaded.bucket;
 
   await exportRef.set({
     applicationId: opts.applicationId,
@@ -57,7 +49,6 @@ export async function createReportExport(opts: {
     tokenHash,
     storagePath,
     storageBucket,
-    pdfBase64,
     status: "ready",
   });
 
@@ -76,9 +67,6 @@ export function validateToken(exportDoc: any, token: string) {
 }
 
 export async function getExportPdfBuffer(exportDoc: any) {
-  if (exportDoc?.pdfBase64) {
-    return Buffer.from(exportDoc.pdfBase64, "base64");
-  }
   if (exportDoc?.storagePath && exportDoc?.storageBucket) {
     const stream = getFileReadStream({ bucket: exportDoc.storageBucket, path: exportDoc.storagePath });
     const chunks: Buffer[] = [];

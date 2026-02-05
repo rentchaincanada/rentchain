@@ -4,6 +4,7 @@ import { db } from "../config/firebase";
 import { getStripeClient } from "../services/stripeService";
 import { STRIPE_WEBHOOK_SECRET } from "../config/screeningConfig";
 import { stripeNotConfiguredResponse, isStripeNotConfiguredError } from "../lib/stripeNotConfigured";
+import { resolvePlanFromPriceId } from "../config/planMatrix";
 import { finalizeStripePayment } from "../services/stripeFinalize";
 import { applyScreeningResultsFromOrder } from "../services/stripeScreeningProcessor";
 import { beginScreening } from "../services/screening/screeningOrchestrator";
@@ -18,34 +19,6 @@ const router = Router();
 type BillingTier = "starter" | "pro" | "business";
 
 type ScreeningPaidUpdateStatus = "paid_set" | "already_paid" | "ignored";
-
-function resolveTierFromPriceId(priceId?: string | null): BillingTier | null {
-  const id = String(priceId || "").trim();
-  if (!id) return null;
-
-  const envMap: Array<{ key: string; tier: BillingTier }> = [
-    { key: "STRIPE_PRICE_STARTER_MONTHLY", tier: "starter" },
-    { key: "STRIPE_PRICE_STARTER_YEARLY", tier: "starter" },
-    { key: "STRIPE_PRICE_PRO_MONTHLY", tier: "pro" },
-    { key: "STRIPE_PRICE_PRO_YEARLY", tier: "pro" },
-    { key: "STRIPE_PRICE_BUSINESS_MONTHLY", tier: "business" },
-    { key: "STRIPE_PRICE_BUSINESS_YEARLY", tier: "business" },
-    { key: "STRIPE_PRICE_STARTER", tier: "starter" },
-    { key: "STRIPE_PRICE_PRO", tier: "pro" },
-    { key: "STRIPE_PRICE_BUSINESS", tier: "business" },
-  ];
-
-  for (const entry of envMap) {
-    const raw = process.env[entry.key];
-    if (!raw) continue;
-    const trimmed = String(raw).trim();
-    if (trimmed && trimmed === id) {
-      return entry.tier;
-    }
-  }
-
-  return null;
-}
 
 async function resolveLandlordIdFromCustomer(
   customerId?: string | null
@@ -274,7 +247,7 @@ export const stripeWebhookHandler = async (req: StripeWebhookRequest, res: Respo
           ? subscription.customer
           : subscription.customer?.id || null;
       const priceId = subscription.items?.data?.[0]?.price?.id || null;
-      const tier = resolveTierFromPriceId(priceId);
+      const tier = resolvePlanFromPriceId(priceId);
       const subscriptionStatus = subscription.status || "unknown";
       const currentPeriodEnd =
         typeof (subscription as any).current_period_end === "number"

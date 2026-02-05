@@ -39,6 +39,7 @@ import {
 import { createLedgerEvent } from "../services/ledgerEventsService";
 import { attachAccount } from "../middleware/attachAccount";
 import { requireFeature } from "../middleware/entitlements";
+import { getScreeningProviderHealth } from "../services/screening/providerHealth";
 
 const router = Router();
 
@@ -210,6 +211,18 @@ router.post(
 
     if (!req.user?.id || screeningRequest.landlordId !== req.user.id) {
       return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const providerHealth = await getScreeningProviderHealth();
+    if (
+      process.env.NODE_ENV === "production" &&
+      (!providerHealth.configured || !providerHealth.preflightOk)
+    ) {
+      return res.status(503).json({
+        ok: false,
+        error: "screening_unavailable",
+        detail: "provider_not_ready",
+      });
     }
 
     if (!isStripeConfigured()) {

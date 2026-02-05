@@ -15,6 +15,7 @@ import billingRoutes from "./routes/billingRoutes";
 import stripeScreeningOrdersWebhookRoutes, {
   stripeWebhookHandler,
 } from "./routes/stripeScreeningOrdersWebhookRoutes";
+import { transunionWebhookHandler } from "./routes/transunionWebhookRoutes";
 import { requestContext } from "./middleware/requestContext";
 import "./types/auth";
 import "./types/http";
@@ -86,6 +87,12 @@ app.post(
   express.raw({ type: "application/json" }),
   routeSource("stripeScreeningOrdersWebhookRoutes.ts"),
   stripeWebhookHandler
+);
+app.post(
+  "/api/webhooks/transunion",
+  express.raw({ type: "application/json" }),
+  routeSource("transunionWebhookRoutes.ts"),
+  transunionWebhookHandler
 );
 
 // ---- Body parsing (JSON/urlencoded) ----

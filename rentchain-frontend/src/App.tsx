@@ -38,6 +38,7 @@ import ScreeningStartPage from "./pages/screening/ScreeningStartPage";
 import ScreeningSuccessPage from "./pages/screening/ScreeningSuccessPage";
 import ScreeningCancelPage from "./pages/screening/ScreeningCancelPage";
 import ScreeningReportPage from "./pages/screening/ScreeningReportPage";
+import VerifyScreeningPage from "./pages/VerifyScreeningPage";
 import BillingPage from "./pages/BillingPage";
 import BillingCheckoutSuccessPage from "./pages/BillingCheckoutSuccessPage";
 import { DebugPanel } from "./components/DebugPanel";
@@ -383,6 +384,7 @@ function App() {
           />
         ))}
         <Route path="/apply/:token" element={<PublicApplyPage />} />
+        <Route path="/verify/:token" element={<VerifyScreeningPage />} />
 
         <Route path="*" element={<NotFoundPage />} />
       </Routes>

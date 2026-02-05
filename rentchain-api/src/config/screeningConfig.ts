@@ -2,7 +2,7 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-const DEFAULT_SCREENING_PRICE_CENTS = 2999;
+const DEFAULT_SCREENING_PRICE_CENTS = 1999;
 const DEFAULT_SCREENING_CURRENCY = "cad";
 const DEFAULT_FRONTEND_URL = "http://localhost:5173";
 

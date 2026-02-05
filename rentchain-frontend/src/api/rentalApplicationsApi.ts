@@ -51,6 +51,26 @@ export type ScreeningResult = {
   reportText?: string | null;
 };
 
+export type ScreeningOrder = {
+  id: string;
+  landlordId?: string | null;
+  applicationId?: string | null;
+  propertyId?: string | null;
+  unitId?: string | null;
+  status?: string | null;
+  paymentStatus?: string | null;
+  paidAt?: number | null;
+  consentedAt?: number | null;
+  provider?: string | null;
+  providerRequestId?: string | null;
+  reportBucket?: string | null;
+  reportObjectKey?: string | null;
+  failureCode?: string | null;
+  failureDetail?: string | null;
+  stripeIdentitySessionId?: string | null;
+  updatedAt?: number | null;
+};
+
 export type ScreeningEvent = {
   id: string;
   applicationId: string;
@@ -65,7 +85,11 @@ export type ScreeningEvent = {
     | "webhook_ignored"
     | "manual_complete"
     | "manual_fail"
-    | "recomputed";
+    | "recomputed"
+    | "consent_created"
+    | "kba_in_progress"
+    | "kba_failed"
+    | "report_ready";
   at: number;
   meta?: {
     reasonCode?: string;
@@ -303,6 +327,29 @@ export async function runScreening(
   return res as { ok: boolean; data?: ScreeningRunResult; error?: string; detail?: string };
 }
 
+export async function createScreeningOrder(params: {
+  applicationId?: string;
+  propertyId?: string;
+  unitId?: string | null;
+  tenantEmail?: string | null;
+  tenantName?: string | null;
+  screeningTier?: "basic" | "verify" | "verify_ai";
+  addons?: string[];
+  totalAmount?: number;
+  scoreAddOn: boolean;
+  serviceLevel: "SELF_SERVE" | "VERIFIED" | "VERIFIED_AI";
+  returnTo?: string;
+  successPath?: string;
+  cancelPath?: string;
+}): Promise<{ ok: boolean; checkoutUrl?: string; orderId?: string; tenantInviteUrl?: string; error?: string; detail?: string }> {
+  const res: any = await apiFetch(`/screening/orders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  });
+  return res as { ok: boolean; checkoutUrl?: string; orderId?: string; tenantInviteUrl?: string; error?: string; detail?: string };
+}
+
 export async function createScreeningCheckout(
   id: string,
   params: {
@@ -312,13 +359,8 @@ export async function createScreeningCheckout(
     scoreAddOn: boolean;
     serviceLevel: "SELF_SERVE" | "VERIFIED" | "VERIFIED_AI";
   }
-): Promise<{ ok: boolean; checkoutUrl?: string; orderId?: string; error?: string; detail?: string }> {
-  const res: any = await apiFetch(`/rental-applications/${encodeURIComponent(id)}/screening/checkout`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(params),
-  });
-  return res as { ok: boolean; checkoutUrl?: string; orderId?: string; error?: string; detail?: string };
+): Promise<{ ok: boolean; checkoutUrl?: string; orderId?: string; tenantInviteUrl?: string; error?: string; detail?: string }> {
+  return createScreeningOrder({ applicationId: id, ...params });
 }
 
 export async function fetchScreening(
@@ -333,6 +375,20 @@ export async function fetchScreeningResult(
 ): Promise<{ ok: boolean; result?: ScreeningResult; error?: string }> {
   const res: any = await apiFetch(`/rental-applications/${encodeURIComponent(id)}/screening/result`);
   return res as { ok: boolean; result?: ScreeningResult; error?: string };
+}
+
+export async function fetchScreeningOrder(
+  orderId: string
+): Promise<{ ok: boolean; data?: ScreeningOrder; error?: string }> {
+  const res: any = await apiFetch(`/screening/orders/${encodeURIComponent(orderId)}`);
+  return res as { ok: boolean; data?: ScreeningOrder; error?: string };
+}
+
+export async function fetchScreeningOrderReport(
+  orderId: string
+): Promise<{ ok: boolean; url?: string; expiresInSeconds?: number; error?: string }> {
+  const res: any = await apiFetch(`/screening/orders/${encodeURIComponent(orderId)}/report`);
+  return res as { ok: boolean; url?: string; expiresInSeconds?: number; error?: string };
 }
 
 export async function fetchScreeningEvents(

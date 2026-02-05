@@ -10,7 +10,11 @@ export type ScreeningEventType =
   | "webhook_ignored"
   | "manual_complete"
   | "manual_fail"
-  | "recomputed";
+  | "recomputed"
+  | "consent_created"
+  | "kba_in_progress"
+  | "kba_failed"
+  | "report_ready";
 
 export type ScreeningEventActor = "system" | "admin" | "landlord";
 
@@ -24,18 +28,20 @@ export type ScreeningEventMeta = {
 };
 
 export async function writeScreeningEvent(params: {
-  applicationId: string;
+  applicationId?: string | null;
+  orderId?: string | null;
   landlordId: string | null;
   type: ScreeningEventType;
   at?: number;
   meta?: ScreeningEventMeta;
   actor: ScreeningEventActor;
 }) {
-  const { applicationId, landlordId, type, meta, actor } = params;
+  const { applicationId, orderId, landlordId, type, meta, actor } = params;
   const at = typeof params.at === "number" ? params.at : Date.now();
   const eventRef = db.collection("screeningEvents").doc();
   await eventRef.set({
-    applicationId,
+    applicationId: applicationId || "",
+    orderId: orderId || "",
     landlordId: landlordId || "",
     type,
     at,
