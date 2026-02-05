@@ -14,6 +14,7 @@ import { buildScreeningStatusPayload } from "../services/screening/screeningPayl
 import { writeScreeningEvent } from "../services/screening/screeningEvents";
 import { buildScreeningPdf } from "../services/screening/reportPdf";
 import { buildShareUrl, createReportExport } from "../services/screening/reportExportService";
+import { getScreeningProviderHealth } from "../services/screening/providerHealth";
 
 const router = Router();
 
@@ -499,6 +500,26 @@ router.post(
         });
       }
 
+      const providerHealth = await getScreeningProviderHealth();
+      if (
+        process.env.NODE_ENV === "production" &&
+        (!providerHealth.configured || !providerHealth.preflightOk)
+      ) {
+        await writeScreeningEvent({
+          applicationId: id,
+          landlordId: data?.landlordId || null,
+          type: "checkout_blocked",
+          at: Date.now(),
+          meta: { status: "provider_unavailable", reasonCode: providerHealth.preflightDetail || "not_ready" },
+          actor: role === "admin" ? "admin" : "landlord",
+        });
+        return res.status(503).json({
+          ok: false,
+          error: "screening_unavailable",
+          detail: "provider_not_ready",
+        });
+      }
+
       const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
       const { screeningTier, addons, serviceLevel, scoreAddOn, expeditedAddOn, pricing } =
         resolvePricingInput(body);
@@ -558,7 +579,7 @@ router.post(
         scoreAddOnCents: pricing.scoreAddOnCents,
         expeditedAddOn,
         expeditedAddOnCents: pricing.expeditedAddOnCents,
-        provider: "STUB",
+        provider: providerHealth.provider,
         providerRequestId: null,
         paidAt: null,
         error: null,
@@ -765,6 +786,26 @@ router.post(
         return res.status(400).json({ ok: false, error: "NOT_ELIGIBLE", detail: eligibility.detail });
       }
 
+      const providerHealth = await getScreeningProviderHealth();
+      if (
+        process.env.NODE_ENV === "production" &&
+        (!providerHealth.configured || !providerHealth.preflightOk)
+      ) {
+        await writeScreeningEvent({
+          applicationId: id,
+          landlordId: data?.landlordId || null,
+          type: "checkout_blocked",
+          at: Date.now(),
+          meta: { status: "provider_unavailable", reasonCode: providerHealth.preflightDetail || "not_ready" },
+          actor: role === "admin" ? "admin" : "landlord",
+        });
+        return res.status(503).json({
+          ok: false,
+          error: "screening_unavailable",
+          detail: "provider_not_ready",
+        });
+      }
+
       const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
       const { screeningTier, addons, serviceLevel, scoreAddOn, expeditedAddOn, pricing } =
         resolvePricingInput(body);
@@ -788,7 +829,7 @@ router.post(
         scoreAddOnCents: pricing.scoreAddOnCents,
         expeditedAddOn,
         expeditedAddOnCents: pricing.expeditedAddOnCents,
-        provider: "STUB",
+        provider: providerHealth.provider,
         providerRequestId: null,
         paidAt: null,
         error: null,

@@ -10,6 +10,7 @@ import { getTenantsList, getTenantDetailBundle } from "../services/tenantDetails
 import { getStripeClient, isStripeConfigured, STRIPE_API_VERSION } from "../services/stripeService";
 import { requireCapability } from "../services/capabilityGuard";
 import onboardingRoutes from "./onboardingRoutes";
+import { getScreeningProviderHealth } from "../services/screening/providerHealth";
 
 const router = Router();
 
@@ -86,6 +87,20 @@ router.get("/health/stripe", async (_req, res) => {
     },
     deepChecked: deepCheckEnabled,
     apiRevision: process.env.K_REVISION || null,
+  });
+});
+
+router.get("/health/screening-provider", async (_req, res) => {
+  res.setHeader("x-route-source", "publicRoutes.ts");
+  const health = await getScreeningProviderHealth();
+  res.json({
+    ok: true,
+    provider: health.provider,
+    configured: health.configured,
+    preflightOk: health.preflightOk,
+    preflightDetail: health.preflightDetail || null,
+    apiRevision: process.env.COMMIT_SHA || process.env.GIT_SHA || null,
+    ts: Date.now(),
   });
 });
 

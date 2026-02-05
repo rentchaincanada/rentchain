@@ -24,18 +24,20 @@ export type ScreeningEventMeta = {
 };
 
 export async function writeScreeningEvent(params: {
-  applicationId: string;
+  applicationId?: string | null;
+  orderId?: string | null;
   landlordId: string | null;
   type: ScreeningEventType;
   at?: number;
   meta?: ScreeningEventMeta;
   actor: ScreeningEventActor;
 }) {
-  const { applicationId, landlordId, type, meta, actor } = params;
+  const { applicationId, orderId, landlordId, type, meta, actor } = params;
   const at = typeof params.at === "number" ? params.at : Date.now();
   const eventRef = db.collection("screeningEvents").doc();
   await eventRef.set({
-    applicationId,
+    applicationId: applicationId || "",
+    orderId: orderId || "",
     landlordId: landlordId || "",
     type,
     at,
