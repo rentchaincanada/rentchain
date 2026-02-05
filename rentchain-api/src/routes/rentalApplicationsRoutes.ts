@@ -15,6 +15,7 @@ import { writeScreeningEvent } from "../services/screening/screeningEvents";
 import { buildScreeningPdf } from "../services/screening/reportPdf";
 import { buildShareUrl, createReportExport } from "../services/screening/reportExportService";
 import { getScreeningProviderHealth } from "../services/screening/providerHealth";
+import { buildTenantInviteUrl, createInviteToken } from "../services/screening/inviteTokens";
 
 const router = Router();
 
@@ -40,6 +41,7 @@ function isAllowedRedirectOrigin(origin: string) {
   if (/^https:\/\/.+\.vercel\.app$/i.test(origin)) return true;
   return false;
 }
+
 
 function normalizeOrigin(raw?: string | string[] | null) {
   const value = Array.isArray(raw) ? raw[0] : raw;
@@ -752,6 +754,293 @@ router.post(
         error: "internal_error",
         detail: String(err?.message || ""),
       });
+    }
+  }
+);
+
+router.post(
+  "/screening/orders",
+  attachAccount,
+  requireFeature("screening"),
+  async (req: any, res) => {
+    const logBase = { route: "screening_orders", applicationId: String(req.body?.applicationId || "") };
+    try {
+      res.setHeader("x-route-source", "rentalApplicationsRoutes:screeningOrders");
+      const role = String(req.user?.role || "").toLowerCase();
+      if (role !== "landlord" && role !== "admin") {
+        return res.status(401).json({ ok: false, error: "unauthorized" });
+      }
+      const landlordId = req.user?.landlordId || req.user?.id || null;
+      if (!landlordId) return res.status(401).json({ ok: false, error: "unauthorized" });
+
+      const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
+      const applicationId = String(body?.applicationId || "").trim();
+      if (!applicationId) return res.status(400).json({ ok: false, error: "missing_application" });
+
+      const snap = await db.collection("rentalApplications").doc(applicationId).get();
+      if (!snap.exists) return res.status(404).json({ ok: false, error: "not_found" });
+      const data = snap.data() as any;
+      if (data?.landlordId && data.landlordId !== landlordId) {
+        return res.status(401).json({ ok: false, error: "unauthorized" });
+      }
+
+      const eligibility = evaluateEligibility(data);
+      if (!eligibility.eligible) {
+        return res.status(400).json({
+          ok: false,
+          error: "not_eligible",
+          detail: eligibility.detail,
+          reasonCode: eligibility.reasonCode,
+        });
+      }
+
+      const providerHealth = await getScreeningProviderHealth();
+      if (
+        process.env.NODE_ENV === "production" &&
+        (!providerHealth.configured || !providerHealth.preflightOk)
+      ) {
+        await writeScreeningEvent({
+          applicationId,
+          landlordId: data?.landlordId || null,
+          type: "checkout_blocked",
+          at: Date.now(),
+          meta: { status: "provider_unavailable", reasonCode: providerHealth.preflightDetail || "not_ready" },
+          actor: role === "admin" ? "admin" : "landlord",
+        });
+        return res.status(503).json({
+          ok: false,
+          error: "screening_unavailable",
+          detail: "provider_not_ready",
+        });
+      }
+
+      const { screeningTier, addons, serviceLevel, scoreAddOn, expeditedAddOn, pricing } =
+        resolvePricingInput(body);
+      const rawReturnTo = String(body?.returnTo || "/dashboard");
+      const returnTo = rawReturnTo.startsWith("/") ? rawReturnTo : "/dashboard";
+      const frontendOrigin = resolveFrontendOrigin(req);
+      const successUrl = buildRedirectUrl({
+        input: body?.successPath,
+        fallbackPath: "/screening/success",
+        frontendOrigin,
+        applicationId: applicationId,
+        returnTo,
+      });
+      const cancelUrl = buildRedirectUrl({
+        input: body?.cancelPath,
+        fallbackPath: "/screening/cancel",
+        frontendOrigin,
+        applicationId: applicationId,
+        returnTo,
+      });
+      if (!successUrl || !cancelUrl) {
+        console.warn("[screening_orders] invalid redirect origin", logBase);
+        return res.status(400).json({ ok: false, error: "invalid_redirect_origin" });
+      }
+
+      let stripe: any;
+      try {
+        stripe = getStripeClient();
+      } catch (err: any) {
+        if (err?.code === "stripe_not_configured" || err?.message === "stripe_not_configured") {
+          return res.status(400).json({ ok: false, error: "stripe_not_configured" });
+        }
+        throw err;
+      }
+
+      const now = Date.now();
+      const orderRef = db.collection("screeningOrders").doc();
+      const orderId = orderRef.id;
+      const aiVerification = serviceLevel === "VERIFIED_AI";
+      const { token, tokenHash } = createInviteToken();
+      const tenantInviteUrl = buildTenantInviteUrl(token);
+
+      const applicant = data?.applicant || {};
+      const tenantName =
+        String(body?.tenantName || "").trim() ||
+        [applicant?.firstName, applicant?.lastName].filter(Boolean).join(" ").trim();
+      const tenantEmail = String(body?.tenantEmail || applicant?.email || "").trim().toLowerCase();
+
+      const orderPayload: any = {
+        id: orderId,
+        landlordId,
+        applicationId,
+        propertyId: data?.propertyId || null,
+        unitId: data?.unitId || null,
+        createdAt: now,
+        amountCents: pricing.baseAmountCents,
+        currency: "CAD",
+        status: "CREATED",
+        paymentStatus: "unpaid",
+        finalized: false,
+        finalizedAt: null,
+        lastStripeEventId: null,
+        amountTotalCents: pricing.totalAmountCents,
+        screeningTier,
+        addons,
+        scoreAddOn,
+        scoreAddOnCents: pricing.scoreAddOnCents,
+        expeditedAddOn,
+        expeditedAddOnCents: pricing.expeditedAddOnCents,
+        provider: providerHealth.provider,
+        providerRequestId: null,
+        paidAt: null,
+        error: null,
+        serviceLevel,
+        aiVerification,
+        aiPriceCents: aiVerification ? pricing.aiAddOnCents : 0,
+        totalAmountCents: pricing.totalAmountCents,
+        reviewerStatus: "QUEUED",
+        stripeSessionId: null,
+        stripePaymentIntentId: null,
+        tenantInviteTokenHash: tokenHash,
+        tenantInviteCreatedAt: now,
+        tenantInviteSentAt: null,
+        tenantName: tenantName || null,
+        tenantEmail: tenantEmail || null,
+      };
+
+      await orderRef.set(orderPayload, { merge: true });
+
+      const currency = String(orderPayload.currency || "CAD").toLowerCase();
+      const lineItems: any[] = [
+        {
+          price_data: {
+            currency,
+            product_data: { name: "Rental screening" },
+            unit_amount: pricing.baseAmountCents,
+          },
+          quantity: 1,
+        },
+      ];
+      if (pricing.verifiedAddOnCents) {
+        lineItems.push({
+          price_data: {
+            currency,
+            product_data: { name: "Verified screening add-on" },
+            unit_amount: pricing.verifiedAddOnCents,
+          },
+          quantity: 1,
+        });
+      }
+      if (pricing.aiAddOnCents) {
+        lineItems.push({
+          price_data: {
+            currency,
+            product_data: { name: "AI verification add-on" },
+            unit_amount: pricing.aiAddOnCents,
+          },
+          quantity: 1,
+        });
+      }
+      if (pricing.scoreAddOnCents) {
+        lineItems.push({
+          price_data: {
+            currency,
+            product_data: { name: "Credit score add-on" },
+            unit_amount: pricing.scoreAddOnCents,
+          },
+          quantity: 1,
+        });
+      }
+      if (pricing.expeditedAddOnCents) {
+        lineItems.push({
+          price_data: {
+            currency,
+            product_data: { name: "Expedited processing add-on" },
+            unit_amount: pricing.expeditedAddOnCents,
+          },
+          quantity: 1,
+        });
+      }
+
+      const session = await stripe.checkout.sessions.create({
+        mode: "payment",
+        line_items: lineItems,
+        client_reference_id: orderId,
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        metadata: {
+          orderId,
+          applicationId,
+          landlordId,
+          serviceLevel,
+          scoreAddOn: String(scoreAddOn),
+          screeningTier,
+          addons: addons.join(","),
+          totalAmountCents: String(pricing.totalAmountCents),
+        },
+        payment_intent_data: {
+          metadata: {
+            orderId,
+            applicationId,
+            landlordId,
+            serviceLevel,
+            scoreAddOn: String(scoreAddOn),
+            screeningTier,
+            addons: addons.join(","),
+            totalAmountCents: String(pricing.totalAmountCents),
+          },
+        },
+      });
+
+      await orderRef.set({ stripeSessionId: session.id }, { merge: true });
+
+      if (tenantEmail) {
+        const apiKey = String(process.env.SENDGRID_API_KEY || "").trim();
+        const from =
+          String(process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM || process.env.FROM_EMAIL || "")
+            .trim();
+        if (apiKey && from) {
+          try {
+            sgMail.setApiKey(apiKey);
+            const subject = "RentChain: Complete your screening";
+            const safeName = tenantName || "there";
+            await sgMail.send({
+              to: tenantEmail,
+              from,
+              subject,
+              text: [
+                `Hi ${safeName},`,
+                "",
+                "Your landlord has requested a tenant screening.",
+                "Complete your verification here:",
+                tenantInviteUrl,
+                "",
+                "- RentChain",
+              ].join("\n"),
+              html: `
+                <div style="font-family:Arial,sans-serif;line-height:1.5;color:#0f172a;">
+                  <p>Hi ${safeName},</p>
+                  <p>Your landlord has requested a tenant screening.</p>
+                  <p><a href="${tenantInviteUrl}" style="display:inline-block;padding:10px 14px;background:#2563eb;color:#fff;border-radius:10px;text-decoration:none;font-weight:700;">Start verification</a></p>
+                  <p style="font-size:12px;color:#6b7280;">If the button doesn't work, copy and paste: ${tenantInviteUrl}</p>
+                  <p>- RentChain</p>
+                </div>
+              `,
+              trackingSettings: {
+                clickTracking: { enable: false, enableText: false },
+                openTracking: { enable: false },
+              },
+              mailSettings: { footer: { enable: false } },
+            });
+            await orderRef.set({ tenantInviteSentAt: Date.now() }, { merge: true });
+          } catch (err: any) {
+            console.error("[screening_orders] invite email failed", {
+              orderId,
+              error: err?.message || err,
+            });
+          }
+        }
+      }
+
+      return res.json({ ok: true, orderId, checkoutUrl: session.url, tenantInviteUrl });
+    } catch (err: any) {
+      console.error("[screening_orders] failed", {
+        ...logBase,
+        error: err?.message || "unknown",
+      });
+      return res.status(500).json({ ok: false, error: "internal_error" });
     }
   }
 );
