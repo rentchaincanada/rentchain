@@ -718,6 +718,13 @@ const ApplicationsPage: React.FC = () => {
         throw new Error(res.detail || res.error || "Unable to start checkout");
       }
       onboarding.markStepComplete("applicationCreated", "explicit");
+      if (res.tenantInviteUrl) {
+        showToast({
+          message: "Tenant invite created",
+          description: "We emailed the applicant a verification link.",
+          variant: "success",
+        });
+      }
       window.location.href = res.checkoutUrl;
     } catch (err: any) {
       showToast({ message: "Screening failed", description: err?.message || "", variant: "error" });
