@@ -9,6 +9,10 @@
       "destination": "https://rentchain-landlord-api-915921057662.us-central1.run.app/api/:path*"
     },
     {
+      "source": "/sample/:path*",
+      "destination": "/sample/:path*"
+    },
+    {
       "source": "/:path*",
       "destination": "/index.html"
     }
