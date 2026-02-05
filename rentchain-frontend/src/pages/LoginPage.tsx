@@ -127,10 +127,11 @@ export const LoginPage: React.FC = () => {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        padding: spacing.xl,
+        padding: "clamp(16px, 5vw, 40px)",
+        overflowX: "hidden",
       }}
     >
-      <Card elevated style={{ width: "100%", maxWidth: 460, padding: spacing.lg }}>
+      <Card elevated style={{ width: "min(460px, 92vw)", padding: spacing.lg }}>
         <div style={{ marginBottom: spacing.xs, color: text.subtle, fontSize: "0.9rem" }}>
           RentChain Landlord Portal
         </div>

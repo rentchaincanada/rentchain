@@ -19,6 +19,8 @@ import { useAuth } from "../context/useAuth";
 import { useToast } from "../components/ui/ToastProvider";
 import { buildOnboardingSteps } from "../lib/onboardingSteps";
 import { getApplicationPrereqState } from "../lib/applicationPrereqs";
+import { CreatePropertyFirstModal } from "../components/properties/CreatePropertyFirstModal";
+import { buildCreatePropertyUrl, buildReturnTo } from "../lib/propertyGate";
 
 const StarterOnboardingPanel = React.lazy(
   () => import("../components/dashboard/StarterOnboardingPanel")
@@ -56,6 +58,8 @@ const DashboardPage: React.FC = () => {
   const [propsLoading, setPropsLoading] = React.useState(false);
   const [invitesCount, setInvitesCount] = React.useState(0);
   const [invitesLoading, setInvitesLoading] = React.useState(false);
+  const [propertyGateOpen, setPropertyGateOpen] = React.useState(false);
+  const [pendingPropertyAction, setPendingPropertyAction] = React.useState<"create_application" | null>(null);
   const onboarding = useOnboardingState();
   const prevDerivedRef = React.useRef({
     propertyAdded: false,
@@ -175,6 +179,28 @@ const DashboardPage: React.FC = () => {
   const showOnboardingSkeleton = onboarding.loading && !isAdmin;
   const showStarterOnboarding = !onboarding.loading && !onboarding.dismissed;
   const showAdvancedCollapsed = showStarterOnboarding;
+
+  const handleCreateApplicationClick = () => {
+    const prereq = getApplicationPrereqState({
+      propertiesCount: derivedPropertiesCount,
+      unitsCount: derivedUnitsCount,
+    });
+    if (prereq.missingProperty) {
+      track("onboarding_step_clicked", {
+        stepKey: "applicationCreated",
+        blockedBy: "no_property",
+        source: "dashboard",
+      });
+      setPendingPropertyAction("create_application");
+      setPropertyGateOpen(true);
+      return;
+    }
+    track("onboarding_step_clicked", {
+      stepKey: "applicationCreated",
+      source: "dashboard",
+    });
+    navigate("/applications?autoSelectProperty=1&openSendApplication=1");
+  };
 
   const derivedSteps = {
     propertyAdded: derivedPropertiesCount > 0,
@@ -325,7 +351,8 @@ const DashboardPage: React.FC = () => {
                         blockedBy: "no_property",
                         source: "dashboard_quick_action",
                       });
-                      navigate("/properties?focus=addProperty");
+                      setPendingPropertyAction("create_application");
+                      setPropertyGateOpen(true);
                       return;
                     }
                     if (prereq.missingUnit) {
@@ -334,14 +361,13 @@ const DashboardPage: React.FC = () => {
                         blockedBy: "no_units",
                         source: "dashboard_quick_action",
                       });
-                      navigate("/properties?openAddUnit=1");
-                      return;
+                      // Units are optional for screening; don't block create application.
                     }
                     track("onboarding_step_clicked", {
                       stepKey: "applicationCreated",
                       source: "dashboard_quick_action",
                     });
-                    navigate("/applications?autoSelectProperty=1&openSendApplication=1");
+                    handleCreateApplicationClick();
                   }}
                   aria-label="Create application"
                   disabled={progressLoading}
@@ -412,7 +438,7 @@ const DashboardPage: React.FC = () => {
             <div style={{ color: text.muted, marginBottom: 12 }}>
               Next up: create your first application.
             </div>
-            <Button onClick={() => navigate("/applications?autoSelectProperty=1&openSendApplication=1")}>
+            <Button onClick={handleCreateApplicationClick}>
               Create application
             </Button>
           </Card>
@@ -424,7 +450,7 @@ const DashboardPage: React.FC = () => {
             <div style={{ color: text.muted, marginBottom: 12 }}>
               Invite a tenant or start an application to begin screening.
             </div>
-            <Button onClick={() => navigate("/applications?autoSelectProperty=1&openSendApplication=1")}>
+            <Button onClick={handleCreateApplicationClick}>
               Create application
             </Button>
           </Card>
@@ -484,6 +510,15 @@ const DashboardPage: React.FC = () => {
           </Section>
         ) : null}
       </div>
+      <CreatePropertyFirstModal
+        open={propertyGateOpen}
+        onClose={() => setPropertyGateOpen(false)}
+        onCreate={() => {
+          const returnTo = buildReturnTo(pendingPropertyAction || "create_application");
+          navigate(buildCreatePropertyUrl(returnTo));
+          setPropertyGateOpen(false);
+        }}
+      />
     </MacShell>
   );
 };

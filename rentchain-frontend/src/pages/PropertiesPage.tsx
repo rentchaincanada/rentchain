@@ -30,6 +30,7 @@ import { PropertySelector } from "../components/properties/PropertySelector";
 import "../styles/propertiesMobile.css";
 import "./PropertiesPage.css";
 import { track } from "../lib/analytics";
+import { resolveReturnToParam } from "../lib/propertyGate";
 
 const PropertiesPage: React.FC = () => {
   const [properties, setProperties] = useState<Property[]>([]);
@@ -256,9 +257,12 @@ const PropertiesPage: React.FC = () => {
       setProperties((prev) => [...prev, property]);
       setSelectedPropertyId(property.id);
       const next = new URLSearchParams(location.search);
+      const returnTo = resolveReturnToParam(next.get("returnTo"));
+      if (returnTo) {
+        navigate(returnTo, { replace: true });
+        return;
+      }
       next.set("propertyId", property.id);
-      // Onboarding: immediately guide to add units after creating a property
-      next.set("openAddUnit", "1");
       navigate({ pathname: location.pathname, search: next.toString() }, { replace: true });
       return;
     }

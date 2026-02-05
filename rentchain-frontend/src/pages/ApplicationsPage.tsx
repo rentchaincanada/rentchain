@@ -33,6 +33,8 @@ import { useOnboardingState } from "../hooks/useOnboardingState";
 import { SendApplicationModal } from "../components/properties/SendApplicationModal";
 import { unitsForProperty } from "../lib/propertyCounts";
 import { getApplicationPrereqState } from "../lib/applicationPrereqs";
+import { CreatePropertyFirstModal } from "../components/properties/CreatePropertyFirstModal";
+import { buildCreatePropertyUrl, buildReturnTo } from "../lib/propertyGate";
 import "./ApplicationsPage.css";
 
 const statusOptions: RentalApplicationStatus[] = [
@@ -150,6 +152,7 @@ const ApplicationsPage: React.FC = () => {
   const [exportPreviewSource, setExportPreviewSource] = useState<"applications" | "onboarding">("applications");
   const [sendAppOpen, setSendAppOpen] = useState(false);
   const [sendAppPropertyId, setSendAppPropertyId] = useState<string | null>(null);
+  const [propertyGateOpen, setPropertyGateOpen] = useState(false);
   const onboarding = useOnboardingState();
   const propertiesCount = propertyRecords.length;
   const unitsCount = propertyRecords.reduce((sum, p) => sum + unitsForProperty(p), 0);
@@ -346,7 +349,7 @@ const ApplicationsPage: React.FC = () => {
     });
 
     if (prereq.missingProperty) {
-      showToast({ message: "Add a property first.", variant: "error" });
+      setPropertyGateOpen(true);
       params.delete("openSendApplication");
       params.delete("autoSelectProperty");
       navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
@@ -354,13 +357,6 @@ const ApplicationsPage: React.FC = () => {
     }
     if (prereq.missingSelectedProperty) {
       showToast({ message: "Select a property first.", variant: "error" });
-      params.delete("openSendApplication");
-      params.delete("autoSelectProperty");
-      navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
-      return;
-    }
-    if (prereq.missingUnit) {
-      showToast({ message: "Add a unit first.", variant: "error" });
       params.delete("openSendApplication");
       params.delete("autoSelectProperty");
       navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
@@ -596,8 +592,7 @@ const ApplicationsPage: React.FC = () => {
     });
 
     if (prereq.missingProperty) {
-      showToast({ message: "Add a property first.", variant: "error" });
-      navigate("/properties?focus=addProperty");
+      setPropertyGateOpen(true);
       return;
     }
     if (prereq.missingSelectedProperty) {
@@ -608,11 +603,6 @@ const ApplicationsPage: React.FC = () => {
         return;
       }
       showToast({ message: "Select a property first.", variant: "error" });
-      return;
-    }
-    if (prereq.missingUnit) {
-      showToast({ message: "Add a unit first.", variant: "error" });
-      navigate("/properties?openAddUnit=1");
       return;
     }
     setSendAppPropertyId(nextSelectedId);
@@ -679,7 +669,18 @@ const ApplicationsPage: React.FC = () => {
     track("exports_sample_opened", { source: "applications" });
     if (typeof window !== "undefined") {
       const base = window.location.origin;
-      window.open(`${base}/sample/screening_report_sample.pdf`, "_blank", "noopener,noreferrer");
+      const win = window.open(
+        `${base}/sample/screening_report_sample.pdf`,
+        "_blank",
+        "noopener,noreferrer"
+      );
+      if (!win) {
+        showToast({
+          message: "Sample report unavailable",
+          description: "Please allow popups to view the sample report.",
+          variant: "error",
+        });
+      }
     }
   };
 
@@ -1362,6 +1363,15 @@ const ApplicationsPage: React.FC = () => {
         </Card>
       </div>
       )}
+      <CreatePropertyFirstModal
+        open={propertyGateOpen}
+        onClose={() => setPropertyGateOpen(false)}
+        onCreate={() => {
+          const returnTo = buildReturnTo("create_application");
+          navigate(buildCreatePropertyUrl(returnTo));
+          setPropertyGateOpen(false);
+        }}
+      />
       <SendApplicationModal
         open={sendAppOpen}
         propertyId={sendAppPropertyId}
