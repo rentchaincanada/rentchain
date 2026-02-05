@@ -13,6 +13,7 @@ import onboardingRoutes from "./onboardingRoutes";
 import { getScreeningProviderHealth } from "../services/screening/providerHealth";
 import { hashInviteToken } from "../services/screening/inviteTokens";
 import { writeScreeningEvent } from "../services/screening/screeningEvents";
+import { getBureauProvider } from "../services/screening/providers/bureauProvider";
 
 const router = Router();
 
@@ -161,6 +162,85 @@ router.post("/screening/tenant/:token/consent", async (req: any, res) => {
     { merge: true }
   );
 
+  const provider = getBureauProvider();
+  if (!provider.isConfigured()) {
+    return res.status(503).json({ ok: false, error: "provider_not_configured" });
+  }
+
+  let redirectUrl: string | null = null;
+  try {
+    const applicationId = String(data?.applicationId || "").trim();
+    let address: any = undefined;
+    if (applicationId) {
+      const appSnap = await db.collection("rentalApplications").doc(applicationId).get();
+      if (appSnap.exists) {
+        const app = appSnap.data() as any;
+        const addr = app?.recentAddress || app?.applicant?.address || {};
+        address = {
+          line1: addr?.line1 || addr?.streetNumber || null,
+          line2: addr?.line2 || addr?.streetName || null,
+          city: addr?.city || null,
+          province: addr?.province || null,
+          postalCode: addr?.postalCode || null,
+          country: addr?.country || "CA",
+        };
+      }
+    }
+
+    const result = await provider.createRequest({
+      orderId: doc.id,
+      tenant: {
+        firstName: String(data?.tenantName || "").split(" ")[0] || "Applicant",
+        lastName: String(data?.tenantName || "").split(" ").slice(1).join(" "),
+        email: String(data?.tenantEmail || ""),
+        phone: null,
+        dateOfBirth: null,
+      },
+      address,
+      consent: {
+        name: consentName,
+        consentedAt,
+        ip: ip || null,
+        userAgent: userAgent || null,
+      },
+      returnUrl: null,
+    });
+
+    redirectUrl = result.redirectUrl || null;
+
+    await doc.ref.set(
+      {
+        provider: provider.name,
+        providerRequestId: result.requestId || null,
+        providerRedirectUrl: redirectUrl,
+        status: "KBA_IN_PROGRESS",
+        updatedAt: Date.now(),
+      },
+      { merge: true }
+    );
+
+    await writeScreeningEvent({
+      orderId: doc.id,
+      applicationId: data?.applicationId || null,
+      landlordId: data?.landlordId || null,
+      type: "kba_in_progress",
+      at: Date.now(),
+      meta: { status: "kba_in_progress" },
+      actor: "system",
+    });
+  } catch (err: any) {
+    await doc.ref.set(
+      {
+        status: "FAILED",
+        failureCode: "PROVIDER_REQUEST_FAILED",
+        failureDetail: String(err?.message || err),
+        updatedAt: Date.now(),
+      },
+      { merge: true }
+    );
+    return res.status(502).json({ ok: false, error: "provider_request_failed" });
+  }
+
   await writeScreeningEvent({
     orderId: doc.id,
     applicationId: data?.applicationId || null,
@@ -171,7 +251,7 @@ router.post("/screening/tenant/:token/consent", async (req: any, res) => {
     actor: "system",
   });
 
-  return res.json({ ok: true, orderId: doc.id, consentedAt });
+  return res.json({ ok: true, orderId: doc.id, consentedAt, redirectUrl });
 });
 
 router.get("/__probe/version", (_req, res) => {

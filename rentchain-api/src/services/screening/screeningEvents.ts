@@ -11,7 +11,10 @@ export type ScreeningEventType =
   | "manual_complete"
   | "manual_fail"
   | "recomputed"
-  | "consent_created";
+  | "consent_created"
+  | "kba_in_progress"
+  | "kba_failed"
+  | "report_ready";
 
 export type ScreeningEventActor = "system" | "admin" | "landlord";
 

@@ -41,12 +41,50 @@ export class TransUnionProvider implements BureauProvider {
   }
 
   async createRequest(_input: BureauProviderRequest): Promise<BureauProviderRequestResult> {
-    // TODO: implement reseller/TU request creation when API docs/keys are available.
-    throw new Error("transunion_create_request_not_implemented");
+    const env = readEnv();
+    if (!env.baseUrl || !env.apiKey) {
+      throw new Error("transunion_not_configured");
+    }
+    const res = await fetch(`${env.baseUrl.replace(/\/$/, "")}/requests`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.apiKey}`,
+        "Content-Type": "application/json",
+        ...(env.clientId ? { "X-Client-Id": env.clientId } : {}),
+      },
+      body: JSON.stringify(_input),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`transunion_create_failed:${res.status}:${text}`);
+    }
+    const data = (await res.json()) as any;
+    return {
+      requestId: String(data?.requestId || data?.id || ""),
+      redirectUrl: data?.redirectUrl || data?.kbaUrl || null,
+    };
   }
 
   async fetchReportPdf(_requestId: string): Promise<BureauProviderReport> {
-    // TODO: implement secure report fetch once API docs/keys are available.
-    throw new Error("transunion_fetch_report_not_implemented");
+    const env = readEnv();
+    if (!env.baseUrl || !env.apiKey) {
+      throw new Error("transunion_not_configured");
+    }
+    const res = await fetch(
+      `${env.baseUrl.replace(/\/$/, "")}/requests/${encodeURIComponent(_requestId)}/report`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${env.apiKey}`,
+          ...(env.clientId ? { "X-Client-Id": env.clientId } : {}),
+        },
+      }
+    );
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`transunion_report_failed:${res.status}:${text}`);
+    }
+    const buf = Buffer.from(await res.arrayBuffer());
+    return { pdfBuffer: buf, contentType: "application/pdf" };
   }
 }
