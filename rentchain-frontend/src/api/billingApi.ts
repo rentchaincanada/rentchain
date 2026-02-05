@@ -88,3 +88,35 @@ export async function simulateCreditPull(
     message: data?.message ?? "Credit pull simulated.",
   };
 }
+
+export type BillingPlanPricing = {
+  key: "starter" | "pro" | "business";
+  label: string;
+  currency: string;
+  monthlyAmountCents: number;
+  yearlyAmountCents: number;
+};
+
+export type BillingPricingResponse = {
+  ok: true;
+  plans: BillingPlanPricing[];
+  screening?: {
+    basicCents: number;
+    verifyCents: number;
+    verifyAiCents: number;
+    creditScoreCents: number;
+    expeditedCents: number;
+    currency: string;
+  };
+  env?: "live" | "test";
+};
+
+export async function fetchBillingPricing(): Promise<BillingPricingResponse | null> {
+  try {
+    const res = await apiGetJson<any>("/billing/pricing", { allowStatuses: [404, 501] });
+    if (!res.ok) return null;
+    return res.data as BillingPricingResponse;
+  } catch {
+    return null;
+  }
+}

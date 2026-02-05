@@ -5,6 +5,13 @@ import { requireAuth } from "../middleware/requireAuth";
 import { getStripeClient } from "../services/stripeService";
 import { stripeNotConfiguredResponse, isStripeNotConfiguredError } from "../lib/stripeNotConfigured";
 import { FRONTEND_URL } from "../config/screeningConfig";
+import {
+  getPlanMatrix,
+  getStripeEnv,
+  resolvePlanPriceId,
+  type BillingPlanKey,
+} from "../config/planMatrix";
+import { getScreeningPricing } from "../billing/screeningPricing";
 
 const router = express.Router();
 
@@ -12,7 +19,35 @@ router.get("/health", (_req, res) => {
   res.json({ ok: true, service: "billing", ts: Date.now() });
 });
 
-type BillingTier = "starter" | "pro" | "business";
+router.get("/pricing", (_req, res) => {
+  res.setHeader("x-route-source", "billingRoutes.ts");
+  const plans = getPlanMatrix().map((plan) => ({
+    key: plan.key,
+    label: plan.label,
+    currency: "cad",
+    monthlyAmountCents: plan.monthlyAmountCents,
+    yearlyAmountCents: plan.yearlyAmountCents,
+  }));
+
+  const screening = {
+    basicCents: getScreeningPricing({ screeningTier: "basic" }).baseAmountCents,
+    verifyCents: getScreeningPricing({ screeningTier: "verify" }).baseAmountCents,
+    verifyAiCents: getScreeningPricing({ screeningTier: "verify_ai" }).baseAmountCents,
+    creditScoreCents: getScreeningPricing({
+      screeningTier: "basic",
+      addons: ["credit_score"],
+    }).scoreAddOnCents,
+    expeditedCents: getScreeningPricing({
+      screeningTier: "basic",
+      addons: ["expedited"],
+    }).expeditedAddOnCents,
+    currency: "cad",
+  };
+
+  res.json({ ok: true, plans, screening, env: getStripeEnv() });
+});
+
+type BillingTier = BillingPlanKey;
 type BillingInterval = "monthly" | "yearly";
 
 function normalizeTier(input: any): BillingTier | "free" | null {
@@ -31,41 +66,8 @@ function normalizeInterval(input: any): BillingInterval {
   return "monthly";
 }
 
-function resolvePriceId(
-  tier: BillingTier,
-  interval: BillingInterval
-): { priceId: string | null; envKey: string; hadValue: boolean } {
-  const preferredKey =
-    tier === "starter"
-      ? interval === "yearly"
-        ? "STRIPE_PRICE_STARTER_YEARLY"
-        : "STRIPE_PRICE_STARTER_MONTHLY"
-      : tier === "pro"
-      ? interval === "yearly"
-        ? "STRIPE_PRICE_PRO_YEARLY"
-        : "STRIPE_PRICE_PRO_MONTHLY"
-      : interval === "yearly"
-      ? "STRIPE_PRICE_BUSINESS_YEARLY"
-      : "STRIPE_PRICE_BUSINESS_MONTHLY";
-  const legacyKey =
-    tier === "starter"
-      ? "STRIPE_PRICE_STARTER"
-      : tier === "pro"
-      ? "STRIPE_PRICE_PRO"
-      : "STRIPE_PRICE_BUSINESS";
-  const keys = interval === "monthly" ? [preferredKey, legacyKey] : [preferredKey];
-
-  for (const key of keys) {
-    const raw = process.env[key];
-    if (raw === undefined || raw === null || String(raw).trim() === "") continue;
-    const trimmed = String(raw).trim();
-    if (trimmed.startsWith("price_")) {
-      return { priceId: trimmed, envKey: key, hadValue: true };
-    }
-    return { priceId: null, envKey: key, hadValue: true };
-  }
-
-  return { priceId: null, envKey: preferredKey, hadValue: false };
+function resolvePriceId(tier: BillingTier, interval: BillingInterval) {
+  return resolvePlanPriceId({ plan: tier, interval });
 }
 
 function sanitizeRedirectTo(raw: any): string {
@@ -124,7 +126,7 @@ router.get(
   }
 );
 
-router.post("/checkout", requireAuth, async (req: any, res) => {
+async function handleCheckout(req: any, res: any) {
   const landlordId = req.user?.landlordId || req.user?.id;
   const userId = req.user?.id || null;
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
@@ -140,13 +142,14 @@ router.post("/checkout", requireAuth, async (req: any, res) => {
   }
   const resolvedInterval = normalizeInterval(interval);
 
-  const { priceId, envKey } = resolvePriceId(resolvedTier, resolvedInterval);
-  if (!priceId) {
-    console.error("[billing/checkout] price not configured or invalid", { envKey });
-    return res.status(400).json({
+  const resolved = resolvePriceId(resolvedTier, resolvedInterval);
+  if (!resolved.priceId) {
+    console.error("[billing/checkout] price not configured or invalid", { envKey: resolved.envKey });
+    const statusCode = process.env.NODE_ENV === "production" ? 503 : 400;
+    return res.status(statusCode).json({
       ok: false,
       error: "price_not_configured",
-      detail: `${envKey} must be Stripe price id price_...`,
+      detail: `${resolved.envKey} must be Stripe price id price_...`,
     });
   }
 
@@ -169,7 +172,7 @@ router.post("/checkout", requireAuth, async (req: any, res) => {
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       payment_method_types: ["card"],
-      line_items: [{ price: priceId, quantity: 1 }],
+      line_items: [{ price: resolved.priceId, quantity: 1 }],
       metadata: {
         landlordId: String(landlordId),
         userId: String(userId || ""),
@@ -201,7 +204,11 @@ router.post("/checkout", requireAuth, async (req: any, res) => {
     });
     return res.status(500).json({ ok: false, error: "checkout_failed" });
   }
-});
+}
+
+router.post("/checkout", requireAuth, handleCheckout);
+router.post("/subscribe", requireAuth, handleCheckout);
+router.post("/upgrade", requireAuth, handleCheckout);
 
 router.post("/portal", requireAuth, async (req: any, res) => {
   const landlordId = req.user?.landlordId || req.user?.id;

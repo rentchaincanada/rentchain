@@ -263,18 +263,25 @@ export function UpgradePromptModal({
               >
                 {secondaryLabel}
               </button>
-              <a
-                href="/pricing"
+              <button
+                onClick={() => {
+                  if (typeof window !== "undefined") {
+                    window.open("/pricing", "_blank", "noopener,noreferrer");
+                  }
+                }}
                 style={{
                   alignSelf: "center",
                   color: "#2563eb",
                   fontWeight: 700,
                   fontSize: 13,
                   textDecoration: "none",
+                  border: "none",
+                  background: "transparent",
+                  cursor: "pointer",
                 }}
               >
                 Learn more
-              </a>
+              </button>
             </div>
           </div>
         </div>

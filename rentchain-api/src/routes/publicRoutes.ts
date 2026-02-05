@@ -14,6 +14,7 @@ import { getScreeningProviderHealth } from "../services/screening/providerHealth
 import { hashInviteToken } from "../services/screening/inviteTokens";
 import { writeScreeningEvent } from "../services/screening/screeningEvents";
 import { getBureauProvider } from "../services/screening/providers/bureauProvider";
+import { getPricingHealth } from "../config/planMatrix";
 
 const router = Router();
 
@@ -90,6 +91,20 @@ router.get("/health/stripe", async (_req, res) => {
     },
     deepChecked: deepCheckEnabled,
     apiRevision: process.env.K_REVISION || null,
+  });
+});
+
+router.get("/health/pricing", (_req, res) => {
+  res.setHeader("x-route-source", "publicRoutes.ts");
+  const health = getPricingHealth();
+  res.json({
+    ok: health.ok,
+    stripeConfigured: isStripeConfigured(),
+    planPricesConfigured: health.ok,
+    missing: health.missing,
+    invalid: health.invalid,
+    env: health.env,
+    ts: Date.now(),
   });
 });
 
