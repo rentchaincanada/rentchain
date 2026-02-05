@@ -12,6 +12,7 @@ import { spacing, colors, text, radius } from "@/styles/tokens";
 import { ResponsiveMasterDetail } from "@/components/layout/ResponsiveMasterDetail";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { useUpgrade } from "@/context/UpgradeContext";
+import { upgradeStarterButtonStyle } from "@/lib/upgradeButtonStyles";
 import "./MessagesPage.css";
 
 const POLL_CONVERSATIONS_MS = 15000;
@@ -132,15 +133,7 @@ export default function MessagesPage() {
                 ctaLabel: "Upgrade to Starter",
               })
             }
-            style={{
-              padding: "10px 14px",
-              borderRadius: 12,
-              border: `1px solid ${colors.border}`,
-              background: "rgba(59,130,246,0.12)",
-              color: colors.accent,
-              fontWeight: 700,
-              cursor: "pointer",
-            }}
+            style={upgradeStarterButtonStyle}
           >
             Upgrade to Starter
           </button>
