@@ -62,6 +62,7 @@ import verifiedScreeningRoutes from "./routes/verifiedScreeningRoutes";
 import stripeScreeningOrdersWebhookRoutes, {
   stripeWebhookHandler,
 } from "./routes/stripeScreeningOrdersWebhookRoutes";
+import { transunionWebhookHandler } from "./routes/transunionWebhookRoutes";
 import { resolveLandlordAndTier } from "./lib/landlordResolver";
 import screeningJobsAdminRoutes from "./routes/screeningJobsAdminRoutes";
 import adminRoutes from "./routes/adminRoutes";
@@ -86,6 +87,12 @@ app.post(
   express.raw({ type: "application/json" }),
   routeSource("stripeScreeningOrdersWebhookRoutes.ts"),
   stripeWebhookHandler
+);
+app.post(
+  "/api/webhooks/transunion",
+  express.raw({ type: "application/json" }),
+  routeSource("transunionWebhookRoutes.ts"),
+  transunionWebhookHandler
 );
 const jsonParser = express.json({
   limit: "10mb",

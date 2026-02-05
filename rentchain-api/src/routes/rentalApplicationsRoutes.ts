@@ -16,6 +16,7 @@ import { buildScreeningPdf } from "../services/screening/reportPdf";
 import { buildShareUrl, createReportExport } from "../services/screening/reportExportService";
 import { getScreeningProviderHealth } from "../services/screening/providerHealth";
 import { buildTenantInviteUrl, createInviteToken } from "../services/screening/inviteTokens";
+import { createSignedUrl } from "../storage/pdfStore";
 
 const router = Router();
 
@@ -1042,6 +1043,43 @@ router.post(
       });
       return res.status(500).json({ ok: false, error: "internal_error" });
     }
+  }
+);
+
+router.get(
+  "/screening/orders/:id/report",
+  attachAccount,
+  requireFeature("screening"),
+  async (req: any, res) => {
+    res.setHeader("x-route-source", "rentalApplicationsRoutes:screeningOrderReport");
+    const role = String(req.user?.role || "").toLowerCase();
+    if (role !== "landlord" && role !== "admin") {
+      return res.status(401).json({ ok: false, error: "unauthorized" });
+    }
+    const landlordId = req.user?.landlordId || req.user?.id || null;
+    if (!landlordId && role !== "admin") {
+      return res.status(401).json({ ok: false, error: "unauthorized" });
+    }
+
+    const id = String(req.params?.id || "").trim();
+    if (!id) return res.status(404).json({ ok: false, error: "not_found" });
+    const snap = await db.collection("screeningOrders").doc(id).get();
+    if (!snap.exists) return res.status(404).json({ ok: false, error: "not_found" });
+    const data = snap.data() as any;
+    if (role !== "admin" && data?.landlordId && data.landlordId !== landlordId) {
+      return res.status(403).json({ ok: false, error: "forbidden" });
+    }
+
+    if (!data?.reportBucket || !data?.reportObjectKey) {
+      return res.status(409).json({ ok: false, error: "report_not_ready" });
+    }
+
+    const url = await createSignedUrl({
+      bucket: data.reportBucket,
+      objectKey: data.reportObjectKey,
+      expiresSeconds: 10 * 60,
+    });
+    return res.json({ ok: true, url, expiresInSeconds: 10 * 60 });
   }
 );
 
