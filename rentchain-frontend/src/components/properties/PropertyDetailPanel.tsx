@@ -21,6 +21,7 @@ import { setOnboardingStep } from "../../api/onboardingApi";
 import "../../styles/propertiesMobile.css";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { useUpgrade } from "@/context/UpgradeContext";
+import { upgradeStarterButtonStyle } from "../../lib/upgradeButtonStyles";
 import { dispatchUpgradePrompt } from "@/lib/upgradePrompt";
 
 interface PropertyDetailPanelProps {
@@ -741,15 +742,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                 ctaLabel: "Upgrade to Starter",
               })
             }
-            style={{
-              padding: "8px 12px",
-              borderRadius: 10,
-              border: "1px solid rgba(59,130,246,0.45)",
-              background: "rgba(59,130,246,0.12)",
-              color: "#2563eb",
-              cursor: "pointer",
-              fontWeight: 700,
-            }}
+            style={upgradeStarterButtonStyle}
           >
             Upgrade to Starter
           </button>

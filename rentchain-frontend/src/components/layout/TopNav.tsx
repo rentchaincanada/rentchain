@@ -22,6 +22,7 @@ const TopNav: React.FC = () => {
           borderBottom: `1px solid ${colors.border}`,
           boxShadow: shadows.sm,
           backdropFilter: blur.sm,
+          paddingTop: "env(safe-area-inset-top)",
         }}
       >
         <div
