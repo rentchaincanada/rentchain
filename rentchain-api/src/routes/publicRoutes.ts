@@ -11,6 +11,8 @@ import { getStripeClient, isStripeConfigured, STRIPE_API_VERSION } from "../serv
 import { requireCapability } from "../services/capabilityGuard";
 import onboardingRoutes from "./onboardingRoutes";
 import { getScreeningProviderHealth } from "../services/screening/providerHealth";
+import { hashInviteToken } from "../services/screening/inviteTokens";
+import { writeScreeningEvent } from "../services/screening/screeningEvents";
 
 const router = Router();
 
@@ -102,6 +104,74 @@ router.get("/health/screening-provider", async (_req, res) => {
     apiRevision: process.env.COMMIT_SHA || process.env.GIT_SHA || null,
     ts: Date.now(),
   });
+});
+
+router.post("/screening/tenant/:token/consent", async (req: any, res) => {
+  res.setHeader("x-route-source", "publicRoutes.ts");
+  const token = String(req.params?.token || "").trim();
+  if (!token) return res.status(400).json({ ok: false, error: "missing_token" });
+  const tokenHash = hashInviteToken(token);
+
+  const snap = await db
+    .collection("screeningOrders")
+    .where("tenantInviteTokenHash", "==", tokenHash)
+    .limit(1)
+    .get();
+
+  if (snap.empty) {
+    return res.status(404).json({ ok: false, error: "invalid_token" });
+  }
+
+  const doc = snap.docs[0];
+  const data = doc.data() as any;
+  let body: any = req.body || {};
+  if (typeof req.body === "string") {
+    try {
+      body = JSON.parse(req.body);
+    } catch {
+      body = {};
+    }
+  }
+  const consentName = String(body?.consentName || body?.name || "").trim();
+  if (!consentName) {
+    return res.status(400).json({ ok: false, error: "missing_consent_name" });
+  }
+
+  const consentedAt = Date.now();
+  const ip =
+    String(req.headers["x-forwarded-for"] || "")
+      .split(",")[0]
+      .trim() || req.ip;
+  const userAgent = String(req.headers["user-agent"] || "").trim();
+
+  await doc.ref.set(
+    {
+      consent: {
+        name: consentName,
+        consentedAt,
+        ip: ip || null,
+        userAgent: userAgent || null,
+      },
+      consentedAt,
+      consentName,
+      consentIp: ip || null,
+      consentUserAgent: userAgent || null,
+      updatedAt: consentedAt,
+    },
+    { merge: true }
+  );
+
+  await writeScreeningEvent({
+    orderId: doc.id,
+    applicationId: data?.applicationId || null,
+    landlordId: data?.landlordId || null,
+    type: "consent_created",
+    at: consentedAt,
+    meta: { status: "consent_created" },
+    actor: "system",
+  });
+
+  return res.json({ ok: true, orderId: doc.id, consentedAt });
 });
 
 router.get("/__probe/version", (_req, res) => {

@@ -10,7 +10,8 @@ export type ScreeningEventType =
   | "webhook_ignored"
   | "manual_complete"
   | "manual_fail"
-  | "recomputed";
+  | "recomputed"
+  | "consent_created";
 
 export type ScreeningEventActor = "system" | "admin" | "landlord";
 
