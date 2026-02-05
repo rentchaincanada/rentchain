@@ -333,33 +333,41 @@ const ApplicationsPage: React.FC = () => {
     if (propertiesLoading) return;
 
     const autoSelect = params.get("autoSelectProperty") === "1";
-    if (prereqState.missingProperty) {
+    if (autoSelect && properties[0]?.id && !propertyFilter) {
+      setPropertyFilter(properties[0].id);
+    }
+
+    const nextSelectedId = propertyFilter || (autoSelect ? properties[0]?.id : null) || null;
+    const prereq = getApplicationPrereqState({
+      propertiesCount,
+      unitsCount,
+      selectedPropertyId: nextSelectedId,
+      requireSelection: true,
+    });
+
+    if (prereq.missingProperty) {
       showToast({ message: "Add a property first.", variant: "error" });
       params.delete("openSendApplication");
       params.delete("autoSelectProperty");
       navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
       return;
     }
-    if (prereqState.missingUnit) {
+    if (prereq.missingSelectedProperty) {
+      showToast({ message: "Select a property first.", variant: "error" });
+      params.delete("openSendApplication");
+      params.delete("autoSelectProperty");
+      navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
+      return;
+    }
+    if (prereq.missingUnit) {
       showToast({ message: "Add a unit first.", variant: "error" });
       params.delete("openSendApplication");
       params.delete("autoSelectProperty");
       navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
       return;
     }
-    if (prereqState.missingSelectedProperty) {
-      if (autoSelect && properties[0]?.id) {
-        setPropertyFilter(properties[0].id);
-      } else {
-        showToast({ message: "Select a property to continue.", variant: "error" });
-        params.delete("openSendApplication");
-        params.delete("autoSelectProperty");
-        navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
-        return;
-      }
-    }
 
-    const nextPropertyId = propertyFilter || properties[0]?.id || null;
+    const nextPropertyId = nextSelectedId;
     setSendAppPropertyId(nextPropertyId);
     setSendAppOpen(true);
     params.delete("openSendApplication");
@@ -371,8 +379,9 @@ const ApplicationsPage: React.FC = () => {
     navigate,
     properties,
     propertyFilter,
+    propertiesCount,
+    unitsCount,
     propertiesLoading,
-    prereqState,
     showToast,
   ]);
 
@@ -578,26 +587,35 @@ const ApplicationsPage: React.FC = () => {
       showToast({ message: "Loading properties…", variant: "info" });
       return;
     }
-    if (prereqState.missingProperty) {
+    const nextSelectedId = propertyFilter || (autoSelectProperty ? properties[0]?.id : null) || null;
+    const prereq = getApplicationPrereqState({
+      propertiesCount,
+      unitsCount,
+      selectedPropertyId: nextSelectedId,
+      requireSelection: true,
+    });
+
+    if (prereq.missingProperty) {
       showToast({ message: "Add a property first.", variant: "error" });
       navigate("/properties?focus=addProperty");
       return;
     }
-    if (prereqState.missingUnit) {
+    if (prereq.missingSelectedProperty) {
+      if (autoSelectProperty && properties[0]?.id) {
+        setPropertyFilter(properties[0].id);
+        setSendAppPropertyId(properties[0].id);
+        setSendAppOpen(true);
+        return;
+      }
+      showToast({ message: "Select a property first.", variant: "error" });
+      return;
+    }
+    if (prereq.missingUnit) {
       showToast({ message: "Add a unit first.", variant: "error" });
       navigate("/properties?openAddUnit=1");
       return;
     }
-    if (prereqState.missingSelectedProperty) {
-      if (autoSelectProperty && properties[0]?.id) {
-        setPropertyFilter(properties[0].id);
-      } else {
-        showToast({ message: "Select a property to continue.", variant: "error" });
-        return;
-      }
-    }
-    const nextPropertyId = propertyFilter || properties[0]?.id || null;
-    setSendAppPropertyId(nextPropertyId);
+    setSendAppPropertyId(nextSelectedId);
     setSendAppOpen(true);
   };
 
