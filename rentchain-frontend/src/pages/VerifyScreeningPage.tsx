@@ -114,7 +114,19 @@ const VerifyScreeningPage: React.FC = () => {
                 </span>
               </label>
 
-              {error ? <div style={{ color: "#b91c1c", fontSize: 13 }}>{error}</div> : null}
+              {error ? (
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div style={{ color: "#b91c1c", fontSize: 13 }}>{error}</div>
+                  <a
+                    href="https://www.rentchain.ai/help/screening"
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ fontSize: 13, color: text.subtle }}
+                  >
+                    Need help?
+                  </a>
+                </div>
+              ) : null}
 
               <Button type="button" onClick={handleStart} disabled={submitting}>
                 {submitting ? "Starting..." : "Start verification"}

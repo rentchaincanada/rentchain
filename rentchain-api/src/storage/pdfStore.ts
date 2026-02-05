@@ -15,11 +15,10 @@ export async function createSignedUrl(params: {
   objectKey: string;
   expiresSeconds: number;
 }) {
+  const expiresMinutes = Math.max(1, Math.ceil(params.expiresSeconds / 60));
   return getSignedDownloadUrl({
     bucket: params.bucket,
     path: params.objectKey,
-    expiresSeconds: params.expiresSeconds,
-    contentType: "application/pdf",
-    filename: params.objectKey.split("/").pop() || "screening-report.pdf",
+    expiresMinutes,
   });
 }

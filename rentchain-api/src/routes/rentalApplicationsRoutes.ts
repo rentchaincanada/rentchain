@@ -79,7 +79,8 @@ function buildRedirectUrl(params: {
   input?: string;
   fallbackPath: string;
   frontendOrigin: string | null;
-  applicationId: string;
+  applicationId?: string | null;
+  orderId?: string | null;
   returnTo?: string | null;
 }) {
   const rawInput = String(params.input || "").trim();
@@ -102,7 +103,12 @@ function buildRedirectUrl(params: {
     url = new URL(path, params.frontendOrigin);
   }
 
-  url.searchParams.set("applicationId", params.applicationId);
+  if (params.applicationId) {
+    url.searchParams.set("applicationId", params.applicationId);
+  }
+  if (params.orderId) {
+    url.searchParams.set("orderId", params.orderId);
+  }
   if (params.returnTo) {
     url.searchParams.set("returnTo", params.returnTo);
   }
@@ -776,23 +782,31 @@ router.post(
 
       const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
       const applicationId = String(body?.applicationId || "").trim();
-      if (!applicationId) return res.status(400).json({ ok: false, error: "missing_application" });
+      const propertyIdInput = String(body?.propertyId || "").trim();
+      const unitIdInput = String(body?.unitId || "").trim();
+      let data: any = null;
 
-      const snap = await db.collection("rentalApplications").doc(applicationId).get();
-      if (!snap.exists) return res.status(404).json({ ok: false, error: "not_found" });
-      const data = snap.data() as any;
-      if (data?.landlordId && data.landlordId !== landlordId) {
-        return res.status(401).json({ ok: false, error: "unauthorized" });
+      if (!applicationId && !propertyIdInput) {
+        return res.status(400).json({ ok: false, error: "missing_property" });
       }
 
-      const eligibility = evaluateEligibility(data);
-      if (!eligibility.eligible) {
-        return res.status(400).json({
-          ok: false,
-          error: "not_eligible",
-          detail: eligibility.detail,
-          reasonCode: eligibility.reasonCode,
-        });
+      if (applicationId) {
+        const snap = await db.collection("rentalApplications").doc(applicationId).get();
+        if (!snap.exists) return res.status(404).json({ ok: false, error: "not_found" });
+        data = snap.data() as any;
+        if (data?.landlordId && data.landlordId !== landlordId) {
+          return res.status(401).json({ ok: false, error: "unauthorized" });
+        }
+
+        const eligibility = evaluateEligibility(data);
+        if (!eligibility.eligible) {
+          return res.status(400).json({
+            ok: false,
+            error: "not_eligible",
+            detail: eligibility.detail,
+            reasonCode: eligibility.reasonCode,
+          });
+        }
       }
 
       const providerHealth = await getScreeningProviderHealth();
@@ -817,27 +831,6 @@ router.post(
 
       const { screeningTier, addons, serviceLevel, scoreAddOn, expeditedAddOn, pricing } =
         resolvePricingInput(body);
-      const rawReturnTo = String(body?.returnTo || "/dashboard");
-      const returnTo = rawReturnTo.startsWith("/") ? rawReturnTo : "/dashboard";
-      const frontendOrigin = resolveFrontendOrigin(req);
-      const successUrl = buildRedirectUrl({
-        input: body?.successPath,
-        fallbackPath: "/screening/success",
-        frontendOrigin,
-        applicationId: applicationId,
-        returnTo,
-      });
-      const cancelUrl = buildRedirectUrl({
-        input: body?.cancelPath,
-        fallbackPath: "/screening/cancel",
-        frontendOrigin,
-        applicationId: applicationId,
-        returnTo,
-      });
-      if (!successUrl || !cancelUrl) {
-        console.warn("[screening_orders] invalid redirect origin", logBase);
-        return res.status(400).json({ ok: false, error: "invalid_redirect_origin" });
-      }
 
       let stripe: any;
       try {
@@ -852,6 +845,29 @@ router.post(
       const now = Date.now();
       const orderRef = db.collection("screeningOrders").doc();
       const orderId = orderRef.id;
+      const rawReturnTo = String(body?.returnTo || "/dashboard");
+      const returnTo = rawReturnTo.startsWith("/") ? rawReturnTo : "/dashboard";
+      const frontendOrigin = resolveFrontendOrigin(req);
+      const successUrl = buildRedirectUrl({
+        input: body?.successPath,
+        fallbackPath: "/screening/success",
+        frontendOrigin,
+        applicationId: applicationId,
+        orderId,
+        returnTo,
+      });
+      const cancelUrl = buildRedirectUrl({
+        input: body?.cancelPath,
+        fallbackPath: "/screening/cancel",
+        frontendOrigin,
+        applicationId: applicationId,
+        orderId,
+        returnTo,
+      });
+      if (!successUrl || !cancelUrl) {
+        console.warn("[screening_orders] invalid redirect origin", logBase);
+        return res.status(400).json({ ok: false, error: "invalid_redirect_origin" });
+      }
       const aiVerification = serviceLevel === "VERIFIED_AI";
       const { token, tokenHash } = createInviteToken();
       const tenantInviteUrl = buildTenantInviteUrl(token);
@@ -861,13 +877,16 @@ router.post(
         String(body?.tenantName || "").trim() ||
         [applicant?.firstName, applicant?.lastName].filter(Boolean).join(" ").trim();
       const tenantEmail = String(body?.tenantEmail || applicant?.email || "").trim().toLowerCase();
+      if (!tenantEmail && !applicationId) {
+        return res.status(400).json({ ok: false, error: "missing_tenant_email" });
+      }
 
       const orderPayload: any = {
         id: orderId,
         landlordId,
-        applicationId,
-        propertyId: data?.propertyId || null,
-        unitId: data?.unitId || null,
+        applicationId: applicationId || null,
+        propertyId: data?.propertyId || propertyIdInput || null,
+        unitId: data?.unitId || unitIdInput || null,
         createdAt: now,
         amountCents: pricing.baseAmountCents,
         currency: "CAD",
@@ -1043,6 +1062,55 @@ router.post(
       });
       return res.status(500).json({ ok: false, error: "internal_error" });
     }
+  }
+);
+
+router.get(
+  "/screening/orders/:id",
+  attachAccount,
+  requireFeature("screening"),
+  async (req: any, res) => {
+    res.setHeader("x-route-source", "rentalApplicationsRoutes:screeningOrderGet");
+    const role = String(req.user?.role || "").toLowerCase();
+    if (role !== "landlord" && role !== "admin") {
+      return res.status(401).json({ ok: false, error: "unauthorized" });
+    }
+    const landlordId = req.user?.landlordId || req.user?.id || null;
+    if (!landlordId && role !== "admin") {
+      return res.status(401).json({ ok: false, error: "unauthorized" });
+    }
+
+    const id = String(req.params?.id || "").trim();
+    if (!id) return res.status(404).json({ ok: false, error: "not_found" });
+    const snap = await db.collection("screeningOrders").doc(id).get();
+    if (!snap.exists) return res.status(404).json({ ok: false, error: "not_found" });
+    const data = snap.data() as any;
+    if (role !== "admin" && data?.landlordId && data.landlordId !== landlordId) {
+      return res.status(403).json({ ok: false, error: "forbidden" });
+    }
+
+    return res.json({
+      ok: true,
+      data: {
+        id: snap.id,
+        landlordId: data?.landlordId || null,
+        applicationId: data?.applicationId || null,
+        propertyId: data?.propertyId || null,
+        unitId: data?.unitId || null,
+        status: data?.status || null,
+        paymentStatus: data?.paymentStatus || null,
+        paidAt: data?.paidAt || null,
+        consentedAt: data?.consentedAt || data?.consent?.consentedAt || null,
+        provider: data?.provider || null,
+        providerRequestId: data?.providerRequestId || null,
+        reportBucket: data?.reportBucket || null,
+        reportObjectKey: data?.reportObjectKey || null,
+        failureCode: data?.failureCode || null,
+        failureDetail: data?.failureDetail || null,
+        stripeIdentitySessionId: data?.stripeIdentitySessionId || null,
+        updatedAt: data?.updatedAt || null,
+      },
+    });
   }
 );
 

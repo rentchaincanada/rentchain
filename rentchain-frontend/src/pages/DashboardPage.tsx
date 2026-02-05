@@ -21,6 +21,7 @@ import { buildOnboardingSteps } from "../lib/onboardingSteps";
 import { getApplicationPrereqState } from "../lib/applicationPrereqs";
 import { CreatePropertyFirstModal } from "../components/properties/CreatePropertyFirstModal";
 import { buildCreatePropertyUrl, buildReturnTo } from "../lib/propertyGate";
+import { SendScreeningInviteModal } from "../components/screening/SendScreeningInviteModal";
 
 const StarterOnboardingPanel = React.lazy(
   () => import("../components/dashboard/StarterOnboardingPanel")
@@ -60,6 +61,7 @@ const DashboardPage: React.FC = () => {
   const [invitesLoading, setInvitesLoading] = React.useState(false);
   const [propertyGateOpen, setPropertyGateOpen] = React.useState(false);
   const [pendingPropertyAction, setPendingPropertyAction] = React.useState<"create_application" | null>(null);
+  const [screeningInviteOpen, setScreeningInviteOpen] = React.useState(false);
   const onboarding = useOnboardingState();
   const prevDerivedRef = React.useRef({
     propertyAdded: false,
@@ -332,11 +334,20 @@ const DashboardPage: React.FC = () => {
               <div style={{ fontWeight: 700, marginBottom: spacing.sm }}>Quick actions</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: spacing.sm }}>
                 <Button
+                  variant="secondary"
                   onClick={() => navigate("/properties")}
                   aria-label="Add property"
                   disabled={progressLoading}
                 >
                   Add property
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={() => setScreeningInviteOpen(true)}
+                  aria-label="Send screening invite"
+                  disabled={progressLoading}
+                >
+                  Send screening invite
                 </Button>
                 <Button
                   variant="secondary"
@@ -518,6 +529,11 @@ const DashboardPage: React.FC = () => {
           navigate(buildCreatePropertyUrl(returnTo));
           setPropertyGateOpen(false);
         }}
+      />
+      <SendScreeningInviteModal
+        open={screeningInviteOpen}
+        onClose={() => setScreeningInviteOpen(false)}
+        returnTo="/dashboard"
       />
     </MacShell>
   );

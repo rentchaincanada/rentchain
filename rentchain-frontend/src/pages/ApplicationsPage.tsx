@@ -12,6 +12,7 @@ import {
   fetchScreening,
   fetchScreeningResult,
   fetchScreeningEvents,
+  fetchScreeningOrderReport,
   adminMarkScreeningComplete,
   adminMarkScreeningFailed,
   adminRecomputeScreening,
@@ -36,6 +37,8 @@ import { getApplicationPrereqState } from "../lib/applicationPrereqs";
 import { CreatePropertyFirstModal } from "../components/properties/CreatePropertyFirstModal";
 import { buildCreatePropertyUrl, buildReturnTo } from "../lib/propertyGate";
 import "./ApplicationsPage.css";
+import { SendScreeningInviteModal } from "../components/screening/SendScreeningInviteModal";
+import { ScreeningStatusBadge } from "../components/screening/ScreeningStatusBadge";
 
 const statusOptions: RentalApplicationStatus[] = [
   "SUBMITTED",
@@ -97,6 +100,14 @@ const formatScreeningEventLabel = (value: ScreeningEvent["type"]) => {
       return "Manual fail";
     case "recomputed":
       return "Recomputed";
+    case "consent_created":
+      return "Tenant started";
+    case "kba_in_progress":
+      return "Identity verification in progress";
+    case "kba_failed":
+      return "KBA failed";
+    case "report_ready":
+      return "Report ready";
     default:
       return value.replace(/_/g, " ");
   }
@@ -150,9 +161,12 @@ const ApplicationsPage: React.FC = () => {
   const [exportExpiresAt, setExportExpiresAt] = useState<number | null>(null);
   const [exportPreviewOpen, setExportPreviewOpen] = useState(false);
   const [exportPreviewSource, setExportPreviewSource] = useState<"applications" | "onboarding">("applications");
+  const [orderReportLoading, setOrderReportLoading] = useState(false);
   const [sendAppOpen, setSendAppOpen] = useState(false);
   const [sendAppPropertyId, setSendAppPropertyId] = useState<string | null>(null);
   const [propertyGateOpen, setPropertyGateOpen] = useState(false);
+  const [screeningInviteOpen, setScreeningInviteOpen] = useState(false);
+  const screeningSectionRef = React.useRef<HTMLDivElement | null>(null);
   const onboarding = useOnboardingState();
   const propertiesCount = propertyRecords.length;
   const unitsCount = propertyRecords.reduce((sum, p) => sum + unitsForProperty(p), 0);
@@ -178,10 +192,36 @@ const ApplicationsPage: React.FC = () => {
   }, [screeningTier, scoreAddOn, expeditedAddOn]);
   const effectiveTotalCents = screeningQuote?.totalAmountCents ?? computedTotalCents;
 
+  const screeningBadge = useMemo(() => {
+    const eventTypes = new Set(screeningEvents.map((event) => event.type));
+    if (eventTypes.has("report_ready")) return { label: "Report ready", tone: "success" as const };
+    if (eventTypes.has("completed")) return { label: "Completed", tone: "success" as const };
+    if (eventTypes.has("kba_failed") || eventTypes.has("failed")) {
+      return { label: "Failed — Manual verification required", tone: "danger" as const };
+    }
+    if (eventTypes.has("kba_in_progress")) {
+      return { label: "Identity verification in progress", tone: "info" as const };
+    }
+    if (eventTypes.has("consent_created")) return { label: "Tenant started", tone: "info" as const };
+    const status = screeningStatus?.status || detail?.screeningStatus || null;
+    if (status === "processing") return { label: "Identity verification in progress", tone: "info" as const };
+    if (status === "complete") return { label: "Completed", tone: "success" as const };
+    if (status === "failed") return { label: "Failed — Manual verification required", tone: "danger" as const };
+    if (status === "paid") return { label: "Sent", tone: "neutral" as const };
+    if (eventTypes.has("paid")) return { label: "Sent", tone: "neutral" as const };
+    return null;
+  }, [detail?.screeningStatus, screeningEvents, screeningStatus?.status]);
+
+  const orderReportReady =
+    screeningEvents.some((event) => event.type === "report_ready") ||
+    screeningStatus?.status === "complete" ||
+    detail?.screeningStatus === "complete";
+
   const isAdmin = String(user?.role || "").toLowerCase() === "admin";
   const selectedLabel = detail
     ? `${detail.applicant.firstName} ${detail.applicant.lastName}`.trim()
     : "Application";
+  const screeningOrderId = detail?.screening?.orderId || null;
 
   const loadScreeningStatus = async (applicationId: string) => {
     setScreeningStatusLoading(true);
@@ -609,6 +649,13 @@ const ApplicationsPage: React.FC = () => {
     setSendAppOpen(true);
   };
 
+  const handleRowScreen = (applicationId: string) => {
+    handleSelectApplication(applicationId);
+    window.setTimeout(() => {
+      screeningSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 150);
+  };
+
   const handleExportReport = async (copyOnly: boolean) => {
     if (!detail?.id) return;
     if (!features?.exports_basic && !isAdmin) {
@@ -637,6 +684,23 @@ const ApplicationsPage: React.FC = () => {
       showToast({ message: err?.message || "Unable to export report.", variant: "error" });
     } finally {
       setExportingReport(false);
+    }
+  };
+
+  const handleViewOrderReport = async () => {
+    if (!screeningOrderId) return;
+    setOrderReportLoading(true);
+    try {
+      const res = await fetchScreeningOrderReport(screeningOrderId);
+      if (!res.ok || !res.url) {
+        showToast({ message: res.error || "Report not ready.", variant: "error" });
+        return;
+      }
+      window.open(res.url, "_blank", "noopener,noreferrer");
+    } catch (err: any) {
+      showToast({ message: err?.message || "Unable to open report.", variant: "error" });
+    } finally {
+      setOrderReportLoading(false);
     }
   };
 
@@ -745,6 +809,9 @@ const ApplicationsPage: React.FC = () => {
               Review submitted rental applications.
             </div>
           </div>
+          <Button variant="secondary" onClick={() => setScreeningInviteOpen(true)}>
+            Send screening invite
+          </Button>
         </div>
       </Card>
 
@@ -839,6 +906,27 @@ const ApplicationsPage: React.FC = () => {
                       <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                         <Pill>{app.status}</Pill>
                       </div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRowScreen(app.id);
+                          }}
+                          style={{
+                            padding: "6px 10px",
+                            borderRadius: 999,
+                            border: `1px solid ${colors.border}`,
+                            background: colors.accentSoft,
+                            color: text.primary,
+                            fontSize: 12,
+                            fontWeight: 700,
+                            cursor: "pointer",
+                          }}
+                        >
+                          Screen tenant
+                        </button>
+                      </div>
                     </button>
                   ))}
                 </div>
@@ -893,45 +981,61 @@ const ApplicationsPage: React.FC = () => {
                 </div>
               </div>
 
-              <Card>
-                <div className="rc-applications-card-header" style={{ marginBottom: 8 }}>
-                  <div style={{ fontWeight: 700, fontSize: 16 }}>Screening</div>
-                  <Button
-                    variant="ghost"
-                    onClick={() => void refreshSelectedApplication(detail.id)}
-                    disabled={!detail?.id || loadingDetail}
-                  >
-                    Refresh
-                  </Button>
-                </div>
-                <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
-                  <div className="rc-wrap-row">
-                    <Pill>{formatScreeningStatus(screeningStatus?.status || detail.screeningStatus || null)}</Pill>
-                    {screeningStatusLoading ? (
-                      <span style={{ fontSize: 12, color: text.subtle }}>Refreshing…</span>
-                    ) : null}
-                    {screeningStatus?.provider ? (
-                      <span style={{ fontSize: 12, color: text.subtle }}>Provider: {screeningStatus.provider}</span>
-                    ) : null}
+              <div ref={screeningSectionRef}>
+                <Card>
+                  <div className="rc-applications-card-header" style={{ marginBottom: 8 }}>
+                    <div style={{ fontWeight: 700, fontSize: 16 }}>Screening</div>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                      {screeningOrderId && orderReportReady ? (
+                        <Button
+                          variant="secondary"
+                          onClick={() => void handleViewOrderReport()}
+                          disabled={orderReportLoading}
+                        >
+                          {orderReportLoading ? "Opening..." : "View report"}
+                        </Button>
+                      ) : null}
+                      <Button
+                        variant="ghost"
+                        onClick={() => void refreshSelectedApplication(detail.id)}
+                        disabled={!detail?.id || loadingDetail}
+                      >
+                        Refresh
+                      </Button>
+                    </div>
                   </div>
-                  <div style={{ fontSize: 13, color: text.muted }}>
-                    Last updated:{" "}
-                    {screeningStatus?.lastUpdatedAt
-                      ? new Date(screeningStatus.lastUpdatedAt).toLocaleString()
-                      : "—"}
-                  </div>
-                  {screeningStatus?.summary ? (
-                    <div
-                      style={{
-                        border: `1px solid ${colors.border}`,
-                        borderRadius: radius.md,
-                        padding: spacing.sm,
-                        background: colors.panel,
-                        display: "grid",
-                        gap: 4,
-                        fontSize: 14,
-                      }}
-                    >
+                  <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
+                    <div className="rc-wrap-row">
+                      {screeningBadge ? (
+                        <ScreeningStatusBadge label={screeningBadge.label} tone={screeningBadge.tone} />
+                      ) : (
+                        <Pill>{formatScreeningStatus(screeningStatus?.status || detail.screeningStatus || null)}</Pill>
+                      )}
+                      {screeningStatusLoading ? (
+                        <span style={{ fontSize: 12, color: text.subtle }}>Refreshing…</span>
+                      ) : null}
+                      {screeningStatus?.provider ? (
+                        <span style={{ fontSize: 12, color: text.subtle }}>Provider: {screeningStatus.provider}</span>
+                      ) : null}
+                    </div>
+                    <div style={{ fontSize: 13, color: text.muted }}>
+                      Last updated:{" "}
+                      {screeningStatus?.lastUpdatedAt
+                        ? new Date(screeningStatus.lastUpdatedAt).toLocaleString()
+                        : "—"}
+                    </div>
+                    {screeningStatus?.summary ? (
+                      <div
+                        style={{
+                          border: `1px solid ${colors.border}`,
+                          borderRadius: radius.md,
+                          padding: spacing.sm,
+                          background: colors.panel,
+                          display: "grid",
+                          gap: 4,
+                          fontSize: 14,
+                        }}
+                      >
                       <div>Overall: {screeningStatus.summary.overall}</div>
                       {screeningStatus.summary.scoreBand ? (
                         <div>Score band: {screeningStatus.summary.scoreBand}</div>
@@ -1110,6 +1214,7 @@ const ApplicationsPage: React.FC = () => {
                   </div>
                 )}
               </Card>
+              </div>
               <Card>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm, marginBottom: 8 }}>
                   <div style={{ fontWeight: 700, fontSize: 16 }}>Timeline</div>
@@ -1377,6 +1482,11 @@ const ApplicationsPage: React.FC = () => {
         propertyId={sendAppPropertyId}
         unit={null}
         onClose={() => setSendAppOpen(false)}
+      />
+      <SendScreeningInviteModal
+        open={screeningInviteOpen}
+        onClose={() => setScreeningInviteOpen(false)}
+        returnTo={`${location.pathname}${location.search}`}
       />
       {manualCompleteOpen && (
       <div
