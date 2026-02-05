@@ -113,9 +113,9 @@ export type BillingPricingResponse = {
 
 export async function fetchBillingPricing(): Promise<BillingPricingResponse | null> {
   try {
-    const res = await apiGetJson<any>("/billing/pricing", { allowStatuses: [404, 501] });
-    if (!res.ok) return null;
-    return res.data as BillingPricingResponse;
+    const res = await apiFetch<any>("/billing/pricing", { method: "GET" });
+    if (!res?.ok) return null;
+    return res as BillingPricingResponse;
   } catch {
     return null;
   }

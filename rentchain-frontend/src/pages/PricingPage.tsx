@@ -16,6 +16,7 @@ const PricingPage: React.FC = () => {
   const [notifyPlan, setNotifyPlan] = useState<"core" | "pro" | "elite">("core");
   const [pricing, setPricing] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+  const [pricingError, setPricingError] = useState(false);
   const [pricingHealth, setPricingHealth] = useState<any | null>(null);
   const [healthLoading, setHealthLoading] = useState(true);
 
@@ -24,7 +25,17 @@ const PricingPage: React.FC = () => {
     fetchBillingPricing()
       .then((res) => {
         if (!active) return;
+        if (!res) {
+          setPricingError(true);
+          return;
+        }
         setPricing(res);
+      })
+      .catch((err) => {
+        if (import.meta.env.DEV) {
+          console.warn("[pricing] fetch failed", { message: err?.message || err });
+        }
+        setPricingError(true);
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -50,7 +61,8 @@ const PricingPage: React.FC = () => {
   }, []);
 
   const pricingUnavailable =
-    !healthLoading && pricingHealth && pricingHealth.ok === false;
+    (!healthLoading && pricingHealth && pricingHealth.ok === false) ||
+    (!loading && pricingError);
 
   const planMap = useMemo(() => {
     const map = new Map<string, any>();
@@ -108,7 +120,7 @@ const PricingPage: React.FC = () => {
                   fontWeight: 600,
                 }}
               >
-                Billing temporarily unavailable. Please try again later.
+                Pricing unavailable. Please try again later.
               </div>
             ) : null}
           </div>
@@ -131,7 +143,7 @@ const PricingPage: React.FC = () => {
               >
                 <div style={{ fontWeight: 700 }}>Starter</div>
                 <div style={{ color: text.muted, fontSize: 13 }}>
-                  {loading ? "Loading..." : renderPrice("starter")}
+                  {loading ? "—" : renderPrice("starter")}
                 </div>
                 <Button
                   type="button"
@@ -154,7 +166,7 @@ const PricingPage: React.FC = () => {
               >
                 <div style={{ fontWeight: 700 }}>Pro</div>
                 <div style={{ color: text.muted, fontSize: 13 }}>
-                  {loading ? "Loading..." : renderPrice("pro")}
+                  {loading ? "—" : renderPrice("pro")}
                 </div>
                 <Button
                   type="button"
@@ -177,7 +189,7 @@ const PricingPage: React.FC = () => {
               >
                 <div style={{ fontWeight: 700 }}>Business</div>
                 <div style={{ color: text.muted, fontSize: 13 }}>
-                  {loading ? "Loading..." : renderPrice("business")}
+                  {loading ? "—" : renderPrice("business")}
                 </div>
                 <Button type="button" onClick={() => navigate(user ? "/billing" : "/login")}>
                   Contact sales
