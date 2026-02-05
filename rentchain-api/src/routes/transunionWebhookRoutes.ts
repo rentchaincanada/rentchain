@@ -1,9 +1,12 @@
 import { Request, Response, Router } from "express";
 import crypto from "crypto";
 import { db } from "../config/firebase";
+import sgMail from "@sendgrid/mail";
 import { getBureauProvider } from "../services/screening/providers/bureauProvider";
 import { putPdfObject } from "../storage/pdfStore";
 import { writeScreeningEvent } from "../services/screening/screeningEvents";
+import { getStripeClient, isStripeConfigured } from "../services/stripeService";
+import { resolveFrontendBase } from "../services/screening/inviteTokens";
 
 interface WebhookRequest extends Request {
   rawBody?: Buffer;
@@ -105,6 +108,72 @@ export const transunionWebhookHandler = async (req: WebhookRequest, res: Respons
       meta: { status: "kba_failed" },
       actor: "system",
     });
+
+    if (isStripeConfigured() && !orderData?.stripeIdentitySessionId) {
+      try {
+        const stripe = getStripeClient();
+        const session = await stripe.identity.verificationSessions.create({
+          type: "document",
+          metadata: {
+            orderId: orderDoc.id,
+            landlordId: orderData?.landlordId || "",
+            applicationId: orderData?.applicationId || "",
+          },
+          return_url: `${resolveFrontendBase()}/verify/identity-complete`,
+        });
+
+        await markOrderStatus(orderDoc, {
+          stripeIdentitySessionId: session.id,
+          stripeIdentityStatus: session.status,
+        });
+
+        const tenantEmail = String(orderData?.tenantEmail || "").trim();
+        const tenantName = String(orderData?.tenantName || "").trim() || "there";
+        if (tenantEmail) {
+          const apiKey = String(process.env.SENDGRID_API_KEY || "").trim();
+          const from =
+            String(
+              process.env.SENDGRID_FROM_EMAIL ||
+                process.env.SENDGRID_FROM ||
+                process.env.FROM_EMAIL ||
+                ""
+            ).trim();
+          if (apiKey && from && session.url) {
+            sgMail.setApiKey(apiKey);
+            await sgMail.send({
+              to: tenantEmail,
+              from,
+              subject: "RentChain: Verify your identity",
+              text: [
+                `Hi ${tenantName},`,
+                "",
+                "We couldn't complete KBA verification. Please verify your identity to finish screening:",
+                session.url,
+                "",
+                "- RentChain",
+              ].join("\n"),
+              html: `
+                <div style="font-family:Arial,sans-serif;line-height:1.5;color:#0f172a;">
+                  <p>Hi ${tenantName},</p>
+                  <p>We couldn't complete KBA verification. Please verify your identity to finish screening:</p>
+                  <p><a href="${session.url}" style="display:inline-block;padding:10px 14px;background:#2563eb;color:#fff;border-radius:10px;text-decoration:none;font-weight:700;">Verify identity</a></p>
+                  <p style="font-size:12px;color:#6b7280;">If the button doesn't work, copy and paste: ${session.url}</p>
+                  <p>- RentChain</p>
+                </div>
+              `,
+              trackingSettings: {
+                clickTracking: { enable: false, enableText: false },
+                openTracking: { enable: false },
+              },
+              mailSettings: { footer: { enable: false } },
+            });
+          }
+        }
+      } catch (err: any) {
+        console.error("[transunion-webhook] identity fallback failed", err?.message || err);
+      }
+    }
+
     return res.json({ ok: true });
   }
 
