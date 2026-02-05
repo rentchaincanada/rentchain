@@ -128,7 +128,7 @@ const MaintenanceRequestsPage: React.FC = () => {
             RentChain Screening is free. Rental management starts on Starter.
           </div>
           <Button
-            variant="secondary"
+            variant="navy"
             onClick={() =>
               openUpgrade({
                 reason: "screening",

@@ -6,6 +6,7 @@ import { useToast } from "../components/ui/ToastProvider";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { useUpgrade } from "@/context/UpgradeContext";
 import { colors, spacing } from "@/styles/tokens";
+import { upgradeStarterButtonStyle } from "@/lib/upgradeButtonStyles";
 
 function getEventDate(e: LedgerEventStored): Date {
   if (typeof e.ts === "number") return new Date(e.ts);
@@ -197,15 +198,7 @@ const LedgerPage: React.FC = () => {
                     ctaLabel: "Upgrade to Starter",
                   })
                 }
-                style={{
-                  padding: "10px 14px",
-                  borderRadius: 12,
-                  border: "1px solid rgba(148,163,184,0.35)",
-                  background: "rgba(59,130,246,0.12)",
-                  color: colors.accent,
-                  fontWeight: 700,
-                  cursor: "pointer",
-                }}
+                style={upgradeStarterButtonStyle}
               >
                 Upgrade to Starter
               </button>

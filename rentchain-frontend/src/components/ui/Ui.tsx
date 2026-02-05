@@ -47,7 +47,7 @@ export const Section: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({
 };
 
 type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: "primary" | "secondary" | "ghost";
+  variant?: "primary" | "secondary" | "ghost" | "navy";
 };
 
 export const Button: React.FC<ButtonProps> = ({
@@ -69,6 +69,11 @@ export const Button: React.FC<ButtonProps> = ({
   const variants: Record<string, React.CSSProperties> = {
     primary: {
       background: colors.accent,
+      color: "#fff",
+      boxShadow: shadows.sm,
+    },
+    navy: {
+      background: colors.navy,
       color: "#fff",
       boxShadow: shadows.sm,
     },

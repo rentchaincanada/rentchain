@@ -41,6 +41,8 @@ export const colors = {
   borderStrong: "rgba(15,23,42,0.16)",
   accent: "#2563eb",
   accentSoft: "rgba(37,99,235,0.12)",
+  navy: "#0f1f3d",
+  navySoft: "rgba(15,31,61,0.12)",
   danger: "#ef4444",
 };
 

@@ -13,6 +13,7 @@ import { useToast } from "../ui/ToastProvider";
 import { colors, radius, spacing, text, shadows } from "../../styles/tokens";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { useUpgrade } from "@/context/UpgradeContext";
+import { upgradeStarterButtonStyle } from "../../lib/upgradeButtonStyles";
 
 interface TenantDetailPanelProps {
   tenantId: string | null;
@@ -389,15 +390,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
                 ctaLabel: "Upgrade to Starter",
               })
             }
-            style={{
-              padding: "8px 12px",
-              borderRadius: 10,
-              border: "1px solid rgba(59,130,246,0.45)",
-              background: "rgba(59,130,246,0.12)",
-              color: "#2563eb",
-              cursor: "pointer",
-              fontWeight: 700,
-            }}
+            style={upgradeStarterButtonStyle}
           >
             Upgrade to Starter
           </button>

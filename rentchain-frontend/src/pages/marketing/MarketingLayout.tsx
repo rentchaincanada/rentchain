@@ -102,6 +102,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
           backdropFilter: "blur(12px)",
           background: "rgba(247,249,252,0.9)",
           borderBottom: `1px solid ${colors.border}`,
+          paddingTop: "env(safe-area-inset-top)",
         }}
       >
         <div
@@ -445,10 +446,11 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
 
         <main
           style={{
-            maxWidth: layout.maxWidth,
+            maxWidth: "100vw",
             width: "100%",
             margin: "0 auto",
-            padding: `${spacing.xl} ${layout.pagePadding}`,
+            padding: `clamp(16px, 4vw, 40px) ${layout.pagePadding}`,
+            boxSizing: "border-box",
           }}
         >
         <div
@@ -457,7 +459,9 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
             borderRadius: radius.xl,
             boxShadow: shadows.md,
             border: `1px solid ${colors.border}`,
-            padding: spacing.xxl,
+            padding: "clamp(20px, 6vw, 48px)",
+            maxWidth: "100%",
+            boxSizing: "border-box",
           }}
         >
           {children}
