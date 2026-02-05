@@ -30,6 +30,15 @@ router.post("/users/create-landlord", requireAdmin, async (req, res) => {
     const uid = user.uid;
     const createdAt = admin.firestore.FieldValue.serverTimestamp();
 
+    await db.collection("users").doc(uid).set({
+      id: uid,
+      email,
+      role: "landlord",
+      landlordId: uid,
+      status: "active",
+      createdAt,
+    });
+
     await db.collection("accounts").doc(uid).set({
       id: uid,
       email,
