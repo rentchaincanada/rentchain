@@ -3,6 +3,7 @@ import request from "supertest";
 import { describe, it, expect, vi } from "vitest";
 
 const createUserMock = vi.fn(async () => ({ uid: "user-123" }));
+const usersSetMock = vi.fn(async () => ({}));
 const accountsSetMock = vi.fn(async () => ({}));
 const landlordsSetMock = vi.fn(async () => ({}));
 const onboardingSetMock = vi.fn(async () => ({}));
@@ -19,6 +20,9 @@ vi.mock("firebase-admin", () => ({
 vi.mock("../../config/firebase", () => ({
   db: {
     collection: (name: string) => {
+      if (name === "users") {
+        return { doc: () => ({ set: usersSetMock }) };
+      }
       if (name === "accounts") {
         return { doc: () => ({ set: accountsSetMock }) };
       }
@@ -56,6 +60,7 @@ describe("admin create landlord", () => {
     expect(res.body.ok).toBe(true);
     expect(res.body.uid).toBe("user-123");
     expect(createUserMock).toHaveBeenCalled();
+    expect(usersSetMock).toHaveBeenCalled();
     expect(accountsSetMock).toHaveBeenCalled();
     expect(landlordsSetMock).toHaveBeenCalled();
     expect(onboardingSetMock).toHaveBeenCalled();
