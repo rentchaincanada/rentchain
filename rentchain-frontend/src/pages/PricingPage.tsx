@@ -6,7 +6,7 @@ import { spacing, text } from "../styles/tokens";
 import { SUPPORT_EMAIL } from "../config/support";
 import { NotifyMeModal } from "../components/billing/NotifyMeModal";
 import { useAuth } from "../context/useAuth";
-import { fetchBillingPricing } from "../api/billingApi";
+import { fetchBillingPricing, fetchPricingHealth } from "../api/billingApi";
 import { startCheckout } from "../billing/startCheckout";
 
 const PricingPage: React.FC = () => {
@@ -16,6 +16,8 @@ const PricingPage: React.FC = () => {
   const [notifyPlan, setNotifyPlan] = useState<"core" | "pro" | "elite">("core");
   const [pricing, setPricing] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+  const [pricingHealth, setPricingHealth] = useState<any | null>(null);
+  const [healthLoading, setHealthLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
@@ -31,6 +33,24 @@ const PricingPage: React.FC = () => {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    fetchPricingHealth()
+      .then((res) => {
+        if (!active) return;
+        setPricingHealth(res);
+      })
+      .finally(() => {
+        if (active) setHealthLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const pricingUnavailable =
+    !healthLoading && pricingHealth && pricingHealth.ok === false;
 
   const planMap = useMemo(() => {
     const map = new Map<string, any>();
@@ -52,6 +72,7 @@ const PricingPage: React.FC = () => {
   };
 
   const handlePlanAction = (planKey: "starter" | "pro") => {
+    if (pricingUnavailable) return;
     if (!user) {
       navigate("/login");
       return;
@@ -74,6 +95,22 @@ const PricingPage: React.FC = () => {
             <div style={{ color: text.muted }}>
               Transparent pricing for Screening Credits and rental management.
             </div>
+            {pricingUnavailable ? (
+              <div
+                style={{
+                  marginTop: 8,
+                  padding: "8px 12px",
+                  borderRadius: 12,
+                  border: "1px solid rgba(239,68,68,0.4)",
+                  background: "rgba(239,68,68,0.08)",
+                  color: "#b91c1c",
+                  fontSize: 13,
+                  fontWeight: 600,
+                }}
+              >
+                Billing temporarily unavailable. Please try again later.
+              </div>
+            ) : null}
           </div>
         </Card>
 
@@ -96,7 +133,11 @@ const PricingPage: React.FC = () => {
                 <div style={{ color: text.muted, fontSize: 13 }}>
                   {loading ? "Loading..." : renderPrice("starter")}
                 </div>
-                <Button type="button" onClick={() => handlePlanAction("starter")}>
+                <Button
+                  type="button"
+                  onClick={() => handlePlanAction("starter")}
+                  disabled={pricingUnavailable}
+                >
                   Get started
                 </Button>
               </div>
@@ -115,7 +156,11 @@ const PricingPage: React.FC = () => {
                 <div style={{ color: text.muted, fontSize: 13 }}>
                   {loading ? "Loading..." : renderPrice("pro")}
                 </div>
-                <Button type="button" onClick={() => handlePlanAction("pro")}>
+                <Button
+                  type="button"
+                  onClick={() => handlePlanAction("pro")}
+                  disabled={pricingUnavailable}
+                >
                   Upgrade to Pro
                 </Button>
               </div>
@@ -142,6 +187,14 @@ const PricingPage: React.FC = () => {
             <div style={{ fontSize: "0.85rem", color: text.subtle }}>
               Questions? <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>
             </div>
+            {(import.meta.env.DEV ||
+              (typeof window !== "undefined" &&
+                new URLSearchParams(window.location.search).get("debug") === "1")) &&
+            pricingHealth?.env ? (
+              <div style={{ fontSize: 12, color: text.subtle }}>
+                Environment: {String(pricingHealth.env).toUpperCase()}
+              </div>
+            ) : null}
           </div>
         </Card>
       </Section>

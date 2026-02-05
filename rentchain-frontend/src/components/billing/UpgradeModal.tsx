@@ -2,7 +2,7 @@ import React from "react";
 import { NotifyMeModal } from "./NotifyMeModal";
 import { useAuth } from "../../context/useAuth";
 import { startCheckout } from "@/billing/startCheckout";
-import { fetchBillingPricing } from "@/api/billingApi";
+import { fetchBillingPricing, fetchPricingHealth } from "@/api/billingApi";
 
 export type UpgradeReason =
   | "propertiesMax"
@@ -31,6 +31,8 @@ export function UpgradeModal({
   const { user } = useAuth();
   const [pricing, setPricing] = React.useState<any | null>(null);
   const [loadingPricing, setLoadingPricing] = React.useState(true);
+  const [pricingHealth, setPricingHealth] = React.useState<any | null>(null);
+  const [healthLoading, setHealthLoading] = React.useState(true);
   const [interval, setInterval] = React.useState<"monthly" | "yearly">("monthly");
   const [selectedPlan, setSelectedPlan] = React.useState<"starter" | "pro">("pro");
   const [notifyOpen, setNotifyOpen] = React.useState(false);
@@ -53,6 +55,21 @@ export function UpgradeModal({
     };
   }, []);
 
+  React.useEffect(() => {
+    let active = true;
+    fetchPricingHealth()
+      .then((res) => {
+        if (!active) return;
+        setPricingHealth(res);
+      })
+      .finally(() => {
+        if (active) setHealthLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const normalizePlan = (input?: string) => {
     const raw = String(input || "").trim().toLowerCase();
     if (raw === "starter" || raw === "core") return "starter";
@@ -60,6 +77,8 @@ export function UpgradeModal({
     return "starter";
   };
   const currentPlanKey = normalizePlan(currentPlan);
+  const pricingUnavailable =
+    !healthLoading && pricingHealth && pricingHealth.ok === false;
   const starterPricing = pricing?.plans?.find((p: any) => p.key === "starter");
   const proPricing = pricing?.plans?.find((p: any) => p.key === "pro");
   const starterPriceLabel =
@@ -154,6 +173,23 @@ export function UpgradeModal({
             />
           </div>
 
+          {pricingUnavailable ? (
+            <div
+              style={{
+                marginTop: 10,
+                padding: "8px 12px",
+                borderRadius: 12,
+                border: "1px solid rgba(239,68,68,0.4)",
+                background: "rgba(239,68,68,0.08)",
+                color: "#b91c1c",
+                fontSize: 13,
+                fontWeight: 600,
+              }}
+            >
+              Billing temporarily unavailable. Please try again later.
+            </div>
+          ) : null}
+
           <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button
               type="button"
@@ -231,17 +267,18 @@ export function UpgradeModal({
                       : "/dashboard",
                 })
               }
-              disabled={selectedPlan === currentPlanKey}
+              disabled={selectedPlan === currentPlanKey || pricingUnavailable}
               style={{
                 padding: "10px 16px",
                 borderRadius: 12,
                 border: "1px solid rgba(59,130,246,0.45)",
                 background: "rgba(59,130,246,0.12)",
                 color: "#2563eb",
-                cursor: selectedPlan === currentPlanKey ? "not-allowed" : "pointer",
+                cursor:
+                  selectedPlan === currentPlanKey || pricingUnavailable ? "not-allowed" : "pointer",
                 fontWeight: 900,
                 boxShadow: "0 10px 30px rgba(37,99,235,0.2)",
-                opacity: selectedPlan === currentPlanKey ? 0.6 : 1,
+                opacity: selectedPlan === currentPlanKey || pricingUnavailable ? 0.6 : 1,
               }}
             >
               {ctaLabel || (selectedPlan === "starter" ? "Choose Starter" : "Upgrade to Pro")}

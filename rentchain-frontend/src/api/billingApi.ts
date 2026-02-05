@@ -120,3 +120,22 @@ export async function fetchBillingPricing(): Promise<BillingPricingResponse | nu
     return null;
   }
 }
+
+export type PricingHealth = {
+  ok: boolean;
+  stripeConfigured?: boolean;
+  planPricesConfigured?: boolean;
+  missing?: string[];
+  invalid?: string[];
+  env?: "live" | "test";
+};
+
+export async function fetchPricingHealth(): Promise<PricingHealth | null> {
+  try {
+    const res = await apiGetJson<any>("/health/pricing", { allowStatuses: [404, 501] });
+    if (!res.ok) return null;
+    return res.data as PricingHealth;
+  } catch {
+    return null;
+  }
+}
