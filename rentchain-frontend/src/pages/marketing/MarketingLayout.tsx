@@ -110,12 +110,14 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
             maxWidth: layout.maxWidth,
             width: "100%",
             margin: "0 auto",
-            padding: `${spacing.md} ${layout.pagePadding}`,
+            padding: `${spacing.md} clamp(12px, 4vw, ${layout.pagePadding})`,
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
             gap: spacing.lg,
             minWidth: 0,
+            boxSizing: "border-box",
+            flexWrap: isMobile ? "wrap" : "nowrap",
           }}
         >
           <div style={{ flex: "1 1 0", display: "flex", alignItems: "center" }}>
@@ -249,6 +251,9 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                 justifyContent: "flex-end",
                 alignItems: "center",
                 gap: spacing.sm,
+                flexWrap: "wrap",
+                rowGap: spacing.xs,
+                maxWidth: "100%",
               }}
             >
               <Link
@@ -261,6 +266,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                   textDecoration: "none",
                   fontWeight: 600,
                   boxShadow: shadows.sm,
+                  whiteSpace: "nowrap",
                 }}
               >
                 Get Started
@@ -278,6 +284,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                   fontWeight: 600,
                   cursor: "pointer",
                   outline: "none",
+                  whiteSpace: "nowrap",
                 }}
                 aria-expanded={menuOpen}
                 aria-controls="marketing-header-menu"
