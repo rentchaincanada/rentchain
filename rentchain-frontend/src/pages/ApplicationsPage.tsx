@@ -783,9 +783,8 @@ const ApplicationsPage: React.FC = () => {
   const handleSampleOpen = () => {
     track("exports_sample_opened", { source: "applications" });
     if (typeof window !== "undefined") {
-      const base = window.location.origin;
       const win = window.open(
-        `${base}/sample/screening_report_sample.pdf`,
+        "/sample/screening_report_sample.pdf",
         "_blank",
         "noopener,noreferrer"
       );
