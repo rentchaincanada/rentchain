@@ -58,6 +58,7 @@ import MessagesPage from "./pages/MessagesPage";
 import TenantMessagesPage from "./pages/tenant/TenantMessagesPage";
 import TenantNoticeDetailPage from "./pages/tenant/TenantNoticeDetailPage";
 import MaintenanceRequestsPage from "./pages/MaintenanceRequestsPage";
+import PdfSamplePage from "./pages/PdfSamplePage";
 
 const TENANT_PORTAL_ENABLED = import.meta.env.VITE_TENANT_PORTAL_ENABLED === "true";
 
@@ -185,6 +186,14 @@ function App() {
                 <ApplicationsPage />
               </LandlordNav>
             </RequireAuth>
+          }
+        />
+        <Route
+          path="/pdf/sample"
+          element={
+            <LandlordNav>
+              <PdfSamplePage />
+            </LandlordNav>
           }
         />
         {import.meta.env.DEV ? (

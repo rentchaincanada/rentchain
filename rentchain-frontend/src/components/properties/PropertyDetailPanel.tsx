@@ -1082,6 +1082,13 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
               ]
             : []
         }
+        units={(units || [])
+          .map((u: any) => ({
+            id: String(u?.id || u?.unitId || u?.uid || ""),
+            name: u?.unitNumber || u?.label || u?.name || u?.unit || "Unit",
+          }))
+          .filter((u: any) => u.id)}
+        initialUnitId={(sendAppUnit as any)?.id ? String((sendAppUnit as any).id) : null}
         unit={sendAppUnit}
         onClose={() => setSendAppUnit(null)}
       />

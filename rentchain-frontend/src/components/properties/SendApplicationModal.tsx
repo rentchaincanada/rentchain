@@ -10,6 +10,9 @@ type Props = {
   propertyName?: string | null;
   properties?: Array<{ id: string; name: string }>;
   onPropertyChange?: (nextId: string) => void;
+  units?: Array<{ id: string; name: string }>;
+  initialUnitId?: string | null;
+  onUnitChange?: (nextId: string | null) => void;
   unit?: any | null;
   onClose: () => void;
 };
@@ -20,6 +23,9 @@ export function SendApplicationModal({
   propertyName,
   properties,
   onPropertyChange,
+  units,
+  initialUnitId,
+  onUnitChange,
   unit,
   onClose,
 }: Props) {
@@ -39,6 +45,9 @@ export function SendApplicationModal({
     return [];
   }, [properties, propertyId, propertyName]);
   const [selectedPropertyId, setSelectedPropertyId] = React.useState<string>(propertyId || "");
+  const [selectedUnitId, setSelectedUnitId] = React.useState<string>(
+    initialUnitId || ((unit as any)?.id ? String((unit as any).id) : "")
+  );
 
   React.useEffect(() => {
     if (!open) {
@@ -63,6 +72,17 @@ export function SendApplicationModal({
     }
   }, [open, propertyId]);
 
+  React.useEffect(() => {
+    if (!open) return;
+    if (initialUnitId) {
+      setSelectedUnitId(String(initialUnitId));
+    } else if ((unit as any)?.id) {
+      setSelectedUnitId(String((unit as any).id));
+    } else {
+      setSelectedUnitId("");
+    }
+  }, [open, initialUnitId, unit]);
+
   if (!open) return null;
 
   const handleGenerate = async () => {
@@ -77,7 +97,7 @@ export function SendApplicationModal({
     try {
       const res = await createApplicationLink({
         propertyId: String(selectedPropertyId),
-        unitId: (unit as any)?.id ? String((unit as any).id) : null,
+        unitId: selectedUnitId ? String(selectedUnitId) : null,
         applicantEmail: applicantEmail.trim() || null,
       });
       if ((res as any)?.ok === false) {
@@ -189,6 +209,10 @@ export function SendApplicationModal({
                   const nextId = e.target.value;
                   setSelectedPropertyId(nextId);
                   onPropertyChange?.(nextId);
+                  if (nextId !== selectedPropertyId) {
+                    setSelectedUnitId("");
+                    onUnitChange?.(null);
+                  }
                 }}
                 style={{
                   width: "100%",
@@ -210,6 +234,34 @@ export function SendApplicationModal({
                 This link will be for the selected property.
               </span>
             </label>
+            {units && units.length ? (
+              <label style={{ display: "grid", gap: 6, fontSize: "0.9rem", color: "#111827" }}>
+                Unit (optional)
+                <select
+                  value={selectedUnitId}
+                  onChange={(e) => {
+                    const nextId = e.target.value;
+                    setSelectedUnitId(nextId);
+                    onUnitChange?.(nextId ? nextId : null);
+                  }}
+                  style={{
+                    width: "100%",
+                    padding: "8px 10px",
+                    borderRadius: 8,
+                    border: "1px solid #e5e7eb",
+                    fontSize: "0.9rem",
+                    background: "#fff",
+                  }}
+                >
+                  <option value="">No unit selected</option>
+                  {units.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             {!unit ? (
               <div style={{ fontSize: "0.85rem", color: "#6b7280" }}>
                 Unit and rent details can be entered manually by the applicant.

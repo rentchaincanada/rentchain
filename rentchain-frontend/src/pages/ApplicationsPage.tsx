@@ -168,8 +168,9 @@ const ApplicationsPage: React.FC = () => {
   const [samplePdfOpen, setSamplePdfOpen] = useState(false);
   const [orderReportLoading, setOrderReportLoading] = useState(false);
   const [sendAppOpen, setSendAppOpen] = useState(false);
-  const [sendAppPropertyId, setSendAppPropertyId] = useState<string | null>(null);
-  const [sendAppPropertyName, setSendAppPropertyName] = useState<string | null>(null);
+  const [modalPropertyId, setModalPropertyId] = useState<string | null>(null);
+  const [modalPropertyName, setModalPropertyName] = useState<string | null>(null);
+  const [modalUnitId, setModalUnitId] = useState<string | null>(null);
   const [propertyGateOpen, setPropertyGateOpen] = useState(false);
   const [screeningInviteOpen, setScreeningInviteOpen] = useState(false);
   const screeningSectionRef = React.useRef<HTMLDivElement | null>(null);
@@ -182,6 +183,30 @@ const ApplicationsPage: React.FC = () => {
     selectedPropertyId: propertyFilter || null,
     requireSelection: true,
   });
+
+  const modalUnits = useMemo(() => {
+    if (!modalPropertyId) return [];
+    const property = propertyRecords.find(
+      (p) => String(p.id || p.propertyId || p.uid || "") === modalPropertyId
+    );
+    const unitsRaw =
+      (property as any)?.units ||
+      (property as any)?.unitList ||
+      (property as any)?.unitDetails ||
+      [];
+    if (!Array.isArray(unitsRaw)) return [];
+    return unitsRaw
+      .map((unit: any) => ({
+        id: String(unit?.id || unit?.unitId || unit?.uid || ""),
+        name:
+          unit?.unitNumber ||
+          unit?.label ||
+          unit?.name ||
+          unit?.unit ||
+          "Unit",
+      }))
+      .filter((u) => u.id);
+  }, [modalPropertyId, propertyRecords]);
 
   const screeningOptions = [
     { value: "basic", label: "Basic", priceLabel: "$19.99" },
@@ -452,10 +477,11 @@ const ApplicationsPage: React.FC = () => {
     }
 
     const nextPropertyId = nextSelectedId;
-    setSendAppPropertyId(nextPropertyId);
+    setModalPropertyId(nextPropertyId);
     const nextPropertyName =
       properties.find((p) => p.id === nextPropertyId)?.name || null;
-    setSendAppPropertyName(nextPropertyName);
+    setModalPropertyName(nextPropertyName);
+    setModalUnitId(null);
     setSendAppOpen(true);
     params.delete("openSendApplication");
     params.delete("autoSelectProperty");
@@ -702,10 +728,11 @@ const ApplicationsPage: React.FC = () => {
       showToast({ message: "Select a property first.", variant: "error" });
       return;
     }
-    setSendAppPropertyId(nextSelectedId);
+    setModalPropertyId(nextSelectedId);
     const nextPropertyName =
       properties.find((p) => p.id === nextSelectedId)?.name || null;
-    setSendAppPropertyName(nextPropertyName);
+    setModalPropertyName(nextPropertyName);
+    setModalUnitId(null);
     setSendAppOpen(true);
   };
 
@@ -1554,14 +1581,19 @@ const ApplicationsPage: React.FC = () => {
       />
       <SendApplicationModal
         open={sendAppOpen}
-        propertyId={sendAppPropertyId}
-        propertyName={sendAppPropertyName}
+        propertyId={modalPropertyId}
+        propertyName={modalPropertyName}
         properties={properties}
+        units={modalUnits}
+        initialUnitId={modalUnitId}
         onPropertyChange={(nextId) => {
-          setSendAppPropertyId(nextId);
+          setModalPropertyId(nextId);
           const nextName = properties.find((p) => p.id === nextId)?.name || null;
-          setSendAppPropertyName(nextName);
-          setPropertyFilter(nextId);
+          setModalPropertyName(nextName);
+          setModalUnitId(null);
+        }}
+        onUnitChange={(nextId) => {
+          setModalUnitId(nextId);
         }}
         unit={null}
         onClose={() => setSendAppOpen(false)}
