@@ -29,7 +29,7 @@ export function OnboardingChecklist() {
         <Row label="Add a property" done={!!steps.propertyAdded} />
         <Row label="Add units" done={!!steps.unitAdded} />
         <Row label="Invite tenant" done={!!steps.tenantInvited} />
-        <Row label="Create application" done={!!steps.applicationCreated} />
+        <Row label="Send application link" done={!!steps.applicationCreated} />
         <Row label="Preview export" done={!!steps.exportPreviewed} />
       </div>
 
