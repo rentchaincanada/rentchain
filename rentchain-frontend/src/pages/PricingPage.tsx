@@ -7,7 +7,7 @@ import { SUPPORT_EMAIL } from "../config/support";
 import { NotifyMeModal } from "../components/billing/NotifyMeModal";
 import { useAuth } from "../context/useAuth";
 import { fetchBillingPricing, fetchPricingHealth } from "../api/billingApi";
-import { startCheckout } from "../billing/startCheckout";
+import { apiFetch } from "@/lib/apiClient";
 
 const PricingPage: React.FC = () => {
   const navigate = useNavigate();
@@ -19,6 +19,7 @@ const PricingPage: React.FC = () => {
   const [pricingError, setPricingError] = useState(false);
   const [pricingHealth, setPricingHealth] = useState<any | null>(null);
   const [healthLoading, setHealthLoading] = useState(true);
+  const [interval, setInterval] = useState<"monthly" | "yearly">("monthly");
 
   useEffect(() => {
     let active = true;
@@ -76,27 +77,40 @@ const PricingPage: React.FC = () => {
     if (pricingUnavailable) return "—";
     const plan = planMap.get(planKey);
     if (!plan) return "—";
-    if (plan.monthlyAmountCents === 0) return "Free";
-    const monthly = `$${(plan.monthlyAmountCents / 100).toFixed(0)} / month`;
-    const yearly = plan.yearlyAmountCents
-      ? `$${(plan.yearlyAmountCents / 100).toFixed(0)} / year`
-      : "";
-    return yearly ? `${monthly} • ${yearly}` : monthly;
+    const amountCents =
+      interval === "yearly" ? plan.yearlyAmountCents : plan.monthlyAmountCents;
+    if (!amountCents) return "—";
+    const suffix = interval === "yearly" ? "year" : "month";
+    return `$${(amountCents / 100).toFixed(0)} / ${suffix}`;
   };
 
-  const handlePlanAction = (planKey: "starter" | "pro") => {
+  const handlePlanAction = async (planKey: "starter" | "pro") => {
     if (pricingUnavailable) return;
     if (!user) {
       navigate("/login");
       return;
     }
-    startCheckout({
-      tier: planKey,
-      interval: "monthly",
-      featureKey: "pricing",
-      source: "pricing_page",
-      redirectTo: "/billing",
-    });
+    try {
+      const res: any = await apiFetch("/billing/subscribe", {
+        method: "POST",
+        body: JSON.stringify({
+          planKey,
+          interval: interval === "yearly" ? "year" : "month",
+          featureKey: "pricing",
+          source: "pricing_page",
+          redirectTo: "/billing",
+        }),
+      });
+      const url = res?.url || res?.checkoutUrl;
+      if (url && typeof window !== "undefined") {
+        window.location.assign(url);
+        return;
+      }
+    } catch (err: any) {
+      if (import.meta.env.DEV) {
+        console.warn("[pricing] subscribe failed", { message: err?.message || err });
+      }
+    }
   };
 
   return (
@@ -130,6 +144,46 @@ const PricingPage: React.FC = () => {
         <Card>
           <div style={{ display: "flex", flexDirection: "column", gap: spacing.sm }}>
             <h2 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 700 }}>Plans</h2>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={() => setInterval("monthly")}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 10,
+                  border:
+                    interval === "monthly"
+                      ? "1px solid rgba(37,99,235,0.6)"
+                      : "1px solid rgba(148,163,184,0.35)",
+                  background: interval === "monthly" ? "rgba(37,99,235,0.12)" : "transparent",
+                  color: "#0f172a",
+                  fontWeight: 800,
+                  fontSize: 12,
+                  cursor: "pointer",
+                }}
+              >
+                Monthly
+              </button>
+              <button
+                type="button"
+                onClick={() => setInterval("yearly")}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 10,
+                  border:
+                    interval === "yearly"
+                      ? "1px solid rgba(37,99,235,0.6)"
+                      : "1px solid rgba(148,163,184,0.35)",
+                  background: interval === "yearly" ? "rgba(37,99,235,0.12)" : "transparent",
+                  color: "#0f172a",
+                  fontWeight: 800,
+                  fontSize: 12,
+                  cursor: "pointer",
+                }}
+              >
+                Yearly
+              </button>
+            </div>
             <div style={{ display: "grid", gap: spacing.sm }}>
               <div
                 style={{
