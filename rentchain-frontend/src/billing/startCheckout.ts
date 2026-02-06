@@ -21,7 +21,8 @@ function normalizeTier(input?: string): "starter" | "pro" | "business" | "free" 
 
 function normalizeInterval(input?: string): "monthly" | "yearly" {
   const raw = String(input || "").trim().toLowerCase();
-  if (raw === "yearly" || raw === "annual" || raw === "annually") return "yearly";
+  if (raw === "year" || raw === "yearly" || raw === "annual" || raw === "annually") return "yearly";
+  if (raw === "month" || raw === "monthly") return "monthly";
   return "monthly";
 }
 
