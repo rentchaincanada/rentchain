@@ -129,6 +129,7 @@ const ApplicationsPage: React.FC = () => {
   const [properties, setProperties] = useState<PropertyOption[]>([]);
   const [propertyRecords, setPropertyRecords] = useState<any[]>([]);
   const [propertiesLoading, setPropertiesLoading] = useState(false);
+  const propertiesLoaded = !propertiesLoading;
   const { features, loading: loadingCaps } = useCapabilities();
   const { user } = useAuth();
   const [screeningQuote, setScreeningQuote] = useState<ScreeningQuote | null>(null);
@@ -373,7 +374,7 @@ const ApplicationsPage: React.FC = () => {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (params.get("openSendApplication") !== "1") return;
-    if (propertiesLoading) return;
+    if (!propertiesLoaded) return;
 
     const autoSelect = params.get("autoSelectProperty") === "1";
     if (autoSelect && properties[0]?.id && !propertyFilter) {
@@ -619,7 +620,7 @@ const ApplicationsPage: React.FC = () => {
   };
 
   const handleCreateApplication = (autoSelectProperty: boolean = false) => {
-    if (propertiesLoading) {
+    if (!propertiesLoaded) {
       showToast({ message: "Loading properties…", variant: "info" });
       return;
     }
@@ -809,8 +810,12 @@ const ApplicationsPage: React.FC = () => {
               Review submitted rental applications.
             </div>
           </div>
-          <Button variant="secondary" onClick={() => setScreeningInviteOpen(true)}>
-            Send screening invite
+          <Button
+            variant="secondary"
+            onClick={() => setScreeningInviteOpen(true)}
+            disabled={!propertiesLoaded}
+          >
+            {propertiesLoaded ? "Send screening invite" : "Loading properties…"}
           </Button>
         </div>
       </Card>
@@ -872,8 +877,9 @@ const ApplicationsPage: React.FC = () => {
                       handleCreateApplication(false);
                     }}
                     style={{ width: "fit-content" }}
+                    disabled={!propertiesLoaded}
                   >
-                    Create application
+                    {propertiesLoaded ? "Create application" : "Loading properties…"}
                   </Button>
                 </div>
               ) : (
