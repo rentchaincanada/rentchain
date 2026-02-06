@@ -84,7 +84,7 @@ export function buildOnboardingSteps({
       title: "Create an application",
       description: "Invite an applicant or start an application record.",
       isComplete: !!onboarding.steps.applicationCreated,
-      actionLabel: "Create application",
+      actionLabel: "Send application link",
       onAction: routeToCreateApplication,
       isPrimary: true,
     },

@@ -167,6 +167,7 @@ const ApplicationsPage: React.FC = () => {
   const [orderReportLoading, setOrderReportLoading] = useState(false);
   const [sendAppOpen, setSendAppOpen] = useState(false);
   const [sendAppPropertyId, setSendAppPropertyId] = useState<string | null>(null);
+  const [sendAppPropertyName, setSendAppPropertyName] = useState<string | null>(null);
   const [propertyGateOpen, setPropertyGateOpen] = useState(false);
   const [screeningInviteOpen, setScreeningInviteOpen] = useState(false);
   const screeningSectionRef = React.useRef<HTMLDivElement | null>(null);
@@ -450,6 +451,9 @@ const ApplicationsPage: React.FC = () => {
 
     const nextPropertyId = nextSelectedId;
     setSendAppPropertyId(nextPropertyId);
+    const nextPropertyName =
+      properties.find((p) => p.id === nextPropertyId)?.name || null;
+    setSendAppPropertyName(nextPropertyName);
     setSendAppOpen(true);
     params.delete("openSendApplication");
     params.delete("autoSelectProperty");
@@ -697,6 +701,9 @@ const ApplicationsPage: React.FC = () => {
       return;
     }
     setSendAppPropertyId(nextSelectedId);
+    const nextPropertyName =
+      properties.find((p) => p.id === nextSelectedId)?.name || null;
+    setSendAppPropertyName(nextPropertyName);
     setSendAppOpen(true);
   };
 
@@ -783,9 +790,8 @@ const ApplicationsPage: React.FC = () => {
   const handleSampleOpen = () => {
     track("exports_sample_opened", { source: "applications" });
     if (typeof window !== "undefined") {
-      const base = window.location.origin;
       const win = window.open(
-        `${base}/sample/screening_report_sample.pdf`,
+        "/sample/screening_report_sample.pdf",
         "_blank",
         "noopener,noreferrer"
       );
@@ -952,7 +958,7 @@ const ApplicationsPage: React.FC = () => {
                     style={{ width: "fit-content" }}
                     disabled={!propertiesReady}
                   >
-                    {propertiesLoaded ? "Create application" : "Loading properties…"}
+                    {propertiesLoaded ? "Send application link" : "Loading properties…"}
                   </Button>
                 </div>
               ) : (
@@ -1559,6 +1565,7 @@ const ApplicationsPage: React.FC = () => {
       <SendApplicationModal
         open={sendAppOpen}
         propertyId={sendAppPropertyId}
+        propertyName={sendAppPropertyName}
         unit={null}
         onClose={() => setSendAppOpen(false)}
       />
