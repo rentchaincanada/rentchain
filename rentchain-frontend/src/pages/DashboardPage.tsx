@@ -380,10 +380,10 @@ const DashboardPage: React.FC = () => {
                     });
                     handleCreateApplicationClick();
                   }}
-                  aria-label="Create application"
+                  aria-label="Send application link"
                   disabled={progressLoading}
                 >
-                  Create application
+                  Send application link
                 </Button>
                 <Button
                   variant="ghost"
@@ -450,7 +450,7 @@ const DashboardPage: React.FC = () => {
               Next up: create your first application.
             </div>
             <Button onClick={handleCreateApplicationClick}>
-              Create application
+              Send application link
             </Button>
           </Card>
         ) : null}
@@ -462,7 +462,7 @@ const DashboardPage: React.FC = () => {
               Invite a tenant or start an application to begin screening.
             </div>
             <Button onClick={handleCreateApplicationClick}>
-              Create application
+              Send application link
             </Button>
           </Card>
         ) : null}

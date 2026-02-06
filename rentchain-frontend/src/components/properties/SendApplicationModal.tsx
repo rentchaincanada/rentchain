@@ -7,11 +7,12 @@ import { track } from "../../lib/analytics";
 type Props = {
   open: boolean;
   propertyId?: string | null;
+  propertyName?: string | null;
   unit?: any | null;
   onClose: () => void;
 };
 
-export function SendApplicationModal({ open, propertyId, unit, onClose }: Props) {
+export function SendApplicationModal({ open, propertyId, propertyName, unit, onClose }: Props) {
   const { showToast } = useToast();
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -143,7 +144,7 @@ export function SendApplicationModal({ open, propertyId, unit, onClose }: Props)
         }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ fontWeight: 700, fontSize: "1rem" }}>Send application</div>
+          <div style={{ fontWeight: 700, fontSize: "1rem" }}>Send application link</div>
           <button
             type="button"
             onClick={onClose}
@@ -155,7 +156,11 @@ export function SendApplicationModal({ open, propertyId, unit, onClose }: Props)
         </div>
 
         <div style={{ fontSize: "0.9rem", color: "#111827" }}>
-          Generate a shareable link for {unit ? `unit ${(unit as any)?.unitNumber || ""}` : "this property"}.
+          This application link is for:{" "}
+          <strong>
+            {propertyName ||
+              (unit ? `Unit ${(unit as any)?.unitNumber || ""}` : "this property")}
+          </strong>
         </div>
         {!unit ? (
           <div style={{ fontSize: "0.85rem", color: "#6b7280" }}>

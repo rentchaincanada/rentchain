@@ -1071,6 +1071,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
       <SendApplicationModal
         open={!!sendAppUnit}
         propertyId={property?.id || null}
+        propertyName={property?.name || property?.addressLine1 || null}
         unit={sendAppUnit}
         onClose={() => setSendAppUnit(null)}
       />
