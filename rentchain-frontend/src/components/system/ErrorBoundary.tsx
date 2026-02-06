@@ -62,6 +62,22 @@ export class ErrorBoundary extends React.Component<
             >
               {this.state.error?.message}
             </pre>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              style={{
+                marginTop: "1rem",
+                padding: "8px 12px",
+                borderRadius: "999px",
+                border: "1px solid rgba(148,163,184,0.4)",
+                background: "rgba(148,163,184,0.15)",
+                color: "#e2e8f0",
+                cursor: "pointer",
+                fontWeight: 600,
+              }}
+            >
+              Reload
+            </button>
           </div>
         </div>
       );

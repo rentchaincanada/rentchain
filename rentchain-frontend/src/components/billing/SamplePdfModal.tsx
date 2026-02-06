@@ -9,6 +9,7 @@ export function SamplePdfModal({ open, onClose }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const pdfUrl = "/sample/screening_report_sample.pdf?v=1";
 
   useEffect(() => {
     if (!open) return;
@@ -122,7 +123,21 @@ export function SamplePdfModal({ open, onClose }: Props) {
           <div style={{ fontWeight: 700 }}>Sample screening report</div>
           <div style={{ display: "flex", gap: 8 }}>
             <a
-              href="/sample/screening_report_sample.pdf"
+              href="/pdf/sample"
+              style={{
+                fontSize: 13,
+                color: "#0f172a",
+                textDecoration: "none",
+                padding: "6px 10px",
+                borderRadius: 10,
+                border: "1px solid #e2e8f0",
+                background: "#fff",
+              }}
+            >
+              View full page
+            </a>
+            <a
+              href={pdfUrl}
               target="_blank"
               rel="noreferrer"
               style={{
@@ -158,7 +173,7 @@ export function SamplePdfModal({ open, onClose }: Props) {
             <div style={{ padding: 16, fontSize: 14, color: "#b91c1c" }}>
               Unable to load the sample report.
               <div style={{ marginTop: 8 }}>
-                <a href="/sample/screening_report_sample.pdf" target="_blank" rel="noreferrer">
+                <a href={pdfUrl} target="_blank" rel="noreferrer">
                   Open in new tab
                 </a>
               </div>
@@ -166,7 +181,7 @@ export function SamplePdfModal({ open, onClose }: Props) {
           ) : (
             <iframe
               title="Sample screening report PDF"
-              src="/sample/screening_report_sample.pdf#view=FitH"
+              src={`${pdfUrl}#view=FitH`}
               className="w-full h-full rounded-xl"
               style={{
                 width: "100%",

@@ -22,6 +22,41 @@ if (typeof window !== "undefined" && window.location.hostname === "rentchain.ai"
   window.location.replace(target.toString());
 }
 
+function showReloadBanner(message: string) {
+  if (typeof document === "undefined") return;
+  const existing = document.getElementById("rc-reload-banner");
+  if (existing) return;
+  const banner = document.createElement("div");
+  banner.id = "rc-reload-banner";
+  banner.textContent = message;
+  banner.style.position = "fixed";
+  banner.style.top = "16px";
+  banner.style.left = "50%";
+  banner.style.transform = "translateX(-50%)";
+  banner.style.background = "rgba(15,23,42,0.95)";
+  banner.style.color = "#f8fafc";
+  banner.style.padding = "10px 14px";
+  banner.style.borderRadius = "999px";
+  banner.style.fontSize = "13px";
+  banner.style.fontWeight = "600";
+  banner.style.zIndex = "9999";
+  banner.style.boxShadow = "0 10px 30px rgba(15,23,42,0.4)";
+  document.body.appendChild(banner);
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("unhandledrejection", (event) => {
+    const msg = String((event as any)?.reason?.message || (event as any)?.reason || "");
+    if (
+      msg.includes("Failed to fetch dynamically imported module") ||
+      msg.includes("Importing a module script failed")
+    ) {
+      showReloadBanner("Update available — reloading…");
+      window.setTimeout(() => window.location.reload(), 1200);
+    }
+  });
+}
+
 const originalFetch = window.fetch.bind(window);
 // Legacy global (DO NOT REMOVE until all fetch() calls are migrated)
 (window as any).API_BASE_URL = API_BASE_URL;
