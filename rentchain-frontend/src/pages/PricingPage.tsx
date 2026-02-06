@@ -91,6 +91,9 @@ const PricingPage: React.FC = () => {
       return;
     }
     try {
+      if (import.meta.env.DEV) {
+        console.debug("[billing] subscribe interval", { interval });
+      }
       const res: any = await apiFetch("/billing/subscribe", {
         method: "POST",
         body: JSON.stringify({
