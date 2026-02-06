@@ -39,6 +39,7 @@ import { buildCreatePropertyUrl, buildReturnTo } from "../lib/propertyGate";
 import "./ApplicationsPage.css";
 import { SendScreeningInviteModal } from "../components/screening/SendScreeningInviteModal";
 import { ScreeningStatusBadge } from "../components/screening/ScreeningStatusBadge";
+import { SamplePdfModal } from "../components/billing/SamplePdfModal";
 
 const statusOptions: RentalApplicationStatus[] = [
   "SUBMITTED",
@@ -164,6 +165,7 @@ const ApplicationsPage: React.FC = () => {
   const [exportExpiresAt, setExportExpiresAt] = useState<number | null>(null);
   const [exportPreviewOpen, setExportPreviewOpen] = useState(false);
   const [exportPreviewSource, setExportPreviewSource] = useState<"applications" | "onboarding">("applications");
+  const [samplePdfOpen, setSamplePdfOpen] = useState(false);
   const [orderReportLoading, setOrderReportLoading] = useState(false);
   const [sendAppOpen, setSendAppOpen] = useState(false);
   const [sendAppPropertyId, setSendAppPropertyId] = useState<string | null>(null);
@@ -789,20 +791,7 @@ const ApplicationsPage: React.FC = () => {
 
   const handleSampleOpen = () => {
     track("exports_sample_opened", { source: "applications" });
-    if (typeof window !== "undefined") {
-      const win = window.open(
-        "/sample/screening_report_sample.pdf",
-        "_blank",
-        "noopener,noreferrer"
-      );
-      if (!win) {
-        showToast({
-          message: "Sample report unavailable",
-          description: "Please allow popups to view the sample report.",
-          variant: "error",
-        });
-      }
-    }
+    setSamplePdfOpen(true);
   };
 
   const setStatus = async (status: RentalApplicationStatus) => {
@@ -1553,6 +1542,7 @@ const ApplicationsPage: React.FC = () => {
         </Card>
       </div>
       )}
+      <SamplePdfModal open={samplePdfOpen} onClose={() => setSamplePdfOpen(false)} />
       <CreatePropertyFirstModal
         open={propertyGateOpen}
         onClose={() => setPropertyGateOpen(false)}
