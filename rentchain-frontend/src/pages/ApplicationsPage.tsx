@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Card, Section, Input, Button, Pill } from "../components/ui/Ui";
 import { spacing, colors, text, radius } from "../styles/tokens";
@@ -128,8 +128,10 @@ const ApplicationsPage: React.FC = () => {
   const [propertyFilter, setPropertyFilter] = useState<string>("");
   const [properties, setProperties] = useState<PropertyOption[]>([]);
   const [propertyRecords, setPropertyRecords] = useState<any[]>([]);
-  const [propertiesLoading, setPropertiesLoading] = useState(false);
+  const [propertiesLoading, setPropertiesLoading] = useState(true);
+  const [propertiesError, setPropertiesError] = useState<string | null>(null);
   const propertiesLoaded = !propertiesLoading;
+  const propertiesReady = propertiesLoaded && !propertiesError;
   const { features, loading: loadingCaps } = useCapabilities();
   const { user } = useAuth();
   const [screeningQuote, setScreeningQuote] = useState<ScreeningQuote | null>(null);
@@ -287,6 +289,7 @@ const ApplicationsPage: React.FC = () => {
     const loadProperties = async () => {
       try {
         setPropertiesLoading(true);
+        setPropertiesError(null);
         const res: any = await fetchProperties();
         const list = Array.isArray(res?.properties)
           ? res.properties
@@ -313,6 +316,7 @@ const ApplicationsPage: React.FC = () => {
         );
       } catch {
         if (!alive) return;
+        setPropertiesError("Couldn’t load properties. Retry.");
         setPropertyRecords([]);
         setProperties([]);
       } finally {
@@ -324,6 +328,42 @@ const ApplicationsPage: React.FC = () => {
       alive = false;
     };
   }, []);
+
+  const retryProperties = useCallback(async () => {
+    try {
+      setPropertiesLoading(true);
+      setPropertiesError(null);
+      const res: any = await fetchProperties();
+      const list = Array.isArray(res?.properties)
+        ? res.properties
+        : Array.isArray(res?.items)
+        ? res.items
+        : Array.isArray(res)
+        ? res
+        : [];
+      setPropertyRecords(list);
+      setProperties(
+        list
+          .map((p: any) => ({
+            id: String(p.id || p.propertyId || p.uid || ""),
+            name: p.name || p.addressLine1 || p.label || "Property",
+          }))
+          .filter((p: PropertyOption) => Boolean(p.id))
+      );
+    } catch {
+      setPropertiesError("Couldn’t load properties. Retry.");
+    } finally {
+      setPropertiesLoading(false);
+    }
+  }, []);
+
+  if (import.meta.env.DEV) {
+    console.debug("[applications] properties state", {
+      loaded: propertiesLoaded,
+      count: propertiesCount,
+      error: propertiesError,
+    });
+  }
 
   useEffect(() => {
     let alive = true;
@@ -375,6 +415,10 @@ const ApplicationsPage: React.FC = () => {
     const params = new URLSearchParams(location.search);
     if (params.get("openSendApplication") !== "1") return;
     if (!propertiesLoaded) return;
+    if (propertiesError) {
+      showToast({ message: "Couldn’t load properties. Retry.", variant: "error" });
+      return;
+    }
 
     const autoSelect = params.get("autoSelectProperty") === "1";
     if (autoSelect && properties[0]?.id && !propertyFilter) {
@@ -389,7 +433,7 @@ const ApplicationsPage: React.FC = () => {
       requireSelection: true,
     });
 
-    if (prereq.missingProperty) {
+    if (prereq.missingProperty && propertiesReady && propertiesCount === 0) {
       setPropertyGateOpen(true);
       params.delete("openSendApplication");
       params.delete("autoSelectProperty");
@@ -417,8 +461,10 @@ const ApplicationsPage: React.FC = () => {
     properties,
     propertyFilter,
     propertiesCount,
+    propertiesError,
     unitsCount,
-    propertiesLoading,
+    propertiesLoaded,
+    propertiesReady,
     showToast,
   ]);
 
@@ -624,6 +670,10 @@ const ApplicationsPage: React.FC = () => {
       showToast({ message: "Loading properties…", variant: "info" });
       return;
     }
+    if (propertiesError) {
+      showToast({ message: "Couldn’t load properties. Retry.", variant: "error" });
+      return;
+    }
     const nextSelectedId = propertyFilter || (autoSelectProperty ? properties[0]?.id : null) || null;
     const prereq = getApplicationPrereqState({
       propertiesCount,
@@ -632,7 +682,7 @@ const ApplicationsPage: React.FC = () => {
       requireSelection: true,
     });
 
-    if (prereq.missingProperty) {
+    if (prereq.missingProperty && propertiesReady && propertiesCount === 0) {
       setPropertyGateOpen(true);
       return;
     }
@@ -809,11 +859,34 @@ const ApplicationsPage: React.FC = () => {
             <div style={{ color: text.muted, fontSize: "0.95rem" }}>
               Review submitted rental applications.
             </div>
+            {propertiesError ? (
+              <div
+                style={{
+                  marginTop: 8,
+                  padding: "8px 12px",
+                  borderRadius: 12,
+                  border: "1px solid rgba(239,68,68,0.4)",
+                  background: "rgba(239,68,68,0.08)",
+                  color: "#b91c1c",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  flexWrap: "wrap",
+                }}
+              >
+                {propertiesError}
+                <Button variant="secondary" onClick={() => void retryProperties()} disabled={propertiesLoading}>
+                  {propertiesLoading ? "Retrying..." : "Retry"}
+                </Button>
+              </div>
+            ) : null}
           </div>
           <Button
             variant="secondary"
             onClick={() => setScreeningInviteOpen(true)}
-            disabled={!propertiesLoaded}
+            disabled={!propertiesReady}
           >
             {propertiesLoaded ? "Send screening invite" : "Loading properties…"}
           </Button>
@@ -877,7 +950,7 @@ const ApplicationsPage: React.FC = () => {
                       handleCreateApplication(false);
                     }}
                     style={{ width: "fit-content" }}
-                    disabled={!propertiesLoaded}
+                    disabled={!propertiesReady}
                   >
                     {propertiesLoaded ? "Create application" : "Loading properties…"}
                   </Button>
