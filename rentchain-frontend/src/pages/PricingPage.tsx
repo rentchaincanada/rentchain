@@ -8,6 +8,7 @@ import { NotifyMeModal } from "../components/billing/NotifyMeModal";
 import { useAuth } from "../context/useAuth";
 import { fetchBillingPricing, fetchPricingHealth } from "../api/billingApi";
 import { apiFetch } from "@/lib/apiClient";
+import { BillingIntervalToggle } from "@/components/billing/BillingIntervalToggle";
 
 const PricingPage: React.FC = () => {
   const navigate = useNavigate();
@@ -19,7 +20,7 @@ const PricingPage: React.FC = () => {
   const [pricingError, setPricingError] = useState(false);
   const [pricingHealth, setPricingHealth] = useState<any | null>(null);
   const [healthLoading, setHealthLoading] = useState(true);
-  const [interval, setInterval] = useState<"monthly" | "yearly">("monthly");
+  const [interval, setInterval] = useState<"month" | "year">("month");
 
   useEffect(() => {
     let active = true;
@@ -78,9 +79,9 @@ const PricingPage: React.FC = () => {
     const plan = planMap.get(planKey);
     if (!plan) return "—";
     const amountCents =
-      interval === "yearly" ? plan.yearlyAmountCents : plan.monthlyAmountCents;
+      interval === "year" ? plan.yearlyAmountCents : plan.monthlyAmountCents;
     if (!amountCents) return "—";
-    const suffix = interval === "yearly" ? "year" : "month";
+    const suffix = interval === "year" ? "year" : "month";
     return `$${(amountCents / 100).toFixed(0)} / ${suffix}`;
   };
 
@@ -98,7 +99,7 @@ const PricingPage: React.FC = () => {
         method: "POST",
         body: JSON.stringify({
           planKey,
-          interval: interval === "yearly" ? "year" : "month",
+          interval,
           featureKey: "pricing",
           source: "pricing_page",
           redirectTo: "/billing",
@@ -147,46 +148,7 @@ const PricingPage: React.FC = () => {
         <Card>
           <div style={{ display: "flex", flexDirection: "column", gap: spacing.sm }}>
             <h2 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 700 }}>Plans</h2>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button
-                type="button"
-                onClick={() => setInterval("monthly")}
-                style={{
-                  padding: "8px 12px",
-                  borderRadius: 10,
-                  border:
-                    interval === "monthly"
-                      ? "1px solid rgba(37,99,235,0.6)"
-                      : "1px solid rgba(148,163,184,0.35)",
-                  background: interval === "monthly" ? "rgba(37,99,235,0.12)" : "transparent",
-                  color: "#0f172a",
-                  fontWeight: 800,
-                  fontSize: 12,
-                  cursor: "pointer",
-                }}
-              >
-                Monthly
-              </button>
-              <button
-                type="button"
-                onClick={() => setInterval("yearly")}
-                style={{
-                  padding: "8px 12px",
-                  borderRadius: 10,
-                  border:
-                    interval === "yearly"
-                      ? "1px solid rgba(37,99,235,0.6)"
-                      : "1px solid rgba(148,163,184,0.35)",
-                  background: interval === "yearly" ? "rgba(37,99,235,0.12)" : "transparent",
-                  color: "#0f172a",
-                  fontWeight: 800,
-                  fontSize: 12,
-                  cursor: "pointer",
-                }}
-              >
-                Yearly
-              </button>
-            </div>
+            <BillingIntervalToggle value={interval} onChange={setInterval} />
             <div style={{ display: "grid", gap: spacing.sm }}>
               <div
                 style={{

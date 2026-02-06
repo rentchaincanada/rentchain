@@ -3,6 +3,7 @@ import { NotifyMeModal } from "./NotifyMeModal";
 import { useAuth } from "../../context/useAuth";
 import { startCheckout } from "@/billing/startCheckout";
 import { fetchBillingPricing, fetchPricingHealth } from "@/api/billingApi";
+import { BillingIntervalToggle } from "./BillingIntervalToggle";
 
 export type UpgradeReason =
   | "propertiesMax"
@@ -33,7 +34,7 @@ export function UpgradeModal({
   const [loadingPricing, setLoadingPricing] = React.useState(true);
   const [pricingHealth, setPricingHealth] = React.useState<any | null>(null);
   const [healthLoading, setHealthLoading] = React.useState(true);
-  const [interval, setInterval] = React.useState<"monthly" | "yearly">("monthly");
+  const [interval, setInterval] = React.useState<"month" | "year">("month");
   const [selectedPlan, setSelectedPlan] = React.useState<"starter" | "pro">("pro");
   const [notifyOpen, setNotifyOpen] = React.useState(false);
   const [notifyPlan, setNotifyPlan] = React.useState<"core" | "pro" | "elite">("core");
@@ -84,14 +85,14 @@ export function UpgradeModal({
   const starterPriceLabel = loadingPricing
     ? "Loading..."
     : starterPricing
-    ? interval === "yearly"
+    ? interval === "year"
       ? `$${Math.round(starterPricing.yearlyAmountCents / 100)} / year`
       : `$${Math.round(starterPricing.monthlyAmountCents / 100)} / month`
     : "—";
   const proPriceLabel = loadingPricing
     ? "Loading..."
     : proPricing
-    ? interval === "yearly"
+    ? interval === "year"
       ? `$${Math.round(proPricing.yearlyAmountCents / 100)} / year`
       : `$${Math.round(proPricing.monthlyAmountCents / 100)} / month`
     : "—";
@@ -195,45 +196,8 @@ export function UpgradeModal({
             </div>
           ) : null}
 
-          <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button
-              type="button"
-              onClick={() => setInterval("monthly")}
-              style={{
-                padding: "8px 12px",
-                borderRadius: 10,
-                border:
-                  interval === "monthly"
-                    ? "1px solid rgba(37,99,235,0.6)"
-                    : "1px solid rgba(148,163,184,0.35)",
-                background: interval === "monthly" ? "rgba(37,99,235,0.12)" : "transparent",
-                color: "#0f172a",
-                fontWeight: 800,
-                fontSize: 12,
-                cursor: "pointer",
-              }}
-            >
-              Monthly
-            </button>
-            <button
-              type="button"
-              onClick={() => setInterval("yearly")}
-              style={{
-                padding: "8px 12px",
-                borderRadius: 10,
-                border:
-                  interval === "yearly"
-                    ? "1px solid rgba(37,99,235,0.6)"
-                    : "1px solid rgba(148,163,184,0.35)",
-                background: interval === "yearly" ? "rgba(37,99,235,0.12)" : "transparent",
-                color: "#0f172a",
-                fontWeight: 800,
-                fontSize: 12,
-                cursor: "pointer",
-              }}
-            >
-              Yearly
-            </button>
+          <div style={{ marginTop: 10 }}>
+            <BillingIntervalToggle value={interval} onChange={setInterval} />
           </div>
 
           <div
