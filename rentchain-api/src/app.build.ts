@@ -5,6 +5,7 @@ import { authenticateJwt } from "./middleware/authMiddleware";
 import { routeSource } from "./middleware/routeSource";
 import { notFoundHandler, errorHandler } from "./middleware/errorHandler";
 import { corsOptions } from "./lib/cors";
+import { getPricingHealth } from "./config/planMatrix";
 
 import publicRoutes from "./routes/publicRoutes";
 import authRoutes from "./routes/authRoutes";
@@ -77,6 +78,15 @@ process.on("uncaughtException", (err) => {
 });
 
 export const app = express();
+
+const pricingHealth = getPricingHealth();
+if (!pricingHealth.ok) {
+  console.warn("[boot] pricing env missing/invalid", {
+    missing: pricingHealth.missing,
+    invalid: pricingHealth.invalid,
+    env: pricingHealth.env,
+  });
+}
 app.set("etag", false);
 
 app.use(cors(corsOptions));
