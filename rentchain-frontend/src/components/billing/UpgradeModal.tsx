@@ -81,8 +81,13 @@ export function UpgradeModal({
     !healthLoading && pricingHealth && pricingHealth.ok === false;
   const starterPricing = pricing?.plans?.find((p: any) => p.key === "starter");
   const proPricing = pricing?.plans?.find((p: any) => p.key === "pro");
-  const starterPriceLabel =
-    starterPricing?.monthlyAmountCents === 0 ? "Free" : loadingPricing ? "Loading..." : "$0";
+  const starterPriceLabel = loadingPricing
+    ? "Loading..."
+    : starterPricing
+    ? interval === "yearly"
+      ? `$${Math.round(starterPricing.yearlyAmountCents / 100)} / year`
+      : `$${Math.round(starterPricing.monthlyAmountCents / 100)} / month`
+    : "—";
   const proPriceLabel = loadingPricing
     ? "Loading..."
     : proPricing

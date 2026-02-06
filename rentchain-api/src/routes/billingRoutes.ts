@@ -62,7 +62,8 @@ function normalizeTier(input: any): BillingTier | "free" | null {
 
 function normalizeInterval(input: any): BillingInterval {
   const raw = String(input || "").trim().toLowerCase();
-  if (raw === "yearly" || raw === "annual" || raw === "annually") return "yearly";
+  if (raw === "year" || raw === "yearly" || raw === "annual" || raw === "annually") return "yearly";
+  if (raw === "month" || raw === "monthly") return "monthly";
   return "monthly";
 }
 
@@ -131,9 +132,9 @@ async function handleCheckout(req: any, res: any) {
   const userId = req.user?.id || null;
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
 
-  const { tier, interval, plan, requiredPlan, featureKey, source, redirectTo } =
+  const { tier, interval, plan, requiredPlan, planKey, featureKey, source, redirectTo } =
     req.body || {};
-  const resolvedTier = normalizeTier(tier || plan || requiredPlan);
+  const resolvedTier = normalizeTier(tier || plan || requiredPlan || planKey);
   if (!resolvedTier) {
     return res.status(400).json({ ok: false, error: "missing_tier" });
   }
