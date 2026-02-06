@@ -79,7 +79,9 @@ export function resolvePlanPriceId(params: {
 } {
   const env = params.env || inferStripeEnv();
   const { preferred, fallback, legacy } = resolveEnvKeys(params.plan, params.interval, env);
-  const candidates = [preferred].concat(allowFallback(env) ? [fallback, legacy] : []).filter(Boolean) as string[];
+  const candidates = [preferred]
+    .concat(allowFallback(env) ? [fallback, legacy] : [])
+    .filter((v): v is string => Boolean(v));
 
   for (const key of candidates) {
     const value = envVal(key);
@@ -170,7 +172,9 @@ export function resolvePlanFromPriceId(priceId?: string | null): BillingPlanKey 
     for (const plan of plans) {
       for (const interval of intervals) {
         const { preferred, fallback, legacy } = resolveEnvKeys(plan, interval, env);
-        const keys = [preferred].concat(includeFallback ? [fallback, legacy] : []).filter(Boolean) as string[];
+        const keys = [preferred]
+          .concat(includeFallback ? [fallback, legacy] : [])
+          .filter((v): v is string => Boolean(v));
         for (const key of keys) {
           const value = envVal(key);
           if (value && value === id) return plan;
