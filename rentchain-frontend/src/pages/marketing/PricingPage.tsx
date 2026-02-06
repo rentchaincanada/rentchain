@@ -4,6 +4,7 @@ import { spacing, text } from "../../styles/tokens";
 import { MarketingLayout } from "./MarketingLayout";
 import { useAuth } from "../../context/useAuth";
 import { fetchBillingPricing } from "../../api/billingApi";
+import { startCheckout } from "../../billing/startCheckout";
 
 const PricingPage: React.FC = () => {
   const { user } = useAuth();
@@ -49,7 +50,7 @@ const PricingPage: React.FC = () => {
     return map;
   }, [pricing]);
 
-  const renderPrice = (planKey: "starter" | "pro") => {
+  const renderPrice = (planKey: "starter" | "pro" | "business") => {
     const plan = planMap.get(planKey);
     if (!plan) return "—";
     if (plan.monthlyAmountCents === 0) return "Free";
@@ -61,6 +62,21 @@ const PricingPage: React.FC = () => {
   };
 
   const pricingUnavailable = !loading && pricingError;
+
+  const handlePlanAction = (planKey: "starter" | "pro" | "business") => {
+    if (pricingUnavailable) return;
+    if (!isAuthed) {
+      window.location.href = "/login";
+      return;
+    }
+    startCheckout({
+      tier: planKey,
+      interval: "monthly",
+      featureKey: "pricing",
+      source: "marketing_pricing",
+      redirectTo: "/billing",
+    });
+  };
 
   return (
     <MarketingLayout>
@@ -106,11 +122,7 @@ const PricingPage: React.FC = () => {
               {loading ? "—" : renderPrice("starter")}
             </div>
             <div className="rc-wrap-row" style={{ marginTop: spacing.sm }}>
-              <Button
-                type="button"
-                onClick={() => (window.location.href = isAuthed ? "/billing" : "/login")}
-                disabled={pricingUnavailable}
-              >
+              <Button type="button" onClick={() => handlePlanAction("starter")} disabled={pricingUnavailable}>
                 {isAuthed ? "Choose plan" : "Get started"}
               </Button>
             </div>
@@ -131,32 +143,29 @@ const PricingPage: React.FC = () => {
             </div>
             <div style={{ color: text.subtle, marginTop: spacing.xs }}>Screening: Pay-per-applicant</div>
             <div className="rc-wrap-row" style={{ marginTop: spacing.sm }}>
-              <Button
-                type="button"
-                onClick={() => (window.location.href = isAuthed ? "/billing" : "/login")}
-                disabled={pricingUnavailable}
-              >
-                {isAuthed ? "Upgrade to Pro" : "Get started"}
+              <Button type="button" onClick={() => handlePlanAction("pro")} disabled={pricingUnavailable}>
+                {isAuthed ? "Choose plan" : "Get started"}
               </Button>
             </div>
           </Card>
 
           <Card>
-            <h2 style={{ marginTop: 0 }}>Advanced / Compliance (Coming Soon)</h2>
+            <h2 style={{ marginTop: 0 }}>Business</h2>
             <p style={{ color: text.muted, marginTop: 0 }}>
-              For portfolio operators and compliance-focused landlords.
+              For portfolio operators who need advanced workflows and reporting.
             </p>
             <ul style={{ paddingLeft: "1.1rem", color: text.muted, lineHeight: 1.7 }}>
-              <li>Enhanced audit and reporting tools</li>
-              <li>Extended record retention</li>
-              <li>Portfolio-level insights</li>
-              <li>Future support for subsidy and compliance workflows</li>
+              <li>Advanced exports and audit logs</li>
+              <li>Compliance reporting</li>
+              <li>Portfolio analytics</li>
+              <li>Priority support</li>
             </ul>
-            <div style={{ fontWeight: 600 }}>Limited early access</div>
-            <div style={{ fontWeight: 700, fontSize: "1.1rem", marginTop: spacing.xs }}>Contact us</div>
+            <div style={{ fontWeight: 700, fontSize: "1.1rem" }}>
+              {loading ? "—" : renderPrice("business")}
+            </div>
             <div className="rc-wrap-row" style={{ marginTop: spacing.sm }}>
-              <Button type="button" variant="ghost" onClick={() => (window.location.href = "/contact")}>
-                Contact sales
+              <Button type="button" onClick={() => handlePlanAction("business")} disabled={pricingUnavailable}>
+                {isAuthed ? "Choose plan" : "Get started"}
               </Button>
             </div>
           </Card>
