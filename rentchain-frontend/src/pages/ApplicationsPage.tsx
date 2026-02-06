@@ -1566,6 +1566,13 @@ const ApplicationsPage: React.FC = () => {
         open={sendAppOpen}
         propertyId={sendAppPropertyId}
         propertyName={sendAppPropertyName}
+        properties={properties}
+        onPropertyChange={(nextId) => {
+          setSendAppPropertyId(nextId);
+          const nextName = properties.find((p) => p.id === nextId)?.name || null;
+          setSendAppPropertyName(nextName);
+          setPropertyFilter(nextId);
+        }}
         unit={null}
         onClose={() => setSendAppOpen(false)}
       />

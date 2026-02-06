@@ -8,11 +8,21 @@ type Props = {
   open: boolean;
   propertyId?: string | null;
   propertyName?: string | null;
+  properties?: Array<{ id: string; name: string }>;
+  onPropertyChange?: (nextId: string) => void;
   unit?: any | null;
   onClose: () => void;
 };
 
-export function SendApplicationModal({ open, propertyId, propertyName, unit, onClose }: Props) {
+export function SendApplicationModal({
+  open,
+  propertyId,
+  propertyName,
+  properties,
+  onPropertyChange,
+  unit,
+  onClose,
+}: Props) {
   const { showToast } = useToast();
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -21,6 +31,14 @@ export function SendApplicationModal({ open, propertyId, propertyName, unit, onC
   const [emailed, setEmailed] = React.useState<boolean | null>(null);
   const [emailError, setEmailError] = React.useState<string | null>(null);
   const tenantEmail = (unit as any)?.tenantEmail || "";
+  const propertyOptions = React.useMemo(() => {
+    if (properties && properties.length) return properties;
+    if (propertyId) {
+      return [{ id: String(propertyId), name: propertyName || "Selected property" }];
+    }
+    return [];
+  }, [properties, propertyId, propertyName]);
+  const [selectedPropertyId, setSelectedPropertyId] = React.useState<string>(propertyId || "");
 
   React.useEffect(() => {
     if (!open) {
@@ -39,10 +57,16 @@ export function SendApplicationModal({ open, propertyId, propertyName, unit, onC
     }
   }, [open, tenantEmail]);
 
+  React.useEffect(() => {
+    if (open && propertyId) {
+      setSelectedPropertyId(String(propertyId));
+    }
+  }, [open, propertyId]);
+
   if (!open) return null;
 
   const handleGenerate = async () => {
-    if (!propertyId) {
+    if (!selectedPropertyId) {
       setError("Missing property id");
       return;
     }
@@ -52,7 +76,7 @@ export function SendApplicationModal({ open, propertyId, propertyName, unit, onC
     setEmailError(null);
     try {
       const res = await createApplicationLink({
-        propertyId: String(propertyId),
+        propertyId: String(selectedPropertyId),
         unitId: (unit as any)?.id ? String((unit as any).id) : null,
         applicantEmail: applicantEmail.trim() || null,
       });
@@ -155,18 +179,57 @@ export function SendApplicationModal({ open, propertyId, propertyName, unit, onC
           </button>
         </div>
 
-        <div style={{ fontSize: "0.9rem", color: "#111827" }}>
-          This application link is for:{" "}
-          <strong>
-            {propertyName ||
-              (unit ? `Unit ${(unit as any)?.unitNumber || ""}` : "this property")}
-          </strong>
-        </div>
-        {!unit ? (
-          <div style={{ fontSize: "0.85rem", color: "#6b7280" }}>
-            Unit and rent details can be entered manually by the applicant.
+        {propertyOptions.length ? (
+          <>
+            <label style={{ display: "grid", gap: 6, fontSize: "0.9rem", color: "#111827" }}>
+              Property
+              <select
+                value={selectedPropertyId}
+                onChange={(e) => {
+                  const nextId = e.target.value;
+                  setSelectedPropertyId(nextId);
+                  onPropertyChange?.(nextId);
+                }}
+                style={{
+                  width: "100%",
+                  padding: "8px 10px",
+                  borderRadius: 8,
+                  border: "1px solid #e5e7eb",
+                  fontSize: "0.9rem",
+                  background: "#fff",
+                }}
+                required
+              >
+                {propertyOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name}
+                  </option>
+                ))}
+              </select>
+              <span style={{ fontSize: "0.8rem", color: "#6b7280" }}>
+                This link will be for the selected property.
+              </span>
+            </label>
+            {!unit ? (
+              <div style={{ fontSize: "0.85rem", color: "#6b7280" }}>
+                Unit and rent details can be entered manually by the applicant.
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <div
+            style={{
+              padding: 10,
+              borderRadius: 10,
+              border: "1px solid #fde68a",
+              background: "#fffbeb",
+              color: "#92400e",
+              fontSize: "0.9rem",
+            }}
+          >
+            Create a property first to send an application link.
           </div>
-        ) : null}
+        )}
 
         <label style={{ display: "grid", gap: 6, fontSize: "0.9rem", color: "#111827" }}>
           Applicant email
@@ -278,7 +341,7 @@ export function SendApplicationModal({ open, propertyId, propertyName, unit, onC
           <button
             type="button"
             onClick={handleGenerate}
-            disabled={loading}
+            disabled={loading || !selectedPropertyId}
             style={{
               padding: "8px 10px",
               borderRadius: 8,

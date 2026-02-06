@@ -1072,6 +1072,16 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
         open={!!sendAppUnit}
         propertyId={property?.id || null}
         propertyName={property?.name || property?.addressLine1 || null}
+        properties={
+          property?.id
+            ? [
+                {
+                  id: String(property.id),
+                  name: property?.name || property?.addressLine1 || "Selected property",
+                },
+              ]
+            : []
+        }
         unit={sendAppUnit}
         onClose={() => setSendAppUnit(null)}
       />
