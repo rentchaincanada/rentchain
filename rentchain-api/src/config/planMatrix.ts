@@ -13,20 +13,20 @@ const PLAN_MATRIX: Record<BillingPlanKey, PlanConfig> = {
   starter: {
     key: "starter",
     label: "Starter",
-    monthlyAmountCents: 0,
-    yearlyAmountCents: 0,
+    monthlyAmountCents: 2900,
+    yearlyAmountCents: 29000,
   },
   pro: {
     key: "pro",
     label: "Pro",
-    monthlyAmountCents: 2900,
-    yearlyAmountCents: 29000,
+    monthlyAmountCents: 5900,
+    yearlyAmountCents: 59000,
   },
   business: {
     key: "business",
     label: "Business",
-    monthlyAmountCents: 7900,
-    yearlyAmountCents: 79000,
+    monthlyAmountCents: 9900,
+    yearlyAmountCents: 99000,
   },
 };
 
@@ -46,6 +46,9 @@ function envVal(key: string | undefined): string | null {
   return trimmed.length ? trimmed : null;
 }
 
+const compact = <T,>(arr: Array<T | null | undefined>): T[] =>
+  arr.filter((value): value is T => value != null);
+
 function resolveEnvKeys(plan: BillingPlanKey, interval: PlanInterval, env: StripeEnv) {
   const upper = plan.toUpperCase();
   const intervalUpper = interval === "yearly" ? "YEARLY" : "MONTHLY";
@@ -57,14 +60,31 @@ function resolveEnvKeys(plan: BillingPlanKey, interval: PlanInterval, env: Strip
   return { preferred, fallback, legacy };
 }
 
+function isProductionEnv() {
+  return String(process.env.NODE_ENV || "").trim().toLowerCase() === "production";
+}
+
+function allowFallback(env: StripeEnv) {
+  if (env === "test") return true;
+  return !isProductionEnv();
+}
+
 export function resolvePlanPriceId(params: {
   plan: BillingPlanKey;
   interval: PlanInterval;
   env?: StripeEnv;
-}): { priceId: string | null; envKey: string; valid: boolean; missing: boolean } {
+}): {
+  priceId: string | null;
+  envKey: string;
+  valid: boolean;
+  missing: boolean;
+  fallbackUsed: boolean;
+} {
   const env = params.env || inferStripeEnv();
   const { preferred, fallback, legacy } = resolveEnvKeys(params.plan, params.interval, env);
-  const candidates = [preferred, fallback, legacy].filter(Boolean) as string[];
+  const candidates = compact([preferred]).concat(
+    compact(allowFallback(env) ? [fallback, legacy] : [])
+  );
 
   for (const key of candidates) {
     const value = envVal(key);
@@ -74,10 +94,11 @@ export function resolvePlanPriceId(params: {
       envKey: key,
       valid: value.startsWith("price_"),
       missing: false,
+      fallbackUsed: key !== preferred,
     };
   }
 
-  return { priceId: null, envKey: preferred, valid: false, missing: true };
+  return { priceId: null, envKey: preferred, valid: false, missing: true, fallbackUsed: false };
 }
 
 export function getPlanMatrix(): PlanConfig[] {
@@ -105,6 +126,13 @@ export function getPricingHealth() {
 
   const missing: string[] = [];
   const invalid: string[] = [];
+  const amountInvalid: string[] = [];
+  const used: Array<{
+    plan: BillingPlanKey;
+    interval: PlanInterval;
+    envKey: string;
+    fallbackUsed: boolean;
+  }> = [];
 
   for (const req of required) {
     const resolved = resolvePlanPriceId({ ...req, env });
@@ -112,16 +140,34 @@ export function getPricingHealth() {
       missing.push(resolved.envKey);
       continue;
     }
+    used.push({
+      plan: req.plan,
+      interval: req.interval,
+      envKey: resolved.envKey,
+      fallbackUsed: resolved.fallbackUsed,
+    });
     if (!resolved.valid) {
+      invalid.push(resolved.envKey);
+      continue;
+    }
+    if (env === "live" && isProductionEnv() && resolved.fallbackUsed) {
       invalid.push(resolved.envKey);
     }
   }
 
+  for (const plan of Object.values(PLAN_MATRIX)) {
+    if (!plan.monthlyAmountCents || !plan.yearlyAmountCents) {
+      amountInvalid.push(plan.key);
+    }
+  }
+
   return {
-    ok: missing.length === 0 && invalid.length === 0,
+    ok: missing.length === 0 && invalid.length === 0 && amountInvalid.length === 0,
     env,
     missing,
     invalid,
+    amountInvalid,
+    used,
   };
 }
 
@@ -133,10 +179,13 @@ export function resolvePlanFromPriceId(priceId?: string | null): BillingPlanKey 
   const plans: BillingPlanKey[] = ["starter", "pro", "business"];
 
   for (const env of envs) {
+    const includeFallback = allowFallback(env);
     for (const plan of plans) {
       for (const interval of intervals) {
         const { preferred, fallback, legacy } = resolveEnvKeys(plan, interval, env);
-        const keys = [preferred, fallback, legacy].filter(Boolean) as string[];
+        const keys = compact([preferred]).concat(
+          compact(includeFallback ? [fallback, legacy] : [])
+        );
         for (const key of keys) {
           const value = envVal(key);
           if (value && value === id) return plan;

@@ -97,12 +97,16 @@ router.get("/health/stripe", async (_req, res) => {
 router.get("/health/pricing", (_req, res) => {
   res.setHeader("x-route-source", "publicRoutes.ts");
   const health = getPricingHealth();
+  const fallbackUsed = health.used?.some((item) => item.fallbackUsed) ?? false;
   res.json({
     ok: health.ok,
     stripeConfigured: isStripeConfigured(),
     planPricesConfigured: health.ok,
     missing: health.missing,
     invalid: health.invalid,
+    amountInvalid: health.amountInvalid,
+    used: health.used,
+    fallbackUsed,
     env: health.env,
     ts: Date.now(),
   });
