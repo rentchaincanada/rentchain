@@ -8,6 +8,7 @@ import { requestBreadcrumbs } from "./middleware/requestBreadcrumbs";
 import { routeSource } from "./middleware/routeSource";
 import { authenticateJwt } from "./middleware/authMiddleware";
 import { corsOptions } from "./lib/cors";
+import { getPricingHealth } from "./config/planMatrix";
 
 import publicRoutes from "./routes/publicRoutes";
 import authRoutes from "./routes/authRoutes";
@@ -72,6 +73,15 @@ import screeningReportRoutes from "./routes/screeningReportRoutes";
 import onboardingRoutes from "./routes/onboardingRoutes";
 
 const app: Application = express();
+
+const pricingHealth = getPricingHealth();
+if (!pricingHealth.ok) {
+  console.warn("[boot] pricing env missing/invalid", {
+    missing: pricingHealth.missing,
+    invalid: pricingHealth.invalid,
+    env: pricingHealth.env,
+  });
+}
 app.set("etag", false);
 
 /**

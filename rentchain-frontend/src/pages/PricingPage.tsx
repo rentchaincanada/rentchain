@@ -73,6 +73,7 @@ const PricingPage: React.FC = () => {
   }, [pricing]);
 
   const renderPrice = (planKey: "starter" | "pro" | "business") => {
+    if (pricingUnavailable) return "—";
     const plan = planMap.get(planKey);
     if (!plan) return "—";
     if (plan.monthlyAmountCents === 0) return "Free";
