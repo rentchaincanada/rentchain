@@ -104,6 +104,7 @@ router.get("/health/pricing", (_req, res) => {
     planPricesConfigured: health.ok,
     missing: health.missing,
     invalid: health.invalid,
+    amountInvalid: health.amountInvalid,
     used: health.used,
     fallbackUsed,
     env: health.env,

@@ -13,20 +13,20 @@ const PLAN_MATRIX: Record<BillingPlanKey, PlanConfig> = {
   starter: {
     key: "starter",
     label: "Starter",
-    monthlyAmountCents: 0,
-    yearlyAmountCents: 0,
+    monthlyAmountCents: 2900,
+    yearlyAmountCents: 29000,
   },
   pro: {
     key: "pro",
     label: "Pro",
-    monthlyAmountCents: 2900,
-    yearlyAmountCents: 29000,
+    monthlyAmountCents: 5900,
+    yearlyAmountCents: 59000,
   },
   business: {
     key: "business",
     label: "Business",
-    monthlyAmountCents: 7900,
-    yearlyAmountCents: 79000,
+    monthlyAmountCents: 9900,
+    yearlyAmountCents: 99000,
   },
 };
 
@@ -45,6 +45,9 @@ function envVal(key: string | undefined): string | null {
   const trimmed = String(raw).trim();
   return trimmed.length ? trimmed : null;
 }
+
+const compact = <T,>(arr: Array<T | null | undefined>): T[] =>
+  arr.filter((value): value is T => value != null);
 
 function resolveEnvKeys(plan: BillingPlanKey, interval: PlanInterval, env: StripeEnv) {
   const upper = plan.toUpperCase();
@@ -79,9 +82,9 @@ export function resolvePlanPriceId(params: {
 } {
   const env = params.env || inferStripeEnv();
   const { preferred, fallback, legacy } = resolveEnvKeys(params.plan, params.interval, env);
-  const candidates = [preferred]
-    .concat(allowFallback(env) ? [fallback, legacy] : [])
-    .filter((v): v is string => Boolean(v));
+  const candidates = compact([preferred]).concat(
+    compact(allowFallback(env) ? [fallback, legacy] : [])
+  );
 
   for (const key of candidates) {
     const value = envVal(key);
@@ -123,6 +126,7 @@ export function getPricingHealth() {
 
   const missing: string[] = [];
   const invalid: string[] = [];
+  const amountInvalid: string[] = [];
   const used: Array<{
     plan: BillingPlanKey;
     interval: PlanInterval;
@@ -151,11 +155,18 @@ export function getPricingHealth() {
     }
   }
 
+  for (const plan of Object.values(PLAN_MATRIX)) {
+    if (!plan.monthlyAmountCents || !plan.yearlyAmountCents) {
+      amountInvalid.push(plan.key);
+    }
+  }
+
   return {
-    ok: missing.length === 0 && invalid.length === 0,
+    ok: missing.length === 0 && invalid.length === 0 && amountInvalid.length === 0,
     env,
     missing,
     invalid,
+    amountInvalid,
     used,
   };
 }
@@ -172,9 +183,9 @@ export function resolvePlanFromPriceId(priceId?: string | null): BillingPlanKey 
     for (const plan of plans) {
       for (const interval of intervals) {
         const { preferred, fallback, legacy } = resolveEnvKeys(plan, interval, env);
-        const keys = [preferred]
-          .concat(includeFallback ? [fallback, legacy] : [])
-          .filter((v): v is string => Boolean(v));
+        const keys = compact([preferred]).concat(
+          compact(includeFallback ? [fallback, legacy] : [])
+        );
         for (const key of keys) {
           const value = envVal(key);
           if (value && value === id) return plan;
