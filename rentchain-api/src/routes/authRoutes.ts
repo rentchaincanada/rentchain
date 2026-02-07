@@ -263,6 +263,9 @@ router.post("/login", async (req, res) => {
       if (code === "FIREBASE_API_KEY_NOT_CONFIGURED") {
         return loginError(res, 500, "FIREBASE_API_KEY_MISSING");
       }
+      if (code === "EMAIL_NOT_VERIFIED") {
+        return loginError(res, 403, "EMAIL_NOT_VERIFIED", "Email verification required");
+      }
       const looksLikeAuthFailure =
         code.includes("auth/") ||
         code === "UNAUTHORIZED" ||

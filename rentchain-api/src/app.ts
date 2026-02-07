@@ -40,6 +40,8 @@ import capabilitiesRoutes from "./routes/capabilitiesRoutes";
 import tenantInvitesRoutes from "./routes/tenantInvitesRoutes";
 import tenantPortalRoutes from "./routes/tenantPortalRoutes";
 import tenantInviteAliasesRoutes from "./routes/tenantInviteAliasesRoutes";
+import landlordInvitesAdminRoutes from "./routes/landlordInvitesAdminRoutes";
+import landlordInvitesPublicRoutes from "./routes/landlordInvitesPublicRoutes";
 import tenantEventsRoutes from "./routes/tenantEventsRoutes";
 import tenantEventsWriteRoutes from "./routes/tenantEventsWriteRoutes";
 import ledgerAttachmentsRoutes from "./routes/ledgerAttachmentsRoutes";
@@ -155,6 +157,7 @@ app.post("/api/public/waitlist", (req, res, next) => {
   req.url = "/waitlist";
   next();
 });
+app.use("/api/public", routeSource("landlordInvitesPublicRoutes.ts"), landlordInvitesPublicRoutes);
 // Mount public routes under both /api and /api/public for compatibility
 app.use("/api/public", routeSource("publicRoutes.ts"), publicRoutes);
 app.use("/api", routeSource("publicRoutes.ts"), publicRoutes);
@@ -201,6 +204,7 @@ app.use("/api", stubsRoutes);
 app.use("/api/admin", routeSource("adminBootstrapRoutes"), adminBootstrapRoutes);
 app.use("/api/admin", routeSource("screeningJobsAdminRoutes.ts"), screeningJobsAdminRoutes);
 app.use("/api/admin", routeSource("adminRoutes.ts"), adminRoutes);
+app.use("/api/admin", routeSource("landlordInvitesAdminRoutes.ts"), landlordInvitesAdminRoutes);
 app.use("/api/admin/demo", routeSource("adminDemoRoutes.ts"), adminDemoRoutes);
 app.use("/api/admin", routeSource("adminPropertiesRoutes.ts"), adminPropertiesRoutes);
 app.use("/api/admin", routeSource("adminScreeningResultsRoutes.ts"), adminScreeningResultsRoutes);

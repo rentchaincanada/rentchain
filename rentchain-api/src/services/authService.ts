@@ -1,5 +1,6 @@
 // src/services/authService.ts
 import jwt from "jsonwebtoken";
+import admin from "firebase-admin";
 import { JWT_EXPIRES_IN, JWT_SECRET } from "../config/authConfig";
 import { db } from "../config/firebase";
 
@@ -39,6 +40,12 @@ export async function validateLandlordCredentials(
   });
 
   try {
+    const adminUser = await admin.auth().getUser(fb.uid);
+    if (!adminUser.emailVerified) {
+      const err: any = new Error("EMAIL_NOT_VERIFIED");
+      err.code = "EMAIL_NOT_VERIFIED";
+      throw err;
+    }
     const ref = db.collection("landlords").doc(fb.uid);
     const snap = await ref.get();
 
