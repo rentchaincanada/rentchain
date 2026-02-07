@@ -195,7 +195,7 @@ publicRouter.post(
       `Name: ${firstName || "—"}\n` +
       `Portfolio size: ${portfolioSize || "—"}\n` +
       `Note: ${note || "—"}\n\n` +
-      `Approve in admin or use /api/admin/landlord-inquiry/${id}/approve.\n` +
+      `Approve in admin or use /api/admin/landlord-leads/${id}/approve.\n` +
       `Landing: ${baseUrl}/invite (admin invite flow)\n`;
 
     let emailed = false;
