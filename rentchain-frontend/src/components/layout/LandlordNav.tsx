@@ -21,7 +21,15 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
   const unreadFlag = typeof unreadMessages === "boolean" ? unreadMessages : hasUnread;
   const [drawerOpen, setDrawerOpen] = useState(false);
   const lastFocusedRef = useRef<HTMLElement | null>(null);
-  const visibleItems = getVisibleNavItems(user?.role, features);
+  const effectiveRole = String(user?.actorRole || user?.role || "landlord");
+  if (import.meta.env.DEV) {
+    console.debug("[nav] role resolved", {
+      effectiveRole,
+      rawRole: user?.role || null,
+      actorRole: user?.actorRole || null,
+    });
+  }
+  const visibleItems = getVisibleNavItems(effectiveRole, features);
   const drawerItems = visibleItems.filter((item) => item.showInDrawer !== false);
   const primaryDrawerItems = drawerItems.filter((item) => !item.requiresAdmin);
   const adminDrawerItems = drawerItems.filter((item) => item.requiresAdmin);

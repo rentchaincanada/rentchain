@@ -10,6 +10,7 @@ const TopNav: React.FC = () => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const effectiveRole = String(user?.actorRole || user?.role || "landlord");
 
   return (
     <>
@@ -102,7 +103,7 @@ const TopNav: React.FC = () => {
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         userEmail={user?.email || ""}
-        userRole={user?.role || ""}
+        userRole={effectiveRole}
         onSignOut={() => {
           logout();
           navigate("/login");
