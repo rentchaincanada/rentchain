@@ -128,6 +128,24 @@ export async function apiFetch<T = any>(
   }
 
   if (!res.ok) {
+    if (data?.code === "INVALID_CREDENTIALS" || data?.error === "INVALID_CREDENTIALS") {
+      if (isTenantPath) {
+        clearTenantToken();
+      } else {
+        clearAuthToken();
+      }
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem("authExpiredToast", "1");
+      }
+      if (!redirectedOn401 && typeof window !== "undefined" && window.location.pathname !== "/login") {
+        redirectedOn401 = true;
+        window.location.href = "/login?reason=expired";
+      }
+      if (allowStatuses?.includes(res.status)) {
+        return (data as T) ?? (text as unknown as T);
+      }
+      throw new Error(data?.message || "Session expired");
+    }
     if (res.status === 401) {
       if (isTenantPath) {
         clearTenantToken();

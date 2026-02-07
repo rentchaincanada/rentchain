@@ -22,10 +22,54 @@ import { getApplicationPrereqState } from "../lib/applicationPrereqs";
 import { CreatePropertyFirstModal } from "../components/properties/CreatePropertyFirstModal";
 import { buildCreatePropertyUrl, buildReturnTo } from "../lib/propertyGate";
 import { SendScreeningInviteModal } from "../components/screening/SendScreeningInviteModal";
+import { SendApplicationModal } from "../components/properties/SendApplicationModal";
 
 const StarterOnboardingPanel = React.lazy(
   () => import("../components/dashboard/StarterOnboardingPanel")
 );
+
+class OnboardingErrorBoundary extends React.Component<
+  { onError: () => void; children: React.ReactNode },
+  { hasError: boolean }
+> {
+  private didLog = false;
+  constructor(props: { onError: () => void; children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch() {
+    if (!this.didLog) {
+      this.didLog = true;
+      console.error("[onboarding] render crashed");
+    }
+    this.props.onError();
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
+          <div style={{ fontWeight: 700, marginBottom: 10 }}>Get started</div>
+          <div style={{ color: text.muted, marginBottom: 12 }}>
+            Something went wrong while loading onboarding.
+          </div>
+          <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
+            <Button onClick={() => window.location.reload()}>Reload</Button>
+            <Button variant="ghost" onClick={() => window.location.assign("/dashboard")}>
+              Go to Dashboard
+            </Button>
+          </div>
+        </Card>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function formatDate(ts: number | null): string {
   if (!ts) return "—";
@@ -49,7 +93,7 @@ const DashboardPage: React.FC = () => {
   const [lastUpdatedAt, setLastUpdatedAt] = React.useState<number | null>(null);
   const { applications, loading: applicationsLoading } = useApplications();
   const { tenants, loading: tenantsLoading } = useTenants();
-  const { user } = useAuth();
+  const { user, ready: authReady, isLoading: authLoading } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
   const apiBase = debugApiBase();
@@ -62,6 +106,8 @@ const DashboardPage: React.FC = () => {
   const [propertyGateOpen, setPropertyGateOpen] = React.useState(false);
   const [pendingPropertyAction, setPendingPropertyAction] = React.useState<"create_application" | null>(null);
   const [screeningInviteOpen, setScreeningInviteOpen] = React.useState(false);
+  const [sendApplicationOpen, setSendApplicationOpen] = React.useState(false);
+  const [onboardingChunkError, setOnboardingChunkError] = React.useState(false);
   const onboarding = useOnboardingState();
   const prevDerivedRef = React.useRef({
     propertyAdded: false,
@@ -178,8 +224,15 @@ const DashboardPage: React.FC = () => {
   const isAdmin = String(user?.role || "").toLowerCase() === "admin";
   const showEmptyCTA = hasNoProperties;
   const progressLoading = !dataReady || onboarding.loading;
+  const meLoaded = authReady && !authLoading && Boolean(user?.id);
+  const planLoaded = Boolean(user?.plan);
   const showOnboardingSkeleton = onboarding.loading && !isAdmin;
-  const showStarterOnboarding = !onboarding.loading && !onboarding.dismissed;
+  const showStarterOnboarding =
+    meLoaded &&
+    planLoaded &&
+    !onboarding.loading &&
+    !onboarding.dismissed &&
+    !onboardingChunkError;
   const showAdvancedCollapsed = showStarterOnboarding;
 
   const handleCreateApplicationClick = () => {
@@ -201,7 +254,7 @@ const DashboardPage: React.FC = () => {
       stepKey: "applicationCreated",
       source: "dashboard",
     });
-    navigate("/applications?autoSelectProperty=1&openSendApplication=1");
+    setSendApplicationOpen(true);
   };
 
   const derivedSteps = {
@@ -254,6 +307,15 @@ const DashboardPage: React.FC = () => {
     if (!showStarterOnboarding || onboarding.loading) return;
     track("onboarding_viewed");
   }, [showStarterOnboarding, onboarding.loading]);
+
+  const propertyOptions = React.useMemo(
+    () =>
+      properties.map((p) => ({
+        id: String(p?.id || p?.propertyId || ""),
+        name: p?.name || p?.address || "Property",
+      })).filter((p) => p.id),
+    [properties]
+  );
 
   return (
     <MacShell title="RentChain · Dashboard" showTopNav={false}>
@@ -318,17 +380,19 @@ const DashboardPage: React.FC = () => {
                 </Card>
               }
             >
-              <StarterOnboardingPanel
-                steps={buildOnboardingSteps({
-                  onboarding,
-                  navigate,
-                  track,
-                  propertiesCount: derivedPropertiesCount,
-                  unitsCount: derivedUnitsCount,
-                })}
-                loading={progressLoading}
-                onDismiss={() => onboarding.dismissOnboarding()}
-              />
+              <OnboardingErrorBoundary onError={() => setOnboardingChunkError(true)}>
+                <StarterOnboardingPanel
+                  steps={buildOnboardingSteps({
+                    onboarding,
+                    navigate,
+                    track,
+                    propertiesCount: derivedPropertiesCount,
+                    unitsCount: derivedUnitsCount,
+                  })}
+                  loading={progressLoading}
+                  onDismiss={() => onboarding.dismissOnboarding()}
+                />
+              </OnboardingErrorBoundary>
             </React.Suspense>
             <Card style={{ padding: spacing.md }}>
               <div style={{ fontWeight: 700, marginBottom: spacing.sm }}>Quick actions</div>
@@ -534,6 +598,11 @@ const DashboardPage: React.FC = () => {
         open={screeningInviteOpen}
         onClose={() => setScreeningInviteOpen(false)}
         returnTo="/dashboard"
+      />
+      <SendApplicationModal
+        open={sendApplicationOpen}
+        onClose={() => setSendApplicationOpen(false)}
+        properties={propertyOptions}
       />
     </MacShell>
   );

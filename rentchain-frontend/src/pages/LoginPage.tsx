@@ -6,11 +6,13 @@ import { colors, spacing, text } from "../styles/tokens";
 import { Card, Input, Button } from "../components/ui/Ui";
 import { DEBUG_AUTH_KEY, JUST_LOGGED_IN_KEY } from "../lib/authKeys";
 import { getAuthToken } from "../lib/authToken";
+import { useToast } from "../components/ui/ToastProvider";
 
 export const LoginPage: React.FC = () => {
   const { login, loginDemo, user, isLoading, isTwoFactorRequired } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const { showToast } = useToast();
 
   const searchParams = new URLSearchParams(location.search);
   const rawNext = searchParams.get("next");
@@ -39,6 +41,15 @@ export const LoginPage: React.FC = () => {
       navigate(nextPath, { replace: true });
     }
   }, [user, isTwoFactorRequired, navigate, nextPath]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const flag = window.sessionStorage.getItem("authExpiredToast");
+    if (flag) {
+      window.sessionStorage.removeItem("authExpiredToast");
+      showToast({ message: "Session expired. Please sign in again.", variant: "error" });
+    }
+  }, [showToast]);
 
   const handleDemoLogin = async () => {
     if (isSubmittingRef.current) return;
