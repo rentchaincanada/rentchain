@@ -5,6 +5,7 @@ import { MarketingLayout } from "./MarketingLayout";
 import { useAuth } from "../../context/useAuth";
 import { fetchBillingPricing } from "../../api/billingApi";
 import { startCheckout } from "../../billing/startCheckout";
+import { RequestAccessModal } from "../../components/marketing/RequestAccessModal";
 
 const PricingPage: React.FC = () => {
   const { user } = useAuth();
@@ -12,6 +13,7 @@ const PricingPage: React.FC = () => {
   const [pricing, setPricing] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [pricingError, setPricingError] = useState(false);
+  const [requestOpen, setRequestOpen] = useState(false);
 
   useEffect(() => {
     document.title = "Pricing — RentChain";
@@ -90,6 +92,14 @@ const PricingPage: React.FC = () => {
           <p style={{ marginTop: spacing.sm, color: text.muted }}>
             There are no long-term contracts, and you can change plans as your needs evolve.
           </p>
+          <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap", marginTop: spacing.sm }}>
+            <Button type="button" variant="secondary" onClick={() => setRequestOpen(true)}>
+              Request access
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => (window.location.href = "/login")}>
+              Sign in
+            </Button>
+          </div>
         </div>
 
         <div
@@ -181,6 +191,7 @@ const PricingPage: React.FC = () => {
           </p>
         </Card>
       </div>
+      <RequestAccessModal open={requestOpen} onClose={() => setRequestOpen(false)} />
     </MarketingLayout>
   );
 };
