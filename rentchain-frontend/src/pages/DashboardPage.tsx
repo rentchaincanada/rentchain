@@ -32,6 +32,7 @@ class OnboardingErrorBoundary extends React.Component<
   { onError: () => void; children: React.ReactNode },
   { hasError: boolean }
 > {
+  private didLog = false;
   constructor(props: { onError: () => void; children: React.ReactNode }) {
     super(props);
     this.state = { hasError: false };
@@ -42,6 +43,10 @@ class OnboardingErrorBoundary extends React.Component<
   }
 
   componentDidCatch() {
+    if (!this.didLog) {
+      this.didLog = true;
+      console.error("[onboarding] render crashed");
+    }
     this.props.onError();
   }
 
@@ -53,7 +58,12 @@ class OnboardingErrorBoundary extends React.Component<
           <div style={{ color: text.muted, marginBottom: 12 }}>
             Something went wrong while loading onboarding.
           </div>
-          <Button onClick={() => window.location.reload()}>Reload</Button>
+          <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
+            <Button onClick={() => window.location.reload()}>Reload</Button>
+            <Button variant="ghost" onClick={() => window.location.assign("/dashboard")}>
+              Go to Dashboard
+            </Button>
+          </div>
         </Card>
       );
     }

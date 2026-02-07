@@ -7,6 +7,7 @@ const pdfUrl = "/sample/screening_report_sample.pdf?v=1";
 
 const PdfSamplePage: React.FC = () => {
   const navigate = useNavigate();
+  const [loaded, setLoaded] = React.useState(false);
 
   return (
     <div style={{ display: "grid", gap: spacing.md }}>
@@ -54,10 +55,28 @@ const PdfSamplePage: React.FC = () => {
             >
               Open in new tab
             </a>
+            <a
+              href={pdfUrl}
+              download
+              style={{
+                padding: "8px 12px",
+                borderRadius: 10,
+                border: "1px solid #e2e8f0",
+                background: "#fff",
+                textDecoration: "none",
+                color: "#0f172a",
+                fontWeight: 600,
+              }}
+            >
+              Download
+            </a>
           </div>
         </div>
       </Card>
       <Card style={{ padding: 0, overflow: "hidden" }}>
+        {!loaded ? (
+          <div style={{ padding: spacing.md }}>Loading…</div>
+        ) : null}
         <iframe
           title="Sample screening report"
           src={`${pdfUrl}#view=FitH`}
@@ -66,6 +85,7 @@ const PdfSamplePage: React.FC = () => {
             height: "90vh",
             border: "none",
           }}
+          onLoad={() => setLoaded(true)}
         />
       </Card>
     </div>

@@ -44,9 +44,9 @@ export const LoginPage: React.FC = () => {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const flag = window.sessionStorage.getItem("auth:expired");
+    const flag = window.sessionStorage.getItem("authExpiredToast");
     if (flag) {
-      window.sessionStorage.removeItem("auth:expired");
+      window.sessionStorage.removeItem("authExpiredToast");
       showToast({ message: "Session expired. Please sign in again.", variant: "error" });
     }
   }, [showToast]);

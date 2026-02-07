@@ -135,7 +135,7 @@ export async function apiFetch<T = any>(
         clearAuthToken();
       }
       if (typeof window !== "undefined") {
-        sessionStorage.setItem("auth:expired", "1");
+        sessionStorage.setItem("authExpiredToast", "1");
       }
       if (!redirectedOn401 && typeof window !== "undefined" && window.location.pathname !== "/login") {
         redirectedOn401 = true;
