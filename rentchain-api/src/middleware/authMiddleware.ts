@@ -3,6 +3,7 @@ import type { RequestHandler } from "express";
 import jwt from "jsonwebtoken";
 import { JWT_SECRET } from "../config/authConfig";
 import { jsonError } from "../lib/httpResponse";
+import { isAdminEmail } from "../lib/adminEmails";
 
 export interface AuthenticatedUser {
   id: string;
@@ -86,11 +87,17 @@ export const authenticateJwt: RequestHandler = (req, res, next): void => {
       return;
     }
 
+    const resolvedRole: AuthenticatedUser["role"] = isAdminEmail(email)
+      ? "admin"
+      : ((role as any) || "landlord");
+
     (req as any).user = {
       id: String(sub),
       email: String(email),
-      role: (role as any) || "landlord",
-      landlordId: landlordId || (role === "landlord" || role === "admin" ? String(sub) : undefined),
+      role: resolvedRole,
+      landlordId:
+        landlordId ||
+        (resolvedRole === "landlord" || resolvedRole === "admin" ? String(sub) : undefined),
       tenantId: tenantId || undefined,
       leaseId: leaseId || undefined,
       plan: plan ?? "screening",

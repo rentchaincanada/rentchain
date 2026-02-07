@@ -164,6 +164,9 @@ app.get("/api/me", async (req: any, res) => {
   }
   const resolved = await resolveLandlordAndTier(req.user);
   const user = { ...req.user, plan: resolved.tier };
+  if (process.env.NODE_ENV !== "production") {
+    console.debug("[me] role resolved", { email: user.email, role: user.role });
+  }
   return res.json({ ok: true, user });
 });
 
