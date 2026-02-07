@@ -15,6 +15,14 @@ const formatDate = (value?: number | null) => {
   }
 };
 
+const maskEmail = (email?: string | null) => {
+  const value = String(email || "");
+  const [user, domain] = value.split("@");
+  if (!user || !domain) return "";
+  const maskedUser = user.length <= 1 ? "*" : `${user[0]}***`;
+  return `${maskedUser}@${domain}`;
+};
+
 const statusLabel = (status?: string | null) => {
   const s = String(status || "new").toLowerCase();
   if (s === "invited") return "Invited";
@@ -180,6 +188,11 @@ const AdminLeadsPage: React.FC = () => {
                 >
                   <div style={{ display: "flex", flexWrap: "wrap", gap: spacing.sm, alignItems: "center" }}>
                     <div style={{ fontWeight: 700 }}>{lead.email || "—"}</div>
+                    {lead.email ? (
+                      <div style={{ color: text.subtle, fontSize: "0.85rem" }}>
+                        {maskEmail(lead.email)}
+                      </div>
+                    ) : null}
                     <div style={{ color: text.muted }}>{lead.firstName || "—"}</div>
                     <div style={{ color: text.muted }}>Portfolio: {lead.portfolioSize || "—"}</div>
                     <div style={{ color: text.subtle }}>Created: {formatDate(lead.createdAt)}</div>

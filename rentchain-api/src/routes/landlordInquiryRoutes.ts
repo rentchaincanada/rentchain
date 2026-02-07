@@ -176,7 +176,7 @@ publicRouter.post(
     const key = `lead:${req.ip}:${email || "unknown"}`;
     const rate = checkLeadRateLimit(key);
     if (rate.limited) {
-      return res.json({ ok: true, rateLimited: true });
+      return res.json({ ok: true, rateLimited: true, message: "received" });
     }
 
     const id = sha256(email);
