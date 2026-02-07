@@ -69,6 +69,7 @@ const BlockchainPage = lazy(() => import("./pages/BlockchainPage"));
 const AdminScreeningsPage = lazy(() => import("./pages/AdminScreeningsPage"));
 const AdminVerifiedScreeningsPage = lazy(() => import("./pages/AdminVerifiedScreeningsPage"));
 const AdminDashboardPage = lazy(() => import("./pages/admin/AdminDashboardPage"));
+const AdminLeadsPage = lazy(() => import("./pages/admin/AdminLeadsPage"));
 
 function App() {
   const applicantApplyRedirects = [
@@ -226,6 +227,16 @@ function App() {
             <RequireAdmin>
               <Suspense fallback={null}>
                 <AdminDashboardPage />
+              </Suspense>
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/admin/leads"
+          element={
+            <RequireAdmin>
+              <Suspense fallback={null}>
+                <AdminLeadsPage />
               </Suspense>
             </RequireAdmin>
           }

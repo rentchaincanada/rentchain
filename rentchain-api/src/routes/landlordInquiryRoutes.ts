@@ -51,6 +51,84 @@ async function sendEmail(message: sgMail.MailDataRequired) {
   });
 }
 
+async function approveLeadById(leadId: string, req: any, res: any) {
+  const leadRef = db.collection("landlordLeads").doc(leadId);
+  const leadSnap = await leadRef.get();
+  if (!leadSnap.exists) {
+    return res.status(404).json({ ok: false, error: "not_found" });
+  }
+
+  const lead = leadSnap.data() || {};
+  const email = normEmail(String(lead.email || ""));
+  if (!email || !emailRegex.test(email)) {
+    return res.status(400).json({ ok: false, error: "invalid_email" });
+  }
+
+  if (String(lead.status || "").toLowerCase() === "invited") {
+    return res.json({ ok: true, status: "invited", emailed: false });
+  }
+
+  const token = crypto.randomBytes(32).toString("hex");
+  const tokenHash = sha256(token);
+  const now = Date.now();
+  const expiresAt = now + 7 * 24 * 60 * 60 * 1000;
+
+  const inviteRef = db.collection("landlordInvites").doc(tokenHash);
+  await inviteRef.set(
+    {
+      tokenHash,
+      email,
+      createdAt: now,
+      expiresAt,
+      createdBy: req.user?.id || req.user?.landlordId || null,
+      usedAt: null,
+      usedByUserId: null,
+      status: "sent",
+    },
+    { merge: true }
+  );
+
+  await leadRef.set(
+    {
+      status: "invited",
+      invitedAt: now,
+      invitedBy: req.user?.id || req.user?.email || null,
+      updatedAt: now,
+    },
+    { merge: true }
+  );
+
+  const baseUrl = resolveFrontendBase();
+  const inviteUrl = `${baseUrl}/invite/${token}`;
+
+  const { apiKey, from } = getSendgridConfig();
+  if (!apiKey || !from) {
+    return res.json({ ok: true, inviteUrl, emailed: false, emailError: "SendGrid not configured" });
+  }
+
+  try {
+    await sendEmail({
+      to: email,
+      from: from as string,
+      subject: "You’re invited to RentChain",
+      text:
+        `You're invited to RentChain.\n\n` +
+        `Open this link to accept your invite:\n${inviteUrl}\n\n` +
+        `This invite expires in 7 days.\n\n` +
+        `— RentChain`,
+    });
+    return res.json({ ok: true, inviteUrl, emailed: true });
+  } catch (err: any) {
+    console.error("[landlord-inquiry] invite email failed", err?.message || err);
+    return res.json({
+      ok: true,
+      inviteUrl,
+      emailed: false,
+      emailError: String(err?.message || err),
+    });
+  }
+}
+
 publicRouter.post(
   "/landlord-inquiry",
   rateLimit({
@@ -164,6 +242,58 @@ adminRouter.post("/landlord-inquiry/:id/approve", requireAuth, async (req: any, 
   if (!leadId) {
     return res.status(400).json({ ok: false, error: "missing_id" });
   }
+  return approveLeadById(leadId, req, res);
+});
+
+adminRouter.get("/landlord-leads", requireAuth, async (req: any, res) => {
+  res.setHeader("x-route-source", "landlordInquiryRoutes.ts:admin");
+
+  const requesterEmail = String(req.user?.email || "").trim().toLowerCase();
+  if (!isAdminEmail(requesterEmail)) {
+    return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+  }
+
+  const limitRaw = Number(req.query?.limit ?? 100);
+  const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 200) : 100;
+
+  const snap = await db
+    .collection("landlordLeads")
+    .orderBy("createdAt", "desc")
+    .limit(limit)
+    .get();
+
+  const leads = snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) }));
+  return res.json({ ok: true, leads });
+});
+
+adminRouter.post("/landlord-leads/:id/approve", requireAuth, async (req: any, res) => {
+  res.setHeader("x-route-source", "landlordInquiryRoutes.ts:admin");
+
+  const requesterEmail = String(req.user?.email || "").trim().toLowerCase();
+  if (!isAdminEmail(requesterEmail)) {
+    return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+  }
+
+  const leadId = String(req.params?.id || "").trim();
+  if (!leadId) {
+    return res.status(400).json({ ok: false, error: "missing_id" });
+  }
+
+  return approveLeadById(leadId, req, res);
+});
+
+adminRouter.post("/landlord-leads/:id/reject", requireAuth, async (req: any, res) => {
+  res.setHeader("x-route-source", "landlordInquiryRoutes.ts:admin");
+
+  const requesterEmail = String(req.user?.email || "").trim().toLowerCase();
+  if (!isAdminEmail(requesterEmail)) {
+    return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+  }
+
+  const leadId = String(req.params?.id || "").trim();
+  if (!leadId) {
+    return res.status(400).json({ ok: false, error: "missing_id" });
+  }
 
   const leadRef = db.collection("landlordLeads").doc(leadId);
   const leadSnap = await leadRef.get();
@@ -171,75 +301,18 @@ adminRouter.post("/landlord-inquiry/:id/approve", requireAuth, async (req: any, 
     return res.status(404).json({ ok: false, error: "not_found" });
   }
 
-  const lead = leadSnap.data() || {};
-  const email = normEmail(String(lead.email || ""));
-  if (!email || !emailRegex.test(email)) {
-    return res.status(400).json({ ok: false, error: "invalid_email" });
-  }
-
-  if (String(lead.status || "").toLowerCase() === "invited") {
-    return res.json({ ok: true, status: "invited", emailed: false });
-  }
-
-  const token = crypto.randomBytes(32).toString("hex");
-  const tokenHash = sha256(token);
   const now = Date.now();
-  const expiresAt = now + 7 * 24 * 60 * 60 * 1000;
-
-  const inviteRef = db.collection("landlordInvites").doc(tokenHash);
-  await inviteRef.set(
-    {
-      tokenHash,
-      email,
-      createdAt: now,
-      expiresAt,
-      createdBy: req.user?.id || req.user?.landlordId || null,
-      usedAt: null,
-      usedByUserId: null,
-      status: "sent",
-    },
-    { merge: true }
-  );
-
   await leadRef.set(
     {
-      status: "invited",
-      invitedAt: now,
-      invitedBy: req.user?.id || req.user?.email || null,
+      status: "rejected",
+      rejectedAt: now,
+      rejectedBy: req.user?.id || req.user?.email || null,
       updatedAt: now,
     },
     { merge: true }
   );
 
-  const baseUrl = resolveFrontendBase();
-  const inviteUrl = `${baseUrl}/invite/${token}`;
-
-  const { apiKey, from } = getSendgridConfig();
-  if (!apiKey || !from) {
-    return res.json({ ok: true, inviteUrl, emailed: false, emailError: "SendGrid not configured" });
-  }
-
-  try {
-    await sendEmail({
-      to: email,
-      from: from as string,
-      subject: "You’re invited to RentChain",
-      text:
-        `You're invited to RentChain.\n\n` +
-        `Open this link to accept your invite:\n${inviteUrl}\n\n` +
-        `This invite expires in 7 days.\n\n` +
-        `— RentChain`,
-    });
-    return res.json({ ok: true, inviteUrl, emailed: true });
-  } catch (err: any) {
-    console.error("[landlord-inquiry] invite email failed", err?.message || err);
-    return res.json({
-      ok: true,
-      inviteUrl,
-      emailed: false,
-      emailError: String(err?.message || err),
-    });
-  }
+  return res.json({ ok: true, status: "rejected" });
 });
 
 export { publicRouter, adminRouter };
