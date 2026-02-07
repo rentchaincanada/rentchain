@@ -102,6 +102,13 @@ export const NAV_ITEMS: NavItem[] = [
     showInDrawer: true,
   },
   {
+    id: "admin-leads",
+    label: "Access Requests",
+    to: "/admin/leads",
+    requiresAdmin: true,
+    showInDrawer: true,
+  },
+  {
     id: "verified-screenings",
     label: "Verified Screenings",
     to: "/admin/verified-screenings",
