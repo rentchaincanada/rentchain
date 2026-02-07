@@ -15,6 +15,7 @@ import TenantLoginPageV2 from "./pages/tenant/TenantLoginPage.v2";
 import LandingPage from "./pages/marketing/LandingPage";
 import AboutPage from "./pages/marketing/AboutPage";
 import MarketingPricingPage from "./pages/marketing/PricingPage";
+import InvitePage from "./pages/InvitePage";
 import LegalHelpPage from "./pages/marketing/LegalHelpPage";
 import HelpIndexPage from "./pages/help/HelpIndexPage";
 import HelpLandlordsPage from "./pages/help/HelpLandlordsPage";
@@ -83,6 +84,7 @@ function App() {
         <Route path="/site" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/app/login" element={<LoginPage />} />
+        <Route path="/invite/:token" element={<InvitePage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route
           path="/tenant/login"

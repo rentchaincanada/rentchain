@@ -21,7 +21,7 @@ const PUBLIC_ROUTE_ALLOWLIST = [
   "/join-waitlist",
   "/pricing",
   "/login",
-  "/signup",
+  "/invite",
   "/terms",
   "/privacy",
 ];

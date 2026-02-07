@@ -33,6 +33,8 @@ import reportingRoutes from "./routes/reportingRoutes";
 import tenantInvitesRoutes from "./routes/tenantInvitesRoutes";
 import tenantPortalRoutes from "./routes/tenantPortalRoutes";
 import tenantInviteAliasesRoutes from "./routes/tenantInviteAliasesRoutes";
+import landlordInvitesAdminRoutes from "./routes/landlordInvitesAdminRoutes";
+import landlordInvitesPublicRoutes from "./routes/landlordInvitesPublicRoutes";
 import tenantEventsRoutes from "./routes/tenantEventsRoutes";
 import tenantEventsWriteRoutes from "./routes/tenantEventsWriteRoutes";
 import ledgerAttachmentsRoutes from "./routes/ledgerAttachmentsRoutes";
@@ -141,6 +143,7 @@ app.use("/api", routeSource("paymentsRoutes.ts"), paymentsRoutes);
 // Public + Auth (MUST be before authenticateJwt)
 app.use("/api", routeSource("publicRoutes.ts"), publicRoutes);
 app.use("/api/public", routeSource("publicRoutes.ts"), publicRoutes);
+app.use("/api/public", routeSource("landlordInvitesPublicRoutes.ts"), landlordInvitesPublicRoutes);
 app.use("/api/public", tenantHistorySharePublicRouter);
 app.use("/api/public", routeSource("publicApplicationLinksRoutes.ts"), publicApplicationLinksRoutes);
 app.use("/api/auth", routeSource("authRoutes.ts"), authRoutes);
@@ -202,6 +205,7 @@ app.use("/api/action-requests", routeSource("actionRequestsRecomputeRoutes.ts"),
 app.use("/api", authzRoutes);
 app.use("/api", reportsExportRoutes);
 app.use("/api/admin", routeSource("adminRoutes.ts"), adminRoutes);
+app.use("/api/admin", routeSource("landlordInvitesAdminRoutes.ts"), landlordInvitesAdminRoutes);
 app.use("/api/admin", routeSource("adminBootstrapRoutes"), adminBootstrapRoutes);
 app.use("/api/admin", routeSource("screeningJobsAdminRoutes.ts"), screeningJobsAdminRoutes);
 app.use("/api/admin", routeSource("adminPropertiesRoutes.ts"), adminPropertiesRoutes);
