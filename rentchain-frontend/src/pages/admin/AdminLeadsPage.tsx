@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, Button, Section } from "../../components/ui/Ui";
 import { spacing, text, colors, radius } from "../../styles/tokens";
 import { approveLandlordLead, fetchLandlordLeads, rejectLandlordLead, type LandlordLead } from "../../api/adminLeadsApi";
-import { showToast } from "../../components/ui/toast";
+import { useToast } from "../../components/ui/ToastProvider";
 
 const formatDate = (value?: number | null) => {
   if (!value) return "—";
@@ -24,6 +24,7 @@ const AdminLeadsPage: React.FC = () => {
   const [leads, setLeads] = useState<LandlordLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const { showToast } = useToast();
 
   const load = useCallback(async () => {
     setLoading(true);
