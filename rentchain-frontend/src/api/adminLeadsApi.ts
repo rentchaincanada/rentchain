@@ -14,8 +14,14 @@ export type LandlordLead = {
   rejectedBy?: string | null;
 };
 
-export async function fetchLandlordLeads(limit: number = 100): Promise<LandlordLead[]> {
-  const res = await apiFetch<any>(`/admin/landlord-leads?limit=${limit}`, { method: "GET" });
+export async function fetchLandlordLeads(
+  status?: "new" | "invited" | "rejected",
+  limit: number = 100
+): Promise<LandlordLead[]> {
+  const qs = new URLSearchParams();
+  if (status) qs.set("status", status);
+  qs.set("limit", String(limit));
+  const res = await apiFetch<any>(`/admin/landlord-leads?${qs.toString()}`, { method: "GET" });
   if (!res?.ok) return [];
   return Array.isArray(res.leads) ? (res.leads as LandlordLead[]) : [];
 }

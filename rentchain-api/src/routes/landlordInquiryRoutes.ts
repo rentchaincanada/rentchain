@@ -4,12 +4,16 @@ import sgMail from "@sendgrid/mail";
 import { db } from "../config/firebase";
 import { getAdminEmails, isAdminEmail } from "../lib/adminEmails";
 import { requireAuth } from "../middleware/requireAuth";
-import { rateLimit } from "../middleware/rateLimit";
-
 const publicRouter = Router();
 const adminRouter = Router();
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const leadBuckets = new Map<string, { count: number; resetAt: number }>();
+
+const LEAD_RATE_LIMIT_WINDOW_MS = Number(
+  process.env.LEAD_INQUIRY_RATE_LIMIT_WINDOW_MS || 24 * 60 * 60 * 1000
+);
+const LEAD_RATE_LIMIT_MAX = Number(process.env.LEAD_INQUIRY_RATE_LIMIT_MAX || 3);
 
 function normEmail(email: string) {
   return String(email || "").trim().toLowerCase();
@@ -51,6 +55,20 @@ async function sendEmail(message: sgMail.MailDataRequired) {
   });
 }
 
+function checkLeadRateLimit(key: string) {
+  const now = Date.now();
+  const bucket = leadBuckets.get(key);
+  if (!bucket || now >= bucket.resetAt) {
+    leadBuckets.set(key, { count: 1, resetAt: now + LEAD_RATE_LIMIT_WINDOW_MS });
+    return { limited: false };
+  }
+  bucket.count += 1;
+  if (bucket.count > LEAD_RATE_LIMIT_MAX) {
+    return { limited: true, retryAfterSec: Math.ceil((bucket.resetAt - now) / 1000) };
+  }
+  return { limited: false };
+}
+
 async function approveLeadById(leadId: string, req: any, res: any) {
   const leadRef = db.collection("landlordLeads").doc(leadId);
   const leadSnap = await leadRef.get();
@@ -59,13 +77,17 @@ async function approveLeadById(leadId: string, req: any, res: any) {
   }
 
   const lead = leadSnap.data() || {};
+  const status = String(lead.status || "").toLowerCase();
   const email = normEmail(String(lead.email || ""));
   if (!email || !emailRegex.test(email)) {
     return res.status(400).json({ ok: false, error: "invalid_email" });
   }
 
-  if (String(lead.status || "").toLowerCase() === "invited") {
-    return res.json({ ok: true, status: "invited", emailed: false });
+  if (status === "invited") {
+    return res.json({ ok: true, status: "invited", message: "already_invited", emailed: false });
+  }
+  if (status === "rejected") {
+    return res.json({ ok: true, status: "rejected", message: "already_rejected", emailed: false });
   }
 
   const token = crypto.randomBytes(32).toString("hex");
@@ -97,6 +119,13 @@ async function approveLeadById(leadId: string, req: any, res: any) {
     },
     { merge: true }
   );
+
+  console.info("[landlord-leads] approved", {
+    leadId,
+    email,
+    approvedBy: req.user?.email || req.user?.id || null,
+    ts: now,
+  });
 
   const baseUrl = resolveFrontendBase();
   const inviteUrl = `${baseUrl}/invite/${token}`;
@@ -131,14 +160,6 @@ async function approveLeadById(leadId: string, req: any, res: any) {
 
 publicRouter.post(
   "/landlord-inquiry",
-  rateLimit({
-    windowMs: 60 * 60 * 1000,
-    max: 5,
-    key: (req) => {
-      const email = normEmail(String((req as any)?.body?.email || ""));
-      return `lead:${req.ip}:${email || "unknown"}`;
-    },
-  }),
   async (req, res) => {
     res.setHeader("x-route-source", "landlordInquiryRoutes.ts:public");
 
@@ -149,6 +170,13 @@ publicRouter.post(
 
     if (!email || !emailRegex.test(email) || email.length > 254) {
       return res.status(400).json({ ok: false, error: "invalid_email" });
+    }
+
+    // Rate limit returns ok:true to avoid enumeration. Do not create a lead when limited.
+    const key = `lead:${req.ip}:${email || "unknown"}`;
+    const rate = checkLeadRateLimit(key);
+    if (rate.limited) {
+      return res.json({ ok: true, rateLimited: true, message: "received" });
     }
 
     const id = sha256(email);
@@ -255,14 +283,18 @@ adminRouter.get("/landlord-leads", requireAuth, async (req: any, res) => {
 
   const limitRaw = Number(req.query?.limit ?? 100);
   const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 200) : 100;
+  const status = String(req.query?.status || "").trim().toLowerCase();
+  const allowedStatus = status === "new" || status === "invited" || status === "rejected";
 
-  const snap = await db
-    .collection("landlordLeads")
-    .orderBy("createdAt", "desc")
-    .limit(limit)
-    .get();
+  const baseQuery = db.collection("landlordLeads");
+  const snap = await (allowedStatus
+    ? baseQuery.where("status", "==", status).limit(limit).get()
+    : baseQuery.orderBy("createdAt", "desc").limit(limit).get());
 
   const leads = snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) }));
+  if (allowedStatus) {
+    leads.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
+  }
   return res.json({ ok: true, leads });
 });
 
@@ -301,6 +333,15 @@ adminRouter.post("/landlord-leads/:id/reject", requireAuth, async (req: any, res
     return res.status(404).json({ ok: false, error: "not_found" });
   }
 
+  const lead = leadSnap.data() || {};
+  const status = String(lead.status || "").toLowerCase();
+  if (status === "rejected") {
+    return res.json({ ok: true, status: "rejected", message: "already_rejected" });
+  }
+  if (status === "invited") {
+    return res.json({ ok: true, status: "invited", message: "already_invited" });
+  }
+
   const now = Date.now();
   await leadRef.set(
     {
@@ -311,6 +352,13 @@ adminRouter.post("/landlord-leads/:id/reject", requireAuth, async (req: any, res
     },
     { merge: true }
   );
+
+  console.info("[landlord-leads] rejected", {
+    leadId,
+    email: lead?.email || null,
+    rejectedBy: req.user?.email || req.user?.id || null,
+    ts: now,
+  });
 
   return res.json({ ok: true, status: "rejected" });
 });
