@@ -1,11 +1,13 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button, Card } from "../../components/ui/Ui";
 import { spacing, text } from "../../styles/tokens";
 import { MarketingLayout } from "./MarketingLayout";
+import { RequestAccessModal } from "../../components/marketing/RequestAccessModal";
 
 const LandingPage: React.FC = () => {
   const navigate = useNavigate();
+  const [requestOpen, setRequestOpen] = useState(false);
 
   useEffect(() => {
     document.title = "RentChain — Verified screening. Clear records.";
@@ -26,6 +28,9 @@ const LandingPage: React.FC = () => {
           <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap", marginTop: spacing.sm }}>
             <Button type="button" onClick={() => navigate("/login")}>
               Get started
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => setRequestOpen(true)}>
+              Request access
             </Button>
             <Button type="button" variant="ghost" onClick={() => navigate("/site/pricing")}>
               See pricing
@@ -77,6 +82,7 @@ const LandingPage: React.FC = () => {
           </p>
         </Card>
       </div>
+      <RequestAccessModal open={requestOpen} onClose={() => setRequestOpen(false)} />
     </MarketingLayout>
   );
 };
