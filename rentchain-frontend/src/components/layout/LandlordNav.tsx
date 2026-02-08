@@ -15,7 +15,7 @@ type Props = {
 export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
   const nav = useNavigate();
   const loc = useLocation();
-  const { logout, user } = useAuth();
+  const { logout, user, ready } = useAuth();
   const { features } = useCapabilities();
   const [hasUnread, setHasUnread] = useState<boolean>(false);
   const unreadFlag = typeof unreadMessages === "boolean" ? unreadMessages : hasUnread;
@@ -29,7 +29,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
       actorRole: user?.actorRole || null,
     });
   }
-  const visibleItems = getVisibleNavItems(effectiveRole, features);
+  const visibleItems = ready ? getVisibleNavItems(effectiveRole, features) : [];
   const drawerItems = visibleItems.filter((item) => item.showInDrawer !== false);
   const primaryDrawerItems = drawerItems.filter((item) => !item.requiresAdmin);
   const adminDrawerItems = drawerItems.filter((item) => item.requiresAdmin);

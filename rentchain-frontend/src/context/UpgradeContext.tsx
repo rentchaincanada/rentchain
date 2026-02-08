@@ -91,6 +91,14 @@ export function UpgradeProvider({ children }: { children: React.ReactNode }) {
     const requiredPlan = detail.requiredPlan || resolveRequiredPlan(featureKey, currentPlan);
     if (requiredPlan === "free") return;
     if (isAtLeast(currentPlan, requiredPlan)) return;
+    const now = Date.now();
+    if (typeof window !== "undefined") {
+      const lastShown = Number(localStorage.getItem("upgradePromptLastShown") || "0");
+      if (lastShown && now - lastShown < 3600_000) {
+        return;
+      }
+      localStorage.setItem("upgradePromptLastShown", String(now));
+    }
     const source = detail.source || "unknown";
     const fallbackRedirect =
       typeof window !== "undefined"
