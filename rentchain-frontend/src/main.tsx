@@ -56,10 +56,14 @@ if (typeof window !== "undefined") {
 
   const reloadOnce = () => {
     const key = "chunkReloaded";
-    if (!sessionStorage.getItem(key)) {
+    const tsKey = "chunkReloadedAt";
+    const lastAt = Number(sessionStorage.getItem(tsKey) || "0");
+    const now = Date.now();
+    if (!sessionStorage.getItem(key) || !lastAt || now - lastAt > 60_000) {
       sessionStorage.setItem(key, "1");
+      sessionStorage.setItem(tsKey, String(now));
       const sep = window.location.search ? "&" : "?";
-      window.location.replace(`${window.location.pathname}${window.location.search}${sep}v=${Date.now()}`);
+      window.location.replace(`${window.location.pathname}${window.location.search}${sep}v=${now}`);
       return;
     }
     showReloadBanner("Update available — tap to reload", () => window.location.reload());

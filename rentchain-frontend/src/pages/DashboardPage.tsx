@@ -192,6 +192,17 @@ const DashboardPage: React.FC = () => {
 
   React.useEffect(() => {
     if (import.meta.env.DEV) {
+      console.debug("[onboarding]", {
+        authReady,
+        meLoaded,
+        planLoaded: Boolean(user?.plan),
+        isMobile,
+      });
+    }
+  }, [authReady, meLoaded, user?.plan, isMobile]);
+
+  React.useEffect(() => {
+    if (import.meta.env.DEV) {
       console.debug("[dashboard gates]", {
         loadingSummary: loading,
         applicationsLoading,
@@ -225,11 +236,11 @@ const DashboardPage: React.FC = () => {
   const showEmptyCTA = hasNoProperties;
   const progressLoading = !dataReady || onboarding.loading;
   const meLoaded = authReady && !authLoading && Boolean(user?.id);
-  const planLoaded = Boolean(user?.plan);
+  const isMobile =
+    typeof window !== "undefined" ? window.matchMedia("(max-width: 768px)").matches : false;
   const showOnboardingSkeleton = onboarding.loading && !isAdmin;
   const showStarterOnboarding =
     meLoaded &&
-    planLoaded &&
     !onboarding.loading &&
     !onboarding.dismissed &&
     !onboardingChunkError;
