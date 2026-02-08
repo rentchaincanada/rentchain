@@ -99,6 +99,8 @@ const DashboardPage: React.FC = () => {
   const apiBase = debugApiBase();
   const showDebug =
     typeof window !== "undefined" && new URLSearchParams(window.location.search).get("debug") === "1";
+  const isMobile =
+    typeof window !== "undefined" ? window.matchMedia("(max-width: 768px)").matches : false;
   const [properties, setProperties] = React.useState<any[]>([]);
   const [propsLoading, setPropsLoading] = React.useState(false);
   const [invitesCount, setInvitesCount] = React.useState(0);
@@ -236,8 +238,6 @@ const DashboardPage: React.FC = () => {
   const showEmptyCTA = hasNoProperties;
   const progressLoading = !dataReady || onboarding.loading;
   const meLoaded = authReady && !authLoading && Boolean(user?.id);
-  const isMobile =
-    typeof window !== "undefined" ? window.matchMedia("(max-width: 768px)").matches : false;
   const showOnboardingSkeleton = onboarding.loading && !isAdmin;
   const showStarterOnboarding =
     meLoaded &&
