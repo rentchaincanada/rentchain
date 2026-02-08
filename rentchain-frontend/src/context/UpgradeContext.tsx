@@ -10,6 +10,7 @@ import { UpgradeModal, type UpgradeReason } from "../components/billing/UpgradeM
 import { UpgradePromptModal } from "../components/billing/UpgradePromptModal";
 import { normalizePlanName, resolveRequiredPlan } from "../lib/upgradePrompt";
 import { getCachedCapabilities } from "../lib/entitlements";
+import { useAuth } from "./AuthContext";
 
 type UpgradeContextValue = {
   openUpgrade: (
@@ -28,6 +29,7 @@ type UpgradeContextValue = {
 const UpgradeContext = createContext<UpgradeContextValue | null>(null);
 
 export function UpgradeProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState<UpgradeReason>("propertiesMax");
   const [copy, setCopy] = useState<{ title?: string; body?: string } | undefined>(undefined);
@@ -91,6 +93,15 @@ export function UpgradeProvider({ children }: { children: React.ReactNode }) {
     const requiredPlan = detail.requiredPlan || resolveRequiredPlan(featureKey, currentPlan);
     if (requiredPlan === "free") return;
     if (isAtLeast(currentPlan, requiredPlan)) return;
+    const now = Date.now();
+    if (typeof window !== "undefined") {
+      const userKey = user?.id ? `upgradePromptLastShown:${user.id}` : "upgradePromptLastShown:anon";
+      const lastShown = Number(localStorage.getItem(userKey) || "0");
+      if (lastShown && now - lastShown < 3600_000) {
+        return;
+      }
+      localStorage.setItem(userKey, String(now));
+    }
     const source = detail.source || "unknown";
     const fallbackRedirect =
       typeof window !== "undefined"
@@ -103,7 +114,7 @@ export function UpgradeProvider({ children }: { children: React.ReactNode }) {
     setPromptSource(source);
     setPromptRedirectTo(redirectTo);
     setPromptOpen(true);
-  }, [isAtLeast]);
+  }, [isAtLeast, user?.id]);
 
   const ctxValue = useMemo(
     () => ({ openUpgrade, clearUpgradePrompt }),

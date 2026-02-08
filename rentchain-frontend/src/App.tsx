@@ -234,11 +234,15 @@ function App() {
         <Route
           path="/admin/leads"
           element={
-            <RequireAdmin>
-              <Suspense fallback={null}>
-                <AdminLeadsPage />
-              </Suspense>
-            </RequireAdmin>
+            <RequireAuth>
+              <LandlordNav>
+                <RequireAdmin>
+                  <Suspense fallback={null}>
+                    <AdminLeadsPage />
+                  </Suspense>
+                </RequireAdmin>
+              </LandlordNav>
+            </RequireAuth>
           }
         />
         <Route

@@ -8,9 +8,9 @@ import { colors, radius, shadows, spacing, text, layout, blur } from "../../styl
 
 const TopNav: React.FC = () => {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, logout, ready } = useAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const effectiveRole = String(user?.actorRole || user?.role || "landlord");
+  const effectiveRole = ready ? String(user?.actorRole || user?.role || "landlord") : "landlord";
 
   return (
     <>
