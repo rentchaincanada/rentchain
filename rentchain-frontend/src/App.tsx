@@ -9,6 +9,7 @@ import PaymentsPage from "./pages/PaymentsPage";
 import ApplicationsPage from "./pages/ApplicationsPage";
 import ApplicantApplyPage from "./pages/ApplicantApplyPage";
 import CosignPage from "./pages/CosignPage";
+import PricingPage from "./pages/PricingPage";
 import LoginPage from "./pages/LoginPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import TenantLoginPageV2 from "./pages/tenant/TenantLoginPage.v2";
@@ -35,6 +36,7 @@ import { TwoFactorPage } from "./pages/TwoFactorPage";
 import { AccountSecurityPage } from "./pages/AccountSecurityPage";
 import { RequireAuth } from "./components/auth/RequireAuth";
 import { RequireAdmin } from "./components/auth/RequireAdmin";
+import { useAuth } from "./context/useAuth";
 import ScreeningStartPage from "./pages/screening/ScreeningStartPage";
 import ScreeningSuccessPage from "./pages/screening/ScreeningSuccessPage";
 import ScreeningCancelPage from "./pages/screening/ScreeningCancelPage";
@@ -71,6 +73,82 @@ const AdminVerifiedScreeningsPage = lazy(() => import("./pages/AdminVerifiedScre
 const AdminDashboardPage = lazy(() => import("./pages/admin/AdminDashboardPage"));
 const AdminLeadsPage = lazy(() => import("./pages/admin/AdminLeadsPage"));
 
+const AuthLoadingScreen = () => (
+  <div
+    style={{
+      minHeight: "100vh",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontFamily:
+        "system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', sans-serif",
+      fontSize: "0.95rem",
+      color: "#0f172a",
+      background:
+        "radial-gradient(circle at top left, rgba(37,99,235,0.08) 0, rgba(14,165,233,0.06) 45%, rgba(255,255,255,0.9) 100%)",
+      padding: "24px",
+    }}
+  >
+    <div
+      style={{
+        width: "min(420px, 90vw)",
+        background: "rgba(255,255,255,0.9)",
+        border: "1px solid rgba(15,23,42,0.08)",
+        borderRadius: 16,
+        padding: "20px 22px",
+        boxShadow: "0 12px 30px rgba(15,23,42,0.12)",
+      }}
+    >
+      <div style={{ fontWeight: 700, marginBottom: 8 }}>
+        Loading your workspace...
+      </div>
+      <div style={{ color: "#475569", marginBottom: 16 }}>
+        Restoring your session and syncing data.
+      </div>
+      <div style={{ display: "grid", gap: 10 }}>
+        <div
+          style={{
+            height: 12,
+            borderRadius: 999,
+            background: "rgba(15,23,42,0.08)",
+          }}
+        />
+        <div
+          style={{
+            height: 12,
+            borderRadius: 999,
+            background: "rgba(15,23,42,0.08)",
+            width: "80%",
+          }}
+        />
+        <div
+          style={{
+            height: 12,
+            borderRadius: 999,
+            background: "rgba(15,23,42,0.08)",
+            width: "60%",
+          }}
+        />
+      </div>
+    </div>
+  </div>
+);
+
+const PricingGate: React.FC = () => {
+  const { user, isLoading, ready, authStatus } = useAuth();
+  if (authStatus === "restoring" || isLoading || !ready) {
+    return <AuthLoadingScreen />;
+  }
+  if (!user) {
+    return <Navigate to="/site/pricing" replace />;
+  }
+  return (
+    <LandlordNav>
+      <PricingPage />
+    </LandlordNav>
+  );
+};
+
 function App() {
   const applicantApplyRedirects = [
     "/applicant/apply",
@@ -96,7 +174,7 @@ function App() {
           element={TENANT_PORTAL_ENABLED ? <TenantMagicRedeemPage /> : <TenantPortalComingSoon />}
         />
         <Route path="/2fa" element={<TwoFactorPage />} />
-        <Route path="/pricing" element={<MarketingPricingPage />} />
+        <Route path="/pricing" element={<PricingGate />} />
         <Route path="/site/pricing" element={<MarketingPricingPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/site/about" element={<AboutPage />} />

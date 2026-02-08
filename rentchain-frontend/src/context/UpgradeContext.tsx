@@ -29,7 +29,7 @@ type UpgradeContextValue = {
 const UpgradeContext = createContext<UpgradeContextValue | null>(null);
 
 export function UpgradeProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { user, ready, isLoading } = useAuth();
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState<UpgradeReason>("propertiesMax");
   const [copy, setCopy] = useState<{ title?: string; body?: string } | undefined>(undefined);
@@ -85,6 +85,7 @@ export function UpgradeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const handleUpgradeEvent = useCallback((evt: Event) => {
+    if (!ready || isLoading || !user?.id) return;
     const detail = (evt as CustomEvent<any>).detail || {};
     const featureKey = String(detail.featureKey || detail.limitType || detail.capability || "").trim();
     if (!featureKey) return;
@@ -114,7 +115,7 @@ export function UpgradeProvider({ children }: { children: React.ReactNode }) {
     setPromptSource(source);
     setPromptRedirectTo(redirectTo);
     setPromptOpen(true);
-  }, [isAtLeast, user?.id]);
+  }, [isAtLeast, user?.id, ready, isLoading]);
 
   const ctxValue = useMemo(
     () => ({ openUpgrade, clearUpgradePrompt }),

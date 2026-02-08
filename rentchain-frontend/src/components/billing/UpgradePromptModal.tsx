@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { getUpgradeCopy } from "@/billing/upgradeCopy";
 import { normalizePlanLabel } from "@/billing/planLabel";
 import { startCheckout } from "@/billing/startCheckout";
@@ -36,6 +37,7 @@ export function UpgradePromptModal({
   const primaryRef = useRef<HTMLButtonElement | null>(null);
   const modalRef = useRef<HTMLDivElement | null>(null);
   const [interval, setInterval] = useState<"monthly" | "yearly">("monthly");
+  const navigate = useNavigate();
 
   const resolveTier = (input?: string) => {
     const raw = String(input || "").trim().toLowerCase();
@@ -265,9 +267,8 @@ export function UpgradePromptModal({
               </button>
               <button
                 onClick={() => {
-                  if (typeof window !== "undefined") {
-                    window.open("/pricing", "_blank", "noopener,noreferrer");
-                  }
+                  navigate("/billing");
+                  onClose();
                 }}
                 style={{
                   alignSelf: "center",

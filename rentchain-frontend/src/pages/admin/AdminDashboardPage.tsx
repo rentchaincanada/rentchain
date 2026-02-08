@@ -188,7 +188,7 @@ export const AdminDashboardPage: React.FC = () => {
               </Card>
             </div>
             <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
-              <Button type="button" variant="secondary" onClick={() => window.open("/pricing", "_blank")}>
+              <Button type="button" variant="secondary" onClick={() => window.open("/billing", "_blank")}>
                 Pricing
               </Button>
               <Button type="button" variant="secondary" onClick={() => window.open("/help", "_blank")}>

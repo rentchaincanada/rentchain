@@ -19,7 +19,7 @@ import { clearAuthToken, setAuthToken, TOKEN_KEY } from "../lib/authToken";
 const PUBLIC_ROUTE_ALLOWLIST = [
   "/",
   "/join-waitlist",
-  "/pricing",
+  "/site/pricing",
   "/login",
   "/invite",
   "/terms",

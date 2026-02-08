@@ -618,7 +618,7 @@ export const ScreeningPage: React.FC = () => {
                 type="button"
                 onClick={() => {
                   setShowCreditsModal(false);
-                  window.location.href = "/pricing";
+                  window.location.href = "/billing";
                 }}
                 variant="ghost"
               >
