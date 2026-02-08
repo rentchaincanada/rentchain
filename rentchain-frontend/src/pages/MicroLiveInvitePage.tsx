@@ -76,7 +76,7 @@ export default function MicroLiveInvitePage() {
           <div style={{ fontWeight: 700, marginBottom: 8 }}>Invite issue</div>
           <div style={{ opacity: 0.9 }}>{err}</div>
           <div style={{ marginTop: 12 }}>
-            <a href="/pricing">Join the waitlist</a>
+            <a href="/site/pricing">Join the waitlist</a>
           </div>
         </div>
       ) : (

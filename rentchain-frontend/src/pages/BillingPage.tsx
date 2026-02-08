@@ -6,6 +6,7 @@ import { spacing, text, colors, radius } from "../styles/tokens";
 import { SUPPORT_EMAIL } from "../config/support";
 import { asArray } from "../lib/asArray";
 import { useCapabilities } from "@/hooks/useCapabilities";
+import { BillingIntervalToggle } from "../components/billing/BillingIntervalToggle";
 
 const formatAmount = (amountCents: number, currency: string) => {
   const amount = (amountCents || 0) / 100;
@@ -46,6 +47,7 @@ const BillingPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [interval, setInterval] = useState<"month" | "year">("month");
   const { caps } = useCapabilities();
   const currentPlan = String(caps?.plan || "screening").toLowerCase();
 
@@ -109,6 +111,15 @@ const BillingPage: React.FC = () => {
         <div style={{ fontWeight: 700, fontSize: "1.05rem", marginBottom: 12 }}>
           Plans
         </div>
+        <BillingIntervalToggle
+          value={interval}
+          onChange={(next) => {
+            setInterval(next);
+            if (import.meta.env.DEV) {
+              console.debug("[billing] interval", next);
+            }
+          }}
+        />
         <div style={{ display: "grid", gap: 10 }}>
           {[
             { id: "screening", label: "Screening (Free)", desc: "Run screenings only.", highlight: currentPlan === "screening" },

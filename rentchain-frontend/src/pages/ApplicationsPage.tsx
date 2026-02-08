@@ -809,7 +809,7 @@ const ApplicationsPage: React.FC = () => {
   }, [detail?.screening?.result?.notes, detail?.screeningResultSummary, resultData?.reportText]);
 
   const handleOpenPricing = () => {
-    const url = "/pricing?plan=pro&source=screening_export_preview";
+    const url = "/billing";
     track("exports_upgrade_clicked", { source: "applications", capability: "exports_basic" });
     if (typeof window !== "undefined") {
       window.location.assign(url);
