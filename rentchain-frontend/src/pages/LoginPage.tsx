@@ -253,7 +253,7 @@ export const LoginPage: React.FC = () => {
             ? error
             : expired
             ? "Session expired. Please log in again."
-            : "Use demo credentials to access the landlord portal."}
+            : "Sign in to access your landlord workspace."}
         </div>
       </Card>
     </div>

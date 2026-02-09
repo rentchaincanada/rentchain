@@ -26,11 +26,11 @@ const LandingPage: React.FC = () => {
             between landlords and tenants — through verified information and structured records.
           </p>
           <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap", marginTop: spacing.sm }}>
-            <Button type="button" onClick={() => navigate("/login")}>
-              Get started
-            </Button>
-            <Button type="button" variant="secondary" onClick={() => setRequestOpen(true)}>
+            <Button type="button" onClick={() => setRequestOpen(true)}>
               Request access
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => navigate("/login")}>
+              Sign in
             </Button>
             <Button type="button" variant="ghost" onClick={() => navigate("/site/pricing")}>
               See pricing
