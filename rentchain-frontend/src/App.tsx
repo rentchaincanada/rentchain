@@ -270,6 +270,18 @@ function App() {
           }
         />
         <Route
+          path="/verified-screenings"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <Suspense fallback={null}>
+                  <AdminVerifiedScreeningsPage />
+                </Suspense>
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
           path="/pdf/sample"
           element={
             <LandlordNav>

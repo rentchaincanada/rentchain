@@ -111,8 +111,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     id: "verified-screenings",
     label: "Verified Screenings",
-    to: "/admin/verified-screenings",
-    requiresAdmin: true,
+    to: "/verified-screenings",
     showInDrawer: true,
   },
 ];

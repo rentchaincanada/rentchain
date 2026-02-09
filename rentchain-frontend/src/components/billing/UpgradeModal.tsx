@@ -4,6 +4,7 @@ import { useAuth } from "../../context/useAuth";
 import { startCheckout } from "@/billing/startCheckout";
 import { fetchBillingPricing, fetchPricingHealth } from "@/api/billingApi";
 import { BillingIntervalToggle } from "./BillingIntervalToggle";
+import { getVisiblePlans, type PlanKey } from "@/billing/planVisibility";
 
 export type UpgradeReason =
   | "propertiesMax"
@@ -35,7 +36,7 @@ export function UpgradeModal({
   const [pricingHealth, setPricingHealth] = React.useState<any | null>(null);
   const [healthLoading, setHealthLoading] = React.useState(true);
   const [interval, setInterval] = React.useState<"month" | "year">("month");
-  const [selectedPlan, setSelectedPlan] = React.useState<"starter" | "pro">("pro");
+  const [selectedPlan, setSelectedPlan] = React.useState<PlanKey>("pro");
   const [notifyOpen, setNotifyOpen] = React.useState(false);
   const [notifyPlan, setNotifyPlan] = React.useState<"core" | "pro" | "elite">("core");
 
@@ -75,27 +76,58 @@ export function UpgradeModal({
     const raw = String(input || "").trim().toLowerCase();
     if (raw === "starter" || raw === "core") return "starter";
     if (raw === "pro") return "pro";
+    if (raw === "business") return "business";
+    if (raw === "elite") return "elite";
     return "starter";
   };
   const currentPlanKey = normalizePlan(currentPlan);
   const pricingUnavailable =
     !healthLoading && pricingHealth && pricingHealth.ok === false;
-  const starterPricing = pricing?.plans?.find((p: any) => p.key === "starter");
-  const proPricing = pricing?.plans?.find((p: any) => p.key === "pro");
-  const starterPriceLabel = loadingPricing
-    ? "Loading..."
-    : starterPricing
-    ? interval === "year"
-      ? `$${Math.round(starterPricing.yearlyAmountCents / 100)} / year`
-      : `$${Math.round(starterPricing.monthlyAmountCents / 100)} / month`
-    : "—";
-  const proPriceLabel = loadingPricing
-    ? "Loading..."
-    : proPricing
-    ? interval === "year"
-      ? `$${Math.round(proPricing.yearlyAmountCents / 100)} / year`
-      : `$${Math.round(proPricing.monthlyAmountCents / 100)} / month`
-    : "—";
+  const visiblePlans = React.useMemo<PlanKey[]>(
+    () => getVisiblePlans(user?.actorRole || user?.role || null),
+    [user?.actorRole, user?.role]
+  );
+  const planMap = React.useMemo(() => {
+    const map = new Map<string, any>();
+    if (pricing?.plans) {
+      pricing.plans.forEach((plan: any) => map.set(plan.key, plan));
+    }
+    return map;
+  }, [pricing]);
+  const renderPriceLabel = (planKey: PlanKey) => {
+    if (loadingPricing) return "Loading...";
+    const plan = planMap.get(planKey);
+    if (!plan) return "—";
+    const amountCents =
+      interval === "year" ? plan.yearlyAmountCents : plan.monthlyAmountCents;
+    if (!amountCents) return "—";
+    const suffix = interval === "year" ? "year" : "month";
+    return `$${Math.round(amountCents / 100)} / ${suffix}`;
+  };
+  const planLabel = (planKey: PlanKey) => {
+    switch (planKey) {
+      case "pro":
+        return "Pro";
+      case "business":
+        return "Business";
+      case "elite":
+        return "Elite";
+      default:
+        return "Starter";
+    }
+  };
+  const planDescription = (planKey: PlanKey) => {
+    switch (planKey) {
+      case "pro":
+        return `Team workflows and ledger exports · ${renderPriceLabel(planKey)}`;
+      case "business":
+        return `Portfolio analytics and compliance · ${renderPriceLabel(planKey)}`;
+      case "elite":
+        return `Enterprise controls · ${renderPriceLabel(planKey)}`;
+      default:
+        return `Rental management + maintenance · ${renderPriceLabel(planKey)}`;
+    }
+  };
 
   const reasonCopy: Record<UpgradeReason, { title: string; body: string }> = {
     propertiesMax: {
@@ -161,22 +193,19 @@ export function UpgradeModal({
           </div>
 
           <div style={{ marginTop: 20, display: "grid", gap: 10 }}>
-            <PlanRow
-              name="Starter"
-              description={`Rental management + maintenance · ${starterPriceLabel}`}
-              active={currentPlanKey === "starter"}
-              highlight={selectedPlan === "starter"}
-              disabled={currentPlanKey === "starter"}
-              onClick={() => setSelectedPlan("starter")}
-            />
-            <PlanRow
-              name="Pro"
-              description={`Team workflows and ledger exports · ${proPriceLabel}`}
-              active={currentPlanKey === "pro"}
-              highlight={selectedPlan === "pro"}
-              disabled={currentPlanKey === "pro"}
-              onClick={() => setSelectedPlan("pro")}
-            />
+            {visiblePlans
+              .filter((planKey) => planKey !== "screening")
+              .map((planKey) => (
+                <PlanRow
+                  key={planKey}
+                  name={planLabel(planKey)}
+                  description={planDescription(planKey)}
+                  active={currentPlanKey === planKey}
+                  highlight={selectedPlan === planKey}
+                  disabled={currentPlanKey === planKey}
+                  onClick={() => setSelectedPlan(planKey)}
+                />
+              ))}
           </div>
 
           {pricingUnavailable ? (
@@ -250,7 +279,12 @@ export function UpgradeModal({
                 opacity: selectedPlan === currentPlanKey || pricingUnavailable ? 0.6 : 1,
               }}
             >
-              {ctaLabel || (selectedPlan === "starter" ? "Choose Starter" : "Upgrade to Pro")}
+              {ctaLabel ||
+                (selectedPlan === "starter"
+                  ? "Choose Starter"
+                  : selectedPlan === "business" || selectedPlan === "elite"
+                  ? "Choose plan"
+                  : "Upgrade to Pro")}
             </button>
           </div>
         </div>

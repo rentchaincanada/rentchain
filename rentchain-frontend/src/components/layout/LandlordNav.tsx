@@ -128,7 +128,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
         aria-label="Navigation menu"
       >
         <div className="rc-landlord-drawer-header">
-          <span>Menu</span>
+          <span>Workspace</span>
           <button type="button" onClick={() => setDrawerOpen(false)} aria-label="Close menu">
             Close
           </button>
@@ -145,24 +145,28 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
                 {label}
               </button>
             ))}
-            {adminDrawerItems.length ? (
-              <div className="rc-landlord-drawer-divider" />
-            ) : null}
-            {adminDrawerItems.map(({ to, label }) => (
-              <button
-                key={to}
-                type="button"
-                onClick={() => nav(to)}
-                className={loc.pathname.startsWith(to) ? "active" : ""}
-              >
-                {label}
-              </button>
-            ))}
           </div>
           <div className="rc-landlord-drawer-divider" />
           <button type="button" className="rc-landlord-drawer-signout" onClick={logout}>
             Sign out
           </button>
+          {adminDrawerItems.length ? (
+            <div className="rc-landlord-drawer-divider" />
+          ) : null}
+          {adminDrawerItems.length ? (
+            <div className="rc-landlord-drawer-links">
+              {adminDrawerItems.map(({ to, label }) => (
+                <button
+                  key={to}
+                  type="button"
+                  onClick={() => nav(to)}
+                  className={loc.pathname.startsWith(to) ? "active" : ""}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
       </aside>
 

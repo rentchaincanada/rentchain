@@ -130,10 +130,7 @@
   color: #ef4444;
   cursor: pointer;
   text-align: left;
-  padding: 6px 4px;
-  position: sticky;
-  bottom: 0;
-  background: #ffffff;
+  padding: 8px 4px;
 }
 
 .rc-mobile-tabbar {

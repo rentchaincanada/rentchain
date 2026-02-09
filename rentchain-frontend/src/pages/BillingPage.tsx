@@ -1,12 +1,15 @@
 // @ts-nocheck
 import React, { useEffect, useState } from "react";
 import { Card, Section, Button } from "../components/ui/Ui";
-import { createBillingPortalSession, fetchBillingHistory, type BillingRecord } from "../api/billingApi";
+import { createBillingPortalSession, fetchBillingHistory, fetchBillingPricing, type BillingRecord } from "../api/billingApi";
 import { spacing, text, colors, radius } from "../styles/tokens";
 import { SUPPORT_EMAIL } from "../config/support";
 import { asArray } from "../lib/asArray";
 import { useCapabilities } from "@/hooks/useCapabilities";
+import { useAuth } from "@/context/useAuth";
 import { BillingIntervalToggle } from "../components/billing/BillingIntervalToggle";
+import { apiFetch } from "@/lib/apiClient";
+import { getVisiblePlans, type PlanKey } from "@/billing/planVisibility";
 
 const formatAmount = (amountCents: number, currency: string) => {
   const amount = (amountCents || 0) / 100;
@@ -47,9 +50,18 @@ const BillingPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pricing, setPricing] = useState<any | null>(null);
+  const [pricingLoading, setPricingLoading] = useState(true);
+  const [pricingError, setPricingError] = useState(false);
+  const [planActionLoading, setPlanActionLoading] = useState<string | null>(null);
   const [interval, setInterval] = useState<"month" | "year">("month");
   const { caps } = useCapabilities();
+  const { user } = useAuth();
   const currentPlan = String(caps?.plan || "screening").toLowerCase();
+  const visiblePlans = React.useMemo<PlanKey[]>(
+    () => getVisiblePlans(user?.actorRole || user?.role || null),
+    [user?.actorRole, user?.role]
+  );
 
   const load = async () => {
     try {
@@ -72,6 +84,76 @@ const BillingPage: React.FC = () => {
   useEffect(() => {
     void load();
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    fetchBillingPricing()
+      .then((res) => {
+        if (!active) return;
+        if (!res) {
+          setPricingError(true);
+          return;
+        }
+        setPricing(res);
+      })
+      .catch(() => {
+        setPricingError(true);
+      })
+      .finally(() => {
+        if (active) setPricingLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const pricingUnavailable = !pricingLoading && pricingError;
+
+  const planMap = React.useMemo(() => {
+    const map = new Map<string, any>();
+    if (pricing?.plans) {
+      pricing.plans.forEach((plan: any) => map.set(plan.key, plan));
+    }
+    return map;
+  }, [pricing]);
+
+  const renderPrice = (planKey: PlanKey) => {
+    if (pricingUnavailable) return "—";
+    const plan = planMap.get(planKey);
+    if (!plan) return "—";
+    const amountCents =
+      interval === "year" ? plan.yearlyAmountCents : plan.monthlyAmountCents;
+    if (!amountCents) return "—";
+    const suffix = interval === "year" ? "year" : "month";
+    return `$${(amountCents / 100).toFixed(0)} / ${suffix}`;
+  };
+
+  const handlePlanAction = async (planKey: "starter" | "pro" | "business") => {
+    if (pricingUnavailable) return;
+    if (planKey === currentPlan) return;
+    try {
+      setPlanActionLoading(planKey);
+      const res: any = await apiFetch("/billing/subscribe", {
+        method: "POST",
+        body: JSON.stringify({
+          planKey,
+          interval,
+          featureKey: "billing",
+          source: "billing_page",
+          redirectTo: "/billing",
+        }),
+      });
+      const url = res?.url || res?.checkoutUrl;
+      if (url && typeof window !== "undefined") {
+        window.location.assign(url);
+        return;
+      }
+    } catch (err: any) {
+      setError(err?.message || "Unable to start checkout.");
+    } finally {
+      setPlanActionLoading(null);
+    }
+  };
 
   const handlePortal = async () => {
     try {
@@ -121,36 +203,81 @@ const BillingPage: React.FC = () => {
           }}
         />
         <div style={{ display: "grid", gap: 10 }}>
-          {[
-            { id: "screening", label: "Screening (Free)", desc: "Run screenings only.", highlight: currentPlan === "screening" },
-            { id: "starter", label: "Starter", desc: "Rental management + maintenance.", highlight: currentPlan === "starter" },
-            { id: "pro", label: "Pro", desc: "Messaging, ledger, exports.", highlight: currentPlan === "pro" },
-            { id: "elite", label: "Elite (Coming Soon)", desc: "Institutional-grade operations.", highlight: currentPlan === "elite" },
-          ].map((plan) => (
-            <div
-              key={plan.id}
-              style={{
-                borderRadius: radius.lg,
-                border: plan.highlight
-                  ? "1px solid rgba(59,130,246,0.45)"
-                  : "1px solid rgba(148,163,184,0.25)",
-                background: plan.highlight ? "rgba(59,130,246,0.08)" : "rgba(148,163,184,0.06)",
-                padding: 12,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 12,
-              }}
-            >
-              <div>
-                <div style={{ fontWeight: 800 }}>{plan.label}</div>
-                <div style={{ fontSize: 12, color: text.muted }}>{plan.desc}</div>
+          {visiblePlans.map((planId) => {
+            if (planId === "screening") return null;
+            const plan = {
+              id: planId,
+              label:
+                planId === "pro"
+                  ? "Pro"
+                  : planId === "business"
+                  ? "Business"
+                  : planId === "elite"
+                  ? "Elite"
+                  : "Starter",
+              desc:
+                planId === "pro"
+                  ? "Messaging, ledger, exports."
+                  : planId === "business"
+                  ? "Portfolio analytics and compliance."
+                  : planId === "elite"
+                  ? "Enterprise controls and compliance."
+                  : "Rental management + maintenance.",
+            };
+            const highlight = currentPlan === plan.id;
+            return (
+              <div
+                key={plan.id}
+                style={{
+                  borderRadius: radius.lg,
+                  border: highlight
+                    ? "1px solid rgba(59,130,246,0.45)"
+                    : "1px solid rgba(148,163,184,0.25)",
+                  background: highlight ? "rgba(59,130,246,0.08)" : "rgba(148,163,184,0.06)",
+                  padding: 12,
+                  display: "grid",
+                  gap: 12,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                  <div>
+                    <div style={{ fontWeight: 800 }}>{plan.label}</div>
+                    <div style={{ fontSize: 12, color: text.muted }}>{plan.desc}</div>
+                  </div>
+                  {highlight ? (
+                    <span style={{ fontSize: 12, fontWeight: 700, color: colors.accent }}>Current</span>
+                  ) : null}
+                </div>
+                <div style={{ color: text.muted, fontSize: 13 }}>
+                  {pricingLoading ? "—" : renderPrice(plan.id as PlanKey)}
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <Button
+                    type="button"
+                    variant={highlight ? "secondary" : "primary"}
+                    onClick={() => {
+                      if (plan.id === "elite") return;
+                      handlePlanAction(plan.id as "starter" | "pro" | "business");
+                    }}
+                    disabled={
+                      pricingUnavailable ||
+                      highlight ||
+                      planActionLoading === plan.id ||
+                      plan.id === "elite"
+                    }
+                  >
+                    {highlight
+                      ? "Current plan"
+                      : plan.id === "elite"
+                      ? "Contact sales"
+                      : planActionLoading === plan.id
+                      ? "Starting..."
+                      : "Choose plan"}
+                  </Button>
+                </div>
               </div>
-              {plan.highlight ? (
-                <span style={{ fontSize: 12, fontWeight: 700, color: colors.accent }}>Current</span>
-              ) : null}
-            </div>
-          ))}
+            );
+          })}
         </div>
       </Card>
 
