@@ -229,7 +229,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
               Log in
             </Link>
             <Link
-              to="/login"
+              to="/site/pricing"
               style={{
                 color: "#fff",
                 background: colors.accent,
@@ -240,7 +240,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                 boxShadow: shadows.sm,
               }}
             >
-              Get Started
+              Request access
             </Link>
           </div>
           {isMobile ? (
@@ -257,7 +257,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
               }}
             >
               <Link
-                to="/login"
+                to="/site/pricing"
                 style={{
                   color: "#fff",
                   background: colors.accent,
@@ -269,7 +269,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                   whiteSpace: "nowrap",
                 }}
               >
-                Get Started
+                Request access
               </Link>
               <button
                 type="button"
@@ -432,7 +432,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                 Log in
               </Link>
               <Link
-                to="/login"
+                to="/site/pricing"
                 style={{
                   color: "#fff",
                   background: colors.accent,
@@ -444,7 +444,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                 }}
                 onClick={() => setMenuOpen(false)}
               >
-                Get Started
+                Request access
               </Link>
             </div>
           </div>
