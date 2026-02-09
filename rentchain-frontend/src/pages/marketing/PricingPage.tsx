@@ -6,6 +6,7 @@ import { useAuth } from "../../context/useAuth";
 import { fetchBillingPricing } from "../../api/billingApi";
 import { startCheckout } from "../../billing/startCheckout";
 import { RequestAccessModal } from "../../components/marketing/RequestAccessModal";
+import { PlanIntervalToggle } from "../../components/billing/PlanIntervalToggle";
 
 const PricingPage: React.FC = () => {
   const { user } = useAuth();
@@ -14,6 +15,7 @@ const PricingPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [pricingError, setPricingError] = useState(false);
   const [requestOpen, setRequestOpen] = useState(false);
+  const [interval, setInterval] = useState<"month" | "year">("month");
 
   useEffect(() => {
     document.title = "Pricing — RentChain";
@@ -56,11 +58,11 @@ const PricingPage: React.FC = () => {
     const plan = planMap.get(planKey);
     if (!plan) return "—";
     if (plan.monthlyAmountCents === 0) return "Free";
-    const monthly = `$${Math.round(plan.monthlyAmountCents / 100)} / month`;
-    const yearly = plan.yearlyAmountCents
-      ? `$${Math.round(plan.yearlyAmountCents / 100)} / year`
-      : "";
-    return yearly ? `${monthly} • ${yearly}` : monthly;
+    const amountCents =
+      interval === "year" ? plan.yearlyAmountCents : plan.monthlyAmountCents;
+    if (!amountCents) return "—";
+    const suffix = interval === "year" ? "year" : "month";
+    return `$${Math.round(amountCents / 100)} / ${suffix}`;
   };
 
   const pricingUnavailable = !loading && pricingError;
@@ -73,7 +75,7 @@ const PricingPage: React.FC = () => {
     }
     startCheckout({
       tier: planKey,
-      interval: "monthly",
+      interval,
       featureKey: "pricing",
       source: "marketing_pricing",
       redirectTo: "/billing",
@@ -110,6 +112,9 @@ const PricingPage: React.FC = () => {
             alignItems: "stretch",
           }}
         >
+          <div style={{ gridColumn: "1 / -1" }}>
+            <PlanIntervalToggle value={interval} onChange={setInterval} />
+          </div>
           {pricingUnavailable ? (
             <Card>
               <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>Pricing unavailable</div>
