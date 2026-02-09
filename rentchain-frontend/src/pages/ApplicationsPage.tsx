@@ -177,12 +177,6 @@ const ApplicationsPage: React.FC = () => {
   const onboarding = useOnboardingState();
   const propertiesCount = propertyRecords.length;
   const unitsCount = propertyRecords.reduce((sum, p) => sum + unitsForProperty(p), 0);
-  const prereqState = getApplicationPrereqState({
-    propertiesCount,
-    unitsCount,
-    selectedPropertyId: propertyFilter || null,
-    requireSelection: true,
-  });
 
   const modalUnits = useMemo(() => {
     if (!modalPropertyId) return [];
@@ -449,27 +443,16 @@ const ApplicationsPage: React.FC = () => {
     }
 
     const autoSelect = params.get("autoSelectProperty") === "1";
-    if (autoSelect && properties[0]?.id && !propertyFilter) {
-      setPropertyFilter(properties[0].id);
-    }
-
     const nextSelectedId = propertyFilter || (autoSelect ? properties[0]?.id : null) || null;
     const prereq = getApplicationPrereqState({
       propertiesCount,
       unitsCount,
       selectedPropertyId: nextSelectedId,
-      requireSelection: true,
+      requireSelection: false,
     });
 
     if (prereq.missingProperty && propertiesReady && propertiesCount === 0) {
       setPropertyGateOpen(true);
-      params.delete("openSendApplication");
-      params.delete("autoSelectProperty");
-      navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
-      return;
-    }
-    if (prereq.missingSelectedProperty) {
-      showToast({ message: "Select a property first.", variant: "error" });
       params.delete("openSendApplication");
       params.delete("autoSelectProperty");
       navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
@@ -711,21 +694,11 @@ const ApplicationsPage: React.FC = () => {
       propertiesCount,
       unitsCount,
       selectedPropertyId: nextSelectedId,
-      requireSelection: true,
+      requireSelection: false,
     });
 
     if (prereq.missingProperty && propertiesReady && propertiesCount === 0) {
       setPropertyGateOpen(true);
-      return;
-    }
-    if (prereq.missingSelectedProperty) {
-      if (autoSelectProperty && properties[0]?.id) {
-        setPropertyFilter(properties[0].id);
-        setSendAppPropertyId(properties[0].id);
-        setSendAppOpen(true);
-        return;
-      }
-      showToast({ message: "Select a property first.", variant: "error" });
       return;
     }
     setModalPropertyId(nextSelectedId);

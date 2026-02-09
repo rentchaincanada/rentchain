@@ -850,7 +850,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                       key={(u as any).id ?? `${unitNum}-${idx}`}
                       style={{
                         borderTop: "1px solid rgba(148,163,184,0.12)",
-                        color: "#e5e7eb",
+                        color: "#0f172a",
                       }}
                     >
                       <td style={{ padding: "10px 12px", whiteSpace: "nowrap" }}>{unitNum}</td>

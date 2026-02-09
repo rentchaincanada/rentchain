@@ -9,6 +9,7 @@ import { useAuth } from "../context/useAuth";
 import { fetchBillingPricing, fetchPricingHealth } from "../api/billingApi";
 import { apiFetch } from "@/lib/apiClient";
 import { BillingIntervalToggle } from "@/components/billing/BillingIntervalToggle";
+import { getVisiblePlans, type PlanKey } from "@/billing/planVisibility";
 
 const PricingPage: React.FC = () => {
   const navigate = useNavigate();
@@ -21,6 +22,10 @@ const PricingPage: React.FC = () => {
   const [pricingHealth, setPricingHealth] = useState<any | null>(null);
   const [healthLoading, setHealthLoading] = useState(true);
   const [interval, setInterval] = useState<"month" | "year">("month");
+  const visiblePlans = useMemo<PlanKey[]>(
+    () => getVisiblePlans(user?.actorRole || user?.role || null),
+    [user?.actorRole, user?.role]
+  );
 
   useEffect(() => {
     let active = true;
@@ -85,7 +90,7 @@ const PricingPage: React.FC = () => {
     return `$${(amountCents / 100).toFixed(0)} / ${suffix}`;
   };
 
-  const handlePlanAction = async (planKey: "starter" | "pro") => {
+  const handlePlanAction = async (planKey: "starter" | "pro" | "business") => {
     if (pricingUnavailable) return;
     if (!user) {
       navigate("/login");
@@ -150,71 +155,54 @@ const PricingPage: React.FC = () => {
             <h2 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 700 }}>Plans</h2>
             <BillingIntervalToggle value={interval} onChange={setInterval} />
             <div style={{ display: "grid", gap: spacing.sm }}>
-              <div
-                style={{
-                  padding: "12px 14px",
-                  borderRadius: 12,
-                  border: `1px solid ${text.muted}`,
-                  background: "#ffffff",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 6,
-                }}
-              >
-                <div style={{ fontWeight: 700 }}>Starter</div>
-                <div style={{ color: text.muted, fontSize: 13 }}>
-                  {loading ? "—" : renderPrice("starter")}
-                </div>
-                <Button
-                  type="button"
-                  onClick={() => handlePlanAction("starter")}
-                  disabled={pricingUnavailable}
-                >
-                  Get started
-                </Button>
-              </div>
-              <div
-                style={{
-                  padding: "12px 14px",
-                  borderRadius: 12,
-                  border: `1px solid ${text.muted}`,
-                  background: "#ffffff",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 6,
-                }}
-              >
-                <div style={{ fontWeight: 700 }}>Pro</div>
-                <div style={{ color: text.muted, fontSize: 13 }}>
-                  {loading ? "—" : renderPrice("pro")}
-                </div>
-                <Button
-                  type="button"
-                  onClick={() => handlePlanAction("pro")}
-                  disabled={pricingUnavailable}
-                >
-                  Upgrade to Pro
-                </Button>
-              </div>
-              <div
-                style={{
-                  padding: "12px 14px",
-                  borderRadius: 12,
-                  border: `1px solid ${text.muted}`,
-                  background: "#ffffff",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 6,
-                }}
-              >
-                <div style={{ fontWeight: 700 }}>Business</div>
-                <div style={{ color: text.muted, fontSize: 13 }}>
-                  {loading ? "—" : renderPrice("business")}
-                </div>
-                <Button type="button" onClick={() => navigate(user ? "/billing" : "/login")}>
-                  Contact sales
-                </Button>
-              </div>
+              {visiblePlans.map((planId) => {
+                if (planId === "screening") return null;
+                const label =
+                  planId === "pro"
+                    ? "Pro"
+                    : planId === "business"
+                    ? "Business"
+                    : planId === "elite"
+                    ? "Elite"
+                    : "Starter";
+                const cta =
+                  planId === "pro"
+                    ? "Upgrade to Pro"
+                    : planId === "business"
+                    ? "Choose plan"
+                    : planId === "elite"
+                    ? "Contact sales"
+                    : "Get started";
+                return (
+                  <div
+                    key={planId}
+                    style={{
+                      padding: "12px 14px",
+                      borderRadius: 12,
+                      border: `1px solid ${text.muted}`,
+                      background: "#ffffff",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 6,
+                    }}
+                  >
+                    <div style={{ fontWeight: 700 }}>{label}</div>
+                    <div style={{ color: text.muted, fontSize: 13 }}>
+                      {loading ? "—" : renderPrice(planId as "starter" | "pro" | "business")}
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        if (planId === "elite") return;
+                        handlePlanAction(planId as "starter" | "pro" | "business");
+                      }}
+                      disabled={pricingUnavailable || planId === "elite"}
+                    >
+                      {cta}
+                    </Button>
+                  </div>
+                );
+              })}
             </div>
             <div style={{ fontSize: "0.85rem", color: text.subtle }}>
               Questions? <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>
