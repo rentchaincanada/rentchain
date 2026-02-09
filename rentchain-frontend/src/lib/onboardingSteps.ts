@@ -96,7 +96,7 @@ export function buildOnboardingSteps({
       actionLabel: "Preview export",
       onAction: () => {
         track("onboarding_step_clicked", { stepKey: "exportPreviewed" });
-        navigate("/applications?exportPreview=1");
+        navigate("/pdf/sample");
       },
     },
   ];
