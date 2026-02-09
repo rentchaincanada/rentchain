@@ -1,7 +1,7 @@
 import React from "react";
 import { Button } from "../ui/Ui";
 import { colors, radius, text } from "../../styles/tokens";
-import { BillingIntervalToggle } from "./BillingIntervalToggle";
+import { PlanIntervalToggle } from "./PlanIntervalToggle";
 import { getVisiblePlans, type PlanKey } from "@/billing/planVisibility";
 
 type Props = {
@@ -96,7 +96,7 @@ export function BillingPlansPanel({
 
   return (
     <div style={{ display: "grid", gap: 10 }}>
-      <BillingIntervalToggle value={interval} onChange={onIntervalChange} />
+      <PlanIntervalToggle value={interval} onChange={onIntervalChange} />
       {visiblePlans.map((planId) => {
         if (planId === "screening") return null;
         const { label, desc } = planMeta(planId);
