@@ -203,35 +203,6 @@ const BillingPage: React.FC = () => {
           }}
         />
         <div style={{ display: "grid", gap: 10 }}>
-<<<<<<< HEAD
-          {visiblePlans.map((plan) => {
-            const highlight = currentPlan === plan.id;
-            return (
-            <div
-              key={plan.id}
-              style={{
-                borderRadius: radius.lg,
-                border: highlight
-                  ? "1px solid rgba(59,130,246,0.45)"
-                  : "1px solid rgba(148,163,184,0.25)",
-                background: highlight ? "rgba(59,130,246,0.08)" : "rgba(148,163,184,0.06)",
-                padding: 12,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 12,
-              }}
-            >
-              <div>
-                <div style={{ fontWeight: 800 }}>{plan.label}</div>
-                <div style={{ fontSize: 12, color: text.muted }}>{plan.desc}</div>
-              </div>
-              {highlight ? (
-                <span style={{ fontSize: 12, fontWeight: 700, color: colors.accent }}>Current</span>
-              ) : null}
-            </div>
-          )})}
-=======
           {visiblePlans.map((planId) => {
             if (planId === "screening") return null;
             const plan = {
@@ -307,7 +278,6 @@ const BillingPage: React.FC = () => {
               </div>
             );
           })}
->>>>>>> c124373 (fix(ui): unify pricing/billing and plan visibility)
         </div>
       </Card>
 
