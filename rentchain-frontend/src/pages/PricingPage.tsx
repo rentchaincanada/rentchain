@@ -1,15 +1,16 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { MacShell } from "../components/layout/MacShell";
-import { Card, Section, Button } from "../components/ui/Ui";
+import { Card, Section } from "../components/ui/Ui";
 import { spacing, text } from "../styles/tokens";
 import { SUPPORT_EMAIL } from "../config/support";
 import { NotifyMeModal } from "../components/billing/NotifyMeModal";
 import { useAuth } from "../context/useAuth";
 import { fetchBillingPricing, fetchPricingHealth } from "../api/billingApi";
 import { apiFetch } from "@/lib/apiClient";
-import { BillingIntervalToggle } from "@/components/billing/BillingIntervalToggle";
-import { getVisiblePlans, type PlanKey } from "@/billing/planVisibility";
+import { BillingPlansPanel } from "@/components/billing/BillingPlansPanel";
+import { type PlanKey } from "@/billing/planVisibility";
+import { useCapabilities } from "@/hooks/useCapabilities";
 
 const PricingPage: React.FC = () => {
   const navigate = useNavigate();
@@ -22,10 +23,7 @@ const PricingPage: React.FC = () => {
   const [pricingHealth, setPricingHealth] = useState<any | null>(null);
   const [healthLoading, setHealthLoading] = useState(true);
   const [interval, setInterval] = useState<"month" | "year">("month");
-  const visiblePlans = useMemo<PlanKey[]>(
-    () => getVisiblePlans(user?.actorRole || user?.role || null),
-    [user?.actorRole, user?.role]
-  );
+  const { caps } = useCapabilities();
 
   useEffect(() => {
     let active = true;
@@ -71,24 +69,16 @@ const PricingPage: React.FC = () => {
     (!healthLoading && pricingHealth && pricingHealth.ok === false) ||
     (!loading && pricingError);
 
-  const planMap = useMemo(() => {
-    const map = new Map<string, any>();
-    if (pricing?.plans) {
-      pricing.plans.forEach((plan: any) => map.set(plan.key, plan));
-    }
-    return map;
-  }, [pricing]);
-
-  const renderPrice = (planKey: "starter" | "pro" | "business") => {
-    if (pricingUnavailable) return "—";
-    const plan = planMap.get(planKey);
-    if (!plan) return "—";
-    const amountCents =
-      interval === "year" ? plan.yearlyAmountCents : plan.monthlyAmountCents;
-    if (!amountCents) return "—";
-    const suffix = interval === "year" ? "year" : "month";
-    return `$${(amountCents / 100).toFixed(0)} / ${suffix}`;
+  const normalizePlan = (input?: string | null): PlanKey => {
+    const raw = String(input || "").trim().toLowerCase();
+    if (raw === "starter" || raw === "core") return "starter";
+    if (raw === "pro") return "pro";
+    if (raw === "business") return "business";
+    if (raw === "elite") return "elite";
+    return "screening";
   };
+
+  const currentPlanKey = normalizePlan(caps?.plan || user?.plan || null);
 
   const handlePlanAction = async (planKey: "starter" | "pro" | "business") => {
     if (pricingUnavailable) return;
@@ -96,11 +86,14 @@ const PricingPage: React.FC = () => {
       navigate("/login");
       return;
     }
+    if (currentPlanKey === planKey) return;
     try {
       if (import.meta.env.DEV) {
         console.debug("[billing] subscribe interval", { interval });
       }
-      const res: any = await apiFetch("/billing/subscribe", {
+      const hasSubscription = ["starter", "pro", "business", "elite"].includes(currentPlanKey);
+      const endpoint = hasSubscription ? "/billing/upgrade" : "/billing/subscribe";
+      const res: any = await apiFetch(endpoint, {
         method: "POST",
         body: JSON.stringify({
           planKey,
@@ -154,56 +147,17 @@ const PricingPage: React.FC = () => {
           <div style={{ display: "flex", flexDirection: "column", gap: spacing.sm }}>
             <h2 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 700 }}>Plans</h2>
             <BillingIntervalToggle value={interval} onChange={setInterval} />
-            <div style={{ display: "grid", gap: spacing.sm }}>
-              {visiblePlans.map((planId) => {
-                if (planId === "screening") return null;
-                const label =
-                  planId === "pro"
-                    ? "Pro"
-                    : planId === "business"
-                    ? "Business"
-                    : planId === "elite"
-                    ? "Elite"
-                    : "Starter";
-                const cta =
-                  planId === "pro"
-                    ? "Upgrade to Pro"
-                    : planId === "business"
-                    ? "Choose plan"
-                    : planId === "elite"
-                    ? "Contact sales"
-                    : "Get started";
-                return (
-                  <div
-                    key={planId}
-                    style={{
-                      padding: "12px 14px",
-                      borderRadius: 12,
-                      border: `1px solid ${text.muted}`,
-                      background: "#ffffff",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 6,
-                    }}
-                  >
-                    <div style={{ fontWeight: 700 }}>{label}</div>
-                    <div style={{ color: text.muted, fontSize: 13 }}>
-                      {loading ? "—" : renderPrice(planId as "starter" | "pro" | "business")}
-                    </div>
-                    <Button
-                      type="button"
-                      onClick={() => {
-                        if (planId === "elite") return;
-                        handlePlanAction(planId as "starter" | "pro" | "business");
-                      }}
-                      disabled={pricingUnavailable || planId === "elite"}
-                    >
-                      {cta}
-                    </Button>
-                  </div>
-                );
-              })}
-            </div>
+            <BillingPlansPanel
+              pricing={pricing}
+              pricingLoading={loading}
+              pricingUnavailable={pricingUnavailable}
+              interval={interval}
+              onIntervalChange={setInterval}
+              currentPlan={currentPlanKey}
+              role={user?.actorRole || user?.role || null}
+              mode="pricing"
+              onSelectPlan={handlePlanAction}
+            />
             <div style={{ fontSize: "0.85rem", color: text.subtle }}>
               Questions? <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>
             </div>
