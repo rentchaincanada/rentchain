@@ -6,6 +6,7 @@ import { spacing, text, colors, radius } from "../styles/tokens";
 import { SUPPORT_EMAIL } from "../config/support";
 import { asArray } from "../lib/asArray";
 import { useCapabilities } from "@/hooks/useCapabilities";
+import { useAuth } from "../context/useAuth";
 import { BillingIntervalToggle } from "../components/billing/BillingIntervalToggle";
 
 const formatAmount = (amountCents: number, currency: string) => {
@@ -49,7 +50,19 @@ const BillingPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [interval, setInterval] = useState<"month" | "year">("month");
   const { caps } = useCapabilities();
+  const { user } = useAuth();
   const currentPlan = String(caps?.plan || "screening").toLowerCase();
+  const isAdmin = String(user?.role || "").toLowerCase() === "admin";
+  const planCards = [
+    { id: "starter", label: "Starter", desc: "Rental management + maintenance." },
+    { id: "pro", label: "Pro", desc: "Messaging, ledger, exports." },
+    { id: "business", label: "Business", desc: "Portfolio analytics and compliance." },
+  ];
+  const adminOnlyCards = [
+    { id: "screening", label: "Screening (Free)", desc: "Run screenings only." },
+    { id: "elite", label: "Elite (Coming Soon)", desc: "Institutional-grade operations." },
+  ];
+  const visiblePlans = isAdmin ? [...adminOnlyCards, ...planCards] : planCards;
 
   const load = async () => {
     try {
@@ -121,20 +134,17 @@ const BillingPage: React.FC = () => {
           }}
         />
         <div style={{ display: "grid", gap: 10 }}>
-          {[
-            { id: "screening", label: "Screening (Free)", desc: "Run screenings only.", highlight: currentPlan === "screening" },
-            { id: "starter", label: "Starter", desc: "Rental management + maintenance.", highlight: currentPlan === "starter" },
-            { id: "pro", label: "Pro", desc: "Messaging, ledger, exports.", highlight: currentPlan === "pro" },
-            { id: "elite", label: "Elite (Coming Soon)", desc: "Institutional-grade operations.", highlight: currentPlan === "elite" },
-          ].map((plan) => (
+          {visiblePlans.map((plan) => {
+            const highlight = currentPlan === plan.id;
+            return (
             <div
               key={plan.id}
               style={{
                 borderRadius: radius.lg,
-                border: plan.highlight
+                border: highlight
                   ? "1px solid rgba(59,130,246,0.45)"
                   : "1px solid rgba(148,163,184,0.25)",
-                background: plan.highlight ? "rgba(59,130,246,0.08)" : "rgba(148,163,184,0.06)",
+                background: highlight ? "rgba(59,130,246,0.08)" : "rgba(148,163,184,0.06)",
                 padding: 12,
                 display: "flex",
                 alignItems: "center",
@@ -146,11 +156,11 @@ const BillingPage: React.FC = () => {
                 <div style={{ fontWeight: 800 }}>{plan.label}</div>
                 <div style={{ fontSize: 12, color: text.muted }}>{plan.desc}</div>
               </div>
-              {plan.highlight ? (
+              {highlight ? (
                 <span style={{ fontSize: 12, fontWeight: 700, color: colors.accent }}>Current</span>
               ) : null}
             </div>
-          ))}
+          )})}
         </div>
       </Card>
 
