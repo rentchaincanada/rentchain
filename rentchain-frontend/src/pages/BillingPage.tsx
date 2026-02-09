@@ -7,7 +7,7 @@ import { SUPPORT_EMAIL } from "../config/support";
 import { asArray } from "../lib/asArray";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { useAuth } from "@/context/useAuth";
-import { BillingIntervalToggle } from "../components/billing/BillingIntervalToggle";
+import { BillingPlansPanel } from "../components/billing/BillingPlansPanel";
 import { apiFetch } from "@/lib/apiClient";
 import { getVisiblePlans, type PlanKey } from "@/billing/planVisibility";
 
@@ -109,24 +109,6 @@ const BillingPage: React.FC = () => {
 
   const pricingUnavailable = !pricingLoading && pricingError;
 
-  const planMap = React.useMemo(() => {
-    const map = new Map<string, any>();
-    if (pricing?.plans) {
-      pricing.plans.forEach((plan: any) => map.set(plan.key, plan));
-    }
-    return map;
-  }, [pricing]);
-
-  const renderPrice = (planKey: PlanKey) => {
-    if (pricingUnavailable) return "—";
-    const plan = planMap.get(planKey);
-    if (!plan) return "—";
-    const amountCents =
-      interval === "year" ? plan.yearlyAmountCents : plan.monthlyAmountCents;
-    if (!amountCents) return "—";
-    const suffix = interval === "year" ? "year" : "month";
-    return `$${(amountCents / 100).toFixed(0)} / ${suffix}`;
-  };
 
   const handlePlanAction = async (planKey: "starter" | "pro" | "business") => {
     if (pricingUnavailable) return;
@@ -193,92 +175,23 @@ const BillingPage: React.FC = () => {
         <div style={{ fontWeight: 700, fontSize: "1.05rem", marginBottom: 12 }}>
           Plans
         </div>
-        <BillingIntervalToggle
-          value={interval}
-          onChange={(next) => {
+        <BillingPlansPanel
+          pricing={pricing}
+          pricingLoading={pricingLoading}
+          pricingUnavailable={pricingUnavailable}
+          interval={interval}
+          onIntervalChange={(next) => {
             setInterval(next);
             if (import.meta.env.DEV) {
               console.debug("[billing] interval", next);
             }
           }}
+          currentPlan={currentPlan}
+          role={user?.actorRole || user?.role || null}
+          mode="billing"
+          planActionLoading={planActionLoading}
+          onSelectPlan={handlePlanAction}
         />
-        <div style={{ display: "grid", gap: 10 }}>
-          {visiblePlans.map((planId) => {
-            if (planId === "screening") return null;
-            const plan = {
-              id: planId,
-              label:
-                planId === "pro"
-                  ? "Pro"
-                  : planId === "business"
-                  ? "Business"
-                  : planId === "elite"
-                  ? "Elite"
-                  : "Starter",
-              desc:
-                planId === "pro"
-                  ? "Messaging, ledger, exports."
-                  : planId === "business"
-                  ? "Portfolio analytics and compliance."
-                  : planId === "elite"
-                  ? "Enterprise controls and compliance."
-                  : "Rental management + maintenance.",
-            };
-            const highlight = currentPlan === plan.id;
-            return (
-              <div
-                key={plan.id}
-                style={{
-                  borderRadius: radius.lg,
-                  border: highlight
-                    ? "1px solid rgba(59,130,246,0.45)"
-                    : "1px solid rgba(148,163,184,0.25)",
-                  background: highlight ? "rgba(59,130,246,0.08)" : "rgba(148,163,184,0.06)",
-                  padding: 12,
-                  display: "grid",
-                  gap: 12,
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                  <div>
-                    <div style={{ fontWeight: 800 }}>{plan.label}</div>
-                    <div style={{ fontSize: 12, color: text.muted }}>{plan.desc}</div>
-                  </div>
-                  {highlight ? (
-                    <span style={{ fontSize: 12, fontWeight: 700, color: colors.accent }}>Current</span>
-                  ) : null}
-                </div>
-                <div style={{ color: text.muted, fontSize: 13 }}>
-                  {pricingLoading ? "—" : renderPrice(plan.id as PlanKey)}
-                </div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <Button
-                    type="button"
-                    variant={highlight ? "secondary" : "primary"}
-                    onClick={() => {
-                      if (plan.id === "elite") return;
-                      handlePlanAction(plan.id as "starter" | "pro" | "business");
-                    }}
-                    disabled={
-                      pricingUnavailable ||
-                      highlight ||
-                      planActionLoading === plan.id ||
-                      plan.id === "elite"
-                    }
-                  >
-                    {highlight
-                      ? "Current plan"
-                      : plan.id === "elite"
-                      ? "Contact sales"
-                      : planActionLoading === plan.id
-                      ? "Starting..."
-                      : "Choose plan"}
-                  </Button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
       </Card>
 
       <Card>
