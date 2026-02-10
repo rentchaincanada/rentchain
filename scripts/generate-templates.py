@@ -9,16 +9,21 @@ except Exception:
 
 try:
     from reportlab.lib.pagesizes import letter
+    from reportlab.lib import colors as rl_colors
     from reportlab.pdfgen import canvas
 except Exception:
     canvas = None  # type: ignore
     letter = None  # type: ignore
+    rl_colors = None  # type: ignore
 
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATES_DIR = ROOT / "rentchain-frontend" / "public" / "templates"
 
 PDF_VERSION = "Version v1.0"
+MARGIN_X = 40
+MARGIN_TOP = 770
+PAGE_WIDTH = letter[0] if letter else 612
 
 
 def ensure_deps():
@@ -45,27 +50,63 @@ def write_docx(path: Path, title: str, paragraphs: list[str], table: list[list[s
 
 
 def draw_pdf_header(c, title: str):
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(40, 760, "RENTCHAIN")
-    c.setFont("Helvetica-Bold", 16)
-    c.drawString(40, 735, title)
+    c.setFont("Helvetica-Bold", 12)
+    c.setFillColor(rl_colors.HexColor("#111111"))
+    c.drawString(MARGIN_X, MARGIN_TOP, "RENTCHAIN")
+    c.setFont("Helvetica-Bold", 18)
+    c.drawString(MARGIN_X, MARGIN_TOP - 22, title)
     c.setFont("Helvetica", 10)
-    c.drawString(40, 718, PDF_VERSION)
+    c.setFillColor(rl_colors.HexColor("#6b7280"))
+    c.drawString(MARGIN_X, MARGIN_TOP - 40, PDF_VERSION)
+    c.setFillColor(rl_colors.HexColor("#111111"))
 
 
-def write_pdf(path: Path, title: str, body_lines: list[str]):
-    c = canvas.Canvas(str(path), pagesize=letter)
-    draw_pdf_header(c, title)
-    c.setFont("Helvetica", 10)
-    y = 690
-    for line in body_lines:
-        c.drawString(40, y, line)
-        y -= 14
-        if y < 60:
+def draw_section_title(c, title: str, y: float) -> float:
+    c.setFont("Helvetica-Bold", 12)
+    c.setFillColor(rl_colors.HexColor("#111111"))
+    c.drawString(MARGIN_X, y, title)
+    return y - 14
+
+
+def draw_kv_table(c, rows: list[tuple[str, str]], y: float) -> float:
+    table_width = PAGE_WIDTH - (MARGIN_X * 2)
+    label_width = int(table_width * 0.38)
+    value_width = table_width - label_width
+    row_height = 20
+    border_color = rl_colors.HexColor("#e5e7eb")
+    header_fill = rl_colors.HexColor("#f3f4f6")
+    text_color = rl_colors.HexColor("#111111")
+    muted = rl_colors.HexColor("#6b7280")
+
+    for label, value in rows:
+        if y - row_height < 60:
             c.showPage()
-            draw_pdf_header(c, title)
-            c.setFont("Helvetica", 10)
-            y = 690
+            draw_pdf_header(c, c._doc.info.title or "")
+            y = MARGIN_TOP - 70
+        # label cell
+        c.setFillColor(header_fill)
+        c.rect(MARGIN_X, y - row_height, label_width, row_height, fill=1, stroke=1)
+        # value cell
+        c.setFillColor(rl_colors.white)
+        c.rect(MARGIN_X + label_width, y - row_height, value_width, row_height, fill=1, stroke=1)
+        c.setFillColor(text_color)
+        c.setFont("Helvetica", 9)
+        c.drawString(MARGIN_X + 8, y - 14, label)
+        c.setFillColor(muted)
+        c.drawString(MARGIN_X + label_width + 8, y - 14, value)
+        y -= row_height
+    c.setFillColor(text_color)
+    return y - 10
+
+
+def write_pdf(path: Path, title: str, sections: list[tuple[str, list[tuple[str, str]]]]):
+    c = canvas.Canvas(str(path), pagesize=letter)
+    c.setTitle(title)
+    draw_pdf_header(c, title)
+    y = MARGIN_TOP - 70
+    for section_title, rows in sections:
+        y = draw_section_title(c, section_title, y)
+        y = draw_kv_table(c, rows, y)
     c.save()
 
 
@@ -97,13 +138,18 @@ def main():
         TEMPLATES_DIR / "Notice_of_Entry_Template.pdf",
         "NOTICE OF ENTRY",
         [
-            "Tenant Name: ____________________________",
-            "Property Address: ________________________",
-            "Unit: ____________",
-            "Date of Notice: __________________________",
-            "Planned Entry Date/Time: __________________",
-            "Reason for Entry: _________________________",
-            "Landlord/Manager: _________________________",
+            (
+                "Summary",
+                [
+                    ("Tenant Name", "____________________________"),
+                    ("Property Address", "____________________________"),
+                    ("Unit", "____________"),
+                    ("Date of Notice", "____________________________"),
+                    ("Planned Entry Date/Time", "____________________________"),
+                    ("Reason for Entry", "____________________________"),
+                    ("Landlord/Manager", "____________________________"),
+                ],
+            )
         ],
     )
 
@@ -131,14 +177,26 @@ def main():
         TEMPLATES_DIR / "Move_In_Out_Inspection_Checklist_Template.pdf",
         "MOVE-IN / MOVE-OUT INSPECTION",
         [
-            "Tenant Name: ____________________________",
-            "Property Address: ________________________",
-            "Unit: ____________",
-            "Inspection Type: _________________________",
-            "Inspection Date: _________________________",
-            "",
-            "Areas: Entry / Hallway, Living Room, Kitchen, Bathroom, Bedroom",
-            "Condition Notes: _________________________",
+            (
+                "Summary",
+                [
+                    ("Tenant Name", "____________________________"),
+                    ("Property Address", "____________________________"),
+                    ("Unit", "____________"),
+                    ("Inspection Type", "____________________________"),
+                    ("Inspection Date", "____________________________"),
+                ],
+            ),
+            (
+                "Inspection Areas",
+                [
+                    ("Entry / Hallway", "____________________________"),
+                    ("Living Room", "____________________________"),
+                    ("Kitchen", "____________________________"),
+                    ("Bathroom", "____________________________"),
+                    ("Bedroom", "____________________________"),
+                ],
+            ),
         ],
     )
 
@@ -163,10 +221,24 @@ def main():
         TEMPLATES_DIR / "Rent_Ledger_Summary_Template.pdf",
         "RENT LEDGER SUMMARY",
         [
-            "Property: ________________________________",
-            "Period: _________________________________",
-            "",
-            "Columns: Date | Tenant | Unit | Charge Type | Amount | Balance",
+            (
+                "Summary",
+                [
+                    ("Property", "____________________________"),
+                    ("Period", "____________________________"),
+                ],
+            ),
+            (
+                "Ledger Columns",
+                [
+                    ("Date", "YYYY-MM-DD"),
+                    ("Tenant", "Full name"),
+                    ("Unit", "Unit number"),
+                    ("Charge Type", "Rent / Fee / Credit"),
+                    ("Amount", "$0.00"),
+                    ("Balance", "$0.00"),
+                ],
+            ),
         ],
     )
 
@@ -189,10 +261,21 @@ def main():
         TEMPLATES_DIR / "Dispute_Documentation_Guide_Template.pdf",
         "DISPUTE DOCUMENTATION GUIDE",
         [
-            "Tenant: _________________________________",
-            "Property: _______________________________",
-            "Issue Summary: __________________________",
-            "Timeline and supporting evidence notes.",
+            (
+                "Summary",
+                [
+                    ("Tenant", "____________________________"),
+                    ("Property", "____________________________"),
+                    ("Issue Summary", "____________________________"),
+                ],
+            ),
+            (
+                "Supporting Evidence",
+                [
+                    ("Timeline", "Add key dates and actions."),
+                    ("Evidence Items", "List photos, emails, invoices."),
+                ],
+            ),
         ],
     )
 
@@ -215,10 +298,83 @@ def main():
         TEMPLATES_DIR / "Rental_Application_Checklist_Tenant.pdf",
         "RENTAL APPLICATION CHECKLIST",
         [
-            "Applicant: _____________________________",
-            "Email: _________________________________",
-            "",
-            "Checklist: ID, proof of income, references, screening consent.",
+            (
+                "Applicant",
+                [
+                    ("Name", "____________________________"),
+                    ("Email", "____________________________"),
+                ],
+            ),
+            (
+                "Checklist",
+                [
+                    ("Government ID", "Provided / Pending"),
+                    ("Proof of income", "Provided / Pending"),
+                    ("References", "Provided / Pending"),
+                    ("Screening consent", "Provided / Pending"),
+                ],
+            ),
+        ],
+    )
+
+    # Late Rent Notice
+    write_docx(
+        TEMPLATES_DIR / "Late_Rent_Notice_Template.docx",
+        "Late Rent Notice",
+        [
+            "Tenant Name: {{TENANT_NAME}}",
+            "Property Address: {{PROPERTY_ADDRESS}}",
+            "Unit: {{UNIT_NUMBER}}",
+            "Rent Period: {{RENT_PERIOD}}",
+            "Rent Due Date: {{RENT_DUE_DATE}}",
+            "Total Rent Due: {{TOTAL_RENT_DUE}}",
+            "Late Fee: {{LATE_FEE}}",
+            "Other Charges: {{OTHER_CHARGES}}",
+            "Total Outstanding: {{TOTAL_OUTSTANDING}}",
+            "Payment Deadline: {{PAYMENT_DEADLINE}}",
+            "Payment Methods: {{PAYMENT_METHODS}}",
+            "Landlord/Manager: {{LANDLORD_NAME}}",
+        ],
+    )
+    write_pdf(
+        TEMPLATES_DIR / "Late_Rent_Notice_Template.pdf",
+        "LATE RENT NOTICE",
+        [
+            (
+                "Summary",
+                [
+                    ("Property Address", "____________________________"),
+                    ("Unit", "____________________________"),
+                    ("Tenant(s)", "____________________________"),
+                    ("Landlord/Manager", "____________________________"),
+                ],
+            ),
+            (
+                "Amount Due",
+                [
+                    ("Rent Period", "____________________________"),
+                    ("Rent Due Date", "____________________________"),
+                    ("Total Rent Due", "____________________________"),
+                    ("Late Fee", "____________________________"),
+                    ("Other Charges", "____________________________"),
+                    ("Total Outstanding", "____________________________"),
+                ],
+            ),
+            (
+                "Payment Instructions",
+                [
+                    ("Deadline", "____________________________"),
+                    ("Methods", "____________________________"),
+                    ("Details", "____________________________"),
+                ],
+            ),
+            (
+                "Disclaimer",
+                [
+                    ("Note", "This notice is provided for informational purposes only."),
+                    ("Action", "Please contact your landlord/manager to resolve any disputes."),
+                ],
+            ),
         ],
     )
 
@@ -227,12 +383,21 @@ def main():
         TEMPLATES_DIR / "Tenant_Notice_Templates.pdf",
         "TENANT NOTICE TEMPLATES",
         [
-            "Notice types included:",
-            "- Notice of Entry",
-            "- Late Rent Notice",
-            "- Lease Violation Notice",
-            "",
-            "Use the corresponding DOCX template to edit details.",
+            (
+                "Included Notices",
+                [
+                    ("Notice of Entry", "DOCX + PDF"),
+                    ("Late Rent Notice", "DOCX + PDF"),
+                    ("Lease Violation Notice", "DOCX + PDF"),
+                ],
+            ),
+            (
+                "How to Use",
+                [
+                    ("Edit", "Use the DOCX to customize."),
+                    ("Distribute", "Export to PDF for delivery."),
+                ],
+            ),
         ],
     )
 
@@ -241,8 +406,13 @@ def main():
         TEMPLATES_DIR / "Tenant_Rights_Overview.pdf",
         "TENANT RIGHTS OVERVIEW",
         [
-            "This document provides a high-level overview of tenant rights.",
-            "Always refer to your local jurisdiction for the latest rules.",
+            (
+                "Overview",
+                [
+                    ("Purpose", "High-level summary of tenant rights."),
+                    ("Note", "Refer to local jurisdiction for latest rules."),
+                ],
+            )
         ],
     )
 
@@ -251,12 +421,22 @@ def main():
         TEMPLATES_DIR / "Lease_Event_Log_Template.pdf",
         "LEASE EVENT LOG",
         [
-            "Property: ________________________________",
-            "Unit: ____________________________________",
-            "Tenant: __________________________________",
-            "",
-            "Event log entries:",
-            "Date | Event | Notes",
+            (
+                "Summary",
+                [
+                    ("Property", "____________________________"),
+                    ("Unit", "____________________________"),
+                    ("Tenant", "____________________________"),
+                ],
+            ),
+            (
+                "Event Log",
+                [
+                    ("Date", "YYYY-MM-DD"),
+                    ("Event", "Payment / Notice / Maintenance"),
+                    ("Notes", "Details"),
+                ],
+            ),
         ],
     )
 
