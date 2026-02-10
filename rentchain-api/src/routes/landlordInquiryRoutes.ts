@@ -19,6 +19,14 @@ function normEmail(email: string) {
   return String(email || "").trim().toLowerCase();
 }
 
+function normalizeLeadStatus(value: string | undefined | null) {
+  const status = String(value || "").trim().toLowerCase();
+  if (status === "approved" || status === "invited") return "approved";
+  if (status === "rejected") return "rejected";
+  if (status === "pending" || status === "new") return "pending";
+  return "pending";
+}
+
 function sha256(input: string) {
   return crypto.createHash("sha256").update(input).digest("hex");
 }
@@ -77,14 +85,14 @@ async function approveLeadById(leadId: string, req: any, res: any) {
   }
 
   const lead = leadSnap.data() || {};
-  const status = String(lead.status || "").toLowerCase();
+  const status = normalizeLeadStatus(lead.status);
   const email = normEmail(String(lead.email || ""));
   if (!email || !emailRegex.test(email)) {
     return res.status(400).json({ ok: false, error: "invalid_email" });
   }
 
-  if (status === "invited") {
-    return res.json({ ok: true, status: "invited", message: "already_invited", emailed: false });
+  if (status === "approved") {
+    return res.json({ ok: true, status: "approved", message: "already_approved", emailed: false });
   }
   if (status === "rejected") {
     return res.json({ ok: true, status: "rejected", message: "already_rejected", emailed: false });
@@ -94,6 +102,10 @@ async function approveLeadById(leadId: string, req: any, res: any) {
   const tokenHash = sha256(token);
   const now = Date.now();
   const expiresAt = now + 7 * 24 * 60 * 60 * 1000;
+
+  const usersSnap = await db.collection("users").where("email", "==", email).limit(1).get();
+  const userDoc = usersSnap.empty ? null : usersSnap.docs[0];
+  const userId = userDoc?.id || null;
 
   const inviteRef = db.collection("landlordInvites").doc(tokenHash);
   await inviteRef.set(
@@ -112,9 +124,9 @@ async function approveLeadById(leadId: string, req: any, res: any) {
 
   await leadRef.set(
     {
-      status: "invited",
-      invitedAt: now,
-      invitedBy: req.user?.id || req.user?.email || null,
+      status: "approved",
+      approvedAt: now,
+      approvedBy: req.user?.id || req.user?.email || null,
       updatedAt: now,
     },
     { merge: true }
@@ -127,8 +139,28 @@ async function approveLeadById(leadId: string, req: any, res: any) {
     ts: now,
   });
 
+  if (userId) {
+    await db.collection("users").doc(userId).set(
+      {
+        approved: true,
+        approvedAt: now,
+        approvedBy: req.user?.email || req.user?.id || null,
+      },
+      { merge: true }
+    );
+    await db.collection("accounts").doc(userId).set(
+      {
+        approved: true,
+        approvedAt: now,
+        approvedBy: req.user?.email || req.user?.id || null,
+      },
+      { merge: true }
+    );
+  }
+
   const baseUrl = resolveFrontendBase();
   const inviteUrl = `${baseUrl}/invite/${token}`;
+  const loginUrl = `${baseUrl}/login`;
 
   const { apiKey, from } = getSendgridConfig();
   if (!apiKey || !from) {
@@ -136,15 +168,17 @@ async function approveLeadById(leadId: string, req: any, res: any) {
   }
 
   try {
+    const subject = userId
+      ? "Your RentChain landlord access is approved"
+      : "Your RentChain landlord access is approved";
+    const text = userId
+      ? `Your landlord access has been approved.\n\nLog in here:\n${loginUrl}\n\n— RentChain`
+      : `Your landlord access has been approved.\n\nOpen this link to accept your invite:\n${inviteUrl}\n\nThis invite expires in 7 days.\n\n— RentChain`;
     await sendEmail({
       to: email,
       from: from as string,
-      subject: "You’re invited to RentChain",
-      text:
-        `You're invited to RentChain.\n\n` +
-        `Open this link to accept your invite:\n${inviteUrl}\n\n` +
-        `This invite expires in 7 days.\n\n` +
-        `— RentChain`,
+      subject,
+      text,
     });
     return res.json({ ok: true, inviteUrl, emailed: true });
   } catch (err: any) {
@@ -186,8 +220,8 @@ publicRouter.post(
     const existingData = existing.exists ? existing.data() : null;
     const existingStatus = String(existingData?.status || "").toLowerCase();
 
-    if (existingStatus === "invited" || existingStatus === "rejected") {
-      return res.json({ ok: true, status: existingStatus, emailed: false });
+    if (existingStatus === "invited" || existingStatus === "approved" || existingStatus === "rejected") {
+      return res.json({ ok: true, status: normalizeLeadStatus(existingStatus), emailed: false });
     }
 
     await leadRef.set(
@@ -196,7 +230,7 @@ publicRouter.post(
         firstName: firstName || null,
         portfolioSize: portfolioSize || null,
         note: note || null,
-        status: "new",
+        status: "pending",
         createdAt: existingData?.createdAt || now,
         updatedAt: now,
       },
@@ -284,14 +318,26 @@ adminRouter.get("/landlord-leads", requireAuth, async (req: any, res) => {
   const limitRaw = Number(req.query?.limit ?? 100);
   const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 200) : 100;
   const status = String(req.query?.status || "").trim().toLowerCase();
-  const allowedStatus = status === "new" || status === "invited" || status === "rejected";
+  const allowedStatus = status === "pending" || status === "approved" || status === "rejected";
 
   const baseQuery = db.collection("landlordLeads");
-  const snap = await (allowedStatus
-    ? baseQuery.where("status", "==", status).limit(limit).get()
-    : baseQuery.orderBy("createdAt", "desc").limit(limit).get());
+  let snap;
+  if (allowedStatus) {
+    if (status === "pending") {
+      snap = await baseQuery.where("status", "in", ["pending", "new"]).limit(limit).get();
+    } else if (status === "approved") {
+      snap = await baseQuery.where("status", "in", ["approved", "invited"]).limit(limit).get();
+    } else {
+      snap = await baseQuery.where("status", "==", status).limit(limit).get();
+    }
+  } else {
+    snap = await baseQuery.orderBy("createdAt", "desc").limit(limit).get();
+  }
 
-  const leads = snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) }));
+  const leads = snap.docs.map((doc) => {
+    const data = doc.data() || {};
+    return { id: doc.id, ...data, status: normalizeLeadStatus(data.status) };
+  });
   if (allowedStatus) {
     leads.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
   }
@@ -334,12 +380,12 @@ adminRouter.post("/landlord-leads/:id/reject", requireAuth, async (req: any, res
   }
 
   const lead = leadSnap.data() || {};
-  const status = String(lead.status || "").toLowerCase();
+  const status = normalizeLeadStatus(lead.status);
   if (status === "rejected") {
     return res.json({ ok: true, status: "rejected", message: "already_rejected" });
   }
-  if (status === "invited") {
-    return res.json({ ok: true, status: "invited", message: "already_invited" });
+  if (status === "approved") {
+    return res.json({ ok: true, status: "approved", message: "already_approved" });
   }
 
   const now = Date.now();

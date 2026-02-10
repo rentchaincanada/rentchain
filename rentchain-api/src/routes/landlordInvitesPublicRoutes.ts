@@ -131,6 +131,30 @@ router.post("/landlord-invites/:token/accept", async (req: any, res) => {
 
   const uid = user.uid;
   const createdAt = admin.firestore.FieldValue.serverTimestamp();
+  const now = nowMs();
+
+  let approved = true;
+  let approvedAt: number | null = now;
+  let approvedBy: string | null = "invite";
+  try {
+    const leadSnap = await db.collection("landlordLeads").where("email", "==", email).limit(1).get();
+    if (!leadSnap.empty) {
+      const lead = leadSnap.docs[0].data() as any;
+      const status = String(lead?.status || "").toLowerCase();
+      if (status === "pending" || status === "new") {
+        approved = false;
+        approvedAt = null;
+        approvedBy = null;
+      }
+      if (status === "rejected") {
+        approved = false;
+        approvedAt = null;
+        approvedBy = null;
+      }
+    }
+  } catch {
+    // ignore lead lookup errors; default to approved
+  }
 
   await db.collection("users").doc(uid).set(
     {
@@ -139,6 +163,9 @@ router.post("/landlord-invites/:token/accept", async (req: any, res) => {
       role: "landlord",
       landlordId: uid,
       status: "active",
+      approved,
+      approvedAt,
+      approvedBy,
       createdAt,
     },
     { merge: true }
@@ -152,6 +179,9 @@ router.post("/landlord-invites/:token/accept", async (req: any, res) => {
       landlordId: uid,
       status: "active",
       plan: "free",
+      approved,
+      approvedAt,
+      approvedBy,
       createdAt,
     },
     { merge: true }

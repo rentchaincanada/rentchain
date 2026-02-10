@@ -37,6 +37,7 @@ export interface AuthUser {
   plan?: string;
   actorRole?: string | null;
   actorLandlordId?: string | null;
+  approved?: boolean;
 }
 
 export interface AuthContextValue {

@@ -23,6 +23,7 @@ import { signAuthToken } from "../auth/jwt";
 import { validateLandlordCredentials } from "../services/authService";
 import { getOrCreateAccount } from "../services/accountService";
 import { getOrCreateLandlordProfile } from "../services/landlordProfileService";
+import { db } from "../config/firebase";
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
@@ -140,6 +141,49 @@ function saveLandlord(user: Landlord2FAUser): void {
   landlordStoreById[user.id] = user;
 }
 
+async function resolveApproval(email?: string, userId?: string) {
+  if (!email) return { approved: true, source: "default" };
+  const normalized = String(email || "").trim().toLowerCase();
+  try {
+    if (userId) {
+      const userSnap = await db.collection("users").doc(userId).get();
+      if (userSnap.exists) {
+        const u = userSnap.data() as any;
+        if (typeof u?.approved === "boolean") {
+          return { approved: u.approved, source: "user" };
+        }
+      }
+    }
+
+    const leadSnap = await db.collection("landlordLeads").where("email", "==", normalized).limit(1).get();
+    if (!leadSnap.empty) {
+      const lead = leadSnap.docs[0].data() as any;
+      const status = String(lead?.status || "").toLowerCase();
+      if (status === "approved" || status === "invited") {
+        if (userId) {
+          await db.collection("users").doc(userId).set(
+            { approved: true, approvedAt: Date.now(), approvedBy: lead?.approvedBy || "lead" },
+            { merge: true }
+          );
+        }
+        return { approved: true, source: "lead" };
+      }
+      if (status === "pending" || status === "new" || status === "rejected") {
+        if (userId) {
+          await db.collection("users").doc(userId).set(
+            { approved: false, approvedAt: null, approvedBy: null },
+            { merge: true }
+          );
+        }
+        return { approved: false, source: "lead" };
+      }
+    }
+  } catch {
+    // ignore lookup errors
+  }
+  return { approved: true, source: "default" };
+}
+
 function validateCodeWithBackup(
   user: Landlord2FAUser,
   code: string
@@ -226,6 +270,8 @@ router.post("/login", async (req, res) => {
       revokedPermissions: [],
     } as any);
 
+    const approval = await resolveApproval(user.email, user.id);
+
     step = "jwt_sign";
     const claimsUser = user as any;
     const token = signAuthToken(
@@ -253,6 +299,7 @@ router.post("/login", async (req, res) => {
       token,
       user: {
         ...user,
+        approved: approval.approved,
         screeningCredits: profile?.screeningCredits ?? (user as any)?.screeningCredits ?? 0,
       },
     });
