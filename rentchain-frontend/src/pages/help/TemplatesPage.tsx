@@ -116,6 +116,8 @@ const TemplatesPage: React.FC = () => {
             key={f.file}
             href={templateUrl(f.file)}
             download
+            target="_blank"
+            rel="noopener noreferrer"
             style={{
               border: "1px solid rgba(15,23,42,0.12)",
               borderRadius: 999,

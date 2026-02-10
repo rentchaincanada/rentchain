@@ -599,10 +599,10 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             border: "1px solid rgba(148,163,184,0.15)",
           }}
         >
-          <div className="rc-kpi-label" style={{ color: "#94a3b8", fontSize: "0.8rem" }}>
+          <div className="rc-kpi-label" style={{ color: "#111827", fontSize: "0.8rem" }}>
             Total units
           </div>
-          <div className="rc-kpi-value" style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.1rem" }}>
+          <div className="rc-kpi-value" style={{ color: "#0b1220", fontWeight: 700, fontSize: "1.1rem" }}>
             {unitCount}
           </div>
         </div>
@@ -615,10 +615,10 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             border: "1px solid rgba(148,163,184,0.15)",
           }}
         >
-          <div className="rc-kpi-label" style={{ color: "#94a3b8", fontSize: "0.8rem" }}>
+          <div className="rc-kpi-label" style={{ color: "#111827", fontSize: "0.8rem" }}>
             Leased units
           </div>
-          <div className="rc-kpi-value" style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.1rem" }}>
+          <div className="rc-kpi-value" style={{ color: "#0b1220", fontWeight: 700, fontSize: "1.1rem" }}>
             {leasedUnits}
           </div>
         </div>
@@ -631,10 +631,10 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             border: "1px solid rgba(148,163,184,0.15)",
           }}
         >
-          <div className="rc-kpi-label" style={{ color: "#94a3b8", fontSize: "0.8rem" }}>
+          <div className="rc-kpi-label" style={{ color: "#111827", fontSize: "0.8rem" }}>
             Occupancy
           </div>
-          <div className="rc-kpi-value" style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.05rem" }}>
+          <div className="rc-kpi-value" style={{ color: "#0b1220", fontWeight: 700, fontSize: "1.05rem" }}>
             {unitCount === 0 ? "--" : `${occupancy.toFixed(0)}%`}
           </div>
         </div>
@@ -647,13 +647,13 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             border: "1px solid rgba(148,163,184,0.15)",
           }}
         >
-          <div className="rc-kpi-label" style={{ color: "#94a3b8", fontSize: "0.8rem" }}>
+          <div className="rc-kpi-label" style={{ color: "#111827", fontSize: "0.8rem" }}>
             Lease rent roll
           </div>
-          <div className="rc-kpi-value" style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.05rem" }}>
+          <div className="rc-kpi-value" style={{ color: "#0b1220", fontWeight: 700, fontSize: "1.05rem" }}>
             {formatCurrency(leaseRentRoll)}
           </div>
-          <div className="rc-kpi-subtext" style={{ color: "#6b7280", fontSize: "0.75rem", marginTop: 2 }}>
+          <div className="rc-kpi-subtext" style={{ color: "#4b5563", fontSize: "0.75rem", marginTop: 2 }}>
             Configured rent roll: {formatCurrency(totalRentConfigured)}
           </div>
         </div>
@@ -667,10 +667,10 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             border: "1px solid rgba(148,163,184,0.15)",
           }}
         >
-          <div className="rc-kpi-label" style={{ color: "#94a3b8", fontSize: "0.8rem" }}>
+          <div className="rc-kpi-label" style={{ color: "#111827", fontSize: "0.8rem" }}>
             Collected this month
           </div>
-          <div className="rc-kpi-value" style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.05rem" }}>
+          <div className="rc-kpi-value" style={{ color: "#0b1220", fontWeight: 700, fontSize: "1.05rem" }}>
             {formatCurrency(totalCollectedThisMonth)}
           </div>
         </div>
@@ -684,10 +684,10 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             border: "1px solid rgba(148,163,184,0.15)",
           }}
         >
-          <div className="rc-kpi-label" style={{ color: "#94a3b8", fontSize: "0.8rem" }}>
+          <div className="rc-kpi-label" style={{ color: "#111827", fontSize: "0.8rem" }}>
             Collection
           </div>
-          <div className="rc-kpi-value" style={{ color: "#e5e7eb", fontWeight: 700, fontSize: "1.05rem" }}>
+          <div className="rc-kpi-value" style={{ color: "#0b1220", fontWeight: 700, fontSize: "1.05rem" }}>
             {leaseRentRoll === 0 ? "--" : `${(collectionRate * 100).toFixed(0)}%`}
           </div>
         </div>
