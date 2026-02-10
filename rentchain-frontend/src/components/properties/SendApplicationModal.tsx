@@ -234,7 +234,7 @@ export function SendApplicationModal({
                 This link will be for the selected property.
               </span>
             </label>
-            {units && units.length ? (
+            {selectedPropertyId ? (
               <label style={{ display: "grid", gap: 6, fontSize: "0.9rem", color: "#111827" }}>
                 Unit (optional)
                 <select
@@ -253,13 +253,18 @@ export function SendApplicationModal({
                     background: "#fff",
                   }}
                 >
-                  <option value="">No unit selected</option>
-                  {units.map((option) => (
+                  <option value="">Whole property / unspecified</option>
+                  {(units || []).map((option) => (
                     <option key={option.id} value={option.id}>
                       {option.name}
                     </option>
                   ))}
                 </select>
+                {!units || units.length === 0 ? (
+                  <span style={{ fontSize: "0.8rem", color: "#6b7280" }}>
+                    No units found for this property.
+                  </span>
+                ) : null}
               </label>
             ) : null}
             {!unit ? (
