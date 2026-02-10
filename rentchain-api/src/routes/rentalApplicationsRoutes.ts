@@ -1273,6 +1273,11 @@ router.post(
       }
 
       const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
+      const consent = resolveConsentPayload(body);
+      const consentCheck = validateConsent(consent);
+      if (!consentCheck.ok) {
+        return res.status(400).json({ ok: false, error: "consent_required", detail: consentCheck.error });
+      }
       const { screeningTier, addons, serviceLevel, scoreAddOn, expeditedAddOn, pricing } =
         resolvePricingInput(body);
       const now = Date.now();
