@@ -24,11 +24,17 @@ export default defineConfig({
         ],
       },
       workbox: {
+        navigateFallbackDenylist: [/^\/templates\//, /^\/sample\//],
         runtimeCaching: [
           {
             urlPattern: /\/templates\/.*\.(pdf|docx|csv)(\?.*)?$/,
             handler: "NetworkOnly",
             options: { cacheName: "templates" },
+          },
+          {
+            urlPattern: /\/sample\/.*\.pdf(\?.*)?$/,
+            handler: "NetworkOnly",
+            options: { cacheName: "samples" },
           },
         ],
       },

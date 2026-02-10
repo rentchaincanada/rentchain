@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
 
 type Props = {
   open: boolean;
@@ -10,7 +9,6 @@ export function SamplePdfModal({ open, onClose }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const navigate = useNavigate();
   const pdfUrl = "/sample/screening_report_sample.pdf?v=1";
 
   useEffect(() => {
@@ -126,7 +124,11 @@ export function SamplePdfModal({ open, onClose }: Props) {
           <div style={{ display: "flex", gap: 8 }}>
             <button
               type="button"
-              onClick={() => navigate("/pdf/sample")}
+              onClick={() => {
+                if (typeof window !== "undefined") {
+                  window.location.assign(pdfUrl);
+                }
+              }}
               style={{
                 fontSize: 13,
                 color: "#0f172a",

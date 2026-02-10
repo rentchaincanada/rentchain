@@ -95,12 +95,20 @@ const PricingPage: React.FC = () => {
             There are no long-term contracts, and you can change plans as your needs evolve.
           </p>
           <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap", marginTop: spacing.sm }}>
-            <Button type="button" variant="secondary" onClick={() => setRequestOpen(true)}>
-              Request access
-            </Button>
-            <Button type="button" variant="ghost" onClick={() => (window.location.href = "/login")}>
-              Sign in
-            </Button>
+            {isAuthed ? (
+              <Button type="button" onClick={() => (window.location.href = "/dashboard")}>
+                Go to dashboard
+              </Button>
+            ) : (
+              <>
+                <Button type="button" variant="secondary" onClick={() => setRequestOpen(true)}>
+                  Request access
+                </Button>
+                <Button type="button" variant="ghost" onClick={() => (window.location.href = "/login")}>
+                  Sign in
+                </Button>
+              </>
+            )}
           </div>
         </div>
 

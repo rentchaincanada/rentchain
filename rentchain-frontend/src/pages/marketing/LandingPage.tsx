@@ -3,11 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { Button, Card } from "../../components/ui/Ui";
 import { spacing, text } from "../../styles/tokens";
 import { MarketingLayout } from "./MarketingLayout";
+import { useAuth } from "../../context/useAuth";
 import { RequestAccessModal } from "../../components/marketing/RequestAccessModal";
 
 const LandingPage: React.FC = () => {
   const navigate = useNavigate();
   const [requestOpen, setRequestOpen] = useState(false);
+  const { user } = useAuth();
 
   useEffect(() => {
     document.title = "RentChain — Verified screening. Clear records.";
@@ -26,12 +28,17 @@ const LandingPage: React.FC = () => {
             between landlords and tenants — through verified information and structured records.
           </p>
           <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap", marginTop: spacing.sm }}>
-            <Button type="button" onClick={() => setRequestOpen(true)}>
-              Request access
+            <Button
+              type="button"
+              onClick={() => (user?.id ? navigate("/dashboard") : setRequestOpen(true))}
+            >
+              {user?.id ? "Go to dashboard" : "Request access"}
             </Button>
-            <Button type="button" variant="secondary" onClick={() => navigate("/login")}>
-              Sign in
-            </Button>
+            {!user?.id ? (
+              <Button type="button" variant="secondary" onClick={() => navigate("/login")}>
+                Sign in
+              </Button>
+            ) : null}
             <Button type="button" variant="ghost" onClick={() => navigate("/site/pricing")}>
               See pricing
             </Button>

@@ -283,11 +283,7 @@ function App() {
         />
         <Route
           path="/pdf/sample"
-          element={
-            <LandlordNav>
-              <PdfSamplePage />
-            </LandlordNav>
-          }
+          element={<Navigate to="/sample/screening_report_sample.pdf" replace />}
         />
         {import.meta.env.DEV ? (
           <Route

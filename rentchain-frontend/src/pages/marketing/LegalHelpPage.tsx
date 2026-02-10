@@ -98,38 +98,38 @@ const LegalHelpPage: React.FC = () => {
                 <li style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm }}>
                   <span>Late Rent Notice</span>
                   <span style={{ display: "flex", gap: spacing.xs }}>
-                    <a href={templateUrl("/templates/Late_Rent_Notice_Template.pdf")} download>PDF</a>
-                    <a href={templateUrl("/templates/Late_Rent_Notice_Template.docx")} download>DOCX</a>
+                    <a href={templateUrl("/templates/Late_Rent_Notice_Template.pdf")} download target="_blank" rel="noopener noreferrer">PDF</a>
+                    <a href={templateUrl("/templates/Late_Rent_Notice_Template.docx")} download target="_blank" rel="noopener noreferrer">DOCX</a>
                   </span>
                 </li>
                 <li style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm }}>
                   <span>Notice of Entry</span>
                   <span style={{ display: "flex", gap: spacing.xs }}>
-                    <a href={templateUrl("/templates/Notice_of_Entry_Template.pdf")} download>PDF</a>
-                    <a href={templateUrl("/templates/Notice_of_Entry_Template.docx")} download>DOCX</a>
+                    <a href={templateUrl("/templates/Notice_of_Entry_Template.pdf")} download target="_blank" rel="noopener noreferrer">PDF</a>
+                    <a href={templateUrl("/templates/Notice_of_Entry_Template.docx")} download target="_blank" rel="noopener noreferrer">DOCX</a>
                   </span>
                 </li>
                 <li style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm }}>
                   <span>Lease Event Log</span>
                   <span style={{ display: "flex", gap: spacing.xs }}>
-                    <a href={templateUrl("/templates/Lease_Event_Log_Template.pdf")} download>PDF</a>
-                    <a href={templateUrl("/templates/Lease_Event_Log_Template.docx")} download>DOCX</a>
-                    <a href={templateUrl("/templates/Lease_Event_Log_Template.csv")} download>CSV</a>
+                    <a href={templateUrl("/templates/Lease_Event_Log_Template.pdf")} download target="_blank" rel="noopener noreferrer">PDF</a>
+                    <a href={templateUrl("/templates/Lease_Event_Log_Template.docx")} download target="_blank" rel="noopener noreferrer">DOCX</a>
+                    <a href={templateUrl("/templates/Lease_Event_Log_Template.csv")} download target="_blank" rel="noopener noreferrer">CSV</a>
                   </span>
                 </li>
                 <li style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm }}>
                   <span>Move-In / Move-Out Inspection Checklist</span>
                   <span style={{ display: "flex", gap: spacing.xs }}>
-                    <a href={templateUrl("/templates/Move_In_Out_Inspection_Checklist_Template.pdf")} download>PDF</a>
-                    <a href={templateUrl("/templates/Move_In_Out_Inspection_Checklist_Template.docx")} download>DOCX</a>
+                    <a href={templateUrl("/templates/Move_In_Out_Inspection_Checklist_Template.pdf")} download target="_blank" rel="noopener noreferrer">PDF</a>
+                    <a href={templateUrl("/templates/Move_In_Out_Inspection_Checklist_Template.docx")} download target="_blank" rel="noopener noreferrer">DOCX</a>
                   </span>
                 </li>
                 <li style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm }}>
                   <span>Rent Ledger Summary Sheet</span>
                   <span style={{ display: "flex", gap: spacing.xs }}>
-                    <a href={templateUrl("/templates/Rent_Ledger_Summary_Template.pdf")} download>PDF</a>
-                    <a href={templateUrl("/templates/Rent_Ledger_Summary_Template.docx")} download>DOCX</a>
-                    <a href={templateUrl("/templates/Rent_Ledger_Summary_Template.csv")} download>CSV</a>
+                    <a href={templateUrl("/templates/Rent_Ledger_Summary_Template.pdf")} download target="_blank" rel="noopener noreferrer">PDF</a>
+                    <a href={templateUrl("/templates/Rent_Ledger_Summary_Template.docx")} download target="_blank" rel="noopener noreferrer">DOCX</a>
+                    <a href={templateUrl("/templates/Rent_Ledger_Summary_Template.csv")} download target="_blank" rel="noopener noreferrer">CSV</a>
                   </span>
                 </li>
               </ul>
@@ -144,15 +144,15 @@ const LegalHelpPage: React.FC = () => {
                 <li style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm }}>
                   <span>Rental Application Checklist (Tenant)</span>
                   <span style={{ display: "flex", gap: spacing.xs }}>
-                    <a href={templateUrl("/templates/Rental_Application_Checklist_Tenant.pdf")} download>PDF</a>
-                    <a href={templateUrl("/templates/Rental_Application_Checklist_Tenant.docx")} download>DOCX</a>
+                    <a href={templateUrl("/templates/Rental_Application_Checklist_Tenant.pdf")} download target="_blank" rel="noopener noreferrer">PDF</a>
+                    <a href={templateUrl("/templates/Rental_Application_Checklist_Tenant.docx")} download target="_blank" rel="noopener noreferrer">DOCX</a>
                   </span>
                 </li>
                 <li style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm }}>
                   <span>Dispute Documentation Guide</span>
                   <span style={{ display: "flex", gap: spacing.xs }}>
-                    <a href={templateUrl("/templates/Dispute_Documentation_Guide_Template.pdf")} download>PDF</a>
-                    <a href={templateUrl("/templates/Dispute_Documentation_Guide_Template.docx")} download>DOCX</a>
+                    <a href={templateUrl("/templates/Dispute_Documentation_Guide_Template.pdf")} download target="_blank" rel="noopener noreferrer">PDF</a>
+                    <a href={templateUrl("/templates/Dispute_Documentation_Guide_Template.docx")} download target="_blank" rel="noopener noreferrer">DOCX</a>
                   </span>
                 </li>
               </ul>

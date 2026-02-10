@@ -96,7 +96,12 @@ export function buildOnboardingSteps({
       actionLabel: "Preview export",
       onAction: () => {
         track("onboarding_step_clicked", { stepKey: "exportPreviewed" });
-        navigate("/pdf/sample");
+        const url = "/sample/screening_report_sample.pdf";
+        if (typeof window !== "undefined") {
+          window.location.assign(url);
+          return;
+        }
+        navigate(url);
       },
     },
   ];

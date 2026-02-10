@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { colors, layout, radius, shadows, spacing, text, typography } from "../../styles/tokens";
+import { useAuth } from "../../context/useAuth";
 
 interface MarketingLayoutProps {
   children: React.ReactNode;
@@ -13,6 +14,8 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
   const prevMenuOpen = useRef(false);
   const prevBodyOverflow = useRef<string | null>(null);
   const location = useLocation();
+  const { user } = useAuth();
+  const isAuthed = Boolean(user?.id);
 
   const onHover = (event: React.MouseEvent<HTMLElement>, active: boolean) => {
     event.currentTarget.style.color = active ? text.primary : text.muted;
@@ -220,16 +223,18 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                 FR
               </button>
             </div>
+            {!isAuthed ? (
+              <Link
+                to="/login"
+                style={{ color: text.muted, textDecoration: "none" }}
+                onMouseEnter={(e) => onHover(e, true)}
+                onMouseLeave={(e) => onHover(e, false)}
+              >
+                Log in
+              </Link>
+            ) : null}
             <Link
-              to="/login"
-              style={{ color: text.muted, textDecoration: "none" }}
-              onMouseEnter={(e) => onHover(e, true)}
-              onMouseLeave={(e) => onHover(e, false)}
-            >
-              Log in
-            </Link>
-            <Link
-              to="/site/pricing"
+              to={isAuthed ? "/dashboard" : "/site/pricing"}
               style={{
                 color: "#fff",
                 background: colors.accent,
@@ -240,7 +245,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                 boxShadow: shadows.sm,
               }}
             >
-              Request access
+              {isAuthed ? "Dashboard" : "Request access"}
             </Link>
           </div>
           {isMobile ? (
@@ -257,7 +262,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
               }}
             >
               <Link
-                to="/site/pricing"
+                to={isAuthed ? "/dashboard" : "/site/pricing"}
                 style={{
                   color: "#fff",
                   background: colors.accent,
@@ -269,7 +274,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                   whiteSpace: "nowrap",
                 }}
               >
-                Request access
+                {isAuthed ? "Dashboard" : "Request access"}
               </Link>
               <button
                 type="button"
@@ -422,17 +427,19 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
               </div>
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: spacing.sm, alignItems: "center" }}>
+              {!isAuthed ? (
+                <Link
+                  to="/login"
+                  style={{ color: text.muted, textDecoration: "none" }}
+                  onMouseEnter={(e) => onHover(e, true)}
+                  onMouseLeave={(e) => onHover(e, false)}
+                  onClick={() => setMenuOpen(false)}
+                >
+                  Log in
+                </Link>
+              ) : null}
               <Link
-                to="/login"
-                style={{ color: text.muted, textDecoration: "none" }}
-                onMouseEnter={(e) => onHover(e, true)}
-                onMouseLeave={(e) => onHover(e, false)}
-                onClick={() => setMenuOpen(false)}
-              >
-                Log in
-              </Link>
-              <Link
-                to="/site/pricing"
+                to={isAuthed ? "/dashboard" : "/site/pricing"}
                 style={{
                   color: "#fff",
                   background: colors.accent,
@@ -444,7 +451,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                 }}
                 onClick={() => setMenuOpen(false)}
               >
-                Request access
+                {isAuthed ? "Dashboard" : "Request access"}
               </Link>
             </div>
           </div>
