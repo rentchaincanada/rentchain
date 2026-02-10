@@ -97,6 +97,7 @@
   overflow-y: auto;
   display: grid;
   gap: 12px;
+  -webkit-overflow-scrolling: touch;
 }
 
 .rc-landlord-drawer-links {
