@@ -32,6 +32,7 @@ const ALLOWED_STATUS = [
 
 const ELIGIBLE_STATUS = ["SUBMITTED", "IN_REVIEW"];
 const SERVICE_LEVELS = ["SELF_SERVE", "VERIFIED", "VERIFIED_AI"] as const;
+const CONSENT_VERSION = "v1.0";
 
 const ALLOWED_REDIRECT_ORIGINS = ["https://www.rentchain.ai", "https://rentchain.ai", "http://localhost:5173"];
 
@@ -220,6 +221,23 @@ function evaluateEligibility(application: any) {
 function isScreeningAlreadyPaid(application: any) {
   const status = String(application?.screeningStatus || "").toLowerCase();
   return status === "paid" || status === "processing" || status === "complete" || status === "completed";
+}
+
+function resolveConsentPayload(body: any) {
+  const consent = body?.consent || {};
+  return {
+    given: Boolean(consent?.given),
+    timestamp: String(consent?.timestamp || "").trim(),
+    version: String(consent?.version || "").trim(),
+    textHash: consent?.textHash ? String(consent.textHash).trim() : null,
+  };
+}
+
+function validateConsent(consent: ReturnType<typeof resolveConsentPayload>) {
+  if (!consent.given) return { ok: false, error: "consent_required" };
+  if (!consent.timestamp) return { ok: false, error: "consent_missing_timestamp" };
+  if (consent.version !== CONSENT_VERSION) return { ok: false, error: "consent_version_mismatch" };
+  return { ok: true };
 }
 
 function resolveServiceLevel(raw?: string | null) {
@@ -423,6 +441,15 @@ router.post(
       }
 
       const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
+      const consent = resolveConsentPayload(body);
+      const consentCheck = validateConsent(consent);
+      if (!consentCheck.ok) {
+        return res.status(400).json({
+          ok: false,
+          error: "consent_required",
+          detail: consentCheck.error,
+        });
+      }
       const { screeningTier, addons, serviceLevel, scoreAddOn, expeditedAddOn, pricing } =
         resolvePricingInput(body);
 
@@ -530,6 +557,11 @@ router.post(
       }
 
       const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
+      const consent = resolveConsentPayload(body);
+      const consentCheck = validateConsent(consent);
+      if (!consentCheck.ok) {
+        return res.status(400).json({ ok: false, error: "consent_required", detail: consentCheck.error });
+      }
       const { screeningTier, addons, serviceLevel, scoreAddOn, expeditedAddOn, pricing } =
         resolvePricingInput(body);
       const rawReturnTo = String(body?.returnTo || "/dashboard");
@@ -599,6 +631,10 @@ router.post(
         reviewerStatus: "QUEUED",
         stripeSessionId: null,
         stripePaymentIntentId: null,
+        consentGiven: true,
+        consentTimestamp: consent.timestamp,
+        consentVersion: consent.version,
+        consentTextHash: consent.textHash,
       };
 
       await orderRef.set(orderPayload, { merge: true });
@@ -737,6 +773,10 @@ router.post(
             totalAmountCents: pricing.totalAmountCents,
             serviceLevel,
             aiVerification,
+            consentGiven: true,
+            consentTimestamp: consent.timestamp,
+            consentVersion: consent.version,
+            consentTextHash: consent.textHash,
             ai: null,
             result: null,
           },
@@ -805,6 +845,18 @@ router.post(
             error: "not_eligible",
             detail: eligibility.detail,
             reasonCode: eligibility.reasonCode,
+          });
+        }
+      }
+
+      const consent = resolveConsentPayload(body);
+      if (applicationId) {
+        const consentCheck = validateConsent(consent);
+        if (!consentCheck.ok) {
+          return res.status(400).json({
+            ok: false,
+            error: "consent_required",
+            detail: consentCheck.error,
           });
         }
       }
@@ -918,9 +970,28 @@ router.post(
         tenantInviteSentAt: null,
         tenantName: tenantName || null,
         tenantEmail: tenantEmail || null,
+        consentGiven: applicationId ? true : null,
+        consentTimestamp: applicationId ? consent.timestamp : null,
+        consentVersion: applicationId ? consent.version : null,
+        consentTextHash: applicationId ? consent.textHash : null,
       };
 
       await orderRef.set(orderPayload, { merge: true });
+
+      if (applicationId) {
+        await db.collection("rentalApplications").doc(applicationId).set(
+          {
+            screening: {
+              consentGiven: true,
+              consentTimestamp: consent.timestamp,
+              consentVersion: consent.version,
+              consentTextHash: consent.textHash,
+            },
+            updatedAt: now,
+          },
+          { merge: true }
+        );
+      }
 
       const currency = String(orderPayload.currency || "CAD").toLowerCase();
       const lineItems: any[] = [
@@ -1233,6 +1304,10 @@ router.post(
         aiPriceCents: aiVerification ? pricing.aiAddOnCents : 0,
         totalAmountCents: pricing.totalAmountCents,
         reviewerStatus: "QUEUED",
+        consentGiven: true,
+        consentTimestamp: consent.timestamp,
+        consentVersion: consent.version,
+        consentTextHash: consent.textHash,
       };
 
       await orderRef.set(orderPayload, { merge: true });
@@ -1259,6 +1334,10 @@ router.post(
         totalAmountCents: pricing.totalAmountCents,
         serviceLevel,
         aiVerification,
+        consentGiven: true,
+        consentTimestamp: consent.timestamp,
+        consentVersion: consent.version,
+        consentTextHash: consent.textHash,
         ai,
         result,
       };
