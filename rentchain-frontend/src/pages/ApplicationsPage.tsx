@@ -139,6 +139,9 @@ const ApplicationsPage: React.FC = () => {
   const [screeningQuoteDetail, setScreeningQuoteDetail] = useState<string | null>(null);
   const [screeningLoading, setScreeningLoading] = useState(false);
   const [screeningRunning, setScreeningRunning] = useState(false);
+  const [screeningConsentChecked, setScreeningConsentChecked] = useState(false);
+  const [screeningConsentError, setScreeningConsentError] = useState<string | null>(null);
+  const [screeningConsentDetailsOpen, setScreeningConsentDetailsOpen] = useState(false);
   const [scoreAddOn, setScoreAddOn] = useState(false);
   const [expeditedAddOn, setExpeditedAddOn] = useState(false);
   const [screeningTier, setScreeningTier] = useState<"basic" | "verify" | "verify_ai">("verify_ai");
@@ -174,6 +177,7 @@ const ApplicationsPage: React.FC = () => {
   const [propertyGateOpen, setPropertyGateOpen] = useState(false);
   const [screeningInviteOpen, setScreeningInviteOpen] = useState(false);
   const screeningSectionRef = React.useRef<HTMLDivElement | null>(null);
+  const CONSENT_VERSION = "v1.0";
   const onboarding = useOnboardingState();
   const propertiesCount = propertyRecords.length;
   const unitsCount = propertyRecords.reduce((sum, p) => sum + unitsForProperty(p), 0);
@@ -494,6 +498,12 @@ const ApplicationsPage: React.FC = () => {
   }, [selectedId]);
 
   useEffect(() => {
+    setScreeningConsentChecked(false);
+    setScreeningConsentError(null);
+    setScreeningConsentDetailsOpen(false);
+  }, [selectedId]);
+
+  useEffect(() => {
     if (!detail?.id) {
       setScreeningStatus(null);
       setScreeningEvents([]);
@@ -808,6 +818,10 @@ const ApplicationsPage: React.FC = () => {
 
   const runScreeningRequest = async () => {
     if (!detail) return;
+    if (!screeningConsentChecked) {
+      setScreeningConsentError("Consent is required to run screening.");
+      return;
+    }
     setScreeningRunning(true);
     try {
       const addons = [scoreAddOn ? "credit_score" : null, expeditedAddOn ? "expedited" : null].filter(
@@ -824,6 +838,11 @@ const ApplicationsPage: React.FC = () => {
             : screeningTier === "verify"
             ? "VERIFIED"
             : "VERIFIED_AI",
+        consent: {
+          given: true,
+          timestamp: new Date().toISOString(),
+          version: CONSENT_VERSION,
+        },
       });
       if (!res.ok || !res.checkoutUrl) {
         throw new Error(res.detail || res.error || "Unable to start checkout");
@@ -1267,10 +1286,64 @@ const ApplicationsPage: React.FC = () => {
                               <input type="checkbox" checked={expeditedAddOn} onChange={(e) => setExpeditedAddOn(e.target.checked)} />
                               Expedited processing (+$9.99)
                             </label>
+                            <div style={{ display: "grid", gap: 6, marginTop: 6 }}>
+                              <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13 }}>
+                                <input
+                                  type="checkbox"
+                                  checked={screeningConsentChecked}
+                                  onChange={(e) => {
+                                    setScreeningConsentChecked(e.target.checked);
+                                    setScreeningConsentError(null);
+                                  }}
+                                />
+                                <span>
+                                  I authorize RentChain and its screening partners to obtain and verify my consumer report
+                                  and related information for tenant screening purposes, and I confirm the information I
+                                  provided is accurate.
+                                  <button
+                                    type="button"
+                                    onClick={() => setScreeningConsentDetailsOpen((prev) => !prev)}
+                                    style={{
+                                      marginLeft: 6,
+                                      background: "none",
+                                      border: "none",
+                                      color: colors.primary,
+                                      cursor: "pointer",
+                                      padding: 0,
+                                      fontSize: 12,
+                                      fontWeight: 600,
+                                    }}
+                                  >
+                                    Learn more
+                                  </button>
+                                </span>
+                              </label>
+                              {screeningConsentDetailsOpen ? (
+                                <div
+                                  style={{
+                                    fontSize: 12,
+                                    color: text.muted,
+                                    border: `1px solid ${colors.border}`,
+                                    borderRadius: radius.md,
+                                    padding: "8px 10px",
+                                    background: colors.panel,
+                                  }}
+                                >
+                                  By proceeding, you consent to the collection, use, and disclosure of your information for
+                                  tenant screening, identity verification, and fraud prevention. This may include obtaining
+                                  a consumer report and verifying information you provide. Your consent is valid only for
+                                  this rental application and may be withdrawn by contacting the landlord/manager before the
+                                  screening is submitted, where permitted by law.
+                                </div>
+                              ) : null}
+                              {screeningConsentError ? (
+                                <div style={{ fontSize: 12, color: colors.danger }}>{screeningConsentError}</div>
+                              ) : null}
+                            </div>
                             <Button
                               variant="primary"
                               onClick={() => void runScreeningRequest()}
-                              disabled={screeningRunning}
+                              disabled={screeningRunning || !screeningConsentChecked}
                             >
                               {screeningRunning ? "Running..." : `Run screening ($${(effectiveTotalCents / 100).toFixed(2)})`}
                             </Button>

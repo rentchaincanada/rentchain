@@ -338,6 +338,11 @@ export async function createScreeningOrder(params: {
   totalAmount?: number;
   scoreAddOn: boolean;
   serviceLevel: "SELF_SERVE" | "VERIFIED" | "VERIFIED_AI";
+  consent?: {
+    given: boolean;
+    timestamp: string;
+    version: string;
+  };
   returnTo?: string;
   successPath?: string;
   cancelPath?: string;
@@ -358,6 +363,11 @@ export async function createScreeningCheckout(
     totalAmount?: number;
     scoreAddOn: boolean;
     serviceLevel: "SELF_SERVE" | "VERIFIED" | "VERIFIED_AI";
+    consent?: {
+      given: boolean;
+      timestamp: string;
+      version: string;
+    };
   }
 ): Promise<{ ok: boolean; checkoutUrl?: string; orderId?: string; tenantInviteUrl?: string; error?: string; detail?: string }> {
   return createScreeningOrder({ applicationId: id, ...params });
