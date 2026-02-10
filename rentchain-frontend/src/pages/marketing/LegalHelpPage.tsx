@@ -5,112 +5,110 @@ import { Card } from "../../components/ui/Ui";
 import { spacing, text } from "../../styles/tokens";
 import { MarketingLayout } from "./MarketingLayout";
 import { templateUrl } from "../../utils/templateUrl";
+import { useLocale } from "../../i18n";
 
 const LegalHelpPage: React.FC = () => {
+  const { t } = useLocale();
+
   useEffect(() => {
-    document.title = "Legal & Help — RentChain";
-  }, []);
+    document.title = `${t("legal.headline")} — RentChain`;
+  }, [t]);
 
   return (
     <MarketingLayout>
       <div style={{ display: "flex", flexDirection: "column", gap: spacing.lg }}>
         <div>
-          <h1 style={{ margin: 0 }}>Legal &amp; Help</h1>
+          <h1 style={{ margin: 0 }}>{t("legal.headline")}</h1>
         </div>
 
         <div>
-          <h2 style={{ marginTop: 0 }}>Need help? Ask RentChain</h2>
+          <h2 style={{ marginTop: 0 }}>{t("legal.ask_title")}</h2>
           <AskRentChainWidget compact defaultOpen={false} />
         </div>
 
         <Card>
-          <h2 style={{ marginTop: 0 }}>Legal</h2>
+          <h2 style={{ marginTop: 0 }}>{t("legal.section_legal")}</h2>
           <div style={{ display: "flex", flexDirection: "column", gap: spacing.md }}>
             <div>
-              <h3 style={{ marginTop: 0 }}>Privacy &amp; Data Protection</h3>
+              <h3 style={{ marginTop: 0 }}>{t("legal.privacy_title")}</h3>
               <p style={{ margin: 0, color: text.muted }}>
-                RentChain is built with privacy, security, and consent at its core. Personal data is collected, stored,
-                and processed in accordance with applicable laws and is only used for clearly defined purposes. Tenant
-                information is never shared without proper authorization or legal basis.
+                {t("legal.privacy_body")}
               </p>
             </div>
             <div>
-              <h3 style={{ marginTop: 0 }}>Consent &amp; Transparency</h3>
+              <h3 style={{ marginTop: 0 }}>{t("legal.consent_title")}</h3>
               <p style={{ margin: 0, color: text.muted }}>
-                Tenants are informed when screening or records are created and must provide consent where required.
-                RentChain does not create hidden profiles or undisclosed records.
+                {t("legal.consent_body")}
               </p>
             </div>
             <div>
-              <h3 style={{ marginTop: 0 }}>No Black-Box Scoring</h3>
+              <h3 style={{ marginTop: 0 }}>{t("legal.noblackbox_title")}</h3>
               <p style={{ margin: 0, color: text.muted }}>
-                RentChain does not generate informal tenant ratings or opaque risk scores. All recorded information is
-                factual, time-stamped, and attributable.
+                {t("legal.noblackbox_body")}
               </p>
             </div>
             <div>
-              <h3 style={{ marginTop: 0 }}>Platform Role</h3>
+              <h3 style={{ marginTop: 0 }}>{t("legal.platform_title")}</h3>
               <p style={{ margin: 0, color: text.muted }}>
-                RentChain provides tools and record-keeping infrastructure. Landlords remain responsible for decisions,
-                compliance, and outcomes.
+                {t("legal.platform_body")}
               </p>
             </div>
           </div>
         </Card>
 
         <Card>
-          <h2 style={{ marginTop: 0 }}>Terms &amp; Policies</h2>
+          <h2 style={{ marginTop: 0 }}>{t("legal.section_terms")}</h2>
           <ul style={{ margin: 0, paddingLeft: "1.1rem", color: text.muted }}>
             <li>
               <Link to="/terms" style={{ color: text.secondary }}>
-                Terms of Service
+                {t("legal.terms_service")}
               </Link>
             </li>
             <li>
               <Link to="/privacy" style={{ color: text.secondary }}>
-                Privacy Policy
+                {t("legal.terms_privacy")}
               </Link>
             </li>
             <li>
               <Link to="/acceptable-use" style={{ color: text.secondary }}>
-                Acceptable Use Policy
+                {t("legal.terms_acceptable")}
               </Link>
             </li>
           </ul>
         </Card>
 
         <Card>
-          <h2 style={{ marginTop: 0 }}>Help Center</h2>
+          <h2 style={{ marginTop: 0 }}>{t("legal.section_help")}</h2>
           <p style={{ marginTop: 0, color: text.muted }}>
-            Looking for the full library?{" "}
+            {t("legal.help_library")}{" "}
             <Link to="/help/templates" style={{ color: text.secondary }}>
-              View all templates →
+              {t("legal.help_library_link")}
             </Link>
           </p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: spacing.lg }}>
             <div style={{ flex: "1 1 280px" }}>
-              <h3 style={{ marginTop: 0 }}>Help for Landlords</h3>
+              <h3 style={{ marginTop: 0 }}>{t("legal.help_landlords")}</h3>
               <ul style={{ paddingLeft: "1.1rem", color: text.muted }}>
-                <li>Getting Started</li>
-                <li>Guides</li>
+                <li>{t("legal.help_getting_started")}</li>
+                <li>{t("legal.help_guides")}</li>
               </ul>
               <ul style={{ paddingLeft: "1.1rem", color: text.muted, display: "grid", gap: spacing.xs }}>
                 <li style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm }}>
-                  <span>Late Rent Notice</span>
+                  <span>{t("legal.template_late_rent")}</span>
                   <span style={{ display: "flex", gap: spacing.xs }}>
                     <a href={templateUrl("/templates/Late_Rent_Notice_Template.pdf")} download target="_blank" rel="noopener noreferrer">PDF</a>
                     <a href={templateUrl("/templates/Late_Rent_Notice_Template.docx")} download target="_blank" rel="noopener noreferrer">DOCX</a>
                   </span>
                 </li>
                 <li style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm }}>
-                  <span>Notice of Entry</span>
+                  <span>{t("legal.template_notice_entry")}</span>
                   <span style={{ display: "flex", gap: spacing.xs }}>
                     <a href={templateUrl("/templates/Notice_of_Entry_Template.pdf")} download target="_blank" rel="noopener noreferrer">PDF</a>
                     <a href={templateUrl("/templates/Notice_of_Entry_Template.docx")} download target="_blank" rel="noopener noreferrer">DOCX</a>
                   </span>
                 </li>
                 <li style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm }}>
-                  <span>Lease Event Log</span>
+                  <span>{t("legal.template_lease_event")}</span>
                   <span style={{ display: "flex", gap: spacing.xs }}>
                     <a href={templateUrl("/templates/Lease_Event_Log_Template.pdf")} download target="_blank" rel="noopener noreferrer">PDF</a>
                     <a href={templateUrl("/templates/Lease_Event_Log_Template.docx")} download target="_blank" rel="noopener noreferrer">DOCX</a>
@@ -118,14 +116,14 @@ const LegalHelpPage: React.FC = () => {
                   </span>
                 </li>
                 <li style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm }}>
-                  <span>Move-In / Move-Out Inspection Checklist</span>
+                  <span>{t("legal.template_move_in_out")}</span>
                   <span style={{ display: "flex", gap: spacing.xs }}>
                     <a href={templateUrl("/templates/Move_In_Out_Inspection_Checklist_Template.pdf")} download target="_blank" rel="noopener noreferrer">PDF</a>
                     <a href={templateUrl("/templates/Move_In_Out_Inspection_Checklist_Template.docx")} download target="_blank" rel="noopener noreferrer">DOCX</a>
                   </span>
                 </li>
                 <li style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm }}>
-                  <span>Rent Ledger Summary Sheet</span>
+                  <span>{t("legal.template_rent_ledger")}</span>
                   <span style={{ display: "flex", gap: spacing.xs }}>
                     <a href={templateUrl("/templates/Rent_Ledger_Summary_Template.pdf")} download target="_blank" rel="noopener noreferrer">PDF</a>
                     <a href={templateUrl("/templates/Rent_Ledger_Summary_Template.docx")} download target="_blank" rel="noopener noreferrer">DOCX</a>
@@ -135,21 +133,21 @@ const LegalHelpPage: React.FC = () => {
               </ul>
             </div>
             <div style={{ flex: "1 1 280px" }}>
-              <h3 style={{ marginTop: 0 }}>Help for Tenants</h3>
+              <h3 style={{ marginTop: 0 }}>{t("legal.help_tenants")}</h3>
               <ul style={{ paddingLeft: "1.1rem", color: text.muted }}>
-                <li>Understanding RentChain</li>
-                <li>Guides</li>
+                <li>{t("legal.help_understanding")}</li>
+                <li>{t("legal.help_guides")}</li>
               </ul>
               <ul style={{ paddingLeft: "1.1rem", color: text.muted, display: "grid", gap: spacing.xs }}>
                 <li style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm }}>
-                  <span>Rental Application Checklist (Tenant)</span>
+                  <span>{t("legal.template_rental_checklist")}</span>
                   <span style={{ display: "flex", gap: spacing.xs }}>
                     <a href={templateUrl("/templates/Rental_Application_Checklist_Tenant.pdf")} download target="_blank" rel="noopener noreferrer">PDF</a>
                     <a href={templateUrl("/templates/Rental_Application_Checklist_Tenant.docx")} download target="_blank" rel="noopener noreferrer">DOCX</a>
                   </span>
                 </li>
                 <li style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm }}>
-                  <span>Dispute Documentation Guide</span>
+                  <span>{t("legal.template_dispute_guide")}</span>
                   <span style={{ display: "flex", gap: spacing.xs }}>
                     <a href={templateUrl("/templates/Dispute_Documentation_Guide_Template.pdf")} download target="_blank" rel="noopener noreferrer">PDF</a>
                     <a href={templateUrl("/templates/Dispute_Documentation_Guide_Template.docx")} download target="_blank" rel="noopener noreferrer">DOCX</a>
@@ -159,10 +157,10 @@ const LegalHelpPage: React.FC = () => {
             </div>
           </div>
           <p style={{ marginTop: spacing.sm, color: text.subtle }}>
-            Templates are general-purpose and not legal advice. Customize for your jurisdiction and consult counsel as needed.
+            {t("legal.templates_disclaimer")}
           </p>
           <p style={{ marginTop: spacing.md, color: text.muted }}>
-            If you need help or have questions, visit the Help Center or contact our support team.
+            {t("legal.help_contact")}
           </p>
         </Card>
       </div>
