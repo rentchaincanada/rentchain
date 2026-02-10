@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { colors, layout, radius, shadows, spacing, text, typography } from "../../styles/tokens";
 import { useAuth } from "../../context/useAuth";
+import { useLocale } from "../../i18n";
 
 interface MarketingLayoutProps {
   children: React.ReactNode;
@@ -15,7 +16,18 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
   const prevBodyOverflow = useRef<string | null>(null);
   const location = useLocation();
   const { user } = useAuth();
+  const { locale, setLocale, t } = useLocale();
   const isAuthed = Boolean(user?.id);
+
+  const localeButtonStyle = (active: boolean) => ({
+    border: "none",
+    background: active ? colors.accentSoft : "transparent",
+    color: active ? text.primary : text.muted,
+    borderRadius: radius.pill,
+    padding: "4px 10px",
+    cursor: "pointer",
+    fontWeight: 600,
+  });
 
   const onHover = (event: React.MouseEvent<HTMLElement>, active: boolean) => {
     event.currentTarget.style.color = active ? text.primary : text.muted;
@@ -148,7 +160,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
               onMouseEnter={(e) => onHover(e, true)}
               onMouseLeave={(e) => onHover(e, false)}
             >
-              About
+              {t("nav.about")}
             </Link>
             <Link
               to="/site/pricing"
@@ -156,7 +168,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
               onMouseEnter={(e) => onHover(e, true)}
               onMouseLeave={(e) => onHover(e, false)}
             >
-              Pricing
+              {t("nav.pricing")}
             </Link>
             <Link
               to="/site/legal"
@@ -164,7 +176,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
               onMouseEnter={(e) => onHover(e, true)}
               onMouseLeave={(e) => onHover(e, false)}
             >
-              Legal &amp; Help
+              {t("nav.legal")}
             </Link>
           </nav>
           <div
@@ -192,33 +204,18 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
             >
               <button
                 type="button"
-                style={{
-                  border: "none",
-                  background: colors.accentSoft,
-                  color: text.primary,
-                  borderRadius: radius.pill,
-                  padding: "4px 10px",
-                  cursor: "pointer",
-                  fontWeight: 600,
-                }}
-                aria-pressed="true"
+                style={localeButtonStyle(locale === "en")}
+                aria-pressed={locale === "en"}
+                onClick={() => setLocale("en")}
               >
                 EN
               </button>
               <span style={{ color: text.subtle }}>/</span>
-              {/* TODO: Wire FR toggle once i18n is available. */}
               <button
                 type="button"
-                style={{
-                  border: "none",
-                  background: "transparent",
-                  color: text.muted,
-                  borderRadius: radius.pill,
-                  padding: "4px 10px",
-                  cursor: "pointer",
-                  fontWeight: 600,
-                }}
-                aria-pressed="false"
+                style={localeButtonStyle(locale === "fr")}
+                aria-pressed={locale === "fr"}
+                onClick={() => setLocale("fr")}
               >
                 FR
               </button>
@@ -230,7 +227,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                 onMouseEnter={(e) => onHover(e, true)}
                 onMouseLeave={(e) => onHover(e, false)}
               >
-                Log in
+                {t("nav.login")}
               </Link>
             ) : null}
             <Link
@@ -245,7 +242,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                 boxShadow: shadows.sm,
               }}
             >
-              {isAuthed ? "Dashboard" : "Request access"}
+              {isAuthed ? t("nav.dashboard") : t("nav.request_access")}
             </Link>
           </div>
           {isMobile ? (
@@ -274,7 +271,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                   whiteSpace: "nowrap",
                 }}
               >
-                {isAuthed ? "Dashboard" : "Request access"}
+                {isAuthed ? t("nav.dashboard") : t("nav.request_access")}
               </Link>
               <button
                 type="button"
@@ -293,7 +290,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                 }}
                 aria-expanded={menuOpen}
                 aria-controls="marketing-header-menu"
-                aria-label={menuOpen ? "Close menu" : "Open menu"}
+                aria-label={menuOpen ? t("nav.close_menu") : t("nav.open_menu")}
                 onFocus={(event) => {
                   event.currentTarget.style.boxShadow = shadows.focus;
                 }}
@@ -301,7 +298,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                   event.currentTarget.style.boxShadow = "none";
                 }}
               >
-                Menu
+                {t("nav.menu")}
               </button>
             </div>
           ) : null}
@@ -348,7 +345,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                 onMouseLeave={(e) => onHover(e, false)}
                 onClick={() => setMenuOpen(false)}
               >
-                Home
+                {t("nav.home")}
               </Link>
               <Link
                 to="/site/about"
@@ -357,7 +354,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                 onMouseLeave={(e) => onHover(e, false)}
                 onClick={() => setMenuOpen(false)}
               >
-                About
+                {t("nav.about")}
               </Link>
               <Link
                 to="/site/pricing"
@@ -366,7 +363,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                 onMouseLeave={(e) => onHover(e, false)}
                 onClick={() => setMenuOpen(false)}
               >
-                Pricing
+                {t("nav.pricing")}
               </Link>
               <Link
                 to="/site/legal"
@@ -375,7 +372,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                 onMouseLeave={(e) => onHover(e, false)}
                 onClick={() => setMenuOpen(false)}
               >
-                Legal &amp; Help
+                {t("nav.legal")}
               </Link>
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: spacing.sm, alignItems: "center" }}>
@@ -394,33 +391,18 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
               >
                 <button
                   type="button"
-                  style={{
-                    border: "none",
-                    background: colors.accentSoft,
-                    color: text.primary,
-                    borderRadius: radius.pill,
-                    padding: "4px 10px",
-                    cursor: "pointer",
-                    fontWeight: 600,
-                  }}
-                  aria-pressed="true"
+                  style={localeButtonStyle(locale === "en")}
+                  aria-pressed={locale === "en"}
+                  onClick={() => setLocale("en")}
                 >
                   EN
                 </button>
                 <span style={{ color: text.subtle }}>/</span>
-                {/* TODO: Wire FR toggle once i18n is available. */}
                 <button
                   type="button"
-                  style={{
-                    border: "none",
-                    background: "transparent",
-                    color: text.muted,
-                    borderRadius: radius.pill,
-                    padding: "4px 10px",
-                    cursor: "pointer",
-                    fontWeight: 600,
-                  }}
-                  aria-pressed="false"
+                  style={localeButtonStyle(locale === "fr")}
+                  aria-pressed={locale === "fr"}
+                  onClick={() => setLocale("fr")}
                 >
                   FR
                 </button>
@@ -435,7 +417,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                   onMouseLeave={(e) => onHover(e, false)}
                   onClick={() => setMenuOpen(false)}
                 >
-                  Log in
+                  {t("nav.login")}
                 </Link>
               ) : null}
               <Link
@@ -451,7 +433,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                 }}
                 onClick={() => setMenuOpen(false)}
               >
-                {isAuthed ? "Dashboard" : "Request access"}
+                {isAuthed ? t("nav.dashboard") : t("nav.request_access")}
               </Link>
             </div>
           </div>
@@ -512,16 +494,16 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
             }}
           >
             <Link to="/legal" style={{ color: text.muted, textDecoration: "none" }}>
-              Help Center
+              {t("footer.help_center")}
             </Link>
             <Link to="/help/templates" style={{ color: text.muted, textDecoration: "none" }}>
-              Templates
+              {t("footer.templates")}
             </Link>
             <Link to="/privacy" style={{ color: text.muted, textDecoration: "none" }}>
-              Privacy
+              {t("footer.privacy")}
             </Link>
             <Link to="/terms" style={{ color: text.muted, textDecoration: "none" }}>
-              Terms
+              {t("footer.terms")}
             </Link>
           </div>
         </div>
