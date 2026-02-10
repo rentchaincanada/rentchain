@@ -23,6 +23,7 @@ import { CreatePropertyFirstModal } from "../components/properties/CreatePropert
 import { buildCreatePropertyUrl, buildReturnTo } from "../lib/propertyGate";
 import { SendScreeningInviteModal } from "../components/screening/SendScreeningInviteModal";
 import { SendApplicationModal } from "../components/properties/SendApplicationModal";
+import { useUnitsForProperty } from "../hooks/useUnitsForProperty";
 
 const StarterOnboardingPanel = React.lazy(
   () => import("../components/dashboard/StarterOnboardingPanel")
@@ -332,29 +333,12 @@ const DashboardPage: React.FC = () => {
     [properties]
   );
 
-  const modalUnits = React.useMemo(() => {
-    if (!modalPropertyId) return [];
-    const property = properties.find(
-      (p) => String(p?.id || p?.propertyId || p?.uid || "") === modalPropertyId
-    );
-    const unitsRaw =
-      (property as any)?.units ||
-      (property as any)?.unitList ||
-      (property as any)?.unitDetails ||
-      [];
-    if (!Array.isArray(unitsRaw)) return [];
-    return unitsRaw
-      .map((unit: any) => ({
-        id: String(unit?.id || unit?.unitId || unit?.uid || ""),
-        name:
-          unit?.unitNumber ||
-          unit?.label ||
-          unit?.name ||
-          unit?.unit ||
-          "Unit",
-      }))
-      .filter((u) => u.id);
-  }, [modalPropertyId, properties]);
+  const {
+    units: modalUnits,
+    loading: modalUnitsLoading,
+    error: modalUnitsError,
+    refetch: refetchModalUnits,
+  } = useUnitsForProperty(modalPropertyId, sendApplicationOpen);
 
   return (
     <MacShell title="RentChain · Dashboard" showTopNav={false}>
@@ -644,6 +628,9 @@ const DashboardPage: React.FC = () => {
         properties={propertyOptions}
         propertyId={modalPropertyId}
         units={modalUnits}
+        unitsLoading={modalUnitsLoading}
+        unitsError={modalUnitsError}
+        onUnitsRetry={refetchModalUnits}
         initialUnitId={modalUnitId}
         onPropertyChange={(nextId) => {
           setModalPropertyId(nextId);

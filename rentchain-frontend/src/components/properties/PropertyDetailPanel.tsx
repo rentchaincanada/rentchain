@@ -761,7 +761,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                 className="rc-units-table"
                 style={{
                   width: "100%",
-                  minWidth: 720,
+                  minWidth: 560,
                   borderCollapse: "collapse",
                   fontSize: "0.9rem",
                   color: "#0f172a",
@@ -769,13 +769,13 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
               >
             <thead>
               <tr style={{ background: "rgba(255,255,255,0.03)", color: "#9ca3af" }}>
-                <th style={{ textAlign: "left", padding: "10px 12px", whiteSpace: "nowrap" }}>Unit #</th>
-                <th style={{ textAlign: "right", padding: "10px 12px", whiteSpace: "nowrap" }}>Rent</th>
-                <th style={{ textAlign: "center", padding: "10px 12px", whiteSpace: "nowrap" }}>Beds</th>
-                <th style={{ textAlign: "center", padding: "10px 12px", whiteSpace: "nowrap" }}>Baths</th>
-                <th style={{ textAlign: "center", padding: "10px 12px", whiteSpace: "nowrap" }}>Sqft</th>
-                <th style={{ textAlign: "left", padding: "10px 12px", whiteSpace: "nowrap" }}>Status</th>
-                <th style={{ textAlign: "left", padding: "10px 12px" }}>Actions</th>
+                <th className="rc-units-col-unit" style={{ textAlign: "left", padding: "10px 12px", whiteSpace: "nowrap" }}>Unit</th>
+                <th className="rc-units-col-rent" style={{ textAlign: "right", padding: "10px 12px", whiteSpace: "nowrap" }}>Rent</th>
+                <th className="rc-units-col-beds" style={{ textAlign: "center", padding: "10px 12px", whiteSpace: "nowrap" }}>Beds</th>
+                <th className="rc-units-col-baths" style={{ textAlign: "center", padding: "10px 12px", whiteSpace: "nowrap" }}>Baths</th>
+                <th className="rc-units-col-sqft" style={{ textAlign: "center", padding: "10px 12px", whiteSpace: "nowrap" }}>Sqft</th>
+                <th className="rc-units-col-status" style={{ textAlign: "left", padding: "10px 12px", whiteSpace: "nowrap" }}>Status</th>
+                <th className="rc-units-col-actions" style={{ textAlign: "left", padding: "10px 12px" }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -853,28 +853,28 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                         color: "#0f172a",
                       }}
                     >
-                      <td style={{ padding: "10px 12px", whiteSpace: "nowrap" }}>{unitNum}</td>
-                      <td style={{ padding: "10px 12px", textAlign: "right", whiteSpace: "nowrap" }}>
+                      <td className="rc-units-col-unit" style={{ padding: "10px 12px", whiteSpace: "nowrap" }}>{unitNum}</td>
+                      <td className="rc-units-col-rent" style={{ padding: "10px 12px", textAlign: "right", whiteSpace: "nowrap" }}>
                         <span className={rentVal !== null && rentVal !== undefined ? "" : "rc-unit-placeholder"}>
                           {rentDisplay}
                         </span>
                       </td>
-                      <td style={{ padding: "10px 12px", textAlign: "center", whiteSpace: "nowrap" }}>
+                      <td className="rc-units-col-beds" style={{ padding: "10px 12px", textAlign: "center", whiteSpace: "nowrap" }}>
                         <span className={bedsVal !== null && bedsVal !== undefined ? "" : "rc-unit-placeholder"}>
                           {bedsDisplay}
                         </span>
                       </td>
-                      <td style={{ padding: "10px 12px", textAlign: "center", whiteSpace: "nowrap" }}>
+                      <td className="rc-units-col-baths" style={{ padding: "10px 12px", textAlign: "center", whiteSpace: "nowrap" }}>
                         <span className={bathsVal !== null && bathsVal !== undefined ? "" : "rc-unit-placeholder"}>
                           {bathsDisplay}
                         </span>
                       </td>
-                      <td style={{ padding: "10px 12px", textAlign: "center", whiteSpace: "nowrap" }}>
+                      <td className="rc-units-col-sqft" style={{ padding: "10px 12px", textAlign: "center", whiteSpace: "nowrap" }}>
                         <span className={sqftVal !== null && sqftVal !== undefined ? "" : "rc-unit-placeholder"}>
                           {sqftDisplay}
                         </span>
                       </td>
-                      <td style={{ padding: "10px 12px" }}>
+                      <td className="rc-units-col-status" style={{ padding: "10px 12px" }}>
                         <span
                           style={{
                             display: "inline-flex",
@@ -901,7 +901,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                           {isLeased ? "Occupied" : "Vacant"}
                         </span>
                       </td>
-                      <td style={{ padding: "10px 12px" }}>
+                      <td className="rc-units-col-actions" style={{ padding: "10px 12px" }}>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                           <button
                             type="button"

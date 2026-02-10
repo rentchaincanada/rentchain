@@ -70,6 +70,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
           gap: spacing.md,
           zIndex: 3001,
           overflowY: "auto",
+          WebkitOverflowScrolling: "touch",
         }}
       >
         <div

@@ -225,6 +225,11 @@
     color: #0f172a;
   }
 
+  .rc-units-col-sqft,
+  .rc-units-col-actions {
+    display: none;
+  }
+
   .rc-unit-placeholder {
     color: #94a3b8;
   }

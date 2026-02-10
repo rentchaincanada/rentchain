@@ -11,6 +11,9 @@ type Props = {
   properties?: Array<{ id: string; name: string }>;
   onPropertyChange?: (nextId: string) => void;
   units?: Array<{ id: string; name: string }>;
+  unitsLoading?: boolean;
+  unitsError?: string | null;
+  onUnitsRetry?: () => void;
   initialUnitId?: string | null;
   onUnitChange?: (nextId: string | null) => void;
   unit?: any | null;
@@ -24,6 +27,9 @@ export function SendApplicationModal({
   properties,
   onPropertyChange,
   units,
+  unitsLoading,
+  unitsError,
+  onUnitsRetry,
   initialUnitId,
   onUnitChange,
   unit,
@@ -253,14 +259,34 @@ export function SendApplicationModal({
                     background: "#fff",
                   }}
                 >
-                  <option value="">Whole property / unspecified</option>
+                  <option value="">{unitsLoading ? "Loading units..." : "Whole property / unspecified"}</option>
                   {(units || []).map((option) => (
                     <option key={option.id} value={option.id}>
                       {option.name}
                     </option>
                   ))}
                 </select>
-                {!units || units.length === 0 ? (
+                {unitsError ? (
+                  <span style={{ fontSize: "0.8rem", color: "#b91c1c", display: "flex", gap: 8, alignItems: "center" }}>
+                    {unitsError}
+                    {onUnitsRetry ? (
+                      <button
+                        type="button"
+                        onClick={onUnitsRetry}
+                        style={{
+                          border: "none",
+                          background: "transparent",
+                          color: "#2563eb",
+                          fontWeight: 600,
+                          cursor: "pointer",
+                          padding: 0,
+                        }}
+                      >
+                        Retry
+                      </button>
+                    ) : null}
+                  </span>
+                ) : !unitsLoading && (!units || units.length === 0) ? (
                   <span style={{ fontSize: "0.8rem", color: "#6b7280" }}>
                     No units found for this property.
                   </span>

@@ -31,6 +31,7 @@ import { track } from "@/lib/analytics";
 import { useAuth } from "../context/useAuth";
 import { ResponsiveMasterDetail } from "@/components/layout/ResponsiveMasterDetail";
 import { useOnboardingState } from "../hooks/useOnboardingState";
+import { useUnitsForProperty } from "../hooks/useUnitsForProperty";
 import { SendApplicationModal } from "../components/properties/SendApplicationModal";
 import { unitsForProperty } from "../lib/propertyCounts";
 import { getApplicationPrereqState } from "../lib/applicationPrereqs";
@@ -182,29 +183,12 @@ const ApplicationsPage: React.FC = () => {
   const propertiesCount = propertyRecords.length;
   const unitsCount = propertyRecords.reduce((sum, p) => sum + unitsForProperty(p), 0);
 
-  const modalUnits = useMemo(() => {
-    if (!modalPropertyId) return [];
-    const property = propertyRecords.find(
-      (p) => String(p.id || p.propertyId || p.uid || "") === modalPropertyId
-    );
-    const unitsRaw =
-      (property as any)?.units ||
-      (property as any)?.unitList ||
-      (property as any)?.unitDetails ||
-      [];
-    if (!Array.isArray(unitsRaw)) return [];
-    return unitsRaw
-      .map((unit: any) => ({
-        id: String(unit?.id || unit?.unitId || unit?.uid || ""),
-        name:
-          unit?.unitNumber ||
-          unit?.label ||
-          unit?.name ||
-          unit?.unit ||
-          "Unit",
-      }))
-      .filter((u) => u.id);
-  }, [modalPropertyId, propertyRecords]);
+  const {
+    units: modalUnits,
+    loading: modalUnitsLoading,
+    error: modalUnitsError,
+    refetch: refetchModalUnits,
+  } = useUnitsForProperty(modalPropertyId, sendAppOpen);
 
   const screeningOptions = [
     { value: "basic", label: "Basic", priceLabel: "$19.99" },
@@ -1631,6 +1615,9 @@ const ApplicationsPage: React.FC = () => {
         propertyName={modalPropertyName}
         properties={properties}
         units={modalUnits}
+        unitsLoading={modalUnitsLoading}
+        unitsError={modalUnitsError}
+        onUnitsRetry={refetchModalUnits}
         initialUnitId={modalUnitId}
         onPropertyChange={(nextId) => {
           setModalPropertyId(nextId);
