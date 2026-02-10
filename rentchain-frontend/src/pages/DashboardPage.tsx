@@ -110,6 +110,8 @@ const DashboardPage: React.FC = () => {
   const [pendingPropertyAction, setPendingPropertyAction] = React.useState<"create_application" | null>(null);
   const [screeningInviteOpen, setScreeningInviteOpen] = React.useState(false);
   const [sendApplicationOpen, setSendApplicationOpen] = React.useState(false);
+  const [modalPropertyId, setModalPropertyId] = React.useState<string | null>(null);
+  const [modalUnitId, setModalUnitId] = React.useState<string | null>(null);
   const [onboardingChunkError, setOnboardingChunkError] = React.useState(false);
   const onboarding = useOnboardingState();
   const prevDerivedRef = React.useRef({
@@ -265,6 +267,8 @@ const DashboardPage: React.FC = () => {
       stepKey: "applicationCreated",
       source: "dashboard",
     });
+    setModalPropertyId(propertyOptions[0]?.id || null);
+    setModalUnitId(null);
     setSendApplicationOpen(true);
   };
 
@@ -327,6 +331,30 @@ const DashboardPage: React.FC = () => {
       })).filter((p) => p.id),
     [properties]
   );
+
+  const modalUnits = React.useMemo(() => {
+    if (!modalPropertyId) return [];
+    const property = properties.find(
+      (p) => String(p?.id || p?.propertyId || p?.uid || "") === modalPropertyId
+    );
+    const unitsRaw =
+      (property as any)?.units ||
+      (property as any)?.unitList ||
+      (property as any)?.unitDetails ||
+      [];
+    if (!Array.isArray(unitsRaw)) return [];
+    return unitsRaw
+      .map((unit: any) => ({
+        id: String(unit?.id || unit?.unitId || unit?.uid || ""),
+        name:
+          unit?.unitNumber ||
+          unit?.label ||
+          unit?.name ||
+          unit?.unit ||
+          "Unit",
+      }))
+      .filter((u) => u.id);
+  }, [modalPropertyId, properties]);
 
   return (
     <MacShell title="RentChain · Dashboard" showTopNav={false}>
@@ -614,6 +642,14 @@ const DashboardPage: React.FC = () => {
         open={sendApplicationOpen}
         onClose={() => setSendApplicationOpen(false)}
         properties={propertyOptions}
+        propertyId={modalPropertyId}
+        units={modalUnits}
+        initialUnitId={modalUnitId}
+        onPropertyChange={(nextId) => {
+          setModalPropertyId(nextId);
+          setModalUnitId(null);
+        }}
+        onUnitChange={(nextId) => setModalUnitId(nextId)}
       />
     </MacShell>
   );
