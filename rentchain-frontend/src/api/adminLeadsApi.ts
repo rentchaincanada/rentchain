@@ -8,14 +8,14 @@ export type LandlordLead = {
   note?: string | null;
   status?: string | null;
   createdAt?: number | null;
-  invitedAt?: number | null;
-  invitedBy?: string | null;
+  approvedAt?: number | null;
+  approvedBy?: string | null;
   rejectedAt?: number | null;
   rejectedBy?: string | null;
 };
 
 export async function fetchLandlordLeads(
-  status?: "new" | "invited" | "rejected",
+  status?: "pending" | "approved" | "rejected",
   limit: number = 100
 ): Promise<LandlordLead[]> {
   const qs = new URLSearchParams();

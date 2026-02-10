@@ -24,10 +24,10 @@ const maskEmail = (email?: string | null) => {
 };
 
 const statusLabel = (status?: string | null) => {
-  const s = String(status || "new").toLowerCase();
-  if (s === "invited") return "Invited";
+  const s = String(status || "pending").toLowerCase();
+  if (s === "approved" || s === "invited") return "Approved";
   if (s === "rejected") return "Rejected";
-  return "New";
+  return "Pending";
 };
 
 const AdminLeadsPage: React.FC = () => {
@@ -37,7 +37,7 @@ const AdminLeadsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const { showToast } = useToast();
-  const [statusFilter, setStatusFilter] = useState<"new" | "invited" | "rejected">("new");
+  const [statusFilter, setStatusFilter] = useState<"pending" | "approved" | "rejected">("pending");
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
 
   const isAdmin = String(user?.role || "").toLowerCase() === "admin";
@@ -141,14 +141,14 @@ const AdminLeadsPage: React.FC = () => {
 
       <Card style={{ padding: spacing.md }}>
         <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap", marginBottom: spacing.sm }}>
-          {(["new", "invited", "rejected"] as const).map((status) => (
+          {(["pending", "approved", "rejected"] as const).map((status) => (
             <Button
               key={status}
               type="button"
               variant={statusFilter === status ? "primary" : "ghost"}
               onClick={() => setStatusFilter(status)}
             >
-              {status === "new" ? "New" : status === "invited" ? "Invited" : "Rejected"}
+              {status === "pending" ? "Pending" : status === "approved" ? "Approved" : "Rejected"}
             </Button>
           ))}
         </div>
@@ -156,19 +156,19 @@ const AdminLeadsPage: React.FC = () => {
           <div style={{ color: text.muted }}>Loading…</div>
         ) : sorted.length === 0 ? (
           <div style={{ color: text.muted }}>
-            {statusFilter === "new" ? "No access requests yet." : `No ${statusFilter} requests.`}
+            {statusFilter === "pending" ? "No access requests yet." : `No ${statusFilter} requests.`}
           </div>
         ) : (
           <div style={{ display: "grid", gap: spacing.sm }}>
             {sorted.map((lead) => {
               const id = lead.id;
-              const status = String(lead.status || "new").toLowerCase();
+              const status = String(lead.status || "pending").toLowerCase();
               const isBusy = busyId === id;
               const isBlocked = busyId !== null;
-              const isNew = status === "new";
+              const isNew = status === "pending" || status === "new";
               const highlight = new URLSearchParams(location.search).get("leadId") === id;
               const badgeStyle: React.CSSProperties =
-                status === "invited"
+                status === "approved" || status === "invited"
                   ? { background: "#dcfce7", color: "#166534" }
                   : status === "rejected"
                   ? { background: "#f1f5f9", color: "#475569" }

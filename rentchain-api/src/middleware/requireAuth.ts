@@ -9,6 +9,7 @@ type HydratedUser = {
   role: Role;
   landlordId?: string;
   tenantId?: string;
+  approved?: boolean;
   permissions?: Permission[];
   revokedPermissions?: Permission[];
 };
@@ -41,12 +42,38 @@ export async function requireAuth(req: any, res: any, next: any) {
 
     const hydrate = String(process.env.AUTH_HYDRATE_FROM_DB || "").toLowerCase() === "true";
     if (!hydrate) {
+      let approved = true;
+      if (baseUser.role === "landlord") {
+        approved = true;
+        if (baseUser.email) {
+          try {
+            const leadSnap = await db
+              .collection("landlordLeads")
+              .where("email", "==", String(baseUser.email).toLowerCase())
+              .limit(1)
+              .get();
+            if (!leadSnap.empty) {
+              const lead = leadSnap.docs[0].data() as any;
+              const status = String(lead?.status || "").toLowerCase();
+              if (status === "pending" || status === "new" || status === "rejected") {
+                approved = false;
+              }
+              if (status === "approved" || status === "invited") {
+                approved = true;
+              }
+            }
+          } catch {
+            // ignore lead lookup errors
+          }
+        }
+      }
       req.user = {
         ...baseUser,
         landlordId:
           baseUser.role === "landlord" || baseUser.role === "admin"
             ? baseUser.landlordId || baseUser.id
             : baseUser.landlordId,
+        approved: baseUser.role === "admin" || baseUser.role === "tenant" ? true : approved,
       };
       return next();
     }
@@ -70,6 +97,72 @@ export async function requireAuth(req: any, res: any, next: any) {
       return res.status(403).json({ ok: false, error: "Tenant scope mismatch" });
     }
 
+    let approved =
+      baseUser.role === "admin" || baseUser.role === "tenant"
+        ? true
+        : u?.approved === true;
+    const hasApprovedField = Object.prototype.hasOwnProperty.call(u || {}, "approved");
+    if (baseUser.role === "landlord" && !approved && baseUser.email) {
+      try {
+        const leadSnap = await db
+          .collection("landlordLeads")
+          .where("email", "==", String(baseUser.email).toLowerCase())
+          .limit(1)
+          .get();
+        if (!leadSnap.empty) {
+          const lead = leadSnap.docs[0].data() as any;
+          const status = String(lead?.status || "").toLowerCase();
+          if (status === "approved" || status === "invited") {
+            approved = true;
+            await db.collection("users").doc(baseUser.id).set(
+              {
+                approved: true,
+                approvedAt: Date.now(),
+                approvedBy: lead?.approvedBy || "lead",
+              },
+              { merge: true }
+            );
+            await db.collection("accounts").doc(baseUser.id).set(
+              {
+                approved: true,
+                approvedAt: Date.now(),
+                approvedBy: lead?.approvedBy || "lead",
+              },
+              { merge: true }
+            );
+          } else if (status === "pending" || status === "new" || status === "rejected") {
+            approved = false;
+            if (!hasApprovedField) {
+              await db.collection("users").doc(baseUser.id).set(
+                {
+                  approved: false,
+                  approvedAt: null,
+                  approvedBy: null,
+                },
+                { merge: true }
+              );
+              await db.collection("accounts").doc(baseUser.id).set(
+                {
+                  approved: false,
+                  approvedAt: null,
+                  approvedBy: null,
+                },
+                { merge: true }
+              );
+            }
+          }
+        } else if (!hasApprovedField) {
+          approved = true;
+        }
+      } catch {
+        if (!hasApprovedField) {
+          approved = true;
+        }
+      }
+    } else if (baseUser.role === "landlord" && !hasApprovedField && approved !== false) {
+      approved = true;
+    }
+
     req.user = {
       id: baseUser.id,
       email: u.email ?? baseUser.email,
@@ -80,6 +173,7 @@ export async function requireAuth(req: any, res: any, next: any) {
           ? baseUser.id
           : undefined),
       tenantId: u.tenantId ?? baseUser.tenantId,
+      approved,
       permissions: Array.isArray(u.permissions) ? u.permissions : baseUser.permissions,
       revokedPermissions: Array.isArray(u.revokedPermissions) ? u.revokedPermissions : baseUser.revokedPermissions,
     };
