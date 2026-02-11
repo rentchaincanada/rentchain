@@ -62,6 +62,7 @@ import TenantMessagesPage from "./pages/tenant/TenantMessagesPage";
 import TenantNoticeDetailPage from "./pages/tenant/TenantNoticeDetailPage";
 import MaintenanceRequestsPage from "./pages/MaintenanceRequestsPage";
 import PdfSamplePage from "./pages/PdfSamplePage";
+import LeaseLedgerPage from "./pages/LeaseLedgerPage";
 
 const TENANT_PORTAL_ENABLED = import.meta.env.VITE_TENANT_PORTAL_ENABLED === "true";
 
@@ -414,6 +415,16 @@ function App() {
             <RequireAuth>
               <LandlordNav>
                 <MaintenanceRequestsPage />
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/leases/:leaseId/ledger"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <LeaseLedgerPage />
               </LandlordNav>
             </RequireAuth>
           }
