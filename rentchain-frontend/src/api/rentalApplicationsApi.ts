@@ -51,6 +51,18 @@ export type ScreeningResult = {
   reportText?: string | null;
 };
 
+export type ScreeningReceipt = {
+  status: "paid" | "completed" | "pending" | "failed";
+  provider?: string | null;
+  inquiryType?: string | null;
+  referenceId?: string | null;
+  consentVersion?: string | null;
+  consentTimestamp?: number | string | null;
+  generatedAt?: number | string | null;
+  reportUrl?: string | null;
+  pdfUrl?: string | null;
+};
+
 export type ScreeningOrder = {
   id: string;
   landlordId?: string | null;
@@ -385,6 +397,13 @@ export async function fetchScreeningResult(
 ): Promise<{ ok: boolean; result?: ScreeningResult; error?: string }> {
   const res: any = await apiFetch(`/rental-applications/${encodeURIComponent(id)}/screening/result`);
   return res as { ok: boolean; result?: ScreeningResult; error?: string };
+}
+
+export async function fetchScreeningReceipt(
+  id: string
+): Promise<{ ok: boolean; receipt?: ScreeningReceipt; error?: string }> {
+  const res: any = await apiFetch(`/rental-applications/${encodeURIComponent(id)}/screening/receipt`);
+  return res as { ok: boolean; receipt?: ScreeningReceipt; error?: string };
 }
 
 export async function fetchScreeningOrder(

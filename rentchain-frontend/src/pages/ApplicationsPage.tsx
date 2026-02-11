@@ -11,6 +11,7 @@ import {
   createScreeningCheckout,
   fetchScreening,
   fetchScreeningResult,
+  fetchScreeningReceipt,
   fetchScreeningEvents,
   fetchScreeningOrderReport,
   adminMarkScreeningComplete,
@@ -24,6 +25,7 @@ import {
   type ScreeningPipeline,
   type ScreeningResult,
   type ScreeningEvent,
+  type ScreeningReceipt,
 } from "@/api/rentalApplicationsApi";
 import { useToast } from "../components/ui/ToastProvider";
 import { useCapabilities } from "@/hooks/useCapabilities";
@@ -148,6 +150,8 @@ const ApplicationsPage: React.FC = () => {
   const [screeningTier, setScreeningTier] = useState<"basic" | "verify" | "verify_ai">("verify_ai");
   const [screeningStatus, setScreeningStatus] = useState<ScreeningPipeline | null>(null);
   const [screeningStatusLoading, setScreeningStatusLoading] = useState(false);
+  const [screeningReceipt, setScreeningReceipt] = useState<ScreeningReceipt | null>(null);
+  const [screeningReceiptLoading, setScreeningReceiptLoading] = useState(false);
   const [resultModalOpen, setResultModalOpen] = useState(false);
   const [resultLoading, setResultLoading] = useState(false);
   const [resultError, setResultError] = useState<string | null>(null);
@@ -172,6 +176,7 @@ const ApplicationsPage: React.FC = () => {
   const [samplePdfOpen, setSamplePdfOpen] = useState(false);
   const [orderReportLoading, setOrderReportLoading] = useState(false);
   const [sendAppOpen, setSendAppOpen] = useState(false);
+  const [screeningRedirecting, setScreeningRedirecting] = useState(false);
   const [modalPropertyId, setModalPropertyId] = useState<string | null>(null);
   const [modalPropertyName, setModalPropertyName] = useState<string | null>(null);
   const [modalUnitId, setModalUnitId] = useState<string | null>(null);
@@ -225,6 +230,15 @@ const ApplicationsPage: React.FC = () => {
     return null;
   }, [detail?.screeningStatus, screeningEvents, screeningStatus?.status]);
 
+  const receiptStatusLabel = useMemo(() => {
+    const status = screeningReceipt?.status;
+    if (!status) return null;
+    if (status === "paid") return "Paid";
+    if (status === "completed") return "Completed";
+    if (status === "failed") return "Failed";
+    return "Pending";
+  }, [screeningReceipt?.status]);
+
   const orderReportReady =
     screeningEvents.some((event) => event.type === "report_ready") ||
     screeningStatus?.status === "complete" ||
@@ -266,6 +280,31 @@ const ApplicationsPage: React.FC = () => {
     }
   };
 
+  const loadScreeningReceipt = async (applicationId: string) => {
+    setScreeningReceiptLoading(true);
+    try {
+      const res = await fetchScreeningReceipt(applicationId);
+      if (res?.ok) {
+        setScreeningReceipt(res.receipt || null);
+      } else {
+        setScreeningReceipt(null);
+      }
+    } catch {
+      setScreeningReceipt(null);
+    } finally {
+      setScreeningReceiptLoading(false);
+    }
+  };
+
+  const mapScreeningError = (err: any) => {
+    const code = String(err?.code || err?.error || "").toLowerCase();
+    if (code === "consent_required") return "Consent is required to run screening.";
+    if (code === "stripe_not_configured") {
+      return "Screening payments are not yet enabled. Contact support.";
+    }
+    return err?.detail || err?.message || "Unable to start screening.";
+  };
+
   const refreshSelectedApplication = async (applicationId?: string | null) => {
     const id = String(applicationId || "").trim();
     if (!id) return;
@@ -277,6 +316,7 @@ const ApplicationsPage: React.FC = () => {
       setDetail(app);
       await loadScreeningStatus(id);
       await loadScreeningEvents(id);
+      await loadScreeningReceipt(id);
       setScreeningEventsRefreshedAt(Date.now());
       if (app?.screeningStatus === "complete" && app?.screeningResultId) {
         const res = await fetchScreeningResult(id);
@@ -478,6 +518,7 @@ const ApplicationsPage: React.FC = () => {
       setScreeningQuoteDetail(null);
       return;
     }
+    setScreeningRedirecting(false);
     void refreshSelectedApplication(selectedId);
   }, [selectedId]);
 
@@ -491,6 +532,7 @@ const ApplicationsPage: React.FC = () => {
     if (!detail?.id) {
       setScreeningStatus(null);
       setScreeningEvents([]);
+      setScreeningReceipt(null);
       return;
     }
     setScreeningStatus({
@@ -505,6 +547,7 @@ const ApplicationsPage: React.FC = () => {
     });
     void loadScreeningStatus(detail.id);
     void loadScreeningEvents(detail.id);
+    void loadScreeningReceipt(detail.id);
   }, [detail?.id]);
 
   useEffect(() => {
@@ -806,6 +849,7 @@ const ApplicationsPage: React.FC = () => {
       setScreeningConsentError("Consent is required to run screening.");
       return;
     }
+    setScreeningRedirecting(false);
     setScreeningRunning(true);
     try {
       const addons = [scoreAddOn ? "credit_score" : null, expeditedAddOn ? "expedited" : null].filter(
@@ -829,7 +873,7 @@ const ApplicationsPage: React.FC = () => {
         },
       });
       if (!res.ok || !res.checkoutUrl) {
-        throw new Error(res.detail || res.error || "Unable to start checkout");
+        throw res;
       }
       onboarding.markStepComplete("applicationCreated", "explicit");
       if (res.tenantInviteUrl) {
@@ -839,9 +883,10 @@ const ApplicationsPage: React.FC = () => {
           variant: "success",
         });
       }
+      setScreeningRedirecting(true);
       window.location.href = res.checkoutUrl;
     } catch (err: any) {
-      showToast({ message: "Screening failed", description: err?.message || "", variant: "error" });
+      showToast({ message: "Screening failed", description: mapScreeningError(err), variant: "error" });
     } finally {
       setScreeningRunning(false);
     }
@@ -1082,6 +1127,23 @@ const ApplicationsPage: React.FC = () => {
                     </div>
                   </div>
                   <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
+                    <div
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 8,
+                        padding: "4px 10px",
+                        borderRadius: 999,
+                        background: "rgba(15, 118, 110, 0.08)",
+                        color: "#0f766e",
+                        fontSize: 12,
+                        fontWeight: 600,
+                        width: "fit-content",
+                      }}
+                    >
+                      Powered by TransUnion
+                      <span style={{ fontWeight: 400, color: text.subtle }}>Soft inquiry (no score impact)</span>
+                    </div>
                     <div className="rc-wrap-row">
                       {screeningBadge ? (
                         <ScreeningStatusBadge label={screeningBadge.label} tone={screeningBadge.tone} />
@@ -1239,7 +1301,7 @@ const ApplicationsPage: React.FC = () => {
                     ) : (
                       <>
                         {screeningLoading ? (
-                          <div style={{ color: text.muted }}>Checking eligibility...</div>
+                          <div style={{ color: text.muted }}>Calculating total...</div>
                         ) : screeningQuote ? (
                           <div style={{ display: "grid", gap: 6 }}>
                             <div>Price: ${(effectiveTotalCents / 100).toFixed(2)} {screeningQuote.currency}</div>
@@ -1247,6 +1309,10 @@ const ApplicationsPage: React.FC = () => {
                               Base {screeningTier === "basic" ? "$19.99" : screeningTier === "verify" ? "$29.99" : "$39.99"}
                               {scoreAddOn ? " + Credit score $4.99" : ""}
                               {expeditedAddOn ? " + Expedited $9.99" : ""}
+                            </div>
+                            <div style={{ fontSize: 12, color: text.subtle }}>
+                              Tenant authorizes screening and receives the consent flow. You receive a verified screening
+                              report and audit-ready record.
                             </div>
                             <div style={{ display: "grid", gap: 6 }}>
                               <div style={{ fontSize: 12, fontWeight: 600 }}>Screening tier</div>
@@ -1331,6 +1397,9 @@ const ApplicationsPage: React.FC = () => {
                             >
                               {screeningRunning ? "Running..." : `Run screening ($${(effectiveTotalCents / 100).toFixed(2)})`}
                             </Button>
+                            {screeningRedirecting ? (
+                              <div style={{ fontSize: 12, color: text.muted }}>Opening secure checkout…</div>
+                            ) : null}
                           </div>
                         ) : (
                           <div style={{ color: colors.danger, fontSize: 13 }}>
@@ -1345,6 +1414,58 @@ const ApplicationsPage: React.FC = () => {
                   </div>
                 )}
               </Card>
+              {screeningReceiptLoading ? (
+                <div style={{ marginTop: 12, fontSize: 12, color: text.muted }}>Loading screening receipt…</div>
+              ) : screeningReceipt ? (
+                <Card style={{ marginTop: 12 }}>
+                  <div style={{ display: "grid", gap: 6, fontSize: 12 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13 }}>Screening receipt</div>
+                    {receiptStatusLabel ? <div>Status: {receiptStatusLabel}</div> : null}
+                    <div>Provider: {screeningReceipt.provider || "TransUnion"}</div>
+                    <div>Inquiry type: {screeningReceipt.inquiryType || "Soft inquiry (no score impact)"}</div>
+                    <div>
+                      Consent: {screeningReceipt.consentVersion || CONSENT_VERSION}
+                      {screeningReceipt.consentTimestamp
+                        ? ` · ${new Date(screeningReceipt.consentTimestamp).toLocaleString()}`
+                        : ""}
+                    </div>
+                    {screeningReceipt.referenceId ? <div>Reference ID: {screeningReceipt.referenceId}</div> : null}
+                    {screeningReceipt.generatedAt ? (
+                      <div>Generated: {new Date(screeningReceipt.generatedAt).toLocaleString()}</div>
+                    ) : null}
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {screeningReceipt.reportUrl ? (
+                        <Button
+                          variant="secondary"
+                          onClick={() => window.open(screeningReceipt.reportUrl || "", "_blank", "noopener,noreferrer")}
+                        >
+                          View report
+                        </Button>
+                      ) : null}
+                      {screeningReceipt.pdfUrl ? (
+                        <Button
+                          variant="secondary"
+                          onClick={() => window.open(screeningReceipt.pdfUrl || "", "_blank", "noopener,noreferrer")}
+                        >
+                          Download PDF
+                        </Button>
+                      ) : null}
+                      {screeningReceipt.referenceId ? (
+                        <Button
+                          variant="ghost"
+                          onClick={() => {
+                            if (!screeningReceipt.referenceId) return;
+                            navigator.clipboard.writeText(screeningReceipt.referenceId);
+                            showToast({ message: "Reference ID copied", variant: "success" });
+                          }}
+                        >
+                          Copy reference ID
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                </Card>
+              ) : null}
               </div>
               <Card>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm, marginBottom: 8 }}>
