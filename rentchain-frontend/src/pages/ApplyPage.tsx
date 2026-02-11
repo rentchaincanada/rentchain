@@ -61,9 +61,12 @@ const ApplyPage: React.FC = () => {
   const [leaseStartDate, setLeaseStartDate] = useState("");
   const [streetNumber, setStreetNumber] = useState("");
   const [streetName, setStreetName] = useState("");
+  const [addressLine2, setAddressLine2] = useState("");
   const [city, setCity] = useState("");
   const [province, setProvince] = useState("");
   const [postalCode, setPostalCode] = useState("");
+  const [timeAtAddressMonths, setTimeAtAddressMonths] = useState("");
+  const [currentRentAmount, setCurrentRentAmount] = useState("");
 
   const [requestedRent, setRequestedRent] = useState<string>(
     defaults.defaultRent ? String(defaults.defaultRent) : ""
@@ -73,6 +76,10 @@ const ApplyPage: React.FC = () => {
   const [employer, setEmployer] = useState("");
   const [position, setPosition] = useState("");
   const [monthlyIncome, setMonthlyIncome] = useState("");
+  const [incomeFrequency, setIncomeFrequency] = useState<"monthly" | "annual">("monthly");
+  const [monthsAtJob, setMonthsAtJob] = useState("");
+  const [workReferenceName, setWorkReferenceName] = useState("");
+  const [workReferencePhone, setWorkReferencePhone] = useState("");
 
   // Step 3 – co-applicant + references (MVP: single co-applicant)
   const [hasCoApplicant, setHasCoApplicant] = useState(false);
@@ -94,10 +101,16 @@ const ApplyPage: React.FC = () => {
   const [otherOccupants, setOtherOccupants] = useState("");
   const [petDetails, setPetDetails] = useState("");
   const [vehicleDetails, setVehicleDetails] = useState("");
-  const [additionalNotes, setAdditionalNotes] = useState("");
 
   // Step 4 – consent + submit
-  const [creditConsent, setCreditConsent] = useState(false);
+  const [applicationConsent, setApplicationConsent] = useState(false);
+  const [applicationConsentDetailsOpen, setApplicationConsentDetailsOpen] = useState(false);
+  const [applicationConsentError, setApplicationConsentError] = useState<string | null>(null);
+  const [signatureType, setSignatureType] = useState<"drawn" | "typed">("drawn");
+  const [signatureDrawnDataUrl, setSignatureDrawnDataUrl] = useState<string | null>(null);
+  const [signatureTypedName, setSignatureTypedName] = useState("");
+  const [signatureTypedAck, setSignatureTypedAck] = useState(false);
+  const [applicantNotes, setApplicantNotes] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -124,6 +137,8 @@ const ApplyPage: React.FC = () => {
         !!dob &&
         !!streetNumber &&
         !!streetName &&
+        !!timeAtAddressMonths &&
+        !!currentRentAmount &&
         !!city &&
         !!province &&
         !!postalCode &&
@@ -131,13 +146,15 @@ const ApplyPage: React.FC = () => {
       );
     }
     if (step === 2) {
-      return true;
+      return !!employer && !!position && !!monthlyIncome && !!monthsAtJob && !!workReferenceName && !!workReferencePhone;
     }
     if (step === 3) {
       return true;
     }
     if (step === 4) {
-      return creditConsent && !submitting;
+      const hasDrawn = signatureDrawnDataUrl && signatureDrawnDataUrl.startsWith("data:image/");
+      const hasTyped = signatureTypedName.trim() && signatureTypedAck;
+      return applicationConsent && (hasDrawn || hasTyped) && !submitting;
     }
     return true;
   }, [
@@ -151,11 +168,22 @@ const ApplyPage: React.FC = () => {
     dob,
     streetNumber,
     streetName,
+    timeAtAddressMonths,
+    currentRentAmount,
     city,
     province,
     postalCode,
     requestedRent,
-    creditConsent,
+    employer,
+    position,
+    monthlyIncome,
+    monthsAtJob,
+    workReferenceName,
+    workReferencePhone,
+    applicationConsent,
+    signatureDrawnDataUrl,
+    signatureTypedName,
+    signatureTypedAck,
     submitting,
   ]);
 
@@ -183,9 +211,23 @@ const ApplyPage: React.FC = () => {
       if (!city) missing.push("city");
       if (!province) missing.push("province");
       if (!postalCode) missing.push("postalCode");
-      if (!creditConsent) missing.push("consentCreditCheck");
+      if (!timeAtAddressMonths) missing.push("timeAtCurrentAddressMonths");
+      if (!currentRentAmount) missing.push("currentRentAmount");
+      if (!employer) missing.push("employerName");
+      if (!position) missing.push("jobTitle");
+      if (!monthlyIncome) missing.push("incomeAmount");
+      if (!monthsAtJob) missing.push("monthsAtJob");
+      if (!workReferenceName) missing.push("workReferenceName");
+      if (!workReferencePhone) missing.push("workReferencePhone");
+      if (!applicationConsent) missing.push("applicationConsent");
+      const hasDrawn = signatureDrawnDataUrl && signatureDrawnDataUrl.startsWith("data:image/");
+      const hasTyped = signatureTypedName.trim() && signatureTypedAck;
+      if (!hasDrawn && !hasTyped) missing.push("signature");
 
       if (missing.length) {
+        if (missing.includes("applicationConsent")) {
+          setApplicationConsentError("Consent is required to submit your application.");
+        }
         setSubmitError(
           `Missing required fields: ${missing
             .map((f) => f)
@@ -199,6 +241,30 @@ const ApplyPage: React.FC = () => {
       const rentNumber = Number(requestedRent) || 0;
       const incomeNumber = Number(monthlyIncome) || 0;
       const coIncomeNumber = Number(coMonthlyIncome) || 0;
+      const timeAtAddressNumber = Number(timeAtAddressMonths) || 0;
+      const rentAmountNumber = Number(currentRentAmount) || 0;
+      const monthsAtJobNumber = Number(monthsAtJob) || 0;
+
+      if (postalCode && !/^[A-Za-z]\d[A-Za-z][ -]?\d[A-Za-z]\d$/.test(postalCode.trim())) {
+        setSubmitError("Postal code must be a valid Canadian postal code.");
+        setSubmitting(false);
+        return;
+      }
+      if (timeAtAddressNumber < 0 || timeAtAddressNumber > 600) {
+        setSubmitError("Time at current address must be between 0 and 600 months.");
+        setSubmitting(false);
+        return;
+      }
+      if (rentAmountNumber <= 0) {
+        setSubmitError("Current rent amount must be greater than 0.");
+        setSubmitting(false);
+        return;
+      }
+      if (monthsAtJobNumber < 0 || monthsAtJobNumber > 600) {
+        setSubmitError("Time at current job must be between 0 and 600 months.");
+        setSubmitting(false);
+        return;
+      }
 
       const payload: SubmitApplicationPayload = {
         propertyId,
@@ -207,6 +273,7 @@ const ApplyPage: React.FC = () => {
         unitApplied: unitValue,
         leaseStartDate,
         requestedRent: rentNumber,
+        formVersion: "v2",
         primaryApplicant: {
           firstName,
           middleName: middleName || undefined,
@@ -248,10 +315,45 @@ const ApplyPage: React.FC = () => {
         household: {
           otherOccupants: otherOccupants || undefined,
           pets: petDetails || undefined,
-        vehicles: vehicleDetails || undefined,
-        notes: additionalNotes || undefined,
-      },
-        creditConsent,
+          vehicles: vehicleDetails || undefined,
+        },
+        creditConsent: applicationConsent,
+        applicantProfile: {
+          currentAddress: {
+            line1: [streetNumber, streetName].filter(Boolean).join(" ").trim(),
+            line2: addressLine2 || undefined,
+            city,
+            provinceState: province,
+            postalCode,
+            country: "CA",
+          },
+          timeAtCurrentAddressMonths: timeAtAddressNumber,
+          currentRentAmountCents: Math.round(rentAmountNumber * 100),
+          employment: {
+            employerName: employer,
+            jobTitle: position,
+            incomeAmountCents: Math.round(incomeNumber * 100),
+            incomeFrequency,
+            monthsAtJob: monthsAtJobNumber,
+          },
+          workReference: {
+            name: workReferenceName,
+            phone: workReferencePhone,
+          },
+          signature: {
+            type: signatureType,
+            drawnDataUrl: signatureType === "drawn" ? signatureDrawnDataUrl || undefined : undefined,
+            typedName: signatureType === "typed" ? signatureTypedName.trim() : undefined,
+            typedAcknowledge: signatureType === "typed" ? signatureTypedAck : undefined,
+            signedAt: new Date().toISOString(),
+          },
+          applicantNotes: applicantNotes || undefined,
+        },
+        applicationConsent: {
+          version: "v1.0",
+          accepted: true,
+          acceptedAt: new Date().toISOString(),
+        },
       };
 
       let app = createdApplication;
@@ -511,12 +613,18 @@ const ApplyPage: React.FC = () => {
                     setStreetNumber={setStreetNumber}
                     streetName={streetName}
                     setStreetName={setStreetName}
+                    addressLine2={addressLine2}
+                    setAddressLine2={setAddressLine2}
                     city={city}
                     setCity={setCity}
                     province={province}
                     setProvince={setProvince}
                     postalCode={postalCode}
                     setPostalCode={setPostalCode}
+                    timeAtAddressMonths={timeAtAddressMonths}
+                    setTimeAtAddressMonths={setTimeAtAddressMonths}
+                    currentRentAmount={currentRentAmount}
+                    setCurrentRentAmount={setCurrentRentAmount}
                     requestedRent={requestedRent}
                     setRequestedRent={setRequestedRent}
                   />
@@ -530,6 +638,14 @@ const ApplyPage: React.FC = () => {
                     setPosition={setPosition}
                     monthlyIncome={monthlyIncome}
                     setMonthlyIncome={setMonthlyIncome}
+                    incomeFrequency={incomeFrequency}
+                    setIncomeFrequency={setIncomeFrequency}
+                    monthsAtJob={monthsAtJob}
+                    setMonthsAtJob={setMonthsAtJob}
+                    workReferenceName={workReferenceName}
+                    setWorkReferenceName={setWorkReferenceName}
+                    workReferencePhone={workReferencePhone}
+                    setWorkReferencePhone={setWorkReferencePhone}
                   />
                 )}
 
@@ -563,16 +679,30 @@ const ApplyPage: React.FC = () => {
     setPetDetails={setPetDetails}
     vehicleDetails={vehicleDetails}
     setVehicleDetails={setVehicleDetails}
-    additionalNotes={additionalNotes}
-    setAdditionalNotes={setAdditionalNotes}
   />
 )}
 
 
                 {step === 4 && (
                   <StepFour
-                    creditConsent={creditConsent}
-                    setCreditConsent={setCreditConsent}
+                    applicationConsent={applicationConsent}
+                    setApplicationConsent={(v) => {
+                      setApplicationConsent(v);
+                      setApplicationConsentError(null);
+                    }}
+                    applicationConsentDetailsOpen={applicationConsentDetailsOpen}
+                    setApplicationConsentDetailsOpen={setApplicationConsentDetailsOpen}
+                    applicationConsentError={applicationConsentError}
+                    signatureType={signatureType}
+                    setSignatureType={setSignatureType}
+                    signatureDrawnDataUrl={signatureDrawnDataUrl}
+                    setSignatureDrawnDataUrl={setSignatureDrawnDataUrl}
+                    signatureTypedName={signatureTypedName}
+                    setSignatureTypedName={setSignatureTypedName}
+                    signatureTypedAck={signatureTypedAck}
+                    setSignatureTypedAck={setSignatureTypedAck}
+                    applicantNotes={applicantNotes}
+                    setApplicantNotes={setApplicantNotes}
                     submitting={submitting}
                   />
                 )}
@@ -746,12 +876,18 @@ interface StepOneProps {
   setStreetNumber: (v: string) => void;
   streetName: string;
   setStreetName: (v: string) => void;
+  addressLine2: string;
+  setAddressLine2: (v: string) => void;
   city: string;
   setCity: (v: string) => void;
   province: string;
   setProvince: (v: string) => void;
   postalCode: string;
   setPostalCode: (v: string) => void;
+  timeAtAddressMonths: string;
+  setTimeAtAddressMonths: (v: string) => void;
+  currentRentAmount: string;
+  setCurrentRentAmount: (v: string) => void;
   requestedRent: string;
   setRequestedRent: (v: string) => void;
 }
@@ -792,12 +928,18 @@ const StepOne: React.FC<StepOneProps> = ({
   setStreetNumber,
   streetName,
   setStreetName,
+  addressLine2,
+  setAddressLine2,
   city,
   setCity,
   province,
   setProvince,
   postalCode,
   setPostalCode,
+  timeAtAddressMonths,
+  setTimeAtAddressMonths,
+  currentRentAmount,
+  setCurrentRentAmount,
   requestedRent,
   setRequestedRent,
 }) => {
@@ -974,6 +1116,36 @@ const StepOne: React.FC<StepOneProps> = ({
         }}
       >
         <div>
+          <div style={labelStyle}>Address line 2 (optional)</div>
+          <input
+            type="text"
+            value={addressLine2}
+            onChange={(e) => setAddressLine2(e.target.value)}
+            style={fieldStyle}
+            autoComplete="address-line3"
+          />
+        </div>
+        <div>
+          <div style={labelStyle}>Time at current address (months) *</div>
+          <input
+            type="number"
+            min={0}
+            value={timeAtAddressMonths}
+            onChange={(e) => setTimeAtAddressMonths(e.target.value)}
+            style={fieldStyle}
+          />
+        </div>
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+          gap: "0.75rem",
+          marginBottom: "0.6rem",
+        }}
+      >
+        <div>
           <div style={labelStyle}>City *</div>
           <input
             type="text"
@@ -1024,9 +1196,49 @@ const StepOne: React.FC<StepOneProps> = ({
           />
         </div>
       </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+          gap: "0.75rem",
+          marginTop: "0.6rem",
+        }}
+      >
+        <div>
+          <div style={labelStyle}>Current rent amount (per month) *</div>
+          <input
+            type="number"
+            min={0}
+            value={currentRentAmount}
+            onChange={(e) => setCurrentRentAmount(e.target.value)}
+            style={fieldStyle}
+            inputMode="decimal"
+          />
+        </div>
+        <div />
+      </div>
     </div>
   );
 };
+
+interface StepTwoProps {
+  employer: string;
+  setEmployer: (v: string) => void;
+  position: string;
+  setPosition: (v: string) => void;
+  monthlyIncome: string;
+  setMonthlyIncome: (v: string) => void;
+  incomeFrequency: "monthly" | "annual";
+  setIncomeFrequency: (v: "monthly" | "annual") => void;
+  monthsAtJob: string;
+  setMonthsAtJob: (v: string) => void;
+  workReferenceName: string;
+  setWorkReferenceName: (v: string) => void;
+  workReferencePhone: string;
+  setWorkReferencePhone: (v: string) => void;
+}
+
 const StepTwo: React.FC<StepTwoProps> = ({
   employer,
   setEmployer,
@@ -1034,6 +1246,14 @@ const StepTwo: React.FC<StepTwoProps> = ({
   setPosition,
   monthlyIncome,
   setMonthlyIncome,
+  incomeFrequency,
+  setIncomeFrequency,
+  monthsAtJob,
+  setMonthsAtJob,
+  workReferenceName,
+  setWorkReferenceName,
+  workReferencePhone,
+  setWorkReferencePhone,
 }) => {
   return (
     <div>
@@ -1047,43 +1267,95 @@ const StepTwo: React.FC<StepTwoProps> = ({
         Step 2 – Employment & income
       </div>
 
-      <div style={{ marginBottom: "0.6rem" }}>
-        <div style={labelStyle}>Employer #1</div>
-        <input
-          type="text"
-          value={employer}
-          onChange={(e) => setEmployer(e.target.value)}
-          style={fieldStyle}
-        />
-      </div>
-
-      <div style={{ marginBottom: "0.6rem" }}>
-        <div style={labelStyle}>Position</div>
-        <input
-          type="text"
-          value={position}
-          onChange={(e) => setPosition(e.target.value)}
-          style={fieldStyle}
-        />
-      </div>
-
-<div style={{ marginBottom: "0.6rem" }}>
-        <div style={labelStyle}>Total monthly income (before tax)</div>
-        <input
-          type="number"
-          value={monthlyIncome}
-          onChange={(e) => setMonthlyIncome(e.target.value)}
-          style={fieldStyle}
-        />
+      <div style={{ display: "grid", gap: "0.6rem" }}>
+        <div>
+          <div style={labelStyle}>Employer / Company *</div>
+          <input
+            type="text"
+            value={employer}
+            onChange={(e) => setEmployer(e.target.value)}
+            style={fieldStyle}
+          />
         </div>
- <div style={{ marginBottom: "0.6rem" }}>
-        <div style={labelStyle}>Employer #2</div>
-        <input
-          type="text"
-          value={employer}
-          onChange={(e) => setEmployer(e.target.value)}
-          style={fieldStyle}
-        />
+
+        <div>
+          <div style={labelStyle}>Job title / Position *</div>
+          <input
+            type="text"
+            value={position}
+            onChange={(e) => setPosition(e.target.value)}
+            style={fieldStyle}
+          />
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+            gap: "0.75rem",
+          }}
+        >
+          <div>
+            <div style={labelStyle}>Income amount *</div>
+            <input
+              type="number"
+              value={monthlyIncome}
+              onChange={(e) => setMonthlyIncome(e.target.value)}
+              style={fieldStyle}
+            />
+          </div>
+          <div>
+            <div style={labelStyle}>Income frequency *</div>
+            <select
+              value={incomeFrequency}
+              onChange={(e) => setIncomeFrequency(e.target.value as "monthly" | "annual")}
+              style={fieldStyle}
+            >
+              <option value="monthly">Monthly</option>
+              <option value="annual">Annual</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <div style={labelStyle}>Time at current job (months) *</div>
+          <input
+            type="number"
+            min={0}
+            value={monthsAtJob}
+            onChange={(e) => setMonthsAtJob(e.target.value)}
+            style={fieldStyle}
+          />
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+            gap: "0.75rem",
+          }}
+        >
+          <div>
+            <div style={labelStyle}>Work reference name *</div>
+            <input
+              type="text"
+              value={workReferenceName}
+              onChange={(e) => setWorkReferenceName(e.target.value)}
+              style={fieldStyle}
+            />
+          </div>
+          <div>
+            <div style={labelStyle}>Work reference phone *</div>
+            <input
+              type="tel"
+              inputMode="tel"
+              pattern="[0-9+ ]*"
+              value={workReferencePhone}
+              onChange={(e) => setWorkReferencePhone(e.target.value.replace(/[^0-9+ ]/g, ""))}
+              style={fieldStyle}
+            />
+          </div>
+        </div>
       </div>
 
       <div style={{ marginBottom: "0.6rem" }}>
@@ -1179,8 +1451,6 @@ interface StepThreeProps {
   setPetDetails: (v: string) => void;
   vehicleDetails: string;
   setVehicleDetails: (v: string) => void;
-  additionalNotes: string;
-  setAdditionalNotes: (v: string) => void;
 }
 
 
@@ -1213,8 +1483,6 @@ const StepThree: React.FC<StepThreeProps> = ({
   setPetDetails,
   vehicleDetails,
   setVehicleDetails,
-  additionalNotes,
-  setAdditionalNotes,
 }) => {
   return (
     <div>
@@ -1497,19 +1765,6 @@ const StepThree: React.FC<StepThreeProps> = ({
         />
       </div>
 
-      <div style={{ marginBottom: "0.5rem" }}>
-        <div style={labelStyle}>Anything else you&apos;d like us to know</div>
-        <textarea
-          value={additionalNotes}
-          onChange={(e) => setAdditionalNotes(e.target.value)}
-          style={{
-            ...fieldStyle,
-            minHeight: "60px",
-            resize: "vertical",
-          }}
-        />
-      </div>
-
       <div
         style={{
           marginTop: "0.2rem",
@@ -1525,16 +1780,88 @@ const StepThree: React.FC<StepThreeProps> = ({
 };
 
 interface StepFourProps {
-  creditConsent: boolean;
-  setCreditConsent: (v: boolean) => void;
+  applicationConsent: boolean;
+  setApplicationConsent: (v: boolean) => void;
+  applicationConsentDetailsOpen: boolean;
+  setApplicationConsentDetailsOpen: (v: boolean) => void;
+  applicationConsentError: string | null;
+  signatureType: "drawn" | "typed";
+  setSignatureType: (v: "drawn" | "typed") => void;
+  signatureDrawnDataUrl: string | null;
+  setSignatureDrawnDataUrl: (v: string | null) => void;
+  signatureTypedName: string;
+  setSignatureTypedName: (v: string) => void;
+  signatureTypedAck: boolean;
+  setSignatureTypedAck: (v: boolean) => void;
+  applicantNotes: string;
+  setApplicantNotes: (v: string) => void;
   submitting: boolean;
 }
 
 const StepFour: React.FC<StepFourProps> = ({
-  creditConsent,
-  setCreditConsent,
+  applicationConsent,
+  setApplicationConsent,
+  applicationConsentDetailsOpen,
+  setApplicationConsentDetailsOpen,
+  applicationConsentError,
+  signatureType,
+  setSignatureType,
+  signatureDrawnDataUrl,
+  setSignatureDrawnDataUrl,
+  signatureTypedName,
+  setSignatureTypedName,
+  signatureTypedAck,
+  setSignatureTypedAck,
+  applicantNotes,
+  setApplicantNotes,
   submitting,
 }) => {
+  const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
+  const [drawing, setDrawing] = React.useState(false);
+
+  const startDrawing = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (signatureType !== "drawn") return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const rect = canvas.getBoundingClientRect();
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    ctx.strokeStyle = "#0f172a";
+    ctx.beginPath();
+    ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+    setDrawing(true);
+  };
+
+  const draw = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!drawing || signatureType !== "drawn") return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const rect = canvas.getBoundingClientRect();
+    ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+    ctx.stroke();
+  };
+
+  const endDrawing = () => {
+    if (!drawing) return;
+    setDrawing(false);
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    setSignatureDrawnDataUrl(canvas.toDataURL("image/png"));
+  };
+
+  const clearSignature = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setSignatureDrawnDataUrl(null);
+  };
+
   return (
     <div>
       <div
@@ -1547,31 +1874,89 @@ const StepFour: React.FC<StepFourProps> = ({
         Step 4 – Consent & submit
       </div>
 
-      <p
-        style={{
-          fontSize: "0.8rem",
-          opacity: 0.9,
-          marginBottom: "0.7rem",
-        }}
-      >
-        By submitting this application you confirm that all information provided
-        is true and complete to the best of your knowledge. You understand that
-        providing false or incomplete information may result in your application
-        being declined or your tenancy being terminated.
-      </p>
+      <div style={{ display: "grid", gap: "0.8rem" }}>
+        <div>
+          <div style={{ fontSize: "0.85rem", fontWeight: 600, marginBottom: 4 }}>Signature *</div>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 8 }}>
+            <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: "0.8rem" }}>
+              <input
+                type="radio"
+                checked={signatureType === "drawn"}
+                onChange={() => setSignatureType("drawn")}
+              />
+              Draw signature
+            </label>
+            <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: "0.8rem" }}>
+              <input
+                type="radio"
+                checked={signatureType === "typed"}
+                onChange={() => setSignatureType("typed")}
+              />
+              Type signature
+            </label>
+          </div>
 
-      <p
-        style={{
-          fontSize: "0.8rem",
-          opacity: 0.9,
-          marginBottom: "0.7rem",
-        }}
-      >
-        You authorize the landlord or property manager to obtain a consumer
-        credit report, to contact your current and previous landlords, and to
-        verify your employment and income for the purpose of assessing this
-        rental application.
-      </p>
+          {signatureType === "drawn" ? (
+            <div style={{ display: "grid", gap: 8 }}>
+              <canvas
+                ref={canvasRef}
+                width={520}
+                height={160}
+                onPointerDown={startDrawing}
+                onPointerMove={draw}
+                onPointerUp={endDrawing}
+                onPointerLeave={endDrawing}
+                style={{
+                  width: "100%",
+                  border: "1px solid rgba(51,65,85,0.9)",
+                  borderRadius: "0.6rem",
+                  background: "#fff",
+                }}
+              />
+              <div style={{ display: "flex", gap: 8 }}>
+                <button type="button" onClick={clearSignature} style={{ fontSize: "0.75rem" }}>
+                  Clear signature
+                </button>
+                {signatureDrawnDataUrl ? (
+                  <span style={{ fontSize: "0.75rem", opacity: 0.8 }}>Signature captured</span>
+                ) : null}
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: "grid", gap: 6 }}>
+              <input
+                type="text"
+                value={signatureTypedName}
+                onChange={(e) => setSignatureTypedName(e.target.value)}
+                placeholder="Type your full name"
+                style={fieldStyle}
+              />
+              <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: "0.8rem" }}>
+                <input
+                  type="checkbox"
+                  checked={signatureTypedAck}
+                  onChange={(e) => setSignatureTypedAck(e.target.checked)}
+                />
+                I agree this is my legal signature.
+              </label>
+            </div>
+          )}
+        </div>
+
+        <div>
+          <div style={{ fontSize: "0.85rem", fontWeight: 600, marginBottom: 4 }}>Applicant notes (optional)</div>
+          <textarea
+            value={applicantNotes}
+            onChange={(e) => setApplicantNotes(e.target.value)}
+            style={{
+              ...fieldStyle,
+              minHeight: "90px",
+              resize: "vertical",
+            }}
+            maxLength={2000}
+          />
+        </div>
+      </div>
 
       <div
         style={{
@@ -1579,34 +1964,52 @@ const StepFour: React.FC<StepFourProps> = ({
           alignItems: "center",
           gap: "0.45rem",
           marginBottom: "0.4rem",
+          marginTop: "0.8rem",
         }}
       >
         <input
-          id="creditConsent"
+          id="applicationConsent"
           type="checkbox"
-          checked={creditConsent}
-          onChange={(e) => setCreditConsent(e.target.checked)}
+          checked={applicationConsent}
+          onChange={(e) => setApplicationConsent(e.target.checked)}
           disabled={submitting}
         />
         <label
-          htmlFor="creditConsent"
+          htmlFor="applicationConsent"
           style={{
             fontSize: "0.82rem",
           }}
         >
-          I agree to the above and authorize a credit and reference check.
+          I confirm the information provided is accurate and I authorize the landlord/manager to use it to evaluate my
+          rental application.
         </label>
       </div>
 
-      <div
+      <button
+        type="button"
+        onClick={() => setApplicationConsentDetailsOpen(!applicationConsentDetailsOpen)}
         style={{
+          background: "none",
+          border: "none",
+          color: "#93c5fd",
+          padding: 0,
           fontSize: "0.78rem",
-          opacity: 0.75,
+          cursor: "pointer",
+          textDecoration: "underline",
         }}
       >
-        You may withdraw your consent at any time before a lease is signed by
-        contacting the landlord or property manager.
-      </div>
+        Learn more
+      </button>
+      {applicationConsentDetailsOpen ? (
+        <div style={{ fontSize: "0.78rem", opacity: 0.8, marginTop: 6 }}>
+          By proceeding, you consent to the collection, use, and disclosure of your information for tenant screening,
+          identity verification, and fraud prevention. This consent applies only to this rental application and may be
+          withdrawn before the screening is submitted, where permitted by law.
+        </div>
+      ) : null}
+      {applicationConsentError ? (
+        <div style={{ fontSize: "0.78rem", color: "#fca5a5", marginTop: 6 }}>{applicationConsentError}</div>
+      ) : null}
     </div>
   );
 };

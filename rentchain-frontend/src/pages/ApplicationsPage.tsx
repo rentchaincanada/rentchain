@@ -1466,6 +1466,84 @@ const ApplicationsPage: React.FC = () => {
                   </div>
                 </Card>
               ) : null}
+              <Card style={{ marginTop: 12 }}>
+                <div style={{ display: "grid", gap: 6, fontSize: 12 }}>
+                  <div style={{ fontWeight: 700, fontSize: 13 }}>Applicant profile</div>
+                  {detail.applicantProfile ? (
+                    <>
+                      <div>
+                        Address:{" "}
+                        {[
+                          detail.applicantProfile.currentAddress?.line1,
+                          detail.applicantProfile.currentAddress?.line2,
+                          detail.applicantProfile.currentAddress?.city,
+                          detail.applicantProfile.currentAddress?.provinceState,
+                          detail.applicantProfile.currentAddress?.postalCode,
+                        ]
+                          .filter(Boolean)
+                          .join(", ") || "Not provided"}
+                      </div>
+                      <div>
+                        Time at address:{" "}
+                        {detail.applicantProfile.timeAtCurrentAddressMonths != null
+                          ? `${detail.applicantProfile.timeAtCurrentAddressMonths} months`
+                          : "Not provided"}
+                      </div>
+                      <div>
+                        Current rent:{" "}
+                        {detail.applicantProfile.currentRentAmountCents != null
+                          ? `$${(detail.applicantProfile.currentRentAmountCents / 100).toFixed(2)}`
+                          : "Not provided"}
+                      </div>
+                      <div>
+                        Employment:{" "}
+                        {detail.applicantProfile.employment?.employerName || "Not provided"}
+                        {detail.applicantProfile.employment?.jobTitle
+                          ? ` · ${detail.applicantProfile.employment.jobTitle}`
+                          : ""}
+                      </div>
+                      <div>
+                        Income:{" "}
+                        {detail.applicantProfile.employment?.incomeAmountCents != null
+                          ? `$${(detail.applicantProfile.employment.incomeAmountCents / 100).toFixed(2)} ${
+                              detail.applicantProfile.employment?.incomeFrequency === "annual" ? "/ year" : "/ month"
+                            }`
+                          : "Not provided"}
+                      </div>
+                      <div>
+                        Time at job:{" "}
+                        {detail.applicantProfile.employment?.monthsAtJob != null
+                          ? `${detail.applicantProfile.employment.monthsAtJob} months`
+                          : "Not provided"}
+                      </div>
+                      <div>
+                        Work reference:{" "}
+                        {detail.applicantProfile.workReference?.name || "Not provided"}
+                        {detail.applicantProfile.workReference?.phone
+                          ? ` · ${detail.applicantProfile.workReference.phone}`
+                          : ""}
+                      </div>
+                      <div>
+                        Signature:{" "}
+                        {detail.applicantProfile.signature?.signedAt
+                          ? `Signed ${new Date(detail.applicantProfile.signature.signedAt).toLocaleString()}`
+                          : "Not provided"}
+                      </div>
+                      <div>
+                        Consent:{" "}
+                        {detail.applicationConsent?.acceptedAt
+                          ? `Accepted ${new Date(detail.applicationConsent.acceptedAt).toLocaleString()}`
+                          : "Not provided"}
+                      </div>
+                      {detail.applicantProfile.applicantNotes ? (
+                        <div>Notes: {detail.applicantProfile.applicantNotes}</div>
+                      ) : null}
+                    </>
+                  ) : (
+                    <div style={{ color: text.muted }}>Not provided.</div>
+                  )}
+                </div>
+              </Card>
               </div>
               <Card>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm, marginBottom: 8 }}>

@@ -50,6 +50,7 @@ interface NewApplicationPayload {
   unitApplied?: string;
   leaseStartDate: string;
   requestedRent: number;
+  formVersion?: string;
 
   primaryApplicant: {
     firstName: string;
@@ -94,6 +95,43 @@ interface NewApplicationPayload {
   };
 
   creditConsent: boolean;
+  applicantProfile?: {
+    currentAddress: {
+      line1: string;
+      line2?: string;
+      city: string;
+      provinceState: string;
+      postalCode: string;
+      country: string;
+    };
+    timeAtCurrentAddressMonths: number;
+    currentRentAmountCents: number;
+    employment: {
+      employerName: string;
+      jobTitle: string;
+      incomeAmountCents: number;
+      incomeFrequency: "monthly" | "annual";
+      monthsAtJob: number;
+    };
+    workReference: {
+      name: string;
+      phone: string;
+    };
+    signature: {
+      type: "drawn" | "typed";
+      drawnDataUrl?: string;
+      typedName?: string;
+      typedAcknowledge?: boolean;
+      signedAt: string;
+    };
+    applicantNotes?: string;
+  };
+  applicationConsent?: {
+    version: "v1.0";
+    accepted: true;
+    acceptedAt: string;
+    textHash?: string;
+  };
 }
 
 async function streamApplicationPdf(app: Application, res: Response) {
@@ -990,8 +1028,56 @@ function handleApplicationFormSubmit(req: Request, res: Response) {
       missing.push("consentCreditCheck");
     }
 
+    const profile = payload.applicantProfile;
+    if (!profile) {
+      missing.push("applicantProfile");
+    } else {
+      if (!profile.currentAddress?.line1) missing.push("currentAddress.line1");
+      if (!profile.currentAddress?.city) missing.push("currentAddress.city");
+      if (!profile.currentAddress?.provinceState) missing.push("currentAddress.provinceState");
+      if (!profile.currentAddress?.postalCode) missing.push("currentAddress.postalCode");
+      if (!profile.timeAtCurrentAddressMonths && profile.timeAtCurrentAddressMonths !== 0) {
+        missing.push("timeAtCurrentAddressMonths");
+      }
+      if (!profile.currentRentAmountCents && profile.currentRentAmountCents !== 0) {
+        missing.push("currentRentAmountCents");
+      }
+      if (!profile.employment?.employerName) missing.push("employment.employerName");
+      if (!profile.employment?.jobTitle) missing.push("employment.jobTitle");
+      if (!profile.employment?.incomeAmountCents && profile.employment?.incomeAmountCents !== 0) {
+        missing.push("employment.incomeAmountCents");
+      }
+      if (!profile.employment?.incomeFrequency) missing.push("employment.incomeFrequency");
+      if (!profile.employment?.monthsAtJob && profile.employment?.monthsAtJob !== 0) {
+        missing.push("employment.monthsAtJob");
+      }
+      if (!profile.workReference?.name) missing.push("workReference.name");
+      if (!profile.workReference?.phone) missing.push("workReference.phone");
+      const sig = profile.signature;
+      if (!sig) {
+        missing.push("signature");
+      } else if (sig.type === "drawn") {
+        if (!sig.drawnDataUrl) missing.push("signature.drawnDataUrl");
+      } else if (sig.type === "typed") {
+        if (!sig.typedName) missing.push("signature.typedName");
+        if (!sig.typedAcknowledge) missing.push("signature.typedAcknowledge");
+      } else {
+        missing.push("signature.type");
+      }
+    }
+
+    const consent = payload.applicationConsent;
+    if (!consent?.accepted || !consent?.acceptedAt) {
+      missing.push("applicationConsent");
+    }
+
     if (missing.length) {
-      return res.status(400).json({ error: "missing_fields", missing });
+      return res.status(400).json({
+        ok: false,
+        error: "validation_failed",
+        detail: "Required fields are missing or invalid.",
+        fields: missing,
+      });
     }
 
     const rent =
@@ -999,10 +1085,15 @@ function handleApplicationFormSubmit(req: Request, res: Response) {
         ? payload.requestedRent
         : 0;
 
-    const monthlyIncome =
-      payload.employment?.monthlyIncome && payload.employment.monthlyIncome > 0
-        ? payload.employment.monthlyIncome
-        : 0;
+    const profileIncomeCents = profile?.employment?.incomeAmountCents || 0;
+    const profileIncomeFrequency = profile?.employment?.incomeFrequency || "monthly";
+    let monthlyIncome = 0;
+    if (profileIncomeCents > 0) {
+      const base = profileIncomeCents / 100;
+      monthlyIncome = profileIncomeFrequency === "annual" ? base / 12 : base;
+    } else if (payload.employment?.monthlyIncome && payload.employment.monthlyIncome > 0) {
+      monthlyIncome = payload.employment.monthlyIncome;
+    }
 
     const rentToIncomeRatio =
       rent > 0 && monthlyIncome > 0 ? rent / monthlyIncome : 0;
@@ -1138,6 +1229,9 @@ function handleApplicationFormSubmit(req: Request, res: Response) {
       coApplicant: coApplicantSummary,
       household: householdDetails,
       references: referenceDetails,
+      applicantProfile: profile || null,
+      applicationConsent: consent || null,
+      formVersion: payload.formVersion || "v2",
     };
 
     APPLICATIONS.unshift(newApp);
