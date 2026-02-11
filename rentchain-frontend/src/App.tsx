@@ -63,6 +63,7 @@ import TenantNoticeDetailPage from "./pages/tenant/TenantNoticeDetailPage";
 import MaintenanceRequestsPage from "./pages/MaintenanceRequestsPage";
 import PdfSamplePage from "./pages/PdfSamplePage";
 import LeaseLedgerPage from "./pages/LeaseLedgerPage";
+import ApplicationReviewSummaryPage from "./pages/ApplicationReviewSummaryPage";
 
 const TENANT_PORTAL_ENABLED = import.meta.env.VITE_TENANT_PORTAL_ENABLED === "true";
 
@@ -266,6 +267,16 @@ function App() {
             <RequireAuth>
               <LandlordNav>
                 <ApplicationsPage />
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/applications/:id/review-summary"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <ApplicationReviewSummaryPage />
               </LandlordNav>
             </RequireAuth>
           }
