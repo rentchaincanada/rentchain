@@ -1810,6 +1810,7 @@ router.get(
 
 router.get("/rental-applications/:id/review-summary", async (req: any, res) => {
   try {
+    res.setHeader("x-route-source", "rentalApplicationsRoutes.ts");
     const id = String(req.params?.id || "").trim();
     const access = await loadAuthorizedApplication(req, id);
     if (!access.ok) {
@@ -1833,6 +1834,7 @@ router.get("/rental-applications/:id/review-summary", async (req: any, res) => {
 
 router.get("/rental-applications/:id/review-summary.pdf", async (req: any, res) => {
   try {
+    res.setHeader("x-route-source", "rentalApplicationsRoutes.ts");
     const id = String(req.params?.id || "").trim();
     const access = await loadAuthorizedApplication(req, id);
     if (!access.ok) {
