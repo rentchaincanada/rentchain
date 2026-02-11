@@ -41,6 +41,45 @@ export interface HouseholdDetails {
   notes?: string;
 }
 
+export interface ApplicantProfile {
+  currentAddress: {
+    line1: string;
+    line2?: string;
+    city: string;
+    provinceState: string;
+    postalCode: string;
+    country: string;
+  };
+  timeAtCurrentAddressMonths: number;
+  currentRentAmountCents: number;
+  employment: {
+    employerName: string;
+    jobTitle: string;
+    incomeAmountCents: number;
+    incomeFrequency: "monthly" | "annual";
+    monthsAtJob: number;
+  };
+  workReference: {
+    name: string;
+    phone: string;
+  };
+  signature: {
+    type: "drawn" | "typed";
+    drawnDataUrl?: string;
+    typedName?: string;
+    typedAcknowledge?: boolean;
+    signedAt: string;
+  };
+  applicantNotes?: string;
+}
+
+export interface ApplicationConsent {
+  version: "v1.0";
+  accepted: true;
+  acceptedAt: string;
+  textHash?: string;
+}
+
 export interface ReferenceDetails {
   currentLandlordName?: string;
   currentLandlordPhone?: string;
@@ -163,6 +202,9 @@ export interface Application {
   coSignerName?: string | null;
   coSignerRelationship?: string | null;
   coSignerMonthlyIncome?: number | null;
+  applicantProfile?: ApplicantProfile | null;
+  applicationConsent?: ApplicationConsent | null;
+  formVersion?: string | null;
 }
 
 /**
@@ -225,6 +267,9 @@ export interface SubmitApplicationPayload {
   };
 
   creditConsent: boolean;
+  applicantProfile?: ApplicantProfile;
+  applicationConsent?: ApplicationConsent;
+  formVersion?: string;
 }
 
 export interface UpdateApplicationPayload {

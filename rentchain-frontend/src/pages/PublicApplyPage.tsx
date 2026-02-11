@@ -95,6 +95,16 @@ export default function PublicApplyPage() {
     emptyHistory(),
     emptyHistory(),
   ]);
+  const [profileAddress, setProfileAddress] = useState({
+    line1: "",
+    line2: "",
+    city: "",
+    provinceState: "",
+    postalCode: "",
+    country: "CA",
+  });
+  const [timeAtAddressMonths, setTimeAtAddressMonths] = useState("");
+  const [currentRentAmount, setCurrentRentAmount] = useState("");
   const [employment, setEmployment] = useState<RentalApplicationPayload["employment"]>({
     applicant: {
       status: null,
@@ -124,6 +134,8 @@ export default function PublicApplyPage() {
     applicantPersonal: { name: "", relationship: "", phone: "", address: "" },
     coApplicantPersonal: { name: "", relationship: "", phone: "", address: "" },
   });
+  const [workReferenceName, setWorkReferenceName] = useState("");
+  const [workReferencePhone, setWorkReferencePhone] = useState("");
   const [loans, setLoans] = useState<LoanEntry[]>([
     { institution: "", address: "", monthlyPaymentCents: null, balanceCents: null },
   ]);
@@ -150,6 +162,10 @@ export default function PublicApplyPage() {
     applicantNameTyped: "",
     coApplicantNameTyped: "",
   });
+  const [signatureTypedName, setSignatureTypedName] = useState("");
+  const [signatureTypedAck, setSignatureTypedAck] = useState(false);
+  const [applicationConsentAccepted, setApplicationConsentAccepted] = useState(false);
+  const [applicantNotes, setApplicantNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const updateApplicant = (value: Partial<RentalApplicationPayload["applicant"]>) => {
@@ -247,10 +263,37 @@ export default function PublicApplyPage() {
         isValidDob(dobValue)
       );
     }
+    if (step === 1) {
+      return (
+        profileAddress.line1.trim() &&
+        profileAddress.city.trim() &&
+        profileAddress.provinceState.trim() &&
+        profileAddress.postalCode.trim() &&
+        timeAtAddressMonths.trim() &&
+        currentRentAmount.trim()
+      );
+    }
+    if (step === 2) {
+      return (
+        (employment.applicant.employer || "").trim() &&
+        (employment.applicant.jobTitle || "").trim() &&
+        Number(employment.applicant.monthlyIncomeCents || 0) > 0 &&
+        employment.applicant.lengthMonths != null
+      );
+    }
     if (step === 4) {
       const hasApplicantSig = (consent.applicantNameTyped || "").trim();
       const hasCoSig = !coApplicantEnabled || (consent.coApplicantNameTyped || "").trim();
-      return consent.creditConsent && consent.referenceConsent && consent.dataSharingConsent && hasApplicantSig && hasCoSig;
+      return (
+        consent.creditConsent &&
+        consent.referenceConsent &&
+        consent.dataSharingConsent &&
+        hasApplicantSig &&
+        hasCoSig &&
+        signatureTypedName.trim() &&
+        signatureTypedAck &&
+        applicationConsentAccepted
+      );
     }
     return true;
   };
@@ -260,9 +303,34 @@ export default function PublicApplyPage() {
       setError("Missing application link token.");
       return;
     }
-    if (!residentialHistory[0]?.address?.trim()) {
+    if (!profileAddress.line1.trim() || !profileAddress.city.trim() || !profileAddress.provinceState.trim() || !profileAddress.postalCode.trim()) {
       setError("Current address is required for screening.");
       setStep(1);
+      return;
+    }
+    if (!timeAtAddressMonths.trim() || !currentRentAmount.trim()) {
+      setError("Time at current address and current rent are required.");
+      setStep(1);
+      return;
+    }
+    if (!(employment.applicant.employer || "").trim() || !(employment.applicant.jobTitle || "").trim()) {
+      setError("Employment details are required.");
+      setStep(2);
+      return;
+    }
+    if (!employment.applicant.monthlyIncomeCents || employment.applicant.monthlyIncomeCents <= 0) {
+      setError("Income amount is required.");
+      setStep(2);
+      return;
+    }
+    if (employment.applicant.lengthMonths == null) {
+      setError("Time at current job is required.");
+      setStep(2);
+      return;
+    }
+    if (!workReferenceName.trim() || !workReferencePhone.trim()) {
+      setError("Work reference name and phone are required.");
+      setStep(3);
       return;
     }
     const normalizedApplicant = {
@@ -329,6 +397,16 @@ export default function PublicApplyPage() {
       setStep(4);
       return;
     }
+    if (!signatureTypedName.trim() || !signatureTypedAck) {
+      setError("Signature is required to submit.");
+      setStep(4);
+      return;
+    }
+    if (!applicationConsentAccepted) {
+      setError("Application consent is required.");
+      setStep(4);
+      return;
+    }
     if (!canContinue()) {
       setError("Please complete required fields.");
       return;
@@ -337,12 +415,23 @@ export default function PublicApplyPage() {
     setSubmitting(true);
     setError(null);
     try {
+      const history = residentialHistory.map((entry, idx) => {
+        if (idx !== 0) return entry;
+        return {
+          ...entry,
+          address: [profileAddress.line1, profileAddress.line2, profileAddress.city, profileAddress.provinceState, profileAddress.postalCode]
+            .filter(Boolean)
+            .join(", "),
+          durationMonths: Number(timeAtAddressMonths) || null,
+          rentAmountCents: parseCents(currentRentAmount),
+        };
+      });
       const payload: RentalApplicationPayload = {
         token,
         applicant: normalizedApplicant,
         coApplicant: normalizedCoApplicant,
         otherResidents: otherResidents.filter((r) => r.name.trim()),
-        residentialHistory: residentialHistory.filter((h) => h.address.trim()),
+        residentialHistory: history.filter((h) => h.address.trim()),
         employment: {
           applicant: employment.applicant,
           coApplicant: coApplicantEnabled ? employment.coApplicant ?? null : null,
@@ -356,6 +445,42 @@ export default function PublicApplyPage() {
           ...consent,
           acceptedAt: Date.now(),
         },
+        applicantProfile: {
+          currentAddress: {
+            line1: profileAddress.line1,
+            line2: profileAddress.line2 || undefined,
+            city: profileAddress.city,
+            provinceState: profileAddress.provinceState,
+            postalCode: profileAddress.postalCode,
+            country: "CA",
+          },
+          timeAtCurrentAddressMonths: Number(timeAtAddressMonths) || 0,
+          currentRentAmountCents: parseCents(currentRentAmount) || 0,
+          employment: {
+            employerName: employment.applicant.employer || "",
+            jobTitle: employment.applicant.jobTitle || "",
+            incomeAmountCents: employment.applicant.monthlyIncomeCents || 0,
+            incomeFrequency: "monthly",
+            monthsAtJob: employment.applicant.lengthMonths || 0,
+          },
+          workReference: {
+            name: workReferenceName.trim(),
+            phone: workReferencePhone.trim(),
+          },
+          signature: {
+            type: "typed",
+            typedName: signatureTypedName.trim(),
+            typedAcknowledge: signatureTypedAck,
+            signedAt: new Date().toISOString(),
+          },
+          applicantNotes: applicantNotes || undefined,
+        },
+        applicationConsent: {
+          version: "v1.0",
+          accepted: true,
+          acceptedAt: new Date().toISOString(),
+        },
+        formVersion: "v2",
       };
       const resp = await submitPublicApplication(payload);
       setSubmitted(true);
@@ -522,6 +647,63 @@ export default function PublicApplyPage() {
         {step === 1 ? (
           <>
             <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>Residential history</div>
+            <div style={{ border: "1px solid #e5e7eb", borderRadius: 10, padding: 10, display: "grid", gap: 8 }}>
+              <div style={{ fontWeight: 600 }}>Current address *</div>
+              <label style={labelStyle}>
+                Address line 1
+                <input
+                  value={profileAddress.line1}
+                  onChange={(e) => setProfileAddress({ ...profileAddress, line1: e.target.value })}
+                />
+              </label>
+              <label style={labelStyle}>
+                Address line 2
+                <input
+                  value={profileAddress.line2}
+                  onChange={(e) => setProfileAddress({ ...profileAddress, line2: e.target.value })}
+                />
+              </label>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 8 }}>
+                <label style={labelStyle}>
+                  City
+                  <input
+                    value={profileAddress.city}
+                    onChange={(e) => setProfileAddress({ ...profileAddress, city: e.target.value })}
+                  />
+                </label>
+                <label style={labelStyle}>
+                  Province
+                  <input
+                    value={profileAddress.provinceState}
+                    onChange={(e) => setProfileAddress({ ...profileAddress, provinceState: e.target.value })}
+                  />
+                </label>
+                <label style={labelStyle}>
+                  Postal code
+                  <input
+                    value={profileAddress.postalCode}
+                    onChange={(e) => setProfileAddress({ ...profileAddress, postalCode: e.target.value.toUpperCase() })}
+                  />
+                </label>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 8 }}>
+                <label style={labelStyle}>
+                  Time at current address (months)
+                  <input
+                    type="number"
+                    value={timeAtAddressMonths}
+                    onChange={(e) => setTimeAtAddressMonths(e.target.value)}
+                  />
+                </label>
+                <label style={labelStyle}>
+                  Current rent amount (monthly)
+                  <input
+                    value={currentRentAmount}
+                    onChange={(e) => setCurrentRentAmount(e.target.value)}
+                  />
+                </label>
+              </div>
+            </div>
             {residentialHistory.map((entry, idx) => (
               <div key={idx} style={{ border: "1px solid #e5e7eb", borderRadius: 10, padding: 10, display: "grid", gap: 8 }}>
                 <div style={{ fontWeight: 600 }}>Address {idx + 1}</div>
@@ -714,6 +896,19 @@ export default function PublicApplyPage() {
         {step === 3 ? (
           <>
             <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>References, loans, vehicles</div>
+            <div style={{ border: "1px solid #e5e7eb", borderRadius: 10, padding: 10, display: "grid", gap: 8 }}>
+              <div style={{ fontWeight: 600 }}>Work reference *</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 8 }}>
+                <label style={labelStyle}>
+                  Reference name
+                  <input value={workReferenceName} onChange={(e) => setWorkReferenceName(e.target.value)} />
+                </label>
+                <label style={labelStyle}>
+                  Reference phone
+                  <input value={workReferencePhone} onChange={(e) => setWorkReferencePhone(e.target.value)} />
+                </label>
+              </div>
+            </div>
             <div style={{ fontWeight: 600 }}>Bank reference</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 8 }}>
               <label style={labelStyle}>
@@ -884,6 +1079,34 @@ export default function PublicApplyPage() {
                   <input value={consent.coApplicantNameTyped || ""} onChange={(e) => setConsent({ ...consent, coApplicantNameTyped: e.target.value })} />
                 </label>
               ) : null}
+            </div>
+            <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: 10, display: "grid", gap: 8 }}>
+              <div style={{ fontWeight: 600 }}>Signature *</div>
+              <label style={labelStyle}>
+                Type your full name
+                <input value={signatureTypedName} onChange={(e) => setSignatureTypedName(e.target.value)} />
+              </label>
+              <label style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                <input type="checkbox" checked={signatureTypedAck} onChange={(e) => setSignatureTypedAck(e.target.checked)} />
+                <span>I agree this is my legal signature.</span>
+              </label>
+            </div>
+            <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: 10, display: "grid", gap: 8 }}>
+              <label style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                <input type="checkbox" checked={applicationConsentAccepted} onChange={(e) => setApplicationConsentAccepted(e.target.checked)} />
+                <span>
+                  I confirm the information provided is accurate and I authorize the landlord/manager to use it to evaluate my rental application.
+                </span>
+              </label>
+              <div style={{ fontSize: "0.85rem", opacity: 0.7 }}>
+                By proceeding, you consent to the collection, use, and disclosure of your information for tenant screening and verification.
+              </div>
+            </div>
+            <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: 10 }}>
+              <label style={labelStyle}>
+                Applicant notes (optional)
+                <textarea value={applicantNotes} onChange={(e) => setApplicantNotes(e.target.value)} style={{ minHeight: 90 }} />
+              </label>
             </div>
             <div style={{ fontSize: "0.85rem", opacity: 0.7 }}>
               By submitting, you confirm the information provided is accurate.

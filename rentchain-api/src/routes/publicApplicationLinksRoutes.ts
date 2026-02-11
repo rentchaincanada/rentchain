@@ -103,6 +103,8 @@ router.post("/rental-applications", async (req: any, res) => {
     const residentialHistory = Array.isArray(body?.residentialHistory) ? body.residentialHistory : [];
     const currentAddress = String(residentialHistory?.[0]?.address || "").trim();
     const consent = body?.consent || {};
+    const applicantProfile = body?.applicantProfile || null;
+    const applicationConsent = body?.applicationConsent || null;
     const creditConsent = consent?.creditConsent === true;
     const referenceConsent = consent?.referenceConsent === true;
     const acceptedAt =
@@ -125,6 +127,61 @@ router.post("/rental-applications", async (req: any, res) => {
         ok: false,
         error: "INVALID_REQUEST",
         detail: "Credit and reference consent are required.",
+      });
+    }
+
+    const missingProfile: string[] = [];
+    if (!applicantProfile?.currentAddress?.line1) missingProfile.push("currentAddress.line1");
+    if (!applicantProfile?.currentAddress?.city) missingProfile.push("currentAddress.city");
+    if (!applicantProfile?.currentAddress?.provinceState) missingProfile.push("currentAddress.provinceState");
+    if (!applicantProfile?.currentAddress?.postalCode) missingProfile.push("currentAddress.postalCode");
+    if (
+      applicantProfile?.timeAtCurrentAddressMonths == null ||
+      !Number.isFinite(Number(applicantProfile?.timeAtCurrentAddressMonths))
+    ) {
+      missingProfile.push("timeAtCurrentAddressMonths");
+    }
+    if (
+      applicantProfile?.currentRentAmountCents == null ||
+      !Number.isFinite(Number(applicantProfile?.currentRentAmountCents))
+    ) {
+      missingProfile.push("currentRentAmountCents");
+    }
+    if (!applicantProfile?.employment?.employerName) missingProfile.push("employment.employerName");
+    if (!applicantProfile?.employment?.jobTitle) missingProfile.push("employment.jobTitle");
+    if (
+      applicantProfile?.employment?.incomeAmountCents == null ||
+      !Number.isFinite(Number(applicantProfile?.employment?.incomeAmountCents))
+    ) {
+      missingProfile.push("employment.incomeAmountCents");
+    }
+    if (!applicantProfile?.employment?.incomeFrequency) missingProfile.push("employment.incomeFrequency");
+    if (
+      applicantProfile?.employment?.monthsAtJob == null ||
+      !Number.isFinite(Number(applicantProfile?.employment?.monthsAtJob))
+    ) {
+      missingProfile.push("employment.monthsAtJob");
+    }
+    if (!applicantProfile?.workReference?.name) missingProfile.push("workReference.name");
+    if (!applicantProfile?.workReference?.phone) missingProfile.push("workReference.phone");
+    const sig = applicantProfile?.signature;
+    if (!sig) {
+      missingProfile.push("signature");
+    } else if (sig.type === "drawn") {
+      if (!sig.drawnDataUrl) missingProfile.push("signature.drawnDataUrl");
+    } else if (sig.type === "typed") {
+      if (!sig.typedName) missingProfile.push("signature.typedName");
+      if (!sig.typedAcknowledge) missingProfile.push("signature.typedAcknowledge");
+    }
+    if (!applicationConsent?.accepted || !applicationConsent?.acceptedAt) {
+      missingProfile.push("applicationConsent");
+    }
+    if (missingProfile.length) {
+      return res.status(400).json({
+        ok: false,
+        error: "validation_failed",
+        detail: "Required profile fields are missing.",
+        fields: missingProfile,
       });
     }
 
@@ -180,6 +237,9 @@ router.post("/rental-applications", async (req: any, res) => {
         ip: req.ip || null,
         userAgent: req.get("user-agent") || null,
       },
+      applicantProfile: applicantProfile,
+      applicationConsent: applicationConsent,
+      formVersion: body?.formVersion || "v2",
       screening: {
         requested: false,
         requestedAt: null,

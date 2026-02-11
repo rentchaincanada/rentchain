@@ -100,6 +100,44 @@ export type RentalApplicationPayload = {
     applicantNameTyped?: string | null;
     coApplicantNameTyped?: string | null;
   };
+  applicantProfile?: {
+    currentAddress: {
+      line1: string;
+      line2?: string;
+      city: string;
+      provinceState: string;
+      postalCode: string;
+      country: string;
+    };
+    timeAtCurrentAddressMonths: number;
+    currentRentAmountCents: number;
+    employment: {
+      employerName: string;
+      jobTitle: string;
+      incomeAmountCents: number;
+      incomeFrequency: "monthly" | "annual";
+      monthsAtJob: number;
+    };
+    workReference: {
+      name: string;
+      phone: string;
+    };
+    signature: {
+      type: "drawn" | "typed";
+      drawnDataUrl?: string;
+      typedName?: string;
+      typedAcknowledge?: boolean;
+      signedAt: string;
+    };
+    applicantNotes?: string;
+  };
+  applicationConsent?: {
+    version: "v1.0";
+    accepted: true;
+    acceptedAt: string;
+    textHash?: string;
+  };
+  formVersion?: string;
 };
 
 export async function submitPublicApplication(params: RentalApplicationPayload): Promise<{ applicationId?: string }> {

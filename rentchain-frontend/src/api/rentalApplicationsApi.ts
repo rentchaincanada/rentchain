@@ -63,6 +63,45 @@ export type ScreeningReceipt = {
   pdfUrl?: string | null;
 };
 
+export type ApplicantProfile = {
+  currentAddress?: {
+    line1?: string;
+    line2?: string;
+    city?: string;
+    provinceState?: string;
+    postalCode?: string;
+    country?: string;
+  };
+  timeAtCurrentAddressMonths?: number | null;
+  currentRentAmountCents?: number | null;
+  employment?: {
+    employerName?: string;
+    jobTitle?: string;
+    incomeAmountCents?: number | null;
+    incomeFrequency?: "monthly" | "annual";
+    monthsAtJob?: number | null;
+  };
+  workReference?: {
+    name?: string;
+    phone?: string;
+  };
+  signature?: {
+    type?: "drawn" | "typed";
+    drawnDataUrl?: string | null;
+    typedName?: string | null;
+    typedAcknowledge?: boolean | null;
+    signedAt?: string | number | null;
+  };
+  applicantNotes?: string | null;
+};
+
+export type ApplicationConsent = {
+  version?: string | null;
+  accepted?: boolean | null;
+  acceptedAt?: string | number | null;
+  textHash?: string | null;
+};
+
 export type ScreeningOrder = {
   id: string;
   landlordId?: string | null;
@@ -230,6 +269,9 @@ export type RentalApplication = {
       notes?: string | null;
     } | null;
   };
+  applicantProfile?: ApplicantProfile | null;
+  applicationConsent?: ApplicationConsent | null;
+  formVersion?: string | null;
   screeningStatus?: "unpaid" | "paid" | "processing" | "complete" | "failed" | "ineligible";
   screeningPaidAt?: number | null;
   screeningStartedAt?: number | null;
