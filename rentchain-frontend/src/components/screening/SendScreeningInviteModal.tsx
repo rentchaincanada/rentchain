@@ -202,6 +202,27 @@ export function SendScreeningInviteModal({
             ×
           </button>
         </div>
+        <div
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "4px 10px",
+            borderRadius: 999,
+            background: "rgba(15, 118, 110, 0.08)",
+            color: "#0f766e",
+            fontSize: 12,
+            fontWeight: 600,
+            width: "fit-content",
+          }}
+        >
+          Powered by TransUnion
+          <span style={{ fontWeight: 400, color: text.subtle }}>Soft inquiry (no score impact)</span>
+        </div>
+        <div style={{ fontSize: 12, color: text.subtle }}>
+          Tenant authorizes screening and receives the consent flow. You receive a verified screening report and
+          audit-ready record.
+        </div>
 
         <label style={{ display: "grid", gap: 6, fontSize: 13, color: text.muted }}>
           Tenant email

@@ -127,6 +127,32 @@ function seededNumber(input: string) {
   return parseInt(hash.slice(0, 8), 16);
 }
 
+function buildReferenceId(orderId: string) {
+  const safe = String(orderId || "").replace(/[^a-z0-9]/gi, "");
+  const suffix = safe.slice(-8).toUpperCase() || "UNKNOWN";
+  return `RC-${suffix}`;
+}
+
+function resolveProviderLabel(value?: string | null) {
+  const raw = String(value || "").toLowerCase();
+  if (!raw) return "TransUnion";
+  if (raw.includes("transunion") || raw.includes("tu")) return "TransUnion";
+  return raw;
+}
+
+function resolveReceiptStatus(application: any, order: any) {
+  const status = String(
+    application?.screeningStatus ||
+      order?.status ||
+      order?.paymentStatus ||
+      ""
+  ).toLowerCase();
+  if (["complete", "completed", "report_ready"].includes(status)) return "completed";
+  if (["paid", "processing"].includes(status)) return "paid";
+  if (status === "failed") return "failed";
+  return "pending";
+}
+
 function buildStubResult(application: any, scoreAddOn: boolean, seed: number) {
   const applicant = application?.applicant || {};
   const currentAddress = String(application?.residentialHistory?.[0]?.address || "").trim();
@@ -599,37 +625,39 @@ router.post(
       const orderRef = db.collection("screeningOrders").doc();
       const orderId = orderRef.id;
       const aiVerification = serviceLevel === "VERIFIED_AI";
-      const orderPayload: any = {
-        id: orderId,
-        landlordId,
-        applicationId: id,
-        propertyId: data?.propertyId || null,
-        unitId: data?.unitId || null,
-        createdAt: now,
-        amountCents: pricing.baseAmountCents,
-        currency: "CAD",
-        status: "CREATED",
-        paymentStatus: "unpaid",
-        finalized: false,
-        finalizedAt: null,
-        lastStripeEventId: null,
-        amountTotalCents: pricing.totalAmountCents,
-        screeningTier,
-        addons,
-        scoreAddOn,
-        scoreAddOnCents: pricing.scoreAddOnCents,
-        expeditedAddOn,
-        expeditedAddOnCents: pricing.expeditedAddOnCents,
-        provider: providerHealth.provider,
-        providerRequestId: null,
-        paidAt: null,
-        error: null,
-        serviceLevel,
-        aiVerification,
-        aiPriceCents: aiVerification ? pricing.aiAddOnCents : 0,
-        totalAmountCents: pricing.totalAmountCents,
-        reviewerStatus: "QUEUED",
-        stripeSessionId: null,
+        const orderPayload: any = {
+          id: orderId,
+          referenceId: buildReferenceId(orderId),
+          landlordId,
+          applicationId: id,
+          propertyId: data?.propertyId || null,
+          unitId: data?.unitId || null,
+          createdAt: now,
+          amountCents: pricing.baseAmountCents,
+          currency: "CAD",
+          status: "CREATED",
+          paymentStatus: "unpaid",
+          finalized: false,
+          finalizedAt: null,
+          lastStripeEventId: null,
+          amountTotalCents: pricing.totalAmountCents,
+          screeningTier,
+          addons,
+          scoreAddOn,
+          scoreAddOnCents: pricing.scoreAddOnCents,
+          expeditedAddOn,
+          expeditedAddOnCents: pricing.expeditedAddOnCents,
+          provider: providerHealth.provider,
+          inquiryType: "soft",
+          providerRequestId: null,
+          paidAt: null,
+          error: null,
+          serviceLevel,
+          aiVerification,
+          aiPriceCents: aiVerification ? pricing.aiAddOnCents : 0,
+          totalAmountCents: pricing.totalAmountCents,
+          reviewerStatus: "QUEUED",
+          stripeSessionId: null,
         stripePaymentIntentId: null,
         consentGiven: true,
         consentTimestamp: consent.timestamp,
@@ -935,6 +963,7 @@ router.post(
 
       const orderPayload: any = {
         id: orderId,
+        referenceId: buildReferenceId(orderId),
         landlordId,
         applicationId: applicationId || null,
         propertyId: data?.propertyId || propertyIdInput || null,
@@ -955,6 +984,7 @@ router.post(
         expeditedAddOn,
         expeditedAddOnCents: pricing.expeditedAddOnCents,
         provider: providerHealth.provider,
+        inquiryType: "soft",
         providerRequestId: null,
         paidAt: null,
         error: null,
@@ -1284,27 +1314,29 @@ router.post(
       const orderRef = db.collection("screeningOrders").doc();
       const orderId = orderRef.id;
       const aiVerification = serviceLevel === "VERIFIED_AI";
-      const orderPayload: any = {
-        id: orderId,
-        landlordId,
-        applicationId: id,
-        propertyId: data?.propertyId || null,
-        unitId: data?.unitId || null,
-        createdAt: now,
-        amountCents: pricing.baseAmountCents,
-        currency: "CAD",
-        status: "CREATED",
-        screeningTier,
-        addons,
-        scoreAddOn,
-        scoreAddOnCents: pricing.scoreAddOnCents,
-        expeditedAddOn,
-        expeditedAddOnCents: pricing.expeditedAddOnCents,
-        provider: providerHealth.provider,
-        providerRequestId: null,
-        paidAt: null,
-        error: null,
-        serviceLevel,
+        const orderPayload: any = {
+          id: orderId,
+          referenceId: buildReferenceId(orderId),
+          landlordId,
+          applicationId: id,
+          propertyId: data?.propertyId || null,
+          unitId: data?.unitId || null,
+          createdAt: now,
+          amountCents: pricing.baseAmountCents,
+          currency: "CAD",
+          status: "CREATED",
+          screeningTier,
+          addons,
+          scoreAddOn,
+          scoreAddOnCents: pricing.scoreAddOnCents,
+          expeditedAddOn,
+          expeditedAddOnCents: pricing.expeditedAddOnCents,
+          provider: providerHealth.provider,
+          inquiryType: "soft",
+          providerRequestId: null,
+          paidAt: null,
+          error: null,
+          serviceLevel,
         aiVerification,
         aiPriceCents: aiVerification ? pricing.aiAddOnCents : 0,
         totalAmountCents: pricing.totalAmountCents,
@@ -1665,6 +1697,84 @@ router.get(
     } catch (err: any) {
       console.error("[rental-applications] screening result read failed", err?.message || err);
       return res.status(500).json({ ok: false, error: "SCREENING_RESULT_READ_FAILED" });
+    }
+  }
+);
+
+router.get(
+  "/rental-applications/:id/screening/receipt",
+  attachAccount,
+  requireFeature("screening"),
+  async (req: any, res) => {
+    try {
+      const role = String(req.user?.role || "").toLowerCase();
+      if (role !== "landlord" && role !== "admin") {
+        return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+      }
+      const landlordId = req.user?.landlordId || req.user?.id || null;
+      if (!landlordId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+      const id = String(req.params?.id || "").trim();
+      if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+      const snap = await db.collection("rentalApplications").doc(id).get();
+      if (!snap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+      const data = snap.data() as any;
+      if (data?.landlordId && data.landlordId !== landlordId) {
+        return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+      }
+
+      const orderId = String(data?.screening?.orderId || "").trim();
+      let order: any = null;
+      if (orderId) {
+        const orderSnap = await db.collection("screeningOrders").doc(orderId).get();
+        order = orderSnap.exists ? (orderSnap.data() as any) : null;
+      }
+
+      const providerValue = order?.provider || data?.screeningProvider || data?.screening?.provider || null;
+      const providerLabel = resolveProviderLabel(providerValue);
+      const referenceId = order?.referenceId || (orderId ? buildReferenceId(orderId) : null);
+      const consentVersion = order?.consentVersion || data?.screening?.consentVersion || CONSENT_VERSION;
+      const consentTimestamp =
+        order?.consentTimestamp ||
+        data?.screening?.consentTimestamp ||
+        data?.consent?.acceptedAt ||
+        null;
+      const generatedAt =
+        order?.reportGeneratedAt ||
+        data?.screeningCompletedAt ||
+        order?.completedAt ||
+        null;
+
+      let reportUrl: string | null = null;
+      if (order?.reportBucket && order?.reportObjectKey) {
+        try {
+          reportUrl = await createSignedUrl({
+            bucket: order.reportBucket,
+            objectKey: order.reportObjectKey,
+            expiresSeconds: 10 * 60,
+          });
+        } catch {
+          reportUrl = null;
+        }
+      }
+
+      return res.json({
+        ok: true,
+        receipt: {
+          status: resolveReceiptStatus(data, order),
+          provider: providerLabel,
+          inquiryType: "Soft inquiry (no score impact)",
+          referenceId,
+          consentVersion,
+          consentTimestamp,
+          generatedAt,
+          reportUrl,
+          pdfUrl: reportUrl,
+        },
+      });
+    } catch (err: any) {
+      console.error("[screening_receipt] failed", err?.message || err);
+      return res.status(500).json({ ok: false, error: "internal_error" });
     }
   }
 );
