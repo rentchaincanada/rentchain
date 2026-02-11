@@ -49,11 +49,30 @@ export type ApplicationReviewSummary = {
   insights: string[];
 };
 
+export class ReviewSummaryApiError extends Error {
+  status?: number;
+  backendError?: string;
+  detail?: string;
+}
+
 export async function fetchReviewSummary(applicationId: string): Promise<ApplicationReviewSummary> {
-  const res: any = await apiFetch(`/rental-applications/${encodeURIComponent(applicationId)}/review-summary`, {
-    method: "GET",
-  });
-  return res?.summary as ApplicationReviewSummary;
+  const res: any = await apiFetch(
+    `/rental-applications/${encodeURIComponent(applicationId)}/review-summary`,
+    {
+      method: "GET",
+      allowStatuses: [400, 401, 403, 404, 500],
+    }
+  );
+  if (!res?.ok || !res?.summary) {
+    const err = new ReviewSummaryApiError(
+      res?.detail || res?.error || "Failed to load review summary"
+    );
+    err.status = Number.isFinite(Number(res?.status)) ? Number(res.status) : undefined;
+    err.backendError = typeof res?.error === "string" ? res.error : undefined;
+    err.detail = typeof res?.detail === "string" ? res.detail : undefined;
+    throw err;
+  }
+  return res.summary as ApplicationReviewSummary;
 }
 
 export function reviewSummaryPdfUrl(applicationId: string): string {

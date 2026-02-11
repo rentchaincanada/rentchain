@@ -1813,13 +1813,21 @@ router.get("/rental-applications/:id/review-summary", async (req: any, res) => {
     const id = String(req.params?.id || "").trim();
     const access = await loadAuthorizedApplication(req, id);
     if (!access.ok) {
-      return res.status(access.status).json({ ok: false, error: access.error });
+      return res.status(access.status).json({
+        ok: false,
+        status: access.status,
+        error: access.error,
+      });
     }
     const summary = buildReviewSummary(id, access.data);
     return res.json({ ok: true, summary });
   } catch (err: any) {
     console.error("[review_summary] failed", err?.message || err);
-    return res.status(500).json({ ok: false, error: "REVIEW_SUMMARY_FAILED" });
+    return res.status(500).json({
+      ok: false,
+      status: 500,
+      error: "REVIEW_SUMMARY_FAILED",
+    });
   }
 });
 
@@ -1828,7 +1836,11 @@ router.get("/rental-applications/:id/review-summary.pdf", async (req: any, res) 
     const id = String(req.params?.id || "").trim();
     const access = await loadAuthorizedApplication(req, id);
     if (!access.ok) {
-      return res.status(access.status).json({ ok: false, error: access.error });
+      return res.status(access.status).json({
+        ok: false,
+        status: access.status,
+        error: access.error,
+      });
     }
     const summary = buildReviewSummary(id, access.data);
     const pdfBuffer = await buildReviewSummaryPdf(summary);
@@ -1837,7 +1849,11 @@ router.get("/rental-applications/:id/review-summary.pdf", async (req: any, res) 
     return res.status(200).send(pdfBuffer);
   } catch (err: any) {
     console.error("[review_summary_pdf] failed", err?.message || err);
-    return res.status(500).json({ ok: false, error: "REVIEW_SUMMARY_PDF_FAILED" });
+    return res.status(500).json({
+      ok: false,
+      status: 500,
+      error: "REVIEW_SUMMARY_PDF_FAILED",
+    });
   }
 });
 

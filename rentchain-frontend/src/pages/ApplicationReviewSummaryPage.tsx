@@ -6,6 +6,7 @@ import {
   fetchReviewSummary,
   reviewSummaryPdfUrl,
   type ApplicationReviewSummary,
+  ReviewSummaryApiError,
 } from "../api/reviewSummaryApi";
 import { useToast } from "../components/ui/ToastProvider";
 
@@ -44,32 +45,79 @@ function kv(label: string, value: string) {
   );
 }
 
-export default function ApplicationReviewSummaryPage() {
+type SummaryLoadError = {
+  message: string;
+  status?: number;
+  backendError?: string;
+  detail?: string;
+};
+
+class ReviewSummaryErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; message: string }
+> {
+  state = { hasError: false, message: "" };
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, message: error?.message || "Review summary failed to render." };
+  }
+
+  componentDidCatch(error: Error) {
+    console.error("[review-summary] render crash", error);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <Card style={{ color: colors.danger }}>
+          <div style={{ fontWeight: 700, marginBottom: 8 }}>Review summary failed to render.</div>
+          <div style={{ marginBottom: 10 }}>{this.state.message}</div>
+          <Button variant="secondary" onClick={() => window.location.reload()}>
+            Reload
+          </Button>
+        </Card>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function ApplicationReviewSummaryPageBody() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<SummaryLoadError | null>(null);
   const [summary, setSummary] = useState<ApplicationReviewSummary | null>(null);
 
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await fetchReviewSummary(id);
-        if (mounted) setSummary(data);
-      } catch (err: any) {
-        if (mounted) setError(err?.message || "Failed to load review summary");
-      } finally {
-        if (mounted) setLoading(false);
+  const loadSummary = React.useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await fetchReviewSummary(id);
+      setSummary(data);
+    } catch (err: any) {
+      console.error("[review-summary] load failed", err);
+      const parsed: SummaryLoadError = {
+        message: err?.message || "Failed to load review summary",
+      };
+      if (err instanceof ReviewSummaryApiError) {
+        parsed.status = err.status;
+        parsed.backendError = err.backendError;
+        parsed.detail = err.detail;
+      } else if (typeof err?.status === "number") {
+        parsed.status = err.status;
       }
-    })();
-    return () => {
-      mounted = false;
-    };
+      setSummary(null);
+      setError(parsed);
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
+
+  useEffect(() => {
+    void loadSummary();
+  }, [loadSummary]);
 
   const shareUrl = useMemo(() => {
     if (typeof window === "undefined") return "";
@@ -113,7 +161,26 @@ export default function ApplicationReviewSummaryPage() {
       </div>
 
       {loading ? <Card>Loading summary…</Card> : null}
-      {error ? <Card style={{ color: colors.danger }}>{error}</Card> : null}
+      {error ? (
+        <Card style={{ color: colors.danger, display: "grid", gap: 6 }}>
+          <div style={{ fontWeight: 700 }}>Unable to load review summary</div>
+          <div>{error.message}</div>
+          <div style={{ fontSize: 13, color: text.subtle }}>
+            Status: {error.status ?? "unknown"}
+          </div>
+          {error.backendError ? (
+            <div style={{ fontSize: 13, color: text.subtle }}>Error: {error.backendError}</div>
+          ) : null}
+          {error.detail ? (
+            <div style={{ fontSize: 13, color: text.subtle }}>Detail: {error.detail}</div>
+          ) : null}
+          <div>
+            <Button variant="secondary" onClick={() => void loadSummary()}>
+              Retry
+            </Button>
+          </div>
+        </Card>
+      ) : null}
 
       {!loading && !error && summary ? (
         <>
@@ -204,5 +271,13 @@ export default function ApplicationReviewSummaryPage() {
         </>
       ) : null}
     </div>
+  );
+}
+
+export default function ApplicationReviewSummaryPage() {
+  return (
+    <ReviewSummaryErrorBoundary>
+      <ApplicationReviewSummaryPageBody />
+    </ReviewSummaryErrorBoundary>
   );
 }
