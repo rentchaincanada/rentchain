@@ -4,6 +4,7 @@ import sgMail from "@sendgrid/mail";
 import { db } from "../config/firebase";
 import { getAdminEmails, isAdminEmail } from "../lib/adminEmails";
 import { requireAuth } from "../middleware/requireAuth";
+import { rateLimitLeads } from "../middleware/rateLimit";
 const publicRouter = Router();
 const adminRouter = Router();
 
@@ -194,6 +195,7 @@ async function approveLeadById(leadId: string, req: any, res: any) {
 
 publicRouter.post(
   "/landlord-inquiry",
+  rateLimitLeads,
   async (req, res) => {
     res.setHeader("x-route-source", "landlordInquiryRoutes.ts:public");
 

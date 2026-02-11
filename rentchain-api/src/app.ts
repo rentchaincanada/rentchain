@@ -86,6 +86,7 @@ if (!pricingHealth.ok) {
   });
 }
 app.set("etag", false);
+app.set("trust proxy", 1);
 
 /**
  * Middleware

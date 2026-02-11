@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { createHash } from "crypto";
 import { db } from "../config/firebase";
+import { rateLimitPublicApply } from "../middleware/rateLimit";
 
 const router = Router();
 
@@ -74,7 +75,7 @@ router.get("/application-links/:token", async (req: any, res) => {
   }
 });
 
-router.post("/rental-applications", async (req: any, res) => {
+router.post("/rental-applications", rateLimitPublicApply, async (req: any, res) => {
   res.setHeader("x-route-source", "publicApplicationLinksRoutes");
   try {
     const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
