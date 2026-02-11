@@ -24,6 +24,7 @@ import { validateLandlordCredentials } from "../services/authService";
 import { getOrCreateAccount } from "../services/accountService";
 import { getOrCreateLandlordProfile } from "../services/landlordProfileService";
 import { db } from "../config/firebase";
+import { rateLimitAuth } from "../middleware/rateLimit";
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
@@ -205,7 +206,7 @@ function validateCodeWithBackup(
 // Seed demo landlord on startup
 ensureLandlordEntry({ ...DEMO_LANDLORD });
 
-router.post("/login", async (req, res) => {
+router.post("/login", rateLimitAuth, async (req, res) => {
   const requestId = (req as any).requestId || `req-${Math.random().toString(36).slice(2, 8)}`;
   (req as any).requestId = requestId;
   res.setHeader("x-auth-login-rev", "debug-2026-01-06-v1");
@@ -373,7 +374,7 @@ router.get("/health", (req, res) => {
   });
 });
 
-router.post("/login/demo", async (_req, res) => {
+router.post("/login/demo", rateLimitAuth, async (_req, res) => {
   if (process.env.NODE_ENV === "production") {
     return res.status(404).end();
   }

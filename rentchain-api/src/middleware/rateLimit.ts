@@ -1,45 +1,91 @@
-import type { Request, Response, NextFunction } from "express";
-import { jsonError } from "../lib/httpResponse";
+import expressRateLimit from "express-rate-limit";
 
-type Bucket = { count: number; resetAt: number };
+type RateLimitOptions = {
+  windowMs: number;
+  max: number;
+  keyGenerator: (req: any) => string;
+};
 
-const buckets = new Map<string, Bucket>();
+type SimpleRateLimitOptions = {
+  windowMs: number;
+  max: number;
+};
 
-export function rateLimit(opts: { windowMs: number; max: number; key?: (req: Request) => string }) {
-  const windowMs = opts.windowMs;
-  const max = opts.max;
+const allowlist = String(process.env.RATE_LIMIT_ALLOWLIST || "")
+  .split(",")
+  .map((v) => v.trim())
+  .filter(Boolean);
 
-  return (req: Request, res: Response, next: NextFunction) => {
-    const now = Date.now();
-    const keyFn =
-      opts.key ||
-      ((r) => {
-        const u: any = (r as any).user;
-        return String(u?.landlordId || u?.id || r.ip || "anon");
-      });
+const handler = (_req: any, res: any) => {
+  return res.status(429).json({
+    ok: false,
+    error: "rate_limited",
+    detail: "Too many requests. Please try again later.",
+  });
+};
 
-    const key = keyFn(req);
-    const b = buckets.get(key);
-
-    if (!b || now >= b.resetAt) {
-      buckets.set(key, { count: 1, resetAt: now + windowMs });
-      return next();
-    }
-
-    b.count += 1;
-    if (b.count > max) {
-      const retryAfterSec = Math.ceil((b.resetAt - now) / 1000);
-      res.setHeader("Retry-After", String(retryAfterSec));
-      return jsonError(
-        res,
-        429,
-        "RATE_LIMITED",
-        "Too many requests",
-        { windowMs, max, retryAfterSec },
-        req.requestId
-      );
-    }
-
-    return next();
-  };
+function createLimiter(opts: RateLimitOptions) {
+  return expressRateLimit({
+    windowMs: opts.windowMs,
+    max: opts.max,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: opts.keyGenerator,
+    handler,
+    skip: (req) => {
+      const ip = req.ip || "";
+      return allowlist.includes(ip);
+    },
+  });
 }
+
+export function rateLimitSimple(opts: SimpleRateLimitOptions) {
+  return createLimiter({
+    windowMs: opts.windowMs,
+    max: opts.max,
+    keyGenerator: keyByIp,
+  });
+}
+
+// Backwards-compatible export used by older route modules.
+export const rateLimit = rateLimitSimple;
+
+const keyByIp = (req: any) => String(req.ip || "unknown");
+const keyByUser = (req: any) =>
+  String(req.user?.id || req.user?.uid || req.user?.landlordId || req.ip || "unknown");
+
+export const rateLimitPublicApply = createLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  keyGenerator: keyByIp,
+});
+
+export const rateLimitLeads = createLimiter({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  keyGenerator: keyByIp,
+});
+
+export const rateLimitAuth = createLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  keyGenerator: keyByIp,
+});
+
+export const rateLimitScreeningUser = createLimiter({
+  windowMs: 60 * 60 * 1000,
+  max: 30,
+  keyGenerator: keyByUser,
+});
+
+export const rateLimitScreeningIp = createLimiter({
+  windowMs: 60 * 60 * 1000,
+  max: 60,
+  keyGenerator: keyByIp,
+});
+
+export const rateLimitTenantInvitesUser = createLimiter({
+  windowMs: 60 * 60 * 1000,
+  max: 30,
+  keyGenerator: keyByUser,
+});

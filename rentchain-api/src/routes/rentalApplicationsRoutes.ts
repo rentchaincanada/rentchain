@@ -17,6 +17,7 @@ import { buildShareUrl, createReportExport } from "../services/screening/reportE
 import { getScreeningProviderHealth } from "../services/screening/providerHealth";
 import { buildTenantInviteUrl, createInviteToken } from "../services/screening/inviteTokens";
 import { createSignedUrl } from "../storage/pdfStore";
+import { rateLimitScreeningIp, rateLimitScreeningUser } from "../middleware/rateLimit";
 
 const router = Router();
 
@@ -501,6 +502,8 @@ router.post(
 
 router.post(
   "/rental-applications/:id/screening/checkout",
+  rateLimitScreeningIp,
+  rateLimitScreeningUser,
   attachAccount,
   requireFeature("screening"),
   async (req: any, res) => {
@@ -1254,6 +1257,8 @@ router.get(
 
 router.post(
   "/rental-applications/:id/screening/run",
+  rateLimitScreeningIp,
+  rateLimitScreeningUser,
   attachAccount,
   requireFeature("screening"),
   async (req: any, res) => {

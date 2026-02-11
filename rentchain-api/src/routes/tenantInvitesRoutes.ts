@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import { db } from "../config/firebase";
 import sgMail from "@sendgrid/mail";
 import { requireLandlordOrAdmin } from "../middleware/requireLandlordOrAdmin";
+import { rateLimitTenantInvitesUser } from "../middleware/rateLimit";
 
 const router = Router();
 
@@ -16,6 +17,7 @@ function signTenantJwt(payload: any) {
 router.post(
   "/",
   requireLandlordOrAdmin,
+  rateLimitTenantInvitesUser,
   async (req: any, res) => {
     try {
       res.setHeader("x-route-source", "tenantInvitesRoutes");
