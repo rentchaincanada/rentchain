@@ -12,6 +12,10 @@ export type LandlordLead = {
   approvedBy?: string | null;
   rejectedAt?: number | null;
   rejectedBy?: string | null;
+  referralCode?: string | null;
+  referrerLandlordId?: string | null;
+  referralStatus?: string | null;
+  priority?: boolean;
 };
 
 export async function fetchLandlordLeads(

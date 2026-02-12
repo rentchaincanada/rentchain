@@ -6,9 +6,10 @@ import { requestLandlordInquiry } from "../../api/public";
 type Props = {
   open: boolean;
   onClose: () => void;
+  referralCode?: string | null;
 };
 
-export const RequestAccessModal: React.FC<Props> = ({ open, onClose }) => {
+export const RequestAccessModal: React.FC<Props> = ({ open, onClose, referralCode }) => {
   const [email, setEmail] = useState("");
   const [firstName, setFirstName] = useState("");
   const [portfolioSize, setPortfolioSize] = useState("");
@@ -31,7 +32,7 @@ export const RequestAccessModal: React.FC<Props> = ({ open, onClose }) => {
     setError(null);
     setLoading(true);
     try {
-      await requestLandlordInquiry({ email, firstName, portfolioSize, note });
+      await requestLandlordInquiry({ email, firstName, portfolioSize, note, referralCode: referralCode || undefined });
       setSent(true);
     } catch (err: any) {
       setError(err?.message || "Request failed");
@@ -93,6 +94,19 @@ export const RequestAccessModal: React.FC<Props> = ({ open, onClose }) => {
           </div>
         ) : (
           <form onSubmit={handleSubmit} style={{ display: "grid", gap: spacing.md }}>
+            {referralCode ? (
+              <div
+                style={{
+                  padding: "10px 12px",
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: radius.md,
+                  background: "#f8fafc",
+                  color: text.muted,
+                }}
+              >
+                You were invited by a RentChain landlord.
+              </div>
+            ) : null}
             <div style={{ display: "grid", gap: 6 }}>
               <label style={{ fontWeight: 600 }}>Email</label>
               <Input

@@ -27,6 +27,7 @@ import tenantHistoryShareRoutes, {
 import propertiesRoutes from "./routes/propertiesRoutes";
 import accountRoutes from "./routes/accountRoutes";
 import onboardingRoutes from "./routes/onboardingRoutes";
+import referralsRoutes from "./routes/referralsRoutes";
 import billingRoutes from "./routes/billingRoutes";
 import tenantSignalsRoutes from "./routes/tenantSignalsRoutes";
 import reportingRoutes from "./routes/reportingRoutes";
@@ -183,6 +184,7 @@ app.use("/api", routeSource("unitsRoutes.ts"), unitsRoutes);
 app.use("/api/ledger", ledgerRoutes);
 app.use("/api/dashboard", routeSource("dashboardRoutes.ts"), dashboardRoutes);
 app.use("/api/application-links", routeSource("landlordApplicationLinksRoutes.ts"), landlordApplicationLinksRoutes);
+app.use("/api", routeSource("referralsRoutes.ts"), referralsRoutes);
 app.use(
   "/api/landlord/application-links",
   routeSource("landlordApplicationLinksRoutes.ts"),

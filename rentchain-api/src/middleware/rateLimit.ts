@@ -89,3 +89,9 @@ export const rateLimitTenantInvitesUser = createLimiter({
   max: 30,
   keyGenerator: keyByUser,
 });
+
+export const rateLimitReferralsUser = createLimiter({
+  windowMs: 24 * 60 * 60 * 1000,
+  max: 10,
+  keyGenerator: keyByUser,
+});

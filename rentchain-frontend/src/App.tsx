@@ -16,6 +16,7 @@ import TenantLoginPageV2 from "./pages/tenant/TenantLoginPage.v2";
 import LandingPage from "./pages/marketing/LandingPage";
 import AboutPage from "./pages/marketing/AboutPage";
 import MarketingPricingPage from "./pages/marketing/PricingPage";
+import RequestAccessPage from "./pages/marketing/RequestAccessPage";
 import InvitePage from "./pages/InvitePage";
 import LegalHelpPage from "./pages/marketing/LegalHelpPage";
 import HelpIndexPage from "./pages/help/HelpIndexPage";
@@ -64,6 +65,7 @@ import MaintenanceRequestsPage from "./pages/MaintenanceRequestsPage";
 import PdfSamplePage from "./pages/PdfSamplePage";
 import LeaseLedgerPage from "./pages/LeaseLedgerPage";
 import ApplicationReviewSummaryPage from "./pages/ApplicationReviewSummaryPage";
+import ReferralsPage from "./pages/ReferralsPage";
 
 const TENANT_PORTAL_ENABLED = import.meta.env.VITE_TENANT_PORTAL_ENABLED === "true";
 
@@ -198,6 +200,7 @@ function App() {
         <Route path="/2fa" element={<TwoFactorPage />} />
         <Route path="/pricing" element={<PricingGate />} />
         <Route path="/site/pricing" element={<MarketingPricingPage />} />
+        <Route path="/site/request-access" element={<RequestAccessPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/site/about" element={<AboutPage />} />
         <Route path="/legal" element={<LegalHelpPage />} />
@@ -297,6 +300,16 @@ function App() {
             <RequireAuth>
               <LandlordNav>
                 <ApplicationReviewSummaryPage />
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/referrals"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <ReferralsPage />
               </LandlordNav>
             </RequireAuth>
           }

@@ -76,6 +76,12 @@ export const NAV_ITEMS: NavItem[] = [
     showInDrawer: true,
   },
   {
+    id: "referrals",
+    label: "Referrals",
+    to: "/referrals",
+    showInDrawer: true,
+  },
+  {
     id: "maintenance",
     label: "Maintenance",
     to: "/maintenance",
