@@ -95,10 +95,6 @@ router.post("/referrals", requireAuth, rateLimitReferralsUser, async (req: any, 
     if (!landlordId) {
       return res.status(403).json({ ok: false, error: "FORBIDDEN", detail: "missing_landlordId" });
     }
-    if (req.user?.approved === false) {
-      return res.status(403).json({ ok: false, error: "FORBIDDEN", detail: "not_approved" });
-    }
-
     const refereeEmail = normEmail(req.body?.refereeEmail || "");
     const refereeName = String(req.body?.refereeName || "").trim().slice(0, 120) || null;
     const note = String(req.body?.note || "").trim().slice(0, 500) || null;
