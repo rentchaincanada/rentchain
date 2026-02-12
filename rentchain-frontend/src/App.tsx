@@ -67,13 +67,33 @@ import ApplicationReviewSummaryPage from "./pages/ApplicationReviewSummaryPage";
 
 const TENANT_PORTAL_ENABLED = import.meta.env.VITE_TENANT_PORTAL_ENABLED === "true";
 
+function lazyWithRetry<T extends React.ComponentType<any>>(
+  importer: () => Promise<{ default: T }>,
+  retries = 1
+) {
+  return lazy(async () => {
+    let lastError: unknown;
+    for (let attempt = 0; attempt <= retries; attempt += 1) {
+      try {
+        return await importer();
+      } catch (error) {
+        lastError = error;
+        if (attempt < retries) {
+          await new Promise((resolve) => setTimeout(resolve, 250));
+        }
+      }
+    }
+    throw lastError;
+  });
+}
+
 const LedgerPage = lazy(() => import("./pages/LedgerPage"));
 const LedgerV2Page = lazy(() => import("./pages/LedgerV2Page"));
 const BlockchainPage = lazy(() => import("./pages/BlockchainPage"));
 const AdminScreeningsPage = lazy(() => import("./pages/AdminScreeningsPage"));
 const AdminVerifiedScreeningsPage = lazy(() => import("./pages/AdminVerifiedScreeningsPage"));
 const AdminDashboardPage = lazy(() => import("./pages/admin/AdminDashboardPage"));
-const AdminLeadsPage = lazy(() => import("./pages/admin/AdminLeadsPage"));
+const AdminLeadsPage = lazyWithRetry(() => import("./pages/admin/AdminLeadsPage"));
 
 const AuthLoadingScreen = () => (
   <div
