@@ -1108,6 +1108,13 @@ const ApplicationsPage: React.FC = () => {
                   <div className="rc-applications-card-header" style={{ marginBottom: 8 }}>
                     <div style={{ fontWeight: 700, fontSize: 16 }}>Screening</div>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                      <Button
+                        variant="secondary"
+                        onClick={() => navigate(`/applications/${detail.id}/review-summary`)}
+                        disabled={!detail?.id}
+                      >
+                        Review Summary
+                      </Button>
                       {screeningOrderId && orderReportReady ? (
                         <Button
                           variant="secondary"

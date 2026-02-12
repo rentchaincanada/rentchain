@@ -197,6 +197,9 @@ app.use("/api", routeSource("maintenanceRequestsRoutes"), maintenanceRequestsRou
 app.use("/api", routeSource("usageBreakdownRoutes.ts"), usageBreakdownRoutes);
 app.use("/api/properties", propertiesRoutes);
 app.use("/api", routeSource("rentalApplicationsRoutes.ts"), rentalApplicationsRoutes);
+if (process.env.NODE_ENV !== "production") {
+  console.log("[boot] mounted rentalApplicationsRoutes at /api (review-summary endpoints enabled)");
+}
 app.use("/api", routeSource("verifiedScreeningRoutes.ts"), verifiedScreeningRoutes);
 app.use("/api", routeSource("tenantReportRoutes.ts"), tenantReportRoutes);
 app.use("/api", applicationsRoutes);

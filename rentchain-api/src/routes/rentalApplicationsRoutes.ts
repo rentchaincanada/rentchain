@@ -17,6 +17,7 @@ import { buildShareUrl, createReportExport } from "../services/screening/reportE
 import { getScreeningProviderHealth } from "../services/screening/providerHealth";
 import { buildTenantInviteUrl, createInviteToken } from "../services/screening/inviteTokens";
 import { createSignedUrl } from "../storage/pdfStore";
+import { buildReviewSummary, buildReviewSummaryPdf } from "../lib/reviewSummary";
 import { rateLimitScreeningIp, rateLimitScreeningUser } from "../middleware/rateLimit";
 
 const router = Router();
@@ -248,6 +249,29 @@ function evaluateEligibility(application: any) {
 function isScreeningAlreadyPaid(application: any) {
   const status = String(application?.screeningStatus || "").toLowerCase();
   return status === "paid" || status === "processing" || status === "complete" || status === "completed";
+}
+
+async function loadAuthorizedApplication(req: any, applicationId: string) {
+  const role = String(req.user?.role || "").toLowerCase();
+  if (role !== "landlord" && role !== "admin") {
+    return { ok: false as const, status: 403, error: "FORBIDDEN" };
+  }
+  const landlordId = req.user?.landlordId || req.user?.id || null;
+  if (role !== "admin" && !landlordId) {
+    return { ok: false as const, status: 401, error: "UNAUTHORIZED" };
+  }
+  if (!applicationId) {
+    return { ok: false as const, status: 404, error: "NOT_FOUND" };
+  }
+  const snap = await db.collection("rentalApplications").doc(applicationId).get();
+  if (!snap.exists) {
+    return { ok: false as const, status: 404, error: "NOT_FOUND" };
+  }
+  const data = snap.data() as any;
+  if (role !== "admin" && data?.landlordId && data.landlordId !== landlordId) {
+    return { ok: false as const, status: 403, error: "FORBIDDEN" };
+  }
+  return { ok: true as const, data, role, landlordId };
 }
 
 function resolveConsentPayload(body: any) {
@@ -1783,6 +1807,57 @@ router.get(
     }
   }
 );
+
+router.get("/rental-applications/:id/review-summary", async (req: any, res) => {
+  try {
+    res.setHeader("x-route-source", "rentalApplicationsRoutes.ts");
+    const id = String(req.params?.id || "").trim();
+    const access = await loadAuthorizedApplication(req, id);
+    if (!access.ok) {
+      return res.status(access.status).json({
+        ok: false,
+        status: access.status,
+        error: access.error,
+      });
+    }
+    const summary = buildReviewSummary(id, access.data);
+    return res.json({ ok: true, summary });
+  } catch (err: any) {
+    console.error("[review_summary] failed", err?.message || err);
+    return res.status(500).json({
+      ok: false,
+      status: 500,
+      error: "REVIEW_SUMMARY_FAILED",
+    });
+  }
+});
+
+router.get("/rental-applications/:id/review-summary.pdf", async (req: any, res) => {
+  try {
+    res.setHeader("x-route-source", "rentalApplicationsRoutes.ts");
+    const id = String(req.params?.id || "").trim();
+    const access = await loadAuthorizedApplication(req, id);
+    if (!access.ok) {
+      return res.status(access.status).json({
+        ok: false,
+        status: access.status,
+        error: access.error,
+      });
+    }
+    const summary = buildReviewSummary(id, access.data);
+    const pdfBuffer = await buildReviewSummaryPdf(summary);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename=\"application-review-summary-${id}.pdf\"`);
+    return res.status(200).send(pdfBuffer);
+  } catch (err: any) {
+    console.error("[review_summary_pdf] failed", err?.message || err);
+    return res.status(500).json({
+      ok: false,
+      status: 500,
+      error: "REVIEW_SUMMARY_PDF_FAILED",
+    });
+  }
+});
 
 router.get("/rental-applications/:id/screening/events", attachAccount, requireFeature("screening"), async (req, res) => {
   try {
