@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { MacShell } from "../components/layout/MacShell";
 import { Card, Section, Button, Pill, Input } from "../components/ui/Ui";
 import { ResponsiveMasterDetail } from "../components/layout/ResponsiveMasterDetail";
@@ -14,8 +15,16 @@ import { colors, spacing, text, radius } from "../styles/tokens";
 
 const statusOptions = ["QUEUED", "IN_PROGRESS", "COMPLETE", "CANCELLED"] as const;
 const recommendationOptions = ["APPROVE", "DECLINE", "CONDITIONAL"] as const;
+type QueueViewState =
+  | "ready"
+  | "empty"
+  | "not_configured"
+  | "upgrade_required"
+  | "forbidden"
+  | "error";
 
 const AdminVerifiedScreeningsPage: React.FC = () => {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { showToast } = useToast();
   const [items, setItems] = useState<VerifiedScreeningQueueItem[]>([]);
@@ -24,25 +33,48 @@ const AdminVerifiedScreeningsPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
+  const [viewState, setViewState] = useState<QueueViewState>("ready");
+  const [viewMessage, setViewMessage] = useState<string | null>(null);
 
   const isAdmin = String(user?.role || "").toLowerCase() === "admin";
 
   const load = async () => {
     try {
       setLoading(true);
+      setViewMessage(null);
       const list = await listVerifiedScreenings();
       setItems(list);
+      setViewState(list.length === 0 ? "empty" : "ready");
     } catch (err: any) {
-      showToast({ message: "Failed to load queue", description: err?.message || "", variant: "error" });
+      const status = Number(err?.status || 0);
+      const errorCode = String(err?.payload?.error || "").toLowerCase();
+      const detail = err?.payload?.detail ? String(err.payload.detail) : null;
+      if (
+        (status === 400 || status === 412) &&
+        ["stripe_not_configured", "provider_not_configured"].includes(errorCode)
+      ) {
+        setViewState("not_configured");
+      } else if (status === 403 && errorCode === "upgrade_required") {
+        setViewState("upgrade_required");
+      } else if (status === 403) {
+        setViewState("forbidden");
+      } else {
+        setViewState("error");
+        showToast({
+          message: "Failed to load queue",
+          description: err?.message || "",
+          variant: "error",
+        });
+      }
+      setViewMessage(detail);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (!isAdmin) return;
     void load();
-  }, [isAdmin]);
+  }, []);
 
   useEffect(() => {
     const loadDetail = async () => {
@@ -90,12 +122,38 @@ const AdminVerifiedScreeningsPage: React.FC = () => {
     }
   };
 
-  if (!isAdmin) {
+  if (viewState !== "ready") {
+    const heading =
+      viewState === "empty"
+        ? "No verified screenings yet."
+        : viewState === "not_configured"
+          ? "Verified screenings not configured yet."
+          : viewState === "upgrade_required"
+            ? "Upgrade required to view verified screenings."
+            : viewState === "forbidden"
+              ? "You do not have access to this queue."
+              : "Unable to load verified screenings.";
     return (
       <MacShell title="Admin · Verified Screenings">
         <Section>
-          <Card elevated>
-            <div style={{ color: text.muted, fontSize: 14 }}>Not available.</div>
+          <Card elevated style={{ display: "grid", gap: 12 }}>
+            <h1 style={{ margin: 0, fontSize: "1.2rem" }}>{heading}</h1>
+            {viewMessage ? <div style={{ color: text.muted }}>{viewMessage}</div> : null}
+            <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
+              <Button type="button" onClick={() => navigate("/applications")}>
+                Run a screening
+              </Button>
+              {viewState === "upgrade_required" ? (
+                <Button type="button" variant="secondary" onClick={() => navigate("/billing")}>
+                  Upgrade plan
+                </Button>
+              ) : null}
+              {viewState === "error" ? (
+                <Button type="button" variant="secondary" onClick={load}>
+                  Retry
+                </Button>
+              ) : null}
+            </div>
           </Card>
         </Section>
       </MacShell>
