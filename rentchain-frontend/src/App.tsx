@@ -305,11 +305,9 @@ function App() {
           path="/verified-screenings"
           element={
             <RequireAuth>
-              <LandlordNav>
-                <Suspense fallback={null}>
-                  <AdminVerifiedScreeningsPage />
-                </Suspense>
-              </LandlordNav>
+              <Suspense fallback={null}>
+                <AdminVerifiedScreeningsPage />
+              </Suspense>
             </RequireAuth>
           }
         />
