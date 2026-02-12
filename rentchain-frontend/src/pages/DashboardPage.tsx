@@ -24,6 +24,7 @@ import { buildCreatePropertyUrl, buildReturnTo } from "../lib/propertyGate";
 import { SendScreeningInviteModal } from "../components/screening/SendScreeningInviteModal";
 import { SendApplicationModal } from "../components/properties/SendApplicationModal";
 import { useUnitsForProperty } from "../hooks/useUnitsForProperty";
+import { listReferrals } from "../api/referralsApi";
 
 const StarterOnboardingPanel = React.lazy(
   () => import("../components/dashboard/StarterOnboardingPanel")
@@ -114,6 +115,7 @@ const DashboardPage: React.FC = () => {
   const [modalPropertyId, setModalPropertyId] = React.useState<string | null>(null);
   const [modalUnitId, setModalUnitId] = React.useState<string | null>(null);
   const [onboardingChunkError, setOnboardingChunkError] = React.useState(false);
+  const [referralsCount, setReferralsCount] = React.useState(0);
   const onboarding = useOnboardingState();
   const prevDerivedRef = React.useRef({
     propertyAdded: false,
@@ -168,6 +170,23 @@ const DashboardPage: React.FC = () => {
       alive = false;
     };
   }, []);
+
+  React.useEffect(() => {
+    let active = true;
+    const loadReferrals = async () => {
+      if (!meLoaded) return;
+      try {
+        const rows = await listReferrals();
+        if (active) setReferralsCount(rows.length);
+      } catch {
+        if (active) setReferralsCount(0);
+      }
+    };
+    void loadReferrals();
+    return () => {
+      active = false;
+    };
+  }, [meLoaded]);
 
   React.useEffect(() => {
     let alive = true;
@@ -551,6 +570,16 @@ const DashboardPage: React.FC = () => {
             <Button onClick={handleCreateApplicationClick}>
               Send application link
             </Button>
+          </Card>
+        ) : null}
+
+        {dataReady ? (
+          <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>Invite another landlord</div>
+            <div style={{ color: text.muted, marginBottom: 12 }}>
+              Referrals sent: {referralsCount}
+            </div>
+            <Button onClick={() => navigate("/referrals")}>Refer a landlord</Button>
           </Card>
         ) : null}
 

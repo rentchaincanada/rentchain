@@ -210,6 +210,12 @@ const AdminLeadsPage: React.FC = () => {
                     </span>
                   </div>
                   {lead.note ? <div style={{ color: text.muted }}>Note: {lead.note}</div> : null}
+                  {lead.referrerLandlordId ? (
+                    <div style={{ color: text.muted }}>
+                      Referred by landlord {lead.referrerLandlordId}
+                      {lead.referralCode ? ` (${lead.referralCode})` : ""}
+                    </div>
+                  ) : null}
                   <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
                     <Button
                       type="button"

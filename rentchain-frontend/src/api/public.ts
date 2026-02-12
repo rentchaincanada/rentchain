@@ -17,6 +17,7 @@ export async function requestLandlordInquiry(payload: {
   firstName: string;
   portfolioSize: string;
   note?: string;
+  referralCode?: string;
 }) {
   const url = `${window.location.origin}/api/public/landlord-inquiry`;
   const res = await fetch(url, {

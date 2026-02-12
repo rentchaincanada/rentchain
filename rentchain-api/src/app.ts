@@ -74,6 +74,7 @@ import adminRoutes from "./routes/adminRoutes";
 import adminScreeningResultsRoutes from "./routes/adminScreeningResultsRoutes";
 import screeningReportRoutes from "./routes/screeningReportRoutes";
 import onboardingRoutes from "./routes/onboardingRoutes";
+import referralsRoutes from "./routes/referralsRoutes";
 
 const app: Application = express();
 
@@ -180,6 +181,7 @@ app.use("/api", compatRoutes);
 app.use("/api/ledger", ledgerRoutes);
 app.use("/api/dashboard", routeSource("dashboardRoutes.ts"), dashboardRoutes);
 app.use("/api/application-links", routeSource("landlordApplicationLinksRoutes.ts"), landlordApplicationLinksRoutes);
+app.use("/api", routeSource("referralsRoutes.ts"), referralsRoutes);
 app.use(
   "/api/landlord/application-links",
   routeSource("landlordApplicationLinksRoutes.ts"),

@@ -133,6 +133,36 @@ async function approveLeadById(leadId: string, req: any, res: any) {
     { merge: true }
   );
 
+  const referralSnap = await db
+    .collection("referrals")
+    .where("refereeEmail", "==", email)
+    .where("status", "in", ["sent", "accepted"])
+    .limit(1)
+    .get()
+    .catch(() => null);
+  if (referralSnap && !referralSnap.empty) {
+    const referralDoc = referralSnap.docs[0];
+    await referralDoc.ref.set(
+      {
+        status: "approved",
+        approvedAt: now,
+        updatedAt: now,
+      },
+      { merge: true }
+    );
+    const referralData = referralDoc.data() || {};
+    await leadRef.set(
+      {
+        referralId: referralDoc.id,
+        referralCode: referralData.referralCode || null,
+        referrerLandlordId: referralData.referrerLandlordId || null,
+        referralStatus: "approved",
+        priority: true,
+      },
+      { merge: true }
+    );
+  }
+
   console.info("[landlord-leads] approved", {
     leadId,
     email,
@@ -203,6 +233,7 @@ publicRouter.post(
     const firstName = String(req.body?.firstName || "").trim().slice(0, 80);
     const portfolioSize = String(req.body?.portfolioSize || "").trim().slice(0, 80);
     const note = String(req.body?.note || "").trim().slice(0, 500);
+    const referralCode = String(req.body?.referralCode || "").trim().toUpperCase();
 
     if (!email || !emailRegex.test(email) || email.length > 254) {
       return res.status(400).json({ ok: false, error: "invalid_email" });
@@ -217,6 +248,44 @@ publicRouter.post(
 
     const id = sha256(email);
     const now = Date.now();
+    let referralMeta: Record<string, any> = {};
+    if (referralCode) {
+      const referralSnap = await db
+        .collection("referrals")
+        .where("referralCode", "==", referralCode)
+        .limit(1)
+        .get();
+      if (referralSnap.empty) {
+        return res.status(400).json({ ok: false, error: "invalid_referral_code" });
+      }
+      const referralDoc = referralSnap.docs[0];
+      const referral = referralDoc.data() || {};
+      const referralEmail = normEmail(String(referral.refereeEmail || ""));
+      const referralStatus = String(referral.status || "").toLowerCase();
+      if (referralEmail && referralEmail !== email) {
+        return res.status(400).json({ ok: false, error: "referral_email_mismatch" });
+      }
+      if (referralStatus === "expired") {
+        return res.status(400).json({ ok: false, error: "referral_expired" });
+      }
+      if (referralStatus !== "approved") {
+        await referralDoc.ref.set(
+          {
+            status: "accepted",
+            acceptedAt: referral.acceptedAt || now,
+            updatedAt: now,
+          },
+          { merge: true }
+        );
+      }
+      referralMeta = {
+        referralId: referralDoc.id,
+        referralCode,
+        referrerLandlordId: referral.referrerLandlordId || null,
+        referralStatus: referralStatus === "approved" ? "approved" : "accepted",
+        priority: true,
+      };
+    }
     const leadRef = db.collection("landlordLeads").doc(id);
     const existing = await leadRef.get();
     const existingData = existing.exists ? existing.data() : null;
@@ -235,6 +304,7 @@ publicRouter.post(
         status: "pending",
         createdAt: existingData?.createdAt || now,
         updatedAt: now,
+        ...referralMeta,
       },
       { merge: true }
     );
