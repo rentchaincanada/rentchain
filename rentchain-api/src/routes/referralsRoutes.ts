@@ -57,48 +57,70 @@ async function createReferralCode() {
 
 router.get("/referrals", requireAuth, async (req: any, res) => {
   res.setHeader("x-route-source", "referralsRoutes.ts");
-  const landlordId = String(req.user?.landlordId || req.user?.id || "");
-  if (!landlordId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+  try {
+    const role = String(req.user?.role || "").toLowerCase();
+    if (role !== "landlord" && role !== "admin") {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN", detail: "role_not_landlord" });
+    }
+    const landlordId = String(req.user?.landlordId || req.user?.id || "");
+    if (!landlordId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN", detail: "missing_landlordId" });
+    }
 
-  const snap = await db
-    .collection("referrals")
-    .where("referrerLandlordId", "==", landlordId)
-    .orderBy("createdAt", "desc")
-    .limit(200)
-    .get();
+    // Avoid composite index dependency: fetch by landlordId then sort in memory.
+    const snap = await db
+      .collection("referrals")
+      .where("referrerLandlordId", "==", landlordId)
+      .limit(200)
+      .get();
 
-  const referrals = snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as any) }));
-  return res.json({ ok: true, referrals });
+    const referrals = snap.docs
+      .map((doc) => ({ id: doc.id, ...(doc.data() as any) }))
+      .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+    return res.json({ ok: true, referrals });
+  } catch (err: any) {
+    console.error("[referrals] list failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "REFERRALS_LIST_FAILED" });
+  }
 });
 
 router.post("/referrals", requireAuth, rateLimitReferralsUser, async (req: any, res) => {
   res.setHeader("x-route-source", "referralsRoutes.ts");
+  try {
+    const role = String(req.user?.role || "").toLowerCase();
+    if (role !== "landlord") {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN", detail: "role_not_landlord" });
+    }
+    const landlordId = String(req.user?.landlordId || req.user?.id || "");
+    if (!landlordId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN", detail: "missing_landlordId" });
+    }
+    if (req.user?.approved === false) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN", detail: "not_approved" });
+    }
 
-  const role = String(req.user?.role || "").toLowerCase();
-  const approved = req.user?.approved !== false;
-  if (role !== "landlord" || !approved) {
-    return res.status(403).json({ ok: false, error: "FORBIDDEN" });
-  }
+    const refereeEmail = normEmail(req.body?.refereeEmail || "");
+    const refereeName = String(req.body?.refereeName || "").trim().slice(0, 120) || null;
+    const note = String(req.body?.note || "").trim().slice(0, 500) || null;
+    if (!refereeEmail || !emailRegex.test(refereeEmail)) {
+      return res.status(400).json({ ok: false, error: "invalid_email" });
+    }
 
-  const refereeEmail = normEmail(req.body?.refereeEmail || "");
-  const refereeName = String(req.body?.refereeName || "").trim().slice(0, 120) || null;
-  const note = String(req.body?.note || "").trim().slice(0, 500) || null;
-  if (!refereeEmail || !emailRegex.test(refereeEmail)) {
-    return res.status(400).json({ ok: false, error: "invalid_email" });
-  }
-
-  const landlordId = String(req.user?.landlordId || req.user?.id || "");
-  const now = Date.now();
-  const existingSnap = await db
-    .collection("referrals")
-    .where("refereeEmail", "==", refereeEmail)
-    .where("createdAt", ">=", now - ACTIVE_REFERRAL_WINDOW_MS)
-    .limit(1)
-    .get();
-  if (!existingSnap.empty) {
-    const existingDoc = existingSnap.docs[0];
-    const data = existingDoc.data() as any;
-    if (String(data.status || "").toLowerCase() !== "expired") {
+    const now = Date.now();
+    // Avoid composite index dependency: fetch recent refs by email, filter in memory.
+    const existingSnap = await db
+      .collection("referrals")
+      .where("refereeEmail", "==", refereeEmail)
+      .limit(20)
+      .get();
+    const existingDoc = existingSnap.docs.find((doc) => {
+      const data = doc.data() as any;
+      const createdAt = Number(data?.createdAt || 0);
+      const status = String(data?.status || "").toLowerCase();
+      return createdAt >= now - ACTIVE_REFERRAL_WINDOW_MS && status !== "expired";
+    });
+    if (existingDoc) {
+      const data = existingDoc.data() as any;
       return res.json({
         ok: true,
         referral: {
@@ -110,63 +132,66 @@ router.post("/referrals", requireAuth, rateLimitReferralsUser, async (req: any, 
         emailed: false,
       });
     }
-  }
 
-  const referralCode = await createReferralCode();
-  const referrerEmail = normEmail(req.user?.email || "");
-  const referrerName = String(req.user?.name || req.user?.displayName || "").trim() || null;
+    const referralCode = await createReferralCode();
+    const referrerEmail = normEmail(req.user?.email || "");
+    const referrerName = String(req.user?.name || req.user?.displayName || "").trim() || null;
 
-  const referralRef = db.collection("referrals").doc();
-  await referralRef.set({
-    referrerLandlordId: landlordId,
-    referrerEmail: referrerEmail || null,
-    referrerName,
-    refereeEmail,
-    refereeName,
-    note,
-    status: "sent",
-    referralCode,
-    createdAt: now,
-    updatedAt: now,
-    acceptedAt: null,
-    approvedAt: null,
-    lastEmailSentAt: null,
-    metadata: {
-      userAgent: req.get("user-agent") || null,
-    },
-  });
-
-  const link = `${resolveFrontendBase()}/site/request-access?ref=${encodeURIComponent(referralCode)}`;
-  const { apiKey, from } = getSendgridConfig();
-  let emailed = false;
-  if (apiKey && from) {
-    try {
-      await sendEmail({
-        to: refereeEmail,
-        from: from as string,
-        subject: "You've been invited to RentChain",
-        text:
-          `${referrerName || "A RentChain landlord"} invited you to RentChain.\n\n` +
-          `Request access here:\n${link}\n\n` +
-          "Verified screening, clear records, trusted rental relationships.",
-      });
-      emailed = true;
-      await referralRef.set({ lastEmailSentAt: Date.now() }, { merge: true });
-    } catch (err: any) {
-      console.error("[referrals] invite email failed", err?.message || err);
-    }
-  }
-
-  return res.json({
-    ok: true,
-    referral: {
-      id: referralRef.id,
-      referralCode,
+    const referralRef = db.collection("referrals").doc();
+    await referralRef.set({
+      referrerLandlordId: landlordId,
+      referrerEmail: referrerEmail || null,
+      referrerName,
+      refereeEmail,
+      refereeName,
+      note,
       status: "sent",
-      link,
-    },
-    emailed,
-  });
+      referralCode,
+      createdAt: now,
+      updatedAt: now,
+      acceptedAt: null,
+      approvedAt: null,
+      lastEmailSentAt: null,
+      metadata: {
+        userAgent: req.get("user-agent") || null,
+      },
+    });
+
+    const link = `${resolveFrontendBase()}/site/request-access?ref=${encodeURIComponent(referralCode)}`;
+    const { apiKey, from } = getSendgridConfig();
+    let emailed = false;
+    if (apiKey && from) {
+      try {
+        await sendEmail({
+          to: refereeEmail,
+          from: from as string,
+          subject: "You've been invited to RentChain",
+          text:
+            `${referrerName || "A RentChain landlord"} invited you to RentChain.\n\n` +
+            `Request access here:\n${link}\n\n` +
+            "Verified screening, clear records, trusted rental relationships.",
+        });
+        emailed = true;
+        await referralRef.set({ lastEmailSentAt: Date.now() }, { merge: true });
+      } catch (err: any) {
+        console.error("[referrals] invite email failed", err?.message || err);
+      }
+    }
+
+    return res.json({
+      ok: true,
+      referral: {
+        id: referralRef.id,
+        referralCode,
+        status: "sent",
+        link,
+      },
+      emailed,
+    });
+  } catch (err: any) {
+    console.error("[referrals] create failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "REFERRAL_CREATE_FAILED" });
+  }
 });
 
 export default router;
