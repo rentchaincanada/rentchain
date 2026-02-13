@@ -87,11 +87,11 @@ canvas {
 }
 
 .rc-logo-sm {
-  --rc-logo-h: 26px;
+  --rc-logo-h: 36px;
 }
 
 .rc-logo-md {
-  --rc-logo-h: 36px;
+  --rc-logo-h: 50px;
 }
 
 .rc-logo-dark {
