@@ -1,9 +1,10 @@
 import { Router } from "express";
 import crypto from "crypto";
-import sgMail from "@sendgrid/mail";
 import { db } from "../config/firebase";
 import { isAdminEmail } from "../lib/adminEmails";
 import { requireAuth } from "../middleware/requireAuth";
+import { sendEmail } from "../services/emailService";
+import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 
 const router = Router();
 
@@ -63,10 +64,9 @@ router.post("/landlord-invites", requireAuth, async (req: any, res) => {
   const baseUrl = resolveFrontendBase();
   const inviteUrl = `${baseUrl}/invite/${token}`;
 
-  const apiKey = process.env.SENDGRID_API_KEY;
   const from =
     process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM || process.env.FROM_EMAIL;
-  if (!apiKey || !from) {
+  if (!from) {
     return res.json({
       ok: true,
       inviteUrl,
@@ -77,26 +77,22 @@ router.post("/landlord-invites", requireAuth, async (req: any, res) => {
   }
 
   try {
-    sgMail.setApiKey(apiKey as string);
-    const subject = "You’re invited to RentChain";
-    const text =
-      `You're invited to RentChain.\n\n` +
-      `Open this link to accept your invite:\n${inviteUrl}\n\n` +
-      `This invite expires: ${formatExpiry(expiresAt)}\n\n` +
-      `— RentChain`;
-
-    await sgMail.send({
+    const subject = "You're invited to RentChain";
+    await sendEmail({
       to: email,
       from: from as string,
       subject,
-      text,
-      trackingSettings: {
-        clickTracking: { enable: false, enableText: false },
-        openTracking: { enable: false },
-      },
-      mailSettings: {
-        footer: { enable: false },
-      },
+      text: buildEmailText({
+        intro: `You're invited to RentChain. This invite expires: ${formatExpiry(expiresAt)}.`,
+        ctaText: "Accept invite",
+        ctaUrl: inviteUrl,
+      }),
+      html: buildEmailHtml({
+        title: "You're invited to RentChain",
+        intro: `Open your invite to join RentChain. This invite expires: ${formatExpiry(expiresAt)}.`,
+        ctaText: "Accept invite",
+        ctaUrl: inviteUrl,
+      }),
     });
 
     return res.json({ ok: true, inviteUrl, expiresAt, emailed: true });

@@ -1,8 +1,8 @@
 import { Router } from "express";
-import sgMail from "@sendgrid/mail";
 import { authenticateJwt } from "../middleware/authMiddleware";
 import { db } from "../config/firebase";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
+import { sendEmail } from "../services/emailService";
 
 const router = Router();
 router.use(authenticateJwt);
@@ -711,8 +711,7 @@ router.post("/maintenance-requests", requireTenant, async (req: any, res) => {
         emailError = "EMAIL_NOT_CONFIGURED";
       } else {
         try {
-          sgMail.setApiKey(apiKey);
-          await sgMail.send({
+          await sendEmail({
             to: landlordEmail,
             from,
             replyTo: replyTo || from,
@@ -728,13 +727,6 @@ router.post("/maintenance-requests", requireTenant, async (req: any, res) => {
               ctaText: "Open maintenance",
               ctaUrl: requestLink,
             }),
-            trackingSettings: {
-              clickTracking: { enable: false, enableText: false },
-              openTracking: { enable: false },
-            },
-            mailSettings: {
-              footer: { enable: false },
-            },
           });
           emailed = true;
         } catch (err: any) {

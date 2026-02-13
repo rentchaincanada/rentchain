@@ -2,8 +2,7 @@ import { Router, Request, Response } from "express";
 import { db, FieldValue } from "../config/firebase";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
-import sgMail from "@sendgrid/mail";
-import { sendWaitlistConfirmation } from "../services/emailService";
+import { sendEmail, sendWaitlistConfirmation } from "../services/emailService";
 import { authenticateJwt } from "../middleware/authMiddleware";
 import { requireLandlord } from "../middleware/requireLandlord";
 import { getTenantsList, getTenantDetailBundle } from "../services/tenantDetailsService";
@@ -352,7 +351,6 @@ router.post("/notify-plan-interest", async (req: any, res) => {
       { merge: true }
     );
 
-    sgMail.setApiKey(apiKey as string);
     const subject = `Plan interest: ${planRaw}`;
     const textLines = [
       `Email: ${emailRaw}`,
@@ -361,18 +359,11 @@ router.post("/notify-plan-interest", async (req: any, res) => {
       `Timestamp: ${new Date().toISOString()}`,
     ].filter(Boolean);
 
-    await sgMail.send({
+    await sendEmail({
       to,
       from: from as string,
       subject,
       text: textLines.join("\n"),
-      trackingSettings: {
-        clickTracking: { enable: false, enableText: false },
-        openTracking: { enable: false },
-      },
-      mailSettings: {
-        footer: { enable: false },
-      },
     });
 
     return res.json({ ok: true, emailed: true });
@@ -596,14 +587,12 @@ async function notifyMessageRecipient(params: {
       return;
     }
 
-    const sgKey = String(process.env.SENDGRID_API_KEY || "").trim();
     const from =
       String(process.env.SENDGRID_FROM_EMAIL || "").trim() ||
       String(process.env.WAITLIST_FROM_EMAIL || "").trim();
-    if (!sgKey || !from) {
+    if (!from) {
       return;
     }
-    sgMail.setApiKey(sgKey);
 
     let toEmail: string | null = null;
     if (recipientRole === "tenant") {
@@ -655,19 +644,12 @@ async function notifyMessageRecipient(params: {
       ctaUrl: link,
     });
 
-    await sgMail.send({
+    await sendEmail({
       to: toEmail,
       from,
       subject,
       text,
       html,
-      trackingSettings: {
-        clickTracking: { enable: false, enableText: false },
-        openTracking: { enable: false },
-      },
-      mailSettings: {
-        footer: { enable: false },
-      },
     });
 
     const update: any =
@@ -1040,7 +1022,6 @@ router.post("/tenant/auth/magic-link", async (req: any, res) => {
       process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM || process.env.FROM_EMAIL;
     if (apiKey && from) {
       try {
-        sgMail.setApiKey(apiKey as string);
         const baseUrl = (process.env.PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
         const link = `${baseUrl}/tenant/magic?token=${encodeURIComponent(token)}${
           next ? `&next=${encodeURIComponent(next)}` : ""
@@ -1057,19 +1038,12 @@ router.post("/tenant/auth/magic-link", async (req: any, res) => {
           ctaText: "Sign in",
           ctaUrl: link,
         });
-        await sgMail.send({
+        await sendEmail({
           to: emailRaw,
           from: from as string,
           subject,
           text,
           html,
-          trackingSettings: {
-            clickTracking: { enable: false, enableText: false },
-            openTracking: { enable: false },
-          },
-          mailSettings: {
-            footer: { enable: false },
-          },
         });
       } catch (e: any) {
         console.error("[tenant magic-link] email send failed", e?.message || e);

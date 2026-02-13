@@ -1,5 +1,4 @@
 import { Router } from "express";
-import sgMail from "@sendgrid/mail";
 import { createHash } from "crypto";
 import { db } from "../config/firebase";
 import { authenticateJwt } from "../middleware/authMiddleware";
@@ -20,6 +19,7 @@ import { createSignedUrl } from "../storage/pdfStore";
 import { buildReviewSummary, buildReviewSummaryPdf } from "../lib/reviewSummary";
 import { rateLimitScreeningIp, rateLimitScreeningUser } from "../middleware/rateLimit";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
+import { sendEmail } from "../services/emailService";
 
 const router = Router();
 
@@ -1142,10 +1142,9 @@ router.post(
             .trim();
         if (apiKey && from) {
           try {
-            sgMail.setApiKey(apiKey);
             const subject = "RentChain: Complete your screening";
             const safeName = tenantName || "there";
-            await sgMail.send({
+            await sendEmail({
               to: tenantEmail,
               from,
               subject,
@@ -1160,11 +1159,6 @@ router.post(
                 ctaText: "Start verification",
                 ctaUrl: tenantInviteUrl,
               }),
-              trackingSettings: {
-                clickTracking: { enable: false, enableText: false },
-                openTracking: { enable: false },
-              },
-              mailSettings: { footer: { enable: false } },
             });
             await orderRef.set({ tenantInviteSentAt: Date.now() }, { merge: true });
           } catch (err: any) {
@@ -1464,8 +1458,7 @@ router.post(
               } else {
                 const baseUrl = (process.env.PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
                 const adminLink = `${baseUrl}/admin/verified-screenings`;
-                sgMail.setApiKey(apiKey);
-                await sgMail.send({
+                await sendEmail({
                   to: opsEmail,
                   from,
                   replyTo: replyTo || from,
@@ -1483,13 +1476,6 @@ router.post(
                     ctaUrl: adminLink,
                     footerNote: "You received this because you are on verified screening notifications.",
                   }),
-                  trackingSettings: {
-                    clickTracking: { enable: false, enableText: false },
-                    openTracking: { enable: false },
-                  },
-                  mailSettings: {
-                    footer: { enable: false },
-                  },
                 });
                 notifiedOps = true;
               }

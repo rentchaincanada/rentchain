@@ -1,8 +1,9 @@
 import { Router } from "express";
 import crypto from "crypto";
 import admin from "firebase-admin";
-import sgMail from "@sendgrid/mail";
 import { db } from "../config/firebase";
+import { sendEmail } from "../services/emailService";
+import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 
 const router = Router();
 
@@ -24,10 +25,9 @@ function resolveFrontendBase(): string {
 }
 
 async function sendVerificationEmail(email: string) {
-  const apiKey = process.env.SENDGRID_API_KEY;
   const from =
     process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM || process.env.FROM_EMAIL;
-  if (!apiKey || !from) {
+  if (!from) {
     return { ok: false, error: "SendGrid not configured" };
   }
 
@@ -35,25 +35,21 @@ async function sendVerificationEmail(email: string) {
     url: `${resolveFrontendBase()}/login?verified=1`,
   });
 
-  sgMail.setApiKey(apiKey as string);
-  const subject = "Verify your RentChain email";
-  const text =
-    `Welcome to RentChain.\n\n` +
-    `Verify your email to activate your account:\n${verifyUrl}\n\n` +
-    `— RentChain`;
-
-  await sgMail.send({
+  await sendEmail({
     to: email,
     from: from as string,
-    subject,
-    text,
-    trackingSettings: {
-      clickTracking: { enable: false, enableText: false },
-      openTracking: { enable: false },
-    },
-    mailSettings: {
-      footer: { enable: false },
-    },
+    subject: "Verify your RentChain email",
+    text: buildEmailText({
+      intro: "Welcome to RentChain. Verify your email to activate your account.",
+      ctaText: "Verify email",
+      ctaUrl: verifyUrl,
+    }),
+    html: buildEmailHtml({
+      title: "Verify your RentChain email",
+      intro: "Welcome to RentChain. Verify your email to activate your account.",
+      ctaText: "Verify email",
+      ctaUrl: verifyUrl,
+    }),
   });
 
   return { ok: true };

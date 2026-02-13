@@ -1,13 +1,13 @@
 import { Request, Response, Router } from "express";
 import crypto from "crypto";
 import { db } from "../config/firebase";
-import sgMail from "@sendgrid/mail";
 import { getBureauProvider } from "../services/screening/providers/bureauProvider";
 import { putPdfObject } from "../storage/pdfStore";
 import { writeScreeningEvent } from "../services/screening/screeningEvents";
 import { getStripeClient, isStripeConfigured } from "../services/stripeService";
 import { resolveFrontendBase } from "../services/screening/inviteTokens";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
+import { sendEmail } from "../services/emailService";
 
 interface WebhookRequest extends Request {
   rawBody?: Buffer;
@@ -140,8 +140,7 @@ export const transunionWebhookHandler = async (req: WebhookRequest, res: Respons
                 ""
             ).trim();
           if (apiKey && from && session.url) {
-            sgMail.setApiKey(apiKey);
-            await sgMail.send({
+            await sendEmail({
               to: tenantEmail,
               from,
               subject: "RentChain: Verify your identity",
@@ -156,11 +155,6 @@ export const transunionWebhookHandler = async (req: WebhookRequest, res: Respons
                 ctaText: "Verify identity",
                 ctaUrl: session.url,
               }),
-              trackingSettings: {
-                clickTracking: { enable: false, enableText: false },
-                openTracking: { enable: false },
-              },
-              mailSettings: { footer: { enable: false } },
             });
           }
         }

@@ -1,7 +1,7 @@
-import sgMail from "@sendgrid/mail";
 import { createHash } from "crypto";
 import { db } from "../config/firebase";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
+import { sendEmail } from "./emailService";
 
 function seededNumber(input: string) {
   const hash = createHash("sha256").update(input).digest("hex");
@@ -177,8 +177,7 @@ export async function applyScreeningResultsFromOrder(params: {
           } else {
             const baseUrl = (process.env.PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
             const adminLink = `${baseUrl}/admin/verified-screenings`;
-            sgMail.setApiKey(apiKey);
-            await sgMail.send({
+            await sendEmail({
               to: opsEmail,
               from,
               replyTo: replyTo || from,
@@ -196,13 +195,6 @@ export async function applyScreeningResultsFromOrder(params: {
                 ctaUrl: adminLink,
                 footerNote: "You received this because you are on verified screening notifications.",
               }),
-              trackingSettings: {
-                clickTracking: { enable: false, enableText: false },
-                openTracking: { enable: false },
-              },
-              mailSettings: {
-                footer: { enable: false },
-              },
             });
             notifiedOps = true;
           }

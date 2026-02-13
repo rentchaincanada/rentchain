@@ -2,9 +2,10 @@ import { Router } from "express";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { db } from "../config/firebase";
-import sgMail from "@sendgrid/mail";
 import { requireLandlordOrAdmin } from "../middleware/requireLandlordOrAdmin";
 import { rateLimitTenantInvitesUser } from "../middleware/rateLimit";
+import { sendEmail } from "../services/emailService";
+import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 
 const router = Router();
 
@@ -90,30 +91,30 @@ router.post(
       let emailed = false;
       let emailError: string | null = null;
       try {
-        sgMail.setApiKey(apiKey as string);
         const subject = "You're invited to RentChain";
         const landlordEmail = req.user?.email ? String(req.user.email) : "A landlord";
         const greet = tenantName ? `Hi ${tenantName},` : "Hi,";
-        const text =
-          `${greet}\n\n` +
-          `${landlordEmail} has invited you to join RentChain as a tenant.\n\n` +
-          `Open this link to accept your invite:\n${inviteUrl}\n\n` +
-          `Note: this link may expire. If you weren't expecting this, you can ignore this email.\n\n` +
-          `— RentChain`;
+        const text = buildEmailText({
+          intro: `${greet}\n\n${landlordEmail} has invited you to join RentChain as a tenant. This link may expire.`,
+          ctaText: "View invitation",
+          ctaUrl: inviteUrl,
+          footerNote: "If you weren't expecting this, you can ignore this email.",
+        });
+        const html = buildEmailHtml({
+          title: "You're invited to RentChain",
+          intro: `${greet} ${landlordEmail} has invited you to join RentChain as a tenant. This link may expire.`,
+          ctaText: "View invitation",
+          ctaUrl: inviteUrl,
+          footerNote: "If you weren't expecting this, you can ignore this email.",
+        });
 
         await withTimeout(
-          sgMail.send({
+          sendEmail({
             to: toEmail,
             from: from as string,
             subject,
             text,
-            trackingSettings: {
-              clickTracking: { enable: false, enableText: false },
-              openTracking: { enable: false },
-            },
-            mailSettings: {
-              footer: { enable: false },
-            },
+            html,
           }),
           8000
         );

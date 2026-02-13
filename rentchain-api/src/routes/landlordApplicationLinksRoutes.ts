@@ -1,10 +1,10 @@
 import { Router } from "express";
-import sgMail from "@sendgrid/mail";
 import { createHash, randomBytes } from "crypto";
 import { authenticateJwt } from "../middleware/authMiddleware";
 import { db } from "../config/firebase";
 import { requireCapability } from "../services/capabilityGuard";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
+import { sendEmail } from "../services/emailService";
 
 const router = Router();
 
@@ -109,7 +109,6 @@ router.post("/", authenticateJwt, async (req: any, res) => {
         emailError = "EMAIL_NOT_CONFIGURED";
       } else {
         try {
-          sgMail.setApiKey(apiKey);
           const prop = ownership.data || {};
           const addressLine1 = prop.addressLine1 || prop.name || "Property";
           const addressLine2 = prop.addressLine2 || "";
@@ -135,7 +134,7 @@ router.post("/", authenticateJwt, async (req: any, res) => {
           const subject = `Rental Application — ${addressLine1}${subjectUnit}`;
           const expiresAtFormatted = new Date(expiresAt).toLocaleDateString();
 
-          await sgMail.send({
+          await sendEmail({
             to: applicantEmail,
             from,
             replyTo: replyTo || from,
@@ -153,13 +152,6 @@ router.post("/", authenticateJwt, async (req: any, res) => {
               ctaUrl: applicationUrl,
               footerNote: "If you weren't expecting this invite, you can ignore this email.",
             }),
-            trackingSettings: {
-              clickTracking: { enable: false, enableText: false },
-              openTracking: { enable: false },
-            },
-            mailSettings: {
-              footer: { enable: false },
-            },
           });
           emailed = true;
         } catch (err: any) {

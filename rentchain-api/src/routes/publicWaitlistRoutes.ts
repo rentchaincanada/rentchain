@@ -1,9 +1,9 @@
 import { Router } from "express";
 import crypto from "crypto";
 import { db } from "../config/firebase";
-import sgMail from "@sendgrid/mail";
 import { incrementCounter } from "../services/telemetryService";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
+import { sendEmail } from "../services/emailService";
 
 const router = Router();
 
@@ -73,8 +73,7 @@ router.post("/waitlist", async (req, res) => {
     });
 
     try {
-      sgMail.setApiKey(apiKey as string);
-      await sgMail.send({
+      await sendEmail({
         to: email,
         from: from as string,
         subject,
@@ -85,13 +84,6 @@ router.post("/waitlist", async (req, res) => {
           ctaText: "View pricing",
           ctaUrl: ctaLink,
         }),
-        trackingSettings: {
-          clickTracking: { enable: false, enableText: false },
-          openTracking: { enable: false },
-        },
-        mailSettings: {
-          footer: { enable: false },
-        },
       });
       emailed = true;
       console.info("[waitlist] email sent", { to: maskEmail(email), provider: "sendgrid" });
