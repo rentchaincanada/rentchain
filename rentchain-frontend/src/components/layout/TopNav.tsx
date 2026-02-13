@@ -5,6 +5,7 @@ import { useAuth } from "../../context/useAuth";
 import { WorkspaceDrawer } from "./WorkspaceDrawer";
 import { Button } from "../ui/Ui";
 import { colors, radius, shadows, spacing, text, layout, blur } from "../../styles/tokens";
+import { RentChainLogo } from "../brand/RentChainLogo";
 
 const TopNav: React.FC = () => {
   const navigate = useNavigate();
@@ -35,38 +36,7 @@ const TopNav: React.FC = () => {
             gap: spacing.md,
           }}
         >
-          <button
-            type="button"
-            onClick={() => navigate("/dashboard")}
-            style={{
-              background: "none",
-              border: "none",
-              padding: 0,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-            }}
-          >
-            <span
-              style={{
-                width: 28,
-                height: 28,
-                borderRadius: "999px",
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                background: colors.accentSoft,
-                boxShadow: shadows.sm,
-                color: text.primary,
-                fontWeight: 700,
-                fontSize: "0.95rem",
-              }}
-            >
-              R
-            </span>
-            <span style={{ color: text.primary, fontWeight: 700 }}>RentChain</span>
-          </button>
+          <RentChainLogo href="/dashboard" size="sm" />
 
           <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: spacing.sm }}>
             <Button

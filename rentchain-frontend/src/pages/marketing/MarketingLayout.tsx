@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { colors, layout, radius, shadows, spacing, text, typography } from "../../styles/tokens";
 import { useAuth } from "../../context/useAuth";
 import { useLocale } from "../../i18n";
+import { RentChainLogo } from "../../components/brand/RentChainLogo";
 
 interface MarketingLayoutProps {
   children: React.ReactNode;
@@ -136,12 +137,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
           }}
         >
           <div style={{ flex: "1 1 0", display: "flex", alignItems: "center" }}>
-            <Link
-              to="/site"
-              style={{ fontWeight: 700, textDecoration: "none", color: text.primary, letterSpacing: "0.2px" }}
-            >
-              RentChain
-            </Link>
+            <RentChainLogo href="/" size="md" />
           </div>
           <nav
             style={{
