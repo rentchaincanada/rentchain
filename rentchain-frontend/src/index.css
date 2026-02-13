@@ -91,7 +91,7 @@ canvas {
 }
 
 .rc-logo-md {
-  --rc-logo-h: 32px;
+  --rc-logo-h: 36px;
 }
 
 .rc-logo-dark {
@@ -100,7 +100,7 @@ canvas {
 
 @media (max-width: 640px) {
   .rc-logo-md {
-    --rc-logo-h: 28px;
+    --rc-logo-h: 36px;
   }
 
   .rc-logo-sm {
@@ -161,7 +161,7 @@ button,
   align-items: center;
 }
 
-.rc-wrap-row > * {
+.rc-wrap-row>* {
   min-width: 0;
 }
 
@@ -207,6 +207,7 @@ button,
   .rc-mobile-tabbar {
     display: flex;
   }
+
   .rc-page {
     padding-bottom: calc(84px + env(safe-area-inset-bottom));
   }
@@ -237,10 +238,12 @@ button,
 .sev-positive {
   background: currentColor;
 }
+
 .sev-neutral {
   background: currentColor;
   opacity: 0.6;
 }
+
 .sev-negative {
   background: currentColor;
 }
@@ -312,11 +315,13 @@ button,
 .printHeader {
   margin-bottom: 16px;
 }
+
 .printTitle {
   font-size: 20px;
   font-weight: 700;
   margin-bottom: 8px;
 }
+
 .printMeta {
   display: grid;
   gap: 4px;
@@ -372,12 +377,27 @@ button,
 
 /* Print mode selection for applications */
 @media print {
-  .print-only { display: none !important; }
-  body[data-print-mode="summary"] .print-only-summary { display: block !important; }
-  body[data-print-mode="application"] .print-only-application { display: block !important; }
+  .print-only {
+    display: none !important;
+  }
 
-  body * { visibility: hidden !important; }
-  .print-only, .print-only * { visibility: visible !important; }
+  body[data-print-mode="summary"] .print-only-summary {
+    display: block !important;
+  }
+
+  body[data-print-mode="application"] .print-only-application {
+    display: block !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .print-only,
+  .print-only * {
+    visibility: visible !important;
+  }
+
   .print-only {
     position: absolute;
     left: 0;
