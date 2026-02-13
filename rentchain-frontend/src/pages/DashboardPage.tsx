@@ -104,6 +104,10 @@ const DashboardPage: React.FC = () => {
   const isMobile =
     typeof window !== "undefined" ? window.matchMedia("(max-width: 768px)").matches : false;
   const meLoaded = authReady && !authLoading && Boolean(user?.id);
+  const roleLower = String(user?.role || "").toLowerCase();
+  const isAdmin = roleLower === "admin";
+  const isLandlord = roleLower === "landlord";
+  const canUseReferrals = isLandlord || isAdmin;
   const [properties, setProperties] = React.useState<any[]>([]);
   const [propsLoading, setPropsLoading] = React.useState(false);
   const [invitesCount, setInvitesCount] = React.useState(0);
@@ -174,7 +178,7 @@ const DashboardPage: React.FC = () => {
   React.useEffect(() => {
     let active = true;
     const loadReferrals = async () => {
-      if (!meLoaded) return;
+      if (!meLoaded || !canUseReferrals) return;
       try {
         const rows = await listReferrals();
         if (active) setReferralsCount(rows.length);
@@ -186,7 +190,7 @@ const DashboardPage: React.FC = () => {
     return () => {
       active = false;
     };
-  }, [meLoaded]);
+  }, [meLoaded, canUseReferrals]);
 
   React.useEffect(() => {
     let alive = true;
@@ -257,7 +261,6 @@ const DashboardPage: React.FC = () => {
   const countsReady = !propsLoading && !applicationsLoading && !tenantsLoading && !invitesLoading;
   const hasNoProperties = dataReady && (kpis?.propertiesCount ?? 0) === 0;
   const hasNoApplications = dataReady && applicationsCount === 0;
-  const isAdmin = String(user?.role || "").toLowerCase() === "admin";
   const showEmptyCTA = hasNoProperties;
   const progressLoading = !dataReady || onboarding.loading;
   const showOnboardingSkeleton = onboarding.loading && !isAdmin;
@@ -573,7 +576,7 @@ const DashboardPage: React.FC = () => {
           </Card>
         ) : null}
 
-        {dataReady ? (
+        {dataReady && canUseReferrals ? (
           <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
             <div style={{ fontWeight: 700, marginBottom: 6 }}>Invite another landlord</div>
             <div style={{ color: text.muted, marginBottom: 12 }}>
