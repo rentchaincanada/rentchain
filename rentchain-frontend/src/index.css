@@ -100,7 +100,7 @@ canvas {
 
 @media (max-width: 640px) {
   .rc-logo-md {
-    --rc-logo-h: 44px;
+    --rc-logo-h: 100px;
   }
 
   .rc-logo-sm {
@@ -120,7 +120,7 @@ button,
   bottom: 0;
   display: none;
   gap: 8px;
-  padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+  padding: 20px 20px calc(10px + env(safe-area-inset-bottom));
   background: #fff;
   border-top: 1px solid rgba(0, 0, 0, 0.08);
   z-index: 60;
