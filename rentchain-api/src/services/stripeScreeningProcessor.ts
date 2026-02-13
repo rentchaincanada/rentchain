@@ -1,6 +1,7 @@
 import sgMail from "@sendgrid/mail";
 import { createHash } from "crypto";
 import { db } from "../config/firebase";
+import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 
 function seededNumber(input: string) {
   const hash = createHash("sha256").update(input).digest("hex");
@@ -182,36 +183,19 @@ export async function applyScreeningResultsFromOrder(params: {
               from,
               replyTo: replyTo || from,
               subject: `Verified screening queued — ${applicantName}`,
-              text: [
-                "A verified screening is queued.",
-                "",
-                `Applicant: ${applicantName} (${applicantEmail || "n/a"})`,
-                `Service level: ${serviceLevel}`,
-                `Application ID: ${applicationId}`,
-                `Order ID: ${orderId}`,
-                `Property ID: ${application?.propertyId || "n/a"}`,
-                application?.unitId ? `Unit ID: ${application.unitId}` : null,
-                `Total paid: ${(Number(order?.totalAmountCents || 0) / 100).toFixed(2)} ${order?.currency || "CAD"}`,
-                "",
-                `View queue: ${adminLink}`,
-              ]
-                .filter(Boolean)
-                .join("\n"),
-              html: `
-                <div style="font-family:Arial,sans-serif;line-height:1.5;color:#0f172a;">
-                  <h3 style="margin:0 0 8px 0;">Verified screening queued</h3>
-                  <div><strong>Applicant:</strong> ${applicantName} ${applicantEmail ? `(${applicantEmail})` : ""}</div>
-                  <div><strong>Service level:</strong> ${serviceLevel}</div>
-                  <div><strong>Application ID:</strong> ${applicationId}</div>
-                  <div><strong>Order ID:</strong> ${orderId}</div>
-                  <div><strong>Property ID:</strong> ${application?.propertyId || "n/a"}</div>
-                  ${application?.unitId ? `<div><strong>Unit ID:</strong> ${application.unitId}</div>` : ""}
-                  <div><strong>Total paid:</strong> ${(Number(order?.totalAmountCents || 0) / 100).toFixed(2)} ${order?.currency || "CAD"}</div>
-                  <p style="margin:14px 0;">
-                    <a href="${adminLink}" style="display:inline-block;padding:10px 14px;background:#2563eb;color:#fff;border-radius:10px;text-decoration:none;font-weight:700;">View queue</a>
-                  </p>
-                </div>
-              `,
+              text: buildEmailText({
+                intro: `A verified screening is queued.\nApplicant: ${applicantName} (${applicantEmail || "n/a"})\nService level: ${serviceLevel}\nApplication ID: ${applicationId}\nOrder ID: ${orderId}\nProperty ID: ${application?.propertyId || "n/a"}${application?.unitId ? `\nUnit ID: ${application.unitId}` : ""}\nTotal paid: ${(Number(order?.totalAmountCents || 0) / 100).toFixed(2)} ${order?.currency || "CAD"}`,
+                ctaText: "View queue",
+                ctaUrl: adminLink,
+                footerNote: "You received this because you are on verified screening notifications.",
+              }),
+              html: buildEmailHtml({
+                title: "Verified screening queued",
+                intro: `Applicant: ${applicantName} (${applicantEmail || "n/a"}). Service level: ${serviceLevel}. Application ID: ${applicationId}. Order ID: ${orderId}.`,
+                ctaText: "View queue",
+                ctaUrl: adminLink,
+                footerNote: "You received this because you are on verified screening notifications.",
+              }),
               trackingSettings: {
                 clickTracking: { enable: false, enableText: false },
                 openTracking: { enable: false },

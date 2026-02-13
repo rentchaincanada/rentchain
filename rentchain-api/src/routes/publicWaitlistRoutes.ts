@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { db } from "../config/firebase";
 import sgMail from "@sendgrid/mail";
 import { incrementCounter } from "../services/telemetryService";
+import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 
 const router = Router();
 
@@ -65,11 +66,11 @@ router.post("/waitlist", async (req, res) => {
     const ctaLink = `${baseUrl}/pricing?from=waitlist`;
 
     const subject = "You're on the RentChain waitlist";
-    const text =
-      `Thanks${nameRaw ? `, ${nameRaw}` : ""} - you're on the RentChain waitlist.\n\n` +
-      `See plans: ${ctaLink}\n\n` +
-      "We'll email you when Micro-Live invites open.\n\n" +
-      "If you didn't request this, ignore this email.\n";
+    const text = buildEmailText({
+      intro: `Thanks${nameRaw ? `, ${nameRaw}` : ""} - you're on the RentChain waitlist. We'll email you when Micro-Live invites open.`,
+      ctaText: "View pricing",
+      ctaUrl: ctaLink,
+    });
 
     try {
       sgMail.setApiKey(apiKey as string);
@@ -78,14 +79,12 @@ router.post("/waitlist", async (req, res) => {
         from: from as string,
         subject,
         text,
-        html: `
-          <div style="font-family:Arial,sans-serif;line-height:1.5">
-            <h2 style="margin:0 0 12px 0;">You're on the RentChain waitlist.</h2>
-            <p>Thanks${nameRaw ? `, ${nameRaw}` : ""} for your interest. We'll email you when Micro-Live invites open.</p>
-            <p><a href="${ctaLink}" style="display:inline-block;padding:10px 14px;background:#2563eb;color:#fff;border-radius:10px;text-decoration:none;font-weight:700;">View pricing</a></p>
-            <p style="color:#6b7280;font-size:12px;margin-top:18px;">If the button doesn't work, copy and paste: ${ctaLink}</p>
-          </div>
-        `,
+        html: buildEmailHtml({
+          title: "You're on the RentChain waitlist",
+          intro: `Thanks${nameRaw ? `, ${nameRaw}` : ""} for your interest. We'll email you when Micro-Live invites open.`,
+          ctaText: "View pricing",
+          ctaUrl: ctaLink,
+        }),
         trackingSettings: {
           clickTracking: { enable: false, enableText: false },
           openTracking: { enable: false },

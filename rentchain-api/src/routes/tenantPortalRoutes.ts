@@ -2,6 +2,7 @@ import { Router } from "express";
 import sgMail from "@sendgrid/mail";
 import { authenticateJwt } from "../middleware/authMiddleware";
 import { db } from "../config/firebase";
+import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 
 const router = Router();
 router.use(authenticateJwt);
@@ -716,31 +717,17 @@ router.post("/maintenance-requests", requireTenant, async (req: any, res) => {
             from,
             replyTo: replyTo || from,
             subject: `New maintenance request: ${trimmedTitle}`,
-            text: [
-              "A tenant submitted a new maintenance request.",
-              "",
-              `Tenant: ${tenantName || "Unknown"}${tenantEmail ? ` (${tenantEmail})` : ""}`,
-              `Category: ${categorySafe}`,
-              `Priority: ${prioritySafe}`,
-              "",
-              excerpt,
-              "",
-              `Request ID: ${ref.id}`,
-              `View in RentChain: ${requestLink}`,
-            ].join("\n"),
-            html: `
-              <div style="font-family:Arial,sans-serif;line-height:1.5;color:#0f172a;">
-                <p style="font-weight:700;margin:0 0 6px 0;">New maintenance request</p>
-                <p style="margin:6px 0;">Tenant: ${tenantName || "Unknown"}${tenantEmail ? ` (${tenantEmail})` : ""}</p>
-                <p style="margin:6px 0;">Category: ${categorySafe} | Priority: ${prioritySafe}</p>
-                <p style="margin:10px 0;">${excerpt.replace(/\n/g, "<br/>")}</p>
-                <p style="margin:12px 0;">Request ID: ${ref.id}</p>
-                <p style="margin:12px 0;">
-                  <a href="${requestLink}" style="display:inline-block;padding:10px 14px;background:#2563eb;color:#fff;border-radius:10px;text-decoration:none;font-weight:700;">Open maintenance</a>
-                </p>
-                <p style="font-size:12px;color:#475569;margin-top:18px;">If the button doesn't work, copy and paste: ${requestLink}</p>
-              </div>
-            `,
+            text: buildEmailText({
+              intro: `A tenant submitted a new maintenance request.\nTenant: ${tenantName || "Unknown"}${tenantEmail ? ` (${tenantEmail})` : ""}\nCategory: ${categorySafe}\nPriority: ${prioritySafe}\nRequest ID: ${ref.id}\n\n${excerpt}`,
+              ctaText: "Open maintenance",
+              ctaUrl: requestLink,
+            }),
+            html: buildEmailHtml({
+              title: "New maintenance request",
+              intro: `Tenant: ${tenantName || "Unknown"}${tenantEmail ? ` (${tenantEmail})` : ""}. Category: ${categorySafe}. Priority: ${prioritySafe}. Request ID: ${ref.id}.`,
+              ctaText: "Open maintenance",
+              ctaUrl: requestLink,
+            }),
             trackingSettings: {
               clickTracking: { enable: false, enableText: false },
               openTracking: { enable: false },
