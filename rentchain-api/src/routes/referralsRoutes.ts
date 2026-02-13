@@ -14,6 +14,23 @@ function normEmail(email: string) {
   return String(email || "").trim().toLowerCase();
 }
 
+function resolveRole(req: any): string {
+  const explicitRole = String(req.user?.role || "").toLowerCase();
+  if (explicitRole === "landlord" || explicitRole === "admin") return explicitRole;
+  const hasLandlordScope = Boolean(req.user?.landlordId || req.user?.id);
+  if (hasLandlordScope) return "landlord";
+  if (explicitRole) return explicitRole;
+  return hasLandlordScope ? "landlord" : "";
+}
+
+function forbidden(res: any, req: any, detail: string) {
+  const role = resolveRole(req) || "unknown";
+  const landlordId = String(req.user?.landlordId || "");
+  res.setHeader("x-auth-role", role);
+  res.setHeader("x-auth-landlordId", landlordId);
+  return res.status(403).json({ ok: false, error: "FORBIDDEN", detail });
+}
+
 function resolveFrontendBase(): string {
   const fallback =
     process.env.NODE_ENV === "production"
@@ -58,13 +75,13 @@ async function createReferralCode() {
 router.get("/referrals", requireAuth, async (req: any, res) => {
   res.setHeader("x-route-source", "referralsRoutes.ts");
   try {
-    const role = String(req.user?.role || "").toLowerCase();
+    const role = resolveRole(req);
     if (role !== "landlord" && role !== "admin") {
-      return res.status(403).json({ ok: false, error: "FORBIDDEN", detail: "role_not_landlord" });
+      return forbidden(res, req, "role_not_landlord");
     }
     const landlordId = String(req.user?.landlordId || req.user?.id || "");
     if (!landlordId) {
-      return res.status(403).json({ ok: false, error: "FORBIDDEN", detail: "missing_landlordId" });
+      return forbidden(res, req, "missing_landlordId");
     }
 
     // Avoid composite index dependency: fetch by landlordId then sort in memory.
@@ -87,13 +104,13 @@ router.get("/referrals", requireAuth, async (req: any, res) => {
 router.post("/referrals", requireAuth, rateLimitReferralsUser, async (req: any, res) => {
   res.setHeader("x-route-source", "referralsRoutes.ts");
   try {
-    const role = String(req.user?.role || "").toLowerCase();
+    const role = resolveRole(req);
     if (role !== "landlord") {
-      return res.status(403).json({ ok: false, error: "FORBIDDEN", detail: "role_not_landlord" });
+      return forbidden(res, req, "role_not_landlord");
     }
     const landlordId = String(req.user?.landlordId || req.user?.id || "");
     if (!landlordId) {
-      return res.status(403).json({ ok: false, error: "FORBIDDEN", detail: "missing_landlordId" });
+      return forbidden(res, req, "missing_landlordId");
     }
 
     const refereeEmail = normEmail(req.body?.refereeEmail || "");

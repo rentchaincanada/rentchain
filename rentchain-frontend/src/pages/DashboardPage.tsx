@@ -174,7 +174,7 @@ const DashboardPage: React.FC = () => {
   React.useEffect(() => {
     let active = true;
     const loadReferrals = async () => {
-      if (!meLoaded) return;
+      if (!meLoaded || !canUseReferrals) return;
       try {
         const rows = await listReferrals();
         if (active) setReferralsCount(rows.length);
@@ -186,7 +186,7 @@ const DashboardPage: React.FC = () => {
     return () => {
       active = false;
     };
-  }, [meLoaded]);
+  }, [meLoaded, canUseReferrals]);
 
   React.useEffect(() => {
     let alive = true;
@@ -258,6 +258,8 @@ const DashboardPage: React.FC = () => {
   const hasNoProperties = dataReady && (kpis?.propertiesCount ?? 0) === 0;
   const hasNoApplications = dataReady && applicationsCount === 0;
   const isAdmin = String(user?.role || "").toLowerCase() === "admin";
+  const isLandlord = String(user?.role || "").toLowerCase() === "landlord";
+  const canUseReferrals = isLandlord || isAdmin;
   const showEmptyCTA = hasNoProperties;
   const progressLoading = !dataReady || onboarding.loading;
   const showOnboardingSkeleton = onboarding.loading && !isAdmin;
@@ -573,7 +575,7 @@ const DashboardPage: React.FC = () => {
           </Card>
         ) : null}
 
-        {dataReady ? (
+        {dataReady && canUseReferrals ? (
           <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
             <div style={{ fontWeight: 700, marginBottom: 6 }}>Invite another landlord</div>
             <div style={{ color: text.muted, marginBottom: 12 }}>
