@@ -1,4 +1,5 @@
 import sgMail from "@sendgrid/mail";
+import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 
 type SendResult = { ok: true } | { ok: false; error: string };
 
@@ -26,34 +27,51 @@ export async function sendWaitlistConfirmation(params: {
     const baseUrl = (process.env.PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
     const ctaLink = `${baseUrl}/pricing?from=waitlist`;
 
-    await sgMail.send({
+    await sendEmail({
       to,
       from,
       replyTo,
       subject: "You're on the RentChain waitlist",
-      text: `${greet}\n\nThanks for joining the RentChain waitlist. We'll reach out shortly for private onboarding.\n\nSee plans: ${ctaLink}\n\n- RentChain`,
-      html: `
-        <div style="font-family:Arial,sans-serif;line-height:1.5">
-          <h2>You're on the list.</h2>
-          <p>${greet}</p>
-          <p>Thanks for joining the RentChain waitlist.</p>
-          <p><a href="${ctaLink}" style="display:inline-block;padding:10px 14px;background:#2563eb;color:#fff;border-radius:10px;text-decoration:none;font-weight:700;">View pricing</a></p>
-          <p style="color:#6b7280;font-size:12px;margin-top:18px;">If the button doesn't work, copy and paste: ${ctaLink}</p>
-          <p>We'll reach out shortly for private onboarding.</p>
-          <p style="color:#666;font-size:12px;margin-top:24px">- RentChain</p>
-        </div>
-      `,
-      trackingSettings: {
-        clickTracking: { enable: false, enableText: false },
-        openTracking: { enable: false },
-      },
-      mailSettings: {
-        footer: { enable: false },
-      },
+      text: buildEmailText({
+        intro: `${greet}\n\nThanks for joining the RentChain waitlist. We'll reach out shortly for private onboarding.`,
+        ctaText: "View pricing",
+        ctaUrl: ctaLink,
+        footerNote: "If you didn't request this, you can ignore this email.",
+      }),
+      html: buildEmailHtml({
+        title: "You're on the RentChain waitlist",
+        intro: `${greet} Thanks for joining the RentChain waitlist. We'll reach out shortly for private onboarding.`,
+        ctaText: "View pricing",
+        ctaUrl: ctaLink,
+      }),
     });
 
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message || "SendGrid send failed" };
   }
+}
+
+export async function sendEmail(message: sgMail.MailDataRequired) {
+  const key = safeStr(process.env.SENDGRID_API_KEY);
+  const from =
+    safeStr(process.env.SENDGRID_FROM_EMAIL) ||
+    safeStr(process.env.SENDGRID_FROM) ||
+    safeStr(process.env.FROM_EMAIL);
+
+  if (!key) throw new Error("SENDGRID_API_KEY missing");
+  if (!message.from && !from) throw new Error("SENDGRID_FROM_EMAIL missing");
+
+  sgMail.setApiKey(key);
+  await sgMail.send({
+    ...message,
+    from: message.from || from,
+    trackingSettings: {
+      clickTracking: { enable: false, enableText: false },
+      openTracking: { enable: false },
+    },
+    mailSettings: {
+      footer: { enable: false },
+    },
+  });
 }

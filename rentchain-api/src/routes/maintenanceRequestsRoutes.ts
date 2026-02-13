@@ -2,6 +2,7 @@ import { Router } from "express";
 import sgMail from "@sendgrid/mail";
 import { db } from "../config/firebase";
 import { authenticateJwt } from "../middleware/authMiddleware";
+import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 
 const router = Router();
 
@@ -152,30 +153,17 @@ router.patch("/maintenance-requests/:id", async (req: any, res) => {
                 from,
                 replyTo: replyTo || from,
                 subject: `Maintenance update: ${title} (${nextStatus})`,
-                text: [
-                  `Your maintenance request was updated to ${nextStatus}.`,
-                  `Updated at: ${timestamp}`,
-                  "",
-                  `Category: ${category}`,
-                  `Priority: ${priority}`,
-                  "",
-                  excerpt,
-                  "",
-                  `View details: ${requestLink}`,
-                ].join("\n"),
-                html: `
-                  <div style="font-family:Arial,sans-serif;line-height:1.5;color:#0f172a;">
-                    <p style="font-weight:700;margin:0 0 6px 0;">Maintenance request updated</p>
-                    <p style="margin:6px 0;">Status: ${nextStatus}</p>
-                    <p style="margin:6px 0;font-size:12px;color:#475569;">Updated at: ${timestamp}</p>
-                    <p style="margin:6px 0;">Category: ${category} | Priority: ${priority}</p>
-                    <p style="margin:10px 0;">${excerpt.replace(/\n/g, "<br/>")}</p>
-                    <p style="margin:12px 0;">
-                      <a href="${requestLink}" style="display:inline-block;padding:10px 14px;background:#2563eb;color:#fff;border-radius:10px;text-decoration:none;font-weight:700;">View request</a>
-                    </p>
-                    <p style="font-size:12px;color:#475569;margin-top:18px;">If the button doesn't work, copy and paste: ${requestLink}</p>
-                  </div>
-                `,
+                text: buildEmailText({
+                  intro: `Your maintenance request was updated to ${nextStatus}.\nUpdated at: ${timestamp}\nCategory: ${category}\nPriority: ${priority}\n\n${excerpt}`,
+                  ctaText: "View request",
+                  ctaUrl: requestLink,
+                }),
+                html: buildEmailHtml({
+                  title: "Maintenance request updated",
+                  intro: `Status: ${nextStatus}. Updated at: ${timestamp}. Category: ${category}. Priority: ${priority}.`,
+                  ctaText: "View request",
+                  ctaUrl: requestLink,
+                }),
                 trackingSettings: {
                   clickTracking: { enable: false, enableText: false },
                   openTracking: { enable: false },

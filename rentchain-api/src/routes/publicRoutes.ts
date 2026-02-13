@@ -15,6 +15,7 @@ import { hashInviteToken } from "../services/screening/inviteTokens";
 import { writeScreeningEvent } from "../services/screening/screeningEvents";
 import { getBureauProvider } from "../services/screening/providers/bureauProvider";
 import { getPricingHealth } from "../config/planMatrix";
+import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 
 const router = Router();
 
@@ -642,15 +643,17 @@ async function notifyMessageRecipient(params: {
         : `https://www.rentchain.ai/messages?c=${conversationId}`;
 
     const subject = "New message on RentChain";
-    const text = `You have a new message on RentChain:\n\n${snippet}\n\nOpen: ${link}`;
-    const html = `
-      <div style="font-family:Arial,sans-serif;line-height:1.5">
-        <h2 style="margin:0 0 12px 0;">New message on RentChain</h2>
-        <p style="color:#111;">${snippet}</p>
-        <p><a href="${link}" style="display:inline-block;padding:10px 14px;background:#2563eb;color:#fff;border-radius:10px;text-decoration:none;font-weight:700;">Open conversation</a></p>
-        <p style="color:#6b7280;font-size:12px;margin-top:18px;">If the button doesn’t work, copy and paste: ${link}</p>
-      </div>
-    `;
+    const text = buildEmailText({
+      intro: `You have a new message on RentChain:\n\n${snippet}`,
+      ctaText: "Open conversation",
+      ctaUrl: link,
+    });
+    const html = buildEmailHtml({
+      title: "New message on RentChain",
+      intro: `You have a new message on RentChain: ${snippet}`,
+      ctaText: "Open conversation",
+      ctaUrl: link,
+    });
 
     await sgMail.send({
       to: toEmail,
@@ -1043,19 +1046,17 @@ router.post("/tenant/auth/magic-link", async (req: any, res) => {
           next ? `&next=${encodeURIComponent(next)}` : ""
         }`;
         const subject = "Your RentChain login link";
-        const text =
-          `Hi,\n\n` +
-          `Use this secure link to sign in to your RentChain tenant portal:\n${link}\n\n` +
-          `This link expires in 15 minutes and can be used once.\n\n` +
-          `— RentChain`;
-        const html = `
-          <div style="font-family:Arial,sans-serif;line-height:1.5">
-            <h2 style="margin:0 0 12px 0;">Your RentChain login link</h2>
-            <p>Use this secure link to sign in to your tenant portal. It expires in 15 minutes.</p>
-            <p><a href="${link}" style="display:inline-block;padding:10px 14px;background:#2563eb;color:#fff;border-radius:10px;text-decoration:none;font-weight:700;">Sign in</a></p>
-            <p style="color:#6b7280;font-size:12px;margin-top:18px;">If the button doesn't work, copy and paste: ${link}</p>
-          </div>
-        `;
+        const text = buildEmailText({
+          intro: "Use this secure link to sign in to your RentChain tenant portal. This link expires in 15 minutes and can be used once.",
+          ctaText: "Sign in",
+          ctaUrl: link,
+        });
+        const html = buildEmailHtml({
+          title: "Your RentChain login link",
+          intro: "Use this secure link to sign in to your tenant portal. This link expires in 15 minutes and can be used once.",
+          ctaText: "Sign in",
+          ctaUrl: link,
+        });
         await sgMail.send({
           to: emailRaw,
           from: from as string,

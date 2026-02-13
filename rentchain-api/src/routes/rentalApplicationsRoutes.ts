@@ -19,6 +19,7 @@ import { buildTenantInviteUrl, createInviteToken } from "../services/screening/i
 import { createSignedUrl } from "../storage/pdfStore";
 import { buildReviewSummary, buildReviewSummaryPdf } from "../lib/reviewSummary";
 import { rateLimitScreeningIp, rateLimitScreeningUser } from "../middleware/rateLimit";
+import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 
 const router = Router();
 
@@ -1148,24 +1149,17 @@ router.post(
               to: tenantEmail,
               from,
               subject,
-              text: [
-                `Hi ${safeName},`,
-                "",
-                "Your landlord has requested a tenant screening.",
-                "Complete your verification here:",
-                tenantInviteUrl,
-                "",
-                "- RentChain",
-              ].join("\n"),
-              html: `
-                <div style="font-family:Arial,sans-serif;line-height:1.5;color:#0f172a;">
-                  <p>Hi ${safeName},</p>
-                  <p>Your landlord has requested a tenant screening.</p>
-                  <p><a href="${tenantInviteUrl}" style="display:inline-block;padding:10px 14px;background:#2563eb;color:#fff;border-radius:10px;text-decoration:none;font-weight:700;">Start verification</a></p>
-                  <p style="font-size:12px;color:#6b7280;">If the button doesn't work, copy and paste: ${tenantInviteUrl}</p>
-                  <p>- RentChain</p>
-                </div>
-              `,
+              text: buildEmailText({
+                intro: `Hi ${safeName},\n\nYour landlord has requested a tenant screening.`,
+                ctaText: "Start verification",
+                ctaUrl: tenantInviteUrl,
+              }),
+              html: buildEmailHtml({
+                title: "Complete your screening",
+                intro: `Hi ${safeName}, your landlord has requested a tenant screening.`,
+                ctaText: "Start verification",
+                ctaUrl: tenantInviteUrl,
+              }),
               trackingSettings: {
                 clickTracking: { enable: false, enableText: false },
                 openTracking: { enable: false },
@@ -1476,36 +1470,19 @@ router.post(
                   from,
                   replyTo: replyTo || from,
                   subject: `Verified screening queued — ${applicantName}`,
-                  text: [
-                    "A verified screening is queued.",
-                    "",
-                    `Applicant: ${applicantName} (${applicantEmail || "n/a"})`,
-                    `Service level: ${serviceLevel}`,
-                    `Application ID: ${id}`,
-                    `Order ID: ${orderId}`,
-                    `Property ID: ${data?.propertyId || "n/a"}`,
-                    data?.unitId ? `Unit ID: ${data.unitId}` : null,
-                    `Total paid: ${(pricing.totalAmountCents / 100).toFixed(2)} ${orderPayload.currency}`,
-                    "",
-                    `View queue: ${adminLink}`,
-                  ]
-                    .filter(Boolean)
-                    .join("\n"),
-                  html: `
-                    <div style="font-family:Arial,sans-serif;line-height:1.5;color:#0f172a;">
-                      <h3 style="margin:0 0 8px 0;">Verified screening queued</h3>
-                      <div><strong>Applicant:</strong> ${applicantName} ${applicantEmail ? `(${applicantEmail})` : ""}</div>
-                      <div><strong>Service level:</strong> ${serviceLevel}</div>
-                      <div><strong>Application ID:</strong> ${id}</div>
-                      <div><strong>Order ID:</strong> ${orderId}</div>
-                      <div><strong>Property ID:</strong> ${data?.propertyId || "n/a"}</div>
-                      ${data?.unitId ? `<div><strong>Unit ID:</strong> ${data.unitId}</div>` : ""}
-                      <div><strong>Total paid:</strong> ${(pricing.totalAmountCents / 100).toFixed(2)} ${orderPayload.currency}</div>
-                      <p style="margin:14px 0;">
-                        <a href="${adminLink}" style="display:inline-block;padding:10px 14px;background:#2563eb;color:#fff;border-radius:10px;text-decoration:none;font-weight:700;">View queue</a>
-                      </p>
-                    </div>
-                  `,
+                  text: buildEmailText({
+                    intro: `A verified screening is queued.\nApplicant: ${applicantName} (${applicantEmail || "n/a"})\nService level: ${serviceLevel}\nApplication ID: ${id}\nOrder ID: ${orderId}\nProperty ID: ${data?.propertyId || "n/a"}${data?.unitId ? `\nUnit ID: ${data.unitId}` : ""}\nTotal paid: ${(pricing.totalAmountCents / 100).toFixed(2)} ${orderPayload.currency}`,
+                    ctaText: "View queue",
+                    ctaUrl: adminLink,
+                    footerNote: "You received this because you are on verified screening notifications.",
+                  }),
+                  html: buildEmailHtml({
+                    title: "Verified screening queued",
+                    intro: `Applicant: ${applicantName} (${applicantEmail || "n/a"}). Service level: ${serviceLevel}. Application ID: ${id}. Order ID: ${orderId}.`,
+                    ctaText: "View queue",
+                    ctaUrl: adminLink,
+                    footerNote: "You received this because you are on verified screening notifications.",
+                  }),
                   trackingSettings: {
                     clickTracking: { enable: false, enableText: false },
                     openTracking: { enable: false },

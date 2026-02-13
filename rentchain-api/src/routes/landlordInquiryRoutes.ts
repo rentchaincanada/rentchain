@@ -5,6 +5,7 @@ import { db } from "../config/firebase";
 import { getAdminEmails, isAdminEmail } from "../lib/adminEmails";
 import { requireAuth } from "../middleware/requireAuth";
 import { rateLimitLeads } from "../middleware/rateLimit";
+import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 const publicRouter = Router();
 const adminRouter = Router();
 
@@ -199,17 +200,26 @@ async function approveLeadById(leadId: string, req: any, res: any) {
   }
 
   try {
-    const subject = userId
-      ? "Your RentChain landlord access is approved"
-      : "Your RentChain landlord access is approved";
-    const text = userId
-      ? `Your landlord access has been approved.\n\nLog in here:\n${loginUrl}\n\n— RentChain`
-      : `Your landlord access has been approved.\n\nOpen this link to accept your invite:\n${inviteUrl}\n\nThis invite expires in 7 days.\n\n— RentChain`;
+    const subject = "Your RentChain landlord access is approved";
+    const actionUrl = userId ? loginUrl : inviteUrl;
+    const intro = userId
+      ? "Your landlord access has been approved."
+      : "Your landlord access has been approved. Your invite expires in 7 days.";
     await sendEmail({
       to: email,
       from: from as string,
       subject,
-      text,
+      text: buildEmailText({
+        intro,
+        ctaText: userId ? "Open RentChain" : "Accept invite",
+        ctaUrl: actionUrl,
+      }),
+      html: buildEmailHtml({
+        title: "Landlord access approved",
+        intro,
+        ctaText: userId ? "Open RentChain" : "Accept invite",
+        ctaUrl: actionUrl,
+      }),
     });
     return res.json({ ok: true, inviteUrl, emailed: true });
   } catch (err: any) {
@@ -316,21 +326,18 @@ publicRouter.post(
 
     const baseUrl = resolveFrontendBase();
     const leadSubject = "RentChain access request received";
-    const leadText =
-      `Thanks${firstName ? `, ${firstName}` : ""} — we received your request for RentChain access.\n\n` +
-      `We’ll review your request and follow up shortly.\n\n` +
-      `— RentChain`;
+    const leadPortalUrl = `${baseUrl}/site/pricing`;
 
     const admins = getAdminEmails();
     const adminSubject = "New RentChain access request";
+    const adminReviewUrl = `${baseUrl}/admin/leads?leadId=${encodeURIComponent(id)}`;
     const adminText =
       `A new landlord lead requested access.\n\n` +
       `Email: ${email}\n` +
       `Name: ${firstName || "—"}\n` +
       `Portfolio size: ${portfolioSize || "—"}\n` +
       `Note: ${note || "—"}\n\n` +
-      `Approve in admin or use /api/admin/landlord-leads/${id}/approve.\n` +
-      `Landing: ${baseUrl}/invite (admin invite flow)\n`;
+      `Review request:\n${adminReviewUrl}\n`;
 
     let emailed = false;
     let adminNotified = false;
@@ -339,7 +346,17 @@ publicRouter.post(
         to: email,
         from: from as string,
         subject: leadSubject,
-        text: leadText,
+        text: buildEmailText({
+          intro: `Thanks${firstName ? `, ${firstName}` : ""} — we received your request for RentChain access. We’ll review your request and follow up shortly.`,
+          ctaText: "View RentChain",
+          ctaUrl: leadPortalUrl,
+        }),
+        html: buildEmailHtml({
+          title: "Request received",
+          intro: `Thanks${firstName ? `, ${firstName}` : ""} — we received your request for RentChain access. We’ll review your request and follow up shortly.`,
+          ctaText: "View RentChain",
+          ctaUrl: leadPortalUrl,
+        }),
       });
       emailed = true;
     } catch (err: any) {
@@ -353,6 +370,13 @@ publicRouter.post(
           from: from as string,
           subject: adminSubject,
           text: adminText,
+          html: buildEmailHtml({
+            title: "New access request",
+            intro: `A new landlord lead requested access.\nEmail: ${email}\nName: ${firstName || "—"}\nPortfolio size: ${portfolioSize || "—"}\nNote: ${note || "—"}`,
+            ctaText: "Review request",
+            ctaUrl: adminReviewUrl,
+            footerNote: "You received this because you are configured as a RentChain admin.",
+          }),
         });
         adminNotified = true;
       }
