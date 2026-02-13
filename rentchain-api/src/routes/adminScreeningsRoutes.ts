@@ -14,6 +14,7 @@ import { sendEmail } from "../services/emailService";
 import { FRONTEND_URL } from "../config/screeningConfig";
 import { getApplicationById } from "../services/applicationsService";
 import { SCREENING_REQUESTS_INTERNAL } from "../services/screeningRequestService";
+import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 
 const router = Router();
 
@@ -102,8 +103,17 @@ router.post("/:id/resend-email", async (req, res) => {
   await sendEmail({
     to: recipient,
     subject: "RentChain: Screening report ready",
-    text: `Your screening report is ready. View it here: ${linkTarget}`,
-    html: `<p>Your screening report is ready.</p><p><a href="${linkTarget}">View screening</a></p>`,
+    text: buildEmailText({
+      intro: "Your screening report is ready.",
+      ctaText: "View screening",
+      ctaUrl: linkTarget,
+    }),
+    html: buildEmailHtml({
+      title: "Screening report ready",
+      intro: "Your screening report is ready.",
+      ctaText: "View screening",
+      ctaUrl: linkTarget,
+    }),
   });
 
   return res.status(200).json({ success: true });

@@ -4,6 +4,7 @@ import { createHash, randomBytes } from "crypto";
 import { authenticateJwt } from "../middleware/authMiddleware";
 import { db } from "../config/firebase";
 import { requireCapability } from "../services/capabilityGuard";
+import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 
 const router = Router();
 
@@ -139,41 +140,19 @@ router.post("/", authenticateJwt, async (req: any, res) => {
             from,
             replyTo: replyTo || from,
             subject,
-            text: [
-              "Hello,",
-              "",
-              "Thank you for your interest in the property listed below.",
-              "Please complete the rental application at your convenience.",
-              "",
-              `Property: ${propertyAddress || addressLine1}`,
-              unitLabel ? `Unit: ${unitLabel}` : null,
-              rentAmount ? `Rent: ${rentAmount}` : null,
-              "",
-              `Complete application: ${applicationUrl}`,
-              "",
-              `This application link expires on ${expiresAtFormatted}.`,
-              "",
-              "Powered by RentChain.ai",
-            ]
-              .filter(Boolean)
-              .join("\n"),
-            html: `
-              <div style="font-family:Arial,sans-serif;line-height:1.5;color:#0f172a;">
-                <p>Hello,</p>
-                <p>Thank you for your interest in the property listed below.</p>
-                <p>Please complete the rental application at your convenience.</p>
-                <div style="margin:14px 0 10px 0;">
-                  <div><strong>Property:</strong> ${propertyAddress || addressLine1}</div>
-                  ${unitLabel ? `<div><strong>Unit:</strong> ${unitLabel}</div>` : ""}
-                  ${rentAmount ? `<div><strong>Rent:</strong> ${rentAmount}</div>` : ""}
-                </div>
-                <p style="margin:16px 0;">
-                  <a href="${applicationUrl}" style="display:inline-block;padding:10px 14px;background:#2563eb;color:#fff;border-radius:10px;text-decoration:none;font-weight:700;">Complete Application</a>
-                </p>
-                <p style="font-size:12px;color:#475569;">This application link expires on ${expiresAtFormatted}.</p>
-                <p style="font-size:12px;color:#64748b;">Powered by RentChain.ai</p>
-              </div>
-            `,
+            text: buildEmailText({
+              intro: `Hello,\n\nThank you for your interest in the property listed below.\nProperty: ${propertyAddress || addressLine1}${unitLabel ? `\nUnit: ${unitLabel}` : ""}${rentAmount ? `\nRent: ${rentAmount}` : ""}\n\nThis application link expires on ${expiresAtFormatted}.`,
+              ctaText: "Complete application",
+              ctaUrl: applicationUrl,
+              footerNote: "If you weren't expecting this invite, you can ignore this email.",
+            }),
+            html: buildEmailHtml({
+              title: "Complete your rental application",
+              intro: `Thank you for your interest in ${propertyAddress || addressLine1}.${unitLabel ? ` Unit: ${unitLabel}.` : ""}${rentAmount ? ` Rent: ${rentAmount}.` : ""} This application link expires on ${expiresAtFormatted}.`,
+              ctaText: "Complete Application",
+              ctaUrl: applicationUrl,
+              footerNote: "If you weren't expecting this invite, you can ignore this email.",
+            }),
             trackingSettings: {
               clickTracking: { enable: false, enableText: false },
               openTracking: { enable: false },

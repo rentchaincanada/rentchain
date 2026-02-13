@@ -2,6 +2,7 @@ import { Router } from "express";
 import sgMail from "@sendgrid/mail";
 import { db } from "../config/firebase";
 import { authenticateJwt } from "../middleware/authMiddleware";
+import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 
 const router = Router();
 
@@ -96,25 +97,17 @@ router.post("/tenant-notices", authenticateJwt, async (req: any, res) => {
             from,
             replyTo: replyTo || from,
             subject: `New notice from your landlord: ${trimmedTitle}`,
-            text: [
-              `Notice type: ${normalizedType}`,
-              `Title: ${trimmedTitle}`,
-              "",
-              excerpt,
-              "",
-              `View in RentChain: ${noticeLink}`,
-            ].join("\n"),
-            html: `
-              <div style="font-family:Arial,sans-serif;line-height:1.5;color:#0f172a;">
-                <p style="font-weight:700;margin:0 0 4px 0;">Notice type: ${normalizedType}</p>
-                <h3 style="margin:4px 0 8px 0;">${trimmedTitle}</h3>
-                <p style="margin:8px 0;">${excerpt.replace(/\n/g, "<br/>")}</p>
-                <p style="margin:12px 0;">
-                  <a href="${noticeLink}" style="display:inline-block;padding:10px 14px;background:#2563eb;color:#fff;border-radius:10px;text-decoration:none;font-weight:700;">View notice</a>
-                </p>
-                <p style="font-size:12px;color:#475569;margin-top:18px;">If the button doesn't work, copy and paste: ${noticeLink}</p>
-              </div>
-            `,
+            text: buildEmailText({
+              intro: `Notice type: ${normalizedType}\nTitle: ${trimmedTitle}\n\n${excerpt}`,
+              ctaText: "View notice",
+              ctaUrl: noticeLink,
+            }),
+            html: buildEmailHtml({
+              title: `New notice: ${trimmedTitle}`,
+              intro: `Notice type: ${normalizedType}. ${excerpt}`,
+              ctaText: "View notice",
+              ctaUrl: noticeLink,
+            }),
             trackingSettings: {
               clickTracking: { enable: false, enableText: false },
               openTracking: { enable: false },

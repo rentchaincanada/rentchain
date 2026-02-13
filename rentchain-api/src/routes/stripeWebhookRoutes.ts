@@ -22,6 +22,7 @@ import { getApplicationById } from "../services/applicationsService";
 import { setLastProviderError } from "../services/screeningRequestService";
 import { addRecord } from "../services/billingService";
 import { BillingRecord } from "../types/billing";
+import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 
 interface StripeWebhookRequest extends Request {
   rawBody?: Buffer;
@@ -262,8 +263,17 @@ router.post(
           sendEmail({
             to: recipient,
             subject: "RentChain: Screening report ready",
-            text: `Your screening report is ready. View it here: ${linkTarget}`,
-            html: `<p>Your screening report is ready.</p><p><a href="${linkTarget}">View screening</a></p>`,
+            text: buildEmailText({
+              intro: "Your screening report is ready.",
+              ctaText: "View screening",
+              ctaUrl: linkTarget,
+            }),
+            html: buildEmailHtml({
+              title: "Screening report ready",
+              intro: "Your screening report is ready.",
+              ctaText: "View screening",
+              ctaUrl: linkTarget,
+            }),
           }).catch((err) => {
             if (isDev) {
               console.warn("[stripe-webhook] Failed to send email", {

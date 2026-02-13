@@ -7,6 +7,7 @@ import { putPdfObject } from "../storage/pdfStore";
 import { writeScreeningEvent } from "../services/screening/screeningEvents";
 import { getStripeClient, isStripeConfigured } from "../services/stripeService";
 import { resolveFrontendBase } from "../services/screening/inviteTokens";
+import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 
 interface WebhookRequest extends Request {
   rawBody?: Buffer;
@@ -144,23 +145,17 @@ export const transunionWebhookHandler = async (req: WebhookRequest, res: Respons
               to: tenantEmail,
               from,
               subject: "RentChain: Verify your identity",
-              text: [
-                `Hi ${tenantName},`,
-                "",
-                "We couldn't complete KBA verification. Please verify your identity to finish screening:",
-                session.url,
-                "",
-                "- RentChain",
-              ].join("\n"),
-              html: `
-                <div style="font-family:Arial,sans-serif;line-height:1.5;color:#0f172a;">
-                  <p>Hi ${tenantName},</p>
-                  <p>We couldn't complete KBA verification. Please verify your identity to finish screening:</p>
-                  <p><a href="${session.url}" style="display:inline-block;padding:10px 14px;background:#2563eb;color:#fff;border-radius:10px;text-decoration:none;font-weight:700;">Verify identity</a></p>
-                  <p style="font-size:12px;color:#6b7280;">If the button doesn't work, copy and paste: ${session.url}</p>
-                  <p>- RentChain</p>
-                </div>
-              `,
+              text: buildEmailText({
+                intro: `Hi ${tenantName},\n\nWe couldn't complete KBA verification. Please verify your identity to finish screening.`,
+                ctaText: "Verify identity",
+                ctaUrl: session.url,
+              }),
+              html: buildEmailHtml({
+                title: "Verify your identity",
+                intro: `Hi ${tenantName}, We couldn't complete KBA verification. Please verify your identity to finish screening.`,
+                ctaText: "Verify identity",
+                ctaUrl: session.url,
+              }),
               trackingSettings: {
                 clickTracking: { enable: false, enableText: false },
                 openTracking: { enable: false },
