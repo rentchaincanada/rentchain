@@ -121,6 +121,32 @@ router.post("/referrals", requireAuth, rateLimitReferralsUser, async (req: any, 
     });
     if (existingDoc) {
       const data = existingDoc.data() as any;
+
+  const role = String(req.user?.role || "").toLowerCase();
+  const approved = req.user?.approved !== false;
+  if (role !== "landlord" || !approved) {
+    return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+  }
+
+  const refereeEmail = normEmail(req.body?.refereeEmail || "");
+  const refereeName = String(req.body?.refereeName || "").trim().slice(0, 120) || null;
+  const note = String(req.body?.note || "").trim().slice(0, 500) || null;
+  if (!refereeEmail || !emailRegex.test(refereeEmail)) {
+    return res.status(400).json({ ok: false, error: "invalid_email" });
+  }
+
+  const landlordId = String(req.user?.landlordId || req.user?.id || "");
+  const now = Date.now();
+  const existingSnap = await db
+    .collection("referrals")
+    .where("refereeEmail", "==", refereeEmail)
+    .where("createdAt", ">=", now - ACTIVE_REFERRAL_WINDOW_MS)
+    .limit(1)
+    .get();
+  if (!existingSnap.empty) {
+    const existingDoc = existingSnap.docs[0];
+    const data = existingDoc.data() as any;
+    if (String(data.status || "").toLowerCase() !== "expired") {
       return res.json({
         ok: true,
         referral: {
@@ -192,6 +218,8 @@ router.post("/referrals", requireAuth, rateLimitReferralsUser, async (req: any, 
     console.error("[referrals] create failed", err?.message || err);
     return res.status(500).json({ ok: false, error: "REFERRAL_CREATE_FAILED" });
   }
-});
+  }
+
+  });
 
 export default router;
