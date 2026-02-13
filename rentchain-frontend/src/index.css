@@ -73,10 +73,10 @@ canvas {
 }
 
 .rc-logo-link {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 32px;
+  height: 100%;
   line-height: 0;
 }
 
@@ -87,24 +87,24 @@ canvas {
 }
 
 .rc-logo-sm {
-  --rc-logo-h: 36px;
+  --rc-logo-h: 28px;
 }
 
 .rc-logo-md {
-  --rc-logo-h: 100px;
+  --rc-logo-h: 42px;
 }
 
 .rc-logo-dark {
   filter: brightness(0) invert(1);
 }
 
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   .rc-logo-md {
-    --rc-logo-h: 100px;
+    --rc-logo-h: 32px;
   }
 
   .rc-logo-sm {
-    --rc-logo-h: 36px;
+    --rc-logo-h: 28px;
   }
 }
 
