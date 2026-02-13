@@ -104,6 +104,10 @@ const DashboardPage: React.FC = () => {
   const isMobile =
     typeof window !== "undefined" ? window.matchMedia("(max-width: 768px)").matches : false;
   const meLoaded = authReady && !authLoading && Boolean(user?.id);
+  const roleLower = String(user?.role || "").toLowerCase();
+  const isAdmin = roleLower === "admin";
+  const isLandlord = roleLower === "landlord";
+  const canUseReferrals = isLandlord || isAdmin;
   const [properties, setProperties] = React.useState<any[]>([]);
   const [propsLoading, setPropsLoading] = React.useState(false);
   const [invitesCount, setInvitesCount] = React.useState(0);
@@ -257,9 +261,6 @@ const DashboardPage: React.FC = () => {
   const countsReady = !propsLoading && !applicationsLoading && !tenantsLoading && !invitesLoading;
   const hasNoProperties = dataReady && (kpis?.propertiesCount ?? 0) === 0;
   const hasNoApplications = dataReady && applicationsCount === 0;
-  const isAdmin = String(user?.role || "").toLowerCase() === "admin";
-  const isLandlord = String(user?.role || "").toLowerCase() === "landlord";
-  const canUseReferrals = isLandlord || isAdmin;
   const showEmptyCTA = hasNoProperties;
   const progressLoading = !dataReady || onboarding.loading;
   const showOnboardingSkeleton = onboarding.loading && !isAdmin;
