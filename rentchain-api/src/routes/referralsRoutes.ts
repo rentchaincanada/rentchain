@@ -216,61 +216,6 @@ router.post("/referrals", requireAuth, rateLimitReferralsUser, async (req: any, 
   }
   }
 
-  const referralCode = await createReferralCode();
-  const referrerEmail = normEmail(req.user?.email || "");
-  const referrerName = String(req.user?.name || req.user?.displayName || "").trim() || null;
-
-  const referralRef = db.collection("referrals").doc();
-  await referralRef.set({
-    referrerLandlordId: landlordId,
-    referrerEmail: referrerEmail || null,
-    referrerName,
-    refereeEmail,
-    refereeName,
-    note,
-    status: "sent",
-    referralCode,
-    createdAt: now,
-    updatedAt: now,
-    acceptedAt: null,
-    approvedAt: null,
-    lastEmailSentAt: null,
-    metadata: {
-      userAgent: req.get("user-agent") || null,
-    },
   });
-
-  const link = `${resolveFrontendBase()}/site/request-access?ref=${encodeURIComponent(referralCode)}`;
-  const { apiKey, from } = getSendgridConfig();
-  let emailed = false;
-  if (apiKey && from) {
-    try {
-      await sendEmail({
-        to: refereeEmail,
-        from: from as string,
-        subject: "You've been invited to RentChain",
-        text:
-          `${referrerName || "A RentChain landlord"} invited you to RentChain.\n\n` +
-          `Request access here:\n${link}\n\n` +
-          "Verified screening, clear records, trusted rental relationships.",
-      });
-      emailed = true;
-      await referralRef.set({ lastEmailSentAt: Date.now() }, { merge: true });
-    } catch (err: any) {
-      console.error("[referrals] invite email failed", err?.message || err);
-    }
-  }
-
-  return res.json({
-    ok: true,
-    referral: {
-      id: referralRef.id,
-      referralCode,
-      status: "sent",
-      link,
-    },
-    emailed,
-  });
-});
 
 export default router;
