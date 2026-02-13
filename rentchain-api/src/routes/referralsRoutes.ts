@@ -14,21 +14,13 @@ function normEmail(email: string) {
   return String(email || "").trim().toLowerCase();
 }
 
-function resolveRole(req: any): string {
-  const explicitRole = String(req.user?.role || "").toLowerCase();
-  if (explicitRole === "landlord" || explicitRole === "admin") return explicitRole;
-  const hasLandlordScope = Boolean(req.user?.landlordId || req.user?.id);
-  if (hasLandlordScope) return "landlord";
-  if (explicitRole) return explicitRole;
-  return hasLandlordScope ? "landlord" : "";
-}
-
-function forbidden(res: any, req: any, detail: string) {
-  const role = resolveRole(req) || "unknown";
-  const landlordId = String(req.user?.landlordId || "");
-  res.setHeader("x-auth-role", role);
-  res.setHeader("x-auth-landlordId", landlordId);
-  return res.status(403).json({ ok: false, error: "FORBIDDEN", detail });
+function escapeHtml(input: string) {
+  return String(input || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function resolveFrontendBase(): string {
@@ -75,13 +67,13 @@ async function createReferralCode() {
 router.get("/referrals", requireAuth, async (req: any, res) => {
   res.setHeader("x-route-source", "referralsRoutes.ts");
   try {
-    const role = resolveRole(req);
+    const role = String(req.user?.role || "").toLowerCase();
     if (role !== "landlord" && role !== "admin") {
-      return forbidden(res, req, "role_not_landlord");
+      return res.status(403).json({ ok: false, error: "FORBIDDEN", detail: "role_not_landlord" });
     }
     const landlordId = String(req.user?.landlordId || req.user?.id || "");
     if (!landlordId) {
-      return forbidden(res, req, "missing_landlordId");
+      return res.status(403).json({ ok: false, error: "FORBIDDEN", detail: "missing_landlordId" });
     }
 
     // Avoid composite index dependency: fetch by landlordId then sort in memory.
@@ -104,13 +96,13 @@ router.get("/referrals", requireAuth, async (req: any, res) => {
 router.post("/referrals", requireAuth, rateLimitReferralsUser, async (req: any, res) => {
   res.setHeader("x-route-source", "referralsRoutes.ts");
   try {
-    const role = resolveRole(req);
+    const role = String(req.user?.role || "").toLowerCase();
     if (role !== "landlord") {
-      return forbidden(res, req, "role_not_landlord");
+      return res.status(403).json({ ok: false, error: "FORBIDDEN", detail: "role_not_landlord" });
     }
     const landlordId = String(req.user?.landlordId || req.user?.id || "");
     if (!landlordId) {
-      return forbidden(res, req, "missing_landlordId");
+      return res.status(403).json({ ok: false, error: "FORBIDDEN", detail: "missing_landlordId" });
     }
 
     const refereeEmail = normEmail(req.body?.refereeEmail || "");
@@ -176,14 +168,36 @@ router.post("/referrals", requireAuth, rateLimitReferralsUser, async (req: any, 
     let emailed = false;
     if (apiKey && from) {
       try {
+        const inviter = referrerName || "A RentChain landlord";
+        const safeInviter = escapeHtml(inviter);
+        const safeLink = escapeHtml(link);
         await sendEmail({
           to: refereeEmail,
           from: from as string,
           subject: "You've been invited to RentChain",
           text:
-            `${referrerName || "A RentChain landlord"} invited you to RentChain.\n\n` +
+            `${inviter} invited you to RentChain.\n\n` +
+            "RentChain helps landlords and tenants move faster with:\n" +
+            "- Verified screening\n" +
+            "- Clear rental records\n" +
+            "- Audit-ready documentation\n\n" +
             `Request access here:\n${link}\n\n` +
-            "Verified screening, clear records, trusted rental relationships.",
+            "If you weren’t expecting this invite, you can ignore this email.",
+          html:
+            `<div style="margin:0;padding:24px;background:#f9fafb;font-family:Helvetica,Arial,sans-serif;color:#0f172a;">` +
+            `<div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;padding:24px;">` +
+            `<div style="display:none;max-height:0;overflow:hidden;opacity:0;">A landlord invited you to RentChain — verified screening & clear rental records.</div>` +
+            `<h1 style="margin:0 0 12px;font-size:24px;line-height:1.3;">You're invited to RentChain</h1>` +
+            `<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">${safeInviter} invited you to RentChain.</p>` +
+            `<p style="margin:0 0 10px;font-size:14px;line-height:1.6;">RentChain helps landlords and tenants move faster with:</p>` +
+            `<ul style="margin:0 0 18px 18px;padding:0;font-size:14px;line-height:1.6;">` +
+            `<li>Verified screening</li><li>Clear rental records</li><li>Audit-ready documentation</li>` +
+            `</ul>` +
+            `<a href="${safeLink}" style="display:inline-block;background:#0f172a;color:#ffffff;text-decoration:none;font-weight:700;padding:11px 18px;border-radius:10px;">Request Access</a>` +
+            `<p style="margin:16px 0 0;font-size:12px;line-height:1.5;color:#475569;">Button not working? Copy and paste this URL:</p>` +
+            `<p style="margin:6px 0 0;font-size:12px;line-height:1.5;word-break:break-all;"><a href="${safeLink}" style="color:#0f172a;">${safeLink}</a></p>` +
+            `<p style="margin:18px 0 0;font-size:12px;line-height:1.5;color:#64748b;">If you didn’t request this invite, you can safely ignore this email.</p>` +
+            `</div></div>`,
         });
         emailed = true;
         await referralRef.set({ lastEmailSentAt: Date.now() }, { merge: true });

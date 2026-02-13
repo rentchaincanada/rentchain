@@ -40,6 +40,7 @@ const ReferralsPage: React.FC = () => {
           ? "Referral access is pending approval."
           : detail || err?.payload?.error || err?.message || "Failed to load referrals";
       showToast({ message: "Failed to load referrals", description: message, variant: "error" });
+    
     } finally {
       setLoading(false);
     }
@@ -81,6 +82,7 @@ const ReferralsPage: React.FC = () => {
           ? "Referral access is pending approval."
           : detail || err?.payload?.error || err?.message || "Request failed";
       showToast({ message: "Could not send referral", description: message, variant: "error" });
+      showToast({ message: "Could not send referral", description: err?.message || "", variant: "error" });
     } finally {
       setSending(false);
     }
