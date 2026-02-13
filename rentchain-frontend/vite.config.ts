@@ -10,7 +10,7 @@ export default defineConfig({
     VitePWA({
       registerType: "autoUpdate",
       manifestFilename: "manifest.webmanifest",
-      includeAssets: ["icons/icon-192.png", "icons/icon-512.png"],
+      includeAssets: ["icons/icon-192-light.png", "icons/icon-512.png"],
       manifest: {
         name: "RentChain",
         short_name: "RentChain",
@@ -19,8 +19,8 @@ export default defineConfig({
         background_color: "#ffffff",
         theme_color: "#0b1220",
         icons: [
-          { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
-          { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+          { src: "/icons/icon-192-light.png", sizes: "192x192", type: "image/png" },
+          { src: "/icons/icon-512-light.png", sizes: "512x512", type: "image/png" },
         ],
       },
       workbox: {
