@@ -4,14 +4,14 @@ import wordmark from "../../assets/brand/rentchain-wordmark.png";
 
 type RentChainLogoProps = {
   variant?: "light" | "dark";
-  size?: "sm" | "md";
+  size?: "lrg" | "lrg";
   href: string;
   className?: string;
 };
 
 export const RentChainLogo: React.FC<RentChainLogoProps> = ({
   variant = "light",
-  size = "md",
+  size = "lrg",
   href,
   className = "",
 }) => {
