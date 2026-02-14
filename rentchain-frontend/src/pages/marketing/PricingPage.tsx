@@ -9,7 +9,6 @@ import { RequestAccessModal } from "../../components/marketing/RequestAccessModa
 import { PlanIntervalToggle } from "../../components/billing/PlanIntervalToggle";
 import { useLocale } from "../../i18n";
 import { track } from "../../lib/analytics";
-import { track } from "../../lib/analytics";
 
 const PricingPage: React.FC = () => {
   const { user } = useAuth();
@@ -20,7 +19,6 @@ const PricingPage: React.FC = () => {
   const [pricingError, setPricingError] = useState(false);
   const [requestOpen, setRequestOpen] = useState(false);
   const [interval, setInterval] = useState<"month" | "year">("month");
-  const [faqOpen, setFaqOpen] = useState<number | null>(0);
   const [faqOpen, setFaqOpen] = useState<number | null>(0);
 
   useEffect(() => {
