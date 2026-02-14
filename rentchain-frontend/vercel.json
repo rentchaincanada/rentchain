@@ -36,5 +36,20 @@
       "source": "/:path*",
       "destination": "/index.html"
     }
+    {
+      "redirects": [
+        {
+          "source": "/(.*)",
+          "has": [
+            {
+              "type": "host",
+              "value": "rentchain.ca"
+            }
+          ],
+          "destination": "https://www.rentchain.ai/$1",
+          "permanent": true
+        }
+      ]
+    }
   ]
 }
