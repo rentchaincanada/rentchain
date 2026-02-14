@@ -4,6 +4,7 @@ import { db } from "../config/firebase";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { getCountersSummary } from "../services/telemetryService";
 import { getStripeClient, isStripeConfigured } from "../services/stripeService";
+import { getPlanConfig, resolvePlanFromPriceId, type BillingPlanKey } from "../config/planMatrix";
 
 const router = Router();
 
@@ -146,6 +147,207 @@ function dateRangeForYtd() {
   const end = Math.floor(Date.now() / 1000);
   return { start, end };
 }
+
+function toMillis(input: unknown): number | null {
+  if (input == null) return null;
+  if (typeof input === "number" && Number.isFinite(input)) {
+    if (input > 1e12) return Math.round(input);
+    if (input > 1e9) return Math.round(input * 1000);
+  }
+  if (typeof input === "string") {
+    const parsed = Date.parse(input);
+    if (Number.isFinite(parsed)) return parsed;
+    const asNum = Number(input);
+    if (Number.isFinite(asNum)) return toMillis(asNum);
+  }
+  if (input instanceof Date) {
+    const ms = input.getTime();
+    return Number.isFinite(ms) ? ms : null;
+  }
+  if (typeof input === "object") {
+    const maybeTs = input as { toMillis?: () => number; seconds?: number };
+    if (typeof maybeTs.toMillis === "function") {
+      try {
+        const ms = maybeTs.toMillis();
+        return Number.isFinite(ms) ? ms : null;
+      } catch {
+        return null;
+      }
+    }
+    if (typeof maybeTs.seconds === "number") {
+      return Math.round(maybeTs.seconds * 1000);
+    }
+  }
+  return null;
+}
+
+function startOfMonthMs(now = new Date()) {
+  return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
+}
+
+function startOfYearMs(now = new Date()) {
+  return Date.UTC(now.getUTCFullYear(), 0, 1);
+}
+
+function normalizeTier(input?: string | null): BillingPlanKey | null {
+  const raw = String(input || "").trim().toLowerCase();
+  if (raw === "starter" || raw === "core") return "starter";
+  if (raw === "pro" || raw === "professional") return "pro";
+  if (raw === "business" || raw === "enterprise") return "business";
+  return null;
+}
+
+type SubscriptionMetrics = {
+  activeSubscribers: number;
+  mrrCents: number;
+  arrCents: number;
+  subscriptionsByTier: { starter: number; pro: number; business: number; elite: number };
+};
+
+async function getSubscriptionMetrics(): Promise<SubscriptionMetrics> {
+  const byTier = { starter: 0, pro: 0, business: 0, elite: 0 };
+  let mrrCents = 0;
+  let activeSubscribers = 0;
+
+  if (isStripeConfigured()) {
+    try {
+      const stripe = getStripeClient();
+      for await (const sub of stripe.subscriptions.list({ status: "all", limit: 100 })) {
+        if (!(sub.status === "active" || sub.status === "trialing")) continue;
+        const price = sub.items?.data?.[0]?.price;
+        const plan = resolvePlanFromPriceId(price?.id || null);
+        if (!plan) continue;
+        activeSubscribers += 1;
+        byTier[plan] += 1;
+        const amount = typeof price?.unit_amount === "number" ? price.unit_amount : getPlanConfig(plan).monthlyAmountCents;
+        const interval = price?.recurring?.interval;
+        const monthly = interval === "year" ? Math.round(amount / 12) : amount;
+        mrrCents += monthly;
+      }
+      return {
+        activeSubscribers,
+        mrrCents,
+        arrCents: mrrCents * 12,
+        subscriptionsByTier: byTier,
+      };
+    } catch (err: any) {
+      console.warn("[admin] stripe subscription metrics fallback", err?.message || err);
+    }
+  }
+
+  const landlordSnap = await db.collection("landlords").get();
+  landlordSnap.forEach((doc) => {
+    const data = doc.data() as any;
+    const tier = normalizeTier(data?.plan);
+    if (!tier) return;
+    const subStatus = String(data?.subscriptionStatus || "").toLowerCase();
+    const active = subStatus
+      ? subStatus === "active" || subStatus === "trialing"
+      : true;
+    if (!active) return;
+    activeSubscribers += 1;
+    byTier[tier] += 1;
+    mrrCents += getPlanConfig(tier).monthlyAmountCents;
+  });
+
+  return {
+    activeSubscribers,
+    mrrCents,
+    arrCents: mrrCents * 12,
+    subscriptionsByTier: byTier,
+  };
+}
+
+type ScreeningMetrics = {
+  screeningsPaidThisMonth: number;
+  screeningsPaidYtd: number;
+  screeningRevenueCentsThisMonth: number;
+  screeningRevenueCentsYtd: number;
+};
+
+function isPaidScreeningOrder(data: any): boolean {
+  const status = String(data?.status || "").toLowerCase();
+  if (
+    status.includes("paid") ||
+    status.includes("complete") ||
+    status.includes("completed") ||
+    status.includes("report_ready")
+  ) {
+    return true;
+  }
+  return Boolean(data?.paidAt);
+}
+
+function screeningOrderAmountCents(data: any): number {
+  const amount =
+    Number(data?.totalAmountCents ?? data?.amountTotalCents ?? data?.amountCents ?? 0);
+  return Number.isFinite(amount) && amount > 0 ? Math.round(amount) : 0;
+}
+
+async function getScreeningMetrics(): Promise<ScreeningMetrics> {
+  const monthStart = startOfMonthMs();
+  const yearStart = startOfYearMs();
+  let screeningsPaidThisMonth = 0;
+  let screeningsPaidYtd = 0;
+  let screeningRevenueCentsThisMonth = 0;
+  let screeningRevenueCentsYtd = 0;
+
+  const snap = await db.collection("screeningOrders").get();
+  snap.forEach((doc) => {
+    const data = doc.data() as any;
+    if (!isPaidScreeningOrder(data)) return;
+    const at = toMillis(data?.paidAt) || toMillis(data?.createdAt) || 0;
+    if (!at) return;
+    const amountCents = screeningOrderAmountCents(data);
+    if (at >= yearStart) {
+      screeningsPaidYtd += 1;
+      screeningRevenueCentsYtd += amountCents;
+    }
+    if (at >= monthStart) {
+      screeningsPaidThisMonth += 1;
+      screeningRevenueCentsThisMonth += amountCents;
+    }
+  });
+
+  return {
+    screeningsPaidThisMonth,
+    screeningsPaidYtd,
+    screeningRevenueCentsThisMonth,
+    screeningRevenueCentsYtd,
+  };
+}
+
+router.get("/metrics", requireAdmin, async (_req, res) => {
+  try {
+    const [subscription, screening, counters] = await Promise.all([
+      getSubscriptionMetrics(),
+      getScreeningMetrics(),
+      getCountersSummary(31),
+    ]);
+
+    const upgradesStartedThisMonth = Number(counters?.byName?.upgrade_modal_opened || 0);
+    const upgradesCompletedThisMonth = Number(counters?.byName?.upgrade_modal_upgrade_clicked || 0);
+
+    return res.json({
+      ok: true,
+      metrics: {
+        activeSubscribers: subscription.activeSubscribers,
+        mrrCents: subscription.mrrCents,
+        arrCents: subscription.arrCents,
+        subscriptionsByTier: subscription.subscriptionsByTier,
+        screeningsPaidThisMonth: screening.screeningsPaidThisMonth,
+        screeningsPaidYtd: screening.screeningsPaidYtd,
+        screeningRevenueCentsThisMonth: screening.screeningRevenueCentsThisMonth,
+        screeningRevenueCentsYtd: screening.screeningRevenueCentsYtd,
+        upgradesStartedThisMonth,
+        upgradesCompletedThisMonth,
+      },
+    });
+  } catch (err: any) {
+    console.error("[admin] metrics failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "METRICS_FAILED" });
+  }
+});
 
 async function sumStripePaymentIntents(start: number, end: number) {
   if (!isStripeConfigured()) {
