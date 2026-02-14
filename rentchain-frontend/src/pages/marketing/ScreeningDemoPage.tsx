@@ -3,29 +3,30 @@ import { Button, Card } from "../../components/ui/Ui";
 import { MarketingLayout } from "./MarketingLayout";
 import { RequestAccessModal } from "../../components/marketing/RequestAccessModal";
 import { spacing, text } from "../../styles/tokens";
-import { fetchBillingPricing } from "../../api/billingApi";
 import { track } from "../../lib/analytics";
 
-type Tier = "basic" | "verify" | "verify_ai";
+type DemoTier = "basic" | "verify" | "verify_ai";
 
-const tierLabels: Record<Tier, string> = {
-  basic: "Basic screening",
+const tierLabels: Record<DemoTier, string> = {
+  basic: "Basic",
   verify: "Verify",
   verify_ai: "Verify + AI",
 };
 
-function getTierPriceCents(pricing: any, tier: Tier): number {
-  const screening = pricing?.screening || {};
-  if (tier === "basic") return Number(screening.basicCents || 1999);
-  if (tier === "verify") return Number(screening.verifyCents || 3999);
-  return Number(screening.verifyAiCents || 6999);
-}
+const tierAmounts: Record<DemoTier, number> = {
+  basic: 1999,
+  verify: 2999,
+  verify_ai: 3999,
+};
+
+const addonAmounts = {
+  creditScore: 499,
+  expedited: 999,
+};
 
 const ScreeningDemoPage: React.FC = () => {
-  const [pricing, setPricing] = useState<any | null>(null);
-  const [loading, setLoading] = useState(true);
   const [requestOpen, setRequestOpen] = useState(false);
-  const [tier, setTier] = useState<Tier>("verify");
+  const [tier, setTier] = useState<DemoTier>("verify");
   const [addons, setAddons] = useState({
     creditScore: false,
     expedited: false,
@@ -73,12 +74,10 @@ const ScreeningDemoPage: React.FC = () => {
     <MarketingLayout>
       <div style={{ display: "flex", flexDirection: "column", gap: spacing.lg }}>
         <div style={{ display: "flex", flexDirection: "column", gap: spacing.sm }}>
-          <h1 style={{ margin: 0, fontSize: "clamp(2rem, 4vw, 2.8rem)" }}>Try demo screening</h1>
-          <p style={{ margin: 0, color: text.muted, maxWidth: 780 }}>
-            Explore a sample property, applicant profile, and quote breakdown before creating your account.
-          </p>
-          <p style={{ margin: 0, color: text.subtle, fontSize: "0.92rem" }}>
-            Demo uses sample data. No credit checks are performed.
+          <h1 style={{ margin: 0, fontSize: "clamp(2rem, 4vw, 2.8rem)" }}>Screening Demo</h1>
+          <p style={{ margin: 0, color: text.muted, maxWidth: 760 }}>
+            Explore pricing and what&apos;s included. Demo uses sample data. No credit checks are
+            performed.
           </p>
         </div>
 
@@ -91,20 +90,27 @@ const ScreeningDemoPage: React.FC = () => {
           }}
         >
           <Card>
-            <h2 style={{ marginTop: 0 }}>Sample property</h2>
+            <h2 style={{ marginTop: 0 }}>Sample application</h2>
             <div style={{ color: text.muted, lineHeight: 1.7 }}>
-              <div><strong>Property:</strong> Harborview Residences</div>
-              <div><strong>Unit:</strong> 12B</div>
-              <div><strong>Address:</strong> 125 King St W, Toronto, ON</div>
-              <div><strong>Rent:</strong> $2,300 / month</div>
-              <div><strong>Applicant:</strong> Alex Martin</div>
+              <div>
+                <strong>Sample Property:</strong> 123 Example St, Halifax, NS
+              </div>
+              <div>
+                <strong>Sample Applicant:</strong> Jordan Tenant
+              </div>
+              <div>
+                <strong>Sample Rent:</strong> $2,100 / month
+              </div>
+              <div>
+                <strong>Sample Move-in:</strong> May 1
+              </div>
             </div>
           </Card>
 
           <Card>
-            <h2 style={{ marginTop: 0 }}>Sample quote</h2>
+            <h2 style={{ marginTop: 0 }}>Sample quote breakdown</h2>
             <div style={{ display: "grid", gap: spacing.sm }}>
-              {(["basic", "verify", "verify_ai"] as Tier[]).map((option) => (
+              {(Object.keys(tierLabels) as DemoTier[]).map((option) => (
                 <label
                   key={option}
                   style={{
@@ -118,71 +124,96 @@ const ScreeningDemoPage: React.FC = () => {
                 >
                   <input
                     type="radio"
-                    name="tier"
+                    name="demo-tier"
                     checked={tier === option}
-                    onChange={() => setTier(option)}
+                    onChange={() => {
+                      setTier(option);
+                      track("demo_plan_selected", { plan: option });
+                    }}
                   />
                   <span style={{ flex: 1 }}>{tierLabels[option]}</span>
-                  <strong>${Math.round(getTierPriceCents(pricing, option) / 100)}</strong>
+                  <strong>{money(tierAmounts[option])}</strong>
                 </label>
               ))}
+
               <label style={{ display: "flex", alignItems: "center", gap: spacing.sm }}>
                 <input
                   type="checkbox"
                   checked={addons.creditScore}
-                  onChange={(event) => setAddons((prev) => ({ ...prev, creditScore: event.target.checked }))}
+                  onChange={(event) => {
+                    const enabled = event.target.checked;
+                    setAddons((prev) => ({ ...prev, creditScore: enabled }));
+                    track("demo_addon_toggled", { addon: "credit_score", enabled });
+                  }}
                 />
-                Add credit score
+                Credit score ({money(addonAmounts.creditScore)})
               </label>
+
               <label style={{ display: "flex", alignItems: "center", gap: spacing.sm }}>
                 <input
                   type="checkbox"
                   checked={addons.expedited}
-                  onChange={(event) => setAddons((prev) => ({ ...prev, expedited: event.target.checked }))}
+                  onChange={(event) => {
+                    const enabled = event.target.checked;
+                    setAddons((prev) => ({ ...prev, expedited: enabled }));
+                    track("demo_addon_toggled", { addon: "expedited", enabled });
+                  }}
                 />
-                Expedited processing
+                Expedited ({money(addonAmounts.expedited)})
               </label>
             </div>
+
             <div
               style={{
                 marginTop: spacing.md,
                 borderTop: "1px solid rgba(15,23,42,0.12)",
                 paddingTop: spacing.sm,
-                color: text.muted,
                 display: "grid",
                 gap: 6,
+                color: text.muted,
               }}
             >
               <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <span>{tierLabels[tier]}</span>
-                <span>${(quote.tierAmount / 100).toFixed(2)}</span>
+                <span>{money(tierAmounts[tier])}</span>
               </div>
-              {quote.creditScore > 0 ? (
+              {addons.creditScore ? (
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span>Credit score add-on</span>
-                  <span>${(quote.creditScore / 100).toFixed(2)}</span>
+                  <span>Credit score</span>
+                  <span>{money(addonAmounts.creditScore)}</span>
                 </div>
               ) : null}
-              {quote.expedited > 0 ? (
+              {addons.expedited ? (
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span>Expedited add-on</span>
-                  <span>${(quote.expedited / 100).toFixed(2)}</span>
+                  <span>Expedited</span>
+                  <span>{money(addonAmounts.expedited)}</span>
                 </div>
               ) : null}
-              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, color: text.primary }}>
+              <div style={{ display: "flex", justifyContent: "space-between", color: text.primary, marginTop: 8 }}>
                 <strong>Total</strong>
-                <strong>${(quote.total / 100).toFixed(2)} CAD</strong>
+                <strong>{money(totalCents)}</strong>
               </div>
             </div>
+
             <div className="rc-wrap-row" style={{ marginTop: spacing.md }}>
               <Button
                 type="button"
                 onClick={() => {
-                  track("demo_request_access_clicked", { tier, totalCents: quote.total });
+                  track("demo_request_access_clicked", { plan: tier, totalCents });
                   setRequestOpen(true);
                 }}
               >
                 Create account to run screening
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  track("demo_back_to_pricing_clicked");
+                  window.location.href = "/site/pricing";
+                }}
+              >
+                Back to pricing
               </Button>
             </div>
           </Card>
@@ -194,3 +225,4 @@ const ScreeningDemoPage: React.FC = () => {
 };
 
 export default ScreeningDemoPage;
+
