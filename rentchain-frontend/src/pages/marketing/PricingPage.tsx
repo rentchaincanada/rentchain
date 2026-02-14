@@ -140,6 +140,9 @@ const PricingPage: React.FC = () => {
                 >
                   Manage billing
                 </Button>
+                <Button type="button" variant="ghost" onClick={() => (window.location.href = "/screening/demo")}>
+                  Try demo
+                </Button>
               </>
             ) : (
               <>
@@ -154,6 +157,9 @@ const PricingPage: React.FC = () => {
                 </Button>
                 <Button type="button" variant="ghost" onClick={() => (window.location.href = "/login")}>
                   Sign in
+                </Button>
+                <Button type="button" variant="ghost" onClick={() => (window.location.href = "/screening/demo")}>
+                  Try demo
                 </Button>
               </>
             )}
