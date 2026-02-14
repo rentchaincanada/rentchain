@@ -18,6 +18,7 @@ const PricingPage: React.FC = () => {
   const [pricingError, setPricingError] = useState(false);
   const [requestOpen, setRequestOpen] = useState(false);
   const [interval, setInterval] = useState<"month" | "year">("month");
+  const [faqOpen, setFaqOpen] = useState<number | null>(0);
 
   useEffect(() => {
     document.title = `${t("pricing.title")} — RentChain`;
@@ -67,12 +68,36 @@ const PricingPage: React.FC = () => {
     return `$${Math.round(amountCents / 100)} / ${suffix}`;
   };
 
+  const readOrFallback = (key: string, fallback: string) => {
+    const value = t(key);
+    return value === key ? fallback : value;
+  };
+
+  const proPlus = readOrFallback("pricing.pro.plus", "Everything in Starter, plus:");
+  const proItems = [
+    readOrFallback("pricing.pro.item1", "Tenant screening access"),
+    readOrFallback("pricing.pro.item2", "Ledger tools for audit-ready events"),
+    readOrFallback("pricing.pro.item3", "Exports for reporting and audits"),
+    readOrFallback("pricing.pro.item4", "Compliance-ready notices and timelines"),
+  ];
+
   const pricingUnavailable = !loading && pricingError;
+  const businessPlan = planMap.get("business");
+  const businessCheckoutEnabled =
+    Boolean(businessPlan) &&
+    Number(businessPlan?.monthlyAmountCents || 0) > 0 &&
+    Number(businessPlan?.yearlyAmountCents || 0) > 0 &&
+    isAuthed &&
+    !pricingUnavailable;
 
   const handlePlanAction = (planKey: "starter" | "pro" | "business") => {
     if (pricingUnavailable) return;
     if (!isAuthed) {
-      window.location.href = "/login";
+      setRequestOpen(true);
+      return;
+    }
+    if (planKey === "business" && !businessCheckoutEnabled) {
+      setRequestOpen(true);
       return;
     }
     startCheckout({
@@ -88,25 +113,32 @@ const PricingPage: React.FC = () => {
     <MarketingLayout>
       <div style={{ display: "flex", flexDirection: "column", gap: spacing.lg }}>
         <div>
-          <h1 style={{ margin: 0 }}>Pricing</h1>
-          <p style={{ marginTop: spacing.sm, color: text.muted, maxWidth: 760 }}>
+          <h1 style={{ margin: 0, fontSize: "clamp(2rem, 4vw, 3rem)", lineHeight: 1.1 }}>
+            {t("pricing.title")}
+          </h1>
+          <p style={{ marginTop: spacing.sm, color: text.primary, maxWidth: 760, fontWeight: 700, fontSize: "1.15rem" }}>
             {t("pricing.headline")}
           </p>
-          <p style={{ marginTop: spacing.sm, color: text.muted }}>
+          <p style={{ marginTop: spacing.sm, color: text.muted, maxWidth: 760 }}>
             {t("pricing.subline")}
           </p>
           <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap", marginTop: spacing.sm }}>
             {isAuthed ? (
-              <Button type="button" onClick={() => (window.location.href = "/dashboard")}>
-                {t("pricing.go_dashboard")}
-              </Button>
+              <>
+                <Button type="button" onClick={() => (window.location.href = "/dashboard")}>
+                  Go to dashboard
+                </Button>
+                <Button type="button" variant="secondary" onClick={() => (window.location.href = "/billing")}>
+                  Manage billing
+                </Button>
+              </>
             ) : (
               <>
-                <Button type="button" variant="secondary" onClick={() => setRequestOpen(true)}>
-                  {t("pricing.request_access")}
+                <Button type="button" onClick={() => setRequestOpen(true)}>
+                  Start screening
                 </Button>
                 <Button type="button" variant="ghost" onClick={() => (window.location.href = "/login")}>
-                  {t("pricing.sign_in")}
+                  Sign in
                 </Button>
               </>
             )}
@@ -147,20 +179,39 @@ const PricingPage: React.FC = () => {
             </div>
             <div className="rc-wrap-row" style={{ marginTop: spacing.sm }}>
               <Button type="button" onClick={() => handlePlanAction("starter")} disabled={pricingUnavailable}>
-                {isAuthed ? t("pricing.choose_plan") : t("pricing.get_started")}
+                Get started
               </Button>
             </div>
           </Card>
 
-          <Card>
+          <Card
+            style={{
+              border: "1px solid rgba(15, 23, 42, 0.18)",
+              boxShadow: "0 10px 24px rgba(15, 23, 42, 0.08)",
+              transform: "translateY(-2px)",
+            }}
+          >
+            <div
+              style={{
+                display: "inline-block",
+                background: "#0b1220",
+                color: "#fff",
+                borderRadius: 999,
+                padding: "4px 10px",
+                fontSize: "0.75rem",
+                fontWeight: 700,
+                marginBottom: spacing.sm,
+              }}
+            >
+              Most Popular
+            </div>
             <h2 style={{ marginTop: 0 }}>{t("pricing.pro.title")}</h2>
             <p style={{ color: text.muted, marginTop: 0 }}>{t("pricing.pro.subtitle")}</p>
-            <div style={{ color: text.muted, fontWeight: 600, marginTop: spacing.sm }}>{t("pricing.pro.plus")}</div>
+            <div style={{ color: text.muted, fontWeight: 600, marginTop: spacing.sm }}>{proPlus}</div>
             <ul style={{ paddingLeft: "1.1rem", color: text.muted, lineHeight: 1.7 }}>
-              <li>{t("pricing.pro.item1")}</li>
-              <li>{t("pricing.pro.item2")}</li>
-              <li>{t("pricing.pro.item3")}</li>
-              <li>{t("pricing.pro.item4")}</li>
+              {proItems.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
             </ul>
             <div style={{ fontWeight: 700, fontSize: "1.1rem" }}>
               {loading ? "—" : renderPrice("pro")}
@@ -168,7 +219,7 @@ const PricingPage: React.FC = () => {
             <div style={{ color: text.subtle, marginTop: spacing.xs }}>{t("pricing.pro.screening_note")}</div>
             <div className="rc-wrap-row" style={{ marginTop: spacing.sm }}>
               <Button type="button" onClick={() => handlePlanAction("pro")} disabled={pricingUnavailable}>
-                {isAuthed ? t("pricing.choose_plan") : t("pricing.get_started")}
+                Start screening
               </Button>
             </div>
           </Card>
@@ -188,15 +239,80 @@ const PricingPage: React.FC = () => {
               {loading ? "—" : renderPrice("business")}
             </div>
             <div className="rc-wrap-row" style={{ marginTop: spacing.sm }}>
-              <Button type="button" onClick={() => handlePlanAction("business")} disabled={pricingUnavailable}>
-                {isAuthed ? t("pricing.choose_plan") : t("pricing.get_started")}
+              <Button
+                type="button"
+                onClick={() => (businessCheckoutEnabled ? handlePlanAction("business") : setRequestOpen(true))}
+                disabled={pricingUnavailable}
+              >
+                Contact sales
               </Button>
             </div>
           </Card>
         </div>
 
         <Card>
-          <h2 style={{ marginTop: 0 }}>{t("pricing.screening_fees")}</h2>
+          <div
+            style={{
+              display: "grid",
+              gap: spacing.sm,
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            }}
+          >
+            <div style={{ fontWeight: 600, color: text.primary }}>Secure, encrypted data handling</div>
+            <div style={{ fontWeight: 600, color: text.primary }}>Tenant-consented screening</div>
+            <div style={{ fontWeight: 600, color: text.primary }}>Canadian-based platform</div>
+          </div>
+        </Card>
+
+        <Card>
+          <h2 style={{ marginTop: 0 }}>Frequently asked questions</h2>
+          {[
+            {
+              q: "How does tenant consent work?",
+              a: "Tenants provide consent as part of the screening flow. Screening is tenant-initiated and clearly disclosed before purchase.",
+            },
+            {
+              q: "Who pays for screening?",
+              a: "Screening is pay-per-applicant. The applicant pays during checkout (or you can choose to reimburse outside the platform).",
+            },
+            {
+              q: "What do I get with Professional?",
+              a: "Professional includes screening access plus verified record-keeping and reporting tools built for landlord compliance.",
+            },
+            {
+              q: "Is payment secure?",
+              a: "Payments are processed securely through Stripe. RentChain does not store full card details.",
+            },
+            {
+              q: "Can I change plans later?",
+              a: "Yes. You can upgrade or change plans as your portfolio grows.",
+            },
+          ].map((item, index) => (
+            <details
+              key={item.q}
+              open={faqOpen === index}
+              onToggle={(event) => {
+                if ((event.currentTarget as HTMLDetailsElement).open) {
+                  setFaqOpen(index);
+                } else if (faqOpen === index) {
+                  setFaqOpen(null);
+                }
+              }}
+              style={{
+                border: "1px solid rgba(15, 23, 42, 0.12)",
+                borderRadius: 12,
+                padding: "12px 14px",
+                marginBottom: spacing.sm,
+              }}
+            >
+              <summary style={{ cursor: "pointer", fontWeight: 700, color: text.primary }}>{item.q}</summary>
+              <p style={{ margin: `${spacing.sm} 0 0`, color: text.muted }}>{item.a}</p>
+            </details>
+          ))}
+        </Card>
+
+        <Card>
+          <h2 style={{ marginTop: 0 }}>Screening fees (pay-per-applicant)</h2>
           <p style={{ margin: 0, color: text.muted }}>
             {t("pricing.notice")}
           </p>
