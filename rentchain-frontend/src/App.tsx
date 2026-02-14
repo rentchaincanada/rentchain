@@ -17,6 +17,7 @@ import LandingPage from "./pages/marketing/LandingPage";
 import AboutPage from "./pages/marketing/AboutPage";
 import MarketingPricingPage from "./pages/marketing/PricingPage";
 import RequestAccessPage from "./pages/marketing/RequestAccessPage";
+import ScreeningDemoPage from "./pages/marketing/ScreeningDemoPage";
 import InvitePage from "./pages/InvitePage";
 import LegalHelpPage from "./pages/marketing/LegalHelpPage";
 import HelpIndexPage from "./pages/help/HelpIndexPage";
@@ -200,6 +201,7 @@ function App() {
         <Route path="/2fa" element={<TwoFactorPage />} />
         <Route path="/pricing" element={<PricingGate />} />
         <Route path="/site/pricing" element={<MarketingPricingPage />} />
+        <Route path="/site/screening-demo" element={<ScreeningDemoPage />} />
         <Route path="/site/request-access" element={<RequestAccessPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/site/about" element={<AboutPage />} />

@@ -155,6 +155,16 @@ const PricingPage: React.FC = () => {
                 <Button type="button" variant="ghost" onClick={() => (window.location.href = "/login")}>
                   Sign in
                 </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    track("pricing_demo_clicked", { source: "pricing_hero" });
+                    window.location.href = "/site/screening-demo";
+                  }}
+                >
+                  Try demo
+                </Button>
               </>
             )}
           </div>
