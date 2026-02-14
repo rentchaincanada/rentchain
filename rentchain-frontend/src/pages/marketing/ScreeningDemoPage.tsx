@@ -33,18 +33,42 @@ const ScreeningDemoPage: React.FC = () => {
   });
 
   useEffect(() => {
-    document.title = "Screening Demo - RentChain";
-    track("demo_opened", { source: "site_screening_demo" });
+    document.title = "Screening demo - RentChain";
+    track("demo_opened", { source: "marketing_pricing" });
   }, []);
 
-  const totalCents = useMemo(() => {
-    const base = tierAmounts[tier];
-    const withCreditScore = addons.creditScore ? addonAmounts.creditScore : 0;
-    const withExpedited = addons.expedited ? addonAmounts.expedited : 0;
-    return base + withCreditScore + withExpedited;
-  }, [addons.creditScore, addons.expedited, tier]);
+  useEffect(() => {
+    let active = true;
+    fetchBillingPricing()
+      .then((res) => {
+        if (active) setPricing(res);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
-  const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+  const quote = useMemo(() => {
+    const screening = pricing?.screening || {};
+    const tierAmount = getTierPriceCents(pricing, tier);
+    const creditScore = addons.creditScore ? Number(screening.creditScoreCents || 999) : 0;
+    const expedited = addons.expedited ? Number(screening.expeditedCents || 1499) : 0;
+    const total = tierAmount + creditScore + expedited;
+    return { tierAmount, creditScore, expedited, total };
+  }, [addons.creditScore, addons.expedited, pricing?.screening, tier]);
+
+  useEffect(() => {
+    if (loading) return;
+    track("demo_quote_viewed", {
+      tier,
+      creditScore: addons.creditScore,
+      expedited: addons.expedited,
+      totalCents: quote.total,
+    });
+  }, [addons.creditScore, addons.expedited, loading, quote.total, tier]);
 
   return (
     <MarketingLayout>

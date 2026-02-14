@@ -201,7 +201,8 @@ function App() {
         <Route path="/2fa" element={<TwoFactorPage />} />
         <Route path="/pricing" element={<PricingGate />} />
         <Route path="/site/pricing" element={<MarketingPricingPage />} />
-        <Route path="/site/screening-demo" element={<ScreeningDemoPage />} />
+        <Route path="/screening/demo" element={<ScreeningDemoPage />} />
+        <Route path="/site/screening/demo" element={<ScreeningDemoPage />} />
         <Route path="/site/request-access" element={<RequestAccessPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/site/about" element={<AboutPage />} />
