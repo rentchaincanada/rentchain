@@ -6,6 +6,12 @@ import { getCountersSummary } from "../services/telemetryService";
 import { getStripeClient, isStripeConfigured } from "../services/stripeService";
 
 const router = Router();
+const FUNNEL_EVENT_NAMES = [
+  "pricing_demo_clicked",
+  "demo_request_access_clicked",
+  "upgrade_modal_opened",
+  "upgrade_modal_upgrade_clicked",
+];
 
 router.get("/ping", requireAdmin, (_req, res) => res.json({ ok: true }));
 
@@ -230,6 +236,41 @@ router.get("/summary", requireAdmin, async (_req, res) => {
   } catch (err: any) {
     console.error("[admin] summary failed", err?.message || err);
     return res.status(500).json({ ok: false, error: "SUMMARY_FAILED" });
+  }
+});
+
+router.get("/events/summary", requireAdmin, async (req, res) => {
+  try {
+    const range = String(req.query?.range || "month").toLowerCase();
+    const days = range === "week" ? 7 : range === "day" ? 1 : 30;
+    const now = Date.now();
+    const start = now - days * 24 * 60 * 60 * 1000;
+
+    const snapshot = await db
+      .collection("events")
+      .where("ts", ">=", start)
+      .where("ts", "<=", now)
+      .get();
+
+    const counts = FUNNEL_EVENT_NAMES.reduce<Record<string, number>>((acc, name) => {
+      acc[name] = 0;
+      return acc;
+    }, {});
+
+    for (const doc of snapshot.docs) {
+      const name = String(doc.data()?.name || "");
+      if (!Object.prototype.hasOwnProperty.call(counts, name)) continue;
+      counts[name] += 1;
+    }
+
+    return res.json({
+      ok: true,
+      range,
+      counts,
+    });
+  } catch (err: any) {
+    console.error("[admin] events summary failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "EVENTS_SUMMARY_FAILED" });
   }
 });
 

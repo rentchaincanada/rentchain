@@ -4,9 +4,11 @@ import { Card, Section, Button, Input } from "../../components/ui/Ui";
 import { useToast } from "../../components/ui/ToastProvider";
 import {
   fetchAdminSummary,
+  fetchAdminEventsSummary,
   listAdminExpenses,
   createAdminExpense,
   type AdminExpense,
+  type AdminEventsSummary,
   type AdminSummary,
 } from "../../api/adminDashboardApi";
 import { adminSystems } from "./adminSystems";
@@ -24,6 +26,7 @@ export const AdminDashboardPage: React.FC = () => {
   const { showToast } = useToast();
   const [summary, setSummary] = useState<AdminSummary | null>(null);
   const [expenses, setExpenses] = useState<AdminExpense[]>([]);
+  const [funnel, setFunnel] = useState<AdminEventsSummary>({ range: "month", counts: {} });
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
@@ -40,9 +43,14 @@ export const AdminDashboardPage: React.FC = () => {
   const load = async () => {
     try {
       setLoading(true);
-      const [summaryData, expensesData] = await Promise.all([fetchAdminSummary(), listAdminExpenses()]);
+      const [summaryData, expensesData, funnelData] = await Promise.all([
+        fetchAdminSummary(),
+        listAdminExpenses(),
+        fetchAdminEventsSummary("month"),
+      ]);
       setSummary(summaryData);
       setExpenses(expensesData);
+      setFunnel(funnelData);
       setLastUpdated(Date.now());
     } catch (err: any) {
       showToast({ message: "Failed to load admin data", description: err?.message || "", variant: "error" });
@@ -197,6 +205,32 @@ export const AdminDashboardPage: React.FC = () => {
               <Button type="button" variant="secondary" onClick={() => window.open("/site/legal", "_blank")}>
                 Legal templates
               </Button>
+            </div>
+          </Section>
+        </Card>
+
+        <Card elevated>
+          <Section style={{ display: "grid", gap: spacing.sm }}>
+            <div style={{ fontWeight: 700 }}>Funnel (last 30 days)</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: spacing.sm }}>
+              <Card style={{ padding: spacing.md }}>
+                <div style={{ fontSize: 12, color: text.muted }}>Pricing demo clicks</div>
+                <div style={{ fontSize: 18, fontWeight: 700 }}>{Number(funnel.counts.pricing_demo_clicked || 0)}</div>
+              </Card>
+              <Card style={{ padding: spacing.md }}>
+                <div style={{ fontSize: 12, color: text.muted }}>Demo request access clicks</div>
+                <div style={{ fontSize: 18, fontWeight: 700 }}>{Number(funnel.counts.demo_request_access_clicked || 0)}</div>
+              </Card>
+              <Card style={{ padding: spacing.md }}>
+                <div style={{ fontSize: 12, color: text.muted }}>Upgrade modal opened</div>
+                <div style={{ fontSize: 18, fontWeight: 700 }}>{Number(funnel.counts.upgrade_modal_opened || 0)}</div>
+              </Card>
+              <Card style={{ padding: spacing.md }}>
+                <div style={{ fontSize: 12, color: text.muted }}>Upgrade CTA clicks</div>
+                <div style={{ fontSize: 18, fontWeight: 700 }}>
+                  {Number(funnel.counts.upgrade_modal_upgrade_clicked || 0)}
+                </div>
+              </Card>
             </div>
           </Section>
         </Card>

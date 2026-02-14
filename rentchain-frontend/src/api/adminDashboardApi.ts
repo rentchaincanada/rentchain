@@ -32,6 +32,11 @@ export type AdminExpense = {
   notes?: string | null;
 };
 
+export type AdminEventsSummary = {
+  range: string;
+  counts: Record<string, number>;
+};
+
 export async function fetchAdminSummary() {
   const data = await apiFetch<{ ok: boolean; revenue: AdminSummary["revenue"]; marketing: AdminSummary["marketing"]; expenses: AdminSummary["expenses"] }>(
     "/admin/summary"
@@ -58,4 +63,14 @@ export async function createAdminExpense(payload: Omit<AdminExpense, "id">) {
     body: payload,
   });
   return data.item;
+}
+
+export async function fetchAdminEventsSummary(range: "day" | "week" | "month" = "month") {
+  const data = await apiFetch<{ ok: boolean; range: string; counts: Record<string, number> }>(
+    `/admin/events/summary?range=${range}`
+  );
+  return {
+    range: data.range,
+    counts: data.counts || {},
+  } as AdminEventsSummary;
 }

@@ -35,17 +35,33 @@ export function track(eventName: string, props: AnalyticsProps = {}) {
     gtag?: (...args: unknown[]) => void;
   };
 
+  let deliveredToProvider = false;
   if (typeof anyWindow.plausible === "function") {
     anyWindow.plausible(eventName, { props });
-    return;
+    deliveredToProvider = true;
   }
 
   if (typeof anyWindow.gtag === "function") {
     anyWindow.gtag("event", eventName, props);
-    return;
+    deliveredToProvider = true;
   }
 
   if (isDev()) {
     console.debug("[analytics]", eventName, props);
+    return;
   }
+
+  void fetch("/api/events/track", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    credentials: "include",
+    keepalive: true,
+    body: JSON.stringify({ name: eventName, props, ts: new Date().toISOString() }),
+  }).catch(() => {
+    if (!deliveredToProvider && isDev()) {
+      console.debug("[analytics] track_failed", eventName);
+    }
+  });
 }
