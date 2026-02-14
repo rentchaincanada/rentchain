@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React, { useEffect, useState } from "react";
 import { Card, Section, Button } from "../components/ui/Ui";
 import {
@@ -6,6 +5,7 @@ import {
   fetchBillingHistory,
   fetchBillingPricing,
   type BillingRecord,
+  type BillingPricingResponse,
 } from "../api/billingApi";
 import { spacing, text, colors } from "../styles/tokens";
 import { SUPPORT_EMAIL } from "../config/support";
@@ -68,7 +68,7 @@ const BillingPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pricing, setPricing] = useState<any | null>(null);
+  const [pricing, setPricing] = useState<BillingPricingResponse | null>(null);
   const [pricingLoading, setPricingLoading] = useState(true);
   const [pricingError, setPricingError] = useState(false);
   const [planActionLoading, setPlanActionLoading] = useState<string | null>(null);
@@ -77,18 +77,23 @@ const BillingPage: React.FC = () => {
   const billingStatus = useBillingStatus();
   const currentPlan = billingStatus.tier;
 
+  const getErrorMessage = (error: unknown, fallback: string) => {
+    if (error instanceof Error && error.message) return error.message;
+    return fallback;
+  };
+
   const load = async () => {
     try {
       setLoading(true);
       setError(null);
       const [history] = await Promise.all([fetchBillingHistory()]);
       setRecords(asArray(history));
-    } catch (err: any) {
-      const msg = String(err?.message || "");
+    } catch (err: unknown) {
+      const msg = getErrorMessage(err, "");
       if (msg.includes("404")) {
         setError("Billing coming soon");
       } else {
-        setError(err?.message || "Failed to load billing history.");
+        setError(msg || "Failed to load billing history.");
       }
     } finally {
       setLoading(false);
@@ -132,7 +137,7 @@ const BillingPage: React.FC = () => {
 
     try {
       setPlanActionLoading(planKey);
-      const res: any = await apiFetch("/billing/subscribe", {
+      const res = (await apiFetch("/billing/subscribe", {
         method: "POST",
         body: JSON.stringify({
           planKey,
@@ -141,14 +146,14 @@ const BillingPage: React.FC = () => {
           source: "billing_page",
           redirectTo: "/billing",
         }),
-      });
+      })) as { url?: string; checkoutUrl?: string };
       const url = res?.url || res?.checkoutUrl;
       if (url && typeof window !== "undefined") {
         window.location.assign(url);
         return;
       }
-    } catch (err: any) {
-      setError(err?.message || "Unable to start checkout.");
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, "Unable to start checkout."));
     } finally {
       setPlanActionLoading(null);
     }
@@ -163,8 +168,8 @@ const BillingPage: React.FC = () => {
         throw new Error("Missing portal URL");
       }
       window.location.assign(res.url);
-    } catch (err: any) {
-      setError(err?.message || "Unable to open billing portal.");
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, "Unable to open billing portal."));
     } finally {
       setPortalLoading(false);
     }
