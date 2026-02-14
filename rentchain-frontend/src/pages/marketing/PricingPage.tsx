@@ -8,6 +8,7 @@ import { startCheckout } from "../../billing/startCheckout";
 import { RequestAccessModal } from "../../components/marketing/RequestAccessModal";
 import { PlanIntervalToggle } from "../../components/billing/PlanIntervalToggle";
 import { useLocale } from "../../i18n";
+import { track } from "../../lib/analytics";
 
 const PricingPage: React.FC = () => {
   const { user } = useAuth();
@@ -82,21 +83,22 @@ const PricingPage: React.FC = () => {
   ];
 
   const pricingUnavailable = !loading && pricingError;
-  const businessPlan = planMap.get("business");
-  const businessCheckoutEnabled =
-    Boolean(businessPlan) &&
-    Number(businessPlan?.monthlyAmountCents || 0) > 0 &&
-    Number(businessPlan?.yearlyAmountCents || 0) > 0 &&
-    isAuthed &&
-    !pricingUnavailable;
-
   const handlePlanAction = (planKey: "starter" | "pro" | "business") => {
+    if (planKey === "starter") {
+      track("pricing_cta_starter_clicked", { interval, isAuthed });
+    }
+    if (planKey === "pro") {
+      track("pricing_cta_pro_clicked", { interval, isAuthed });
+    }
+    if (planKey === "business") {
+      track("pricing_cta_business_clicked", { interval, isAuthed });
+    }
     if (pricingUnavailable) return;
-    if (!isAuthed) {
+    if (planKey === "business") {
       setRequestOpen(true);
       return;
     }
-    if (planKey === "business" && !businessCheckoutEnabled) {
+    if (!isAuthed) {
       setRequestOpen(true);
       return;
     }
@@ -128,13 +130,26 @@ const PricingPage: React.FC = () => {
                 <Button type="button" onClick={() => (window.location.href = "/dashboard")}>
                   Go to dashboard
                 </Button>
-                <Button type="button" variant="secondary" onClick={() => (window.location.href = "/billing")}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    track("pricing_cta_manage_billing_clicked", { interval, isAuthed });
+                    window.location.href = "/billing";
+                  }}
+                >
                   Manage billing
                 </Button>
               </>
             ) : (
               <>
-                <Button type="button" onClick={() => setRequestOpen(true)}>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    track("pricing_cta_start_screening_clicked", { interval, isAuthed });
+                    setRequestOpen(true);
+                  }}
+                >
                   Start screening
                 </Button>
                 <Button type="button" variant="ghost" onClick={() => (window.location.href = "/login")}>
@@ -241,7 +256,7 @@ const PricingPage: React.FC = () => {
             <div className="rc-wrap-row" style={{ marginTop: spacing.sm }}>
               <Button
                 type="button"
-                onClick={() => (businessCheckoutEnabled ? handlePlanAction("business") : setRequestOpen(true))}
+                onClick={() => handlePlanAction("business")}
                 disabled={pricingUnavailable}
               >
                 Contact sales
