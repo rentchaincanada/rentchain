@@ -17,6 +17,8 @@ import { listTenantInvites } from "../api/tenantInvites";
 import { track } from "../lib/analytics";
 import { useAuth } from "../context/useAuth";
 import { useToast } from "../components/ui/ToastProvider";
+import { useCapabilities } from "../hooks/useCapabilities";
+import { useUpgrade } from "../context/UpgradeContext";
 import { buildOnboardingSteps } from "../lib/onboardingSteps";
 import { getApplicationPrereqState } from "../lib/applicationPrereqs";
 import { CreatePropertyFirstModal } from "../components/properties/CreatePropertyFirstModal";
@@ -25,6 +27,7 @@ import { SendScreeningInviteModal } from "../components/screening/SendScreeningI
 import { SendApplicationModal } from "../components/properties/SendApplicationModal";
 import { useUnitsForProperty } from "../hooks/useUnitsForProperty";
 import { listReferrals } from "../api/referralsApi";
+import { hasTier, normalizeTier } from "@/billing/requireTier";
 
 const StarterOnboardingPanel = React.lazy(
   () => import("../components/dashboard/StarterOnboardingPanel")
@@ -96,6 +99,8 @@ const DashboardPage: React.FC = () => {
   const { applications, loading: applicationsLoading } = useApplications();
   const { tenants, loading: tenantsLoading } = useTenants();
   const { user, ready: authReady, isLoading: authLoading } = useAuth();
+  const { caps } = useCapabilities();
+  const { openUpgrade } = useUpgrade();
   const { showToast } = useToast();
   const navigate = useNavigate();
   const apiBase = debugApiBase();
@@ -107,6 +112,8 @@ const DashboardPage: React.FC = () => {
   const roleLower = String(user?.role || "").toLowerCase();
   const isAdmin = roleLower === "admin";
   const isLandlord = roleLower === "landlord";
+  const userTier = normalizeTier((caps?.plan as string) || user?.plan || null);
+  const canUseProFeatures = isAdmin || hasTier(userTier, "pro");
   const canUseReferrals = isLandlord || isAdmin;
   const [properties, setProperties] = React.useState<any[]>([]);
   const [propsLoading, setPropsLoading] = React.useState(false);
@@ -295,6 +302,23 @@ const DashboardPage: React.FC = () => {
     setSendApplicationOpen(true);
   };
 
+  const handleOpenScreeningInvite = () => {
+    if (!canUseProFeatures) {
+      track("gating_blocked", { featureName: "screening", requiredTier: "pro", userTier });
+      openUpgrade({
+        reason: "screening",
+        plan: userTier,
+        ctaLabel: "Upgrade to Pro",
+        copy: {
+          title: "Upgrade to Pro",
+          body: "Screening is available on Pro plans. Upgrade to run screenings.",
+        },
+      });
+      return;
+    }
+    setScreeningInviteOpen(true);
+  };
+
   const derivedSteps = {
     propertyAdded: derivedPropertiesCount > 0,
     unitAdded: derivedUnitsCount > 0,
@@ -452,7 +476,7 @@ const DashboardPage: React.FC = () => {
                 </Button>
                 <Button
                   variant="primary"
-                  onClick={() => setScreeningInviteOpen(true)}
+                  onClick={handleOpenScreeningInvite}
                   aria-label="Send screening invite"
                   disabled={progressLoading}
                 >

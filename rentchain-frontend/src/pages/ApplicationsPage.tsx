@@ -31,6 +31,7 @@ import { useToast } from "../components/ui/ToastProvider";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { track } from "@/lib/analytics";
 import { useAuth } from "../context/useAuth";
+import { useUpgrade } from "../context/UpgradeContext";
 import { ResponsiveMasterDetail } from "@/components/layout/ResponsiveMasterDetail";
 import { useOnboardingState } from "../hooks/useOnboardingState";
 import { useUnitsForProperty } from "../hooks/useUnitsForProperty";
@@ -43,6 +44,7 @@ import "./ApplicationsPage.css";
 import { SendScreeningInviteModal } from "../components/screening/SendScreeningInviteModal";
 import { ScreeningStatusBadge } from "../components/screening/ScreeningStatusBadge";
 import { SamplePdfModal } from "../components/billing/SamplePdfModal";
+import { hasTier, normalizeTier } from "@/billing/requireTier";
 
 const statusOptions: RentalApplicationStatus[] = [
   "SUBMITTED",
@@ -138,6 +140,7 @@ const ApplicationsPage: React.FC = () => {
   const propertiesReady = propertiesLoaded && !propertiesError;
   const { features, loading: loadingCaps } = useCapabilities();
   const { user } = useAuth();
+  const { openUpgrade } = useUpgrade();
   const [screeningQuote, setScreeningQuote] = useState<ScreeningQuote | null>(null);
   const [screeningQuoteDetail, setScreeningQuoteDetail] = useState<string | null>(null);
   const [screeningLoading, setScreeningLoading] = useState(false);
@@ -245,6 +248,8 @@ const ApplicationsPage: React.FC = () => {
     detail?.screeningStatus === "complete";
 
   const isAdmin = String(user?.role || "").toLowerCase() === "admin";
+  const userTier = normalizeTier((caps?.plan as string) || user?.plan || null);
+  const canUseProFeatures = isAdmin || hasTier(userTier, "pro");
   const selectedLabel = detail
     ? `${detail.applicant.firstName} ${detail.applicant.lastName}`.trim()
     : "Application";
@@ -753,8 +758,31 @@ const ApplicationsPage: React.FC = () => {
     }, 150);
   };
 
+  const openProUpgrade = (featureName: "screening" | "exports") => {
+    track("gating_blocked", { featureName, requiredTier: "pro", userTier });
+    openUpgrade({
+      reason: featureName,
+      plan: userTier,
+      ctaLabel: "Upgrade to Pro",
+      copy:
+        featureName === "screening"
+          ? {
+              title: "Upgrade to Pro",
+              body: "Screening is available on Pro plans. Upgrade to run screenings.",
+            }
+          : {
+              title: "Upgrade to Pro",
+              body: "Verified exports are available on Pro plans. Upgrade to continue.",
+            },
+    });
+  };
+
   const handleExportReport = async (copyOnly: boolean) => {
     if (!detail?.id) return;
+    if (!canUseProFeatures) {
+      openProUpgrade("exports");
+      return;
+    }
     if (!features?.exports_basic && !isAdmin) {
       setExportPreviewSource("applications");
       setExportPreviewOpen(true);
@@ -845,6 +873,10 @@ const ApplicationsPage: React.FC = () => {
 
   const runScreeningRequest = async () => {
     if (!detail) return;
+    if (!canUseProFeatures) {
+      openProUpgrade("screening");
+      return;
+    }
     if (!screeningConsentChecked) {
       setScreeningConsentError("Consent is required to run screening.");
       return;
@@ -928,7 +960,13 @@ const ApplicationsPage: React.FC = () => {
           </div>
           <Button
             variant="secondary"
-            onClick={() => setScreeningInviteOpen(true)}
+            onClick={() => {
+              if (!canUseProFeatures) {
+                openProUpgrade("screening");
+                return;
+              }
+              setScreeningInviteOpen(true);
+            }}
             disabled={!propertiesReady}
           >
             {propertiesLoaded ? "Send screening invite" : "Loading properties…"}
