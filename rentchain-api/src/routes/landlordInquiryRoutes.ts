@@ -1,11 +1,11 @@
 import { Router } from "express";
 import crypto from "crypto";
-import sgMail from "@sendgrid/mail";
 import { db } from "../config/firebase";
 import { getAdminEmails, isAdminEmail } from "../lib/adminEmails";
 import { requireAuth } from "../middleware/requireAuth";
 import { rateLimitLeads } from "../middleware/rateLimit";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
+import { sendEmail } from "../services/emailService";
 const publicRouter = Router();
 const adminRouter = Router();
 
@@ -47,22 +47,6 @@ function getSendgridConfig() {
   const from =
     process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM || process.env.FROM_EMAIL;
   return { apiKey, from };
-}
-
-async function sendEmail(message: sgMail.MailDataRequired) {
-  const { apiKey } = getSendgridConfig();
-  if (!apiKey) throw new Error("SENDGRID_API_KEY missing");
-  sgMail.setApiKey(apiKey as string);
-  await sgMail.send({
-    ...message,
-    trackingSettings: {
-      clickTracking: { enable: false, enableText: false },
-      openTracking: { enable: false },
-    },
-    mailSettings: {
-      footer: { enable: false },
-    },
-  });
 }
 
 function checkLeadRateLimit(key: string) {

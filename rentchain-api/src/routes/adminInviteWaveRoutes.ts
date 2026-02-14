@@ -1,10 +1,11 @@
 import { Router } from "express";
 import crypto from "crypto";
-import sgMail from "@sendgrid/mail";
 import { db } from "../config/firebase";
 import { requireAuth } from "../middleware/requireAuth";
 import { requireRole } from "../middleware/requireRole";
 import { incrementCounter } from "../services/telemetryService";
+import { sendEmail } from "../services/emailService";
+import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 
 const router = Router();
 
@@ -29,14 +30,19 @@ function buildInviteEmail(params: {
   const { toEmail, toName, inviteUrl, fromEmail } = params;
   const greeting = toName ? `Hi ${toName},` : "Hi,";
   const subject = "Your RentChain Micro-Live invite is ready";
-  const text =
-    `${greeting}\n\n` +
-    "You're invited to RentChain Micro-Live.\n\n" +
-    `Start here:\n${inviteUrl}\n\n` +
-    "If you didn't request this, you can ignore this email.\n\n" +
-    "— RentChain\n";
+  const text = buildEmailText({
+    intro: `${greeting}\n\nYou're invited to RentChain Micro-Live.`,
+    ctaText: "Start here",
+    ctaUrl: inviteUrl,
+  });
+  const html = buildEmailHtml({
+    title: "Your RentChain Micro-Live invite is ready",
+    intro: `${greeting} You're invited to RentChain Micro-Live.`,
+    ctaText: "Start here",
+    ctaUrl: inviteUrl,
+  });
 
-  return { to: toEmail, from: fromEmail, subject, text };
+  return { to: toEmail, from: fromEmail, subject, text, html };
 }
 
 router.post("/waitlist/invite-wave", requireAuth, requireRole(["landlord", "admin"]), async (req: any, res) => {
@@ -52,15 +58,11 @@ router.post("/waitlist/invite-wave", requireAuth, requireRole(["landlord", "admi
   const sleepMs = Number(req.body?.sleepMs ?? 150);
   const campaign = String(req.body?.campaign ?? "micro-live").slice(0, 80);
 
-  const apiKey = process.env.SENDGRID_API_KEY;
   const fromEmail = process.env.SENDGRID_FROM_EMAIL;
   const appUrl = process.env.PUBLIC_APP_URL || "https://www.rentchain.ai";
 
-  if (!dryRun) {
-    if (!apiKey || !fromEmail) {
-      return res.status(500).json({ ok: false, error: "Missing SENDGRID_API_KEY or SENDGRID_FROM_EMAIL" });
-    }
-    sgMail.setApiKey(apiKey);
+  if (!dryRun && !fromEmail) {
+    return res.status(500).json({ ok: false, error: "Missing SENDGRID_FROM_EMAIL" });
   }
 
   const candidates: any[] = [];
@@ -181,16 +183,7 @@ router.post("/waitlist/invite-wave", requireAuth, requireRole(["landlord", "admi
           fromEmail: fromEmail as string,
         });
 
-        await sgMail.send({
-          ...msg,
-          trackingSettings: {
-            clickTracking: { enable: false, enableText: false },
-            openTracking: { enable: false },
-          },
-          mailSettings: {
-            footer: { enable: false },
-          },
-        });
+        await sendEmail(msg);
         await inviteRef.set({ status: "sent", sentAt: nowMs(), inviteUrl }, { merge: true });
         await incrementCounter({ name: "waitlist_invite_sent", dims: { campaign }, amount: 1 });
 

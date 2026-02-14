@@ -1,8 +1,8 @@
 import { Router } from "express";
-import sgMail from "@sendgrid/mail";
 import { db } from "../config/firebase";
 import { authenticateJwt } from "../middleware/authMiddleware";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
+import { sendEmail } from "../services/emailService";
 
 const router = Router();
 
@@ -147,8 +147,7 @@ router.patch("/maintenance-requests/:id", async (req: any, res) => {
             emailError = "EMAIL_NOT_CONFIGURED";
           } else {
             try {
-              sgMail.setApiKey(apiKey);
-              await sgMail.send({
+              await sendEmail({
                 to: tenantEmail,
                 from,
                 replyTo: replyTo || from,
@@ -164,13 +163,6 @@ router.patch("/maintenance-requests/:id", async (req: any, res) => {
                   ctaText: "View request",
                   ctaUrl: requestLink,
                 }),
-                trackingSettings: {
-                  clickTracking: { enable: false, enableText: false },
-                  openTracking: { enable: false },
-                },
-                mailSettings: {
-                  footer: { enable: false },
-                },
               });
               emailed = true;
             } catch (err: any) {

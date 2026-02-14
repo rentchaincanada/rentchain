@@ -9,7 +9,8 @@ import { propertyService } from "./propertyService";
 import { runScreeningWithCredits } from "./screeningsService";
 import { logAuditEvent } from "./auditEventsService";
 import { db } from "../config/firebase";
-import sgMail from "@sendgrid/mail";
+import { sendEmail } from "./emailService";
+import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 
 export async function convertApplicationToTenant(params: {
   landlordId: string;
@@ -212,10 +213,9 @@ async function createAndEmailInvite(opts: {
     return { inviteUrl, inviteEmailed: false };
   }
 
-  const apiKey = process.env.SENDGRID_API_KEY;
   const from =
     process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM || process.env.FROM_EMAIL;
-  if (!apiKey || !from) {
+  if (!from) {
     console.warn("[applicationConversion] missing sendgrid env, skipping email");
     return { inviteUrl, inviteEmailed: false };
   }
@@ -227,29 +227,29 @@ async function createAndEmailInvite(opts: {
     ]);
 
   try {
-    sgMail.setApiKey(apiKey as string);
     const subject = "You're invited to RentChain";
     const greet = opts.tenantName ? `Hi ${opts.tenantName},` : "Hi,";
-    const text =
-      `${greet}\n\n` +
-      `You've been invited to join RentChain as a tenant. ` +
-      `Open this link to accept your invite:\n${inviteUrl}\n\n` +
-      `Note: this link may expire. If you weren't expecting this, you can ignore this email.\n\n` +
-      `— RentChain`;
+    const text = buildEmailText({
+      intro: `${greet}\n\nYou've been invited to join RentChain as a tenant. This link may expire.`,
+      ctaText: "View invitation",
+      ctaUrl: inviteUrl,
+      footerNote: "If you weren't expecting this, you can ignore this email.",
+    });
+    const html = buildEmailHtml({
+      title: "You're invited to RentChain",
+      intro: `${greet} You've been invited to join RentChain as a tenant. This link may expire.`,
+      ctaText: "View invitation",
+      ctaUrl: inviteUrl,
+      footerNote: "If you weren't expecting this, you can ignore this email.",
+    });
 
     await withTimeout(
-      sgMail.send({
+      sendEmail({
         to: tenantEmail,
         from: from as string,
         subject,
         text,
-        trackingSettings: {
-          clickTracking: { enable: false, enableText: false },
-          openTracking: { enable: false },
-        },
-        mailSettings: {
-          footer: { enable: false },
-        },
+        html,
       }),
       8000
     );
