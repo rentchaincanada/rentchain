@@ -5,6 +5,7 @@ import { startCheckout } from "@/billing/startCheckout";
 import { fetchBillingPricing, fetchPricingHealth } from "@/api/billingApi";
 import { BillingIntervalToggle } from "./BillingIntervalToggle";
 import { getVisiblePlans, type PlanKey } from "@/billing/planVisibility";
+import { track } from "@/lib/analytics";
 
 export type UpgradeReason =
   | "propertiesMax"
@@ -28,8 +29,6 @@ export function UpgradeModal({
   copy?: { title?: string; body?: string };
   ctaLabel?: string;
 }) {
-  if (!open) return null;
-
   const { user } = useAuth();
   const [pricing, setPricing] = React.useState<any | null>(null);
   const [loadingPricing, setLoadingPricing] = React.useState(true);
@@ -43,6 +42,15 @@ export function UpgradeModal({
   const safeReason = reason ?? ("propertiesMax" as UpgradeReason);
 
   React.useEffect(() => {
+    if (!open) return;
+    track("upgrade_modal_opened", {
+      reason: safeReason,
+      currentPlan: currentPlanKey,
+    });
+  }, [currentPlanKey, open, safeReason]);
+
+  React.useEffect(() => {
+    if (!open) return;
     let active = true;
     fetchBillingPricing()
       .then((res) => {
@@ -55,9 +63,10 @@ export function UpgradeModal({
     return () => {
       active = false;
     };
-  }, []);
+  }, [open]);
 
   React.useEffect(() => {
+    if (!open) return;
     let active = true;
     fetchPricingHealth()
       .then((res) => {
@@ -70,7 +79,7 @@ export function UpgradeModal({
     return () => {
       active = false;
     };
-  }, []);
+  }, [open]);
 
   const normalizePlan = (input?: string) => {
     const raw = String(input || "").trim().toLowerCase();
@@ -158,6 +167,8 @@ export function UpgradeModal({
     title: rawCopy?.title ?? "Upgrade required",
     body: rawCopy?.body ?? "You’ve reached your plan limit. Upgrade to continue.",
   };
+
+  if (!open) return null;
 
   return (
     <>
@@ -254,16 +265,23 @@ export function UpgradeModal({
 
             <button
               onClick={() =>
-                startCheckout({
-                  tier: selectedPlan,
-                  interval,
-                  featureKey: safeReason,
-                  source: "upgrade_modal",
-                  redirectTo:
-                    typeof window !== "undefined"
-                      ? `${window.location.pathname}${window.location.search}`
-                      : "/dashboard",
-                })
+                {
+                  track("upgrade_modal_upgrade_clicked", {
+                    reason: safeReason,
+                    toTier: selectedPlan,
+                    interval,
+                  });
+                  startCheckout({
+                    tier: selectedPlan,
+                    interval,
+                    featureKey: safeReason,
+                    source: "upgrade_modal",
+                    redirectTo:
+                      typeof window !== "undefined"
+                        ? `${window.location.pathname}${window.location.search}`
+                        : "/dashboard",
+                  });
+                }
               }
               disabled={selectedPlan === currentPlanKey || pricingUnavailable}
               style={{

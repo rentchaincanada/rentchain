@@ -5,6 +5,11 @@ import { fetchProperties } from "../../api/propertiesApi";
 import { fetchUnitsForProperty } from "../../api/unitsApi";
 import { createScreeningOrder } from "../../api/rentalApplicationsApi";
 import { useToast } from "../ui/ToastProvider";
+import { useAuth } from "../../context/useAuth";
+import { useCapabilities } from "../../hooks/useCapabilities";
+import { useUpgrade } from "../../context/UpgradeContext";
+import { hasTier, normalizeTier } from "@/billing/requireTier";
+import { track } from "../../lib/analytics";
 
 type PropertyOption = { id: string; name: string };
 type UnitOption = { id: string; label: string };
@@ -19,6 +24,9 @@ export function SendScreeningInviteModal({
   returnTo?: string;
 }) {
   const { showToast } = useToast();
+  const { user } = useAuth();
+  const { caps } = useCapabilities();
+  const { openUpgrade } = useUpgrade();
   const [properties, setProperties] = useState<PropertyOption[]>([]);
   const [propertyId, setPropertyId] = useState("");
   const [units, setUnits] = useState<UnitOption[]>([]);
@@ -30,6 +38,10 @@ export function SendScreeningInviteModal({
   const [tier, setTier] = useState<"basic" | "verify" | "verify_ai">("basic");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const roleLower = String(user?.role || "").toLowerCase();
+  const isAdmin = roleLower === "admin";
+  const userTier = normalizeTier((caps?.plan as string) || user?.plan || null);
+  const canUseProFeatures = isAdmin || hasTier(userTier, "pro");
 
   const packageOptions = useMemo(
     () => [
@@ -122,6 +134,19 @@ export function SendScreeningInviteModal({
 
   const handleSubmit = async () => {
     setError(null);
+    if (!canUseProFeatures) {
+      track("gating_blocked", { featureName: "screening", requiredTier: "pro", userTier });
+      openUpgrade({
+        reason: "screening",
+        plan: userTier,
+        ctaLabel: "Upgrade to Pro",
+        copy: {
+          title: "Upgrade to Pro",
+          body: "Screening is available on Pro plans. Upgrade to send screening invites.",
+        },
+      });
+      return;
+    }
     if (!propertyId) {
       setError("Select a property to continue.");
       return;
@@ -332,12 +357,17 @@ export function SendScreeningInviteModal({
         </div>
 
         {error ? <div style={{ color: "#b91c1c", fontSize: 13 }}>{error}</div> : null}
+        {!canUseProFeatures ? (
+          <div style={{ color: text.muted, fontSize: 13 }}>
+            Screening invites require Pro. Upgrade to continue.
+          </div>
+        ) : null}
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: spacing.sm }}>
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={submitting}>
+          <Button onClick={handleSubmit} disabled={submitting || !canUseProFeatures}>
             {submitting ? "Starting..." : "Send invite"}
           </Button>
         </div>
