@@ -27,6 +27,22 @@
   z-index: 30;
 }
 
+.rc-landlord-plan-badge {
+  display: none;
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: #ffffff;
+  color: #111827;
+  font-size: 12px;
+  font-weight: 700;
+  z-index: 30;
+}
+
 .rc-landlord-hamburger span {
   display: block;
   width: 18px;
@@ -182,6 +198,11 @@
 @media (max-width: 768px) {
   .rc-landlord-topnav {
     display: none;
+  }
+
+  .rc-landlord-plan-badge {
+    display: inline-flex;
+    align-items: center;
   }
 
   .rc-landlord-hamburger {

@@ -1,1 +1,1 @@
-export const SUPPORT_EMAIL = "support@rentchain.ca";
+export const SUPPORT_EMAIL = "support@rentchain.ai";

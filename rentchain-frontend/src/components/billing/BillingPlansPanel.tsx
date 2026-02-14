@@ -15,6 +15,7 @@ type Props = {
   mode: "billing" | "pricing";
   planActionLoading?: string | null;
   onSelectPlan: (planKey: "starter" | "pro" | "business") => void;
+  onContactSales?: () => void;
 };
 
 const normalizePlan = (input?: string | null): PlanKey => {
@@ -37,6 +38,7 @@ export function BillingPlansPanel({
   mode,
   planActionLoading,
   onSelectPlan,
+  onContactSales,
 }: Props) {
   const visiblePlans = React.useMemo<PlanKey[]>(
     () => getVisiblePlans(role),
@@ -86,12 +88,8 @@ export function BillingPlansPanel({
     if (isCurrent) return "Current plan";
     if (planId === "elite") return "Contact sales";
     if (planActionLoading === planId) return "Starting...";
-    if (mode === "pricing") {
-      if (planId === "pro") return "Upgrade to Pro";
-      if (planId === "business") return "Choose plan";
-      return "Get started";
-    }
-    return "Choose plan";
+    if (mode === "pricing" && planId === "starter") return "Get started";
+    return "Upgrade";
   };
 
   return (
@@ -132,7 +130,10 @@ export function BillingPlansPanel({
                 type="button"
                 variant={highlight ? "secondary" : "primary"}
                 onClick={() => {
-                  if (planId === "elite") return;
+                  if (planId === "elite") {
+                    onContactSales?.();
+                    return;
+                  }
                   if (planId === "starter" || planId === "pro" || planId === "business") {
                     onSelectPlan(planId);
                   }
@@ -140,8 +141,7 @@ export function BillingPlansPanel({
                 disabled={
                   pricingUnavailable ||
                   highlight ||
-                  planActionLoading === planId ||
-                  planId === "elite"
+                  planActionLoading === planId
                 }
               >
                 {ctaLabel(planId, highlight)}
