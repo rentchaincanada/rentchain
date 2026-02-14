@@ -90,13 +90,7 @@ const dictionaries: Record<Locale, Record<string, string>> = {
     "pricing.banner.unavailable": "Pricing unavailable",
     "pricing.starter.subtitle": "Simple starter plan for growing portfolios.",
     "pricing.pro.subtitle": "For landlords who require screening and verified records.",
-    "pricing.pro.item1": "Tenant screening access",
-    "pricing.pro.item2": "Verified record-keeping",
-    "pricing.pro.item3": "Priority support",
     "pricing.business.subtitle": "For larger portfolios with compliance needs.",
-    "pricing.business.item1": "Advanced exports and reporting",
-    "pricing.business.item2": "Audit-ready documentation",
-    "pricing.business.item3": "Dedicated success support",
     "pricing.notice":
       "Tenant screening services are charged per applicant and clearly disclosed before purchase.",
     "pricing.notice2": "RentChain does not bundle or obscure third-party screening costs.",
@@ -230,12 +224,8 @@ const dictionaries: Record<Locale, Record<string, string>> = {
     "pricing.starter.subtitle": "Plan de démarrage simple pour portefeuilles en croissance.",
     "pricing.pro.subtitle": "Pour les propriétaires qui exigent des dossiers vérifiés.",
     "pricing.pro.item1": "Accès à la vérification des locataires",
-    "pricing.pro.item2": "Tenue de dossiers vérifiés",
-    "pricing.pro.item3": "Support prioritaire",
+
     "pricing.business.subtitle": "Pour les grands portefeuilles avec exigences de conformité.",
-    "pricing.business.item1": "Exports et rapports avancés",
-    "pricing.business.item2": "Documentation prête pour audit",
-    "pricing.business.item3": "Accompagnement dédié",
     "pricing.notice":
       "Les services de vérification des locataires sont facturés par demandeur et clairement indiqués avant l’achat.",
     "pricing.notice2": "RentChain n’inclut pas ni ne masque les coûts tiers.",
