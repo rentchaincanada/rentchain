@@ -19,6 +19,30 @@
       ]
     }
   ],
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "rentchain.ca"
+        }
+      ],
+      "destination": "https://www.rentchain.ai/$1",
+      "permanent": true
+    },
+    {
+      "source": "/(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "www.rentchain.ca"
+        }
+      ],
+      "destination": "https://www.rentchain.ai/$1",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     {
       "source": "/health",
@@ -35,21 +59,6 @@
     {
       "source": "/:path*",
       "destination": "/index.html"
-    }
-    {
-      "redirects": [
-        {
-          "source": "/(.*)",
-          "has": [
-            {
-              "type": "host",
-              "value": "rentchain.ca"
-            }
-          ],
-          "destination": "https://www.rentchain.ai/$1",
-          "permanent": true
-        }
-      ]
     }
   ]
 }
