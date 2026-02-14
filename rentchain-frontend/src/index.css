@@ -91,7 +91,7 @@ canvas {
 }
 
 .rc-logo-md {
-  --rc-logo-h: 42px;
+  --rc-logo-h: 100px;
 }
 
 .rc-logo-dark {
@@ -100,11 +100,11 @@ canvas {
 
 @media (max-width: 768px) {
   .rc-logo-md {
-    --rc-logo-h: 32px;
+    --rc-logo-h: 80px;
   }
 
   .rc-logo-sm {
-    --rc-logo-h: 28px;
+    --rc-logo-h: 80px;
   }
 }
 
