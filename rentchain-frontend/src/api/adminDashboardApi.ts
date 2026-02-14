@@ -23,6 +23,24 @@ export type AdminSummary = {
   };
 };
 
+export type AdminMetrics = {
+  activeSubscribers: number;
+  mrrCents: number;
+  arrCents: number;
+  subscriptionsByTier: { starter: number; pro: number; business: number; elite: number };
+  screeningsPaidThisMonth: number;
+  screeningsPaidYtd: number;
+  screeningRevenueCentsThisMonth: number;
+  screeningRevenueCentsYtd: number;
+  upgradesStartedThisMonth?: number;
+  upgradesCompletedThisMonth?: number;
+};
+
+export type StripeHealth = {
+  ok: boolean;
+  stripeConfigured?: boolean;
+};
+
 export type AdminExpense = {
   id: string;
   date: string;
@@ -41,6 +59,20 @@ export async function fetchAdminSummary() {
     marketing: data.marketing,
     expenses: data.expenses,
   } as AdminSummary;
+}
+
+export async function fetchAdminMetrics() {
+  const data = await apiFetch<{ ok: boolean; metrics: AdminMetrics }>("/admin/metrics");
+  return data.metrics;
+}
+
+export async function fetchStripeHealth() {
+  try {
+    const data = await apiFetch<StripeHealth>("/health/stripe");
+    return data;
+  } catch {
+    return null;
+  }
 }
 
 export async function listAdminExpenses(params?: { from?: string; to?: string }) {

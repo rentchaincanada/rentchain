@@ -4,9 +4,12 @@ import { Card, Section, Button, Input } from "../../components/ui/Ui";
 import { useToast } from "../../components/ui/ToastProvider";
 import {
   fetchAdminSummary,
+  fetchAdminMetrics,
+  fetchStripeHealth,
   listAdminExpenses,
   createAdminExpense,
   type AdminExpense,
+  type AdminMetrics,
   type AdminSummary,
 } from "../../api/adminDashboardApi";
 import { adminSystems } from "./adminSystems";
@@ -16,13 +19,17 @@ import "./AdminDashboardPage.css";
 const categories = ["All", ...Array.from(new Set(adminSystems.map((s) => s.category)))];
 
 function formatCents(value: number) {
-  const dollars = (Number(value || 0) / 100).toFixed(2);
-  return `$${dollars}`;
+  const dollars = Math.round(Number(value || 0) / 100);
+  return new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD", maximumFractionDigits: 0 }).format(
+    dollars
+  );
 }
 
 export const AdminDashboardPage: React.FC = () => {
   const { showToast } = useToast();
   const [summary, setSummary] = useState<AdminSummary | null>(null);
+  const [metrics, setMetrics] = useState<AdminMetrics | null>(null);
+  const [stripeHealth, setStripeHealth] = useState<{ ok: boolean; stripeConfigured?: boolean } | null>(null);
   const [expenses, setExpenses] = useState<AdminExpense[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -40,9 +47,16 @@ export const AdminDashboardPage: React.FC = () => {
   const load = async () => {
     try {
       setLoading(true);
-      const [summaryData, expensesData] = await Promise.all([fetchAdminSummary(), listAdminExpenses()]);
+      const [summaryData, expensesData, metricsData, stripeHealthData] = await Promise.all([
+        fetchAdminSummary(),
+        listAdminExpenses(),
+        fetchAdminMetrics(),
+        fetchStripeHealth(),
+      ]);
       setSummary(summaryData);
       setExpenses(expensesData);
+      setMetrics(metricsData);
+      setStripeHealth(stripeHealthData);
       setLastUpdated(Date.now());
     } catch (err: any) {
       showToast({ message: "Failed to load admin data", description: err?.message || "", variant: "error" });
@@ -105,6 +119,19 @@ export const AdminDashboardPage: React.FC = () => {
     },
   };
 
+  const metricsView: AdminMetrics = metrics || {
+    activeSubscribers: 0,
+    mrrCents: 0,
+    arrCents: 0,
+    subscriptionsByTier: { starter: 0, pro: 0, business: 0, elite: 0 },
+    screeningsPaidThisMonth: 0,
+    screeningsPaidYtd: 0,
+    screeningRevenueCentsThisMonth: 0,
+    screeningRevenueCentsYtd: 0,
+    upgradesStartedThisMonth: 0,
+    upgradesCompletedThisMonth: 0,
+  };
+
   return (
     <MacShell title="Admin · Dashboard">
       <Section className="rc-admin-page" style={{ display: "grid", gap: spacing.md }}>
@@ -119,6 +146,105 @@ export const AdminDashboardPage: React.FC = () => {
             Refresh
           </Button>
         </div>
+
+        <Card elevated>
+          <Section style={{ display: "grid", gap: spacing.sm }}>
+            <div style={{ fontWeight: 700 }}>Subscription & Screening KPIs</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: spacing.sm }}>
+              <Card style={{ padding: spacing.md }}>
+                <div style={{ fontSize: 12, color: text.muted }}>Active subscribers</div>
+                <div style={{ fontSize: 18, fontWeight: 700 }}>{metricsView.activeSubscribers}</div>
+              </Card>
+              <Card style={{ padding: spacing.md }}>
+                <div style={{ fontSize: 12, color: text.muted }}>MRR (CAD)</div>
+                <div style={{ fontSize: 18, fontWeight: 700 }}>{formatCents(metricsView.mrrCents)}</div>
+              </Card>
+              <Card style={{ padding: spacing.md }}>
+                <div style={{ fontSize: 12, color: text.muted }}>ARR (CAD)</div>
+                <div style={{ fontSize: 18, fontWeight: 700 }}>{formatCents(metricsView.arrCents)}</div>
+              </Card>
+              <Card style={{ padding: spacing.md }}>
+                <div style={{ fontSize: 12, color: text.muted }}>Screenings sold</div>
+                <div style={{ fontSize: 18, fontWeight: 700 }}>
+                  {metricsView.screeningsPaidThisMonth} / {metricsView.screeningsPaidYtd}
+                </div>
+                <div style={{ fontSize: 12, color: text.muted }}>Month / YTD</div>
+              </Card>
+              <Card style={{ padding: spacing.md }}>
+                <div style={{ fontSize: 12, color: text.muted }}>Screening revenue</div>
+                <div style={{ fontSize: 18, fontWeight: 700 }}>
+                  {formatCents(metricsView.screeningRevenueCentsThisMonth)} / {formatCents(metricsView.screeningRevenueCentsYtd)}
+                </div>
+                <div style={{ fontSize: 12, color: text.muted }}>Month / YTD</div>
+              </Card>
+            </div>
+          </Section>
+        </Card>
+
+        <Card elevated>
+          <Section style={{ display: "grid", gap: spacing.sm }}>
+            <div style={{ fontWeight: 700 }}>Subscription mix</div>
+            <div style={{ display: "grid", gap: spacing.xs }}>
+              {(["starter", "pro", "business", "elite"] as const).map((tier) => {
+                const count = metricsView.subscriptionsByTier?.[tier] || 0;
+                const total = Math.max(metricsView.activeSubscribers, 1);
+                const width = Math.max(8, Math.round((count / total) * 100));
+                return (
+                  <div key={tier} style={{ display: "grid", gap: 6 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+                      <span style={{ textTransform: "capitalize", color: text.muted }}>{tier}</span>
+                      <span style={{ fontWeight: 700 }}>{count}</span>
+                    </div>
+                    <div style={{ height: 8, borderRadius: 999, background: "rgba(148,163,184,0.2)", overflow: "hidden" }}>
+                      <div
+                        style={{
+                          height: "100%",
+                          width: `${width}%`,
+                          background: "rgba(37,99,235,0.85)",
+                        }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ display: "grid", gap: 4, fontSize: 12, color: text.muted }}>
+              <div>Upgrades started (month): {metricsView.upgradesStartedThisMonth || 0}</div>
+              <div>Upgrades completed (month): {metricsView.upgradesCompletedThisMonth || 0}</div>
+            </div>
+          </Section>
+        </Card>
+
+        <Card elevated>
+          <Section style={{ display: "grid", gap: spacing.sm }}>
+            <div style={{ fontWeight: 700 }}>Health</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span
+                style={{
+                  width: 10,
+                  height: 10,
+                  borderRadius: 999,
+                  background:
+                    stripeHealth?.stripeConfigured === true
+                      ? "#16a34a"
+                      : stripeHealth?.stripeConfigured === false
+                      ? "#dc2626"
+                      : "#94a3b8",
+                }}
+              />
+              <span style={{ color: text.muted }}>
+                Stripe configured:{" "}
+                <strong style={{ color: text.primary }}>
+                  {stripeHealth?.stripeConfigured === true
+                    ? "Yes"
+                    : stripeHealth?.stripeConfigured === false
+                    ? "No"
+                    : "Unknown"}
+                </strong>
+              </span>
+            </div>
+          </Section>
+        </Card>
 
         <Card elevated>
           <Section style={{ display: "grid", gap: spacing.sm }}>
