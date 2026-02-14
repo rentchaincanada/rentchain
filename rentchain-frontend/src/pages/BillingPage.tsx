@@ -1,15 +1,20 @@
 // @ts-nocheck
 import React, { useEffect, useState } from "react";
 import { Card, Section, Button } from "../components/ui/Ui";
-import { createBillingPortalSession, fetchBillingHistory, fetchBillingPricing, type BillingRecord } from "../api/billingApi";
-import { spacing, text, colors, radius } from "../styles/tokens";
+import {
+  createBillingPortalSession,
+  fetchBillingHistory,
+  fetchBillingPricing,
+  type BillingRecord,
+} from "../api/billingApi";
+import { spacing, text, colors } from "../styles/tokens";
 import { SUPPORT_EMAIL } from "../config/support";
 import { asArray } from "../lib/asArray";
-import { useCapabilities } from "@/hooks/useCapabilities";
 import { useAuth } from "@/context/useAuth";
 import { BillingPlansPanel } from "../components/billing/BillingPlansPanel";
 import { apiFetch } from "@/lib/apiClient";
-import { getVisiblePlans, type PlanKey } from "@/billing/planVisibility";
+import { track } from "@/lib/analytics";
+import { billingTierLabel, useBillingStatus } from "@/hooks/useBillingStatus";
 
 const formatAmount = (amountCents: number, currency: string) => {
   const amount = (amountCents || 0) / 100;
@@ -45,6 +50,19 @@ const formatAddonsLabel = (addons?: string[] | null) => {
   return labels.join(", ");
 };
 
+const intervalLabel = (interval: "month" | "year" | null) => {
+  if (interval === "year") return "Yearly";
+  if (interval === "month") return "Monthly";
+  return "Not available";
+};
+
+const renewalLabel = (renewalDate: string | null) => {
+  if (!renewalDate) return "Not available";
+  const parsed = new Date(renewalDate);
+  if (!Number.isFinite(parsed.getTime())) return "Not available";
+  return parsed.toLocaleDateString();
+};
+
 const BillingPage: React.FC = () => {
   const [records, setRecords] = useState<BillingRecord[]>([]);
   const [loading, setLoading] = useState(false);
@@ -55,13 +73,9 @@ const BillingPage: React.FC = () => {
   const [pricingError, setPricingError] = useState(false);
   const [planActionLoading, setPlanActionLoading] = useState<string | null>(null);
   const [interval, setInterval] = useState<"month" | "year">("month");
-  const { caps } = useCapabilities();
   const { user } = useAuth();
-  const currentPlan = String(caps?.plan || "screening").toLowerCase();
-  const visiblePlans = React.useMemo<PlanKey[]>(
-    () => getVisiblePlans(user?.actorRole || user?.role || null),
-    [user?.actorRole, user?.role]
-  );
+  const billingStatus = useBillingStatus();
+  const currentPlan = billingStatus.tier;
 
   const load = async () => {
     try {
@@ -82,7 +96,9 @@ const BillingPage: React.FC = () => {
   };
 
   useEffect(() => {
+    track("billing_page_opened", { tier: currentPlan });
     void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -109,10 +125,11 @@ const BillingPage: React.FC = () => {
 
   const pricingUnavailable = !pricingLoading && pricingError;
 
-
   const handlePlanAction = async (planKey: "starter" | "pro" | "business") => {
     if (pricingUnavailable) return;
     if (planKey === currentPlan) return;
+    track("billing_upgrade_clicked", { toTier: planKey, interval });
+
     try {
       setPlanActionLoading(planKey);
       const res: any = await apiFetch("/billing/subscribe", {
@@ -138,6 +155,7 @@ const BillingPage: React.FC = () => {
   };
 
   const handlePortal = async () => {
+    track("billing_manage_subscription_clicked", { tier: currentPlan });
     try {
       setPortalLoading(true);
       const res = await createBillingPortalSession();
@@ -152,8 +170,21 @@ const BillingPage: React.FC = () => {
     }
   };
 
+  const handleContactSales = () => {
+    track("billing_contact_sales_clicked", { tier: currentPlan, interval });
+    window.location.href = "mailto:sales@rentchain.ai";
+  };
+
   return (
-    <Section style={{ display: "flex", flexDirection: "column", gap: spacing.md, maxWidth: 900, margin: "0 auto" }}>
+    <Section
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: spacing.md,
+        maxWidth: 900,
+        margin: "0 auto",
+      }}
+    >
       <Card elevated>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: spacing.sm }}>
           <div>
@@ -172,9 +203,42 @@ const BillingPage: React.FC = () => {
       </Card>
 
       <Card>
-        <div style={{ fontWeight: 700, fontSize: "1.05rem", marginBottom: 12 }}>
-          Plans
+        <div style={{ display: "grid", gap: spacing.xs }}>
+          <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>Current plan</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: spacing.sm }}>
+            <div>
+              <div style={{ color: text.muted, fontSize: 12 }}>Tier</div>
+              <div style={{ fontWeight: 700 }}>{billingTierLabel(currentPlan)}</div>
+            </div>
+            <div>
+              <div style={{ color: text.muted, fontSize: 12 }}>Billing interval</div>
+              <div style={{ fontWeight: 700 }}>{intervalLabel(billingStatus.interval)}</div>
+            </div>
+            <div>
+              <div style={{ color: text.muted, fontSize: 12 }}>Renewal date</div>
+              <div style={{ fontWeight: 700 }}>{renewalLabel(billingStatus.renewalDate)}</div>
+            </div>
+          </div>
+          <div className="rc-wrap-row" style={{ marginTop: spacing.sm }}>
+            <Button type="button" variant="secondary" onClick={handlePortal} disabled={portalLoading}>
+              {portalLoading ? "Opening..." : "Manage subscription"}
+            </Button>
+            {currentPlan === "starter" ? (
+              <Button type="button" onClick={() => void handlePlanAction("pro")} disabled={planActionLoading === "pro" || pricingUnavailable}>
+                Upgrade to Pro
+              </Button>
+            ) : null}
+          </div>
+          {currentPlan === "starter" ? (
+            <div style={{ marginTop: spacing.xs, color: text.muted }}>
+              Upgrade to Pro to unlock screening + verified records.
+            </div>
+          ) : null}
         </div>
+      </Card>
+
+      <Card>
+        <div style={{ fontWeight: 700, fontSize: "1.05rem", marginBottom: 12 }}>Plans</div>
         <BillingPlansPanel
           pricing={pricing}
           pricingLoading={pricingLoading}
@@ -191,6 +255,7 @@ const BillingPage: React.FC = () => {
           mode="billing"
           planActionLoading={planActionLoading}
           onSelectPlan={handlePlanAction}
+          onContactSales={handleContactSales}
         />
       </Card>
 
@@ -218,9 +283,7 @@ const BillingPage: React.FC = () => {
               <tbody>
                 {records.map((record) => (
                   <tr key={record.id} style={{ borderBottom: `1px solid ${colors.border}` }}>
-                    <td style={{ padding: "8px" }}>
-                      {record.createdAt ? new Date(record.createdAt).toLocaleString() : "Unknown"}
-                    </td>
+                    <td style={{ padding: "8px" }}>{record.createdAt ? new Date(record.createdAt).toLocaleString() : "Unknown"}</td>
                     <td style={{ padding: "8px" }}>{formatAmount(record.amountCents, record.currency)}</td>
                     <td style={{ padding: "8px" }}>{record.currency?.toUpperCase?.() || "CAD"}</td>
                     <td style={{ padding: "8px" }}>
@@ -231,11 +294,7 @@ const BillingPage: React.FC = () => {
                           {" · "}
                           Add-ons: {formatAddonsLabel(record.addons)}
                           {" · "}
-                          Total:{" "}
-                          {formatAmount(
-                            record.totalAmountCents ?? record.amountCents,
-                            record.currency
-                          )}
+                          Total: {formatAmount(record.totalAmountCents ?? record.amountCents, record.currency)}
                         </div>
                       ) : null}
                     </td>

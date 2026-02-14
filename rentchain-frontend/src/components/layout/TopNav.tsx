@@ -6,12 +6,15 @@ import { WorkspaceDrawer } from "./WorkspaceDrawer";
 import { Button } from "../ui/Ui";
 import { colors, radius, shadows, spacing, text, layout, blur } from "../../styles/tokens";
 import { RentChainLogo } from "../brand/RentChainLogo";
+import { billingTierLabel, useBillingStatus } from "@/hooks/useBillingStatus";
 
 const TopNav: React.FC = () => {
   const navigate = useNavigate();
   const { user, logout, ready } = useAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const effectiveRole = ready ? String(user?.actorRole || user?.role || "landlord") : "landlord";
+  const billingStatus = useBillingStatus();
+  const planLabel = billingTierLabel(billingStatus.tier);
 
   return (
     <>
@@ -39,6 +42,25 @@ const TopNav: React.FC = () => {
           <RentChainLogo href="/dashboard" size="sm" />
 
           <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: spacing.sm }}>
+            <button
+              type="button"
+              onClick={() => navigate("/billing")}
+              style={{
+                borderRadius: radius.pill,
+                border: `1px solid ${colors.border}`,
+                background: colors.card,
+                color: text.primary,
+                boxShadow: shadows.sm,
+                fontWeight: 700,
+                fontSize: "0.8rem",
+                padding: "8px 10px",
+                whiteSpace: "nowrap",
+                cursor: "pointer",
+              }}
+              aria-label={`Current plan ${planLabel}. Open billing`}
+            >
+              {billingStatus.isLoading ? "Plan..." : planLabel}
+            </button>
             <Button
               variant="ghost"
               onClick={() => navigate("/site")}
