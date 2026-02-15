@@ -109,6 +109,23 @@ canvas {
   }
 }
 
+.rc-billing-plan-subtitle {
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.rc-billing-plan-features {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.rc-billing-plan-price {
+  font-size: 17px;
+  font-weight: 700;
+}
+
 button,
 .tap {
   min-height: 44px;

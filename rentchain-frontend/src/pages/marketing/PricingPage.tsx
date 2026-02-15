@@ -183,14 +183,7 @@ const PricingPage: React.FC = () => {
           </div>
         </div>
 
-        <div
-          style={{
-            display: "grid",
-            gap: spacing.lg,
-            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-            alignItems: "stretch",
-          }}
-        >
+        <div className="rc-pricing-grid">
           <div style={{ gridColumn: "1 / -1" }}>
             <PlanIntervalToggle value={interval} onChange={setInterval} />
           </div>

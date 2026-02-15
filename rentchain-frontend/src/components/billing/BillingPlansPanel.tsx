@@ -93,89 +93,104 @@ export function BillingPlansPanel({
   };
 
   return (
-    <div style={{ display: "grid", gap: 10 }}>
-      <PlanIntervalToggle value={interval} onChange={onIntervalChange} />
-      {visiblePlans.map((planId) => {
-        if (planId === "screening") return null;
-        const { label, desc } = planMeta(planId);
-        const highlight = currentPlanKey === planId;
-        return (
+  <div style={{ display: "grid", gap: 10 }}>
+    <PlanIntervalToggle value={interval} onChange={onIntervalChange} />
+
+    {visiblePlans.map((planId) => {
+      if (planId === "screening") return null;
+
+      const { label, desc } = planMeta(planId);
+      const highlight = currentPlanKey === planId;
+
+      return (
+        <div
+          key={planId}
+          style={{
+            borderRadius: radius.lg,
+            border: highlight
+              ? "1px solid rgba(59,130,246,0.45)"
+              : "1px solid rgba(148,163,184,0.25)",
+            background: highlight ? "rgba(59,130,246,0.08)" : "rgba(148,163,184,0.06)",
+            padding: 12,
+            display: "grid",
+            gap: 12,
+          }}
+        >
           <div
-            key={planId}
             style={{
-              borderRadius: radius.lg,
-              border: highlight
-                ? "1px solid rgba(59,130,246,0.45)"
-                : "1px solid rgba(148,163,184,0.25)",
-              background: highlight ? "rgba(59,130,246,0.08)" : "rgba(148,163,184,0.06)",
-              padding: 12,
-              display: "grid",
-              gap: 12,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 8,
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-              <div>
-                <div style={{ fontWeight: 800 }}>{label}</div>
-                <div style={{ fontSize: 15, color: text.muted, lineHeight: 1.4 }}>{desc}</div>
+            <div>
+              <div style={{ fontWeight: 800 }}>{label}</div>
+              <div className="rc-billing-plan-subtitle" style={{ color: text.muted }}>
+                {desc}
               </div>
-              {highlight ? (
-                <span style={{ fontSize: 12, fontWeight: 700, color: colors.accent }}>Current</span>
-              ) : null}
             </div>
-            <div style={{ color: text.muted, fontSize: 17, fontWeight: 700 }}>
-              {pricingLoading ? "—" : renderPrice(planId)}
-            </div>
-            <ul style={{ margin: 0, paddingLeft: 18, color: text.muted, fontSize: 14, lineHeight: 1.5 }}>
-              {planId === "starter" ? (
-                <>
-                  <li>Property and tenant management</li>
-                  <li>Maintenance tracking</li>
-                </>
-              ) : null}
-              {planId === "pro" ? (
-                <>
-                  <li>Screening workflows and invites</li>
-                  <li>Ledger exports and verified records</li>
-                </>
-              ) : null}
-              {planId === "business" ? (
-                <>
-                  <li>Portfolio analytics dashboard</li>
-                  <li>Compliance and reporting tools</li>
-                </>
-              ) : null}
-              {planId === "elite" ? (
-                <>
-                  <li>Enterprise controls and approvals</li>
-                  <li>Advanced compliance support</li>
-                </>
-              ) : null}
-            </ul>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <Button
-                type="button"
-                variant={highlight ? "secondary" : "primary"}
-                onClick={() => {
-                  if (planId === "elite") {
-                    onContactSales?.();
-                    return;
-                  }
-                  if (planId === "starter" || planId === "pro" || planId === "business") {
-                    onSelectPlan(planId);
-                  }
-                }}
-                disabled={
-                  pricingUnavailable ||
-                  highlight ||
-                  planActionLoading === planId
-                }
-              >
-                {ctaLabel(planId, highlight)}
-              </Button>
-            </div>
+
+            {highlight ? (
+              <span style={{ fontSize: 12, fontWeight: 700, color: colors.accent }}>Current</span>
+            ) : null}
           </div>
-        );
-      })}
-    </div>
-  );
+
+          <div className="rc-billing-plan-price" style={{ color: text.muted }}>
+            {pricingLoading ? "—" : renderPrice(planId)}
+          </div>
+
+          <ul className="rc-billing-plan-features" style={{ color: text.muted }}>
+            {planId === "starter" ? (
+              <>
+                <li>Property and tenant management</li>
+                <li>Maintenance tracking</li>
+              </>
+            ) : null}
+
+            {planId === "pro" ? (
+              <>
+                <li>Screening workflows and invites</li>
+                <li>Ledger exports and verified records</li>
+              </>
+            ) : null}
+
+            {planId === "business" ? (
+              <>
+                <li>Portfolio analytics dashboard</li>
+                <li>Compliance and reporting tools</li>
+              </>
+            ) : null}
+
+            {planId === "elite" ? (
+              <>
+                <li>Enterprise controls and approvals</li>
+                <li>Advanced compliance support</li>
+              </>
+            ) : null}
+          </ul>
+
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Button
+              type="button"
+              variant={highlight ? "secondary" : "primary"}
+              onClick={() => {
+                if (planId === "elite") {
+                  onContactSales?.();
+                  return;
+                }
+                if (planId === "starter" || planId === "pro" || planId === "business") {
+                  onSelectPlan(planId);
+                }
+              }}
+              disabled={pricingUnavailable || highlight || planActionLoading === planId}
+            >
+              {ctaLabel(planId, highlight)}
+            </Button>
+          </div>
+        </div>
+      );
+    })}
+  </div>
+);
 }
