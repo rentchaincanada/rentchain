@@ -84,14 +84,15 @@ canvas {
   display: block;
   width: auto;
   height: var(--rc-logo-h);
+  max-width: none;
 }
 
 .rc-logo-sm {
-  --rc-logo-h: 42px;
+  --rc-logo-h: 28px;
 }
 
 .rc-logo-md {
-  --rc-logo-h: 100px;
+  --rc-logo-h: 40px;
 }
 
 .rc-logo-dark {
@@ -100,11 +101,11 @@ canvas {
 
 @media (max-width: 768px) {
   .rc-logo-md {
-    --rc-logo-h: 80px;
+    --rc-logo-h: 32px;
   }
 
   .rc-logo-sm {
-    --rc-logo-h: 80px;
+    --rc-logo-h: 26px;
   }
 }
 

@@ -116,15 +116,41 @@ export function BillingPlansPanel({
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
               <div>
                 <div style={{ fontWeight: 800 }}>{label}</div>
-                <div style={{ fontSize: 12, color: text.muted }}>{desc}</div>
+                <div style={{ fontSize: 15, color: text.muted, lineHeight: 1.4 }}>{desc}</div>
               </div>
               {highlight ? (
                 <span style={{ fontSize: 12, fontWeight: 700, color: colors.accent }}>Current</span>
               ) : null}
             </div>
-            <div style={{ color: text.muted, fontSize: 13 }}>
+            <div style={{ color: text.muted, fontSize: 17, fontWeight: 700 }}>
               {pricingLoading ? "—" : renderPrice(planId)}
             </div>
+            <ul style={{ margin: 0, paddingLeft: 18, color: text.muted, fontSize: 14, lineHeight: 1.5 }}>
+              {planId === "starter" ? (
+                <>
+                  <li>Property and tenant management</li>
+                  <li>Maintenance tracking</li>
+                </>
+              ) : null}
+              {planId === "pro" ? (
+                <>
+                  <li>Screening workflows and invites</li>
+                  <li>Ledger exports and verified records</li>
+                </>
+              ) : null}
+              {planId === "business" ? (
+                <>
+                  <li>Portfolio analytics dashboard</li>
+                  <li>Compliance and reporting tools</li>
+                </>
+              ) : null}
+              {planId === "elite" ? (
+                <>
+                  <li>Enterprise controls and approvals</li>
+                  <li>Advanced compliance support</li>
+                </>
+              ) : null}
+            </ul>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <Button
                 type="button"

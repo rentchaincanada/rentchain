@@ -133,7 +133,7 @@ const PricingPage: React.FC = () => {
 
   return (
     <MarketingLayout>
-      <div style={{ display: "flex", flexDirection: "column", gap: spacing.lg }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: spacing.lg, width: "100%", maxWidth: 1200, margin: "0 auto" }}>
         <div>
           <h1 style={{ margin: 0, fontSize: "clamp(2rem, 4vw, 3rem)", lineHeight: 1.1 }}>{t("pricing.title")}</h1>
           <p style={{ marginTop: spacing.sm, color: text.primary, maxWidth: 760, fontWeight: 700, fontSize: "1.15rem" }}>
