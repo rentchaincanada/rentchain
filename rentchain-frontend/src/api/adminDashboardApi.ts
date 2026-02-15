@@ -50,10 +50,19 @@ export type AdminExpense = {
   notes?: string | null;
 };
 
+export type AdminEventsSummary = {
+  range: string;
+  counts: Record<string, number>;
+};
+
 export async function fetchAdminSummary() {
-  const data = await apiFetch<{ ok: boolean; revenue: AdminSummary["revenue"]; marketing: AdminSummary["marketing"]; expenses: AdminSummary["expenses"] }>(
-    "/admin/summary"
-  );
+  const data = await apiFetch<{
+    ok: boolean;
+    revenue: AdminSummary["revenue"];
+    marketing: AdminSummary["marketing"];
+    expenses: AdminSummary["expenses"];
+  }>("/admin/summary");
+
   return {
     revenue: data.revenue,
     marketing: data.marketing,
@@ -61,18 +70,11 @@ export async function fetchAdminSummary() {
   } as AdminSummary;
 }
 
-export async function fetchAdminMetrics() {
-  const data = await apiFetch<{ ok: boolean; metrics: AdminMetrics }>("/admin/metrics");
-  return data.metrics;
-}
-
-export async function fetchStripeHealth() {
-  try {
-    const data = await apiFetch<StripeHealth>("/health/stripe");
-    return data;
-  } catch {
-    return null;
-  }
+export async function fetchAdminEventsSummary(range: "day" | "week" | "month" = "month") {
+  const data = await apiFetch<{ ok: boolean; range: string; counts: Record<string, number> }>(
+    `/admin/events/summary?range=${encodeURIComponent(range)}`
+  );
+  return { range: data.range, counts: data.counts } as AdminEventsSummary;
 }
 
 export async function listAdminExpenses(params?: { from?: string; to?: string }) {
@@ -90,4 +92,18 @@ export async function createAdminExpense(payload: Omit<AdminExpense, "id">) {
     body: payload,
   });
   return data.item;
+}
+
+export async function fetchAdminMetrics() {
+  const data = await apiFetch<{ ok: boolean; metrics: AdminMetrics }>("/admin/metrics");
+  return data.metrics;
+}
+
+export async function fetchStripeHealth() {
+  try {
+    const data = await apiFetch<StripeHealth>("/health/stripe");
+    return data;
+  } catch {
+    return null;
+  }
 }
