@@ -83,16 +83,16 @@ canvas {
 .rc-logo {
   display: block;
   width: auto;
-  height: var(--rc-logo-h);
+  height: auto;
   max-width: none;
 }
 
 .rc-logo-sm {
-  --rc-logo-h: 28px;
+  height: 28px;
 }
 
 .rc-logo-md {
-  --rc-logo-h: 40px;
+  height: 40px;
 }
 
 .rc-logo-dark {
@@ -101,12 +101,42 @@ canvas {
 
 @media (max-width: 768px) {
   .rc-logo-md {
-    --rc-logo-h: 32px;
+    height: 32px;
   }
 
   .rc-logo-sm {
-    --rc-logo-h: 26px;
+    height: 26px;
   }
+}
+
+.rc-pricing-grid {
+  display: grid;
+  gap: 24px;
+  align-items: stretch;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+@media (min-width: 1024px) {
+  .rc-pricing-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.rc-billing-plan-subtitle {
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.rc-billing-plan-features {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.rc-billing-plan-price {
+  font-size: 17px;
+  font-weight: 700;
 }
 
 button,

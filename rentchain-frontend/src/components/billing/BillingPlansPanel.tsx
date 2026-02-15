@@ -116,16 +116,16 @@ export function BillingPlansPanel({
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
               <div>
                 <div style={{ fontWeight: 800 }}>{label}</div>
-                <div style={{ fontSize: 15, color: text.muted, lineHeight: 1.4 }}>{desc}</div>
+                <div className="rc-billing-plan-subtitle" style={{ color: text.muted }}>{desc}</div>
               </div>
               {highlight ? (
                 <span style={{ fontSize: 12, fontWeight: 700, color: colors.accent }}>Current</span>
               ) : null}
             </div>
-            <div style={{ color: text.muted, fontSize: 17, fontWeight: 700 }}>
+            <div className="rc-billing-plan-price" style={{ color: text.muted }}>
               {pricingLoading ? "—" : renderPrice(planId)}
             </div>
-            <ul style={{ margin: 0, paddingLeft: 18, color: text.muted, fontSize: 14, lineHeight: 1.5 }}>
+            <ul className="rc-billing-plan-features" style={{ color: text.muted }}>
               {planId === "starter" ? (
                 <>
                   <li>Property and tenant management</li>
