@@ -40,6 +40,15 @@ export function UpgradeModal({
   const [notifyPlan, setNotifyPlan] = React.useState<"core" | "pro" | "elite">("core");
 
   const safeReason = reason ?? ("propertiesMax" as UpgradeReason);
+  const normalizePlan = (input?: string) => {
+    const raw = String(input || "").trim().toLowerCase();
+    if (raw === "starter" || raw === "core") return "starter";
+    if (raw === "pro") return "pro";
+    if (raw === "business") return "business";
+    if (raw === "elite") return "elite";
+    return "starter";
+  };
+  const currentPlanKey = normalizePlan(currentPlan);
 
   React.useEffect(() => {
     if (!open) return;
@@ -80,16 +89,6 @@ export function UpgradeModal({
       active = false;
     };
   }, [open]);
-
-  const normalizePlan = (input?: string) => {
-    const raw = String(input || "").trim().toLowerCase();
-    if (raw === "starter" || raw === "core") return "starter";
-    if (raw === "pro") return "pro";
-    if (raw === "business") return "business";
-    if (raw === "elite") return "elite";
-    return "starter";
-  };
-  const currentPlanKey = normalizePlan(currentPlan);
   const pricingUnavailable =
     !healthLoading && pricingHealth && pricingHealth.ok === false;
   const visiblePlans = React.useMemo<PlanKey[]>(
