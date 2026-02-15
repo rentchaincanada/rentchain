@@ -105,20 +105,7 @@ canvas {
   }
 
   .rc-logo-sm {
-    height: 26px;
-  }
-}
-
-.rc-pricing-grid {
-  display: grid;
-  gap: 24px;
-  align-items: stretch;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-}
-
-@media (min-width: 1024px) {
-  .rc-pricing-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    --rc-logo-h: 26px;
   }
 }
 
