@@ -180,6 +180,9 @@ const BillingPage: React.FC = () => {
     window.location.href = "mailto:sales@rentchain.ai";
   };
 
+  const proUpgradeLabel = interval === "year" ? "Upgrade to Pro (Yearly)" : "Upgrade to Pro (Monthly)";
+  const proUpgradeHelp = `You'll be taken to checkout for the ${interval === "year" ? "Yearly" : "Monthly"} Pro plan.`;
+
   return (
     <Section
       style={{
@@ -230,13 +233,18 @@ const BillingPage: React.FC = () => {
             </Button>
             {currentPlan === "starter" ? (
               <Button type="button" onClick={() => void handlePlanAction("pro")} disabled={planActionLoading === "pro" || pricingUnavailable}>
-                Upgrade to Pro
+                {proUpgradeLabel}
               </Button>
             ) : null}
           </div>
           {currentPlan === "starter" ? (
             <div style={{ marginTop: spacing.xs, color: text.muted }}>
               Upgrade to Pro to unlock screening + verified records.
+            </div>
+          ) : null}
+          {currentPlan === "starter" ? (
+            <div style={{ marginTop: spacing.xs, color: text.muted, fontSize: 14 }}>
+              {proUpgradeHelp}
             </div>
           ) : null}
         </div>
