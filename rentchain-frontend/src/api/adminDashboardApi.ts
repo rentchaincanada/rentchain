@@ -70,13 +70,29 @@ export async function fetchAdminSummary() {
   } as AdminSummary;
 }
 
-export async function fetchAdminEventsSummary(range: "month" | "ytd" = "month") {
+export async function fetchAdminEventsSummary(range: "day" | "week" | "month" = "month") {
   const data = await apiFetch<{ ok: boolean; range: string; counts: Record<string, number> }>(
     `/admin/events/summary?range=${encodeURIComponent(range)}`
   );
   return { range: data.range, counts: data.counts } as AdminEventsSummary;
 }
 
+export async function listAdminExpenses(params?: { from?: string; to?: string }) {
+  const query = new URLSearchParams();
+  if (params?.from) query.set("from", params.from);
+  if (params?.to) query.set("to", params.to);
+  const url = query.toString() ? `/admin/expenses?${query.toString()}` : "/admin/expenses";
+  const data = await apiFetch<{ ok: boolean; items: AdminExpense[] }>(url);
+  return data.items || [];
+}
+
+export async function createAdminExpense(payload: Omit<AdminExpense, "id">) {
+  const data = await apiFetch<{ ok: boolean; item: AdminExpense }>("/admin/expenses", {
+    method: "POST",
+    body: payload,
+  });
+  return data.item;
+}
 
 export async function fetchAdminMetrics() {
   const data = await apiFetch<{ ok: boolean; metrics: AdminMetrics }>("/admin/metrics");
@@ -91,5 +107,3 @@ export async function fetchStripeHealth() {
     return null;
   }
 }
-
-f
