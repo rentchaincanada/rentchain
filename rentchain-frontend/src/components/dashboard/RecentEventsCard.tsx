@@ -7,6 +7,8 @@ type Props = {
   loading?: boolean;
   onOpenLedger?: () => void;
   openLedgerEnabled?: boolean;
+  title?: string;
+  emptyLabel?: string;
 };
 
 function formatDate(value: any): string {
@@ -26,7 +28,14 @@ function formatDate(value: any): string {
   }
 }
 
-export function RecentEventsCard({ events, loading, onOpenLedger, openLedgerEnabled }: Props) {
+export function RecentEventsCard({
+  events,
+  loading,
+  onOpenLedger,
+  openLedgerEnabled,
+  title = "Recent Events",
+  emptyLabel = "No recent events yet.",
+}: Props) {
   const skeletonRows = Array.from({ length: 8 });
   const list = Array.isArray(events) ? events.slice(0, 10) : [];
   const canOpenLedger = Boolean(onOpenLedger) && openLedgerEnabled !== false;
@@ -34,7 +43,7 @@ export function RecentEventsCard({ events, loading, onOpenLedger, openLedgerEnab
   return (
     <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: spacing.sm }}>
-        <div style={{ fontWeight: 800 }}>Recent Events</div>
+        <div style={{ fontWeight: 800 }}>{title}</div>
         <Button
           onClick={canOpenLedger ? onOpenLedger : undefined}
           disabled={!canOpenLedger}
@@ -58,7 +67,7 @@ export function RecentEventsCard({ events, loading, onOpenLedger, openLedgerEnab
           ))}
         </div>
       ) : list.length === 0 ? (
-        <div style={{ color: text.muted, fontSize: 13 }}>No recent events yet.</div>
+        <div style={{ color: text.muted, fontSize: 13 }}>{emptyLabel}</div>
       ) : (
         <div style={{ display: "grid", gap: 10 }}>
           {list.map((ev, idx) => {

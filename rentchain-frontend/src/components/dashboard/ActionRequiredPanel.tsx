@@ -7,16 +7,25 @@ type Props = {
   loading?: boolean;
   onViewAll?: () => void;
   viewAllEnabled?: boolean;
+  title?: string;
+  emptyLabel?: string;
 };
 
-export function ActionRequiredPanel({ items, loading, onViewAll, viewAllEnabled }: Props) {
+export function ActionRequiredPanel({
+  items,
+  loading,
+  onViewAll,
+  viewAllEnabled,
+  title = "Action Required",
+  emptyLabel = "No action items right now.",
+}: Props) {
   const skeletonRows = Array.from({ length: 5 });
   const canViewAll = Boolean(onViewAll) && viewAllEnabled !== false;
 
   return (
     <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: spacing.sm }}>
-        <div style={{ fontWeight: 800 }}>Action Required</div>
+        <div style={{ fontWeight: 800 }}>{title}</div>
         <Button
           onClick={canViewAll ? onViewAll : undefined}
           disabled={!canViewAll}
@@ -40,7 +49,7 @@ export function ActionRequiredPanel({ items, loading, onViewAll, viewAllEnabled 
           ))}
         </div>
       ) : items.length === 0 ? (
-        <div style={{ color: text.muted, fontSize: 13 }}>No action items right now.</div>
+        <div style={{ color: text.muted, fontSize: 13 }}>{emptyLabel}</div>
       ) : (
         <div style={{ display: "grid", gap: 10 }}>
           {items.slice(0, 5).map((item, idx) => {
@@ -59,6 +68,7 @@ export function ActionRequiredPanel({ items, loading, onViewAll, viewAllEnabled 
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
+                  gap: 10,
                 }}
               >
                 <div>
@@ -67,19 +77,39 @@ export function ActionRequiredPanel({ items, loading, onViewAll, viewAllEnabled 
                     <div style={{ color: text.muted, fontSize: 12 }}>{subtitleParts.join(" · ")}</div>
                   ) : null}
                 </div>
-                <div
-                  style={{
-                    padding: "4px 8px",
-                    borderRadius: 12,
-                    border: `1px solid ${colors.border}`,
-                    background: severity === "high" ? "rgba(239,68,68,0.12)" : "rgba(59,130,246,0.12)",
-                    color: severity === "high" ? "#dc2626" : "#1d4ed8",
-                    fontSize: 11,
-                    fontWeight: 700,
-                    textTransform: "capitalize",
-                  }}
-                >
-                  {severity}
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  {item?.href ? (
+                    <button
+                      type="button"
+                      onClick={() => window.location.assign(String(item.href))}
+                      style={{
+                        borderRadius: 10,
+                        border: `1px solid ${colors.border}`,
+                        background: colors.card,
+                        color: text.primary,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        padding: "4px 8px",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Open
+                    </button>
+                  ) : null}
+                  <div
+                    style={{
+                      padding: "4px 8px",
+                      borderRadius: 12,
+                      border: `1px solid ${colors.border}`,
+                      background: severity === "high" ? "rgba(239,68,68,0.12)" : "rgba(59,130,246,0.12)",
+                      color: severity === "high" ? "#dc2626" : "#1d4ed8",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      textTransform: "capitalize",
+                    }}
+                  >
+                    {severity}
+                  </div>
                 </div>
               </div>
             );
