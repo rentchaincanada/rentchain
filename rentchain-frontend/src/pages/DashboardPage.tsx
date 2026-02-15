@@ -259,9 +259,47 @@ const DashboardPage: React.FC = () => {
     tenantsCount: data?.kpis?.tenantsCount ?? 0,
     openActionsCount: data?.kpis?.openActionsCount ?? 0,
     delinquentCount: data?.kpis?.delinquentCount ?? 0,
+    screeningsCount: data?.kpis?.screeningsCount ?? 0,
   };
-  const actions = data?.actions ?? [];
-  const events = data?.events ?? [];
+  const events = Array.isArray(data?.events) ? data.events : [];
+  const fallbackActions = React.useMemo(() => {
+    const items: Array<{ id: string; title: string; severity: "info"; href: string }> = [];
+    if (userTier === "starter") {
+      items.push({
+        id: "upgrade-pro",
+        title: "Upgrade to Pro to unlock screening",
+        severity: "info",
+        href: "/billing",
+      });
+      return items;
+    }
+    if ((kpis.screeningsCount ?? 0) === 0) {
+      items.push({
+        id: "run-first-screening",
+        title: "Run your first screening",
+        severity: "info",
+        href: "/applications",
+      });
+    }
+    if (tenantCount === 0) {
+      items.push({
+        id: "invite-tenant",
+        title: "Invite a tenant",
+        severity: "info",
+        href: "/tenants",
+      });
+    }
+    if (derivedPropertiesCount === 0) {
+      items.push({
+        id: "add-property",
+        title: "Add a property",
+        severity: "info",
+        href: "/properties",
+      });
+    }
+    return items;
+  }, [derivedPropertiesCount, kpis.screeningsCount, tenantCount, userTier]);
+  const actions = Array.isArray(data?.actions) && data.actions.length > 0 ? data.actions : fallbackActions;
 
   const dataReady =
     !loading && !propsLoading && !applicationsLoading && !tenantsLoading && !invitesLoading && !error;
@@ -630,8 +668,20 @@ const DashboardPage: React.FC = () => {
                 marginTop: spacing.md,
               }}
             >
-              <ActionRequiredPanel items={actions} loading={loading} viewAllEnabled={false} />
-              <RecentEventsCard events={events} loading={loading} openLedgerEnabled={false} />
+              <ActionRequiredPanel
+                items={actions}
+                loading={loading}
+                viewAllEnabled={false}
+                title="Next actions"
+                emptyLabel="No next actions right now."
+              />
+              <RecentEventsCard
+                events={events}
+                loading={loading}
+                openLedgerEnabled={false}
+                title="Recent activity"
+                emptyLabel="No recent activity yet."
+              />
             </div>
           </details>
         ) : dataReady ? (
@@ -642,8 +692,20 @@ const DashboardPage: React.FC = () => {
               gap: spacing.md,
             }}
           >
-            <ActionRequiredPanel items={actions} loading={loading} viewAllEnabled={false} />
-            <RecentEventsCard events={events} loading={loading} openLedgerEnabled={false} />
+            <ActionRequiredPanel
+              items={actions}
+              loading={loading}
+              viewAllEnabled={false}
+              title="Next actions"
+              emptyLabel="No next actions right now."
+            />
+            <RecentEventsCard
+              events={events}
+              loading={loading}
+              openLedgerEnabled={false}
+              title="Recent activity"
+              emptyLabel="No recent activity yet."
+            />
           </div>
         ) : null}
 
