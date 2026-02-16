@@ -19,6 +19,36 @@ router.get("/health", (_req, res) => {
   res.json({ ok: true, service: "billing", ts: Date.now() });
 });
 
+type SubscriptionStatusTier = "starter" | "pro" | "business" | "elite";
+type SubscriptionStatusInterval = "month" | "year" | null;
+
+function normalizeSubscriptionStatusTier(input: any): SubscriptionStatusTier {
+  const raw = String(input || "").trim().toLowerCase();
+  if (raw === "pro" || raw === "professional") return "pro";
+  if (raw === "business" || raw === "enterprise") return "business";
+  if (raw === "elite") return "elite";
+  return "starter";
+}
+
+function sendSubscriptionStatus(req: any, res: any) {
+  const tier = normalizeSubscriptionStatusTier(req.user?.plan);
+  const interval: SubscriptionStatusInterval = null;
+  const renewalDate: string | null = null;
+  const isActive = tier !== "starter";
+
+  return res.status(200).json({
+    ok: true,
+    tier,
+    interval,
+    renewalDate,
+    isActive,
+  });
+}
+
+router.get("/subscription-status", requireAuth, sendSubscriptionStatus);
+// Compatibility alias in case any client still calls /api/billing/billing/subscription-status.
+router.get("/billing/subscription-status", requireAuth, sendSubscriptionStatus);
+
 router.get("/pricing", (_req, res) => {
   res.setHeader("x-route-source", "billingRoutes.ts");
   const plans = getPlanMatrix().map((plan) => ({
