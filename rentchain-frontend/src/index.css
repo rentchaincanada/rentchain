@@ -73,39 +73,53 @@ canvas {
 }
 
 .rc-logo-link {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  height: 100%;
-  line-height: 0;
+  justify-content: flex-start;
+  gap: 10px;
+  line-height: 1;
+  white-space: nowrap;
 }
 
-.rc-logo {
+.rc-logo-link-sm {
+  --rc-logo-icon-size: 24px;
+  --rc-logo-text-size: 18px;
+}
+
+.rc-logo-link-md {
+  --rc-logo-icon-size: 28px;
+  --rc-logo-text-size: 22px;
+}
+
+.rc-logo-link-dark {
+  color: #fff;
+}
+
+.rc-logo-icon {
+  width: var(--rc-logo-icon-size, 24px);
+  height: var(--rc-logo-icon-size, 24px);
+  border-radius: 6px;
   display: block;
-  width: auto;
-  height: var(--rc-logo-h, 28px);
-  max-width: none;
+  flex: 0 0 auto;
 }
 
-.rc-logo-sm {
-  --rc-logo-h: 28px;
-}
-
-.rc-logo-md {
-  --rc-logo-h: 40px;
-}
-
-.rc-logo-dark {
-  filter: brightness(0) invert(1);
+.rc-logo-wordmark {
+  font-size: var(--rc-logo-text-size, 18px);
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: currentColor;
+  line-height: 1;
 }
 
 @media (max-width: 768px) {
-  .rc-logo-md {
-    --rc-logo-h: 32px;
+  .rc-logo-link-md {
+    --rc-logo-icon-size: 24px;
+    --rc-logo-text-size: 19px;
   }
 
-  .rc-logo-sm {
-    --rc-logo-h: 26px;
+  .rc-logo-link-sm {
+    --rc-logo-icon-size: 22px;
+    --rc-logo-text-size: 17px;
   }
 }
 

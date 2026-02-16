@@ -1,6 +1,5 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import wordmark from "../../assets/brand/rentchain-wordmark.png";
 
 type RentChainLogoProps = {
   variant?: "light" | "dark";
@@ -15,13 +14,19 @@ export const RentChainLogo: React.FC<RentChainLogoProps> = ({
   href,
   className = "",
 }) => {
-  const imgClassName = ["rc-logo", size === "sm" ? "rc-logo-sm" : "rc-logo-md", variant === "dark" ? "rc-logo-dark" : ""]
+  const linkClassName = [
+    "rc-logo-link",
+    size === "sm" ? "rc-logo-link-sm" : "rc-logo-link-md",
+    variant === "dark" ? "rc-logo-link-dark" : "",
+    className,
+  ]
     .filter(Boolean)
     .join(" ");
 
   return (
-    <Link to={href} aria-label="RentChain home" className={["rc-logo-link", className].filter(Boolean).join(" ")}>
-      <img src={wordmark} alt="RentChain" className={imgClassName} />
+    <Link to={href} aria-label="RentChain home" className={linkClassName}>
+      <img src="/icons/icon-192-light.png" alt="" aria-hidden="true" className="rc-logo-icon" />
+      <span className="rc-logo-wordmark">RentChain</span>
     </Link>
   );
 };
