@@ -138,7 +138,7 @@ const ApplicationsPage: React.FC = () => {
   const [propertiesError, setPropertiesError] = useState<string | null>(null);
   const propertiesLoaded = !propertiesLoading;
   const propertiesReady = propertiesLoaded && !propertiesError;
-  const { features, loading: loadingCaps } = useCapabilities();
+  const { caps, features, loading: loadingCaps } = useCapabilities();
   const { user } = useAuth();
   const { openUpgrade } = useUpgrade();
   const [screeningQuote, setScreeningQuote] = useState<ScreeningQuote | null>(null);
