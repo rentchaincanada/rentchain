@@ -33,7 +33,6 @@ export interface AuthUser {
   landlordId?: string;
   tenantId?: string;
   leaseId?: string;
-  screeningCredits?: number;
   plan?: string;
   actorRole?: string | null;
   actorLandlordId?: string | null;

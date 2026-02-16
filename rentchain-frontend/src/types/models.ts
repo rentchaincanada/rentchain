@@ -72,7 +72,6 @@ export interface PropertyActionRequest {
 export interface Landlord {
   id: string;
   email: string;
-  screeningCredits?: number;
   createdAt?: string;
 }
 
