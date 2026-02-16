@@ -14,13 +14,19 @@ import { hashInviteToken } from "../services/screening/inviteTokens";
 import { writeScreeningEvent } from "../services/screening/screeningEvents";
 import { getBureauProvider } from "../services/screening/providers/bureauProvider";
 import { getPricingHealth } from "../config/planMatrix";
+import { getEnvFlags } from "../config/requiredEnv";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 
 const router = Router();
 
 router.get("/health", (_req, res) => {
   res.setHeader("x-route-source", "publicRoutes.ts");
-  res.json({ ok: true, service: "rentchain-api", ts: Date.now() });
+  res.json({
+    ok: true,
+    service: "rentchain-api",
+    ts: Date.now(),
+    config: getEnvFlags(),
+  });
 });
 
 router.get("/_probe/billing", (_req, res) => {
