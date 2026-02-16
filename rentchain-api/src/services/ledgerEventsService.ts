@@ -5,7 +5,6 @@ export type LedgerEventType =
   | "payment_created"
   | "payment_updated"
   | "payment_deleted"
-  | "screening_credit_used"
   | "charge_created"
   | "charge_issued"
   | "charge_confirmed"

@@ -6,7 +6,6 @@ export type AccountLimits = {
   limits: {
     maxProperties: number;
     maxUnits: number;
-    screeningCreditsMonthly: number;
   };
   capabilities: Record<string, boolean>;
   usage?: {
@@ -38,7 +37,7 @@ export async function fetchAccountLimits(token?: string): Promise<AccountLimits 
     return {
       status: "unavailable",
       plan: "starter",
-      limits: { maxProperties: 0, maxUnits: 0, screeningCreditsMonthly: 0 },
+      limits: { maxProperties: 0, maxUnits: 0 },
       capabilities: {},
       usage: { properties: 0, units: 0 },
     };

@@ -23,7 +23,7 @@ if (!STUBS_ENABLED) {
     })
   );
   r.get("/landlord/billing/usage", (_req, res) =>
-    res.json({ ok: true, usage: { screeningCreditsUsed: 0, period: "month" } })
+    res.json({ ok: true, usage: { screeningsUsed: 0, period: "month" } })
   );
 
   // action requests (support both GET+POST because your FE is POSTing counts)

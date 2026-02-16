@@ -5,7 +5,6 @@ export type LedgerEventType =
   | "payment_created"
   | "payment_updated"
   | "payment_deleted"
-  | "screening_credit_used"
   | "charge_created";
 export type ScreeningProvider = "mock" | "singlekey" | "providerA" | "stubbed_screening";
 export type ScreeningStatus =
@@ -13,7 +12,6 @@ export type ScreeningStatus =
   | "paid"
   | "completed"
   | "failed"
-  | "blocked_no_credits"
   | "queued";
 export type PaymentMethod = "manual" | "cash" | "e-transfer" | "cheque" | "card" | string;
 export interface PortfolioSnapshot {
