@@ -1,4 +1,5 @@
 steps:
+  # Preflight: ensure required env names exist on the Cloud Run service (names only, no values)
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     entrypoint: bash
     args:
@@ -8,6 +9,7 @@ steps:
         SERVICE="rentchain-landlord-api"
         REGION="us-central1"
         REQUIRED=("JWT_SECRET" "FIREBASE_API_KEY")
+
         ENV_NAMES="$(gcloud run services describe "$SERVICE" \
           --region "$REGION" \
           --format="value(spec.template.spec.containers[0].env[].name)" \
@@ -26,6 +28,8 @@ steps:
         fi
 
         echo "Cloud Run preflight passed."
+
+  # Deploy: retry on Cloud Run optimistic-lock conflicts
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     entrypoint: bash
     args:
@@ -34,6 +38,7 @@ steps:
         set -euo pipefail
         SERVICE="rentchain-landlord-api"
         REGION="us-central1"
+
         for i in 1 2 3 4 5; do
           echo "Deploy attempt $i..."
           if gcloud run deploy "$SERVICE" \
@@ -48,6 +53,8 @@ steps:
           echo "Deploy failed (likely conflict). Sleeping..."
           sleep $((i*5))
         done
+
+        echo "Deploy failed after retries"
         exit 1
 
 options:
