@@ -87,8 +87,8 @@ canvas {
 }
 
 .rc-logo-link-md {
-  --rc-logo-icon-size: 28px;
-  --rc-logo-text-size: 22px;
+  --rc-logo-icon-size: 30px;
+  --rc-logo-text-size: 24px;
 }
 
 .rc-logo-link-dark {
@@ -113,8 +113,8 @@ canvas {
 
 @media (max-width: 768px) {
   .rc-logo-link-md {
-    --rc-logo-icon-size: 24px;
-    --rc-logo-text-size: 19px;
+    --rc-logo-icon-size: 26px;
+    --rc-logo-text-size: 21px;
   }
 
   .rc-logo-link-sm {
