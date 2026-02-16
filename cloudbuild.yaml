@@ -1,19 +1,47 @@
 steps:
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        SERVICE="rentchain-landlord-api"
+        REGION="us-central1"
+        REQUIRED=("JWT_SECRET" "FIREBASE_API_KEY")
+        ENV_NAMES_RAW="$(gcloud run services describe "$SERVICE" --region "$REGION" --format='get(spec.template.spec.containers[0].env[].name)')"
+        ENV_NAMES="$(echo "$ENV_NAMES_RAW" | tr ';,' '\n' | sed 's/[[:space:]]//g' | sed '/^$/d')"
+
+        MISSING=()
+        for name in "${REQUIRED[@]}"; do
+          if ! grep -qx "$name" <<< "$ENV_NAMES"; then
+            MISSING+=("$name")
+          fi
+        done
+
+        if [ "${#MISSING[@]}" -gt 0 ]; then
+          echo "Cloud Run preflight failed. Missing required env names: ${MISSING[*]}"
+          exit 1
+        fi
+
+        echo "Cloud Run preflight passed. Required env names are present."
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     entrypoint: gcloud
     args:
       [
-        'run', 'deploy', 'rentchain-landlord-api',
-        '--source', './rentchain-api',
-        '--region', 'us-central1',
-        '--platform', 'managed',
-        '--allow-unauthenticated',
-        '--set-env-vars', 'COMMIT_SHA=${COMMIT_SHA}',
-        '--set-secrets', 'FIREBASE_API_KEY=firebase-web-api-key:latest'
+        "run",
+        "deploy",
+        "rentchain-landlord-api",
+        "--source",
+        "./rentchain-api",
+        "--region",
+        "us-central1",
+        "--platform",
+        "managed",
+        "--allow-unauthenticated"
       ]
 
 options:
   logging: CLOUD_LOGGING_ONLY
-  machineType: 'E2_MEDIUM'
+  machineType: "E2_MEDIUM"
 
-timeout: '1200s'
+timeout: "1200s"
