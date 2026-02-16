@@ -47,7 +47,6 @@ router.get("/limits", async (req: any, res) => {
     limits: {
       maxProperties: Number.MAX_SAFE_INTEGER,
       maxUnits: Number.MAX_SAFE_INTEGER,
-      screeningCreditsMonthly: 0,
     },
     capabilities,
     usage,
