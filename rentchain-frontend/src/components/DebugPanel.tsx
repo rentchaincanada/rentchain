@@ -116,7 +116,6 @@ export const DebugPanel: React.FC = () => {
         </div>
         <div>Properties: {usage.properties ?? "N/A"}/{planLimits.maxProperties}</div>
         <div>Units: {usage.units ?? "N/A"}/{planLimits.maxUnits}</div>
-        <div>Screening credits/mo: {normalizedLimits.screeningCreditsMonthly ?? "N/A"}</div>
         <div>AI: {capabilities["ai.insights"] ? "yes" : "no"}</div>
         <div>Screening: {capabilities["screening"] ? "yes" : "no"}</div>
         <div>Team Invites: {capabilities["team.invites"] ? "yes" : "no"}</div>

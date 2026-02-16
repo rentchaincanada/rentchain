@@ -6,7 +6,6 @@ import { awaitFirebaseAuthReady } from "@/lib/firebaseAuthToken";
 export interface AuthUser {
   id: string;
   email: string;
-  screeningCredits?: number;
   role?: string;
   landlordId?: string;
   tenantId?: string;
@@ -218,7 +217,6 @@ export async function restoreSession(): Promise<{ user: any | null }> {
           role,
           tenantId: tenantId ?? undefined,
           leaseId: leaseId ?? undefined,
-          screeningCredits: 0,
         },
       };
     }

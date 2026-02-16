@@ -7,7 +7,7 @@ import {
   checkoutScreening,
   getScreening,
   downloadScreeningPdf,
-  runScreeningWithCredits,
+  runScreening,
 } from "../api/screeningApi";
 import type { ScreeningRequest } from "../api/screeningApi";
 import { buildScreeningPayload, fetchApplication } from "@/api/applicationsApi";
@@ -17,7 +17,6 @@ import { deriveScreeningReadiness } from "../api/applicationsScreeningApi";
 import { spacing, text } from "../styles/tokens";
 import { SUPPORT_EMAIL } from "../config/support";
 import { useToast } from "../components/ui/ToastProvider";
-import { useAuth } from "../context/useAuth";
 
 type Step = "review" | "applicant" | "payment" | "result";
 
@@ -30,7 +29,6 @@ export const ScreeningPage: React.FC = () => {
   const initialApplication =
     (location.state as any)?.application as Application | undefined;
   const applicationId = searchParams.get("applicationId");
-  const { user, updateUser } = useAuth();
   const [screeningPayload, setScreeningPayload] = useState<CreditReportPayload | null>(
     initialPayload ?? null
   );
@@ -49,7 +47,6 @@ export const ScreeningPage: React.FC = () => {
   const [loadingPayload, setLoadingPayload] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [missingRequirements, setMissingRequirements] = useState<string[]>([]);
-  const [showCreditsModal, setShowCreditsModal] = useState(false);
   const screeningReadiness = useMemo(
     () => deriveScreeningReadiness(application),
     [application]
@@ -140,26 +137,14 @@ export const ScreeningPage: React.FC = () => {
     setError(null);
     setMissingRequirements([]);
     setLoading(true);
-    runScreeningWithCredits(applicationId)
-      .then(({ screeningRequest, screeningCredits }) => {
+    runScreening(applicationId)
+      .then((screeningRequest) => {
         setScreeningRequestId(screeningRequest.id);
         setScreening(screeningRequest);
-        updateUser({ screeningCredits });
         setStep("result");
       })
       .catch((err: any) => {
         const message = err?.message || "Unable to start screening.";
-        if (err?.code === "insufficient_credits") {
-          setShowCreditsModal(true);
-          setError(message);
-          updateUser({
-            screeningCredits:
-              err?.screeningCredits !== undefined
-                ? err.screeningCredits
-                : user?.screeningCredits,
-          });
-          return;
-        }
         if (message.toLowerCase().includes("not ready for screening")) {
           const missing = screeningReadiness.missing;
           setMissingRequirements(missing);
@@ -178,8 +163,6 @@ export const ScreeningPage: React.FC = () => {
     screeningRequestId,
     screeningReadiness.canRun,
     screeningReadiness.missing.join("|"),
-    updateUser,
-    user?.screeningCredits,
   ]);
 
   useEffect(() => {
@@ -272,21 +255,6 @@ export const ScreeningPage: React.FC = () => {
               <div style={{ marginTop: 4, color: text.muted, fontSize: "0.95rem" }}>
                 Capture consent, simulate payment, and view a stubbed credit report.
               </div>
-            </div>
-            <div
-              style={{
-                alignSelf: "center",
-                padding: "6px 10px",
-                borderRadius: 12,
-                border: "1px solid rgba(59,130,246,0.3)",
-                background: "rgba(59,130,246,0.08)",
-                color: "#0f172a",
-                fontSize: "0.9rem",
-                minWidth: 180,
-                textAlign: "center",
-              }}
-            >
-              Screening credits: {user?.screeningCredits ?? 0}
             </div>
           </div>
         </Card>
@@ -572,62 +540,6 @@ export const ScreeningPage: React.FC = () => {
         </div>
       </div>
 
-      {showCreditsModal && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(15,23,42,0.75)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 9999,
-          }}
-        >
-          <div
-            style={{
-              background: "#0b1220",
-              border: "1px solid rgba(59,130,246,0.4)",
-              borderRadius: 14,
-              padding: spacing.lg,
-              width: "min(480px, 90vw)",
-              boxShadow: "0 20px 50px rgba(0,0,0,0.35)",
-              color: text.primary,
-            }}
-          >
-            <h3 style={{ marginTop: 0, marginBottom: 8, fontSize: "1.2rem" }}>
-              Add screening credits
-            </h3>
-            <div style={{ color: text.muted, marginBottom: spacing.sm, lineHeight: 1.5 }}>
-              You need screening credits to run this report. Purchase credits from Billing or contact support for a launch pack.
-            </div>
-            <div style={{ display: "flex", gap: spacing.sm, marginTop: spacing.sm }}>
-              <Button type="button" onClick={() => setShowCreditsModal(false)} variant="secondary">
-                Close
-              </Button>
-              <Button
-                type="button"
-                onClick={() => {
-                  setShowCreditsModal(false);
-                  window.location.href = "/billing";
-                }}
-              >
-                Go to Billing
-              </Button>
-              <Button
-                type="button"
-                onClick={() => {
-                  setShowCreditsModal(false);
-                  window.location.href = "/billing";
-                }}
-                variant="ghost"
-              >
-                View pricing
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </MacShell>
   );
 };

@@ -49,10 +49,6 @@ export interface ScreeningRequestResponse {
   screeningRequest: ScreeningRequest;
 }
 
-export interface ScreeningCreditsResponse {
-  screeningCredits: number;
-}
-
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     let message = `Request failed with status ${response.status}`;
@@ -80,22 +76,13 @@ export async function requestScreening(
   return data.screeningRequest;
 }
 
-export async function runScreeningWithCredits(
-  applicationId: string
-): Promise<{ screeningRequest: ScreeningRequest; screeningCredits: number }> {
-  const data = await apiFetch<{
-    screeningRequest: ScreeningRequest;
-    screeningCredits: number;
-  }>(`/screenings/run`, {
+export async function runScreening(applicationId: string): Promise<ScreeningRequest> {
+  const data = await apiFetch<ScreeningRequestResponse>(`/screenings/run`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ applicationId }),
   });
-  return data;
-}
-
-export async function fetchScreeningCredits(): Promise<ScreeningCreditsResponse> {
-  return apiFetch<ScreeningCreditsResponse>(`/screenings/credits`);
+  return data.screeningRequest;
 }
 
 export async function checkoutScreening(id: string): Promise<string> {
