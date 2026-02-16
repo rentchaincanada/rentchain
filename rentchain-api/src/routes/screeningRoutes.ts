@@ -18,6 +18,7 @@ import { getStripeClient, isStripeConfigured } from "../services/stripeService";
 import { stripeNotConfiguredResponse, isStripeNotConfiguredError } from "../lib/stripeNotConfigured";
 import {
   FRONTEND_URL,
+  FRONTEND_URL_CONFIGURED,
   SCREENING_CURRENCY,
   SCREENING_PRICE_CENTS,
 } from "../config/screeningConfig";
@@ -26,17 +27,7 @@ import { getLastEmailPreview } from "../services/emailService";
 import { recordApplicationEvent } from "../services/applicationEventsService";
 import { propertyService } from "../services/propertyService";
 import { getFlags } from "../services/featureFlagService";
-import {
-  decrementScreeningCredit,
-  ensureLandlordProfile,
-  getLandlordProfile,
-} from "../services/landlordProfileService";
-import { recordScreeningCreditUsed } from "../services/screeningCreditEventsService";
-import {
-  markScreeningPaid,
-  completeScreening,
-} from "../services/screeningRequestService";
-import { createLedgerEvent } from "../services/ledgerEventsService";
+import { runScreeningWithCredits } from "../services/screeningsService";
 import { attachAccount } from "../middleware/attachAccount";
 import { requireFeature } from "../middleware/entitlements";
 import { getScreeningProviderHealth } from "../services/screening/providerHealth";
@@ -53,19 +44,6 @@ router.get("/screenings/config", (_req, res: Response) => {
     priceCents: SCREENING_PRICE_CENTS || 2999,
   });
 });
-
-router.get(
-  "/screenings/credits",
-  (req: AuthenticatedRequest, res: Response) => {
-    if (!req.user?.id) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
-    const profile = ensureLandlordProfile(req.user.id, req.user.email);
-    return res
-      .status(200)
-      .json({ screeningCredits: profile?.screeningCredits ?? 0 });
-  }
-);
 
 router.post(
   "/screenings/run",
@@ -100,21 +78,8 @@ router.post(
       applicationId: application.id,
     })
       .then((result) => {
-        if (result.status === "blocked_no_credits") {
-          const profile = ensureLandlordProfile(req.user!.id, req.user!.email);
-          return res.status(402).json({
-            error: "insufficient_credits",
-            message:
-              "No screening credits available. Add credits to run a screening.",
-            screeningCredits: profile?.screeningCredits ?? 0,
-          });
-        }
         return res.status(201).json({
           screeningRequest: result.screeningRequest,
-          screeningCredits: ensureLandlordProfile(
-            req.user!.id,
-            req.user!.email
-          )?.screeningCredits,
         });
       })
       .catch((err) => {

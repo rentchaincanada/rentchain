@@ -7,7 +7,6 @@ import { db } from "../config/firebase";
 export interface LandlordUser {
   id: string;
   email: string;
-  screeningCredits?: number;
   role?: string;
   landlordId?: string;
   plan?: string;
@@ -61,7 +60,6 @@ export async function validateLandlordCredentials(
         email: fb.email,
         role: "landlord",
         plan: "screening",
-        screeningCredits: 0,
       };
 
       await ref.set({ ...landlord, createdAt, planStartedAt: createdAt }, { merge: true });
@@ -77,7 +75,6 @@ export async function validateLandlordCredentials(
       email: data?.email || fb.email,
       role: data?.role || "landlord",
       plan: data?.plan || "screening",
-      screeningCredits: data?.screeningCredits ?? 0,
     };
   } catch (err: any) {
     console.error("[auth/validate] firestore error", err?.message || err);

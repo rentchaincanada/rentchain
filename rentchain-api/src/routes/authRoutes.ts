@@ -13,7 +13,6 @@ import {
 } from "../services/totpService";
 import {
   ensureLandlordProfile,
-  getLandlordProfile,
 } from "../services/landlordProfileService";
 import { setPlan } from "../services/accountService";
 import { resolvePlan } from "../entitlements/plans";
@@ -38,7 +37,6 @@ type Landlord2FAUser = {
   twoFactorMethods?: string[];
   totpSecret?: string | null;
   backupCodes?: string[];
-  screeningCredits?: number;
 };
 
 const landlordStoreByEmail: Record<string, Landlord2FAUser> = {};
@@ -95,8 +93,7 @@ function rateLimit(key: string) {
 function ensureLandlordEntry(base: Landlord2FAUser): Landlord2FAUser {
   const existing = landlordStoreByEmail[base.email];
   if (existing) {
-    const profile = ensureLandlordProfile(existing.id, existing.email);
-    existing.screeningCredits = profile?.screeningCredits;
+    ensureLandlordProfile(existing.id, existing.email);
     landlordStoreById[existing.id] = existing;
     return existing;
   }
@@ -107,13 +104,11 @@ function ensureLandlordEntry(base: Landlord2FAUser): Landlord2FAUser {
     twoFactorMethods: base.twoFactorMethods ?? [],
     totpSecret: base.totpSecret ?? null,
     backupCodes: base.backupCodes ?? [],
-    screeningCredits: base.screeningCredits,
   };
 
   landlordStoreByEmail[initialized.email] = initialized;
   landlordStoreById[initialized.id] = initialized;
-  const profile = ensureLandlordProfile(initialized.id, initialized.email);
-  initialized.screeningCredits = profile?.screeningCredits;
+  ensureLandlordProfile(initialized.id, initialized.email);
   return initialized;
 }
 
@@ -266,7 +261,6 @@ router.post("/login", rateLimitAuth, async (req, res) => {
       role: profile.role || "landlord",
       landlordId: profile.landlordId || fbUser.id,
       plan,
-      screeningCredits: profile?.screeningCredits ?? fbUser?.screeningCredits,
       permissions: [],
       revokedPermissions: [],
     } as any);
@@ -301,7 +295,6 @@ router.post("/login", rateLimitAuth, async (req, res) => {
       user: {
         ...user,
         approved: approval.approved,
-        screeningCredits: profile?.screeningCredits ?? (user as any)?.screeningCredits ?? 0,
       },
     });
   } catch (err: any) {
@@ -407,7 +400,7 @@ router.post("/login/demo", rateLimitAuth, async (_req, res) => {
 	  }
 
   const token = generateJwtForLandlord({ ...user, plan: demoPlan } as any, "7d");
-  const profile = ensureLandlordProfile(user.id, user.email);
+  ensureLandlordProfile(user.id, user.email);
 
   try {
     await maybeGrantMicroLiveFromLead(user.email, user.id);
@@ -417,10 +410,7 @@ router.post("/login/demo", rateLimitAuth, async (_req, res) => {
 
   return res.json({
     token,
-    user: {
-      ...user,
-      screeningCredits: profile?.screeningCredits ?? 0,
-    },
+    user,
   });
 });
 
@@ -491,14 +481,13 @@ router.post("/2fa/verify", rateLimit("2fa-verify"), async (req, res) => {
   }
 
   const token = generateJwtForLandlord({ id: user.id, email: user.email });
-  const profile = ensureLandlordProfile(user.id, user.email);
+  ensureLandlordProfile(user.id, user.email);
 
   res.status(200).json({
     token,
     user: {
       id: user.id,
       email: user.email,
-      screeningCredits: profile?.screeningCredits ?? 0,
     },
   });
 });
@@ -749,13 +738,10 @@ router.get(
       res.status(401).json({ error: "Unauthorized" });
       return;
     }
-    const profile = getLandlordProfile(req.user.id);
-
     res.status(200).json({
       user: {
         id: req.user.id,
         email: req.user.email,
-        screeningCredits: profile?.screeningCredits ?? 0,
       },
     });
   }
