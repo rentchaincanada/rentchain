@@ -4,7 +4,7 @@ import { Card, Button } from "../components/ui/Ui";
 import { colors, text } from "../styles/tokens";
 import {
   fetchReviewSummary,
-  reviewSummaryPdfUrl,
+  fetchReviewSummaryPdfSignedUrl,
   type ApplicationReviewSummary,
   ReviewSummaryApiError,
 } from "../api/reviewSummaryApi";
@@ -124,9 +124,17 @@ function ApplicationReviewSummaryPageBody() {
     return `${window.location.origin}/applications/${id}/review-summary`;
   }, [id]);
 
-  const downloadPdf = () => {
-    const url = reviewSummaryPdfUrl(id);
-    window.open(url, "_blank", "noopener,noreferrer");
+  const downloadPdf = async () => {
+    try {
+      const url = await fetchReviewSummaryPdfSignedUrl(id);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (err: any) {
+      showToast({
+        message: "Unable to open PDF",
+        description: err?.message || "Failed to load review summary PDF.",
+        variant: "error",
+      });
+    }
   };
 
   const copyText = async (value: string, successMessage: string) => {
@@ -147,7 +155,7 @@ function ApplicationReviewSummaryPageBody() {
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Button variant="ghost" onClick={() => navigate(-1)}>Back</Button>
-          <Button variant="secondary" onClick={downloadPdf}>Download PDF</Button>
+          <Button variant="secondary" onClick={() => void downloadPdf()}>Download PDF</Button>
           <Button variant="secondary" onClick={() => void copyText(shareUrl, "Share link copied")}>Copy link</Button>
           {summary?.screening?.referenceId ? (
             <Button

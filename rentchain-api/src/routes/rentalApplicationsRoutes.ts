@@ -15,7 +15,7 @@ import { buildScreeningPdf } from "../services/screening/reportPdf";
 import { buildShareUrl, createReportExport } from "../services/screening/reportExportService";
 import { getScreeningProviderHealth } from "../services/screening/providerHealth";
 import { buildTenantInviteUrl, createInviteToken } from "../services/screening/inviteTokens";
-import { createSignedUrl } from "../storage/pdfStore";
+import { createSignedUrl, putPdfObject } from "../storage/pdfStore";
 import { buildReviewSummary, buildReviewSummaryPdf } from "../lib/reviewSummary";
 import { rateLimitScreeningIp, rateLimitScreeningUser } from "../middleware/rateLimit";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
@@ -1809,9 +1809,19 @@ router.get("/rental-applications/:id/review-summary.pdf", async (req: any, res) 
     }
     const summary = buildReviewSummary(id, access.data);
     const pdfBuffer = await buildReviewSummaryPdf(summary);
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `inline; filename=\"application-review-summary-${id}.pdf\"`);
-    return res.status(200).send(pdfBuffer);
+    const timestamp = Date.now();
+    const objectKey = `review-summaries/${id}/application-review-summary-${timestamp}.pdf`;
+    const uploaded = await putPdfObject({
+      objectKey,
+      pdfBuffer,
+    });
+    const url = await createSignedUrl({
+      bucket: uploaded.bucket,
+      objectKey: uploaded.path,
+      expiresSeconds: 10 * 60,
+    });
+
+    return res.status(200).json({ ok: true, url });
   } catch (err: any) {
     console.error("[review_summary_pdf] failed", err?.message || err);
     return res.status(500).json({
