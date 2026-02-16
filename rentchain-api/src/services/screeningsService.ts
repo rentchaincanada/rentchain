@@ -5,11 +5,6 @@ import {
   sanitizeScreeningResponse,
 } from "./screeningRequestService";
 import { getApplicationById, saveApplication } from "./applicationsService";
-import {
-  decrementScreeningCredit,
-  ensureLandlordProfile,
-} from "./landlordProfileService";
-import { recordScreeningCreditUsed } from "./screeningCreditEventsService";
 import { recordApplicationEvent } from "./applicationEventsService";
 import { getFlags } from "./featureFlagService";
 
@@ -28,19 +23,6 @@ export async function runScreeningWithCredits(options: {
     return { status: "error", message: "Application not found" };
   }
 
-  const existingProfile = ensureLandlordProfile(options.landlordId, options.landlordEmail);
-  if (!existingProfile || existingProfile.screeningCredits <= 0) {
-    return { status: "blocked_no_credits" };
-  }
-
-  const debit = decrementScreeningCredit({
-    landlordId: options.landlordId,
-    email: options.landlordEmail,
-  });
-  if (!debit.ok) {
-    return { status: "blocked_no_credits" };
-  }
-
   const screeningRequest = createScreeningRequestForApplication({
     applicationId: application.id,
     landlordId: options.landlordId,
@@ -53,15 +35,10 @@ export async function runScreeningWithCredits(options: {
   markScreeningPaid(screeningRequest.id);
   completeScreening(screeningRequest.id);
 
-  recordScreeningCreditUsed({
-    landlordId: options.landlordId,
-    referenceId: screeningRequest.id,
-  });
-
   recordApplicationEvent({
     applicationId: application.id,
     type: "screening_paid",
-    message: "Screening credit used",
+    message: "Screening paid",
     actor: "landlord",
     metadata: { screeningRequestId: screeningRequest.id },
   });

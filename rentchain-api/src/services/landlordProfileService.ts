@@ -4,7 +4,6 @@ import { db } from "../config/firebase";
 export interface LandlordProfile {
   id: string;
   email: string;
-  screeningCredits: number;
   createdAt: string;
   updatedAt: string;
   plan?: string;
@@ -12,11 +11,6 @@ export interface LandlordProfile {
   role?: string;
   landlordId?: string;
 }
-
-const DEFAULT_CREDITS =
-  Number(process.env.DEMO_SCREENING_CREDITS) > 0
-    ? Number(process.env.DEMO_SCREENING_CREDITS)
-    : 3;
 
 const LANDLORD_PROFILES: Record<string, LandlordProfile> = {};
 
@@ -27,7 +21,6 @@ function seedDemo(): void {
   LANDLORD_PROFILES[id] = {
     id,
     email: DEMO_LANDLORD_EMAIL,
-    screeningCredits: DEFAULT_CREDITS,
     createdAt: now,
     updatedAt: now,
   };
@@ -52,7 +45,6 @@ export function ensureLandlordProfile(
   const profile: LandlordProfile = {
     id,
     email: email || "",
-    screeningCredits: DEFAULT_CREDITS,
     createdAt: now,
     updatedAt: now,
   };
@@ -64,29 +56,6 @@ export function getLandlordProfile(
   id: string
 ): LandlordProfile | undefined {
   return LANDLORD_PROFILES[id];
-}
-
-export function decrementScreeningCredit(options: {
-  landlordId: string;
-  email?: string | null;
-}): { ok: boolean; profile?: LandlordProfile } {
-  const profile = ensureLandlordProfile(options.landlordId, options.email);
-  if (!profile || profile.screeningCredits <= 0) {
-    return { ok: false };
-  }
-  profile.screeningCredits = Math.max(0, profile.screeningCredits - 1);
-  profile.updatedAt = new Date().toISOString();
-  return { ok: true, profile };
-}
-
-export function setScreeningCredits(
-  landlordId: string,
-  credits: number
-): LandlordProfile | undefined {
-  const profile = ensureLandlordProfile(landlordId);
-  profile.screeningCredits = Math.max(0, Math.floor(credits));
-  profile.updatedAt = new Date().toISOString();
-  return profile;
 }
 
 export async function getOrCreateLandlordProfile(input: {
@@ -104,7 +73,6 @@ export async function getOrCreateLandlordProfile(input: {
       id: uid,
       landlordId: uid,
       email: fallbackEmail,
-      screeningCredits: 0,
       createdAt: now,
       updatedAt: now,
       plan: "screening",
@@ -120,7 +88,6 @@ export async function getOrCreateLandlordProfile(input: {
     id: data?.id || uid,
     landlordId: data?.landlordId || uid,
     email: data?.email || fallbackEmail,
-    screeningCredits: data?.screeningCredits ?? 0,
     createdAt: data?.createdAt || data?.created_at || "",
     updatedAt: data?.updatedAt || data?.updated_at || "",
     plan: data?.plan || "screening",

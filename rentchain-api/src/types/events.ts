@@ -1,7 +1,6 @@
 export type AuditEventType =
   | "application_converted"
-  | "screening_triggered"
-  | "screening_blocked_no_credits";
+  | "screening_triggered";
 
 export interface AuditEvent {
   id: string;

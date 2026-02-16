@@ -5,10 +5,9 @@ export type LedgerEventType =
   | "payment_created"
   | "payment_updated"
   | "payment_deleted"
-  | "screening_credit_used"
   | "charge_created";
 export type ScreeningProvider = "mock" | "singlekey" | "providerA" | "stubbed_screening";
-export type ScreeningStatus = "requested" | "paid" | "completed" | "failed" | "blocked_no_credits" | "queued";
+export type ScreeningStatus = "requested" | "paid" | "completed" | "failed" | "queued";
 export type PaymentMethod = "manual" | "cash" | "e-transfer" | "cheque" | "card" | string;
 export interface PortfolioSnapshot {
   propertyCount: number;
@@ -66,7 +65,6 @@ export interface PropertyActionRequest {
 export interface Landlord {
   id: string;
   email: string;
-  screeningCredits?: number;
   createdAt?: string;
 }
 

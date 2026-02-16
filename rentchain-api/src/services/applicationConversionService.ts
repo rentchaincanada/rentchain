@@ -145,17 +145,6 @@ export async function convertApplicationToTenant(params: {
       });
     } else if (screening.status) {
       screeningResult = { screeningId: "", status: screening.status };
-      if (screening.status === "blocked_no_credits") {
-        await logAuditEvent({
-          landlordId: params.landlordId,
-          actorUserId: params.actorUserId,
-          type: "screening_blocked_no_credits",
-          applicationId: application.id,
-          tenantId,
-          payload: { status: screening.status },
-          occurredAt: new Date().toISOString(),
-        });
-      }
     }
   }
 
