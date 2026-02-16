@@ -1,4 +1,5 @@
 steps:
+  # Preflight: ensure required env names exist on the Cloud Run service (names only, no values)
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     entrypoint: bash
     args:
@@ -8,8 +9,11 @@ steps:
         SERVICE="rentchain-landlord-api"
         REGION="us-central1"
         REQUIRED=("JWT_SECRET" "FIREBASE_API_KEY")
-        ENV_NAMES_RAW="$(gcloud run services describe "$SERVICE" --region "$REGION" --format='get(spec.template.spec.containers[0].env[].name)')"
-        ENV_NAMES="$(echo "$ENV_NAMES_RAW" | tr ';,' '\n' | sed 's/[[:space:]]//g' | sed '/^$/d')"
+
+        ENV_NAMES="$(gcloud run services describe "$SERVICE" \
+          --region "$REGION" \
+          --format="value(spec.template.spec.containers[0].env[].name)" \
+          | tr ';' '\n' | tr -d '[:space:]' | sed '/^$/d')"
 
         MISSING=()
         for name in "${REQUIRED[@]}"; do
@@ -23,22 +27,35 @@ steps:
           exit 1
         fi
 
-        echo "Cloud Run preflight passed. Required env names are present."
+        echo "Cloud Run preflight passed."
+
+  # Deploy: retry on Cloud Run optimistic-lock conflicts
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
-    entrypoint: gcloud
+    entrypoint: bash
     args:
-      [
-        "run",
-        "deploy",
-        "rentchain-landlord-api",
-        "--source",
-        "./rentchain-api",
-        "--region",
-        "us-central1",
-        "--platform",
-        "managed",
-        "--allow-unauthenticated"
-      ]
+      - -c
+      - |
+        set -euo pipefail
+        SERVICE="rentchain-landlord-api"
+        REGION="us-central1"
+
+        for i in 1 2 3 4 5; do
+          echo "Deploy attempt $i..."
+          if gcloud run deploy "$SERVICE" \
+            --image "us-central1-docker.pkg.dev/project-0d9658de-af29-4dc0-a99/rentchain-api/rentchain-landlord-api:${COMMIT_SHA}" \
+            --region "$REGION" \
+            --platform managed \
+            --allow-unauthenticated \
+            --quiet; then
+            echo "Deploy succeeded"
+            exit 0
+          fi
+          echo "Deploy failed (likely conflict). Sleeping..."
+          sleep $((i*5))
+        done
+
+        echo "Deploy failed after retries"
+        exit 1
 
 options:
   logging: CLOUD_LOGGING_ONLY
