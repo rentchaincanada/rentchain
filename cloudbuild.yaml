@@ -25,20 +25,27 @@ steps:
 
         echo "Cloud Run preflight passed. Required env names are present."
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
-    entrypoint: gcloud
+    entrypoint: bash
     args:
-      [
-        "run",
-        "deploy",
-        "rentchain-landlord-api",
-        "--source",
-        "./rentchain-api",
-        "--region",
-        "us-central1",
-        "--platform",
-        "managed",
-        "--allow-unauthenticated"
-      ]
+      - -c
+      - |
+        set -euo pipefail
+        for i in 1 2 3 4 5; do
+          echo "Deploy attempt $i..."
+          if gcloud run deploy rentchain-landlord-api \
+            --image "us-central1-docker.pkg.dev/project-0d9658de-af29-4dc0-a99/rentchain-api/rentchain-landlord-api:${COMMIT_SHA}" \
+            --region us-central1 \
+            --platform managed \
+            --allow-unauthenticated \
+            --quiet; then
+            echo "Deploy succeeded"
+            exit 0
+          fi
+          echo "Deploy failed (likely conflict). Sleeping..."
+          sleep $((i*5))
+        done
+        echo "Deploy failed after retries"
+        exit 1
 
 options:
   logging: CLOUD_LOGGING_ONLY
