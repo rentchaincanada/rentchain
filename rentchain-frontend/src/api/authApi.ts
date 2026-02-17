@@ -97,6 +97,22 @@ export async function login(
   return res;
 }
 
+export async function signup(
+  email: string,
+  password: string,
+  fullName?: string
+): Promise<LoginResponse> {
+  const response = await apiJson<LoginResponse>("/api/auth/signup", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password, fullName }),
+  });
+  const token = (response as any)?.token;
+  if (!token) throw new Error("Token missing from signup response");
+  setAuthToken(token);
+  return response;
+}
+
 export async function loginDemo(plan: string = "core"): Promise<LoginResponse> {
   const demoEmail = import.meta.env.DEV ? "demo@rentchain.dev" : "";
   return login(demoEmail, "demo", {

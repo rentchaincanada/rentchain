@@ -10,6 +10,7 @@ import React, {
 import {
   login as apiLogin,
   loginDemo as apiLoginDemo,
+  signup as apiSignup,
   logout as apiLogout,
   restoreSession as apiRestoreSession,
 } from "../api/authApi";
@@ -21,6 +22,8 @@ const PUBLIC_ROUTE_ALLOWLIST = [
   "/join-waitlist",
   "/site/pricing",
   "/login",
+  "/signup",
+  "/request-access",
   "/invite",
   "/terms",
   "/privacy",
@@ -50,6 +53,7 @@ export interface AuthContextValue {
     password: string,
     opts?: RequestInit
   ) => Promise<{ requires2fa: boolean }>;
+  signup: (email: string, password: string, fullName?: string) => Promise<void>;
   loginDemo: (plan?: string) => Promise<void>;
   logout: () => Promise<void>;
   twoFactorPendingToken: string | null;
@@ -349,6 +353,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     []
   );
 
+  const signup = useCallback(async (email: string, password: string, fullName?: string) => {
+    setIsLoading(true);
+    try {
+      const response = await apiSignup(email, password, fullName);
+      if (!response.token) throw new Error("Token missing from signup response");
+      storeToken(response.token);
+      setToken(response.token);
+      setUser(response.user ?? null);
+      setAuthStatus("authed");
+      setTwoFactorPendingToken(null);
+      setTwoFactorMethods([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   const loginDemo = useCallback(async (plan: string = "core") => {
     setIsLoading(true);
     try {
@@ -411,7 +431,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   const updateUser = useCallback((patch: Partial<AuthUser>) => {
-    setUser((prev) => (prev ? { ...prev, ...patch } : prev));
+    setUser((prev) => {
+      if (prev) return { ...prev, ...patch };
+      if (patch.id && patch.email) return patch as AuthUser;
+      return prev;
+    });
   }, []);
 
   const debugAuth =
@@ -427,6 +451,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       ready,
       authStatus,
       login,
+      signup,
       loginDemo,
       logout,
       twoFactorPendingToken,
@@ -442,6 +467,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       isLoading,
       ready,
       login,
+      signup,
       loginDemo,
       logout,
       twoFactorPendingToken,
