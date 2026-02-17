@@ -3,7 +3,7 @@ import { fetchSubscriptionStatus } from "@/api/billingApi";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { useAuth } from "@/context/useAuth";
 
-type PlanTier = "starter" | "pro" | "business" | "elite";
+type PlanTier = "free" | "starter" | "pro" | "elite";
 type BillingInterval = "month" | "year" | null;
 
 type BillingStatus = {
@@ -19,7 +19,7 @@ type SubscriptionDetail = {
 };
 
 const DEFAULT_STATUS: BillingStatus = {
-  tier: "starter",
+  tier: "free",
   interval: null,
   renewalDate: null,
   isLoading: true,
@@ -29,9 +29,9 @@ const planFromString = (raw?: string | null): PlanTier | null => {
   const value = String(raw || "").trim().toLowerCase();
   if (!value) return null;
   if (value === "pro" || value === "professional") return "pro";
-  if (value === "business" || value === "enterprise") return "business";
-  if (value === "elite") return "elite";
-  if (value === "starter" || value === "screening" || value === "free") return "starter";
+  if (value === "elite" || value === "business" || value === "enterprise") return "elite";
+  if (value === "starter" || value === "core") return "starter";
+  if (value === "screening" || value === "free") return "free";
   return null;
 };
 
@@ -98,7 +98,7 @@ export function useBillingStatus(): BillingStatus {
       planFromString(caps?.plan) ||
       planFromString(user?.plan) ||
       planFromString((user as any)?.subscriptionPlan) ||
-      "starter";
+      "free";
 
     return {
       tier,
@@ -119,9 +119,9 @@ export function useBillingStatus(): BillingStatus {
 }
 
 export function billingTierLabel(tier?: string | null): string {
-  const normalized = planFromString(tier) || "starter";
+  const normalized = planFromString(tier) || "free";
+  if (normalized === "free") return "Free";
   if (normalized === "starter") return "Starter";
   if (normalized === "pro") return "Pro";
-  if (normalized === "business") return "Business";
   return "Elite";
 }
