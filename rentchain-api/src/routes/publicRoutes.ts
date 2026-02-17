@@ -704,11 +704,12 @@ function signTenantJwt(payload: any) {
 
 // Landlord-scoped tenants bridge (mounted under /api via publicRoutes)
 router.get("/tenants", authenticateJwt, requireLandlord, async (req: any, res) => {
-  const landlordId = req.user?.landlordId || req.user?.id || null;
-  if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+  const role = String(req.user?.role || "").toLowerCase();
+  const isAdmin = role === "admin";
+  const landlordId = isAdmin ? null : req.user?.landlordId || req.user?.id || null;
 
   try {
-    const tenants = await getTenantsList({ landlordId });
+    const tenants = await getTenantsList({ landlordId: landlordId || undefined });
     return res.status(200).json({ ok: true, tenants });
   } catch (err: any) {
     console.error("[publicRoutes] GET /tenants error", err);
@@ -717,14 +718,15 @@ router.get("/tenants", authenticateJwt, requireLandlord, async (req: any, res) =
 });
 
 router.get("/tenants/:tenantId", authenticateJwt, requireLandlord, async (req: any, res) => {
-  const landlordId = req.user?.landlordId || req.user?.id || null;
-  if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+  const role = String(req.user?.role || "").toLowerCase();
+  const isAdmin = role === "admin";
+  const landlordId = isAdmin ? null : req.user?.landlordId || req.user?.id || null;
 
   const tenantId = String(req.params?.tenantId || "").trim();
   if (!tenantId) return res.status(400).json({ ok: false, error: "tenantId is required" });
 
   try {
-    const bundle = await getTenantDetailBundle(tenantId, { landlordId });
+    const bundle = await getTenantDetailBundle(tenantId, { landlordId: landlordId || undefined });
     if (!bundle?.tenant) return res.status(404).json({ ok: false, error: "Tenant not found" });
     return res.status(200).json({ ok: true, ...bundle });
   } catch (err: any) {

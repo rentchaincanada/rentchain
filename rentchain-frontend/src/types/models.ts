@@ -84,6 +84,29 @@ export interface Tenant {
   createdAt?: string;
 }
 
+export type TenancyStatus = "active" | "inactive";
+export type TenancyMoveOutReason =
+  | "LEASE_TERM_END"
+  | "EARLY_LEASE_END"
+  | "EVICTED"
+  | "OTHER";
+
+export interface Tenancy {
+  id: string;
+  tenantId: string;
+  landlordId?: string;
+  propertyId?: string;
+  unitId?: string;
+  unitLabel?: string;
+  status: TenancyStatus;
+  moveInAt?: string | null;
+  moveOutAt?: string | null;
+  moveOutReason?: TenancyMoveOutReason | null;
+  moveOutReasonNote?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface Property {
   id: string;
   landlordId: string;

@@ -6,6 +6,7 @@ import { requireLandlordOrAdmin } from "../middleware/requireLandlordOrAdmin";
 import { rateLimitTenantInvitesUser } from "../middleware/rateLimit";
 import { sendEmail } from "../services/emailService";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
+import { createTenancyIfMissing } from "../services/tenanciesService";
 
 const router = Router();
 
@@ -250,6 +251,19 @@ router.post("/redeem", async (req: any, res) => {
       },
       { merge: true }
     );
+
+  try {
+    await createTenancyIfMissing({
+      tenantId,
+      landlordId: invite.landlordId,
+      propertyId: resolvedPropertyId || null,
+      unitId: resolvedUnitId || null,
+      unitLabel: resolvedUnitId || null,
+      moveInAt: null,
+    });
+  } catch (err) {
+    console.warn("[tenant-invites] tenancy backfill failed", err);
+  }
 
   await ref.set(
     {

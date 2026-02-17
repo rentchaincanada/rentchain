@@ -84,6 +84,16 @@ export function useBillingStatus(): BillingStatus {
   }, []);
 
   return useMemo(() => {
+    const roleLower = String(user?.actorRole || user?.role || "").trim().toLowerCase();
+    if (roleLower === "admin") {
+      return {
+        tier: "elite" as PlanTier,
+        interval: subscription.interval,
+        renewalDate: subscription.renewalDate,
+        isLoading: capsLoading || subscriptionLoading,
+      };
+    }
+
     const tier =
       planFromString(caps?.plan) ||
       planFromString(user?.plan) ||
@@ -96,7 +106,16 @@ export function useBillingStatus(): BillingStatus {
       renewalDate: subscription.renewalDate,
       isLoading: capsLoading || subscriptionLoading,
     };
-  }, [caps?.plan, capsLoading, subscription.interval, subscription.renewalDate, subscriptionLoading, user?.plan]);
+  }, [
+    caps?.plan,
+    capsLoading,
+    subscription.interval,
+    subscription.renewalDate,
+    subscriptionLoading,
+    user?.plan,
+    user?.role,
+    user?.actorRole,
+  ]);
 }
 
 export function billingTierLabel(tier?: string | null): string {

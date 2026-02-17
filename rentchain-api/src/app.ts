@@ -67,6 +67,7 @@ import landlordApplicationLinksRoutes from "./routes/landlordApplicationLinksRou
 import publicApplicationLinksRoutes from "./routes/publicApplicationLinksRoutes";
 import messagesRoutes from "./routes/messagesRoutes";
 import tenantsRoutes from "./routes/tenantsRoutes";
+import tenanciesRoutes from "./routes/tenanciesRoutes";
 import rentalApplicationsRoutes from "./routes/rentalApplicationsRoutes";
 import verifiedScreeningRoutes from "./routes/verifiedScreeningRoutes";
 import screeningJobsAdminRoutes from "./routes/screeningJobsAdminRoutes";
@@ -233,7 +234,8 @@ app.get("/api/me", async (req, res) => {
     return res.status(401).json({ ok: false, error: "Unauthorized" });
   }
   const resolved = await resolveLandlordAndTier(req.user);
-  const user = { ...req.user, plan: resolved.tier };
+  const isAdmin = String(req.user?.role || "").toLowerCase() === "admin";
+  const user = { ...req.user, plan: isAdmin ? "elite" : resolved.tier };
   return res.json({ ok: true, user });
 });
 app.get("/api/_build", (req, res) => {
@@ -293,6 +295,7 @@ app.get("/api/__probe/version", (_req, res) =>
   res.json({ ok: true, ts: Date.now(), marker: "probe-v1" })
 );
 app.use("/api/tenants", routeSource("tenantsRoutes.ts"), tenantsRoutes);
+app.use("/api", routeSource("tenanciesRoutes.ts"), tenanciesRoutes);
 app.use("/api/account", accountRoutes);
 app.use("/api/onboarding", routeSource("onboardingRoutes.ts"), onboardingRoutes);
 app.use("/api", routeSource("onboardingRoutes.ts"), onboardingRoutes);

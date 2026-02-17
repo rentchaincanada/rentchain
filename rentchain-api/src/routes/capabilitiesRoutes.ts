@@ -13,8 +13,8 @@ const router = Router();
  */
 router.use(authenticateJwt, requireAuth);
 
-function buildFeatures(plan: ReturnType<typeof resolvePlanTier>) {
-  return {
+function buildFeatures(plan: ReturnType<typeof resolvePlanTier>, isAdmin = false) {
+  const base = {
     ...CAPABILITIES[plan],
     microLive: false,
     tenantPdfReport: false,
@@ -24,20 +24,26 @@ function buildFeatures(plan: ReturnType<typeof resolvePlanTier>) {
     ledgerV2: true,
     waitlistEmail: true,
   };
+  if (!isAdmin) return base;
+  return Object.fromEntries(Object.keys(base).map((key) => [key, true]));
 }
 
 router.get("/", async (req: any, res) => {
+  const isAdmin = String(req.user?.role || "").toLowerCase() === "admin";
   try {
     const resolved = await resolveLandlordAndTier(req.user);
-    const tier = resolved.tier;
+    const capTier = isAdmin ? "business" : resolved.tier;
+    const planLabel = isAdmin ? "elite" : capTier;
     return res.json({
       ok: true,
-      plan: tier,
-      features: buildFeatures(tier),
+      plan: planLabel,
+      features: buildFeatures(capTier, isAdmin),
       ts: Date.now(),
     });
   } catch (err: any) {
     const tokenPlan = resolvePlanTier(req.user?.plan);
+    const capTier = isAdmin ? "business" : tokenPlan;
+    const planLabel = isAdmin ? "elite" : capTier;
     console.warn("[capabilities] resolver fallback", {
       tokenLandlordId: req.user?.landlordId || null,
       tokenPlan,
@@ -45,8 +51,8 @@ router.get("/", async (req: any, res) => {
     });
     return res.json({
       ok: true,
-      plan: tokenPlan,
-      features: buildFeatures(tokenPlan),
+      plan: planLabel,
+      features: buildFeatures(capTier, isAdmin),
       ts: Date.now(),
     });
   }

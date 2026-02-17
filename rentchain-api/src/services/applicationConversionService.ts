@@ -11,6 +11,7 @@ import { logAuditEvent } from "./auditEventsService";
 import { db } from "../config/firebase";
 import { sendEmail } from "./emailService";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
+import { createTenancyIfMissing } from "./tenanciesService";
 
 export async function convertApplicationToTenant(params: {
   landlordId: string;
@@ -85,6 +86,19 @@ export async function convertApplicationToTenant(params: {
     await db.collection("tenants").doc(tenantId).set(tenantRecord, { merge: true });
   } catch (err) {
     console.error("[applicationConversion] failed to persist tenant", err);
+  }
+
+  try {
+    await createTenancyIfMissing({
+      tenantId,
+      landlordId: params.landlordId,
+      propertyId: application.propertyId ?? null,
+      unitId: application.unitApplied ?? application.unit ?? null,
+      unitLabel: application.unitApplied ?? application.unit ?? null,
+      moveInAt: application.leaseStartDate ?? application.moveInDate ?? null,
+    });
+  } catch (err) {
+    console.warn("[applicationConversion] tenancy backfill failed", err);
   }
 
   if (application.propertyId && application.unitApplied) {
