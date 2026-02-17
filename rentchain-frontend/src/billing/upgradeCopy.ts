@@ -33,7 +33,7 @@ const COPY_MAP: Record<string, UpgradeCopy> = {
   },
   extra_properties: {
     title: "Upgrade to add more properties",
-    subtitle: "Your current plan has reached its property limit.",
+    subtitle: "Your current plan doesn't include this workflow.",
     bullets: [
       "Manage more units in one dashboard",
       "Invite tenants and track events",
@@ -45,7 +45,7 @@ const COPY_MAP: Record<string, UpgradeCopy> = {
   },
   properties: {
     title: "Upgrade to add more properties",
-    subtitle: "Your current plan has reached its property limit.",
+    subtitle: "Your current plan doesn't include this workflow.",
     bullets: [
       "Manage more units in one dashboard",
       "Invite tenants and track events",
@@ -56,7 +56,7 @@ const COPY_MAP: Record<string, UpgradeCopy> = {
   },
   units: {
     title: "Upgrade to add more units",
-    subtitle: "Your current plan has reached its unit limit.",
+    subtitle: "Your current plan doesn't include this workflow.",
     bullets: ["Keep everything in one place", "Track occupancy and rent", "Export reports anytime"],
     primaryCta: "Upgrade now",
     secondaryCta: "Not now",

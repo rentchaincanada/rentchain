@@ -39,7 +39,8 @@ export async function requireCapability(
     entitlements = await getEntitlementsForLandlord(landlordId);
   }
 
-  const allowed = entitlements.capabilities.has(capability);
+  const capabilityList = Array.isArray(entitlements.capabilities) ? entitlements.capabilities : [];
+  const allowed = capabilityList.includes(capability);
   if (!allowed) {
     return { ok: false, plan: entitlements.plan, error: "forbidden" };
   }

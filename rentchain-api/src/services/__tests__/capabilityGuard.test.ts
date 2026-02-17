@@ -33,7 +33,7 @@ describe("requireCapability", () => {
       role: "landlord",
       plan: "pro",
       landlordId: "landlord-1",
-      capabilities: new Set(["messaging"]),
+      capabilities: ["messaging"],
     });
 
     const result = await requireCapability("landlord-1", "messaging", {
@@ -50,7 +50,7 @@ describe("requireCapability", () => {
       role: "landlord",
       plan: "starter",
       landlordId: "landlord-2",
-      capabilities: new Set(),
+      capabilities: [],
     });
 
     const result = await requireCapability("landlord-2", "messaging", {
@@ -67,7 +67,7 @@ describe("requireCapability", () => {
       role: "landlord",
       plan: "pro",
       landlordId: "landlord-3",
-      capabilities: new Set(["messaging"]),
+      capabilities: ["messaging"],
     });
 
     const result = await requireCapability("landlord-3", "messaging");

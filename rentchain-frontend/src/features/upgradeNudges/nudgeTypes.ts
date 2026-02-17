@@ -1,5 +1,4 @@
 export type NudgeType =
-  | "LIMIT_PROPERTIES"
   | "LIMIT_TENANTS"
   | "FEATURE_TEMPLATES_PREMIUM"
   | "FEATURE_EXPORT_CSV"
@@ -18,13 +17,6 @@ export type NudgeCopy = {
 };
 
 export const NUDGE_COPY: Record<NudgeType, NudgeCopy> = {
-  LIMIT_PROPERTIES: {
-    type: "LIMIT_PROPERTIES",
-    title: "Property limit reached",
-    body: "Upgrade your plan to add more properties and keep scaling your portfolio.",
-    primaryCtaLabel: "Upgrade",
-    secondaryCtaLabel: "Not now",
-  },
   LIMIT_TENANTS: {
     type: "LIMIT_TENANTS",
     title: "Tenant limit reached",
@@ -72,7 +64,6 @@ export const NUDGE_COPY: Record<NudgeType, NudgeCopy> = {
 export function mapFeatureKeyToNudgeType(featureKey?: string | null): NudgeType {
   const key = String(featureKey || "").trim().toLowerCase();
   if (!key) return "GENERIC_UPGRADE";
-  if (key.includes("properties")) return "LIMIT_PROPERTIES";
   if (key.includes("tenant")) return "LIMIT_TENANTS";
   if (key.includes("template")) return "FEATURE_TEMPLATES_PREMIUM";
   if (key.includes("export")) return "FEATURE_EXPORT_CSV";
@@ -83,8 +74,6 @@ export function mapFeatureKeyToNudgeType(featureKey?: string | null): NudgeType 
 
 export function mapLimitCodeToNudgeType(limitCode?: string | null): NudgeType {
   const code = String(limitCode || "").trim().toUpperCase();
-  if (code === "LIMIT_PROPERTIES") return "LIMIT_PROPERTIES";
   if (code === "LIMIT_TENANTS") return "LIMIT_TENANTS";
-  if (code === "LIMIT_REACHED") return "LIMIT_PROPERTIES";
   return "GENERIC_UPGRADE";
 }

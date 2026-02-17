@@ -99,7 +99,7 @@ function isUpgradeRequiredPayload(payload: any, status?: number): boolean {
 
   if (code === "PLAN_LIMIT_EXCEEDED" || code === "PLAN_LIMIT_REACHED") return true;
   if (code === "LIMIT_REACHED" || code === "ENTITLEMENT_LIMIT_REACHED") return true;
-  if (code === "LIMIT_PROPERTIES" || code === "LIMIT_TENANTS" || code === "LIMIT_UNITS") return true;
+  if (code === "LIMIT_TENANTS") return true;
   if (error === "plan_limit" || error === "plan_limit_reached") return true;
   if (error === "upgrade required" || payload?.upgradeRequired === true) return true;
   if (message.includes("plan limit")) return true;

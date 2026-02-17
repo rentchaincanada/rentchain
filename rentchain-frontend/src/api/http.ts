@@ -1,6 +1,7 @@
 import { resolveApiUrl } from "../lib/apiClient";
 import { maybeDispatchUpgradePrompt } from "../lib/upgradePrompt";
 import { getFirebaseIdToken, warnIfFirebaseDomainMismatch } from "../lib/firebaseAuthToken";
+import { getAuthToken, getTenantToken } from "../lib/authToken";
 
 export type ApiError = Error & { status?: number; body?: any };
 
@@ -10,7 +11,15 @@ export async function apiFetch<T>(
 ): Promise<T> {
   warnIfFirebaseDomainMismatch();
   const firebaseToken = await getFirebaseIdToken();
-  const token = (opts as any)?.token;
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const isTenantPath =
+    normalizedPath === "/tenant" ||
+    normalizedPath.startsWith("/tenant/") ||
+    normalizedPath === "/api/tenant" ||
+    normalizedPath.startsWith("/api/tenant/");
+  const explicitToken = (opts as any)?.token;
+  const storedToken = isTenantPath ? getTenantToken() : getAuthToken();
+  const token = explicitToken || storedToken;
   const effectiveToken = firebaseToken || token;
   const headers = new Headers(opts.headers || {});
   headers.set("Accept", "application/json");
@@ -26,10 +35,10 @@ export async function apiFetch<T>(
     }
   }
 
-  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   const res = await fetch(resolveApiUrl(normalizedPath), {
     ...opts,
     headers,
+    credentials: "include",
   });
 
   const text = await res.text();

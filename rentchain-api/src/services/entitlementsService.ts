@@ -8,7 +8,7 @@ export type UserEntitlements = {
   userId: string;
   role: EntitlementsRole;
   plan: EntitlementsPlan;
-  capabilities: Set<CapabilityKey>;
+  capabilities: CapabilityKey[];
   landlordId: string | null;
 };
 
@@ -17,9 +17,14 @@ type ResolveHints = {
   claimsPlan?: string | null;
   landlordIdHint?: string | null;
   emailHint?: string | null;
+  requestCache?: Record<string, UserEntitlements> | null;
 };
 
-const ALL_CAPABILITIES = new Set<CapabilityKey>(Object.keys(CAPABILITIES.business) as CapabilityKey[]);
+const ALL_CAPABILITIES = Object.keys(CAPABILITIES.business) as CapabilityKey[];
+
+function sortedCapabilities(caps: Iterable<CapabilityKey>): CapabilityKey[] {
+  return Array.from(new Set(caps)).sort();
+}
 
 function normalizeRole(input?: string | null): EntitlementsRole {
   const role = String(input || "").trim().toLowerCase();
@@ -74,14 +79,20 @@ export async function getUserEntitlements(
   hints: ResolveHints = {}
 ): Promise<UserEntitlements> {
   const cleanUserId = String(userId || "").trim();
+  const cacheKey = cleanUserId ? `entitlements:${cleanUserId}` : "";
+  if (cacheKey && hints.requestCache?.[cacheKey]) {
+    return hints.requestCache[cacheKey];
+  }
   if (!cleanUserId) {
-    return {
+    const empty: UserEntitlements = {
       userId: "",
       role: "landlord",
       plan: "starter",
-      capabilities: new Set<CapabilityKey>(),
+      capabilities: [],
       landlordId: null,
     };
+    if (cacheKey && hints.requestCache) hints.requestCache[cacheKey] = empty;
+    return empty;
   }
 
   const userSnap = await db.collection("users").doc(cleanUserId).get();
@@ -104,29 +115,33 @@ export async function getUserEntitlements(
   const plan = normalizePlan(planRaw);
 
   if (role === "admin") {
-    return {
+    const adminEntitlements: UserEntitlements = {
       userId: cleanUserId,
       role,
       plan: "elite",
-      capabilities: new Set<CapabilityKey>(ALL_CAPABILITIES),
+      capabilities: sortedCapabilities(ALL_CAPABILITIES),
       landlordId: landlordContext.landlordId || landlordIdHint || cleanUserId,
     };
+    if (cacheKey && hints.requestCache) hints.requestCache[cacheKey] = adminEntitlements;
+    return adminEntitlements;
   }
 
   const tier = resolvePlanTier(plan);
   const planCaps = CAPABILITIES[tier] || {};
-  const capabilities = new Set<CapabilityKey>();
+  const capabilities: CapabilityKey[] = [];
   for (const [key, enabled] of Object.entries(planCaps)) {
-    if (enabled) capabilities.add(key as CapabilityKey);
+    if (enabled) capabilities.push(key as CapabilityKey);
   }
 
-  return {
+  const entitlements: UserEntitlements = {
     userId: cleanUserId,
     role,
     plan,
-    capabilities,
+    capabilities: sortedCapabilities(capabilities),
     landlordId: landlordContext.landlordId || landlordIdHint || (role === "landlord" ? cleanUserId : null),
   };
+  if (cacheKey && hints.requestCache) hints.requestCache[cacheKey] = entitlements;
+  return entitlements;
 }
 
 export async function getEntitlementsForLandlord(landlordId: string): Promise<UserEntitlements> {
@@ -136,7 +151,7 @@ export async function getEntitlementsForLandlord(landlordId: string): Promise<Us
       userId: "",
       role: "landlord",
       plan: "starter",
-      capabilities: new Set<CapabilityKey>(),
+      capabilities: [],
       landlordId: null,
     };
   }
@@ -146,16 +161,16 @@ export async function getEntitlementsForLandlord(landlordId: string): Promise<Us
   const plan = normalizePlan(rawPlan);
   const tier = resolvePlanTier(plan);
   const planCaps = CAPABILITIES[tier] || {};
-  const capabilities = new Set<CapabilityKey>();
+  const capabilities: CapabilityKey[] = [];
   for (const [key, enabled] of Object.entries(planCaps)) {
-    if (enabled) capabilities.add(key as CapabilityKey);
+    if (enabled) capabilities.push(key as CapabilityKey);
   }
 
   return {
     userId: cleanLandlordId,
     role: "landlord",
     plan,
-    capabilities,
+    capabilities: sortedCapabilities(capabilities),
     landlordId: cleanLandlordId,
   };
 }

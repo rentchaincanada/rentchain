@@ -62,9 +62,12 @@ async function addMessage(params: {
 }
 
 async function enforceMessagingCapability(req: any, landlordId: string, res: any): Promise<boolean> {
+  if (String(req.user?.role || "").toLowerCase() === "admin") {
+    return true;
+  }
   const cap = await requireCapability(landlordId, "messaging", req.user);
   if (!cap.ok) {
-    res.status(403).json({ ok: false, error: "upgrade_required", capability: "messaging", plan: cap.plan });
+    res.status(403).json({ ok: false, error: "Upgrade required", capability: "messaging", plan: cap.plan });
     return false;
   }
   return true;

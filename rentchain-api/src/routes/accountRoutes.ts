@@ -44,10 +44,6 @@ router.get("/limits", async (req: any, res) => {
   return res.json({
     status: "ok",
     plan,
-    limits: {
-      maxProperties: Number.MAX_SAFE_INTEGER,
-      maxUnits: Number.MAX_SAFE_INTEGER,
-    },
     capabilities,
     usage,
   });

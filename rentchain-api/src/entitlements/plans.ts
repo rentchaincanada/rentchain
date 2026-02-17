@@ -7,21 +7,14 @@ export type Capability =
   | "properties.create"
   | "units.create";
 
-export interface PlanLimits {
-  maxProperties: number;
-  maxUnits: number;
-}
-
 export interface PlanSpec {
   plan: Plan;
-  limits: PlanLimits;
   capabilities: Record<Capability, boolean>;
 }
 
 export const PLANS: Record<Plan, PlanSpec> = {
   free: {
     plan: "free",
-    limits: { maxProperties: Number.MAX_SAFE_INTEGER, maxUnits: Number.MAX_SAFE_INTEGER },
     capabilities: {
       "ai.insights": false,
       "team.invites": true,
@@ -32,7 +25,6 @@ export const PLANS: Record<Plan, PlanSpec> = {
   },
   screening: {
     plan: "screening",
-    limits: { maxProperties: Number.MAX_SAFE_INTEGER, maxUnits: Number.MAX_SAFE_INTEGER },
     capabilities: {
       "ai.insights": false,
       "team.invites": true,
@@ -43,7 +35,6 @@ export const PLANS: Record<Plan, PlanSpec> = {
   },
   starter: {
     plan: "starter",
-    limits: { maxProperties: Number.MAX_SAFE_INTEGER, maxUnits: Number.MAX_SAFE_INTEGER },
     capabilities: {
       "ai.insights": false,
       "team.invites": true,
@@ -54,7 +45,6 @@ export const PLANS: Record<Plan, PlanSpec> = {
   },
   core: {
     plan: "core",
-    limits: { maxProperties: Number.MAX_SAFE_INTEGER, maxUnits: Number.MAX_SAFE_INTEGER },
     capabilities: {
       "ai.insights": false,
       "team.invites": true,
@@ -65,7 +55,6 @@ export const PLANS: Record<Plan, PlanSpec> = {
   },
   pro: {
     plan: "pro",
-    limits: { maxProperties: Number.MAX_SAFE_INTEGER, maxUnits: Number.MAX_SAFE_INTEGER },
     capabilities: {
       "ai.insights": false,
       "team.invites": true,
@@ -76,7 +65,6 @@ export const PLANS: Record<Plan, PlanSpec> = {
   },
   business: {
     plan: "business",
-    limits: { maxProperties: Number.MAX_SAFE_INTEGER, maxUnits: Number.MAX_SAFE_INTEGER },
     capabilities: {
       "ai.insights": true,
       "team.invites": true,
@@ -87,7 +75,6 @@ export const PLANS: Record<Plan, PlanSpec> = {
   },
   elite: {
     plan: "elite",
-    limits: { maxProperties: Number.MAX_SAFE_INTEGER, maxUnits: Number.MAX_SAFE_INTEGER },
     capabilities: {
       "ai.insights": true,
       "team.invites": true,

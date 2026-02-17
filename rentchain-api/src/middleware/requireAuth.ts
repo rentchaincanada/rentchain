@@ -28,7 +28,7 @@ export async function requireAuth(req: any, res: any, next: any) {
   try {
     const token = getBearerToken(req);
     if (!token) {
-      return res.status(401).json({ ok: false, error: "Missing bearer token" });
+      return res.status(401).json({ ok: false, error: "unauthenticated" });
     }
 
     const claims: JwtClaimsV1 = verifyAuthToken(token);
@@ -43,6 +43,7 @@ export async function requireAuth(req: any, res: any, next: any) {
       revokedPermissions: claims.revokedPermissions ?? [],
     };
     const claimsPlan = (claims as any)?.plan ?? null;
+    req.__entitlementsCache = req.__entitlementsCache || {};
 
     const applyEntitlements = async (user: HydratedUser, approved: boolean) => {
       const entitlements = await getUserEntitlements(user.id, {
@@ -50,6 +51,7 @@ export async function requireAuth(req: any, res: any, next: any) {
         claimsPlan,
         landlordIdHint: user.landlordId,
         emailHint: user.email,
+        requestCache: req.__entitlementsCache,
       });
       req.user = {
         ...user,
@@ -59,7 +61,7 @@ export async function requireAuth(req: any, res: any, next: any) {
           (entitlements.role === "landlord" || entitlements.role === "admin" ? user.id : user.landlordId),
         approved: entitlements.role === "admin" || entitlements.role === "tenant" ? true : approved,
         plan: entitlements.plan,
-        capabilities: Array.from(entitlements.capabilities),
+        capabilities: entitlements.capabilities,
       };
       req.user.entitlements = entitlements;
       req.entitlements = entitlements;
@@ -107,7 +109,7 @@ export async function requireAuth(req: any, res: any, next: any) {
 
     const snap = await db.collection("users").doc(baseUser.id).get();
     if (!snap.exists) {
-      return res.status(401).json({ ok: false, error: "User not found" });
+      return res.status(401).json({ ok: false, error: "unauthenticated" });
     }
 
     const u = snap.data() as any;
@@ -210,6 +212,6 @@ export async function requireAuth(req: any, res: any, next: any) {
 
     next();
   } catch {
-    return res.status(401).json({ ok: false, error: "Invalid or expired token" });
+    return res.status(401).json({ ok: false, error: "unauthenticated" });
   }
 }

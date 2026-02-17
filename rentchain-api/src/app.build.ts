@@ -164,9 +164,8 @@ app.use(authenticateJwt);
 // Current user info
 app.get("/api/me", async (req: any, res: any, next: any) => {
   res.setHeader("x-route-source", "app.build.ts:/api/me");
-  const hasAuthHeader = Boolean(req.get("authorization"));
-  if (!hasAuthHeader) {
-    return res.json({ ok: true, user: null });
+  if (!req.get("authorization")) {
+    return res.status(401).json({ ok: false, error: "unauthenticated" });
   }
   return requireAuth(req, res, next);
 }, (req: any, res: any) => {

@@ -1,7 +1,6 @@
 // rentchain-api/src/routes/propertiesRoutes.ts
 import { Router } from "express";
 import { requireCapability } from "../entitlements/entitlements.middleware";
-import { enforcePropertyCap, enforceUnitCap } from "../entitlements/limits.middleware";
 import { db, FieldValue } from "../config/firebase";
 
 const router = Router();
@@ -108,12 +107,10 @@ router.get("/", async (req: any, res) => {
 /**
  * POST /api/properties
  * Creates a new property for the authenticated landlord.
- * Enforces plan property cap via enforcePropertyCap.
  */
 router.post(
   "/",
   requireCapability("properties.create"),
-  enforcePropertyCap,
   async (req: any, res) => {
     const requestId =
       String(req.headers["x-request-id"] || req.headers["x-requestid"] || req.headers["x-correlation-id"] || "")
@@ -123,14 +120,10 @@ router.post(
       return res.status(401).json({ error: "Unauthorized" });
     }
 
-    const plan = req.user?.plan || "starter";
     if (process.env.NODE_ENV !== "production") {
       console.log("[POST /api/properties] requestId=", requestId);
       console.log("[POST /api/properties] landlordId=", landlordId);
-      console.log("[POST /api/properties] plan=", plan);
     }
-
-    // Starter allows unlimited properties; cap enforcement is handled elsewhere if reintroduced.
 
     const {
       address,
@@ -360,7 +353,6 @@ router.post(
 router.post(
   "/:propertyId/units",
   requireCapability("units.create"),
-  enforceUnitCap,
   async (req: any, res) => {
     const landlordId = req.user?.landlordId || req.user?.id;
     if (!landlordId) {
