@@ -43,6 +43,7 @@ export async function requireAuth(req: any, res: any, next: any) {
       revokedPermissions: claims.revokedPermissions ?? [],
     };
     const claimsPlan = (claims as any)?.plan ?? null;
+    req.__entitlementsCache = req.__entitlementsCache || {};
 
     const applyEntitlements = async (user: HydratedUser, approved: boolean) => {
       const entitlements = await getUserEntitlements(user.id, {
@@ -50,6 +51,7 @@ export async function requireAuth(req: any, res: any, next: any) {
         claimsPlan,
         landlordIdHint: user.landlordId,
         emailHint: user.email,
+        requestCache: req.__entitlementsCache,
       });
       req.user = {
         ...user,

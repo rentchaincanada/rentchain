@@ -17,6 +17,7 @@ type ResolveHints = {
   claimsPlan?: string | null;
   landlordIdHint?: string | null;
   emailHint?: string | null;
+  requestCache?: Record<string, UserEntitlements> | null;
 };
 
 const ALL_CAPABILITIES = new Set<CapabilityKey>(Object.keys(CAPABILITIES.business) as CapabilityKey[]);
@@ -74,14 +75,20 @@ export async function getUserEntitlements(
   hints: ResolveHints = {}
 ): Promise<UserEntitlements> {
   const cleanUserId = String(userId || "").trim();
+  const cacheKey = cleanUserId ? `entitlements:${cleanUserId}` : "";
+  if (cacheKey && hints.requestCache?.[cacheKey]) {
+    return hints.requestCache[cacheKey];
+  }
   if (!cleanUserId) {
-    return {
+    const empty: UserEntitlements = {
       userId: "",
       role: "landlord",
       plan: "starter",
       capabilities: new Set<CapabilityKey>(),
       landlordId: null,
     };
+    if (cacheKey && hints.requestCache) hints.requestCache[cacheKey] = empty;
+    return empty;
   }
 
   const userSnap = await db.collection("users").doc(cleanUserId).get();
@@ -104,13 +111,15 @@ export async function getUserEntitlements(
   const plan = normalizePlan(planRaw);
 
   if (role === "admin") {
-    return {
+    const adminEntitlements: UserEntitlements = {
       userId: cleanUserId,
       role,
       plan: "elite",
       capabilities: new Set<CapabilityKey>(ALL_CAPABILITIES),
       landlordId: landlordContext.landlordId || landlordIdHint || cleanUserId,
     };
+    if (cacheKey && hints.requestCache) hints.requestCache[cacheKey] = adminEntitlements;
+    return adminEntitlements;
   }
 
   const tier = resolvePlanTier(plan);
@@ -120,13 +129,15 @@ export async function getUserEntitlements(
     if (enabled) capabilities.add(key as CapabilityKey);
   }
 
-  return {
+  const entitlements: UserEntitlements = {
     userId: cleanUserId,
     role,
     plan,
     capabilities,
     landlordId: landlordContext.landlordId || landlordIdHint || (role === "landlord" ? cleanUserId : null),
   };
+  if (cacheKey && hints.requestCache) hints.requestCache[cacheKey] = entitlements;
+  return entitlements;
 }
 
 export async function getEntitlementsForLandlord(landlordId: string): Promise<UserEntitlements> {
