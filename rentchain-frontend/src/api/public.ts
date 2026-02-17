@@ -1,15 +1,11 @@
+import { apiFetch } from "./http";
+
 export async function joinWaitlist(payload: { email: string; name?: string }) {
-  const url = `${window.location.origin}/api/waitlist`;
-  console.log("[joinWaitlist] posting to", url);
-  const res = await fetch(url, {
+  return apiFetch<{ ok: true; emailed: boolean }>("/waitlist", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ...payload, source: "landing" }),
   });
-
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((data as any)?.error || "Request failed");
-  return data as { ok: true; emailed: boolean };
 }
 
 export async function requestLandlordInquiry(payload: {
@@ -19,14 +15,11 @@ export async function requestLandlordInquiry(payload: {
   note?: string;
   referralCode?: string;
 }) {
-  const url = `${window.location.origin}/api/public/landlord-inquiry`;
-  const res = await fetch(url, {
+  const useReferralFlow = Boolean(payload.referralCode);
+  const path = useReferralFlow ? "/public/landlord-inquiry" : "/access/request";
+  return apiFetch<{ ok: true; emailed?: boolean; adminNotified?: boolean }>(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((data as any)?.error || "Request failed");
-  return data as { ok: true; emailed?: boolean; adminNotified?: boolean };
 }

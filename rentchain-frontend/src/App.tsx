@@ -11,6 +11,7 @@ import ApplicantApplyPage from "./pages/ApplicantApplyPage";
 import CosignPage from "./pages/CosignPage";
 import PricingPage from "./pages/PricingPage";
 import LoginPage from "./pages/LoginPage";
+import SignupPage from "./pages/SignupPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import TenantLoginPageV2 from "./pages/tenant/TenantLoginPage.v2";
 import LandingPage from "./pages/marketing/LandingPage";
@@ -18,7 +19,7 @@ import AboutPage from "./pages/marketing/AboutPage";
 import MarketingPricingPage from "./pages/marketing/PricingPage";
 import RequestAccessPage from "./pages/marketing/RequestAccessPage";
 import ScreeningDemoPage from "./pages/marketing/ScreeningDemoPage";
-import InvitePage from "./pages/InvitePage";
+import InviteRedeemPage from "./pages/InviteRedeemPage";
 import LegalHelpPage from "./pages/marketing/LegalHelpPage";
 import HelpIndexPage from "./pages/help/HelpIndexPage";
 import HelpLandlordsPage from "./pages/help/HelpLandlordsPage";
@@ -187,8 +188,10 @@ function App() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/site" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignupPage />} />
         <Route path="/app/login" element={<LoginPage />} />
-        <Route path="/invite/:token" element={<InvitePage />} />
+        <Route path="/invite" element={<InviteRedeemPage />} />
+        <Route path="/invite/:token" element={<InviteRedeemPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route
           path="/tenant/login"
@@ -204,6 +207,7 @@ function App() {
         <Route path="/screening/demo" element={<ScreeningDemoPage />} />
         <Route path="/site/screening/demo" element={<ScreeningDemoPage />} />
         <Route path="/site/request-access" element={<RequestAccessPage />} />
+        <Route path="/request-access" element={<RequestAccessPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/site/about" element={<AboutPage />} />
         <Route path="/legal" element={<LegalHelpPage />} />

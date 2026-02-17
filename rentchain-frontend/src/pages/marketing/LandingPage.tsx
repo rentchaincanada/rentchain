@@ -1,15 +1,13 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button, Card } from "../../components/ui/Ui";
 import { spacing, text } from "../../styles/tokens";
 import { MarketingLayout } from "./MarketingLayout";
 import { useAuth } from "../../context/useAuth";
-import { RequestAccessModal } from "../../components/marketing/RequestAccessModal";
 import { useLocale } from "../../i18n";
 
 const LandingPage: React.FC = () => {
   const navigate = useNavigate();
-  const [requestOpen, setRequestOpen] = useState(false);
   const { user } = useAuth();
   const { t } = useLocale();
 
@@ -31,18 +29,24 @@ const LandingPage: React.FC = () => {
           <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap", marginTop: spacing.sm }}>
             <Button
               type="button"
-              onClick={() => (user?.id ? navigate("/dashboard") : setRequestOpen(true))}
+              onClick={() => (user?.id ? navigate("/dashboard") : navigate("/signup"))}
             >
-              {user?.id ? t("home.cta.dashboard") : t("home.cta.request")}
+              {user?.id ? t("home.cta.dashboard") : "Sign up (Free)"}
             </Button>
             {!user?.id ? (
               <Button type="button" variant="secondary" onClick={() => navigate("/login")}>
                 {t("home.cta.signin")}
               </Button>
             ) : null}
-            <Button type="button" variant="ghost" onClick={() => navigate("/site/pricing")}>
-              {t("home.cta.pricing")}
-            </Button>
+            {!user?.id ? (
+              <Button type="button" variant="ghost" onClick={() => navigate("/request-access")}>
+                Request access
+              </Button>
+            ) : (
+              <Button type="button" variant="ghost" onClick={() => navigate("/site/pricing")}>
+                {t("home.cta.pricing")}
+              </Button>
+            )}
           </div>
         </div>
 
@@ -86,7 +90,6 @@ const LandingPage: React.FC = () => {
           </p>
         </Card>
       </div>
-      <RequestAccessModal open={requestOpen} onClose={() => setRequestOpen(false)} />
     </MarketingLayout>
   );
 };

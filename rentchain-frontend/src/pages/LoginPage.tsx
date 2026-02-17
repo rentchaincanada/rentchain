@@ -255,6 +255,17 @@ export const LoginPage: React.FC = () => {
             ? "Session expired. Please log in again."
             : "Sign in to access your landlord workspace."}
         </div>
+        <div style={{ marginTop: spacing.sm, display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
+          <Link to="/signup" style={{ color: colors.accent, textDecoration: "none", fontWeight: 600 }}>
+            Create free account
+          </Link>
+          <Link to="/request-access" style={{ color: text.muted, textDecoration: "none" }}>
+            Request access
+          </Link>
+          <Link to="/invite" style={{ color: text.muted, textDecoration: "none" }}>
+            Have an invite?
+          </Link>
+        </div>
       </Card>
     </div>
   );

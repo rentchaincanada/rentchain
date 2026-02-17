@@ -216,30 +216,69 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                 FR
               </button>
             </div>
-            {!isAuthed ? (
+            {isAuthed ? (
               <Link
-                to="/login"
-                style={{ color: text.muted, textDecoration: "none" }}
-                onMouseEnter={(e) => onHover(e, true)}
-                onMouseLeave={(e) => onHover(e, false)}
+                to="/dashboard"
+                style={{
+                  color: "#fff",
+                  background: colors.accent,
+                  padding: "8px 14px",
+                  borderRadius: radius.pill,
+                  textDecoration: "none",
+                  fontWeight: 600,
+                  boxShadow: shadows.sm,
+                }}
               >
-                {t("nav.login")}
+                {t("nav.dashboard")}
               </Link>
-            ) : null}
-            <Link
-              to={isAuthed ? "/dashboard" : "/site/pricing"}
-              style={{
-                color: "#fff",
-                background: colors.accent,
-                padding: "8px 14px",
-                borderRadius: radius.pill,
-                textDecoration: "none",
-                fontWeight: 600,
-                boxShadow: shadows.sm,
-              }}
-            >
-              {isAuthed ? t("nav.dashboard") : t("nav.request_access")}
-            </Link>
+            ) : (
+              <>
+                <Link
+                  to="/signup"
+                  style={{
+                    color: "#fff",
+                    background: colors.accent,
+                    padding: "8px 14px",
+                    borderRadius: radius.pill,
+                    textDecoration: "none",
+                    fontWeight: 600,
+                    boxShadow: shadows.sm,
+                  }}
+                >
+                  Sign up (Free)
+                </Link>
+                <Link
+                  to="/request-access"
+                  style={{
+                    color: text.primary,
+                    border: `1px solid ${colors.border}`,
+                    background: colors.panel,
+                    padding: "8px 14px",
+                    borderRadius: radius.pill,
+                    textDecoration: "none",
+                    fontWeight: 600,
+                  }}
+                >
+                  Request access
+                </Link>
+                <Link
+                  to="/invite"
+                  style={{ color: text.muted, textDecoration: "none", fontWeight: 600 }}
+                  onMouseEnter={(e) => onHover(e, true)}
+                  onMouseLeave={(e) => onHover(e, false)}
+                >
+                  I have an invite
+                </Link>
+                <Link
+                  to="/login"
+                  style={{ color: text.muted, textDecoration: "none" }}
+                  onMouseEnter={(e) => onHover(e, true)}
+                  onMouseLeave={(e) => onHover(e, false)}
+                >
+                  {t("nav.login")}
+                </Link>
+              </>
+            )}
           </div>
           {isMobile ? (
             <div
@@ -255,7 +294,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
               }}
             >
               <Link
-                to={isAuthed ? "/dashboard" : "/site/pricing"}
+                to={isAuthed ? "/dashboard" : "/signup"}
                 style={{
                   color: "#fff",
                   background: colors.accent,
@@ -267,7 +306,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                   whiteSpace: "nowrap",
                 }}
               >
-                {isAuthed ? t("nav.dashboard") : t("nav.request_access")}
+                {isAuthed ? t("nav.dashboard") : "Sign up (Free)"}
               </Link>
               <button
                 type="button"
@@ -405,32 +444,74 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
               </div>
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: spacing.sm, alignItems: "center" }}>
-              {!isAuthed ? (
+              {isAuthed ? (
                 <Link
-                  to="/login"
-                  style={{ color: text.muted, textDecoration: "none" }}
-                  onMouseEnter={(e) => onHover(e, true)}
-                  onMouseLeave={(e) => onHover(e, false)}
+                  to="/dashboard"
+                  style={{
+                    color: "#fff",
+                    background: colors.accent,
+                    padding: "8px 14px",
+                    borderRadius: radius.pill,
+                    textDecoration: "none",
+                    fontWeight: 600,
+                    boxShadow: shadows.sm,
+                  }}
                   onClick={() => setMenuOpen(false)}
                 >
-                  {t("nav.login")}
+                  {t("nav.dashboard")}
                 </Link>
-              ) : null}
-              <Link
-                to={isAuthed ? "/dashboard" : "/site/pricing"}
-                style={{
-                  color: "#fff",
-                  background: colors.accent,
-                  padding: "8px 14px",
-                  borderRadius: radius.pill,
-                  textDecoration: "none",
-                  fontWeight: 600,
-                  boxShadow: shadows.sm,
-                }}
-                onClick={() => setMenuOpen(false)}
-              >
-                {isAuthed ? t("nav.dashboard") : t("nav.request_access")}
-              </Link>
+              ) : (
+                <>
+                  <Link
+                    to="/signup"
+                    style={{
+                      color: "#fff",
+                      background: colors.accent,
+                      padding: "8px 14px",
+                      borderRadius: radius.pill,
+                      textDecoration: "none",
+                      fontWeight: 600,
+                      boxShadow: shadows.sm,
+                    }}
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    Sign up (Free)
+                  </Link>
+                  <Link
+                    to="/request-access"
+                    style={{
+                      color: text.primary,
+                      border: `1px solid ${colors.border}`,
+                      background: colors.panel,
+                      padding: "8px 14px",
+                      borderRadius: radius.pill,
+                      textDecoration: "none",
+                      fontWeight: 600,
+                    }}
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    Request access
+                  </Link>
+                  <Link
+                    to="/invite"
+                    style={{ color: text.muted, textDecoration: "none" }}
+                    onMouseEnter={(e) => onHover(e, true)}
+                    onMouseLeave={(e) => onHover(e, false)}
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    I have an invite
+                  </Link>
+                  <Link
+                    to="/login"
+                    style={{ color: text.muted, textDecoration: "none" }}
+                    onMouseEnter={(e) => onHover(e, true)}
+                    onMouseLeave={(e) => onHover(e, false)}
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    {t("nav.login")}
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>

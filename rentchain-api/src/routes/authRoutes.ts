@@ -2,6 +2,7 @@
 import { Router, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
+import admin from "firebase-admin";
 import { generateJwtForLandlord } from "../services/authService";
 import { authenticateJwt } from "../middleware/authMiddleware";
 import { DEMO_LANDLORD, DEMO_LANDLORD_EMAIL } from "../config/authConfig";
@@ -69,6 +70,12 @@ function loginError(res: any, status: number, code: string, detail?: string) {
 const LoginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
+});
+
+const SignupSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(6),
+  fullName: z.string().trim().max(160).optional(),
 });
 
 function rateLimit(key: string) {
@@ -200,6 +207,120 @@ function validateCodeWithBackup(
 
 // Seed demo landlord on startup
 ensureLandlordEntry({ ...DEMO_LANDLORD });
+
+router.post("/signup", rateLimitAuth, async (req, res) => {
+  const parsed = SignupSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return loginError(res, 400, "BAD_REQUEST", "Invalid signup payload");
+  }
+
+  const email = String(parsed.data.email || "").trim().toLowerCase();
+  const password = String(parsed.data.password || "");
+  const fullName = String(parsed.data.fullName || "").trim();
+  const now = Date.now();
+
+  try {
+    let userRecord: admin.auth.UserRecord;
+    try {
+      userRecord = await admin.auth().createUser({
+        email,
+        password,
+        emailVerified: true,
+        displayName: fullName || undefined,
+        disabled: false,
+      });
+    } catch (err: any) {
+      if (String(err?.code || "") === "auth/email-already-exists") {
+        return res.status(409).json({
+          ok: false,
+          code: "EMAIL_ALREADY_EXISTS",
+          error: "Email already exists",
+        });
+      }
+      throw err;
+    }
+
+    const uid = userRecord.uid;
+    const userDoc = {
+      id: uid,
+      email,
+      role: "landlord",
+      landlordId: uid,
+      status: "active",
+      plan: "free",
+      approved: true,
+      approvedAt: now,
+      approvedBy: "self_signup",
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await db.collection("users").doc(uid).set(userDoc, { merge: true });
+    await db.collection("accounts").doc(uid).set(
+      {
+        id: uid,
+        email,
+        role: "landlord",
+        landlordId: uid,
+        status: "active",
+        plan: "free",
+        approved: true,
+        approvedAt: now,
+        approvedBy: "self_signup",
+        createdAt: now,
+        updatedAt: now,
+      },
+      { merge: true }
+    );
+    await db.collection("landlords").doc(uid).set(
+      {
+        id: uid,
+        email,
+        role: "landlord",
+        landlordId: uid,
+        plan: "free",
+        approved: true,
+        approvedAt: now,
+        approvedBy: "self_signup",
+        createdAt: now,
+        updatedAt: now,
+      },
+      { merge: true }
+    );
+
+    const token = signAuthToken({
+      sub: uid,
+      email,
+      role: "landlord",
+      landlordId: uid,
+      permissions: [],
+      revokedPermissions: [],
+    });
+
+    return res.status(201).json({
+      ok: true,
+      token,
+      user: {
+        id: uid,
+        email,
+        role: "landlord",
+        landlordId: uid,
+        plan: "free",
+        approved: true,
+      },
+    });
+  } catch (err: any) {
+    console.error("[auth/signup] failed", {
+      message: err?.message,
+      code: err?.code,
+    });
+    return res.status(500).json({
+      ok: false,
+      code: "SIGNUP_FAILED",
+      error: "Signup failed",
+    });
+  }
+});
 
 router.post("/login", rateLimitAuth, async (req, res) => {
   const requestId = (req as any).requestId || `req-${Math.random().toString(36).slice(2, 8)}`;
