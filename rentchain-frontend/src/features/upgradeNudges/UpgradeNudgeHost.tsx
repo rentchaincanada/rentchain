@@ -5,6 +5,7 @@ import { UpgradeNudgeBanner } from "./UpgradeNudgeBanner";
 import { UpgradeNudgeModal } from "./UpgradeNudgeModal";
 import { NUDGE_COPY, mapFeatureKeyToNudgeType, type NudgeType } from "./nudgeTypes";
 import { canShowNudge, markNudgeDismissed, markNudgeShown } from "./nudgeStore";
+import { openUpgradeFlow } from "@/billing/openUpgradeFlow";
 
 type ActiveNudge = {
   type: NudgeType;
@@ -61,9 +62,9 @@ export function UpgradeNudgeHost({ onTelemetry }: Props) {
     onTelemetry?.("nudge_dismiss", { type: active.type });
     setActive(null);
   };
-  const upgrade = () => {
+  const upgrade = async () => {
     onTelemetry?.("nudge_click_upgrade", { type: active.type });
-    navigate("/billing?upgradeStarted=1");
+    await openUpgradeFlow({ navigate });
     setActive(null);
   };
 
@@ -76,7 +77,9 @@ export function UpgradeNudgeHost({ onTelemetry }: Props) {
         body={copy.body}
         primaryCtaLabel={copy.primaryCtaLabel}
         secondaryCtaLabel={copy.secondaryCtaLabel}
-        onUpgrade={upgrade}
+        onUpgrade={() => {
+          void upgrade();
+        }}
         onDismiss={dismiss}
       />
     );
@@ -90,7 +93,9 @@ export function UpgradeNudgeHost({ onTelemetry }: Props) {
         body={copy.body}
         primaryCtaLabel={copy.primaryCtaLabel}
         secondaryCtaLabel={copy.secondaryCtaLabel}
-        onUpgrade={upgrade}
+        onUpgrade={() => {
+          void upgrade();
+        }}
         onDismiss={dismiss}
       />
     </div>

@@ -11,6 +11,7 @@ import {
 } from "@/features/upgradeNudges/nudgeStore";
 import { NUDGE_COPY } from "@/features/upgradeNudges/nudgeTypes";
 import { UpgradeNudgeInlineCard } from "@/features/upgradeNudges/UpgradeNudgeInlineCard";
+import { openUpgradeFlow } from "@/billing/openUpgradeFlow";
 
 export default function MonthlyOpsReportPageWithNudge() {
   const navigate = useNavigate();
@@ -40,7 +41,9 @@ export default function MonthlyOpsReportPageWithNudge() {
             body={NUDGE_COPY.FEATURE_EXPORT_CSV.body}
             primaryCtaLabel={NUDGE_COPY.FEATURE_EXPORT_CSV.primaryCtaLabel}
             secondaryCtaLabel={NUDGE_COPY.FEATURE_EXPORT_CSV.secondaryCtaLabel}
-            onUpgrade={() => navigate("/billing?upgradeStarted=1")}
+            onUpgrade={() => {
+              void openUpgradeFlow({ navigate });
+            }}
             onDismiss={() => {
               if (user?.id) markNudgeDismissed(String(user.id), "FEATURE_EXPORT_CSV");
               setShowNudge(false);

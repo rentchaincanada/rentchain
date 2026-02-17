@@ -13,6 +13,7 @@ import {
 } from "@/features/upgradeNudges/nudgeStore";
 import { NUDGE_COPY } from "@/features/upgradeNudges/nudgeTypes";
 import { UpgradeNudgeInlineCard } from "@/features/upgradeNudges/UpgradeNudgeInlineCard";
+import { openUpgradeFlow } from "@/billing/openUpgradeFlow";
 
 type TemplateFile = {
   label: "PDF" | "DOCX" | "CSV";
@@ -184,7 +185,9 @@ const TemplatesPage: React.FC = () => {
             body={NUDGE_COPY.FEATURE_TEMPLATES_PREMIUM.body}
             primaryCtaLabel={NUDGE_COPY.FEATURE_TEMPLATES_PREMIUM.primaryCtaLabel}
             secondaryCtaLabel={NUDGE_COPY.FEATURE_TEMPLATES_PREMIUM.secondaryCtaLabel}
-            onUpgrade={() => navigate("/billing?upgradeStarted=1")}
+            onUpgrade={() => {
+              void openUpgradeFlow({ navigate });
+            }}
             onDismiss={() => {
               if (user?.id) markNudgeDismissed(String(user.id), "FEATURE_TEMPLATES_PREMIUM");
               setShowNudge(false);

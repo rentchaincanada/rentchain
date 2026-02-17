@@ -13,6 +13,7 @@ import {
 } from "@/features/upgradeNudges/nudgeStore";
 import { NUDGE_COPY } from "@/features/upgradeNudges/nudgeTypes";
 import { UpgradeNudgeInlineCard } from "@/features/upgradeNudges/UpgradeNudgeInlineCard";
+import { openUpgradeFlow } from "@/billing/openUpgradeFlow";
 
 type CheckoutResponse = {
   ok: boolean;
@@ -167,7 +168,9 @@ const ScreeningStartPage: React.FC = () => {
             body={NUDGE_COPY.FEATURE_SCREENING_AUTOMATION.body}
             primaryCtaLabel={NUDGE_COPY.FEATURE_SCREENING_AUTOMATION.primaryCtaLabel}
             secondaryCtaLabel={NUDGE_COPY.FEATURE_SCREENING_AUTOMATION.secondaryCtaLabel}
-            onUpgrade={() => navigate("/billing?upgradeStarted=1")}
+            onUpgrade={() => {
+              void openUpgradeFlow({ navigate });
+            }}
             onDismiss={() => {
               if (user?.id) markNudgeDismissed(String(user.id), "FEATURE_SCREENING_AUTOMATION");
               setShowNudge(false);
