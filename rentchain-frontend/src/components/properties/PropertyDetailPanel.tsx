@@ -29,6 +29,7 @@ interface PropertyDetailPanelProps {
   onRefresh?: () => Promise<void> | void;
   openSendApplication?: boolean;
   onSendApplicationOpened?: () => void;
+  highlightUnitId?: string | null;
 }
 
 import { safeLocaleNumber } from "@/utils/format";
@@ -50,6 +51,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   onRefresh,
   openSendApplication = false,
   onSendApplicationOpened,
+  highlightUnitId = null,
 }) => {
   const propertyId = property?.id;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -78,6 +80,9 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   const [editingUnit, setEditingUnit] = useState<any | null>(null);
   const [sendAppUnit, setSendAppUnit] = useState<any | null>(null);
   const sendApplicationOpenedRef = useRef(false);
+  const [highlightedUnitKey, setHighlightedUnitKey] = useState<string | null>(null);
+  const unitRowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
+  const unitCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const readFileText = useCallback((file: File) => {
     return new Promise<string>((resolve, reject) => {
@@ -400,6 +405,36 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   const showLoading = !!property && (isLeasesLoading || isPaymentsLoading);
   const showLeasesError = !!leasesError;
   const showPaymentsError = !!paymentsError;
+
+  const getUnitKey = useCallback((u: any, idx: number) => {
+    return String(u?.id || u?.unitId || u?.uid || u?.unitNumber || `unit-${idx}`);
+  }, []);
+
+  useEffect(() => {
+    if (!highlightUnitId || !displayedUnits.length) {
+      setHighlightedUnitKey(null);
+      return;
+    }
+    const target = String(highlightUnitId).trim().toLowerCase();
+    const matchIndex = displayedUnits.findIndex((u: any) => {
+      const idMatch = String(u?.id || "").toLowerCase() === target;
+      const unitIdMatch = String(u?.unitId || "").toLowerCase() === target;
+      const unitNumberMatch = String(u?.unitNumber || "").toLowerCase() === target;
+      return idMatch || unitIdMatch || unitNumberMatch;
+    });
+    if (matchIndex < 0) {
+      setHighlightedUnitKey(null);
+      return;
+    }
+    const key = getUnitKey(displayedUnits[matchIndex], matchIndex);
+    setHighlightedUnitKey(key);
+    const rowEl = unitRowRefs.current[key];
+    const cardEl = unitCardRefs.current[key];
+    const targetEl = rowEl || cardEl || null;
+    if (targetEl) {
+      targetEl.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [displayedUnits, getUnitKey, highlightUnitId]);
 
   if (showEmpty) {
     return (
@@ -815,6 +850,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                 }
 
                 return displayedUnits.map((u, idx) => {
+                  const unitKey = getUnitKey(u, idx);
                   const unitNum = (u as any).unitNumber || "--";
                   const bedsVal =
                     (u as any).beds ?? (u as any).bedrooms ?? (u as any).bedroomsCount ?? null;
@@ -847,9 +883,16 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                       : "-";
                   return (
                     <tr
-                      key={(u as any).id ?? `${unitNum}-${idx}`}
+                      key={unitKey}
+                      ref={(el) => {
+                        unitRowRefs.current[unitKey] = el;
+                      }}
                       style={{
                         borderTop: "1px solid rgba(148,163,184,0.12)",
+                        background:
+                          highlightedUnitKey === unitKey
+                            ? "rgba(37,99,235,0.14)"
+                            : undefined,
                         color: "#0f172a",
                       }}
                     >
@@ -952,6 +995,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
           </div>
         ) : (
           displayedUnits.map((u, idx) => {
+            const unitKey = getUnitKey(u, idx);
             const unitNum = (u as any).unitNumber || "--";
             const bedsVal =
               (u as any).beds ?? (u as any).bedrooms ?? (u as any).bedroomsCount ?? null;
@@ -983,7 +1027,19 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                 ? sqftVal
                 : "-";
             return (
-              <div key={(u as any).id ?? `${unitNum}-${idx}`} className="rc-unit-card">
+              <div
+                key={unitKey}
+                ref={(el) => {
+                  unitCardRefs.current[unitKey] = el;
+                }}
+                className="rc-unit-card"
+                style={{
+                  background:
+                    highlightedUnitKey === unitKey
+                      ? "rgba(37,99,235,0.14)"
+                      : undefined,
+                }}
+              >
                 <div className="rc-unit-card-row">
                   <div>
                     <div className="rc-unit-label">Unit #</div>

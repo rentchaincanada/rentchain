@@ -86,6 +86,7 @@ const PropertiesPage: React.FC = () => {
   );
 
   const propertyIdFromUrl = params.get("propertyId") || "";
+  const unitIdFromUrl = params.get("unitId") || "";
   const openAddLease = params.get("openAddLease") === "1";
   const openAddUnit = params.get("openAddUnit") === "1";
   const openEditUnits = params.get("openEditUnits") === "1";
@@ -723,6 +724,7 @@ const PropertiesPage: React.FC = () => {
                 property={selectedProperty}
                 onRefresh={loadProperties}
                 openSendApplication={openSendApplication}
+                highlightUnitId={unitIdFromUrl || null}
                 onSendApplicationOpened={() => {
                   const next = new URLSearchParams(location.search);
                   next.delete("openSendApplication");

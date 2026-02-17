@@ -8,6 +8,13 @@ import { colors, radius, shadows, spacing, text, layout, blur } from "../../styl
 import { RentChainLogo } from "../brand/RentChainLogo";
 import { billingTierLabel, useBillingStatus } from "@/hooks/useBillingStatus";
 
+function roleLabel(raw: string): string {
+  const normalized = String(raw || "").trim().toLowerCase();
+  if (normalized === "admin") return "Admin";
+  if (normalized === "tenant") return "Tenant";
+  return "Landlord";
+}
+
 const TopNav: React.FC = () => {
   const navigate = useNavigate();
   const { user, logout, ready } = useAuth();
@@ -15,6 +22,7 @@ const TopNav: React.FC = () => {
   const effectiveRole = ready ? String(user?.actorRole || user?.role || "landlord") : "landlord";
   const billingStatus = useBillingStatus();
   const planLabel = billingTierLabel(billingStatus.tier);
+  const roleBadge = roleLabel(effectiveRole);
 
   return (
     <>
@@ -42,6 +50,21 @@ const TopNav: React.FC = () => {
           <RentChainLogo href="/dashboard" size="sm" />
 
           <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: spacing.sm }}>
+            <span
+              style={{
+                borderRadius: radius.pill,
+                border: `1px solid ${colors.border}`,
+                background: colors.panel,
+                color: text.muted,
+                boxShadow: shadows.sm,
+                fontWeight: 700,
+                fontSize: "0.75rem",
+                padding: "8px 10px",
+                whiteSpace: "nowrap",
+              }}
+            >
+              Role: {roleBadge}
+            </span>
             <button
               type="button"
               onClick={() => navigate("/billing")}
