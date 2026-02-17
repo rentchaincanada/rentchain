@@ -1931,7 +1931,7 @@ router.post("/rental-applications/:id/screening/export", attachAccount, requireF
     }
 
     if (role !== "admin") {
-      const cap = await requireCapability(String(landlordId), "exports_basic");
+      const cap = await requireCapability(String(landlordId), "exports_basic", req.user);
       if (!cap.ok) {
         return res.status(402).json({
           ok: false,

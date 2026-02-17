@@ -72,7 +72,7 @@ import stripeScreeningOrdersWebhookRoutes, {
   stripeWebhookHandler,
 } from "./routes/stripeScreeningOrdersWebhookRoutes";
 import { transunionWebhookHandler } from "./routes/transunionWebhookRoutes";
-import { resolveLandlordAndTier } from "./lib/landlordResolver";
+import { requireAuth } from "./middleware/requireAuth";
 import screeningJobsAdminRoutes from "./routes/screeningJobsAdminRoutes";
 import adminRoutes from "./routes/adminRoutes";
 import adminScreeningResultsRoutes from "./routes/adminScreeningResultsRoutes";
@@ -162,19 +162,15 @@ app.use("/api/capabilities", routeSource("capabilitiesRoutes.ts"), capabilitiesR
 app.use(authenticateJwt);
 
 // Current user info
-app.get("/api/me", async (req: any, res) => {
+app.get("/api/me", async (req: any, res: any, next: any) => {
   res.setHeader("x-route-source", "app.build.ts:/api/me");
   const hasAuthHeader = Boolean(req.get("authorization"));
   if (!hasAuthHeader) {
     return res.json({ ok: true, user: null });
   }
-  if (!req.user) {
-    return res.status(401).json({ ok: false, error: "Unauthorized" });
-  }
-  const resolved = await resolveLandlordAndTier(req.user);
-  const isAdmin = String(req.user?.role || "").toLowerCase() === "admin";
-  const user = { ...req.user, plan: isAdmin ? "elite" : resolved.tier };
-  return res.json({ ok: true, user });
+  return requireAuth(req, res, next);
+}, (req: any, res: any) => {
+  return res.json({ ok: true, user: req.user || null });
 });
 
 // Ledger V2 (after auth decode)

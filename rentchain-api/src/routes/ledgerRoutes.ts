@@ -19,7 +19,7 @@ function getLandlordId(req: any): string | null {
 router.get("/", requireAuth, async (req: any, res) => {
   const landlordId = getLandlordId(req);
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
-  const cap = await requireCapability(landlordId, "ledger");
+  const cap = await requireCapability(landlordId, "ledger", req.user);
   if (!cap.ok) {
     return res.status(403).json({ ok: false, error: "Upgrade required", capability: "ledger", plan: cap.plan });
   }
@@ -77,7 +77,7 @@ router.get("/ping", requireAuth, (req: any, res) => {
 router.post("/events", requireAuth, async (req: any, res) => {
   const landlordId = getLandlordId(req);
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
-  const cap = await requireCapability(landlordId, "ledger");
+  const cap = await requireCapability(landlordId, "ledger", req.user);
   if (!cap.ok) {
     return res.status(403).json({ ok: false, error: "Upgrade required", capability: "ledger", plan: cap.plan });
   }
@@ -127,7 +127,7 @@ router.post("/events", requireAuth, async (req: any, res) => {
 router.get("/verify", requireAuth, async (req: any, res) => {
   const landlordId = getLandlordId(req);
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
-  const cap = await requireCapability(landlordId, "ledger");
+  const cap = await requireCapability(landlordId, "ledger", req.user);
   if (!cap.ok) {
     return res.status(403).json({ ok: false, error: "Upgrade required", capability: "ledger", plan: cap.plan });
   }

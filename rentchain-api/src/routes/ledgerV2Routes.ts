@@ -21,7 +21,7 @@ async function enforceLedgerCapability(req: any, res: any): Promise<boolean> {
     res.status(401).json({ ok: false, error: "Unauthorized" });
     return false;
   }
-  const cap = await requireCapability(landlordId, "ledger");
+  const cap = await requireCapability(landlordId, "ledger", req.user);
   if (!cap.ok) {
     res.status(403).json({ ok: false, error: "Upgrade required", capability: "ledger", plan: cap.plan });
     return false;

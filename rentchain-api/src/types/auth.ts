@@ -5,6 +5,8 @@ export type AuthUser = {
   email?: string;
   role?: UserRole;
   landlordId?: string;
+  plan?: string;
+  capabilities?: string[];
   [key: string]: any;
 };
 

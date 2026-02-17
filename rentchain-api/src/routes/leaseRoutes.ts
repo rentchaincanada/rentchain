@@ -66,7 +66,7 @@ async function enforceLeaseCapability(req: any, res: Response): Promise<boolean>
     res.status(401).json({ error: "Unauthorized" });
     return false;
   }
-  const cap = await requireCapability(landlordId, "leases");
+  const cap = await requireCapability(landlordId, "leases", req.user);
   if (!cap.ok) {
     res.status(403).json({ error: "Upgrade required", capability: "leases", plan: cap.plan });
     return false;

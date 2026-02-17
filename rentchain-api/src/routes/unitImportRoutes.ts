@@ -35,7 +35,7 @@ router.get("/", requireLandlord, async (req: any, res) => {
 
     if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
     if (!propertyId) return res.status(400).json({ ok: false, error: "Missing propertyId" });
-    const cap = await requireCapability(landlordId, "unitsTable");
+    const cap = await requireCapability(landlordId, "unitsTable", req.user);
     if (!cap.ok) {
       return res.status(403).json({ ok: false, error: "Upgrade required", capability: "unitsTable", plan: cap.plan });
     }
@@ -74,7 +74,7 @@ router.post("/", requireLandlord, async (req: any, res) => {
     const propertyId = String(req.params?.propertyId || "");
     if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
     if (!propertyId) return res.status(400).json({ ok: false, error: "Missing propertyId" });
-    const cap = await requireCapability(landlordId, "unitsTable");
+    const cap = await requireCapability(landlordId, "unitsTable", req.user);
     if (!cap.ok) {
       return res.status(403).json({ ok: false, error: "Upgrade required", capability: "unitsTable", plan: cap.plan });
     }

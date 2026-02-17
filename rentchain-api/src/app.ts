@@ -20,7 +20,7 @@ import { transunionWebhookHandler } from "./routes/transunionWebhookRoutes";
 import { requestContext } from "./middleware/requestContext";
 import "./types/auth";
 import "./types/http";
-import { resolveLandlordAndTier } from "./lib/landlordResolver";
+import { requireAuth } from "./middleware/requireAuth";
 import paymentsRoutes from "./routes/paymentsRoutes";
 import applicationsRoutes from "./routes/applicationsRoutes";
 import applicationsConversionRoutes from "./routes/applicationsConversionRoutes";
@@ -225,19 +225,15 @@ app.use("/api", routeSource("screeningReportRoutes.ts"), screeningReportRoutes);
 
 // Core API mounts
 app.use("/health", routeSource("healthRoutes.ts"), healthRoutes);
-app.get("/api/me", async (req, res) => {
+app.get("/api/me", async (req, res, next) => {
   res.setHeader("x-route-source", "app.ts:/api/me");
   const hasAuthHeader = Boolean(req.get("authorization"));
   if (!hasAuthHeader) {
     return res.json({ ok: true, user: null });
   }
-  if (!req.user) {
-    return res.status(401).json({ ok: false, error: "Unauthorized" });
-  }
-  const resolved = await resolveLandlordAndTier(req.user);
-  const isAdmin = String(req.user?.role || "").toLowerCase() === "admin";
-  const user = { ...req.user, plan: isAdmin ? "elite" : resolved.tier };
-  return res.json({ ok: true, user });
+  return requireAuth(req, res, next);
+}, (req, res) => {
+  return res.json({ ok: true, user: req.user || null });
 });
 app.get("/api/_build", (req, res) => {
   res.setHeader("x-route-source", "app.ts:/api/_build");
