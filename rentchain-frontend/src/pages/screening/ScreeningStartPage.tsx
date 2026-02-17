@@ -3,6 +3,16 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Card, Section, Button } from "../../components/ui/Ui";
 import { apiFetch } from "../../api/apiFetch";
 import { spacing, text } from "../../styles/tokens";
+import { useAuth } from "../../context/useAuth";
+import { useBillingStatus } from "@/hooks/useBillingStatus";
+import {
+  canShowNudge,
+  hasMeaningfulAction,
+  markNudgeDismissed,
+  markNudgeShown,
+} from "@/features/upgradeNudges/nudgeStore";
+import { NUDGE_COPY } from "@/features/upgradeNudges/nudgeTypes";
+import { UpgradeNudgeInlineCard } from "@/features/upgradeNudges/UpgradeNudgeInlineCard";
 
 type CheckoutResponse = {
   ok: boolean;
@@ -63,6 +73,8 @@ const mapErrorTitle = (code?: string | null) => {
 };
 
 const ScreeningStartPage: React.FC = () => {
+  const { user } = useAuth();
+  const billingStatus = useBillingStatus();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
@@ -70,6 +82,7 @@ const ScreeningStartPage: React.FC = () => {
   const [reason, setReason] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showNudge, setShowNudge] = useState(false);
   const startedRef = useRef(false);
 
   const applicationId =
@@ -132,8 +145,36 @@ const ScreeningStartPage: React.FC = () => {
     void startCheckout();
   }, [applicationId, cancelPath, returnTo, successPath]);
 
+  useEffect(() => {
+    const roleLower = String(user?.actorRole || user?.role || "").toLowerCase();
+    const isAdmin = roleLower === "admin";
+    const isStarter = billingStatus.tier === "starter";
+    const userId = String(user?.id || "");
+    if (!userId || isAdmin || !isStarter) return;
+    if (!hasMeaningfulAction(userId)) return;
+    if (!canShowNudge(userId, "FEATURE_SCREENING_AUTOMATION")) return;
+    markNudgeShown(userId, "FEATURE_SCREENING_AUTOMATION");
+    setShowNudge(true);
+  }, [billingStatus.tier, user?.actorRole, user?.id, user?.role]);
+
   return (
     <Section style={{ maxWidth: 680, margin: "0 auto" }}>
+      {showNudge ? (
+        <div style={{ marginBottom: spacing.sm }}>
+          <UpgradeNudgeInlineCard
+            type="FEATURE_SCREENING_AUTOMATION"
+            title={NUDGE_COPY.FEATURE_SCREENING_AUTOMATION.title}
+            body={NUDGE_COPY.FEATURE_SCREENING_AUTOMATION.body}
+            primaryCtaLabel={NUDGE_COPY.FEATURE_SCREENING_AUTOMATION.primaryCtaLabel}
+            secondaryCtaLabel={NUDGE_COPY.FEATURE_SCREENING_AUTOMATION.secondaryCtaLabel}
+            onUpgrade={() => navigate("/billing?upgradeStarted=1")}
+            onDismiss={() => {
+              if (user?.id) markNudgeDismissed(String(user.id), "FEATURE_SCREENING_AUTOMATION");
+              setShowNudge(false);
+            }}
+          />
+        </div>
+      ) : null}
       <Card elevated>
         {loading ? (
           <div style={{ display: "grid", gap: spacing.sm }}>

@@ -56,7 +56,7 @@ import TenantDashboardPage from "./pages/tenant/TenantDashboardPage";
 import TenantLedgerPage from "./pages/tenant/TenantLedgerPage";
 import TenantMagicRedeemPage from "./pages/tenant/TenantMagicRedeemPage";
 import TenantMaintenanceRequestDetailPage from "./pages/tenant/TenantMaintenanceRequestDetailPage";
-import MonthlyOpsReportPage from "./pages/reports/MonthlyOpsReportPage";
+import MonthlyOpsReportPageWithNudge from "./pages/reports/MonthlyOpsReportPageWithNudge";
 import InvitesPage from "./pages/landlord/InvitesPage";
 import PublicApplyPage from "./pages/PublicApplyPage";
 import MessagesPage from "./pages/MessagesPage";
@@ -243,7 +243,7 @@ function App() {
           path="/reports/monthly-ops"
           element={
             <RequireAuth>
-              <MonthlyOpsReportPage />
+              <MonthlyOpsReportPageWithNudge />
             </RequireAuth>
           }
         />

@@ -6,9 +6,11 @@ import { requireLandlordOrAdmin } from "../middleware/requireLandlordOrAdmin";
 import { rateLimitTenantInvitesUser } from "../middleware/rateLimit";
 import { sendEmail } from "../services/emailService";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
+import { resolvePlan } from "../entitlements/plans";
 import { createTenancyIfMissing } from "../services/tenanciesService";
 
 const router = Router();
+const STARTER_TENANT_LIMIT = Number(process.env.STARTER_TENANT_LIMIT || 0);
 
 function signTenantJwt(payload: any) {
   const secret = process.env.JWT_SECRET;
@@ -39,6 +41,25 @@ router.post(
         return res.status(400).json({ ok: false, error: "tenantEmail_required" });
       }
       const toEmail = String(tenantEmail || "").trim().toLowerCase();
+      const role = String(req.user?.role || "").toLowerCase();
+      const plan = resolvePlan(req.user?.plan);
+      if (role !== "admin" && plan === "starter" && STARTER_TENANT_LIMIT > 0) {
+        const tenantCountSnap = await db
+          .collection("tenants")
+          .where("landlordId", "==", landlordId)
+          .limit(STARTER_TENANT_LIMIT + 1)
+          .get();
+        if (tenantCountSnap.size >= STARTER_TENANT_LIMIT) {
+          return res.status(409).json({
+            ok: false,
+            error: "plan_limit",
+            code: "LIMIT_TENANTS",
+            limit: STARTER_TENANT_LIMIT,
+            current: tenantCountSnap.size,
+            limitType: "tenants",
+          });
+        }
+      }
 
       const token = crypto.randomBytes(24).toString("hex");
       const now = Date.now();
