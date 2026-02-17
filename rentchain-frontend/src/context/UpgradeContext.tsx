@@ -86,6 +86,8 @@ export function UpgradeProvider({ children }: { children: React.ReactNode }) {
 
   const handleUpgradeEvent = useCallback((evt: Event) => {
     if (!ready || isLoading || !user?.id) return;
+    const roleLower = String(user?.actorRole || user?.role || "").toLowerCase();
+    if (roleLower === "admin") return;
     const detail = (evt as CustomEvent<any>).detail || {};
     const featureKey = String(detail.featureKey || detail.limitType || detail.capability || "").trim();
     if (!featureKey) return;
@@ -115,7 +117,7 @@ export function UpgradeProvider({ children }: { children: React.ReactNode }) {
     setPromptSource(source);
     setPromptRedirectTo(redirectTo);
     setPromptOpen(true);
-  }, [isAtLeast, user?.id, ready, isLoading]);
+  }, [isAtLeast, user?.id, user?.role, user?.actorRole, ready, isLoading]);
 
   const ctxValue = useMemo(
     () => ({ openUpgrade, clearUpgradePrompt }),

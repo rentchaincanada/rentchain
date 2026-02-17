@@ -6,6 +6,7 @@ import { fetchLandlordConversations } from "../../api/messagesApi";
 import { getVisibleNavItems } from "./navConfig";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { billingTierLabel, useBillingStatus } from "@/hooks/useBillingStatus";
+import { UpgradeNudgeHost } from "@/features/upgradeNudges/UpgradeNudgeHost";
 import "./LandlordNav.css";
 
 type Props = {
@@ -182,6 +183,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
         </div>
       </aside>
 
+      <UpgradeNudgeHost />
       <div className="rc-landlord-content">{children}</div>
 
       <nav className="rc-mobile-tabbar" aria-label="Bottom navigation">

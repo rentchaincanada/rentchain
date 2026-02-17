@@ -28,6 +28,7 @@ import { SendApplicationModal } from "../components/properties/SendApplicationMo
 import { useUnitsForProperty } from "../hooks/useUnitsForProperty";
 import { listReferrals } from "../api/referralsApi";
 import { hasTier, normalizeTier } from "@/billing/requireTier";
+import { markDashboardVisit } from "@/features/upgradeNudges/nudgeStore";
 
 const StarterOnboardingPanel = React.lazy(
   () => import("../components/dashboard/StarterOnboardingPanel")
@@ -135,6 +136,7 @@ const DashboardPage: React.FC = () => {
     applicationCreated: false,
   });
   const nudgeReadyRef = React.useRef(false);
+  const dashboardVisitMarkedRef = React.useRef(false);
   const loadDashboard = React.useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -236,6 +238,12 @@ const DashboardPage: React.FC = () => {
       });
     }
   }, [authReady, meLoaded, user?.plan, isMobile]);
+
+  React.useEffect(() => {
+    if (!meLoaded || !user?.id || dashboardVisitMarkedRef.current) return;
+    dashboardVisitMarkedRef.current = true;
+    markDashboardVisit(String(user.id));
+  }, [meLoaded, user?.id]);
 
   React.useEffect(() => {
     if (import.meta.env.DEV) {

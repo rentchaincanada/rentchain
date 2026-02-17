@@ -40,9 +40,9 @@ export async function enforcePropertyCap(req: Request, res: Response, next: Next
       return jsonError(
         res,
         409,
-        "LIMIT_REACHED",
-        "Plan limit reached: max properties",
-        { plan: planKey, current, limit },
+        "LIMIT_PROPERTIES",
+        "plan_limit",
+        { plan: planKey, current, limit, code: "LIMIT_PROPERTIES", error: "plan_limit", limitType: "properties" },
         req.requestId
       );
     }
@@ -75,9 +75,17 @@ export async function enforceUnitCap(req: Request, res: Response, next: NextFunc
       return jsonError(
         res,
         409,
-        "LIMIT_REACHED",
-        "Plan limit reached: max units",
-        { plan: planKey, current, adding: batchCount, limit },
+        "LIMIT_UNITS",
+        "plan_limit",
+        {
+          plan: planKey,
+          current,
+          adding: batchCount,
+          limit,
+          code: "LIMIT_UNITS",
+          error: "plan_limit",
+          limitType: "units",
+        },
         req.requestId
       );
     }

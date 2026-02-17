@@ -1,7 +1,20 @@
 import React, { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, Input } from "../../components/ui/Ui";
 import { spacing, text } from "../../styles/tokens";
 import { MarketingLayout } from "../marketing/MarketingLayout";
+import { useAuth } from "../../context/useAuth";
+import { useBillingStatus } from "@/hooks/useBillingStatus";
+import {
+  canShowNudge,
+  hasMeaningfulAction,
+  markNudgeDismissed,
+  markNudgeShown,
+} from "@/features/upgradeNudges/nudgeStore";
+import { NUDGE_COPY } from "@/features/upgradeNudges/nudgeTypes";
+import { UpgradeNudgeInlineCard } from "@/features/upgradeNudges/UpgradeNudgeInlineCard";
+import { openUpgradeFlow } from "@/billing/openUpgradeFlow";
+import { logTelemetryEvent } from "@/api/telemetryApi";
 
 type TemplateFile = {
   label: "PDF" | "DOCX" | "CSV";
@@ -86,11 +99,32 @@ const templates: TemplateItem[] = [
 ];
 
 const TemplatesPage: React.FC = () => {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const billingStatus = useBillingStatus();
   const [query, setQuery] = useState("");
+  const [showNudge, setShowNudge] = useState(false);
 
   React.useEffect(() => {
     document.title = "Templates — RentChain";
   }, []);
+
+  React.useEffect(() => {
+    const roleLower = String(user?.actorRole || user?.role || "").toLowerCase();
+    const isAdmin = roleLower === "admin";
+    const isStarter = billingStatus.tier === "starter";
+    const userId = String(user?.id || "");
+    if (!userId || isAdmin || !isStarter) return;
+    if (!hasMeaningfulAction(userId)) return;
+    if (!canShowNudge(userId, "FEATURE_TEMPLATES_PREMIUM")) return;
+    markNudgeShown(userId, "FEATURE_TEMPLATES_PREMIUM");
+    setShowNudge(true);
+    void logTelemetryEvent("nudge_impression", {
+      type: "FEATURE_TEMPLATES_PREMIUM",
+      page: "/help/templates",
+      plan: billingStatus.tier,
+    });
+  }, [billingStatus.tier, user?.actorRole, user?.id, user?.role]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -150,6 +184,24 @@ const TemplatesPage: React.FC = () => {
           onChange={(e) => setQuery(e.target.value)}
           style={{ maxWidth: 420 }}
         />
+        {showNudge ? (
+          <UpgradeNudgeInlineCard
+            type="FEATURE_TEMPLATES_PREMIUM"
+            title={NUDGE_COPY.FEATURE_TEMPLATES_PREMIUM.title}
+            body={NUDGE_COPY.FEATURE_TEMPLATES_PREMIUM.body}
+            primaryCtaLabel={NUDGE_COPY.FEATURE_TEMPLATES_PREMIUM.primaryCtaLabel}
+            secondaryCtaLabel={NUDGE_COPY.FEATURE_TEMPLATES_PREMIUM.secondaryCtaLabel}
+            onUpgrade={() => {
+              void logTelemetryEvent("nudge_click_upgrade", { type: "FEATURE_TEMPLATES_PREMIUM" });
+              void openUpgradeFlow({ navigate });
+            }}
+            onDismiss={() => {
+              if (user?.id) markNudgeDismissed(String(user.id), "FEATURE_TEMPLATES_PREMIUM");
+              void logTelemetryEvent("nudge_dismiss", { type: "FEATURE_TEMPLATES_PREMIUM" });
+              setShowNudge(false);
+            }}
+          />
+        ) : null}
 
         {filtered.length === 0 ? (
           <div style={{ color: text.muted }}>No templates match your search.</div>
