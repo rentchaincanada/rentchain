@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import { fetchAccountLimits, type AccountLimits } from "../api/accountApi";
-import { PLANS } from "../config/plans";
 
 let lastApiError: any = null;
 export function setLastApiError(err: any) {
@@ -73,9 +72,6 @@ export const DebugPanel: React.FC = () => {
   const usage = (limitsData as any).usage || {};
   const capabilities = (limitsData as any).capabilities || (limitsData as any).entitlements || {};
   const plan = (limitsData as any).plan || "starter";
-  const planKeyRaw = plan.toString();
-  const planKey = planKeyRaw.trim().toLowerCase();
-  const planLimits = (PLANS as any)[planKey] ?? PLANS.starter;
   const integrity = (limitsData as any)?.integrity;
   const integrityTooltip =
     integrity?.ok === false
@@ -114,8 +110,8 @@ export const DebugPanel: React.FC = () => {
             ? "Integrity: OK"
             : "Integrity: unknown"}
         </div>
-        <div>Properties: {usage.properties ?? "N/A"}/{planLimits.maxProperties}</div>
-        <div>Units: {usage.units ?? "N/A"}/{planLimits.maxUnits}</div>
+        <div>Properties: {usage.properties ?? "N/A"}</div>
+        <div>Units: {usage.units ?? "N/A"}</div>
         <div>AI: {capabilities["ai.insights"] ? "yes" : "no"}</div>
         <div>Screening: {capabilities["screening"] ? "yes" : "no"}</div>
         <div>Team Invites: {capabilities["team.invites"] ? "yes" : "no"}</div>

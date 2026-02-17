@@ -3,10 +3,6 @@ import { apiGetJson } from "./http";
 export type AccountLimits = {
   status: string;
   plan: string;
-  limits: {
-    maxProperties: number;
-    maxUnits: number;
-  };
   capabilities: Record<string, boolean>;
   usage?: {
     properties: number;
@@ -37,7 +33,6 @@ export async function fetchAccountLimits(token?: string): Promise<AccountLimits 
     return {
       status: "unavailable",
       plan: "starter",
-      limits: { maxProperties: 0, maxUnits: 0 },
       capabilities: {},
       usage: { properties: 0, units: 0 },
     };

@@ -25,7 +25,6 @@ export type CapabilityKey =
 export type AccountLimitsResponse = {
   status: "ok";
   plan: string;
-  limits: { maxProperties: number; maxUnits: number };
   capabilities: Record<CapabilityKey, boolean> & Record<string, boolean>;
   // optional future fields:
   usage?: { properties?: number; units?: number; screeningsThisMonth?: number };
