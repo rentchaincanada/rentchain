@@ -227,9 +227,8 @@ app.use("/api", routeSource("screeningReportRoutes.ts"), screeningReportRoutes);
 app.use("/health", routeSource("healthRoutes.ts"), healthRoutes);
 app.get("/api/me", async (req, res, next) => {
   res.setHeader("x-route-source", "app.ts:/api/me");
-  const hasAuthHeader = Boolean(req.get("authorization"));
-  if (!hasAuthHeader) {
-    return res.json({ ok: true, user: null });
+  if (!req.get("authorization")) {
+    return res.status(401).json({ ok: false, error: "unauthenticated" });
   }
   return requireAuth(req, res, next);
 }, (req, res) => {
