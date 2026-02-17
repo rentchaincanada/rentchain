@@ -1,9 +1,8 @@
-export type Plan = "free" | "starter" | "pro" | "business" | "screening" | "core" | "elite";
+export type Plan = "free" | "starter" | "pro" | "elite" | "screening" | "core";
 
 export type Capability =
   | "ai.insights"
   | "team.invites"
-  | "screening"
   | "properties.create"
   | "units.create";
 
@@ -18,7 +17,6 @@ export const PLANS: Record<Plan, PlanSpec> = {
     capabilities: {
       "ai.insights": false,
       "team.invites": true,
-      "screening": true,
       "properties.create": true,
       "units.create": true,
     },
@@ -28,7 +26,6 @@ export const PLANS: Record<Plan, PlanSpec> = {
     capabilities: {
       "ai.insights": false,
       "team.invites": true,
-      "screening": true,
       "properties.create": true,
       "units.create": true,
     },
@@ -38,7 +35,6 @@ export const PLANS: Record<Plan, PlanSpec> = {
     capabilities: {
       "ai.insights": false,
       "team.invites": true,
-      "screening": true,
       "properties.create": true,
       "units.create": true,
     },
@@ -48,7 +44,6 @@ export const PLANS: Record<Plan, PlanSpec> = {
     capabilities: {
       "ai.insights": false,
       "team.invites": true,
-      "screening": true,
       "properties.create": true,
       "units.create": true,
     },
@@ -58,17 +53,6 @@ export const PLANS: Record<Plan, PlanSpec> = {
     capabilities: {
       "ai.insights": false,
       "team.invites": true,
-      "screening": true,
-      "properties.create": true,
-      "units.create": true,
-    },
-  },
-  business: {
-    plan: "business",
-    capabilities: {
-      "ai.insights": true,
-      "team.invites": true,
-      "screening": true,
       "properties.create": true,
       "units.create": true,
     },
@@ -78,7 +62,6 @@ export const PLANS: Record<Plan, PlanSpec> = {
     capabilities: {
       "ai.insights": true,
       "team.invites": true,
-      "screening": true,
       "properties.create": true,
       "units.create": true,
     },
@@ -89,7 +72,7 @@ export function resolvePlan(input?: string | null): Plan {
   const p = (input ?? "").toLowerCase().trim();
   if (p === "starter" || p === "core") return "starter";
   if (p === "pro") return "pro";
-  if (p === "business" || p === "elite" || p === "enterprise") return "business";
+  if (p === "business" || p === "elite" || p === "enterprise") return "elite";
   if (p === "free" || p === "screening") return "free";
   return (process.env.RENTCHAIN_DEFAULT_PLAN as Plan) || "free";
 }

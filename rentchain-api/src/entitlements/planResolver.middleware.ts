@@ -10,7 +10,7 @@ export function attachPlan() {
       (req.user?.plan as string | undefined) ??
       (Array.isArray(headerPlan) ? headerPlan[0] : (headerPlan as string | undefined)) ??
       process.env.RENTCHAIN_DEFAULT_PLAN ??
-      "screening";
+      "free";
 
     const plan = resolvePlan(planStr);
     req.user = { ...(req.user || {}), plan };
