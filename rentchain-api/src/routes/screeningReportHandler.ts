@@ -19,7 +19,7 @@ export async function handleScreeningReport(req: any, res: any) {
       if (!landlordId) {
         return res.status(401).json({ ok: false, error: "unauthorized" });
       }
-      const cap = await requireCapability(String(landlordId), "exports_basic");
+      const cap = await requireCapability(String(landlordId), "exports_basic", req.user);
       if (!cap.ok) {
         return res.status(402).json({
           ok: false,

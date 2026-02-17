@@ -36,7 +36,7 @@ router.post("/", authenticateJwt, async (req: any, res) => {
 
     if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
 
-    const cap = await requireCapability(landlordId, "applications");
+    const cap = await requireCapability(landlordId, "applications", req.user);
     if (!cap.ok) {
       return res.status(403).json({
         ok: false,
