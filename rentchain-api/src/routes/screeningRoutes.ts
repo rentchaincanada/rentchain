@@ -29,12 +29,11 @@ import { propertyService } from "../services/propertyService";
 import { getFlags } from "../services/featureFlagService";
 import { runScreeningWithCredits } from "../services/screeningsService";
 import { attachAccount } from "../middleware/attachAccount";
-import { requireFeature } from "../middleware/entitlements";
 import { getScreeningProviderHealth } from "../services/screening/providerHealth";
 
 const router = Router();
 
-router.use(authenticateJwt, attachAccount, requireFeature("screening"));
+router.use(authenticateJwt, attachAccount);
 
 router.get("/screenings/config", (_req, res: Response) => {
   res.status(200).json({
@@ -460,3 +459,4 @@ router.get("/debug/last-email", (_req: AuthenticatedRequest, res: Response) => {
 });
 
 export default router;
+

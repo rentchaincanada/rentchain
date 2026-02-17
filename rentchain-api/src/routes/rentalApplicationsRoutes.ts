@@ -3,7 +3,6 @@ import { createHash } from "crypto";
 import { db } from "../config/firebase";
 import { authenticateJwt } from "../middleware/authMiddleware";
 import { attachAccount } from "../middleware/attachAccount";
-import { requireFeature } from "../middleware/entitlements";
 import { getStripeClient, isStripeConfigured } from "../services/stripeService";
 import { requireCapability } from "../services/capabilityGuard";
 import { getScreeningPricing } from "../billing/screeningPricing";
@@ -460,7 +459,6 @@ router.patch("/rental-applications/:id", async (req: any, res) => {
 router.post(
   "/rental-applications/:id/screening/quote",
   attachAccount,
-  requireFeature("screening"),
   async (req: any, res) => {
     try {
       const role = String(req.user?.role || "").toLowerCase();
@@ -530,7 +528,6 @@ router.post(
   rateLimitScreeningIp,
   rateLimitScreeningUser,
   attachAccount,
-  requireFeature("screening"),
   async (req: any, res) => {
     const logBase = { route: "screening_checkout", applicationId: String(req.params?.id || "") };
     try {
@@ -864,7 +861,6 @@ router.post(
 router.post(
   "/screening/orders",
   attachAccount,
-  requireFeature("screening"),
   async (req: any, res) => {
     const logBase = { route: "screening_orders", applicationId: String(req.body?.applicationId || "") };
     try {
@@ -1184,7 +1180,6 @@ router.post(
 router.get(
   "/screening/orders/:id",
   attachAccount,
-  requireFeature("screening"),
   async (req: any, res) => {
     res.setHeader("x-route-source", "rentalApplicationsRoutes:screeningOrderGet");
     const role = String(req.user?.role || "").toLowerCase();
@@ -1233,7 +1228,6 @@ router.get(
 router.get(
   "/screening/orders/:id/report",
   attachAccount,
-  requireFeature("screening"),
   async (req: any, res) => {
     res.setHeader("x-route-source", "rentalApplicationsRoutes:screeningOrderReport");
     const role = String(req.user?.role || "").toLowerCase();
@@ -1272,7 +1266,6 @@ router.post(
   rateLimitScreeningIp,
   rateLimitScreeningUser,
   attachAccount,
-  requireFeature("screening"),
   async (req: any, res) => {
     try {
       if (isStripeConfigured()) {
@@ -1533,7 +1526,6 @@ router.post(
 router.post(
   "/screening/stripe/confirm",
   attachAccount,
-  requireFeature("screening"),
   async (req: any, res) => {
     try {
       const role = String(req.user?.role || "").toLowerCase();
@@ -1621,7 +1613,6 @@ router.post(
 router.get(
   "/rental-applications/:id/screening",
   attachAccount,
-  requireFeature("screening"),
   async (req: any, res) => {
     try {
       const role = String(req.user?.role || "").toLowerCase();
@@ -1652,7 +1643,6 @@ router.get(
 router.get(
   "/rental-applications/:id/screening/result",
   attachAccount,
-  requireFeature("screening"),
   async (req: any, res) => {
     try {
       const role = String(req.user?.role || "").toLowerCase();
@@ -1696,7 +1686,6 @@ router.get(
 router.get(
   "/rental-applications/:id/screening/receipt",
   attachAccount,
-  requireFeature("screening"),
   async (req: any, res) => {
     try {
       const role = String(req.user?.role || "").toLowerCase();
@@ -1832,7 +1821,7 @@ router.get("/rental-applications/:id/review-summary.pdf", async (req: any, res) 
   }
 });
 
-router.get("/rental-applications/:id/screening/events", attachAccount, requireFeature("screening"), async (req, res) => {
+router.get("/rental-applications/:id/screening/events", attachAccount, async (req, res) => {
   try {
     const role = String(req.user?.role || "").toLowerCase();
     const landlordId = req.user?.landlordId || req.user?.id || null;
@@ -1910,7 +1899,7 @@ router.get("/rental-applications/:id/screening/events", attachAccount, requireFe
 
 
 
-router.post("/rental-applications/:id/screening/export", attachAccount, requireFeature("screening"), async (req: any, res) => {
+router.post("/rental-applications/:id/screening/export", attachAccount, async (req: any, res) => {
   try {
     const role = String(req.user?.role || "").toLowerCase();
     if (role !== "landlord" && role !== "admin") {
@@ -2007,3 +1996,4 @@ export const __testing = {
 };
 
 export default router;
+
