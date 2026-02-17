@@ -14,6 +14,7 @@ import {
 import { NUDGE_COPY } from "@/features/upgradeNudges/nudgeTypes";
 import { UpgradeNudgeInlineCard } from "@/features/upgradeNudges/UpgradeNudgeInlineCard";
 import { openUpgradeFlow } from "@/billing/openUpgradeFlow";
+import { logTelemetryEvent } from "@/api/telemetryApi";
 
 type TemplateFile = {
   label: "PDF" | "DOCX" | "CSV";
@@ -118,6 +119,11 @@ const TemplatesPage: React.FC = () => {
     if (!canShowNudge(userId, "FEATURE_TEMPLATES_PREMIUM")) return;
     markNudgeShown(userId, "FEATURE_TEMPLATES_PREMIUM");
     setShowNudge(true);
+    void logTelemetryEvent("nudge_impression", {
+      type: "FEATURE_TEMPLATES_PREMIUM",
+      page: "/help/templates",
+      plan: billingStatus.tier,
+    });
   }, [billingStatus.tier, user?.actorRole, user?.id, user?.role]);
 
   const filtered = useMemo(() => {
@@ -186,10 +192,12 @@ const TemplatesPage: React.FC = () => {
             primaryCtaLabel={NUDGE_COPY.FEATURE_TEMPLATES_PREMIUM.primaryCtaLabel}
             secondaryCtaLabel={NUDGE_COPY.FEATURE_TEMPLATES_PREMIUM.secondaryCtaLabel}
             onUpgrade={() => {
+              void logTelemetryEvent("nudge_click_upgrade", { type: "FEATURE_TEMPLATES_PREMIUM" });
               void openUpgradeFlow({ navigate });
             }}
             onDismiss={() => {
               if (user?.id) markNudgeDismissed(String(user.id), "FEATURE_TEMPLATES_PREMIUM");
+              void logTelemetryEvent("nudge_dismiss", { type: "FEATURE_TEMPLATES_PREMIUM" });
               setShowNudge(false);
             }}
           />

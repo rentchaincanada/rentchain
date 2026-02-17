@@ -14,6 +14,7 @@ import {
 import { NUDGE_COPY } from "@/features/upgradeNudges/nudgeTypes";
 import { UpgradeNudgeInlineCard } from "@/features/upgradeNudges/UpgradeNudgeInlineCard";
 import { openUpgradeFlow } from "@/billing/openUpgradeFlow";
+import { logTelemetryEvent } from "@/api/telemetryApi";
 
 type CheckoutResponse = {
   ok: boolean;
@@ -156,6 +157,11 @@ const ScreeningStartPage: React.FC = () => {
     if (!canShowNudge(userId, "FEATURE_SCREENING_AUTOMATION")) return;
     markNudgeShown(userId, "FEATURE_SCREENING_AUTOMATION");
     setShowNudge(true);
+    void logTelemetryEvent("nudge_impression", {
+      type: "FEATURE_SCREENING_AUTOMATION",
+      page: "/screening/start",
+      plan: billingStatus.tier,
+    });
   }, [billingStatus.tier, user?.actorRole, user?.id, user?.role]);
 
   return (
@@ -169,10 +175,12 @@ const ScreeningStartPage: React.FC = () => {
             primaryCtaLabel={NUDGE_COPY.FEATURE_SCREENING_AUTOMATION.primaryCtaLabel}
             secondaryCtaLabel={NUDGE_COPY.FEATURE_SCREENING_AUTOMATION.secondaryCtaLabel}
             onUpgrade={() => {
+              void logTelemetryEvent("nudge_click_upgrade", { type: "FEATURE_SCREENING_AUTOMATION" });
               void openUpgradeFlow({ navigate });
             }}
             onDismiss={() => {
               if (user?.id) markNudgeDismissed(String(user.id), "FEATURE_SCREENING_AUTOMATION");
+              void logTelemetryEvent("nudge_dismiss", { type: "FEATURE_SCREENING_AUTOMATION" });
               setShowNudge(false);
             }}
           />

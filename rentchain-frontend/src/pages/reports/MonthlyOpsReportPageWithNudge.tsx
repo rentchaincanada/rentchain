@@ -12,6 +12,7 @@ import {
 import { NUDGE_COPY } from "@/features/upgradeNudges/nudgeTypes";
 import { UpgradeNudgeInlineCard } from "@/features/upgradeNudges/UpgradeNudgeInlineCard";
 import { openUpgradeFlow } from "@/billing/openUpgradeFlow";
+import { logTelemetryEvent } from "@/api/telemetryApi";
 
 export default function MonthlyOpsReportPageWithNudge() {
   const navigate = useNavigate();
@@ -29,6 +30,11 @@ export default function MonthlyOpsReportPageWithNudge() {
     if (!canShowNudge(userId, "FEATURE_EXPORT_CSV")) return;
     markNudgeShown(userId, "FEATURE_EXPORT_CSV");
     setShowNudge(true);
+    void logTelemetryEvent("nudge_impression", {
+      type: "FEATURE_EXPORT_CSV",
+      page: "/reports/monthly-ops",
+      plan: billingStatus.tier,
+    });
   }, [billingStatus.tier, user?.actorRole, user?.id, user?.role]);
 
   return (
@@ -42,10 +48,12 @@ export default function MonthlyOpsReportPageWithNudge() {
             primaryCtaLabel={NUDGE_COPY.FEATURE_EXPORT_CSV.primaryCtaLabel}
             secondaryCtaLabel={NUDGE_COPY.FEATURE_EXPORT_CSV.secondaryCtaLabel}
             onUpgrade={() => {
+              void logTelemetryEvent("nudge_click_upgrade", { type: "FEATURE_EXPORT_CSV" });
               void openUpgradeFlow({ navigate });
             }}
             onDismiss={() => {
               if (user?.id) markNudgeDismissed(String(user.id), "FEATURE_EXPORT_CSV");
+              void logTelemetryEvent("nudge_dismiss", { type: "FEATURE_EXPORT_CSV" });
               setShowNudge(false);
             }}
           />

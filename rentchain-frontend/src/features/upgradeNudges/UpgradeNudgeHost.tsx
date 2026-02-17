@@ -6,6 +6,7 @@ import { UpgradeNudgeModal } from "./UpgradeNudgeModal";
 import { NUDGE_COPY, mapFeatureKeyToNudgeType, type NudgeType } from "./nudgeTypes";
 import { canShowNudge, markNudgeDismissed, markNudgeShown } from "./nudgeStore";
 import { openUpgradeFlow } from "@/billing/openUpgradeFlow";
+import { logTelemetryEvent } from "@/api/telemetryApi";
 
 type ActiveNudge = {
   type: NudgeType;
@@ -18,11 +19,7 @@ type UpgradeDetail = {
   plan?: string;
 };
 
-type Props = {
-  onTelemetry?: (eventName: string, eventProps?: Record<string, unknown>) => void;
-};
-
-export function UpgradeNudgeHost({ onTelemetry }: Props) {
+export function UpgradeNudgeHost() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [active, setActive] = React.useState<ActiveNudge | null>(null);
@@ -43,7 +40,12 @@ export function UpgradeNudgeHost({ onTelemetry }: Props) {
         markNudgeShown(userId, type);
       }
       setActive({ type, presentation });
-      onTelemetry?.("nudge_impression", { type, page: window.location.pathname, plan, source: detail.source || "upgrade_prompt" });
+      void logTelemetryEvent("nudge_impression", {
+        type,
+        page: window.location.pathname,
+        plan,
+        source: detail.source || "upgrade_prompt",
+      });
     };
 
     window.addEventListener("upgrade:prompt", handler as EventListener);
@@ -52,18 +54,18 @@ export function UpgradeNudgeHost({ onTelemetry }: Props) {
       window.removeEventListener("upgrade:prompt", handler as EventListener);
       window.removeEventListener("upgrade:plan-limit", handler as EventListener);
     };
-  }, [isAdmin, onTelemetry, plan, userId]);
+  }, [isAdmin, plan, userId]);
 
   if (!active || isAdmin) return null;
 
   const copy = NUDGE_COPY[active.type] || NUDGE_COPY.GENERIC_UPGRADE;
   const dismiss = () => {
     if (userId) markNudgeDismissed(userId, active.type);
-    onTelemetry?.("nudge_dismiss", { type: active.type });
+    void logTelemetryEvent("nudge_dismiss", { type: active.type });
     setActive(null);
   };
   const upgrade = async () => {
-    onTelemetry?.("nudge_click_upgrade", { type: active.type });
+    void logTelemetryEvent("nudge_click_upgrade", { type: active.type });
     await openUpgradeFlow({ navigate });
     setActive(null);
   };
