@@ -74,7 +74,7 @@ export function UpgradeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const isAtLeast = useCallback((current?: string, required?: string) => {
-    const order = ["free", "starter", "pro", "business"] as const;
+    const order = ["free", "starter", "pro", "elite"] as const;
     const currentNorm = normalizePlanName(current);
     const requiredNorm = normalizePlanName(required);
     if (!currentNorm || !requiredNorm) return false;

@@ -8,12 +8,12 @@ export function handleEntitlementError(
   if (code !== "ENTITLEMENT_LIMIT_REACHED") return false;
 
   const resource = err?.resource || err?.response?.data?.resource;
+  if (resource === "properties" || resource === "units") {
+    // Properties and units are no longer plan-capped.
+    return false;
+  }
   const reason: UpgradeReason =
-    resource === "properties"
-      ? "propertiesMax"
-      : resource === "units"
-      ? "unitsMax"
-      : resource === "tenants"
+    resource === "tenants"
       ? "automation"
       : "automation";
 
