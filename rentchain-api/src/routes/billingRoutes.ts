@@ -19,22 +19,22 @@ router.get("/health", (_req, res) => {
   res.json({ ok: true, service: "billing", ts: Date.now() });
 });
 
-type SubscriptionStatusTier = "starter" | "pro" | "business" | "elite";
+type SubscriptionStatusTier = "free" | "starter" | "pro" | "elite";
 type SubscriptionStatusInterval = "month" | "year" | null;
 
 function normalizeSubscriptionStatusTier(input: any): SubscriptionStatusTier {
   const raw = String(input || "").trim().toLowerCase();
   if (raw === "pro" || raw === "professional") return "pro";
-  if (raw === "business" || raw === "enterprise") return "business";
-  if (raw === "elite") return "elite";
-  return "starter";
+  if (raw === "elite" || raw === "business" || raw === "enterprise") return "elite";
+  if (raw === "starter" || raw === "core") return "starter";
+  return "free";
 }
 
 function sendSubscriptionStatus(req: any, res: any) {
   const tier = normalizeSubscriptionStatusTier(req.user?.plan);
   const interval: SubscriptionStatusInterval = null;
   const renewalDate: string | null = null;
-  const isActive = tier !== "starter";
+  const isActive = tier !== "free";
 
   return res.status(200).json({
     ok: true,

@@ -232,7 +232,10 @@ app.get("/api/me", async (req, res, next) => {
   }
   return requireAuth(req, res, next);
 }, (req, res) => {
-  return res.json({ ok: true, user: req.user || null });
+  if (!req.user) {
+    return res.status(401).json({ ok: false, error: "unauthenticated" });
+  }
+  return res.json({ ok: true, user: req.user });
 });
 app.get("/api/_build", (req, res) => {
   res.setHeader("x-route-source", "app.ts:/api/_build");

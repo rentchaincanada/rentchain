@@ -27,7 +27,7 @@ export function UpgradeNudgeHost() {
   const roleLower = String(user?.actorRole || user?.role || "").trim().toLowerCase();
   const isAdmin = roleLower === "admin";
   const userId = String(user?.id || "");
-  const plan = String(user?.plan || "").trim().toLowerCase() || "starter";
+  const plan = String(user?.plan || "").trim().toLowerCase() || "free";
 
   React.useEffect(() => {
     if (!userId || isAdmin) return;

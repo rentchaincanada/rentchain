@@ -1,8 +1,9 @@
 import { db } from "../config/firebase";
 import { CAPABILITIES, type CapabilityKey, resolvePlanTier } from "../config/capabilities";
+import { allCanonicalCapabilities } from "./entitlements/planCapabilities";
 
 export type EntitlementsRole = "admin" | "landlord" | "tenant" | string;
-export type EntitlementsPlan = "starter" | "pro" | "business" | "elite";
+export type EntitlementsPlan = "free" | "starter" | "pro" | "elite";
 
 export type UserEntitlements = {
   userId: string;
@@ -20,7 +21,7 @@ type ResolveHints = {
   requestCache?: Record<string, UserEntitlements> | null;
 };
 
-const ALL_CAPABILITIES = Object.keys(CAPABILITIES.business) as CapabilityKey[];
+const ALL_CAPABILITIES = allCanonicalCapabilities() as CapabilityKey[];
 
 function sortedCapabilities(caps: Iterable<CapabilityKey>): CapabilityKey[] {
   return Array.from(new Set(caps)).sort();
@@ -34,11 +35,11 @@ function normalizeRole(input?: string | null): EntitlementsRole {
 }
 
 function normalizePlan(input?: string | null): EntitlementsPlan {
-  const plan = String(input || "").trim().toLowerCase();
-  if (plan === "pro") return "pro";
-  if (plan === "business" || plan === "enterprise") return "business";
-  if (plan === "elite") return "elite";
-  return "starter";
+  const tier = resolvePlanTier(input);
+  if (tier === "elite") return "elite";
+  if (tier === "pro") return "pro";
+  if (tier === "starter") return "starter";
+  return "free";
 }
 
 async function loadLandlordPlan(params: {
@@ -87,7 +88,7 @@ export async function getUserEntitlements(
     const empty: UserEntitlements = {
       userId: "",
       role: "landlord",
-      plan: "starter",
+      plan: "free",
       capabilities: [],
       landlordId: null,
     };
@@ -150,7 +151,7 @@ export async function getEntitlementsForLandlord(landlordId: string): Promise<Us
     return {
       userId: "",
       role: "landlord",
-      plan: "starter",
+      plan: "free",
       capabilities: [],
       landlordId: null,
     };

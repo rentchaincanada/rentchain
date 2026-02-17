@@ -32,7 +32,7 @@ router.get("/", async (req: any, res) => {
   const isAdmin = String(req.user?.role || "").toLowerCase() === "admin";
   try {
     const resolved = await resolveLandlordAndTier(req.user);
-    const capTier = isAdmin ? "business" : resolved.tier;
+    const capTier = isAdmin ? "elite" : resolved.tier;
     const planLabel = isAdmin ? "elite" : capTier;
     return res.json({
       ok: true,
@@ -42,7 +42,7 @@ router.get("/", async (req: any, res) => {
     });
   } catch (err: any) {
     const tokenPlan = resolvePlanTier(req.user?.plan);
-    const capTier = isAdmin ? "business" : tokenPlan;
+    const capTier = isAdmin ? "elite" : tokenPlan;
     const planLabel = isAdmin ? "elite" : capTier;
     console.warn("[capabilities] resolver fallback", {
       tokenLandlordId: req.user?.landlordId || null,

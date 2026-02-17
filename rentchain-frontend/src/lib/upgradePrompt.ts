@@ -6,37 +6,38 @@ export type UpgradePromptDetail = {
   redirectTo?: string;
 };
 
-const PLAN_ORDER = ["free", "starter", "pro", "business"] as const;
+const PLAN_ORDER = ["free", "starter", "pro", "elite"] as const;
 
 const FEATURE_REQUIRED_PLAN: Record<string, string> = {
-  screening: "free",
-  applications: "free",
-  application_links: "free",
-  tenant_invites: "free",
-  "team.invites": "free",
-  properties_unlimited: "free",
-  units_unlimited: "free",
+  applications_manual: "free",
+  tenants_manual: "free",
+  screening_pay_per_use: "free",
   unitstable: "free",
   units: "free",
   properties: "free",
+  tenant_invites: "starter",
+  applications: "starter",
+  application_links: "starter",
   leases: "starter",
   maintenance: "starter",
   notices: "starter",
   tenantportal: "starter",
-  messaging: "pro",
+  messaging: "starter",
   ledger_basic: "starter",
   ledger_verified: "pro",
   ledger: "starter",
+  "team.invites": "pro",
+  portfolio_dashboard: "pro",
   exports_basic: "pro",
-  exports_advanced: "business",
+  exports_advanced: "elite",
   exports: "pro",
-  compliance_reports: "business",
-  audit_logs: "business",
-  ai_summaries: "business",
-  "ai.insights": "business",
-  "ai.summary": "business",
-  portfolio_analytics: "business",
-  "portfolio.ai": "business",
+  compliance_reports: "pro",
+  audit_logs: "elite",
+  ai_summaries: "elite",
+  "ai.insights": "elite",
+  "ai.summary": "elite",
+  portfolio_analytics: "elite",
+  "portfolio.ai": "elite",
 };
 
 export function normalizePlanName(input?: any): string | undefined {
@@ -45,7 +46,7 @@ export function normalizePlanName(input?: any): string | undefined {
   if (PLAN_ORDER.includes(raw as (typeof PLAN_ORDER)[number])) return raw;
   if (raw === "screening") return "free";
   if (raw === "core") return "starter";
-  if (raw === "elite" || raw === "enterprise") return "business";
+  if (raw === "business" || raw === "enterprise") return "elite";
   return undefined;
 }
 
@@ -85,10 +86,14 @@ function normalizeFeatureKey(payload: any): string | undefined {
 function inferFeatureKeyFromMessage(payload: any): string | undefined {
   const message = String(payload?.message ?? payload?.error ?? "").toLowerCase();
   if (!message) return undefined;
-  if (message.includes("properties")) return "properties";
-  if (message.includes("units")) return "units";
-  if (message.includes("leases")) return "leases";
-  if (message.includes("tenants")) return "tenants";
+  if (message.includes("messaging")) return "messaging";
+  if (message.includes("application")) return "applications";
+  if (message.includes("invite")) return "tenant_invites";
+  if (message.includes("ledger")) return "ledger_basic";
+  if (message.includes("export")) return "exports_basic";
+  if (message.includes("compliance")) return "compliance_reports";
+  if (message.includes("audit")) return "audit_logs";
+  if (message.includes("analytics")) return "portfolio_analytics";
   return undefined;
 }
 
@@ -99,7 +104,6 @@ function isUpgradeRequiredPayload(payload: any, status?: number): boolean {
 
   if (code === "PLAN_LIMIT_EXCEEDED" || code === "PLAN_LIMIT_REACHED") return true;
   if (code === "LIMIT_REACHED" || code === "ENTITLEMENT_LIMIT_REACHED") return true;
-  if (code === "LIMIT_TENANTS") return true;
   if (error === "plan_limit" || error === "plan_limit_reached") return true;
   if (error === "upgrade required" || payload?.upgradeRequired === true) return true;
   if (message.includes("plan limit")) return true;

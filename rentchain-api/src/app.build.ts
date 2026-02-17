@@ -169,7 +169,10 @@ app.get("/api/me", async (req: any, res: any, next: any) => {
   }
   return requireAuth(req, res, next);
 }, (req: any, res: any) => {
-  return res.json({ ok: true, user: req.user || null });
+  if (!req.user) {
+    return res.status(401).json({ ok: false, error: "unauthenticated" });
+  }
+  return res.json({ ok: true, user: req.user });
 });
 
 // Ledger V2 (after auth decode)

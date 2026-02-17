@@ -1,9 +1,9 @@
 export type CapabilityKey =
   | "applications"
   | "tenant_invites"
-  | "properties_unlimited"
-  | "units_unlimited"
-  | "screening"
+  | "applications_manual"
+  | "tenants_manual"
+  | "screening_pay_per_use"
   | "ledger_basic"
   | "ledger_verified"
   | "exports_basic"
@@ -20,7 +20,10 @@ export type CapabilityKey =
   | "messaging"
   | "tenantPortal"
   | "exports"
-  | "team.invites";
+  | "team.invites"
+  | "properties"
+  | "units"
+  | "portfolio_dashboard";
 
 export type AccountLimitsResponse = {
   status: "ok";
