@@ -10,6 +10,8 @@ import { generateTenantReportPdfBuffer } from "../services/tenantReportService";
 const router = Router();
 
 function getLandlordId(req: any): string | null {
+  const role = String(req.user?.role || "").toLowerCase();
+  if (role === "admin") return null;
   return req.user?.landlordId || req.user?.id || null;
 }
 
@@ -21,10 +23,9 @@ router.use(requireLandlord);
  */
 router.get("/", async (req: any, res) => {
   const landlordId = getLandlordId(req);
-  if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
 
   try {
-    const tenants = await getTenantsList({ landlordId });
+    const tenants = await getTenantsList({ landlordId: landlordId || undefined });
     return res.status(200).json({ ok: true, tenants });
   } catch (err: any) {
     console.error("[GET /api/tenants] error:", err);
@@ -42,13 +43,12 @@ router.get("/", async (req: any, res) => {
  */
 router.get("/:tenantId", async (req: any, res) => {
   const landlordId = getLandlordId(req);
-  if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
 
   const tenantId = String(req.params?.tenantId || "").trim();
   if (!tenantId) return res.status(400).json({ ok: false, error: "tenantId is required" });
 
   try {
-    const bundle = await getTenantDetailBundle(tenantId, { landlordId });
+    const bundle = await getTenantDetailBundle(tenantId, { landlordId: landlordId || undefined });
 
     if (!bundle?.tenant) {
       return res.status(404).json({ ok: false, error: "Tenant not found" });
@@ -70,13 +70,12 @@ router.get("/:tenantId", async (req: any, res) => {
  */
 router.get("/:tenantId/payments", async (req: any, res) => {
   const landlordId = getLandlordId(req);
-  if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
 
   const tenantId = String(req.params?.tenantId || "").trim();
   if (!tenantId) return res.status(400).json({ ok: false, error: "tenantId is required" });
 
   try {
-    const bundle = await getTenantDetailBundle(tenantId, { landlordId });
+    const bundle = await getTenantDetailBundle(tenantId, { landlordId: landlordId || undefined });
     if (!bundle?.tenant) return res.status(404).json({ ok: false, error: "Tenant not found" });
     return res.json(bundle.payments ?? []);
   } catch (err: any) {
@@ -91,13 +90,12 @@ router.get("/:tenantId/payments", async (req: any, res) => {
  */
 router.get("/:tenantId/ledger", async (req: any, res) => {
   const landlordId = getLandlordId(req);
-  if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
 
   const tenantId = String(req.params?.tenantId || "").trim();
   if (!tenantId) return res.status(400).json({ ok: false, error: "tenantId is required" });
 
   try {
-    const bundle = await getTenantDetailBundle(tenantId, { landlordId });
+    const bundle = await getTenantDetailBundle(tenantId, { landlordId: landlordId || undefined });
     if (!bundle?.tenant) return res.status(404).json({ ok: false, error: "Tenant not found" });
 
     const ledger = await getTenantLedger(tenantId);
@@ -117,13 +115,12 @@ router.get("/:tenantId/ledger", async (req: any, res) => {
  */
 router.get("/:tenantId/report", async (req: any, res) => {
   const landlordId = getLandlordId(req);
-  if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
 
   const tenantId = String(req.params?.tenantId || "").trim();
   if (!tenantId) return res.status(400).json({ ok: false, error: "tenantId is required" });
 
   try {
-    const bundle = await getTenantDetailBundle(tenantId, { landlordId });
+    const bundle = await getTenantDetailBundle(tenantId, { landlordId: landlordId || undefined });
     if (!bundle?.tenant) return res.status(404).json({ ok: false, error: "Tenant not found" });
 
     const buffer = await generateTenantReportPdfBuffer(tenantId);

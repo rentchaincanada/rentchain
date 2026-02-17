@@ -65,14 +65,15 @@ function normalizeUnits(units: any[]): Array<{
  * Returns properties for the authenticated landlord.
  */
 router.get("/", async (req: any, res) => {
+  const role = String(req.user?.role || "").toLowerCase();
+  const isAdmin = role === "admin";
   const landlordId = req.user?.landlordId || req.user?.id;
-  if (!landlordId) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
+  const landlordFilter = String(req.query?.landlordId || "").trim() || null;
+  if (!isAdmin && !landlordId) return res.status(401).json({ error: "Unauthorized" });
 
   res.setHeader("x-route-source", "propertiesRoutes");
   console.log("[GET /api/properties] user=", req.user);
-  console.log("[GET /api/properties] landlordId=", landlordId);
+  console.log("[GET /api/properties] landlordId=", landlordId, "isAdmin=", isAdmin);
 
   try {
     const limitRaw = Number(req.query?.limit ?? 50);
@@ -81,14 +82,15 @@ router.get("/", async (req: any, res) => {
         ? Math.min(Math.max(limitRaw, 1), 200)
         : 50;
 
-    const snap = await db
-      .collection("properties")
-      .where("landlordId", "==", landlordId)
-      .orderBy("createdAt", "desc")
-      .limit(limit)
-      .get();
+    let query = db.collection("properties") as any;
+    if (isAdmin && landlordFilter) {
+      query = query.where("landlordId", "==", landlordFilter);
+    } else if (!isAdmin) {
+      query = query.where("landlordId", "==", landlordId);
+    }
+    const snap = await query.orderBy("createdAt", "desc").limit(limit).get();
 
-    const mineItems = snap.docs.map((doc) => ({
+    const mineItems = snap.docs.map((doc: any) => ({
       id: doc.id,
       ...(doc.data() as any),
     })) as any[];
