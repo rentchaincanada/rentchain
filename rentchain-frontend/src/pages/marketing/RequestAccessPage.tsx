@@ -13,7 +13,7 @@ const RequestAccessPage: React.FC = () => {
       <RequestAccessModal
         open
         referralCode={referralCode}
-        onClose={() => navigate("/site/pricing")}
+        onClose={() => navigate("/")}
       />
     </MarketingLayout>
   );

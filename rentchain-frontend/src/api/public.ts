@@ -19,7 +19,10 @@ export async function requestLandlordInquiry(payload: {
   note?: string;
   referralCode?: string;
 }) {
-  const url = `${window.location.origin}/api/public/landlord-inquiry`;
+  const useReferralFlow = Boolean(payload.referralCode);
+  const url = useReferralFlow
+    ? `${window.location.origin}/api/public/landlord-inquiry`
+    : `${window.location.origin}/api/access/request`;
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
