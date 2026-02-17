@@ -78,6 +78,8 @@ import adminRoutes from "./routes/adminRoutes";
 import adminScreeningResultsRoutes from "./routes/adminScreeningResultsRoutes";
 import screeningReportRoutes from "./routes/screeningReportRoutes";
 import telemetryRoutes from "./routes/telemetryRoutes";
+import invitesRoutes from "./routes/invitesRoutes";
+import accessRoutes from "./routes/accessRoutes";
 
 process.on("unhandledRejection", (reason) => {
   console.error("[FATAL] unhandledRejection", reason);
@@ -256,6 +258,8 @@ app.use("/api/onboarding", routeSource("onboardingRoutes.ts"), onboardingRoutes)
 app.use("/api", routeSource("onboardingRoutes.ts"), onboardingRoutes);
 app.use("/api", routeSource("messagesRoutes.ts"), messagesRoutes);
 app.use("/api", routeSource("telemetryRoutes.ts"), telemetryRoutes);
+app.use("/api/invites", routeSource("invitesRoutes.ts"), invitesRoutes);
+app.use("/api/access", routeSource("accessRoutes.ts"), accessRoutes);
 console.log(
   "[routes] /api/properties, /api/properties/:propertyId/units, /api/action-requests, /api/applications"
 );
