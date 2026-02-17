@@ -1,4 +1,5 @@
 import "express";
+import type { UserEntitlements } from "../services/entitlementsService";
 
 declare global {
   namespace Express {
@@ -11,11 +12,15 @@ declare global {
       leaseId?: string;
       actorRole?: string;
       actorLandlordId?: string;
+      plan?: string;
+      capabilities?: string[];
+      entitlements?: UserEntitlements;
     }
     interface Request {
       user?: User;
       requestId?: string;
       integrity?: any;
+      entitlements?: UserEntitlements;
     }
   }
 }

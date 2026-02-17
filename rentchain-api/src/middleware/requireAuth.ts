@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { verifyAuthToken, type JwtClaimsV1 } from "../auth/jwt";
 import type { Role, Permission } from "../auth/rbac";
 import { db } from "../firebase";
+import { getUserEntitlements } from "../services/entitlementsService";
 
 type HydratedUser = {
   id: string;
@@ -10,6 +11,8 @@ type HydratedUser = {
   landlordId?: string;
   tenantId?: string;
   approved?: boolean;
+  plan?: string;
+  capabilities?: string[];
   permissions?: Permission[];
   revokedPermissions?: Permission[];
 };
@@ -39,6 +42,28 @@ export async function requireAuth(req: any, res: any, next: any) {
       permissions: claims.permissions ?? [],
       revokedPermissions: claims.revokedPermissions ?? [],
     };
+    const claimsPlan = (claims as any)?.plan ?? null;
+
+    const applyEntitlements = async (user: HydratedUser, approved: boolean) => {
+      const entitlements = await getUserEntitlements(user.id, {
+        claimsRole: user.role,
+        claimsPlan,
+        landlordIdHint: user.landlordId,
+        emailHint: user.email,
+      });
+      req.user = {
+        ...user,
+        role: entitlements.role as Role,
+        landlordId:
+          entitlements.landlordId ||
+          (entitlements.role === "landlord" || entitlements.role === "admin" ? user.id : user.landlordId),
+        approved: entitlements.role === "admin" || entitlements.role === "tenant" ? true : approved,
+        plan: entitlements.plan,
+        capabilities: Array.from(entitlements.capabilities),
+      };
+      req.user.entitlements = entitlements;
+      req.entitlements = entitlements;
+    };
 
     const hydrate = String(process.env.AUTH_HYDRATE_FROM_DB || "").toLowerCase() === "true";
     if (!hydrate) {
@@ -67,14 +92,16 @@ export async function requireAuth(req: any, res: any, next: any) {
           }
         }
       }
-      req.user = {
-        ...baseUser,
-        landlordId:
-          baseUser.role === "landlord" || baseUser.role === "admin"
-            ? baseUser.landlordId || baseUser.id
-            : baseUser.landlordId,
-        approved: baseUser.role === "admin" || baseUser.role === "tenant" ? true : approved,
-      };
+      await applyEntitlements(
+        {
+          ...baseUser,
+          landlordId:
+            baseUser.role === "landlord" || baseUser.role === "admin"
+              ? baseUser.landlordId || baseUser.id
+              : baseUser.landlordId,
+        },
+        approved
+      );
       return next();
     }
 
@@ -163,7 +190,8 @@ export async function requireAuth(req: any, res: any, next: any) {
       approved = true;
     }
 
-    req.user = {
+    await applyEntitlements(
+      {
       id: baseUser.id,
       email: u.email ?? baseUser.email,
       role: (u.role ?? baseUser.role) as Role,
@@ -176,7 +204,9 @@ export async function requireAuth(req: any, res: any, next: any) {
       approved,
       permissions: Array.isArray(u.permissions) ? u.permissions : baseUser.permissions,
       revokedPermissions: Array.isArray(u.revokedPermissions) ? u.revokedPermissions : baseUser.revokedPermissions,
-    };
+      },
+      approved
+    );
 
     next();
   } catch {
