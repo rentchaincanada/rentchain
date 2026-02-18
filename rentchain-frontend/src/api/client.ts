@@ -4,6 +4,7 @@ import { DEBUG_AUTH_KEY, JUST_LOGGED_IN_KEY } from "../lib/authKeys";
 import { clearAuthToken, getAuthToken, getTenantToken } from "../lib/authToken";
 import { getFirebaseIdToken, warnIfFirebaseDomainMismatch } from "../lib/firebaseAuthToken";
 import { maybeDispatchUpgradePrompt } from "../lib/upgradePrompt";
+import { isPublicRoutePath } from "../lib/publicRoute";
 
 const normalizedBase = API_BASE_URL.replace(/\/$/, "").replace(/\/api$/i, "");
 const api = axios.create({
@@ -124,7 +125,11 @@ api.interceptors.response.use(
       } catch {
         // ignore
       }
-      if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+      if (
+        typeof window !== "undefined" &&
+        window.location.pathname !== "/login" &&
+        !isPublicRoutePath(window.location.pathname)
+      ) {
         const dbg = localStorage.getItem(DEBUG_AUTH_KEY) === "1";
         const suffix = dbg ? `?reason=expired&debugAuth=1` : `?reason=expired`;
         window.location.href = `/login${suffix}`;

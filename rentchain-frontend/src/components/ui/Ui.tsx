@@ -113,7 +113,10 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
       <input
         ref={ref}
         style={{
+          display: "block",
           width: "100%",
+          boxSizing: "border-box",
+          minHeight: 42,
           padding: "10px 12px",
           borderRadius: radius.md,
           border: `1px solid ${colors.border}`,

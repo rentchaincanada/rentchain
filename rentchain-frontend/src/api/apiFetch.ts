@@ -2,6 +2,7 @@ import { API_BASE_URL } from "./config";
 import { clearAuthToken, clearTenantToken, getAuthToken, getTenantToken } from "../lib/authToken";
 import { getFirebaseIdToken, warnIfFirebaseDomainMismatch } from "../lib/firebaseAuthToken";
 import { maybeDispatchUpgradePrompt } from "../lib/upgradePrompt";
+import { isPublicRoutePath } from "../lib/publicRoute";
 
 type Jsonish = Record<string, any>;
 export type ApiFetchInit = Omit<RequestInit, "body"> & {
@@ -12,6 +13,12 @@ export type ApiFetchInit = Omit<RequestInit, "body"> & {
 };
 
 let redirectedOn401 = false;
+
+function shouldRedirectToLogin() {
+  if (typeof window === "undefined") return false;
+  if (window.location.pathname === "/login") return false;
+  return !isPublicRoutePath(window.location.pathname);
+}
 
 export async function apiFetch<T = any>(
   path: string,
@@ -137,7 +144,7 @@ export async function apiFetch<T = any>(
       if (typeof window !== "undefined") {
         sessionStorage.setItem("authExpiredToast", "1");
       }
-      if (!redirectedOn401 && typeof window !== "undefined" && window.location.pathname !== "/login") {
+      if (!redirectedOn401 && shouldRedirectToLogin()) {
         redirectedOn401 = true;
         window.location.href = "/login?reason=expired";
       }
@@ -152,7 +159,7 @@ export async function apiFetch<T = any>(
       } else {
         clearAuthToken();
       }
-      if (!redirectedOn401 && typeof window !== "undefined" && window.location.pathname !== "/login") {
+      if (!redirectedOn401 && shouldRedirectToLogin()) {
         redirectedOn401 = true;
         window.location.href = "/login?reason=expired";
       }

@@ -16,18 +16,7 @@ import {
 } from "../api/authApi";
 import { DEBUG_AUTH_KEY, JUST_LOGGED_IN_KEY, TENANT_TOKEN_KEY } from "../lib/authKeys";
 import { clearAuthToken, setAuthToken, TOKEN_KEY } from "../lib/authToken";
-
-const PUBLIC_ROUTE_ALLOWLIST = [
-  "/",
-  "/join-waitlist",
-  "/site/pricing",
-  "/login",
-  "/signup",
-  "/request-access",
-  "/invite",
-  "/terms",
-  "/privacy",
-];
+import { isPublicRoutePath } from "../lib/publicRoute";
 
 export interface AuthUser {
   id: string;
@@ -225,7 +214,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     const runRestore = async () => {
       const pathname = typeof window !== "undefined" ? window.location.pathname : "";
-      const isPublic = PUBLIC_ROUTE_ALLOWLIST.includes(pathname);
+      const isPublic = isPublicRoutePath(pathname) || pathname === "/join-waitlist";
 
       let storedToken = getStoredToken();
       const graceRaw =

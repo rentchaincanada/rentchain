@@ -99,13 +99,16 @@ const ToastViewport: React.FC = () => {
     <div
       style={{
         position: "fixed",
-        right: 16,
-        bottom: 16,
+        top: `max(16px, calc(env(safe-area-inset-top) + 12px))`,
+        left: "50%",
+        transform: "translateX(-50%)",
         display: "flex",
         flexDirection: "column",
         gap: 8,
         zIndex: 9999,
         pointerEvents: "none",
+        width: "min(92vw, 420px)",
+        alignItems: "stretch",
       }}
     >
       {toasts.map((toast) => (
@@ -113,8 +116,7 @@ const ToastViewport: React.FC = () => {
           key={toast.id}
           style={{
             pointerEvents: "auto",
-            minWidth: 260,
-            maxWidth: 360,
+            width: "100%",
             borderRadius: 999,
             padding: "8px 12px",
             backgroundColor: bgForVariant(toast.variant),
