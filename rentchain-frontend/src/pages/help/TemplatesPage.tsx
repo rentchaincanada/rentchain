@@ -174,8 +174,9 @@ const TemplatesPage: React.FC = () => {
         <div>
           <h1 style={{ margin: 0 }}>Templates</h1>
           <p style={{ marginTop: spacing.sm, color: text.muted, maxWidth: 760 }}>
-            Download general-purpose templates (not legal advice). Customize for your jurisdiction and consult counsel
-            as needed.
+            Download general-purpose templates to support common rental processes. These templates are provided for
+            convenience and are not legal advice. Customize for your jurisdiction and consult qualified counsel as
+            needed.
           </p>
         </div>
         <Input
@@ -220,6 +221,10 @@ const TemplatesPage: React.FC = () => {
             {tenantTemplates.map(renderTemplate)}
           </div>
         </div>
+        <p style={{ margin: 0, color: text.subtle }}>
+          Templates are intended to support transparent documentation and consistent record keeping. Landlords remain
+          responsible for compliance and lawful use.
+        </p>
       </div>
     </MarketingLayout>
   );

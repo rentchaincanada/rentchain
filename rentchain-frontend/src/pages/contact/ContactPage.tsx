@@ -12,7 +12,10 @@ const ContactPage: React.FC = () => {
       <div style={{ display: "flex", flexDirection: "column", gap: spacing.md, maxWidth: 760 }}>
         <h1 style={{ margin: 0 }}>Contact</h1>
         <p style={{ margin: 0, color: text.muted }}>
-          For support or questions, email support@rentchain.ai.
+          For support or general questions: support@rentchain.ai
+        </p>
+        <p style={{ margin: 0, color: text.muted }}>
+          For privacy or compliance matters: privacy@rentchain.ai
         </p>
         <p style={{ margin: 0, color: text.muted }}>
           We respond to inquiries during standard business hours.
