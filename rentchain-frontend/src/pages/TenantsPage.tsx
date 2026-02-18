@@ -17,6 +17,8 @@ import { InviteTenantModal } from "../components/tenants/InviteTenantModal";
 import { TenantScorePill } from "../components/tenant/TenantScorePill";
 import { hydrateTenantSummariesBatch, getCachedTenantSummary } from "../lib/tenantSummaryCache";
 import { track } from "../lib/analytics";
+import { useCapabilities } from "@/hooks/useCapabilities";
+import { dispatchUpgradePrompt } from "@/lib/upgradePrompt";
 import "./TenantsPage.css";
 
 type TenantWithTenancies = any & { tenancies?: TenancyApiModel[] };
@@ -101,6 +103,16 @@ export const TenantsPage: React.FC = () => {
 
   const selectedTenantIdFromUrl = searchParams.get("tenantId");
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(selectedTenantIdFromUrl);
+  const { features } = useCapabilities();
+  const inviteEnabled = features?.tenant_invites !== false;
+
+  const handleInviteAction = useCallback(() => {
+    if (!inviteEnabled) {
+      dispatchUpgradePrompt({ featureKey: "tenant_invites", source: "tenants_page" });
+      return;
+    }
+    setInviteOpen(true);
+  }, [inviteEnabled]);
 
   const loadTenants = useCallback(async () => {
     try {
@@ -151,9 +163,9 @@ export const TenantsPage: React.FC = () => {
 
   useEffect(() => {
     if (searchParams.get("invite") === "1") {
-      setInviteOpen(true);
+      handleInviteAction();
     }
-  }, [searchParams]);
+  }, [searchParams, handleInviteAction]);
 
   const handleSelectTenant = (tenantId: string) => {
     setSelectedTenantId(tenantId);
@@ -266,17 +278,17 @@ export const TenantsPage: React.FC = () => {
             </div>
           </div>
           <button
-            onClick={() => setInviteOpen(true)}
+            onClick={handleInviteAction}
             style={{
               padding: "10px 12px",
               borderRadius: radius.sm,
-              border: `1px solid ${colors.border}`,
-              background: colors.panel,
+              border: `1px solid ${inviteEnabled ? colors.border : "#f5d0fe"}`,
+              background: inviteEnabled ? colors.panel : "#faf5ff",
               cursor: "pointer",
               minHeight: 44,
             }}
           >
-            Invite tenant
+            {inviteEnabled ? "Invite tenant" : "Unlock Tenant Invites"}
           </button>
         </div>
       </Card>
@@ -308,7 +320,7 @@ export const TenantsPage: React.FC = () => {
                   type="button"
                   onClick={() => {
                     track("empty_state_cta_clicked", { pageKey: "tenants", ctaKey: "invite_tenant" });
-                    setInviteOpen(true);
+                    handleInviteAction();
                   }}
                   style={{
                     padding: "8px 12px",

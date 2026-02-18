@@ -6,17 +6,19 @@ import { signAuthToken } from "../auth/jwt";
 
 const router = Router();
 
-const REDEEMABLE_PLANS = new Set(["starter", "pro", "elite"]);
+const REDEEMABLE_PLANS = new Set(["free", "starter", "pro", "elite"]);
 
 function sha256(input: string) {
   return crypto.createHash("sha256").update(input).digest("hex");
 }
 
-function normalizedPlan(input?: string | null): "starter" | "pro" | "elite" {
+function normalizedPlan(input?: string | null): "free" | "starter" | "pro" | "elite" {
   const raw = String(input || "").trim().toLowerCase();
+  if (raw === "free" || raw === "basic") return "free";
   if (raw === "pro") return "pro";
   if (raw === "elite" || raw === "business" || raw === "enterprise") return "elite";
-  return "starter";
+  if (raw === "starter") return "starter";
+  return "free";
 }
 
 router.post("/redeem", async (req: any, res) => {
@@ -36,7 +38,7 @@ router.post("/redeem", async (req: any, res) => {
   const codeHash = sha256(code);
 
   let resolvedEmail = "";
-  let plan: "starter" | "pro" | "elite" = "starter";
+  let plan: "free" | "starter" | "pro" | "elite" = "free";
   let landlordIdFromInvite: string | null = null;
   let source: "landlord_invite" | "referral" | null = null;
   let inviteRef: FirebaseFirestore.DocumentReference | null = null;
@@ -52,7 +54,7 @@ router.post("/redeem", async (req: any, res) => {
       return res.status(410).json({ ok: false, error: "invite_expired" });
     }
     resolvedEmail = String(invite.email || "").trim().toLowerCase();
-    plan = normalizedPlan(invite.plan || "starter");
+    plan = normalizedPlan(invite.plan);
     source = "landlord_invite";
     inviteRef = inviteSnap.ref;
   } else {
@@ -79,7 +81,7 @@ router.post("/redeem", async (req: any, res) => {
     if (!resolvedEmail) {
       return res.status(400).json({ ok: false, error: "email_required" });
     }
-    plan = normalizedPlan(referral.plan || "starter");
+    plan = normalizedPlan(referral.plan);
     source = "referral";
     referralRef = referralDoc.ref;
     landlordIdFromInvite = String(referral.referrerLandlordId || "").trim() || null;
@@ -122,7 +124,7 @@ router.post("/redeem", async (req: any, res) => {
 
   const uid = userRecord.uid;
   if (!REDEEMABLE_PLANS.has(plan)) {
-    plan = "starter";
+    plan = "free";
   }
 
   await db.collection("users").doc(uid).set(

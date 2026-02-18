@@ -1,3 +1,4 @@
+import { isTelemetryEnabled } from "./telemetry";
 type AnalyticsProps = Record<string, unknown>;
 
 const hasDoNotTrack = () => {
@@ -26,6 +27,9 @@ export function track(eventName: string, props: AnalyticsProps = {}) {
   if (typeof window === "undefined") {
     return;
   }
+  if (!isTelemetryEnabled()) {
+    return;
+  }
   if (hasDoNotTrack()) {
     return;
   }
@@ -35,19 +39,15 @@ export function track(eventName: string, props: AnalyticsProps = {}) {
     gtag?: (...args: unknown[]) => void;
   };
 
-  let deliveredToProvider = false;
   if (typeof anyWindow.plausible === "function") {
     anyWindow.plausible(eventName, { props });
-    deliveredToProvider = true;
   }
 
   if (typeof anyWindow.gtag === "function") {
     anyWindow.gtag("event", eventName, props);
-    deliveredToProvider = true;
   }
 
   if (isDev()) {
-    console.debug("[analytics]", eventName, props);
     return;
   }
 
@@ -59,9 +59,5 @@ export function track(eventName: string, props: AnalyticsProps = {}) {
     credentials: "include",
     keepalive: true,
     body: JSON.stringify({ name: eventName, props, ts: new Date().toISOString() }),
-  }).catch(() => {
-    if (!deliveredToProvider && isDev()) {
-      console.debug("[analytics] track_failed", eventName);
-    }
-  });
+  }).catch(() => {});
 }

@@ -5,6 +5,7 @@ export type TenantInvite = {
   token: string;
   landlordId?: string;
   propertyId?: string | null;
+  unitId?: string | null;
   tenantEmail?: string | null;
   tenantName?: string | null;
   status?: string;
@@ -18,10 +19,10 @@ export async function listTenantInvites(): Promise<{ items: TenantInvite[] }> {
 }
 
 export async function createTenantInvite(payload: {
-  propertyId?: string | null;
+  propertyId: string;
+  unitId: string;
   tenantEmail: string;
   tenantName?: string;
-  unitId?: string | null;
   leaseId?: string | null;
 }) {
   return apiFetch<{
