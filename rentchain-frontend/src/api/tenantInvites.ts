@@ -27,14 +27,18 @@ export async function createTenantInvite(payload: {
 }) {
   return apiFetch<{
     ok: boolean;
-    token: string;
+    token?: string;
     inviteUrl?: string;
     invite?: TenantInvite;
     expiresAt?: number;
     emailed?: boolean;
+    error?: string;
+    capability?: string;
+    plan?: string;
   }>("/tenant-invites", {
     method: "POST",
     body: payload,
+    allowStatuses: [400, 403],
   });
 }
 
