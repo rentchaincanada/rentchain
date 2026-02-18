@@ -179,9 +179,9 @@ export const LoginPage: React.FC = () => {
             e.preventDefault();
             handleLoginClick();
           }}
-          style={{ display: "flex", flexDirection: "column", gap: spacing.sm }}
+          style={{ display: "flex", flexDirection: "column", gap: spacing.sm, width: "100%" }}
         >
-          <label style={{ display: "flex", flexDirection: "column", gap: spacing.xs }}>
+          <label style={{ display: "flex", flexDirection: "column", gap: spacing.xs, width: "100%" }}>
             <span style={{ fontSize: "0.9rem", color: text.muted }}>Email</span>
             <Input
               type="email"
@@ -190,11 +190,12 @@ export const LoginPage: React.FC = () => {
               onClick={(e) => e.stopPropagation()}
               placeholder="you@example.com"
               autoComplete="email"
+              style={{ width: "100%" }}
               required
             />
           </label>
 
-          <label style={{ display: "flex", flexDirection: "column", gap: spacing.xs }}>
+          <label style={{ display: "flex", flexDirection: "column", gap: spacing.xs, width: "100%" }}>
             <span style={{ fontSize: "0.9rem", color: text.muted }}>Password</span>
             <Input
               type="password"
@@ -203,6 +204,7 @@ export const LoginPage: React.FC = () => {
               onClick={(e) => e.stopPropagation()}
               placeholder="••••••••"
               autoComplete="current-password"
+              style={{ width: "100%" }}
               required
             />
           </label>

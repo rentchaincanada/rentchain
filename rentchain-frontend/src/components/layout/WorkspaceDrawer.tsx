@@ -61,16 +61,15 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
           position: "relative",
           width: 320,
           maxWidth: "90vw",
-          maxHeight: "calc(100vh - 24px)",
+          height: "100vh",
+          maxHeight: "100vh",
           background: colors.card,
           borderLeft: `1px solid ${colors.border}`,
           boxShadow: shadows.lg,
-          padding: `${spacing.lg} ${spacing.lg} calc(${spacing.lg} + env(safe-area-inset-bottom))`,
           display: "flex",
           flexDirection: "column",
-          gap: spacing.md,
           zIndex: 3001,
-          overflowY: "auto",
+          overflow: "hidden",
           WebkitOverflowScrolling: "touch",
         }}
       >
@@ -82,8 +81,9 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
             position: "sticky",
             top: 0,
             background: colors.card,
-            paddingBottom: spacing.sm,
+            padding: `${spacing.lg} ${spacing.lg} ${spacing.sm}`,
             zIndex: 1,
+            borderBottom: `1px solid ${colors.border}`,
           }}
         >
           <div style={{ fontSize: "1.1rem", fontWeight: 800, color: text.primary }}>Workspace</div>
@@ -102,91 +102,111 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
           </button>
         </div>
 
-        <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.02em", color: text.muted }}>Pages</div>
-        <div style={{ display: "grid", gap: 8 }}>
-          {navLoading ? (
-            <div
+        <div
+          style={{
+            flex: 1,
+            overflowY: "auto",
+            WebkitOverflowScrolling: "touch",
+            padding: `0 ${spacing.lg}`,
+            minHeight: 0,
+          }}
+        >
+          <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.02em", color: text.muted, marginBottom: spacing.sm }}>Pages</div>
+          <div style={{ display: "grid", gap: 8 }}>
+            {navLoading ? (
+              <div
+                style={{
+                  textAlign: "left",
+                  padding: "10px 12px",
+                  borderRadius: radius.md,
+                  border: `1px solid ${colors.border}`,
+                  background: colors.card,
+                  color: text.muted,
+                  fontWeight: 600,
+                }}
+              >
+                Loading menu...
+              </div>
+            ) : null}
+            {primaryDrawerItems.map((link) => {
+              const active = location.pathname.startsWith(link.to);
+              return (
+                <button
+                  key={link.to}
+                  type="button"
+                  onClick={() => handleNav(link.to)}
+                  style={{
+                    textAlign: "left",
+                    padding: "10px 12px",
+                    borderRadius: radius.md,
+                    border: `1px solid ${active ? colors.accent : colors.border}`,
+                    background: active ? "rgba(37,99,235,0.08)" : colors.card,
+                    color: text.primary,
+                    fontWeight: active ? 700 : 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  {link.label}
+                </button>
+              );
+            })}
+            {adminDrawerItems.length ? (
+              <div style={{ height: 1, background: colors.border, margin: `${spacing.xs} 0` }} />
+            ) : null}
+            {adminDrawerItems.map((link) => {
+              const active = location.pathname.startsWith(link.to);
+              return (
+                <button
+                  key={link.to}
+                  type="button"
+                  onClick={() => handleNav(link.to)}
+                  style={{
+                    textAlign: "left",
+                    padding: "10px 12px",
+                    borderRadius: radius.md,
+                    border: `1px solid ${active ? colors.accent : colors.border}`,
+                    background: active ? "rgba(37,99,235,0.08)" : colors.card,
+                    color: text.primary,
+                    fontWeight: active ? 700 : 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  {link.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div
+          style={{
+            position: "sticky",
+            bottom: 0,
+            background: colors.card,
+            borderTop: `1px solid ${colors.border}`,
+            padding: `${spacing.sm} ${spacing.lg} calc(${spacing.sm} + env(safe-area-inset-bottom))`,
+            display: "grid",
+            gap: 8,
+          }}
+        >
+          {onSignOut ? (
+            <button
+              type="button"
+              onClick={onSignOut}
               style={{
-                textAlign: "left",
-                padding: "10px 12px",
                 borderRadius: radius.md,
                 border: `1px solid ${colors.border}`,
-                background: colors.card,
-                color: text.muted,
-                fontWeight: 600,
+                background: colors.panel,
+                padding: "8px 12px",
+                cursor: "pointer",
+                fontWeight: 700,
+                textAlign: "left",
               }}
             >
-              Loading menu...
-            </div>
+              Sign out
+            </button>
           ) : null}
-          {primaryDrawerItems.map((link) => {
-            const active = location.pathname.startsWith(link.to);
-            return (
-              <button
-                key={link.to}
-                type="button"
-                onClick={() => handleNav(link.to)}
-                style={{
-                  textAlign: "left",
-                  padding: "10px 12px",
-                  borderRadius: radius.md,
-                  border: `1px solid ${active ? colors.accent : colors.border}`,
-                  background: active ? "rgba(37,99,235,0.08)" : colors.card,
-                  color: text.primary,
-                  fontWeight: active ? 700 : 600,
-                  cursor: "pointer",
-                }}
-              >
-                {link.label}
-              </button>
-            );
-          })}
-          {adminDrawerItems.length ? (
-            <div style={{ height: 1, background: colors.border, margin: `${spacing.xs} 0` }} />
-          ) : null}
-          {adminDrawerItems.map((link) => {
-            const active = location.pathname.startsWith(link.to);
-            return (
-              <button
-                key={link.to}
-                type="button"
-                onClick={() => handleNav(link.to)}
-                style={{
-                  textAlign: "left",
-                  padding: "10px 12px",
-                  borderRadius: radius.md,
-                  border: `1px solid ${active ? colors.accent : colors.border}`,
-                  background: active ? "rgba(37,99,235,0.08)" : colors.card,
-                  color: text.primary,
-                  fontWeight: active ? 700 : 600,
-                  cursor: "pointer",
-                }}
-              >
-                {link.label}
-              </button>
-            );
-          })}
+          {userEmail ? <div style={{ fontSize: 12, color: text.muted }}>{userEmail}</div> : null}
         </div>
-
-        <div style={{ height: 1, background: colors.border, marginTop: spacing.sm }} />
-        {onSignOut ? (
-          <button
-            type="button"
-            onClick={onSignOut}
-            style={{
-              borderRadius: radius.md,
-              border: `1px solid ${colors.border}`,
-              background: colors.panel,
-              padding: "8px 12px",
-              cursor: "pointer",
-              fontWeight: 700,
-              textAlign: "left",
-            }}
-          >
-            Sign out
-          </button>
-        ) : null}
-        {userEmail ? <div style={{ fontSize: 12, color: text.muted }}>{userEmail}</div> : null}
       </div>
     </div>
   );
