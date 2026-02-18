@@ -154,6 +154,14 @@ app.use("/api/api", (req, res) => {
 app.use("/api/billing", routeSource("billingRoutes.ts"), billingRoutes);
 console.log("[boot] mounted billingRoutes at /api/billing");
 app.use("/api", routeSource("paymentsRoutes.ts"), paymentsRoutes);
+app.get("/api/__routes", (_req, res) => {
+  res.setHeader("x-route-source", "app.ts:/api/__routes");
+  return res.json({
+    ok: true,
+    runtime: "app.ts",
+    mounted: ["/api/auth", "/api/access", "/api/invites"],
+  });
+});
 
 // Dev tooling routes should not be blocked by auth
 /**
@@ -170,7 +178,9 @@ app.use("/api/public", routeSource("landlordInquiryRoutes.ts"), landlordInquiryP
 app.use("/api/public", routeSource("publicRoutes.ts"), publicRoutes);
 app.use("/api", routeSource("publicRoutes.ts"), publicRoutes);
 app.use("/api/public", tenantHistorySharePublicRouter);
-app.use("/api/auth", authRoutes);
+app.use("/api/auth", routeSource("authRoutes.ts"), authRoutes);
+app.use("/api/invites", routeSource("invitesRoutes.ts"), invitesRoutes);
+app.use("/api/access", routeSource("accessRoutes.ts"), accessRoutes);
 app.use("/api/capabilities", routeSource("capabilitiesRoutes.ts"), capabilitiesRoutes);
 app.use("/api/public", routeSource("publicApplicationLinksRoutes.ts"), publicApplicationLinksRoutes);
 
@@ -302,8 +312,6 @@ app.use("/api/onboarding", routeSource("onboardingRoutes.ts"), onboardingRoutes)
 app.use("/api", routeSource("onboardingRoutes.ts"), onboardingRoutes);
 app.use("/api", routeSource("messagesRoutes.ts"), messagesRoutes);
 app.use("/api", routeSource("telemetryRoutes.ts"), telemetryRoutes);
-app.use("/api/invites", routeSource("invitesRoutes.ts"), invitesRoutes);
-app.use("/api/access", routeSource("accessRoutes.ts"), accessRoutes);
 
 process.on("unhandledRejection", (reason) => {
   console.error("[FATAL] unhandledRejection", reason);

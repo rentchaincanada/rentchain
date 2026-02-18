@@ -144,6 +144,14 @@ app.use("/api/api", (req, res) => {
 
 // Health
 app.use("/health", healthRoutes);
+app.get("/api/__routes", (_req, res) => {
+  res.setHeader("x-route-source", "app.build.ts:/api/__routes");
+  return res.json({
+    ok: true,
+    runtime: "app.build.ts",
+    mounted: ["/api/auth", "/api/access", "/api/invites"],
+  });
+});
 
 // Billing routes
 app.use("/api/billing", routeSource("billingRoutes.ts"), billingRoutes);
@@ -158,6 +166,8 @@ app.use("/api/public", routeSource("landlordInquiryRoutes.ts"), landlordInquiryP
 app.use("/api/public", tenantHistorySharePublicRouter);
 app.use("/api/public", routeSource("publicApplicationLinksRoutes.ts"), publicApplicationLinksRoutes);
 app.use("/api/auth", routeSource("authRoutes.ts"), authRoutes);
+app.use("/api/invites", routeSource("invitesRoutes.ts"), invitesRoutes);
+app.use("/api/access", routeSource("accessRoutes.ts"), accessRoutes);
 app.use("/api/capabilities", routeSource("capabilitiesRoutes.ts"), capabilitiesRoutes);
 
 // Auth decode (non-blocking if header missing)
@@ -258,8 +268,6 @@ app.use("/api/onboarding", routeSource("onboardingRoutes.ts"), onboardingRoutes)
 app.use("/api", routeSource("onboardingRoutes.ts"), onboardingRoutes);
 app.use("/api", routeSource("messagesRoutes.ts"), messagesRoutes);
 app.use("/api", routeSource("telemetryRoutes.ts"), telemetryRoutes);
-app.use("/api/invites", routeSource("invitesRoutes.ts"), invitesRoutes);
-app.use("/api/access", routeSource("accessRoutes.ts"), accessRoutes);
 console.log(
   "[routes] /api/properties, /api/properties/:propertyId/units, /api/action-requests, /api/applications"
 );
