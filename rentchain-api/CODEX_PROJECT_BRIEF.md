@@ -1,4 +1,4 @@
-# Codex Project Brief – RentChain (Landlord / Tenant Platform)
+# Internal Dev Assistant Project Brief – RentChain (Landlord / Tenant Platform)
 
 You are helping on a TypeScript full-stack project called **RentChain**.
 
@@ -408,7 +408,7 @@ Code should:
 * Anticipate future needs
 * Build toward a modular, intelligent SaaS
 
-Codex should prioritize:
+Internal Dev Assistant should prioritize:
 
 * Clean TS/React
 * Seamless API ↔ frontend integration
@@ -453,7 +453,7 @@ There will be:
   * Tenant credit builder
   * Rent statements for immigration, loans, employment
 
-Codex must prepare for:
+Internal Dev Assistant must prepare for:
 
 * Multi-tenant / multi-company auth
 * Separated but interoperable databases
@@ -472,7 +472,7 @@ Insurers use RentChain for:
 * Predictive modeling from tenant payment patterns
 * Automated proof-of-rent documentation
 
-Codex should:
+Internal Dev Assistant should:
 
 * Build `src/integrations/insurance/...` modules
 * Support shared analytics services
@@ -490,7 +490,7 @@ Banks use RentChain data to:
 * Provide landlord credit lines / HELOCs
 * Automate income verification from rent rolls
 
-Codex must:
+Internal Dev Assistant must:
 
 * Generate exportable financial statements
 * Structure per-property NOI
@@ -511,7 +511,7 @@ Governments use RentChain to:
 * Track eviction-risk zones
 * Integrate subsidies
 
-Codex should:
+Internal Dev Assistant should:
 
 * Implement data anonymization pipelines
 * Create export endpoints for statistical reporting
@@ -521,7 +521,7 @@ Codex should:
 
 ---
 
-## 6. Subscriptions & Billing (Codex-Ready)
+## 6. Subscriptions & Billing (Internal Dev Assistant-Ready)
 
 RentChain will be a **subscription SaaS with per-use fees**.
 
@@ -661,7 +661,7 @@ AI actions with costs:
 * Tenant AI Stability Score: included in Enterprise
 * AI Ledger Audit: ~$0.50 per run
 
-Codex should generate:
+Internal Dev Assistant should generate:
 
 * Endpoints
 * DB updates
@@ -684,7 +684,7 @@ Prepare for:
 
 ---
 
-## 8. Guiding Principles for Codex
+## 8. Guiding Principles for Internal Dev Assistant
 
 Every time you generate code, prioritize:
 

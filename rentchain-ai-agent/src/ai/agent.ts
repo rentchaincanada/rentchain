@@ -19,7 +19,7 @@ export async function runAIAgent(event: any) {
     const { requestId, inputType, inputData } = payload;
 
     // ---- TEMP AI LOGIC (stub) ----
-    // Later this is where we call OpenAI.
+    // Later this is where we call the provider model.
     const output = {
       summary: \`AI processed input type: \${inputType}\`,
       echo: inputData,

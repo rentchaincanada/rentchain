@@ -87,7 +87,7 @@ Summarize what matters and give clear next steps.`;
 }
 
 /**
- * Call OpenAI Chat Completions for the given agent + input.
+ * Call provider Chat Completions for the given agent + input.
  * Returns a structured object we can store in the event.
  */
 async function callOpenAIForAgent(
@@ -104,7 +104,7 @@ async function callOpenAIForAgent(
 }> {
   if (!process.env.OPENAI_API_KEY) {
     throw new Error(
-      "OPENAI_API_KEY is not set. Please export it in your environment before calling AI agents."
+      "OPENAI_API_KEY is not set. Please export it in your environment before calling provider-backed agents."
     );
   }
 
@@ -204,7 +204,7 @@ async function dispatchBlockchainEventLegacy(event: AIAgentEvent): Promise<void>
  * Main entrypoint for executing an AI agent task.
  * - Emits a "requested" AI event (ai_events)
  * - Emits a unified "ai.task.requested" domain event
- * - Calls OpenAI
+ * - Calls provider model
  * - Emits a "completed" AI event (ai_events)
  * - Emits a unified "ai.task.completed" domain event
  */
@@ -257,7 +257,7 @@ export async function executeAIAgentTask(
     success = false;
     errorMessage =
       err?.message ||
-      "Unknown error executing AI agent task (OpenAI call failed)";
+      "Unknown error executing AI agent task (provider call failed)";
     output = null;
     console.error("[AI Agent] Error executing task:", err);
   }

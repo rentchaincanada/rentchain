@@ -1,5 +1,5 @@
-# RentChain: CODEx Memory File
-This file teaches the VSCode CODEx assistant the architecture, vision,
+# RentChain: Internal Dev Assistant Memory File
+This file teaches the VSCode Internal Dev Assistant assistant the architecture, vision,
 naming standards, and coding style of the RentChain project.
 
 ## Core Identity
@@ -31,7 +31,7 @@ naming standards, and coding style of the RentChain project.
 - Panels must be modular and elegant, investor-ready visuals.
 - Components should accept typed props and remain stateless.
 
-## Features CODEx Should Expect
+## Features Internal Dev Assistant Should Expect
 - Convert Application → Tenant + Lease + Ledger.
 - Manual Payment recording.
 - Modify Payment system.

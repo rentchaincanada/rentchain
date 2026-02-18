@@ -3,7 +3,7 @@
 import OpenAI from "openai";
 
 /**
- * Singleton OpenAI client for the whole API.
+ * Singleton provider client for the whole API.
  *
  * Make sure OPENAI_API_KEY is set in your environment.
  */
@@ -13,6 +13,6 @@ export const openaiClient = new OpenAI({
 
 if (!process.env.OPENAI_API_KEY) {
   console.warn(
-    "⚠️ [OpenAI] OPENAI_API_KEY is not set. AI calls will fail until you configure it."
+    "⚠️ [Provider] OPENAI_API_KEY is not set. AI calls will fail until you configure it."
   );
 }

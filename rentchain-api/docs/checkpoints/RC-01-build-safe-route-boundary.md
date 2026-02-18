@@ -2,7 +2,7 @@
 
 **Checkpoint ID:** RC-01  
 **Status:** LOCKED ✅  
-**Owner:** CTO (Orion)  
+**Owner:** Engineering  
 **Scope:** rentchain-api routing + production build safety
 
 ## Purpose

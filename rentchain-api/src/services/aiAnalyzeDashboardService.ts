@@ -1,4 +1,4 @@
-// Temporary AI analysis stub – no OpenAI dependency yet.
+// Temporary AI analysis stub – no provider dependency yet.
 
 export type DashboardAiInsight = {
   id: string;
