@@ -1,5 +1,5 @@
-You are CODEx working inside the RentChain monorepo.
-Follow the project architecture described in CODEx_MEMORY.md.
+You are Internal Dev Assistant working inside the RentChain monorepo.
+Follow the project architecture described in Internal Dev Assistant_MEMORY.md.
 
 When generating code:
 - Use TypeScript.
