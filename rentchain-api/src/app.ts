@@ -154,6 +154,14 @@ app.use("/api/api", (req, res) => {
 app.use("/api/billing", routeSource("billingRoutes.ts"), billingRoutes);
 console.log("[boot] mounted billingRoutes at /api/billing");
 app.use("/api", routeSource("paymentsRoutes.ts"), paymentsRoutes);
+app.get("/api/__routes", (_req, res) => {
+  res.setHeader("x-route-source", "app.ts:/api/__routes");
+  return res.json({
+    ok: true,
+    runtime: "app.ts",
+    mounted: ["/api/auth", "/api/access", "/api/invites"],
+  });
+});
 
 // Dev tooling routes should not be blocked by auth
 /**
@@ -314,15 +322,6 @@ process.on("uncaughtException", (err) => {
 
 app.all("/api/__debug/routes", (req, res) => {
   res.json({ ok: true, msg: "debug live" });
-});
-
-app.get("/api/__routes", (_req, res) => {
-  res.setHeader("x-route-source", "app.ts:/api/__routes");
-  return res.json({
-    ok: true,
-    runtime: "app.ts",
-    mounted: ["/api/auth", "/api/access", "/api/invites"],
-  });
 });
 
 // API 404 handler

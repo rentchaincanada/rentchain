@@ -144,6 +144,14 @@ app.use("/api/api", (req, res) => {
 
 // Health
 app.use("/health", healthRoutes);
+app.get("/api/__routes", (_req, res) => {
+  res.setHeader("x-route-source", "app.build.ts:/api/__routes");
+  return res.json({
+    ok: true,
+    runtime: "app.build.ts",
+    mounted: ["/api/auth", "/api/access", "/api/invites"],
+  });
+});
 
 // Billing routes
 app.use("/api/billing", routeSource("billingRoutes.ts"), billingRoutes);
@@ -288,15 +296,6 @@ app.get("/api/__probe/routes", (_req, res) => {
     routesCount: routes.length,
     routes,
     hasTenantsMount: mounts.some((s: string) => s.includes("tenants")),
-  });
-});
-
-app.get("/api/__routes", (_req, res) => {
-  res.setHeader("x-route-source", "app.build.ts:/api/__routes");
-  return res.json({
-    ok: true,
-    runtime: "app.build.ts",
-    mounted: ["/api/auth", "/api/access", "/api/invites"],
   });
 });
 
