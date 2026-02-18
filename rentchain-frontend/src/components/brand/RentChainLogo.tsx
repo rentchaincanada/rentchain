@@ -1,5 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
+import { Logo } from "./Logo";
 
 type RentChainLogoProps = {
   variant?: "light" | "dark";
@@ -25,8 +26,7 @@ export const RentChainLogo: React.FC<RentChainLogoProps> = ({
 
   return (
     <Link to={href} aria-label="RentChain home" className={linkClassName}>
-      <img src="/icons/icon-192-light.png" alt="" aria-hidden="true" className="rc-logo-icon" />
-      <span className="rc-logo-wordmark">RentChain</span>
+      <Logo className={size === "sm" ? "h-8 w-auto" : "h-8 w-auto"} priority />
     </Link>
   );
 };
