@@ -1,6 +1,6 @@
 // src/api/authApi.ts
 import { apiFetch, apiJson } from "./http";
-import { clearAuthToken, getAuthToken, setAuthToken, resolveApiUrl } from "@/lib/apiClient";
+import { clearAuthToken, getAuthToken, setAuthToken } from "@/lib/apiClient";
 import { awaitFirebaseAuthReady } from "@/lib/firebaseAuthToken";
 
 export interface AuthUser {
@@ -53,22 +53,6 @@ export interface TrustDeviceResponse {
 
 export interface Disable2faResponse {
   success: boolean;
-}
-
-async function handleResponse<T>(res: Response): Promise<T> {
-  if (!res.ok) {
-    let message = `Request failed with status ${res.status}`;
-    try {
-      const error = await res.json();
-      if (error?.error) {
-        message = error.error;
-      }
-    } catch {
-      // ignore parse errors
-    }
-    throw new Error(message);
-  }
-  return (await res.json()) as T;
 }
 
 export async function login(
@@ -181,14 +165,10 @@ export async function disable2fa(code: string): Promise<Disable2faResponse> {
 }
 
 export async function getCurrentUser(token: string): Promise<MeResponse> {
-  const res = await fetch(resolveApiUrl("/auth/me"), {
+  return apiFetch<MeResponse>("/me", {
     method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+    token,
   });
-
-  return handleResponse<MeResponse>(res);
 }
 
 export async function restoreSession(): Promise<{ user: any | null }> {
@@ -204,17 +184,35 @@ export async function restoreSession(): Promise<{ user: any | null }> {
     }
   }
 
+  let shouldFallbackToAuthMe = false;
   try {
-    // Prefer auth/me which returns the decoded token payload
-    const authMe = await apiFetch<{ ok?: boolean; user?: AuthUser }>("/auth/me");
-    if (authMe?.user) {
-      return { user: authMe.user };
+    const me = await apiFetch<{ ok?: boolean; user?: AuthUser }>("/me");
+    if (me?.user) {
+      return { user: me.user };
     }
+    shouldFallbackToAuthMe = true;
   } catch (e: any) {
-    // fall through to /me fallback
+    const status = Number(e?.status || e?.body?.status || 0);
+    if (status === 401) {
+      shouldFallbackToAuthMe = true;
+    } else {
+      if (import.meta.env.DEV) {
+        console.warn("[auth] /me hydration failed", { status, message: String(e?.message || "") });
+      }
+      return { user: null };
+    }
   }
 
-  const res = await apiFetch<any>("me");
+  if (!shouldFallbackToAuthMe) {
+    return { user: null };
+  }
+
+  let res: any = null;
+  try {
+    res = await apiFetch<any>("/auth/me");
+  } catch {
+    return { user: null };
+  }
   if (res && typeof res === "object") {
     if ("user" in res) {
       return { user: (res as any).user ?? null };

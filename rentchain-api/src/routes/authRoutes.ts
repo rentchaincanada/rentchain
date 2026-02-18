@@ -25,6 +25,7 @@ import { getOrCreateAccount } from "../services/accountService";
 import { getOrCreateLandlordProfile } from "../services/landlordProfileService";
 import { db } from "../config/firebase";
 import { rateLimitAuth } from "../middleware/rateLimit";
+import { requireAuth } from "../middleware/requireAuth";
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
@@ -853,16 +854,22 @@ router.post(
 
 router.get(
   "/me",
-  authenticateJwt,
+  requireAuth,
   (req: any, res: Response) => {
     if (!req.user) {
-      res.status(401).json({ error: "Unauthorized" });
+      res.status(401).json({ ok: false, error: "unauthenticated" });
       return;
     }
     res.status(200).json({
+      ok: true,
       user: {
         id: req.user.id,
         email: req.user.email,
+        role: req.user.role,
+        landlordId: req.user.landlordId,
+        tenantId: req.user.tenantId,
+        plan: req.user.plan,
+        capabilities: Array.isArray(req.user.capabilities) ? req.user.capabilities : [],
       },
     });
   }

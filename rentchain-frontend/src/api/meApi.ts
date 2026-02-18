@@ -1,4 +1,4 @@
-import { apiFetch } from "./apiFetch";
+import { apiFetch } from "./http";
 
 export async function fetchMe() {
   const res = await apiFetch("/me", { method: "GET" });

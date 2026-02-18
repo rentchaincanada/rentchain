@@ -48,7 +48,7 @@ export async function refreshEntitlements(
   updateUser?: (patch: Record<string, any>) => void
 ): Promise<void> {
   try {
-    const me = await apiFetch<{ ok?: boolean; user?: any }>("/auth/me");
+    const me = await apiFetch<{ ok?: boolean; user?: any }>("/me");
     if (me?.user && updateUser) {
       updateUser(me.user);
     }

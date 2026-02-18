@@ -7,6 +7,7 @@ import React, {
   ReactNode,
 } from "react";
 import { fetchMe } from "../api/meApi";
+import { getAuthToken } from "../lib/authToken";
 
 export type SubscriptionPlan = "screening" | "starter" | "core" | "pro" | "elite";
 
@@ -98,15 +99,22 @@ export function SubscriptionProvider({
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const token = getAuthToken();
+    if (!token) {
+      setLoading(false);
+      return;
+    }
+
     fetchMe()
       .then((me) => {
-        const p = me?.plan;
+        const user = (me as any)?.user && typeof (me as any).user === "object" ? (me as any).user : me;
+        const p = user?.plan;
         if (p === "screening" || p === "starter" || p === "core" || p === "pro" || p === "elite") {
           setPlan(p);
           return;
         }
 
-        if (me?.role === "landlord") {
+        if (user?.role === "landlord") {
           setPlan("screening");
         }
       })
