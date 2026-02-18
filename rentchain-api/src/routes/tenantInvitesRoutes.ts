@@ -12,6 +12,58 @@ import { requireCapability } from "../services/capabilityGuard";
 
 const router = Router();
 
+function normalizeStatus(value: any): string {
+  return String(value || "").trim().toLowerCase();
+}
+
+function leaseIndicatesSigned(status: any): boolean {
+  const normalized = normalizeStatus(status);
+  return normalized === "signed" || normalized === "active" || normalized === "current";
+}
+
+async function loadEligibleUnit(opts: {
+  landlordId: string;
+  propertyId: string;
+  unitId: string;
+}): Promise<{ found: boolean; eligible: boolean }> {
+  const unitSnap = await db.collection("units").doc(opts.unitId).get();
+  if (!unitSnap.exists) return { found: false, eligible: false };
+
+  const unit = unitSnap.data() as any;
+  if (
+    String(unit?.landlordId || "") !== opts.landlordId ||
+    String(unit?.propertyId || "") !== opts.propertyId
+  ) {
+    return { found: false, eligible: false };
+  }
+
+  const occupancyStatus = normalizeStatus(unit?.occupancyStatus || unit?.status);
+  if (occupancyStatus === "occupied") {
+    return { found: true, eligible: true };
+  }
+
+  const leasesSnap = await db
+    .collection("leases")
+    .where("landlordId", "==", opts.landlordId)
+    .limit(400)
+    .get();
+
+  const unitNumber = String(unit?.unitNumber || unit?.label || "").trim();
+  const hasSignedLease = leasesSnap.docs.some((doc) => {
+    const lease = doc.data() as any;
+    const leaseUnitId = String(lease?.unitId || "").trim();
+    const leaseUnitNumber = String(lease?.unitNumber || lease?.unit || "").trim();
+    const leasePropertyId = String(lease?.propertyId || "").trim();
+    return (
+      leasePropertyId === opts.propertyId &&
+      leaseIndicatesSigned(lease?.status) &&
+      (leaseUnitId === opts.unitId || (unitNumber && leaseUnitNumber === unitNumber))
+    );
+  });
+
+  return { found: true, eligible: hasSignedLease };
+}
+
 function signTenantJwt(payload: any) {
   const secret = process.env.JWT_SECRET;
   if (!secret) throw new Error("JWT_SECRET missing");
@@ -49,6 +101,29 @@ router.post(
       }
       if (!propertyId || !unitId) {
         return res.status(400).json({ ok: false, error: "unit_required" });
+      }
+      const unitEligibility = await loadEligibleUnit({
+        landlordId: String(landlordId),
+        propertyId: String(propertyId),
+        unitId: String(unitId),
+      });
+      if (!unitEligibility.found) {
+        return res.status(400).json({ ok: false, error: "unit_required" });
+      }
+      if (!unitEligibility.eligible) {
+        return res.status(400).json({ ok: false, error: "lease_required" });
+      }
+      try {
+        await db.collection("units").doc(String(unitId)).set(
+          {
+            status: "occupied",
+            occupancyStatus: "occupied",
+            updatedAt: Date.now(),
+          },
+          { merge: true }
+        );
+      } catch (err) {
+        console.warn("[tenant-invites] failed to promote unit occupancy", err);
       }
       const toEmail = String(tenantEmail || "").trim().toLowerCase();
 
@@ -277,6 +352,31 @@ router.post("/redeem", async (req: any, res) => {
     });
   } catch (err) {
     console.warn("[tenant-invites] tenancy backfill failed", err);
+  }
+
+  if (resolvedUnitId) {
+    try {
+      const unitRef = db.collection("units").doc(String(resolvedUnitId));
+      const unitSnap = await unitRef.get();
+      if (unitSnap.exists) {
+        const unit = unitSnap.data() as any;
+        const matchesLandlord =
+          !unit?.landlordId || String(unit.landlordId) === String(invite.landlordId);
+        if (matchesLandlord) {
+          await unitRef.set(
+            {
+              status: "occupied",
+              occupancyStatus: "occupied",
+              currentTenantId: tenantId,
+              updatedAt: now,
+            },
+            { merge: true }
+          );
+        }
+      }
+    } catch (err) {
+      console.warn("[tenant-invites] failed to update unit occupancy", err);
+    }
   }
 
   await ref.set(

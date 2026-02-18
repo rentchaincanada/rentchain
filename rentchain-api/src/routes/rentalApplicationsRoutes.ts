@@ -235,11 +235,18 @@ function evaluateEligibility(application: any) {
     };
   }
   const dob = String(application?.applicant?.dob || "").trim();
+  const sin = String(
+    application?.applicant?.sinLast4 ||
+      application?.applicant?.sin ||
+      application?.applicantProfile?.sinLast4 ||
+      application?.applicantProfile?.sin ||
+      ""
+  ).trim();
   const currentAddress = String(application?.residentialHistory?.[0]?.address || "").trim();
-  if (!dob || !currentAddress) {
+  if ((!dob && !sin) || !currentAddress) {
     return {
       eligible: false,
-      detail: "DOB and current address are required.",
+      detail: "DOB (or SIN) and current address are required.",
       reasonCode: "MISSING_TENANT_PROFILE",
     };
   }
@@ -331,6 +338,92 @@ function resolvePricingInput(body: any) {
   const expeditedAddOn = addons.includes("expedited");
   const pricing = getScreeningPricing({ screeningTier, addons, currency: "CAD" });
   return { screeningTier, addons, serviceLevel, scoreAddOn, expeditedAddOn, pricing };
+}
+
+function sanitizeAddressLine(line: any): string {
+  return String(line || "").trim();
+}
+
+async function createManualApplicationFromOrderBody(opts: {
+  landlordId: string;
+  propertyId: string;
+  unitId?: string | null;
+  body: any;
+}) {
+  const manual = opts.body?.manualApplicant || opts.body || {};
+  const firstName = String(manual?.firstName || "").trim();
+  const lastName = String(manual?.lastName || "").trim();
+  const dob = String(manual?.dob || "").trim();
+  const sinRaw = String(manual?.sin || "").replace(/\D/g, "");
+  const sinLast4 = sinRaw ? sinRaw.slice(-4) : "";
+  const email = String(manual?.email || opts.body?.tenantEmail || "").trim().toLowerCase();
+  const phone = String(manual?.phone || "").trim();
+  const currentAddress = {
+    line1: sanitizeAddressLine(manual?.currentAddress?.line1),
+    city: sanitizeAddressLine(manual?.currentAddress?.city),
+    province: sanitizeAddressLine(manual?.currentAddress?.province || manual?.currentAddress?.provinceState),
+    postalCode: sanitizeAddressLine(manual?.currentAddress?.postal || manual?.currentAddress?.postalCode),
+  };
+  const consent = Boolean(manual?.consentGiven || opts.body?.consent?.given);
+
+  if (!firstName || !lastName) {
+    return { ok: false as const, status: 400, error: "missing_name" };
+  }
+  if (!currentAddress.line1 || !currentAddress.city || !currentAddress.province || !currentAddress.postalCode) {
+    return { ok: false as const, status: 400, error: "missing_address" };
+  }
+  if (!dob && !sinLast4) {
+    return { ok: false as const, status: 400, error: "missing_identity" };
+  }
+  if (!consent) {
+    return { ok: false as const, status: 400, error: "consent_required" };
+  }
+
+  const now = Date.now();
+  const appRef = db.collection("rentalApplications").doc();
+  const addressParts = [
+    currentAddress.line1,
+    currentAddress.city,
+    currentAddress.province,
+    currentAddress.postalCode,
+  ].filter(Boolean);
+
+  const record: any = {
+    id: appRef.id,
+    landlordId: opts.landlordId,
+    propertyId: opts.propertyId,
+    unitId: opts.unitId || null,
+    status: "SUBMITTED",
+    createdAt: now,
+    updatedAt: now,
+    submittedAt: now,
+    applicationLinkId: null,
+    source: "manual_screening",
+    applicant: {
+      firstName,
+      lastName,
+      email: email || null,
+      phoneHome: phone || null,
+      dob: dob || null,
+      sinLast4: sinLast4 || null,
+    },
+    residentialHistory: [
+      {
+        address: addressParts.join(", "),
+      },
+    ],
+    consent: {
+      creditConsent: true,
+      referenceConsent: true,
+      dataSharingConsent: true,
+      acceptedAt: now,
+      applicantNameTyped: `${firstName} ${lastName}`.trim(),
+    },
+    screeningStatus: "unpaid",
+  };
+
+  await appRef.set(record, { merge: false });
+  return { ok: true as const, applicationId: appRef.id, data: record };
 }
 
 router.use(authenticateJwt);
@@ -873,7 +966,8 @@ router.post(
       if (!landlordId) return res.status(401).json({ ok: false, error: "unauthorized" });
 
       const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
-      const applicationId = String(body?.applicationId || "").trim();
+      const existingApplicationId = String(body?.applicationId || "").trim();
+      let applicationId = existingApplicationId;
       const propertyIdInput = String(body?.propertyId || "").trim();
       const unitIdInput = String(body?.unitId || "").trim();
       let data: any = null;
@@ -899,10 +993,38 @@ router.post(
             reasonCode: eligibility.reasonCode,
           });
         }
+      } else {
+        const manualApp = await createManualApplicationFromOrderBody({
+          landlordId: String(landlordId),
+          propertyId: propertyIdInput,
+          unitId: unitIdInput || null,
+          body,
+        });
+        if (!manualApp.ok) {
+          if (manualApp.error === "consent_required") {
+            return res.status(400).json({
+              ok: false,
+              error: "consent_required",
+              detail: "consent_required",
+            });
+          }
+          if (manualApp.error === "missing_name") {
+            return res.status(400).json({ ok: false, error: "missing_name" });
+          }
+          if (manualApp.error === "missing_address") {
+            return res.status(400).json({ ok: false, error: "missing_address" });
+          }
+          if (manualApp.error === "missing_identity") {
+            return res.status(400).json({ ok: false, error: "missing_identity" });
+          }
+          return res.status(400).json({ ok: false, error: "invalid_manual_application" });
+        }
+        applicationId = manualApp.applicationId;
+        data = manualApp.data;
       }
 
       const consent = resolveConsentPayload(body);
-      if (applicationId) {
+      if (existingApplicationId) {
         const consentCheck = validateConsent(consent);
         if (!consentCheck.ok) {
           return res.status(400).json({

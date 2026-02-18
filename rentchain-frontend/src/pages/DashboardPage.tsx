@@ -100,7 +100,7 @@ const DashboardPage: React.FC = () => {
   const { applications, loading: applicationsLoading } = useApplications();
   const { tenants, loading: tenantsLoading } = useTenants();
   const { user, ready: authReady, isLoading: authLoading } = useAuth();
-  const { caps } = useCapabilities();
+  const { caps, features } = useCapabilities();
   const { openUpgrade } = useUpgrade();
   const { showToast } = useToast();
   const navigate = useNavigate();
@@ -115,6 +115,7 @@ const DashboardPage: React.FC = () => {
   const isLandlord = roleLower === "landlord";
   const userTier = normalizeTier((caps?.plan as string) || user?.plan || null);
   const canUseProFeatures = isAdmin || hasTier(userTier, "pro");
+  const canManualScreen = isAdmin || features?.screening_pay_per_use !== false;
   const canUseReferrals = isLandlord || isAdmin;
   const [properties, setProperties] = React.useState<any[]>([]);
   const [propsLoading, setPropsLoading] = React.useState(false);
@@ -272,21 +273,12 @@ const DashboardPage: React.FC = () => {
   const events = Array.isArray(data?.events) ? data.events : [];
   const fallbackActions = React.useMemo(() => {
     const items: Array<{ id: string; title: string; severity: "info"; href: string }> = [];
-    if (userTier === "starter") {
-      items.push({
-        id: "upgrade-pro",
-        title: "Upgrade to Pro to unlock screening",
-        severity: "info",
-        href: "/billing",
-      });
-      return items;
-    }
-    if ((kpis.screeningsCount ?? 0) === 0) {
+    if (canManualScreen && (kpis.screeningsCount ?? 0) === 0) {
       items.push({
         id: "run-first-screening",
-        title: "Run your first screening",
+        title: "Run a manual screening",
         severity: "info",
-        href: "/applications",
+        href: "/screening/manual",
       });
     }
     if (tenantCount === 0) {
@@ -306,7 +298,7 @@ const DashboardPage: React.FC = () => {
       });
     }
     return items;
-  }, [derivedPropertiesCount, kpis.screeningsCount, tenantCount, userTier]);
+  }, [canManualScreen, derivedPropertiesCount, kpis.screeningsCount, tenantCount]);
   const actions = Array.isArray(data?.actions) && data.actions.length > 0 ? data.actions : fallbackActions;
 
   const dataReady =
@@ -528,6 +520,16 @@ const DashboardPage: React.FC = () => {
                 >
                   Send screening invite
                 </Button>
+                {canManualScreen ? (
+                  <Button
+                    variant="secondary"
+                    onClick={() => navigate("/screening/manual")}
+                    aria-label="Run manual screening"
+                    disabled={progressLoading}
+                  >
+                    Run manual screening
+                  </Button>
+                ) : null}
                 <Button
                   variant="secondary"
                   onClick={() => {
@@ -643,6 +645,16 @@ const DashboardPage: React.FC = () => {
             <Button onClick={handleCreateApplicationClick}>
               Send application link
             </Button>
+          </Card>
+        ) : null}
+
+        {dataReady && canManualScreen ? (
+          <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>Manual screening</div>
+            <div style={{ color: text.muted, marginBottom: 12 }}>
+              Run a pay-per-use screening without sending an application link.
+            </div>
+            <Button onClick={() => navigate("/screening/manual")}>Run Manual Screening</Button>
           </Card>
         ) : null}
 

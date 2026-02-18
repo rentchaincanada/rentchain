@@ -76,6 +76,7 @@ const BillingPage: React.FC = () => {
   const { user } = useAuth();
   const billingStatus = useBillingStatus();
   const currentPlan = billingStatus.tier;
+  const isPaidPlan = currentPlan !== "free";
 
   const getErrorMessage = (error: unknown, fallback: string) => {
     if (error instanceof Error && error.message) return error.message;
@@ -203,9 +204,20 @@ const BillingPage: React.FC = () => {
             <Button type="button" variant="secondary" onClick={load} disabled={loading}>
               Refresh
             </Button>
-            <Button type="button" variant="primary" onClick={handlePortal} disabled={portalLoading}>
-              {portalLoading ? "Opening..." : "Manage subscription"}
-            </Button>
+            {isPaidPlan ? (
+              <Button type="button" variant="primary" onClick={handlePortal} disabled={portalLoading}>
+                {portalLoading ? "Opening..." : "Manage subscription"}
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="primary"
+                onClick={() => void handlePlanAction("starter")}
+                disabled={planActionLoading === "starter" || pricingUnavailable}
+              >
+                {planActionLoading === "starter" ? "Opening..." : "Upgrade plan"}
+              </Button>
+            )}
           </div>
         </div>
       </Card>
@@ -228,9 +240,20 @@ const BillingPage: React.FC = () => {
             </div>
           </div>
           <div className="rc-wrap-row" style={{ marginTop: spacing.sm }}>
-            <Button type="button" variant="secondary" onClick={handlePortal} disabled={portalLoading}>
-              {portalLoading ? "Opening..." : "Manage subscription"}
-            </Button>
+            {isPaidPlan ? (
+              <Button type="button" variant="secondary" onClick={handlePortal} disabled={portalLoading}>
+                {portalLoading ? "Opening..." : "Manage subscription"}
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => void handlePlanAction("starter")}
+                disabled={planActionLoading === "starter" || pricingUnavailable}
+              >
+                {planActionLoading === "starter" ? "Opening..." : "Upgrade plan"}
+              </Button>
+            )}
             {currentPlan === "starter" ? (
               <Button type="button" onClick={() => void handlePlanAction("pro")} disabled={planActionLoading === "pro" || pricingUnavailable}>
                 {proUpgradeLabel}
