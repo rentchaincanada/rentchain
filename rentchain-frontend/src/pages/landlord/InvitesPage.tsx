@@ -1,11 +1,14 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { fetchProperties, type Property } from "../../api/propertiesApi";
+import { fetchUnitsForProperty } from "../../api/unitsApi";
 import {
   createTenantInvite,
   listTenantInvites,
   type TenantInvite,
 } from "../../api/tenantInvites";
 import { colors, spacing, text } from "../../styles/tokens";
+import { useCapabilities } from "../../hooks/useCapabilities";
+import { dispatchUpgradePrompt } from "../../lib/upgradePrompt";
 
 function deriveInviteUrl(token: string) {
   const base =
@@ -24,10 +27,15 @@ export default function InvitesPage() {
   const [showModal, setShowModal] = useState(false);
 
   const [propertyId, setPropertyId] = useState("");
+  const [unitId, setUnitId] = useState("");
+  const [units, setUnits] = useState<Array<{ id: string; label: string }>>([]);
+  const [loadingUnits, setLoadingUnits] = useState(false);
   const [tenantEmail, setTenantEmail] = useState("");
   const [tenantName, setTenantName] = useState("");
   const [createdInviteUrl, setCreatedInviteUrl] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
+  const { features } = useCapabilities();
+  const canInvite = features?.tenant_invites !== false;
 
   useEffect(() => {
     let mounted = true;
@@ -58,17 +66,56 @@ export default function InvitesPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!propertyId) {
+      setUnits([]);
+      setUnitId("");
+      return;
+    }
+    let mounted = true;
+    (async () => {
+      setLoadingUnits(true);
+      try {
+        const res = await fetchUnitsForProperty(propertyId);
+        if (!mounted) return;
+        const mapped = (res || [])
+          .map((u: any) => ({
+            id: String(u?.id || u?.unitId || "").trim(),
+            label: String(u?.unitNumber || u?.label || u?.name || "Unit"),
+          }))
+          .filter((u: any) => Boolean(u.id));
+        setUnits(mapped);
+        setUnitId((prev) => (mapped.some((u) => u.id === prev) ? prev : ""));
+      } catch {
+        if (mounted) {
+          setUnits([]);
+          setUnitId("");
+        }
+      } finally {
+        if (mounted) setLoadingUnits(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [propertyId]);
+
   const canCreate = useMemo(() => {
-    return !creating && propertyId && tenantEmail;
-  }, [creating, propertyId, tenantEmail]);
+    return !creating && canInvite && propertyId && unitId && tenantEmail;
+  }, [creating, canInvite, propertyId, unitId, tenantEmail]);
 
   async function handleCreate() {
+    if (!canInvite) {
+      dispatchUpgradePrompt({ featureKey: "tenant_invites", source: "landlord_invites_page" });
+      return;
+    }
     if (!canCreate) return;
     try {
       setCreating(true);
       setCreateError(null);
       const res = await createTenantInvite({
         propertyId,
+        unitId,
         tenantEmail,
         tenantName: tenantName || undefined,
       });
@@ -121,22 +168,32 @@ export default function InvitesPage() {
         <button
           type="button"
           onClick={() => {
+            if (!canInvite) {
+              dispatchUpgradePrompt({ featureKey: "tenant_invites", source: "landlord_invites_page" });
+              return;
+            }
             setCreatedInviteUrl(null);
             setShowModal(true);
           }}
-          disabled={!properties.length}
+          disabled={!properties.length || !canInvite}
           style={{
             padding: "10px 14px",
             borderRadius: 10,
             border: "1px solid #e5e7eb",
-            background: properties.length ? "#111827" : "#9ca3af",
+            background: properties.length && canInvite ? "#111827" : "#9ca3af",
             color: "#fff",
             fontWeight: 700,
-            cursor: properties.length ? "pointer" : "not-allowed",
+            cursor: properties.length && canInvite ? "pointer" : "not-allowed",
           }}
-          title={properties.length ? "Create invite" : "Add a property first"}
+          title={
+            !canInvite
+              ? "Upgrade required"
+              : properties.length
+              ? "Create invite"
+              : "Add a property first"
+          }
         >
-          Create Invite
+          {canInvite ? "Create Invite" : "Unlock Tenant Invites"}
         </button>
       </div>
 
@@ -291,6 +348,37 @@ export default function InvitesPage() {
                       </option>
                     ))}
                   </select>
+                </label>
+                <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
+                  Unit *
+                  <select
+                    value={unitId}
+                    onChange={(e) => setUnitId(e.target.value)}
+                    disabled={!propertyId || loadingUnits || units.length === 0}
+                    style={{
+                      padding: "8px 10px",
+                      borderRadius: 10,
+                      border: "1px solid #e5e7eb",
+                    }}
+                  >
+                    <option value="">
+                      {!propertyId
+                        ? "Select property first"
+                        : loadingUnits
+                        ? "Loading units..."
+                        : "Select unit"}
+                    </option>
+                    {units.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.label}
+                      </option>
+                    ))}
+                  </select>
+                  {propertyId && !loadingUnits && units.length === 0 ? (
+                    <div style={{ fontSize: 12, color: text.muted }}>
+                      No units found. <a href="/properties">Create a unit first</a>
+                    </div>
+                  ) : null}
                 </label>
                 <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
                   Tenant email *

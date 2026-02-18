@@ -1,6 +1,11 @@
 import React, { useState } from "react";
 import { createTenantInvite } from "../../api/tenantInvites";
 import { setOnboardingStep } from "../../api/onboardingApi";
+import { fetchProperties } from "../../api/propertiesApi";
+import { fetchUnitsForProperty } from "../../api/unitsApi";
+import { useCapabilities } from "../../hooks/useCapabilities";
+import { dispatchUpgradePrompt } from "../../lib/upgradePrompt";
+import { useAuth } from "../../context/useAuth";
 import { Button } from "../ui/Ui";
 
 interface Props {
@@ -27,6 +32,87 @@ export const InviteTenantModal: React.FC<Props> = ({
   const [successMsg, setSuccessMsg] = useState("");
   const [infoMsg, setInfoMsg] = useState("");
   const [loading, setLoading] = useState(false);
+  const [properties, setProperties] = useState<Array<{ id: string; name: string }>>([]);
+  const [units, setUnits] = useState<Array<{ id: string; label: string }>>([]);
+  const [propertyId, setPropertyId] = useState(defaultPropertyId || "");
+  const [unitId, setUnitId] = useState(defaultUnitId || "");
+  const [loadingProperties, setLoadingProperties] = useState(false);
+  const [loadingUnits, setLoadingUnits] = useState(false);
+  const { features } = useCapabilities();
+  const { user } = useAuth();
+  const role = String(user?.role || "").toLowerCase();
+  const canInvite = role === "admin" || features?.tenant_invites !== false;
+
+  React.useEffect(() => {
+    if (!open) return;
+    let mounted = true;
+    (async () => {
+      setLoadingProperties(true);
+      try {
+        const res: any = await fetchProperties();
+        if (!mounted) return;
+        const list = Array.isArray(res?.properties)
+          ? res.properties
+          : Array.isArray(res?.items)
+          ? res.items
+          : Array.isArray(res)
+          ? res
+          : [];
+        const normalized = list
+          .map((p: any) => ({
+            id: String(p?.id || p?.propertyId || "").trim(),
+            name: String(p?.name || p?.addressLine1 || p?.id || "Property"),
+          }))
+          .filter((p: any) => Boolean(p.id));
+        setProperties(normalized);
+        if (!propertyId && normalized.length > 0) {
+          setPropertyId(String(defaultPropertyId || normalized[0].id));
+        }
+      } catch {
+        if (mounted) setProperties([]);
+      } finally {
+        if (mounted) setLoadingProperties(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [open, defaultPropertyId]);
+
+  React.useEffect(() => {
+    if (!open || !propertyId) {
+      setUnits([]);
+      setUnitId("");
+      return;
+    }
+    let mounted = true;
+    (async () => {
+      setLoadingUnits(true);
+      try {
+        const res = await fetchUnitsForProperty(propertyId);
+        if (!mounted) return;
+        const mapped = (res || [])
+          .map((u: any) => ({
+            id: String(u?.id || u?.unitId || "").trim(),
+            label: String(u?.unitNumber || u?.label || u?.name || "Unit"),
+          }))
+          .filter((u: any) => Boolean(u.id));
+        setUnits(mapped);
+        if (defaultUnitId && mapped.some((u: any) => u.id === defaultUnitId)) {
+          setUnitId(defaultUnitId);
+        } else {
+          setUnitId((prev) => (mapped.some((u: any) => u.id === prev) ? prev : ""));
+        }
+      } catch {
+        if (mounted) setUnits([]);
+      } finally {
+        if (mounted) setLoadingUnits(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [open, propertyId, defaultUnitId]);
 
   if (!open) return null;
 
@@ -37,11 +123,19 @@ export const InviteTenantModal: React.FC<Props> = ({
     setInviteUrl("");
     setLoading(true);
     try {
+      if (!canInvite) {
+        dispatchUpgradePrompt({ featureKey: "tenant_invites", source: "tenants_invite_modal" });
+        return;
+      }
+      if (!propertyId || !unitId) {
+        setErr("Select a property and unit to send an invite.");
+        return;
+      }
       const data: any = await createTenantInvite({
         tenantEmail,
         tenantName: tenantName || undefined,
-        propertyId: defaultPropertyId || null,
-        unitId: defaultUnitId || null,
+        propertyId,
+        unitId,
         leaseId: defaultLeaseId || null,
       });
 
@@ -107,6 +201,64 @@ export const InviteTenantModal: React.FC<Props> = ({
           <Button style={{ padding: "6px 10px" }} onClick={onClose}>
             Close
           </Button>
+        </div>
+
+        <div style={{ display: "grid", gap: 6 }}>
+          <label style={{ fontSize: 13 }}>Property</label>
+          <select
+            value={propertyId}
+            onChange={(e) => setPropertyId(e.target.value)}
+            style={{
+              padding: "8px 10px",
+              borderRadius: 8,
+              border: "1px solid #d1d5db",
+              fontSize: 14,
+            }}
+            disabled={loadingProperties}
+          >
+            <option value="">{loadingProperties ? "Loading properties..." : "Select property"}</option>
+            {properties.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div style={{ display: "grid", gap: 6 }}>
+          <label style={{ fontSize: 13 }}>Unit</label>
+          <select
+            value={unitId}
+            onChange={(e) => setUnitId(e.target.value)}
+            style={{
+              padding: "8px 10px",
+              borderRadius: 8,
+              border: "1px solid #d1d5db",
+              fontSize: 14,
+            }}
+            disabled={!propertyId || loadingUnits || units.length === 0}
+          >
+            <option value="">
+              {!propertyId
+                ? "Select property first"
+                : loadingUnits
+                ? "Loading units..."
+                : "Select unit"}
+            </option>
+            {units.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.label}
+              </option>
+            ))}
+          </select>
+          {propertyId && !loadingUnits && units.length === 0 ? (
+            <div style={{ fontSize: 12, color: "#6b7280" }}>
+              No units found.{" "}
+              <a href="/properties" style={{ color: "#2563eb", textDecoration: "underline" }}>
+                Create a unit first
+              </a>
+            </div>
+          ) : null}
         </div>
 
         <div style={{ display: "grid", gap: 6 }}>
@@ -214,7 +366,11 @@ export const InviteTenantModal: React.FC<Props> = ({
           <Button onClick={onClose} style={{ padding: "8px 12px" }}>
             Cancel
           </Button>
-          <Button onClick={sendInvite} disabled={loading || !tenantEmail} style={{ padding: "8px 12px" }}>
+          <Button
+            onClick={sendInvite}
+            disabled={loading || !tenantEmail || !propertyId || !unitId}
+            style={{ padding: "8px 12px" }}
+          >
             {loading ? "Sending..." : "Send invite"}
           </Button>
         </div>
