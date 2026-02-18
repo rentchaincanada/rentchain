@@ -20,7 +20,13 @@ const TopNav: React.FC = () => {
   const { user, logout, ready, isLoading, authStatus } = useAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const authResolved = ready && !isLoading && authStatus !== "restoring" && !!user;
-  const effectiveRole = authResolved ? String(user?.actorRole || user?.role || "landlord") : "";
+  const effectiveRole = React.useMemo(() => {
+    if (!authResolved) return "";
+    const actorRole = String(user?.actorRole || "").trim().toLowerCase();
+    const role = String(user?.role || "").trim().toLowerCase();
+    if (actorRole === "admin" || role === "admin") return "admin";
+    return actorRole || role || "landlord";
+  }, [authResolved, user?.actorRole, user?.role]);
   const billingStatus = useBillingStatus();
   const planLabel = billingTierLabel(billingStatus.tier);
   const roleBadge = authResolved ? roleLabel(effectiveRole) : "Loading...";
