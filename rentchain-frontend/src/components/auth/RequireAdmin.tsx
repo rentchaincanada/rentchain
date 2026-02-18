@@ -24,7 +24,6 @@ export const RequireAdmin: React.FC<RequireAdminProps> = ({ children }) => {
     const run = async () => {
       try {
         const data = await apiFetch<{ user?: MeUser | null }>("/me", {
-          credentials: "include",
           allowStatuses: [401, 403],
         });
         if (!active) return;

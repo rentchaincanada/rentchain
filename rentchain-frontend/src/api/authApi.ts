@@ -184,16 +184,35 @@ export async function restoreSession(): Promise<{ user: any | null }> {
     }
   }
 
+  let shouldFallbackToAuthMe = false;
   try {
     const me = await apiFetch<{ ok?: boolean; user?: AuthUser }>("/me");
     if (me?.user) {
       return { user: me.user };
     }
-  } catch {
-    // fall through to /auth/me fallback for backward compatibility
+    shouldFallbackToAuthMe = true;
+  } catch (e: any) {
+    const status = Number(e?.status || e?.body?.status || 0);
+    if (status === 401) {
+      shouldFallbackToAuthMe = true;
+    } else {
+      if (import.meta.env.DEV) {
+        console.warn("[auth] /me hydration failed", { status, message: String(e?.message || "") });
+      }
+      return { user: null };
+    }
   }
 
-  const res = await apiFetch<any>("/auth/me");
+  if (!shouldFallbackToAuthMe) {
+    return { user: null };
+  }
+
+  let res: any = null;
+  try {
+    res = await apiFetch<any>("/auth/me");
+  } catch {
+    return { user: null };
+  }
   if (res && typeof res === "object") {
     if ("user" in res) {
       return { user: (res as any).user ?? null };
