@@ -15,8 +15,9 @@ type WorkspaceDrawerProps = {
 export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose, userEmail, userRole, onSignOut }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { features } = useCapabilities();
-  const visibleItems = getVisibleNavItems(userRole, features);
+  const { features, loading: capsLoading } = useCapabilities();
+  const navLoading = !userRole || capsLoading;
+  const visibleItems = navLoading ? [] : getVisibleNavItems(userRole, features);
   const drawerItems = visibleItems.filter((item) => item.showInDrawer !== false);
   const primaryDrawerItems = drawerItems.filter((item) => !item.requiresAdmin);
   const adminDrawerItems = drawerItems.filter((item) => item.requiresAdmin);
@@ -103,6 +104,21 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
 
         <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.02em", color: text.muted }}>Pages</div>
         <div style={{ display: "grid", gap: 8 }}>
+          {navLoading ? (
+            <div
+              style={{
+                textAlign: "left",
+                padding: "10px 12px",
+                borderRadius: radius.md,
+                border: `1px solid ${colors.border}`,
+                background: colors.card,
+                color: text.muted,
+                fontWeight: 600,
+              }}
+            >
+              Loading menu...
+            </div>
+          ) : null}
           {primaryDrawerItems.map((link) => {
             const active = location.pathname.startsWith(link.to);
             return (
