@@ -6,8 +6,9 @@ import { MarketingLayout } from "./MarketingLayout";
 import { useAuth } from "../../context/useAuth";
 import { useCapabilities } from "../../hooks/useCapabilities";
 import { startCheckout } from "../../billing/startCheckout";
+import { DEFAULT_PLANS, type PricingInterval, type PricingPlanKey } from "../../constants/pricingPlans";
 
-type PlanKey = "free" | "starter" | "pro" | "elite";
+type PlanKey = PricingPlanKey;
 
 const PLAN_ORDER: PlanKey[] = ["free", "starter", "pro", "elite"];
 
@@ -18,32 +19,9 @@ const PLAN_LABEL: Record<PlanKey, string> = {
   elite: "Elite",
 };
 
-const PLAN_FEATURES: Record<PlanKey, string[]> = {
-  free: [
-    "Unlimited properties and units",
-    "Manual tenant and application entry",
-    "Pay-per-screening access",
-  ],
-  starter: [
-    "Tenant invites",
-    "Applications",
-    "Messaging",
-    "Basic ledger",
-  ],
-  pro: [
-    "Verified ledger",
-    "Basic exports",
-    "Compliance reports",
-    "Portfolio dashboard",
-    "Team tools",
-  ],
-  elite: [
-    "AI summaries",
-    "Advanced exports",
-    "Audit logs",
-    "Portfolio analytics",
-  ],
-};
+const PLAN_FEATURES: Record<PlanKey, string[]> = Object.fromEntries(
+  DEFAULT_PLANS.map((plan) => [plan.key, plan.features])
+) as Record<PlanKey, string[]>;
 
 const TABLE_ROWS: Array<{ feature: string; values: Record<PlanKey, string> }> = [
   {
@@ -94,6 +72,15 @@ const PricingPage: React.FC = () => {
   const { caps } = useCapabilities();
   const currentPlan = normalizePlan((caps?.plan as string) || user?.plan || null);
   const isAuthed = Boolean(user?.id);
+  const [interval, setInterval] = React.useState<PricingInterval>("monthly");
+
+  const renderPrice = (planKey: PlanKey) => {
+    const plan = DEFAULT_PLANS.find((item) => item.key === planKey);
+    if (!plan) return "Price unavailable";
+    const value = interval === "yearly" ? plan.yearlyPrice : plan.monthlyPrice;
+    if (planKey === "free") return value;
+    return interval === "yearly" ? `${value} / year` : `${value} / month`;
+  };
 
   const handleStartFree = () => {
     navigate("/signup");
@@ -134,9 +121,30 @@ const PricingPage: React.FC = () => {
         </div>
 
         <div className="rc-pricing-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))" }}>
+          <Card style={{ gridColumn: "1 / -1" }}>
+            <div style={{ display: "inline-flex", gap: 8, border: "1px solid rgba(15,23,42,0.12)", borderRadius: 999, padding: 4 }}>
+              <Button
+                type="button"
+                variant={interval === "monthly" ? "primary" : "ghost"}
+                onClick={() => setInterval("monthly")}
+                style={{ padding: "6px 12px" }}
+              >
+                Monthly
+              </Button>
+              <Button
+                type="button"
+                variant={interval === "yearly" ? "primary" : "ghost"}
+                onClick={() => setInterval("yearly")}
+                style={{ padding: "6px 12px" }}
+              >
+                Annual
+              </Button>
+            </div>
+          </Card>
           {PLAN_ORDER.map((plan) => (
             <Card key={plan} style={{ display: "grid", gap: spacing.sm }}>
               <div style={{ fontSize: 20, fontWeight: 800 }}>{PLAN_LABEL[plan]}</div>
+              <div style={{ fontSize: 22, fontWeight: 800 }}>{renderPrice(plan)}</div>
               <ul style={{ margin: 0, paddingLeft: "1.1rem", color: text.muted, lineHeight: 1.7 }}>
                 {PLAN_FEATURES[plan].map((item) => (
                   <li key={item}>{item}</li>
