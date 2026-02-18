@@ -7,6 +7,30 @@ export type CapabilitiesResponse = {
   ts?: number;
 };
 
+export const DEFAULT_CAPABILITIES: CapabilitiesResponse = {
+  ok: true,
+  plan: "free",
+  features: {
+    properties: true,
+    units: true,
+    tenants_manual: true,
+    applications_manual: true,
+    screening_pay_per_use: true,
+    messaging: false,
+    tenant_invites: false,
+    tenantInvites: false,
+    applications: false,
+    ledger_basic: false,
+    ledger_verified: false,
+    exports_basic: false,
+    exports_advanced: false,
+    compliance_reports: false,
+    portfolio_dashboard: false,
+    portfolio_analytics: false,
+    ai_summaries: false,
+  },
+};
+
 let cachedCapabilities: CapabilitiesResponse | null = null;
 
 export function getCachedCapabilities(): CapabilitiesResponse | null {
@@ -43,6 +67,6 @@ export async function refreshEntitlements(
       });
     }
   } catch {
-    // ignore capability refresh failures
+    setCachedCapabilities(DEFAULT_CAPABILITIES);
   }
 }

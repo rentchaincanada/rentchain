@@ -7,11 +7,10 @@ import { requireAuth } from "../middleware/requireAuth";
 const router = Router();
 
 /**
- * Public-ish capabilities endpoint.
- * Keep it safe: do not reveal secrets, just feature flags.
- * If you want it authenticated only, add authenticateJwt middleware here.
+ * Public capabilities endpoint.
+ * Safe for unauthenticated requests: returns only plan + feature flags.
  */
-router.use(authenticateJwt, requireAuth);
+router.use(authenticateJwt);
 
 function buildFeatures(plan: ReturnType<typeof resolvePlanTier>, isAdmin = false) {
   const base = {
@@ -29,6 +28,15 @@ function buildFeatures(plan: ReturnType<typeof resolvePlanTier>, isAdmin = false
 }
 
 router.get("/", async (req: any, res) => {
+  if (!req.user) {
+    return res.json({
+      ok: true,
+      plan: "free",
+      features: buildFeatures("free", false),
+      ts: Date.now(),
+    });
+  }
+
   const isAdmin = String(req.user?.role || "").toLowerCase() === "admin";
   try {
     const resolved = await resolveLandlordAndTier(req.user);
@@ -58,7 +66,7 @@ router.get("/", async (req: any, res) => {
   }
 });
 
-router.get("/_debug", async (req: any, res) => {
+router.get("/_debug", requireAuth, async (req: any, res) => {
   if (req.user?.role !== "admin") {
     return res.status(403).json({ ok: false, error: "Forbidden" });
   }
