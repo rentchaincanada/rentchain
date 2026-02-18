@@ -1,130 +1,116 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React from "react";
 import { useNavigate } from "react-router-dom";
-import { Card, Button } from "../../components/ui/Ui";
+import { Button, Card } from "../../components/ui/Ui";
 import { spacing, text } from "../../styles/tokens";
 import { MarketingLayout } from "./MarketingLayout";
 import { useAuth } from "../../context/useAuth";
-import { fetchBillingPricing } from "../../api/billingApi";
+import { useCapabilities } from "../../hooks/useCapabilities";
 import { startCheckout } from "../../billing/startCheckout";
-import { RequestAccessModal } from "../../components/marketing/RequestAccessModal";
-import { PlanIntervalToggle } from "../../components/billing/PlanIntervalToggle";
-import { useLocale } from "../../i18n";
-import { track } from "../../lib/analytics";
 
-const FAQ_ITEMS = [
+type PlanKey = "free" | "starter" | "pro" | "elite";
+
+const PLAN_ORDER: PlanKey[] = ["free", "starter", "pro", "elite"];
+
+const PLAN_LABEL: Record<PlanKey, string> = {
+  free: "Free",
+  starter: "Starter",
+  pro: "Pro",
+  elite: "Elite",
+};
+
+const PLAN_FEATURES: Record<PlanKey, string[]> = {
+  free: [
+    "Unlimited properties and units",
+    "Manual tenant and application entry",
+    "Pay-per-screening access",
+  ],
+  starter: [
+    "Tenant invites",
+    "Applications",
+    "Messaging",
+    "Basic ledger",
+  ],
+  pro: [
+    "Verified ledger",
+    "Basic exports",
+    "Compliance reports",
+    "Portfolio dashboard",
+    "Team tools",
+  ],
+  elite: [
+    "AI summaries",
+    "Advanced exports",
+    "Audit logs",
+    "Portfolio analytics",
+  ],
+};
+
+const TABLE_ROWS: Array<{ feature: string; values: Record<PlanKey, string> }> = [
   {
-    q: "How does tenant consent work?",
-    a: "Tenants provide consent as part of the screening flow. Screening is tenant-initiated and clearly disclosed before purchase.",
+    feature: "Properties + units",
+    values: { free: "Unlimited", starter: "Unlimited", pro: "Unlimited", elite: "Unlimited" },
   },
   {
-    q: "Who pays for screening?",
-    a: "Screening is pay-per-applicant. The applicant pays during checkout (or you can choose to reimburse outside the platform).",
+    feature: "Manual tenant/application entry",
+    values: { free: "Included", starter: "Included", pro: "Included", elite: "Included" },
   },
   {
-    q: "What do I get with Professional?",
-    a: "Professional includes screening access plus verified record-keeping and reporting tools built for landlord compliance.",
+    feature: "Tenant invites",
+    values: { free: "-", starter: "Included", pro: "Included", elite: "Included" },
   },
   {
-    q: "Is payment secure?",
-    a: "Payments are processed securely through Stripe. RentChain does not store full card details.",
+    feature: "Messaging",
+    values: { free: "-", starter: "Included", pro: "Included", elite: "Included" },
   },
   {
-    q: "Can I change plans later?",
-    a: "Yes. You can upgrade or change plans as your portfolio grows.",
+    feature: "Ledger",
+    values: { free: "-", starter: "Basic", pro: "Verified", elite: "Verified + audit" },
+  },
+  {
+    feature: "Exports",
+    values: { free: "-", starter: "-", pro: "Basic", elite: "Advanced" },
+  },
+  {
+    feature: "Portfolio insights",
+    values: { free: "-", starter: "-", pro: "Dashboard", elite: "Analytics + AI" },
   },
 ];
+
+function normalizePlan(input?: string | null): PlanKey {
+  const raw = String(input || "").trim().toLowerCase();
+  if (raw === "starter" || raw === "core") return "starter";
+  if (raw === "pro") return "pro";
+  if (raw === "elite" || raw === "business" || raw === "enterprise") return "elite";
+  return "free";
+}
+
+function isAtOrAbove(plan: PlanKey, target: PlanKey) {
+  return PLAN_ORDER.indexOf(plan) >= PLAN_ORDER.indexOf(target);
+}
 
 const PricingPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { caps } = useCapabilities();
+  const currentPlan = normalizePlan((caps?.plan as string) || user?.plan || null);
   const isAuthed = Boolean(user?.id);
-  const { t } = useLocale();
-  const [pricing, setPricing] = useState<any | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [pricingError, setPricingError] = useState(false);
-  const [requestOpen, setRequestOpen] = useState(false);
-  const [interval, setInterval] = useState<"month" | "year">("month");
-  const [faqOpen, setFaqOpen] = useState<number | null>(0);
 
-  useEffect(() => {
-    document.title = `${t("pricing.title")} — RentChain`;
-  }, [t]);
-
-  useEffect(() => {
-    let active = true;
-    fetchBillingPricing()
-      .then((res) => {
-        if (!active) return;
-        if (!res) {
-          setPricingError(true);
-          return;
-        }
-        setPricing(res);
-      })
-      .catch((err) => {
-        if (import.meta.env.DEV) {
-          console.warn("[marketing/pricing] fetch failed", { message: err?.message || err });
-        }
-        setPricingError(true);
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const planMap = useMemo(() => {
-    const map = new Map<string, any>();
-    if (pricing?.plans) {
-      pricing.plans.forEach((plan: any) => map.set(plan.key, plan));
-    }
-    return map;
-  }, [pricing]);
-
-  const renderPrice = (planKey: "starter" | "pro" | "business") => {
-    const plan = planMap.get(planKey);
-    if (!plan) return "—";
-    if (plan.monthlyAmountCents === 0) return "Free";
-
-    const amountCents = interval === "year" ? plan.yearlyAmountCents : plan.monthlyAmountCents;
-    if (!amountCents) return "—";
-
-    const suffix = interval === "year" ? "year" : "month";
-    return `$${Math.round(amountCents / 100)} / ${suffix}`;
+  const handleStartFree = () => {
+    navigate("/signup");
   };
 
-  const readOrFallback = (key: string, fallback: string) => {
-    const value = t(key);
-    return value === key ? fallback : value;
-  };
-
-  const proPlus = readOrFallback("pricing.pro.plus", "Everything in Starter, plus:");
-  const proItems = [
-    readOrFallback("pricing.pro.item1", "Tenant screening access"),
-    readOrFallback("pricing.pro.item2", "Ledger tools for audit-ready events"),
-    readOrFallback("pricing.pro.item3", "Exports for reporting and audits"),
-    readOrFallback("pricing.pro.item4", "Compliance-ready notices and timelines"),
-  ];
-
-  const pricingUnavailable = !loading && pricingError;
-
-  const handlePlanAction = (planKey: "starter" | "pro" | "business") => {
-    if (planKey === "starter") track("pricing_cta_starter_clicked", { interval, isAuthed });
-    if (planKey === "pro") track("pricing_cta_pro_clicked", { interval, isAuthed });
-    if (planKey === "business") track("pricing_cta_business_clicked", { interval, isAuthed });
-
-    if (pricingUnavailable) return;
-    if (planKey === "business" || !isAuthed) {
-      setRequestOpen(true);
+  const handleUpgrade = (plan: Exclude<PlanKey, "free">) => {
+    if (!isAuthed) {
+      navigate("/login?next=/site/pricing");
       return;
     }
-
-    startCheckout({
-      tier: planKey,
-      interval,
+    if (isAtOrAbove(currentPlan, plan)) {
+      navigate("/billing");
+      return;
+    }
+    void startCheckout({
+      tier: plan === "elite" ? "business" : plan,
+      interval: "monthly",
       featureKey: "pricing",
       source: "marketing_pricing",
       redirectTo: "/billing",
@@ -133,191 +119,82 @@ const PricingPage: React.FC = () => {
 
   return (
     <MarketingLayout>
-      <div style={{ display: "flex", flexDirection: "column", gap: spacing.lg, width: "100%", maxWidth: 1200, margin: "0 auto" }}>
+      <div style={{ width: "100%", maxWidth: 1180, margin: "0 auto", display: "grid", gap: spacing.lg }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: "clamp(2rem, 4vw, 3rem)", lineHeight: 1.1 }}>{t("pricing.title")}</h1>
-          <p style={{ marginTop: spacing.sm, color: text.primary, maxWidth: 760, fontWeight: 700, fontSize: "1.15rem" }}>
-            {t("pricing.headline")}
+          <h1 style={{ margin: 0, fontSize: "clamp(2rem, 4vw, 3rem)", lineHeight: 1.1 }}>Pricing</h1>
+          <p style={{ marginTop: spacing.sm, color: text.primary, maxWidth: 860, fontWeight: 700, fontSize: "1.1rem" }}>
+            Free to run your core rental workflow. Upgrade only when you need more workflow and intelligence.
           </p>
-          <p style={{ marginTop: spacing.sm, color: text.muted, maxWidth: 760 }}>{t("pricing.subline")}</p>
-
-          <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap", marginTop: spacing.sm }}>
-            {isAuthed ? (
-              <>
-                <Button type="button" onClick={() => navigate("/dashboard")}>Go to dashboard</Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => {
-                    track("pricing_cta_manage_billing_clicked", { interval, isAuthed });
-                    navigate("/billing");
-                  }}
-                >
-                  Manage billing
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button
-                  type="button"
-                  onClick={() => {
-                    track("pricing_cta_start_screening_clicked", { interval, isAuthed });
-                    setRequestOpen(true);
-                  }}
-                >
-                  Start screening
-                </Button>
-                <Button type="button" variant="ghost" onClick={() => navigate("/login")}>Sign in</Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => {
-                    track("pricing_demo_clicked", { source: "pricing_hero" });
-                    navigate("/site/screening-demo");
-                  }}
-                >
-                  Try demo
-                </Button>
-              </>
-            )}
-          </div>
+          <p style={{ marginTop: spacing.xs, color: text.muted, maxWidth: 860 }}>
+            Pay per screening - no credits, no bundles. Only pay when you screen.
+          </p>
+          <p style={{ marginTop: spacing.xs, color: text.muted, maxWidth: 860 }}>
+            Example: Consumer report $19.55 + optional score add-on $1. If no file returned, we&apos;ll apply the reduced/no-result price policy.
+          </p>
         </div>
 
-        <div className="rc-pricing-grid">
-          <div style={{ gridColumn: "1 / -1" }}>
-            <PlanIntervalToggle value={interval} onChange={setInterval} />
-          </div>
-
-          {pricingUnavailable ? (
-            <Card>
-              <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>{t("pricing.banner.unavailable")}</div>
-              <div style={{ color: text.muted, marginTop: spacing.xs }}>Please try again shortly.</div>
+        <div className="rc-pricing-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))" }}>
+          {PLAN_ORDER.map((plan) => (
+            <Card key={plan} style={{ display: "grid", gap: spacing.sm }}>
+              <div style={{ fontSize: 20, fontWeight: 800 }}>{PLAN_LABEL[plan]}</div>
+              <ul style={{ margin: 0, paddingLeft: "1.1rem", color: text.muted, lineHeight: 1.7 }}>
+                {PLAN_FEATURES[plan].map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+              <div style={{ marginTop: spacing.sm }}>
+                {plan === "free" ? (
+                  <Button type="button" onClick={handleStartFree}>
+                    Start Free
+                  </Button>
+                ) : (
+                  <Button type="button" onClick={() => handleUpgrade(plan)}>
+                    Upgrade
+                  </Button>
+                )}
+              </div>
             </Card>
-          ) : null}
-
-          <Card>
-            <h2 style={{ marginTop: 0 }}>{t("pricing.starter.title")}</h2>
-            <p style={{ color: text.muted, marginTop: 0 }}>{t("pricing.starter.subtitle")}</p>
-            <ul style={{ paddingLeft: "1.1rem", color: text.muted, lineHeight: 1.7 }}>
-              <li>{t("pricing.starter.item1")}</li>
-              <li>{t("pricing.starter.item2")}</li>
-              <li>{t("pricing.starter.item3")}</li>
-              <li>{t("pricing.starter.item4")}</li>
-              <li>{t("pricing.starter.item5")}</li>
-            </ul>
-            <div style={{ fontWeight: 700, fontSize: "1.1rem" }}>{loading ? "—" : renderPrice("starter")}</div>
-            <div className="rc-wrap-row" style={{ marginTop: spacing.sm }}>
-              <Button type="button" onClick={() => handlePlanAction("starter")} disabled={pricingUnavailable}>
-                Get started
-              </Button>
-            </div>
-          </Card>
-
-          <Card
-            style={{
-              border: "1px solid rgba(15, 23, 42, 0.18)",
-              boxShadow: "0 10px 24px rgba(15, 23, 42, 0.08)",
-              transform: "translateY(-2px)",
-            }}
-          >
-            <div
-              style={{
-                display: "inline-block",
-                background: "#0b1220",
-                color: "#fff",
-                borderRadius: 999,
-                padding: "4px 10px",
-                fontSize: "0.75rem",
-                fontWeight: 700,
-                marginBottom: spacing.sm,
-              }}
-            >
-              Most Popular
-            </div>
-
-            <h2 style={{ marginTop: 0 }}>{t("pricing.pro.title")}</h2>
-            <p style={{ color: text.muted, marginTop: 0 }}>{t("pricing.pro.subtitle")}</p>
-            <div style={{ color: text.muted, fontWeight: 600, marginTop: spacing.sm }}>{proPlus}</div>
-            <ul style={{ paddingLeft: "1.1rem", color: text.muted, lineHeight: 1.7 }}>
-              {proItems.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-            <div style={{ fontWeight: 700, fontSize: "1.1rem" }}>{loading ? "—" : renderPrice("pro")}</div>
-            <div style={{ color: text.subtle, marginTop: spacing.xs }}>{t("pricing.pro.screening_note")}</div>
-            <div className="rc-wrap-row" style={{ marginTop: spacing.sm }}>
-              <Button type="button" onClick={() => handlePlanAction("pro")} disabled={pricingUnavailable}>
-                Start screening
-              </Button>
-            </div>
-          </Card>
-
-          <Card>
-            <h2 style={{ marginTop: 0 }}>{t("pricing.business.title")}</h2>
-            <p style={{ color: text.muted, marginTop: 0 }}>{t("pricing.business.subtitle")}</p>
-            <ul style={{ paddingLeft: "1.1rem", color: text.muted, lineHeight: 1.7 }}>
-              <li>{t("pricing.business.item1")}</li>
-              <li>{t("pricing.business.item2")}</li>
-              <li>{t("pricing.business.item3")}</li>
-              <li>{t("pricing.business.item4")}</li>
-            </ul>
-            <div style={{ fontWeight: 700, fontSize: "1.1rem" }}>{loading ? "—" : renderPrice("business")}</div>
-            <div className="rc-wrap-row" style={{ marginTop: spacing.sm }}>
-              <Button type="button" onClick={() => handlePlanAction("business")} disabled={pricingUnavailable}>
-                Contact sales
-              </Button>
-            </div>
-          </Card>
+          ))}
         </div>
 
         <Card>
-          <div
-            style={{
-              display: "grid",
-              gap: spacing.sm,
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-            }}
-          >
-            <div style={{ fontWeight: 600, color: text.primary }}>Secure, encrypted data handling</div>
-            <div style={{ fontWeight: 600, color: text.primary }}>Tenant-consented screening</div>
-            <div style={{ fontWeight: 600, color: text.primary }}>Canadian-based platform</div>
+          <h2 style={{ marginTop: 0, marginBottom: spacing.sm }}>Comparison</h2>
+          <div style={{ width: "100%", overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: "left", padding: "10px 12px", borderBottom: "1px solid rgba(15,23,42,0.12)" }}>Capability</th>
+                  <th style={{ textAlign: "left", padding: "10px 12px", borderBottom: "1px solid rgba(15,23,42,0.12)" }}>Free</th>
+                  <th style={{ textAlign: "left", padding: "10px 12px", borderBottom: "1px solid rgba(15,23,42,0.12)" }}>Starter</th>
+                  <th style={{ textAlign: "left", padding: "10px 12px", borderBottom: "1px solid rgba(15,23,42,0.12)" }}>Pro</th>
+                  <th style={{ textAlign: "left", padding: "10px 12px", borderBottom: "1px solid rgba(15,23,42,0.12)" }}>Elite</th>
+                </tr>
+              </thead>
+              <tbody>
+                {TABLE_ROWS.map((row) => (
+                  <tr key={row.feature}>
+                    <td style={{ padding: "10px 12px", borderBottom: "1px solid rgba(15,23,42,0.08)", fontWeight: 600 }}>{row.feature}</td>
+                    <td style={{ padding: "10px 12px", borderBottom: "1px solid rgba(15,23,42,0.08)" }}>{row.values.free}</td>
+                    <td style={{ padding: "10px 12px", borderBottom: "1px solid rgba(15,23,42,0.08)" }}>{row.values.starter}</td>
+                    <td style={{ padding: "10px 12px", borderBottom: "1px solid rgba(15,23,42,0.08)" }}>{row.values.pro}</td>
+                    <td style={{ padding: "10px 12px", borderBottom: "1px solid rgba(15,23,42,0.08)" }}>{row.values.elite}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </Card>
 
         <Card>
-          <h2 style={{ marginTop: 0 }}>Frequently asked questions</h2>
-          {FAQ_ITEMS.map((item, index) => (
-            <details
-              key={item.q}
-              open={faqOpen === index}
-              onToggle={(event) => {
-                if ((event.currentTarget as HTMLDetailsElement).open) {
-                  setFaqOpen(index);
-                } else if (faqOpen === index) {
-                  setFaqOpen(null);
-                }
-              }}
-              style={{
-                border: "1px solid rgba(15, 23, 42, 0.12)",
-                borderRadius: 12,
-                padding: "12px 14px",
-                marginBottom: spacing.sm,
-              }}
-            >
-              <summary style={{ cursor: "pointer", fontWeight: 700, color: text.primary }}>{item.q}</summary>
-              <p style={{ margin: `${spacing.sm} 0 0`, color: text.muted }}>{item.a}</p>
-            </details>
-          ))}
-        </Card>
-
-        <Card>
-          <h2 style={{ marginTop: 0 }}>Screening fees (pay-per-applicant)</h2>
-          <p style={{ margin: 0, color: text.muted }}>{t("pricing.notice")}</p>
-          <p style={{ marginTop: spacing.sm, color: text.muted }}>{t("pricing.notice2")}</p>
+          <h2 style={{ marginTop: 0 }}>FAQ</h2>
+          <details open style={{ border: "1px solid rgba(15,23,42,0.12)", borderRadius: 12, padding: "12px 14px" }}>
+            <summary style={{ cursor: "pointer", fontWeight: 700 }}>Do I need a subscription to screen tenants?</summary>
+            <p style={{ margin: `${spacing.sm} 0 0`, color: text.muted }}>
+              No. Screening is pay-per-use.
+            </p>
+          </details>
         </Card>
       </div>
-
-      <RequestAccessModal open={requestOpen} onClose={() => setRequestOpen(false)} />
     </MarketingLayout>
   );
 };
