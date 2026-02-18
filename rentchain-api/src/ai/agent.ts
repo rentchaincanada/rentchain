@@ -32,11 +32,11 @@ async function getAIOutputWithOpenAI(
   inputData: any
 ): Promise<{ summary: string; riskScore: number; recommendation: string }> {
   if (!openAIClient) {
-    throw new Error("OpenAI client not configured");
+    throw new Error("Provider client not configured");
   }
 
   const systemPrompt = `
-You are an AI assistant for a landlord/tenant platform called RentChain.
+You are an assistant for a landlord/tenant platform called RentChain.
 
 Given:
 - an "inputType" describing the context (e.g. "demo", "rent_payment_analysis")
@@ -75,7 +75,7 @@ Rules:
   try {
     parsed = JSON.parse(rawText);
   } catch (err) {
-    throw new Error("Failed to parse OpenAI JSON: " + rawText);
+    throw new Error("Failed to parse provider JSON: " + rawText);
   }
 
   if (
@@ -83,7 +83,7 @@ Rules:
     typeof parsed.riskScore !== "number" ||
     typeof parsed.recommendation !== "string"
   ) {
-    throw new Error("OpenAI JSON missing required fields");
+    throw new Error("Provider JSON missing required fields");
   }
 
   const riskScore = Math.min(1, Math.max(0, parsed.riskScore));
@@ -97,7 +97,7 @@ Rules:
 
 /**
  * AI agent:
- * - If OPENAI_API_KEY is set: uses real OpenAI model
+ * - If OPENAI_API_KEY is set: uses the configured provider model
  * - Otherwise: uses a simple fallback stub
  */
 export async function runAIAgent(
@@ -118,8 +118,8 @@ export async function runAIAgent(
       recommendation = ai.recommendation;
       source = "openai";
     } catch (err: any) {
-      console.error("[AI] OpenAI error, falling back:", err?.message || err);
-      summary = `Fallback AI: processed input type "${inputType}" (OpenAI error)`;
+      console.error("[AI] Provider error, falling back:", err?.message || err);
+      summary = `Fallback AI: processed input type "${inputType}" (provider error)`;
       riskScore = Math.random();
       recommendation =
         "Review this tenant's payment history manually and consider adding internal notes until AI is fully available.";
@@ -129,7 +129,7 @@ export async function runAIAgent(
     console.warn(
       "[AI] No OPENAI_API_KEY set – using fallback random stub instead."
     );
-    summary = `Fallback AI: processed input type "${inputType}" (no OpenAI key configured)`;
+    summary = `Fallback AI: processed input type "${inputType}" (no provider key configured)`;
     riskScore = Math.random();
     recommendation =
       "Ensure AI configuration is complete, then re-run the analysis. In the meantime, rely on standard screening and payment history.";
