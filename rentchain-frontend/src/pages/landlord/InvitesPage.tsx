@@ -28,7 +28,9 @@ export default function InvitesPage() {
 
   const [propertyId, setPropertyId] = useState("");
   const [unitId, setUnitId] = useState("");
-  const [units, setUnits] = useState<Array<{ id: string; label: string }>>([]);
+  const [units, setUnits] = useState<
+    Array<{ id: string; label: string; inviteEligible: boolean; inviteEligibilityReason?: string | null }>
+  >([]);
   const [loadingUnits, setLoadingUnits] = useState(false);
   const [tenantEmail, setTenantEmail] = useState("");
   const [tenantName, setTenantName] = useState("");
@@ -82,6 +84,9 @@ export default function InvitesPage() {
           .map((u: any) => ({
             id: String(u?.id || u?.unitId || "").trim(),
             label: String(u?.unitNumber || u?.label || u?.name || "Unit"),
+            inviteEligible: u?.inviteEligible !== false,
+            inviteEligibilityReason:
+              u?.inviteEligibilityReason != null ? String(u.inviteEligibilityReason) : null,
           }))
           .filter((u: any) => Boolean(u.id));
         setUnits(mapped);
@@ -101,8 +106,10 @@ export default function InvitesPage() {
   }, [propertyId]);
 
   const canCreate = useMemo(() => {
-    return !creating && canInvite && propertyId && unitId && tenantEmail;
-  }, [creating, canInvite, propertyId, unitId, tenantEmail]);
+    const selectedUnit = units.find((u) => u.id === unitId);
+    const unitEligible = selectedUnit ? selectedUnit.inviteEligible !== false : true;
+    return !creating && canInvite && propertyId && unitId && tenantEmail && unitEligible;
+  }, [creating, canInvite, propertyId, unitId, tenantEmail, units]);
 
   async function handleCreate() {
     if (!canInvite) {
@@ -110,6 +117,11 @@ export default function InvitesPage() {
       return;
     }
     if (!canCreate) return;
+    const selectedUnit = units.find((u) => u.id === unitId);
+    if (selectedUnit && !selectedUnit.inviteEligible) {
+      setCreateError("Unit must have a signed lease before inviting a tenant.");
+      return;
+    }
     try {
       setCreating(true);
       setCreateError(null);
@@ -141,6 +153,10 @@ export default function InvitesPage() {
         }
         if (errorCode === "unit_required") {
           setCreateError("Please select a property and unit before sending an invite.");
+          return;
+        }
+        if (errorCode === "lease_required") {
+          setCreateError("Unit must have a signed lease before inviting a tenant.");
           return;
         }
         setCreateError("Unable to send invite right now. Please try again.");
@@ -175,6 +191,10 @@ export default function InvitesPage() {
       }
       if (msg.toLowerCase().includes("unit_required")) {
         setCreateError("Please select a property and unit before sending an invite.");
+        return;
+      }
+      if (msg.toLowerCase().includes("lease_required")) {
+        setCreateError("Unit must have a signed lease before inviting a tenant.");
         return;
       }
       setCreateError("Unable to send invite right now. Please try again.");
@@ -412,14 +432,24 @@ export default function InvitesPage() {
                         : "Select unit"}
                     </option>
                     {units.map((u) => (
-                      <option key={u.id} value={u.id}>
+                      <option key={u.id} value={u.id} disabled={!u.inviteEligible}>
                         {u.label}
+                        {!u.inviteEligible ? " (lease required)" : ""}
                       </option>
                     ))}
                   </select>
                   {propertyId && !loadingUnits && units.length === 0 ? (
                     <div style={{ fontSize: 12, color: text.muted }}>
                       No units found. <a href="/properties">Create a unit first</a>
+                    </div>
+                  ) : null}
+                  {propertyId &&
+                  !loadingUnits &&
+                  units.length > 0 &&
+                  units.every((u) => !u.inviteEligible) ? (
+                    <div style={{ fontSize: 12, color: text.muted }}>
+                      Unit must have a signed lease before inviting a tenant.{" "}
+                      <a href="/properties">Create/sign a lease first</a>
                     </div>
                   ) : null}
                 </label>

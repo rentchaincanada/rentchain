@@ -34,7 +34,9 @@ export const InviteTenantModal: React.FC<Props> = ({
   const [infoMsg, setInfoMsg] = useState("");
   const [loading, setLoading] = useState(false);
   const [properties, setProperties] = useState<Array<{ id: string; name: string }>>([]);
-  const [units, setUnits] = useState<Array<{ id: string; label: string }>>([]);
+  const [units, setUnits] = useState<
+    Array<{ id: string; label: string; inviteEligible: boolean; inviteEligibilityReason?: string | null }>
+  >([]);
   const [propertyId, setPropertyId] = useState(defaultPropertyId || "");
   const [unitId, setUnitId] = useState(defaultUnitId || "");
   const [loadingProperties, setLoadingProperties] = useState(false);
@@ -97,6 +99,9 @@ export const InviteTenantModal: React.FC<Props> = ({
           .map((u: any) => ({
             id: String(u?.id || u?.unitId || "").trim(),
             label: String(u?.unitNumber || u?.label || u?.name || "Unit"),
+            inviteEligible: u?.inviteEligible !== false,
+            inviteEligibilityReason:
+              u?.inviteEligibilityReason != null ? String(u.inviteEligibilityReason) : null,
           }))
           .filter((u: any) => Boolean(u.id));
         setUnits(mapped);
@@ -117,6 +122,7 @@ export const InviteTenantModal: React.FC<Props> = ({
   }, [open, propertyId, defaultUnitId]);
 
   if (!open) return null;
+  const selectedUnitEligible = unitId ? units.find((u) => u.id === unitId)?.inviteEligible !== false : true;
 
   async function sendInvite() {
     setErr("");
@@ -131,6 +137,11 @@ export const InviteTenantModal: React.FC<Props> = ({
       }
       if (!propertyId || !unitId) {
         setErr("Please select a property and unit before sending an invite.");
+        return;
+      }
+      const selectedUnit = units.find((u) => u.id === unitId);
+      if (selectedUnit && !selectedUnit.inviteEligible) {
+        setErr("Unit must have a signed lease before inviting a tenant.");
         return;
       }
       const data: any = await createTenantInvite({
@@ -164,6 +175,10 @@ export const InviteTenantModal: React.FC<Props> = ({
         }
         if (errorCode === "unit_required") {
           setErr("Please select a property and unit before sending an invite.");
+          return;
+        }
+        if (errorCode === "lease_required") {
+          setErr("Unit must have a signed lease before inviting a tenant.");
           return;
         }
         setErr("Unable to send invite right now. Please try again.");
@@ -205,6 +220,10 @@ export const InviteTenantModal: React.FC<Props> = ({
       }
       if (msg.toLowerCase().includes("unit_required")) {
         setErr("Please select a property and unit before sending an invite.");
+        return;
+      }
+      if (msg.toLowerCase().includes("lease_required")) {
+        setErr("Unit must have a signed lease before inviting a tenant.");
         return;
       }
       if (msg.includes("INVITE_EMAIL_SEND_FAILED") || msg.includes("SENDGRID")) {
@@ -294,8 +313,9 @@ export const InviteTenantModal: React.FC<Props> = ({
                 : "Select unit"}
             </option>
             {units.map((u) => (
-              <option key={u.id} value={u.id}>
+              <option key={u.id} value={u.id} disabled={!u.inviteEligible}>
                 {u.label}
+                {!u.inviteEligible ? " (lease required)" : ""}
               </option>
             ))}
           </select>
@@ -304,6 +324,17 @@ export const InviteTenantModal: React.FC<Props> = ({
               No units found.{" "}
               <a href="/properties" style={{ color: "#2563eb", textDecoration: "underline" }}>
                 Create a unit first
+              </a>
+            </div>
+          ) : null}
+          {propertyId &&
+          !loadingUnits &&
+          units.length > 0 &&
+          units.every((unit) => !unit.inviteEligible) ? (
+            <div style={{ fontSize: 12, color: "#6b7280" }}>
+              Unit must have a signed lease before inviting a tenant.{" "}
+              <a href="/properties" style={{ color: "#2563eb", textDecoration: "underline" }}>
+                Create/sign a lease first
               </a>
             </div>
           ) : null}
@@ -416,7 +447,7 @@ export const InviteTenantModal: React.FC<Props> = ({
           </Button>
           <Button
             onClick={sendInvite}
-            disabled={loading || !tenantEmail || !propertyId || !unitId}
+            disabled={loading || !tenantEmail || !propertyId || !unitId || !selectedUnitEligible}
             style={{ padding: "8px 12px" }}
           >
             {loading ? "Sending..." : "Send invite"}
