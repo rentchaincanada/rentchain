@@ -54,6 +54,9 @@ export function SendApplicationModal({
   const [selectedUnitId, setSelectedUnitId] = React.useState<string>(
     initialUnitId || ((unit as any)?.id ? String((unit as any).id) : "")
   );
+  const availableUnits = units || [];
+  const requiresUnitSelection = !unitsLoading && availableUnits.length > 0;
+  const canGenerate = Boolean(selectedPropertyId) && (!requiresUnitSelection || Boolean(selectedUnitId));
 
   React.useEffect(() => {
     if (!open) {
@@ -94,6 +97,10 @@ export function SendApplicationModal({
   const handleGenerate = async () => {
     if (!selectedPropertyId) {
       setError("Missing property id");
+      return;
+    }
+    if (requiresUnitSelection && !selectedUnitId) {
+      setError("Please select a unit before generating the application link.");
       return;
     }
     setLoading(true);
@@ -242,7 +249,7 @@ export function SendApplicationModal({
             </label>
             {selectedPropertyId ? (
               <label style={{ display: "grid", gap: 6, fontSize: "0.9rem", color: "#111827" }}>
-                Unit (optional)
+                Unit{requiresUnitSelection ? " (required)" : " (optional)"}
                 <select
                   value={selectedUnitId}
                   onChange={(e) => {
@@ -259,8 +266,14 @@ export function SendApplicationModal({
                     background: "#fff",
                   }}
                 >
-                  <option value="">{unitsLoading ? "Loading units..." : "Whole property / unspecified"}</option>
-                  {(units || []).map((option) => (
+                  <option value="">
+                    {unitsLoading
+                      ? "Loading units..."
+                      : requiresUnitSelection
+                      ? "Select a unit"
+                      : "Whole property / unspecified"}
+                  </option>
+                  {availableUnits.map((option) => (
                     <option key={option.id} value={option.id}>
                       {option.name}
                     </option>
@@ -286,9 +299,9 @@ export function SendApplicationModal({
                       </button>
                     ) : null}
                   </span>
-                ) : !unitsLoading && (!units || units.length === 0) ? (
+                ) : !unitsLoading && availableUnits.length === 0 ? (
                   <span style={{ fontSize: "0.8rem", color: "#6b7280" }}>
-                    No units found for this property.
+                    No units found. Unit can be entered by applicant.
                   </span>
                 ) : null}
               </label>
@@ -424,7 +437,7 @@ export function SendApplicationModal({
           <button
             type="button"
             onClick={handleGenerate}
-            disabled={loading || !selectedPropertyId}
+            disabled={loading || !canGenerate}
             style={{
               padding: "8px 10px",
               borderRadius: 8,
