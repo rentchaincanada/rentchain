@@ -6,6 +6,9 @@ import { requireCapability } from "../services/capabilityGuard";
 const router = Router();
 
 function requireLandlord(req: any, res: any, next: any) {
+  if (!req.user) {
+    return res.status(401).json({ ok: false, error: "Unauthorized" });
+  }
   const role = String(req.user?.role || "");
   if (role !== "landlord" && role !== "admin") {
     return res.status(403).json({ ok: false, error: "Forbidden" });

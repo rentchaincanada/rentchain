@@ -9,14 +9,18 @@ export type NavItem = {
   showInDrawer?: boolean;
   showInTabs?: boolean;
   requiresAdmin?: boolean;
+  requiresLandlordOrAdmin?: boolean;
   requiresFeature?: string;
 };
 
 export const getVisibleNavItems = (role?: string | null, features?: Record<string, boolean>) => {
-  const isAdmin = String(role || "").toLowerCase() === "admin";
+  const normalizedRole = String(role || "").trim().toLowerCase();
+  const isAdmin = normalizedRole === "admin";
+  const isLandlord = normalizedRole === "landlord";
   return NAV_ITEMS.filter((item) => {
     if (item.requiresAdmin && !isAdmin) return false;
-    if (item.requiresFeature && features && features[item.requiresFeature] === false) return false;
+    if (item.requiresLandlordOrAdmin && !(isLandlord || isAdmin)) return false;
+    if (!isAdmin && item.requiresFeature && features && features[item.requiresFeature] === false) return false;
     return true;
   });
 };
@@ -80,6 +84,7 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Referrals",
     to: "/referrals",
     showInDrawer: true,
+    requiresLandlordOrAdmin: true,
   },
   {
     id: "maintenance",
@@ -109,7 +114,7 @@ export const NAV_ITEMS: NavItem[] = [
   },
   {
     id: "admin-leads",
-    label: "Access Requests",
+    label: "Referral Requests",
     to: "/admin/leads",
     requiresAdmin: true,
     showInDrawer: true,

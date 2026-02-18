@@ -26,7 +26,13 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const lastFocusedRef = useRef<HTMLElement | null>(null);
   const navLoading = !ready || isLoading || authStatus === "restoring" || !user || capsLoading;
-  const effectiveRole = navLoading ? "" : String(user?.actorRole || user?.role || "landlord");
+  const effectiveRole = React.useMemo(() => {
+    if (navLoading) return "";
+    const actorRole = String(user?.actorRole || "").trim().toLowerCase();
+    const role = String(user?.role || "").trim().toLowerCase();
+    if (actorRole === "admin" || role === "admin") return "admin";
+    return actorRole || role || "landlord";
+  }, [navLoading, user?.actorRole, user?.role]);
   if (import.meta.env.DEV) {
     console.debug("[nav] role resolved", {
       effectiveRole,
