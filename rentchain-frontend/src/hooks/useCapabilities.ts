@@ -1,13 +1,19 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/apiClient";
-import { getCachedCapabilities, setCachedCapabilities, type CapabilitiesResponse } from "@/lib/entitlements";
+import {
+  DEFAULT_CAPABILITIES,
+  getCachedCapabilities,
+  setCachedCapabilities,
+  type CapabilitiesResponse,
+} from "@/lib/entitlements";
 
 type Capabilities = CapabilitiesResponse & { ok: boolean };
 
 export function useCapabilities() {
   const [caps, setCaps] = useState<Capabilities | null>(() => {
     const cached = getCachedCapabilities();
-    return cached ? { ok: Boolean(cached.ok), ...cached } : null;
+    const initial = cached || DEFAULT_CAPABILITIES;
+    return { ok: Boolean(initial.ok), ...initial };
   });
   const [loading, setLoading] = useState(true);
 
@@ -30,7 +36,8 @@ export function useCapabilities() {
         }
       } catch {
         if (!alive) return;
-        setCaps({ ok: false, features: {} });
+        setCaps({ ok: Boolean(DEFAULT_CAPABILITIES.ok), ...DEFAULT_CAPABILITIES });
+        setCachedCapabilities(DEFAULT_CAPABILITIES);
       } finally {
         if (alive) setLoading(false);
       }
