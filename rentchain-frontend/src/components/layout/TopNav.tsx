@@ -17,12 +17,13 @@ function roleLabel(raw: string): string {
 
 const TopNav: React.FC = () => {
   const navigate = useNavigate();
-  const { user, logout, ready } = useAuth();
+  const { user, logout, ready, isLoading, authStatus } = useAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const effectiveRole = ready ? String(user?.actorRole || user?.role || "landlord") : "landlord";
+  const authResolved = ready && !isLoading && authStatus !== "restoring" && !!user;
+  const effectiveRole = authResolved ? String(user?.actorRole || user?.role || "landlord") : "";
   const billingStatus = useBillingStatus();
   const planLabel = billingTierLabel(billingStatus.tier);
-  const roleBadge = roleLabel(effectiveRole);
+  const roleBadge = authResolved ? roleLabel(effectiveRole) : "Loading...";
 
   return (
     <>
@@ -118,7 +119,7 @@ const TopNav: React.FC = () => {
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         userEmail={user?.email || ""}
-        userRole={effectiveRole}
+        userRole={authResolved ? effectiveRole : null}
         onSignOut={() => {
           logout();
           navigate("/login");

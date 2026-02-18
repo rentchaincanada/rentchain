@@ -17,15 +17,16 @@ type Props = {
 export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
   const nav = useNavigate();
   const loc = useLocation();
-  const { logout, user, ready } = useAuth();
-  const { features } = useCapabilities();
+  const { logout, user, ready, isLoading, authStatus } = useAuth();
+  const { features, loading: capsLoading } = useCapabilities();
   const billingStatus = useBillingStatus();
   const planLabel = billingTierLabel(billingStatus.tier);
   const [hasUnread, setHasUnread] = useState<boolean>(false);
   const unreadFlag = typeof unreadMessages === "boolean" ? unreadMessages : hasUnread;
   const [drawerOpen, setDrawerOpen] = useState(false);
   const lastFocusedRef = useRef<HTMLElement | null>(null);
-  const effectiveRole = String(user?.actorRole || user?.role || "landlord");
+  const navLoading = !ready || isLoading || authStatus === "restoring" || !user || capsLoading;
+  const effectiveRole = navLoading ? "" : String(user?.actorRole || user?.role || "landlord");
   if (import.meta.env.DEV) {
     console.debug("[nav] role resolved", {
       effectiveRole,
@@ -33,7 +34,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
       actorRole: user?.actorRole || null,
     });
   }
-  const visibleItems = ready ? getVisibleNavItems(effectiveRole, features) : [];
+  const visibleItems = navLoading ? [] : getVisibleNavItems(effectiveRole, features);
   const drawerItems = visibleItems.filter((item) => item.showInDrawer !== false);
   const primaryDrawerItems = drawerItems.filter((item) => !item.requiresAdmin);
   const adminDrawerItems = drawerItems.filter((item) => item.requiresAdmin);
@@ -41,7 +42,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
 
   useEffect(() => {
     let mounted = true;
-    if (features?.messaging === false) {
+    if (navLoading || features?.messaging === false) {
       setHasUnread(false);
       return () => {
         mounted = false;
@@ -66,7 +67,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
       mounted = false;
       window.clearInterval(t);
     };
-  }, [features?.messaging]);
+  }, [features?.messaging, navLoading]);
 
   useEffect(() => {
     setDrawerOpen(false);
@@ -147,18 +148,26 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
           </button>
         </div>
         <div className="rc-landlord-drawer-scroll">
-          <div className="rc-landlord-drawer-links">
-            {primaryDrawerItems.map(({ to, label }) => (
-              <button
-                key={to}
-                type="button"
-                onClick={() => nav(to)}
-                className={loc.pathname.startsWith(to) ? "active" : ""}
-              >
-                {label}
+          {navLoading ? (
+            <div className="rc-landlord-drawer-links">
+              <button type="button" disabled className="active">
+                Loading menu...
               </button>
-            ))}
-          </div>
+            </div>
+          ) : (
+            <div className="rc-landlord-drawer-links">
+              {primaryDrawerItems.map(({ to, label }) => (
+                <button
+                  key={to}
+                  type="button"
+                  onClick={() => nav(to)}
+                  className={loc.pathname.startsWith(to) ? "active" : ""}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="rc-landlord-drawer-divider" />
           <button type="button" className="rc-landlord-drawer-signout" onClick={logout}>
             Sign out
@@ -187,7 +196,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
       <div className="rc-landlord-content">{children}</div>
 
       <nav className="rc-mobile-tabbar" aria-label="Bottom navigation">
-        {tabItems.map(({ to, label, icon: Icon }) => {
+        {(navLoading ? [] : tabItems).map(({ to, label, icon: Icon }) => {
           if (!Icon) return null;
           const active = loc.pathname.startsWith(to);
           return (

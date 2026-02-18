@@ -160,11 +160,17 @@ function clearStoredToken() {
   if (typeof window === "undefined") return;
   clearAuthToken();
   try {
+    window.localStorage.removeItem(TOKEN_KEY);
+    window.sessionStorage.removeItem(TOKEN_KEY);
     window.localStorage.removeItem(JUST_LOGGED_IN_KEY);
     window.sessionStorage.removeItem(JUST_LOGGED_IN_KEY);
   } catch {
     // ignore
   }
+}
+
+function normalizeEmail(input?: string | null) {
+  return String(input || "").trim().toLowerCase();
 }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
@@ -176,6 +182,38 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [twoFactorPendingToken, setTwoFactorPendingToken] =
     useState<string | null>(null);
   const [twoFactorMethods, setTwoFactorMethods] = useState<string[]>([]);
+
+  const clearAuthStateBeforeNewSession = useCallback(() => {
+    clearStoredToken();
+    setToken(null);
+    setUser(null);
+    setAuthStatus("guest");
+    setTwoFactorPendingToken(null);
+    setTwoFactorMethods([]);
+  }, []);
+
+  const hydrateUserFromMe = useCallback(
+    async (expected?: { email?: string | null; id?: string | null }) => {
+      const me = await apiRestoreSession();
+      if (!me?.user) {
+        throw new Error("Unable to load account session. Please log in again.");
+      }
+      const expectedEmail = normalizeEmail(expected?.email);
+      const meEmail = normalizeEmail(me.user?.email);
+      if (expectedEmail && meEmail && expectedEmail !== meEmail) {
+        throw new Error("Session mismatch, please log in again");
+      }
+      const expectedId = String(expected?.id || "").trim();
+      const meId = String(me.user?.id || "").trim();
+      if (expectedId && meId && expectedId !== meId) {
+        throw new Error("Session mismatch, please log in again");
+      }
+      setUser(me.user);
+      setAuthStatus("authed");
+      return me.user;
+    },
+    []
+  );
 
   // On initial mount, attempt to restore session from localStorage token
   useEffect(() => {
@@ -314,6 +352,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     ): Promise<{ requires2fa: boolean }> => {
       setIsLoading(true);
       try {
+        clearAuthStateBeforeNewSession();
         const response = await apiLogin(email, password, opts);
 
         if (response.requires2fa) {
@@ -322,11 +361,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           return { requires2fa: true };
         }
 
-        if (response.token && response.user) {
+        if (response.token) {
           storeToken(response.token);
           setToken(response.token);
-          setUser(response.user);
-          setAuthStatus("authed");
+          await hydrateUserFromMe({
+            email: response.user?.email || email,
+            id: response.user?.id || null,
+          });
           setTwoFactorPendingToken(null);
           setTwoFactorMethods([]);
           if (import.meta.env.DEV) {
@@ -340,38 +381,41 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         throw new Error("Invalid login response");
       } catch (error) {
         // Make sure we clear any stale auth state on failed login
-        clearStoredToken();
-        setToken(null);
-        setUser(null);
-        setTwoFactorPendingToken(null);
-        setTwoFactorMethods([]);
+        clearAuthStateBeforeNewSession();
         throw error;
       } finally {
         setIsLoading(false);
       }
     },
-    []
+    [clearAuthStateBeforeNewSession, hydrateUserFromMe]
   );
 
   const signup = useCallback(async (email: string, password: string, fullName?: string) => {
     setIsLoading(true);
     try {
+      clearAuthStateBeforeNewSession();
       const response = await apiSignup(email, password, fullName);
       if (!response.token) throw new Error("Token missing from signup response");
       storeToken(response.token);
       setToken(response.token);
-      setUser(response.user ?? null);
-      setAuthStatus("authed");
+      await hydrateUserFromMe({
+        email: response.user?.email || email,
+        id: response.user?.id || null,
+      });
       setTwoFactorPendingToken(null);
       setTwoFactorMethods([]);
+    } catch (error) {
+      clearAuthStateBeforeNewSession();
+      throw error;
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [clearAuthStateBeforeNewSession, hydrateUserFromMe]);
 
   const loginDemo = useCallback(async (plan: string = "core") => {
     setIsLoading(true);
     try {
+      clearAuthStateBeforeNewSession();
       const demoEmail = import.meta.env.DEV ? "demo@rentchain.dev" : "";
       const response = await apiLogin(demoEmail, "demo", {
         headers: { "x-rentchain-plan": plan },
@@ -386,24 +430,39 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (!response.token) throw new Error("Token missing from demo login response");
       storeToken(response.token);
       setToken(response.token);
-      setUser(response.user ?? null);
-      setAuthStatus("authed");
+      await hydrateUserFromMe({
+        email: response.user?.email || demoEmail || null,
+        id: response.user?.id || null,
+      });
       setTwoFactorPendingToken(null);
       setTwoFactorMethods([]);
+    } catch (error) {
+      clearAuthStateBeforeNewSession();
+      throw error;
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [clearAuthStateBeforeNewSession, hydrateUserFromMe]);
 
   const completeTwoFactor = useCallback(
     (newToken: string, newUser: AuthUser) => {
-      storeToken(newToken);
-      setToken(newToken);
-      setUser(newUser);
-      setTwoFactorPendingToken(null);
-      setTwoFactorMethods([]);
+      (async () => {
+        try {
+          clearAuthStateBeforeNewSession();
+          storeToken(newToken);
+          setToken(newToken);
+          await hydrateUserFromMe({
+            email: newUser?.email || null,
+            id: newUser?.id || null,
+          });
+          setTwoFactorPendingToken(null);
+          setTwoFactorMethods([]);
+        } catch {
+          clearAuthStateBeforeNewSession();
+        }
+      })();
     },
-    []
+    [clearAuthStateBeforeNewSession, hydrateUserFromMe]
   );
 
   const resetTwoFactor = useCallback(() => {
