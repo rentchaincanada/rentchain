@@ -16,7 +16,9 @@ const HelpIndexPage: React.FC = () => {
         <div>
           <h1 style={{ margin: 0 }}>Help Center</h1>
           <p style={{ marginTop: spacing.sm, color: text.muted }}>
-            Guides, downloads, and support resources for landlords and tenants.
+            Welcome to the RentChain Help Center. Here you'll find onboarding guidance, documentation templates, and
+            workflow explanations for landlords and tenants. Content is provided for general information and is not
+            legal advice.
           </p>
         </div>
         <AskRentChainWidget defaultOpen />
@@ -143,7 +145,10 @@ const HelpIndexPage: React.FC = () => {
         <div>
           <h2 style={{ marginTop: 0 }}>Need Assistance</h2>
           <p style={{ color: text.muted, margin: 0 }}>
-            If you need help or have questions, visit the Contact page.
+            For privacy or compliance questions: privacy@rentchain.ai
+          </p>
+          <p style={{ color: text.muted, marginTop: spacing.xs, marginBottom: 0 }}>
+            For support: support@rentchain.ai
           </p>
           <Link to="/contact" style={{ display: "inline-block", marginTop: spacing.sm }}>
             Contact Support
