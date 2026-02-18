@@ -14,6 +14,9 @@ function requireLandlord(req: any, res: any, next: any) {
 }
 
 async function enforceUnitsCapability(req: any, res: any): Promise<boolean> {
+  const role = String(req.user?.role || "").toLowerCase();
+  if (role === "admin") return true;
+
   const landlordId = req.user?.landlordId || req.user?.id;
   if (!landlordId) {
     res.status(401).json({ ok: false, error: "Unauthorized" });
@@ -25,6 +28,37 @@ async function enforceUnitsCapability(req: any, res: any): Promise<boolean> {
     return false;
   }
   return true;
+}
+
+async function ensurePropertyReadable(req: any, propertyId: string) {
+  const role = String(req.user?.role || "").toLowerCase();
+  const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+  const snap = await db.collection("properties").doc(propertyId).get();
+  if (!snap.exists) return { ok: false as const, code: "NOT_FOUND" as const };
+
+  const data = snap.data() as any;
+  const propertyLandlordId = String(data?.landlordId || data?.ownerId || data?.owner || "").trim();
+  if (role === "admin") {
+    return {
+      ok: true as const,
+      role,
+      data,
+      landlordId,
+      propertyLandlordId: propertyLandlordId || landlordId,
+    };
+  }
+
+  if (role === "landlord" && landlordId && propertyLandlordId === landlordId) {
+    return {
+      ok: true as const,
+      role,
+      data,
+      landlordId,
+      propertyLandlordId,
+    };
+  }
+
+  return { ok: false as const, code: "FORBIDDEN" as const };
 }
 
 async function ensurePropertyOwned(propertyId: string, landlordId: string) {
@@ -102,20 +136,24 @@ router.get(
     if (!propertyId) return res.status(400).json({ ok: false, error: "Missing propertyId" });
     if (!(await enforceUnitsCapability(req, res))) return;
 
-    const ownership = await ensurePropertyOwned(propertyId, landlordId);
-    if (!ownership.ok) {
-      if (ownership.code === "NOT_FOUND") return res.status(404).json({ ok: false, error: "Property not found" });
+    const access = await ensurePropertyReadable(req, propertyId);
+    if (!access.ok) {
+      if (access.code === "NOT_FOUND") return res.status(404).json({ ok: false, error: "Property not found" });
       return res.status(403).json({ ok: false, error: "Forbidden" });
     }
 
-    const snap = await db
-      .collection("units")
-      .where("landlordId", "==", landlordId)
-      .where("propertyId", "==", propertyId)
-      .get();
+    const unitsQuery = db.collection("units").where("propertyId", "==", propertyId);
+    const snap =
+      access.role === "admin"
+        ? await unitsQuery.get()
+        : await unitsQuery.where("landlordId", "==", landlordId).get();
 
     const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
-    const inviteEligibility = await buildInviteEligibilityByUnit({ landlordId, propertyId, units: items });
+    const inviteEligibility = await buildInviteEligibilityByUnit({
+      landlordId: access.propertyLandlordId || landlordId,
+      propertyId,
+      units: items,
+    });
     const normalizedItems = items.map((item) => {
       const key = String(item?.id || item?.unitId || "").trim();
       const eligibility = inviteEligibility.get(key);
@@ -161,20 +199,24 @@ router.get("/units", authenticateJwt, requireLandlord, async (req: any, res) => 
   if (!propertyId) return res.status(400).json({ ok: false, error: "Missing propertyId" });
   if (!(await enforceUnitsCapability(req, res))) return;
 
-  const ownership = await ensurePropertyOwned(propertyId, landlordId);
-  if (!ownership.ok) {
-    if (ownership.code === "NOT_FOUND") return res.status(404).json({ ok: false, error: "Property not found" });
+  const access = await ensurePropertyReadable(req, propertyId);
+  if (!access.ok) {
+    if (access.code === "NOT_FOUND") return res.status(404).json({ ok: false, error: "Property not found" });
     return res.status(403).json({ ok: false, error: "Forbidden" });
   }
 
-  const snap = await db
-    .collection("units")
-    .where("landlordId", "==", landlordId)
-    .where("propertyId", "==", propertyId)
-    .get();
+  const unitsQuery = db.collection("units").where("propertyId", "==", propertyId);
+  const snap =
+    access.role === "admin"
+      ? await unitsQuery.get()
+      : await unitsQuery.where("landlordId", "==", landlordId).get();
 
   const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
-  const inviteEligibility = await buildInviteEligibilityByUnit({ landlordId, propertyId, units: items });
+  const inviteEligibility = await buildInviteEligibilityByUnit({
+    landlordId: access.propertyLandlordId || landlordId,
+    propertyId,
+    units: items,
+  });
   const normalizedItems = items.map((item) => {
     const key = String(item?.id || item?.unitId || "").trim();
     const eligibility = inviteEligibility.get(key);
