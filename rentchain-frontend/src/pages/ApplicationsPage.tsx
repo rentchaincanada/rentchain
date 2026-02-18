@@ -779,15 +779,6 @@ const ApplicationsPage: React.FC = () => {
 
   const handleExportReport = async (copyOnly: boolean) => {
     if (!detail?.id) return;
-    if (!canUseProFeatures) {
-      openProUpgrade("exports");
-      return;
-    }
-    if (!features?.exports_basic && !isAdmin) {
-      setExportPreviewSource("applications");
-      setExportPreviewOpen(true);
-      return;
-    }
     setExportingReport(true);
     try {
       const res = await exportScreeningReport(detail.id);
@@ -1739,7 +1730,7 @@ const ApplicationsPage: React.FC = () => {
               )}
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <Button variant="primary" onClick={() => void handleExportReport(false)} disabled={exportingReport}>
-                  {exportingReport ? "Preparing..." : `Download PDF${!features?.exports_basic && !isAdmin ? " (Pro)" : ""}`}
+                  {exportingReport ? "Preparing..." : "Download PDF"}
                 </Button>
                 <Button variant="secondary" onClick={() => void handleExportReport(true)} disabled={exportingReport}>
                   Copy share link

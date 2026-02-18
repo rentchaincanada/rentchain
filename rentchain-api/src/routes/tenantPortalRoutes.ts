@@ -504,16 +504,95 @@ router.get("/ledger/:ledgerItemId/attachments", requireTenant, async (req: any, 
   }
 });
 
-router.get("/lease", requireTenant, (_req: any, res) => {
-  return res.json({
-    ok: true,
-    lease: {
-      property: null,
-      unit: null,
-      leaseId: null,
-      status: "active",
-    },
-  });
+router.get("/lease", requireTenant, async (req: any, res) => {
+  try {
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+
+    const tenantSnap = await db.collection("tenants").doc(tenantId).get();
+    const tenantData = (tenantSnap.exists ? (tenantSnap.data() as any) : {}) || {};
+
+    let propertyId = String(tenantData?.propertyId || "").trim() || null;
+    let unitId = String(tenantData?.unitId || tenantData?.unit || "").trim() || null;
+    let leaseId = String(tenantData?.leaseId || "").trim() || null;
+
+    let leaseRecord: any = null;
+    if (leaseId) {
+      const leaseSnap = await db.collection("leases").doc(leaseId).get();
+      if (leaseSnap.exists) {
+        leaseRecord = leaseSnap.data() as any;
+      }
+    }
+    if (!leaseRecord) {
+      const leaseSnap = await db.collection("leases").where("tenantId", "==", tenantId).limit(20).get();
+      const ranked = leaseSnap.docs
+        .map((doc) => ({ id: doc.id, ...(doc.data() as any) }))
+        .sort((a, b) => {
+          const aActive = ["signed", "active", "current"].includes(String(a?.status || "").toLowerCase()) ? 1 : 0;
+          const bActive = ["signed", "active", "current"].includes(String(b?.status || "").toLowerCase()) ? 1 : 0;
+          if (aActive !== bActive) return bActive - aActive;
+          return Number(b?.updatedAt || b?.createdAt || 0) - Number(a?.updatedAt || a?.createdAt || 0);
+        });
+      if (ranked.length > 0) {
+        leaseRecord = ranked[0];
+        leaseId = leaseId || String(leaseRecord.id || "").trim() || null;
+      }
+    }
+
+    propertyId = propertyId || String(leaseRecord?.propertyId || "").trim() || null;
+    unitId =
+      unitId ||
+      String(leaseRecord?.unitId || leaseRecord?.unit || leaseRecord?.unitNumber || "").trim() ||
+      null;
+
+    let propertyName: string | null = null;
+    if (propertyId) {
+      const propertySnap = await db.collection("properties").doc(propertyId).get();
+      if (propertySnap.exists) {
+        const property = propertySnap.data() as any;
+        propertyName = property?.name || property?.addressLine1 || null;
+      }
+    }
+
+    let unitNumber: string | null = null;
+    if (unitId) {
+      const unitSnap = await db.collection("units").doc(unitId).get();
+      if (unitSnap.exists) {
+        const unit = unitSnap.data() as any;
+        unitNumber = unit?.unitNumber || unit?.label || null;
+        propertyId = propertyId || (unit?.propertyId ? String(unit.propertyId) : null);
+      } else if (leaseRecord?.unitNumber) {
+        unitNumber = String(leaseRecord.unitNumber);
+      }
+    }
+
+    const rentAmount =
+      typeof leaseRecord?.monthlyRent === "number"
+        ? leaseRecord.monthlyRent
+        : typeof tenantData?.monthlyRent === "number"
+        ? tenantData.monthlyRent
+        : typeof tenantData?.rentCents === "number"
+        ? tenantData.rentCents / 100
+        : null;
+
+    const lease = {
+      leaseId,
+      propertyId,
+      propertyName,
+      unitId,
+      unitNumber,
+      rentAmount,
+      leaseStart:
+        leaseRecord?.startDate || leaseRecord?.leaseStart || tenantData?.leaseStart || tenantData?.leaseStartDate || null,
+      leaseEnd: leaseRecord?.endDate || tenantData?.leaseEnd || null,
+      status: leaseRecord?.status || tenantData?.leaseStatus || tenantData?.status || null,
+    };
+
+    return res.json({ ok: true, lease, ...lease });
+  } catch (err) {
+    console.error("[tenantPortalRoutes] /tenant/lease error", err);
+    return res.status(500).json({ ok: false, error: "TENANT_LEASE_FAILED" });
+  }
 });
 
 router.get("/payments", requireTenant, (_req: any, res) => {

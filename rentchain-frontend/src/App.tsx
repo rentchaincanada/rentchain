@@ -44,6 +44,7 @@ import ScreeningStartPage from "./pages/screening/ScreeningStartPage";
 import ScreeningSuccessPage from "./pages/screening/ScreeningSuccessPage";
 import ScreeningCancelPage from "./pages/screening/ScreeningCancelPage";
 import ScreeningReportPage from "./pages/screening/ScreeningReportPage";
+import ManualScreeningPage from "./pages/screening/ManualScreeningPage";
 import VerifyScreeningPage from "./pages/VerifyScreeningPage";
 import BillingPage from "./pages/BillingPage";
 import BillingCheckoutSuccessPage from "./pages/BillingCheckoutSuccessPage";
@@ -387,6 +388,16 @@ function App() {
             <RequireAuth>
               <LandlordNav>
                 <ScreeningStartPage />
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/screening/manual"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <ManualScreeningPage />
               </LandlordNav>
             </RequireAuth>
           }

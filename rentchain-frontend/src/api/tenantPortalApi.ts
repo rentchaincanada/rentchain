@@ -85,7 +85,11 @@ export async function getTenantMe(): Promise<TenantProfile> {
 }
 
 export async function getTenantLease(): Promise<TenantLease> {
-  return apiFetch<TenantLease>("tenant/lease");
+  const res = await apiFetch<any>("tenant/lease");
+  if (res?.lease && typeof res.lease === "object") {
+    return res.lease as TenantLease;
+  }
+  return res as TenantLease;
 }
 
 export async function getTenantPayments(): Promise<TenantPayment[]> {

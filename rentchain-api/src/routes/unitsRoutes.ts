@@ -37,6 +37,59 @@ async function ensurePropertyOwned(propertyId: string, landlordId: string) {
   return { ok: true as const, data };
 }
 
+function normalizeStatus(value: any): string {
+  return String(value || "").trim().toLowerCase();
+}
+
+function leaseIndicatesSigned(status: any): boolean {
+  const normalized = normalizeStatus(status);
+  return normalized === "signed" || normalized === "active" || normalized === "current";
+}
+
+async function buildInviteEligibilityByUnit(opts: {
+  landlordId: string;
+  propertyId: string;
+  units: any[];
+}) {
+  const map = new Map<string, { eligible: boolean; reason?: string }>();
+  if (!opts.units.length) return map;
+
+  const signedUnits = new Set<string>();
+  const signedUnitNumbers = new Set<string>();
+  try {
+    const leaseSnap = await db
+      .collection("leases")
+      .where("landlordId", "==", opts.landlordId)
+      .limit(400)
+      .get();
+
+    leaseSnap.docs.forEach((doc) => {
+      const lease = doc.data() as any;
+      if (String(lease?.propertyId || "") !== opts.propertyId) return;
+      if (!leaseIndicatesSigned(lease?.status)) return;
+      const unitId = String(lease?.unitId || "").trim();
+      const unitNumber = String(lease?.unitNumber || lease?.unit || "").trim();
+      if (unitId) signedUnits.add(unitId);
+      if (unitNumber) signedUnitNumbers.add(unitNumber);
+    });
+  } catch {
+    // Keep defaults below if lease lookup fails.
+  }
+
+  opts.units.forEach((unit) => {
+    const unitId = String(unit?.id || unit?.unitId || "").trim();
+    if (!unitId) return;
+    const occupancy = normalizeStatus(unit?.occupancyStatus || unit?.status);
+    const unitNumber = String(unit?.unitNumber || unit?.label || "").trim();
+    const leaseEligible =
+      signedUnits.has(unitId) || (unitNumber ? signedUnitNumbers.has(unitNumber) : false);
+    const eligible = occupancy === "occupied" || leaseEligible;
+    map.set(unitId, eligible ? { eligible: true } : { eligible: false, reason: "lease_required" });
+  });
+
+  return map;
+}
+
 router.get(
   "/properties/:propertyId/units",
   authenticateJwt,
@@ -62,9 +115,20 @@ router.get(
       .get();
 
     const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
-    items.sort((a, b) => String(a.unitNumber || "").localeCompare(String(b.unitNumber || "")));
+    const inviteEligibility = await buildInviteEligibilityByUnit({ landlordId, propertyId, units: items });
+    const normalizedItems = items.map((item) => {
+      const key = String(item?.id || item?.unitId || "").trim();
+      const eligibility = inviteEligibility.get(key);
+      if (!eligibility) return item;
+      return {
+        ...item,
+        inviteEligible: eligibility.eligible,
+        inviteEligibilityReason: eligibility.reason || null,
+      };
+    });
+    normalizedItems.sort((a, b) => String(a.unitNumber || "").localeCompare(String(b.unitNumber || "")));
 
-    const realCount = items.length;
+    const realCount = normalizedItems.length;
     try {
       const propRef = db.collection("properties").doc(propertyId);
       const propSnap = await propRef.get();
@@ -85,7 +149,7 @@ router.get(
       // ignore sync errors
     }
 
-    return res.json({ ok: true, items, unitCount: realCount });
+    return res.json({ ok: true, items: normalizedItems, unitCount: realCount });
   }
 );
 
@@ -110,9 +174,20 @@ router.get("/units", authenticateJwt, requireLandlord, async (req: any, res) => 
     .get();
 
   const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
-  items.sort((a, b) => String(a.unitNumber || "").localeCompare(String(b.unitNumber || "")));
+  const inviteEligibility = await buildInviteEligibilityByUnit({ landlordId, propertyId, units: items });
+  const normalizedItems = items.map((item) => {
+    const key = String(item?.id || item?.unitId || "").trim();
+    const eligibility = inviteEligibility.get(key);
+    if (!eligibility) return item;
+    return {
+      ...item,
+      inviteEligible: eligibility.eligible,
+      inviteEligibilityReason: eligibility.reason || null,
+    };
+  });
+  normalizedItems.sort((a, b) => String(a.unitNumber || "").localeCompare(String(b.unitNumber || "")));
 
-  const realCount = items.length;
+  const realCount = normalizedItems.length;
   try {
     const propRef = db.collection("properties").doc(propertyId);
     const propSnap = await propRef.get();
@@ -133,7 +208,7 @@ router.get("/units", authenticateJwt, requireLandlord, async (req: any, res) => 
     // ignore sync errors
   }
 
-  return res.json({ ok: true, items, unitCount: realCount });
+  return res.json({ ok: true, items: normalizedItems, unitCount: realCount });
 });
 
 router.post(
