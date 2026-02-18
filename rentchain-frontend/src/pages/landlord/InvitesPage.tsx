@@ -119,6 +119,33 @@ export default function InvitesPage() {
         tenantEmail,
         tenantName: tenantName || undefined,
       });
+      if (!res?.ok) {
+        const errorCode = String(res?.error || "").trim().toLowerCase();
+        const capability = String(res?.capability || "").trim().toLowerCase();
+        console.debug("[invites-page] create failed", {
+          error: res?.error,
+          capability: res?.capability,
+          plan: res?.plan,
+        });
+        if (errorCode === "upgrade_required" && capability === "tenant_invites") {
+          dispatchUpgradePrompt({
+            featureKey: "tenant_invites",
+            currentPlan: String(res?.plan || "free"),
+            source: "landlord_invites_page_api_403",
+          });
+          setCreateError("Upgrade to Starter to send tenant invites.");
+          if (typeof (window as any)?.toast?.warning === "function") {
+            (window as any).toast.warning("Tenant invites require an upgrade");
+          }
+          return;
+        }
+        if (errorCode === "unit_required") {
+          setCreateError("Please select a property and unit before sending an invite.");
+          return;
+        }
+        setCreateError("Unable to send invite right now. Please try again.");
+        return;
+      }
       const url = res.inviteUrl || deriveInviteUrl(res.token);
       setCreatedInviteUrl(url);
       const emailed = res.emailed === true;
@@ -134,10 +161,26 @@ export default function InvitesPage() {
       setTenantEmail("");
     } catch (e: any) {
       const msg = String(e?.message || "Failed to create invite");
-      setCreateError(msg);
+      console.debug("[invites-page] request error", { message: msg, raw: e });
+      if (msg.toLowerCase().includes("upgrade_required")) {
+        dispatchUpgradePrompt({
+          featureKey: "tenant_invites",
+          source: "landlord_invites_page_api_catch",
+        });
+        setCreateError("Upgrade to Starter to send tenant invites.");
+        if (typeof (window as any)?.toast?.warning === "function") {
+          (window as any).toast.warning("Tenant invites require an upgrade");
+        }
+        return;
+      }
+      if (msg.toLowerCase().includes("unit_required")) {
+        setCreateError("Please select a property and unit before sending an invite.");
+        return;
+      }
+      setCreateError("Unable to send invite right now. Please try again.");
       const toastMsg = msg.includes("INVITE_EMAIL_SEND_FAILED")
         ? "Invite could not be emailed. Please try again."
-        : msg;
+        : "Unable to send invite right now. Please try again.";
       if (typeof (window as any)?.toast?.error === "function") {
         (window as any).toast.error(toastMsg);
       }

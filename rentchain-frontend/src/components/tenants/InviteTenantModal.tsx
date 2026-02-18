@@ -6,6 +6,7 @@ import { fetchUnitsForProperty } from "../../api/unitsApi";
 import { useCapabilities } from "../../hooks/useCapabilities";
 import { dispatchUpgradePrompt } from "../../lib/upgradePrompt";
 import { useAuth } from "../../context/useAuth";
+import { useToast } from "../ui/ToastProvider";
 import { Button } from "../ui/Ui";
 
 interface Props {
@@ -40,6 +41,7 @@ export const InviteTenantModal: React.FC<Props> = ({
   const [loadingUnits, setLoadingUnits] = useState(false);
   const { features } = useCapabilities();
   const { user } = useAuth();
+  const { showToast } = useToast();
   const role = String(user?.role || "").toLowerCase();
   const canInvite = role === "admin" || features?.tenant_invites !== false;
 
@@ -128,7 +130,7 @@ export const InviteTenantModal: React.FC<Props> = ({
         return;
       }
       if (!propertyId || !unitId) {
-        setErr("Select a property and unit to send an invite.");
+        setErr("Please select a property and unit before sending an invite.");
         return;
       }
       const data: any = await createTenantInvite({
@@ -140,7 +142,32 @@ export const InviteTenantModal: React.FC<Props> = ({
       });
 
       if (!data?.ok) {
-        throw new Error(data?.error || "Failed to send invite");
+        const errorCode = String(data?.error || "").trim().toLowerCase();
+        const capability = String(data?.capability || "").trim().toLowerCase();
+        console.debug("[invite-tenant] create failed", {
+          error: data?.error,
+          capability: data?.capability,
+          plan: data?.plan,
+        });
+        if (errorCode === "upgrade_required" && capability === "tenant_invites") {
+          dispatchUpgradePrompt({
+            featureKey: "tenant_invites",
+            currentPlan: String(data?.plan || user?.plan || "free"),
+            source: "tenants_invite_modal_api_403",
+          });
+          showToast({
+            message: "Tenant invites require an upgrade",
+            description: "Upgrade to Starter to send tenant invites.",
+            variant: "warning",
+          });
+          return;
+        }
+        if (errorCode === "unit_required") {
+          setErr("Please select a property and unit before sending an invite.");
+          return;
+        }
+        setErr("Unable to send invite right now. Please try again.");
+        return;
       }
 
       const url = data.inviteUrl || data.invite?.inviteUrl || "";
@@ -159,10 +186,31 @@ export const InviteTenantModal: React.FC<Props> = ({
       const respDetail =
         (e as any)?.response?.data?.detail || (e as any)?.response?.data?.error;
       const msg = String(respDetail || e?.message || "Failed to send invite");
+      console.debug("[invite-tenant] request error", {
+        message: msg,
+        raw: e,
+      });
+      if (msg.toLowerCase().includes("upgrade_required")) {
+        dispatchUpgradePrompt({
+          featureKey: "tenant_invites",
+          currentPlan: String(user?.plan || "free"),
+          source: "tenants_invite_modal_api_catch",
+        });
+        showToast({
+          message: "Tenant invites require an upgrade",
+          description: "Upgrade to Starter to send tenant invites.",
+          variant: "warning",
+        });
+        return;
+      }
+      if (msg.toLowerCase().includes("unit_required")) {
+        setErr("Please select a property and unit before sending an invite.");
+        return;
+      }
       if (msg.includes("INVITE_EMAIL_SEND_FAILED") || msg.includes("SENDGRID")) {
         setErr("Invite could not be emailed. Please try again.");
       } else {
-        setErr(msg);
+        setErr("Unable to send invite right now. Please try again.");
       }
     } finally {
       setLoading(false);
