@@ -2,6 +2,11 @@
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
+## Env
+
+- `VITE_API_BASE_URL`: Cloud Run API base URL.
+- `VITE_TELEMETRY_ENABLED`: Set `false` to disable client telemetry calls (`/api/events/track`, nudge telemetry). Defaults to disabled in production when unset.
+
 Currently, two official plugins are available:
 
 - [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
