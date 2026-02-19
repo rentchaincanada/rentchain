@@ -4,12 +4,12 @@ import { Button, Card } from "../../components/ui/Ui";
 import { spacing, text } from "../../styles/tokens";
 import { MarketingLayout } from "./MarketingLayout";
 import { useAuth } from "../../context/useAuth";
-import { useLocale } from "../../i18n";
+import { useLanguage } from "../../context/LanguageContext";
 
 const LandingPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { t } = useLocale();
+  const { t } = useLanguage();
 
   useEffect(() => {
     document.title = `RentChain — ${t("home.tagline")}`;
@@ -31,7 +31,7 @@ const LandingPage: React.FC = () => {
               type="button"
               onClick={() => (user?.id ? navigate("/dashboard") : navigate("/signup"))}
             >
-              {user?.id ? t("home.cta.dashboard") : "Sign up (Free)"}
+              {user?.id ? t("home.cta.dashboard") : t("nav.sign_up_free")}
             </Button>
             {!user?.id ? (
               <Button type="button" variant="secondary" onClick={() => navigate("/login")}>
@@ -40,7 +40,7 @@ const LandingPage: React.FC = () => {
             ) : null}
             {!user?.id ? (
               <Button type="button" variant="ghost" onClick={() => navigate("/request-access")}>
-                Request access
+                {t("home.cta.request_access")}
               </Button>
             ) : (
               <Button type="button" variant="ghost" onClick={() => navigate("/site/pricing")}>
