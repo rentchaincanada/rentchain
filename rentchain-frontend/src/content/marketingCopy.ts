@@ -22,8 +22,13 @@ type PricingFeatureGroup = {
 type PricingCopy = {
   headline: string;
   subheadline: string;
+  intervalLabels: {
+    monthly: string;
+    yearly: string;
+  };
   tierLabels: Record<TierKey, string>;
   tierTaglines: Record<TierKey, string>;
+  tierBadges: Partial<Record<TierKey, string>>;
   ctaStartFree: string;
   ctaUpgrade: string;
   comparisonTitle: string;
@@ -83,6 +88,10 @@ export const marketingCopy: Record<Locale, MarketingCopy> = {
     pricing: {
       headline: "Straightforward plans for Canadian landlords",
       subheadline: "Start free, upgrade when your portfolio needs deeper workflow and reporting.",
+      intervalLabels: {
+        monthly: "Monthly",
+        yearly: "Annual",
+      },
       tierLabels: {
         free: "Free",
         starter: "Starter",
@@ -94,6 +103,9 @@ export const marketingCopy: Record<Locale, MarketingCopy> = {
         starter: "Best for active landlords managing day-to-day operations",
         pro: "Best for growing portfolios that need stronger controls",
         elite: "Best for teams that need audit-ready visibility",
+      },
+      tierBadges: {
+        pro: "Most Popular",
       },
       ctaStartFree: "Start Free",
       ctaUpgrade: "Upgrade",
@@ -210,6 +222,10 @@ export const marketingCopy: Record<Locale, MarketingCopy> = {
       headline: "Forfaits clairs pour proprietaires canadiens",
       subheadline:
         "Commencez gratuitement, puis passez a un forfait superieur lorsque votre portefeuille demande plus d'outils.",
+      intervalLabels: {
+        monthly: "Mensuel",
+        yearly: "Annuel",
+      },
       tierLabels: {
         free: "Gratuit",
         starter: "Starter",
@@ -221,6 +237,9 @@ export const marketingCopy: Record<Locale, MarketingCopy> = {
         starter: "Ideal pour les proprietaires actifs au quotidien",
         pro: "Ideal pour les portefeuilles en croissance",
         elite: "Ideal pour les equipes qui veulent une vue complete",
+      },
+      tierBadges: {
+        pro: "Le plus choisi",
       },
       ctaStartFree: "Commencer gratuitement",
       ctaUpgrade: "Mettre a niveau",
