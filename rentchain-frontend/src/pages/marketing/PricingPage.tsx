@@ -109,7 +109,7 @@ const PricingPage: React.FC = () => {
                 onClick={() => setInterval("monthly")}
                 style={{ padding: "6px 12px" }}
               >
-                {locale === "fr" ? "Mensuel" : "Monthly"}
+                {copy.pricing.intervalLabels.monthly}
               </Button>
               <Button
                 type="button"
@@ -117,21 +117,42 @@ const PricingPage: React.FC = () => {
                 onClick={() => setInterval("yearly")}
                 style={{ padding: "6px 12px" }}
               >
-                {locale === "fr" ? "Annuel" : "Annual"}
+                {copy.pricing.intervalLabels.yearly}
               </Button>
             </div>
           </Card>
 
           {PLAN_ORDER.map((plan) => (
             <Card key={plan} style={{ display: "grid", gap: spacing.sm }}>
-              <div style={{ fontSize: 20, fontWeight: 800 }}>{copy.pricing.tierLabels[plan]}</div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing.xs, flexWrap: "wrap" }}>
+                <div style={{ fontSize: 20, fontWeight: 800 }}>{copy.pricing.tierLabels[plan]}</div>
+                {copy.pricing.tierBadges[plan] ? (
+                  <span
+                    style={{
+                      border: "1px solid rgba(15,23,42,0.18)",
+                      borderRadius: 999,
+                      padding: "2px 10px",
+                      fontSize: "0.75rem",
+                      fontWeight: 700,
+                      color: text.primary,
+                      background: "rgba(15,23,42,0.06)",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {copy.pricing.tierBadges[plan]}
+                  </span>
+                ) : null}
+              </div>
               <div style={{ color: text.muted, fontSize: "0.92rem", minHeight: 40 }}>
                 {copy.pricing.tierTaglines[plan]}
               </div>
               <div style={{ fontSize: 22, fontWeight: 800 }}>{renderPrice(plan)}</div>
               <ul style={{ margin: 0, paddingLeft: "1.1rem", color: text.muted, lineHeight: 1.7 }}>
                 {copy.pricing.featureGroups.map((group) => (
-                  <li key={`${plan}-${group.title}`}>{group.items[plan]}</li>
+                  <li key={`${plan}-${group.title}`}>
+                    <span style={{ color: text.secondary, fontWeight: 600 }}>{group.title}:</span>{" "}
+                    {group.items[plan]}
+                  </li>
                 ))}
                 <li>
                   {copy.pricing.screeningRow.label}: {copy.pricing.screeningRow.subtext}
