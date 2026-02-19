@@ -12,6 +12,7 @@ import { AuthProvider } from "./context/AuthContext";
 import { DevAuthGate } from "./components/dev/DevAuthGate";
 import { ErrorBoundary } from "./components/system/ErrorBoundary";
 import { UpgradeProvider } from "./context/UpgradeContext";
+import { LanguageProvider } from "./context/LanguageContext";
 import { API_BASE_URL } from "./api/config";
 import { AuthDebugOverlay } from "./components/debug/AuthDebugOverlay";
 import { getAuthToken } from "./lib/authToken";
@@ -71,14 +72,16 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
       <ToastProvider>
         <SubscriptionProvider initialPlan="pro">
           <AuthProvider>
-            <BrowserRouter>
-              <DevAuthGate>
-                <UpgradeProvider>
-                  <AuthDebugOverlay />
-                  <App />
-                </UpgradeProvider>
-              </DevAuthGate>
-            </BrowserRouter>
+            <LanguageProvider>
+              <BrowserRouter>
+                <DevAuthGate>
+                  <UpgradeProvider>
+                    <AuthDebugOverlay />
+                    <App />
+                  </UpgradeProvider>
+                </DevAuthGate>
+              </BrowserRouter>
+            </LanguageProvider>
           </AuthProvider>
         </SubscriptionProvider>
       </ToastProvider>

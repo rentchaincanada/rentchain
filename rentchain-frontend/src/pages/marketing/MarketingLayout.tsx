@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { colors, layout, radius, shadows, spacing, text, typography } from "../../styles/tokens";
 import { useAuth } from "../../context/useAuth";
-import { useLocale } from "../../i18n";
+import { useLanguage } from "../../context/LanguageContext";
 import { RentChainLogo } from "../../components/brand/RentChainLogo";
 
 interface MarketingLayoutProps {
@@ -17,7 +17,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
   const prevBodyOverflow = useRef<string | null>(null);
   const location = useLocation();
   const { user } = useAuth();
-  const { locale, setLocale, t } = useLocale();
+  const { locale, setLocale, t } = useLanguage();
   const isAuthed = Boolean(user?.id);
 
   const localeButtonStyle = (active: boolean) => ({
@@ -245,7 +245,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                     boxShadow: shadows.sm,
                   }}
                 >
-                  Sign up (Free)
+                  {t("nav.sign_up_free")}
                 </Link>
                 <Link
                   to="/request-access"
@@ -259,7 +259,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                     fontWeight: 600,
                   }}
                 >
-                  Request access
+                  {t("nav.request_access")}
                 </Link>
                 <Link
                   to="/invite"
@@ -267,7 +267,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                   onMouseEnter={(e) => onHover(e, true)}
                   onMouseLeave={(e) => onHover(e, false)}
                 >
-                  I have an invite
+                  {t("nav.have_invite")}
                 </Link>
                 <Link
                   to="/login"
@@ -305,8 +305,8 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                   boxShadow: shadows.sm,
                   whiteSpace: "nowrap",
                 }}
-              >
-                {isAuthed ? t("nav.dashboard") : "Sign up (Free)"}
+                >
+                {isAuthed ? t("nav.dashboard") : t("nav.sign_up_free")}
               </Link>
               <button
                 type="button"
@@ -475,7 +475,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                     }}
                     onClick={() => setMenuOpen(false)}
                   >
-                    Sign up (Free)
+                    {t("nav.sign_up_free")}
                   </Link>
                   <Link
                     to="/request-access"
@@ -490,7 +490,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                     }}
                     onClick={() => setMenuOpen(false)}
                   >
-                    Request access
+                    {t("nav.request_access")}
                   </Link>
                   <Link
                     to="/invite"
@@ -499,7 +499,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                     onMouseLeave={(e) => onHover(e, false)}
                     onClick={() => setMenuOpen(false)}
                   >
-                    I have an invite
+                    {t("nav.have_invite")}
                   </Link>
                   <Link
                     to="/login"
