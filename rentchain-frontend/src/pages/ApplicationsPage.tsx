@@ -45,6 +45,12 @@ import { SendScreeningInviteModal } from "../components/screening/SendScreeningI
 import { ScreeningStatusBadge } from "../components/screening/ScreeningStatusBadge";
 import { SamplePdfModal } from "../components/billing/SamplePdfModal";
 import { hasTier, normalizeTier } from "@/billing/requireTier";
+import {
+  SCREENING_ENABLED,
+  getUiLocale,
+  screeningComingSoonLabel,
+  screeningUnavailableMessage,
+} from "../config/screening";
 
 const statusOptions: RentalApplicationStatus[] = [
   "SUBMITTED",
@@ -186,6 +192,8 @@ const ApplicationsPage: React.FC = () => {
   const [propertyGateOpen, setPropertyGateOpen] = useState(false);
   const [screeningInviteOpen, setScreeningInviteOpen] = useState(false);
   const screeningSectionRef = React.useRef<HTMLDivElement | null>(null);
+  const uiLocale = getUiLocale();
+  const screeningComingSoonText = screeningComingSoonLabel(uiLocale);
   const CONSENT_VERSION = "v1.0";
   const onboarding = useOnboardingState();
   const propertiesCount = propertyRecords.length;
@@ -299,15 +307,6 @@ const ApplicationsPage: React.FC = () => {
     } finally {
       setScreeningReceiptLoading(false);
     }
-  };
-
-  const mapScreeningError = (err: any) => {
-    const code = String(err?.code || err?.error || "").toLowerCase();
-    if (code === "consent_required") return "Consent is required to run screening.";
-    if (code === "stripe_not_configured") {
-      return "Screening payments are not yet enabled. Contact support.";
-    }
-    return err?.detail || err?.message || "Unable to start screening.";
   };
 
   const refreshSelectedApplication = async (applicationId?: string | null) => {
@@ -752,6 +751,7 @@ const ApplicationsPage: React.FC = () => {
   };
 
   const handleRowScreen = (applicationId: string) => {
+    if (!SCREENING_ENABLED) return;
     handleSelectApplication(applicationId);
     window.setTimeout(() => {
       screeningSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -864,6 +864,10 @@ const ApplicationsPage: React.FC = () => {
 
   const runScreeningRequest = async () => {
     if (!detail) return;
+    if (!SCREENING_ENABLED) {
+      showToast({ message: screeningComingSoonText, variant: "warning" });
+      return;
+    }
     if (!canUseProFeatures) {
       openProUpgrade("screening");
       return;
@@ -909,7 +913,11 @@ const ApplicationsPage: React.FC = () => {
       setScreeningRedirecting(true);
       window.location.href = res.checkoutUrl;
     } catch (err: any) {
-      showToast({ message: "Screening failed", description: mapScreeningError(err), variant: "error" });
+      showToast({
+        message: "Screening failed",
+        description: screeningUnavailableMessage(uiLocale),
+        variant: "error",
+      });
     } finally {
       setScreeningRunning(false);
     }
@@ -952,15 +960,19 @@ const ApplicationsPage: React.FC = () => {
           <Button
             variant="secondary"
             onClick={() => {
+              if (!SCREENING_ENABLED) {
+                showToast({ message: screeningComingSoonText, variant: "warning" });
+                return;
+              }
               if (!canUseProFeatures) {
                 openProUpgrade("screening");
                 return;
               }
               setScreeningInviteOpen(true);
             }}
-            disabled={!propertiesReady}
+            disabled={!propertiesReady || !SCREENING_ENABLED}
           >
-            {propertiesLoaded ? "Send screening invite" : "Loading properties…"}
+            {propertiesLoaded ? (SCREENING_ENABLED ? "Send screening invite" : screeningComingSoonText) : "Loading properties…"}
           </Button>
         </div>
       </Card>
@@ -1075,10 +1087,12 @@ const ApplicationsPage: React.FC = () => {
                             color: text.primary,
                             fontSize: 12,
                             fontWeight: 700,
-                            cursor: "pointer",
+                            cursor: SCREENING_ENABLED ? "pointer" : "not-allowed",
+                            opacity: SCREENING_ENABLED ? 1 : 0.7,
                           }}
+                          disabled={!SCREENING_ENABLED}
                         >
-                          Screen tenant
+                          {SCREENING_ENABLED ? "Screen tenant" : screeningComingSoonText}
                         </button>
                       </div>
                     </button>
@@ -1432,9 +1446,13 @@ const ApplicationsPage: React.FC = () => {
                             <Button
                               variant="primary"
                               onClick={() => void runScreeningRequest()}
-                              disabled={screeningRunning || !screeningConsentChecked}
+                              disabled={screeningRunning || !screeningConsentChecked || !SCREENING_ENABLED}
                             >
-                              {screeningRunning ? "Running..." : `Run screening ($${(effectiveTotalCents / 100).toFixed(2)})`}
+                              {SCREENING_ENABLED
+                                ? screeningRunning
+                                  ? "Running..."
+                                  : `Run screening ($${(effectiveTotalCents / 100).toFixed(2)})`
+                                : screeningComingSoonText}
                             </Button>
                             {screeningRedirecting ? (
                               <div style={{ fontSize: 12, color: text.muted }}>Opening secure checkout…</div>
@@ -1869,11 +1887,13 @@ const ApplicationsPage: React.FC = () => {
         unit={null}
         onClose={() => setSendAppOpen(false)}
       />
-      <SendScreeningInviteModal
-        open={screeningInviteOpen}
-        onClose={() => setScreeningInviteOpen(false)}
-        returnTo={`${location.pathname}${location.search}`}
-      />
+      {SCREENING_ENABLED ? (
+        <SendScreeningInviteModal
+          open={screeningInviteOpen}
+          onClose={() => setScreeningInviteOpen(false)}
+          returnTo={`${location.pathname}${location.search}`}
+        />
+      ) : null}
       {manualCompleteOpen && (
       <div
         style={{
