@@ -62,11 +62,25 @@ type LegalCopy = {
   assistanceTitle: string;
 };
 
+type Testimonial = {
+  quote: string;
+  author: string;
+  role: string;
+};
+
+type TrustCopy = {
+  testimonialsTitle: string;
+  testimonialsSubtitle: string;
+  testimonials: Testimonial[];
+  credibilityLine: string;
+};
+
 export type MarketingCopy = {
   home: HomeCopy;
   pricing: PricingCopy;
   about: AboutCopy;
   legal: LegalCopy;
+  trust: TrustCopy;
 };
 
 export const marketingCopy: Record<Locale, MarketingCopy> = {
@@ -201,6 +215,28 @@ export const marketingCopy: Record<Locale, MarketingCopy> = {
       policyAcceptableUse: "Acceptable Use Policy",
       assistanceTitle: "Need assistance",
     },
+    trust: {
+      testimonialsTitle: "Trusted by landlords across Canada",
+      testimonialsSubtitle: "Operators use RentChain to keep portfolios organized, responsive, and accountable.",
+      testimonials: [
+        {
+          quote: "Before RentChain, we tracked everything in separate tools. Now our tenant workflow is finally in one place.",
+          author: "Sarah M.",
+          role: "Independent landlord, Ontario",
+        },
+        {
+          quote: "The ledger and exports save our team hours every month and keep records ready when we need them.",
+          author: "Daniel R.",
+          role: "Portfolio manager, Alberta",
+        },
+        {
+          quote: "We reduced back-and-forth with tenants because messages, notices, and documents are easier to follow.",
+          author: "Amira L.",
+          role: "Property operator, Quebec",
+        },
+      ],
+      credibilityLine: "Built by a 20+ year property manager.",
+    },
   },
   fr: {
     home: {
@@ -334,6 +370,32 @@ export const marketingCopy: Record<Locale, MarketingCopy> = {
       policyPrivacy: "Politique de confidentialite",
       policyAcceptableUse: "Politique d'utilisation acceptable",
       assistanceTitle: "Besoin d'aide",
+    },
+    trust: {
+      testimonialsTitle: "Des proprietaires partout au Canada nous font confiance",
+      testimonialsSubtitle:
+        "Les exploitants utilisent RentChain pour garder leurs portefeuilles organises, reactifs et responsables.",
+      testimonials: [
+        {
+          quote:
+            "Avant RentChain, nous suivions tout dans des outils separes. Maintenant, notre flux locataire est enfin centralise.",
+          author: "Sarah M.",
+          role: "Proprietaire independante, Ontario",
+        },
+        {
+          quote:
+            "Le registre et les exports nous font gagner des heures chaque mois et gardent les dossiers prets en tout temps.",
+          author: "Daniel R.",
+          role: "Gestionnaire de portefeuille, Alberta",
+        },
+        {
+          quote:
+            "Nous avons reduit les allers-retours avec les locataires car messages, avis et documents sont plus faciles a suivre.",
+          author: "Amira L.",
+          role: "Operatrice immobiliere, Quebec",
+        },
+      ],
+      credibilityLine: "Cree par un gestionnaire immobilier avec plus de 20 ans d'experience.",
     },
   },
 };
