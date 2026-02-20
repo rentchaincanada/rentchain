@@ -18,16 +18,13 @@ import { track } from "../lib/analytics";
 import { useAuth } from "../context/useAuth";
 import { useToast } from "../components/ui/ToastProvider";
 import { useCapabilities } from "../hooks/useCapabilities";
-import { useUpgrade } from "../context/UpgradeContext";
 import { buildOnboardingSteps } from "../lib/onboardingSteps";
 import { getApplicationPrereqState } from "../lib/applicationPrereqs";
 import { CreatePropertyFirstModal } from "../components/properties/CreatePropertyFirstModal";
 import { buildCreatePropertyUrl, buildReturnTo } from "../lib/propertyGate";
-import { SendScreeningInviteModal } from "../components/screening/SendScreeningInviteModal";
 import { SendApplicationModal } from "../components/properties/SendApplicationModal";
 import { useUnitsForProperty } from "../hooks/useUnitsForProperty";
 import { listReferrals } from "../api/referralsApi";
-import { hasTier, normalizeTier } from "@/billing/requireTier";
 import { markDashboardVisit } from "@/features/upgradeNudges/nudgeStore";
 import { GettingStartedCard } from "../components/onboarding/GettingStartedCard";
 import { SCREENING_ENABLED, getUiLocale, screeningComingSoonLabel } from "../config/screening";
@@ -102,8 +99,7 @@ const DashboardPage: React.FC = () => {
   const { applications, loading: applicationsLoading } = useApplications();
   const { tenants, loading: tenantsLoading } = useTenants();
   const { user, ready: authReady, isLoading: authLoading } = useAuth();
-  const { caps, features } = useCapabilities();
-  const { openUpgrade } = useUpgrade();
+  const { features } = useCapabilities();
   const { showToast } = useToast();
   const navigate = useNavigate();
   const apiBase = debugApiBase();
@@ -115,8 +111,6 @@ const DashboardPage: React.FC = () => {
   const roleLower = String(user?.role || "").toLowerCase();
   const isAdmin = roleLower === "admin";
   const isLandlord = roleLower === "landlord";
-  const userTier = normalizeTier((caps?.plan as string) || user?.plan || null);
-  const canUseProFeatures = isAdmin || hasTier(userTier, "pro");
   const canManualScreen = isAdmin || features?.screening_pay_per_use !== false;
   const uiLocale = getUiLocale();
   const screeningLabel = screeningComingSoonLabel(uiLocale);
@@ -127,7 +121,6 @@ const DashboardPage: React.FC = () => {
   const [invitesLoading, setInvitesLoading] = React.useState(false);
   const [propertyGateOpen, setPropertyGateOpen] = React.useState(false);
   const [pendingPropertyAction, setPendingPropertyAction] = React.useState<"create_application" | null>(null);
-  const [screeningInviteOpen, setScreeningInviteOpen] = React.useState(false);
   const [sendApplicationOpen, setSendApplicationOpen] = React.useState(false);
   const [modalPropertyId, setModalPropertyId] = React.useState<string | null>(null);
   const [modalUnitId, setModalUnitId] = React.useState<string | null>(null);
@@ -345,23 +338,6 @@ const DashboardPage: React.FC = () => {
     setSendApplicationOpen(true);
   };
 
-  const handleOpenScreeningInvite = () => {
-    if (!canUseProFeatures) {
-      track("gating_blocked", { featureName: "screening", requiredTier: "pro", userTier });
-      openUpgrade({
-        reason: "screening",
-        plan: userTier,
-        ctaLabel: "Upgrade to Pro",
-        copy: {
-          title: "Upgrade to Pro",
-          body: "Screening is available on Pro plans. Upgrade to run screenings.",
-        },
-      });
-      return;
-    }
-    setScreeningInviteOpen(true);
-  };
-
   const derivedSteps = {
     propertyAdded: derivedPropertiesCount > 0,
     unitAdded: derivedUnitsCount > 0,
@@ -477,6 +453,58 @@ const DashboardPage: React.FC = () => {
           </Card>
         ) : null}
 
+        {dataReady ? <KpiStrip kpis={kpis} loading={loading} /> : null}
+
+        {dataReady ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+              gap: spacing.md,
+            }}
+          >
+            <ActionRequiredPanel
+              items={actions}
+              loading={loading}
+              viewAllEnabled={false}
+              title="Action required"
+              emptyLabel="No pending actions. Add a property or invite a tenant to begin."
+            />
+            <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
+              <div style={{ fontWeight: 700, marginBottom: spacing.sm }}>Quick actions</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: spacing.sm }}>
+                <Button
+                  variant="secondary"
+                  onClick={() => navigate("/properties")}
+                  aria-label="Add property"
+                  disabled={progressLoading}
+                >
+                  Add property
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => navigate("/tenants?invite=1")}
+                  aria-label="Invite tenant"
+                  disabled={progressLoading}
+                >
+                  Invite tenant
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={handleCreateApplicationClick}
+                  aria-label="Send application link"
+                  disabled={progressLoading}
+                >
+                  Send application link
+                </Button>
+                <Button variant="primary" disabled>
+                  {screeningLabel}
+                </Button>
+              </div>
+            </Card>
+          </div>
+        ) : null}
+
         {showStarterOnboarding && !isAdmin ? (
           <>
             <React.Suspense
@@ -506,81 +534,6 @@ const DashboardPage: React.FC = () => {
                 />
               </OnboardingErrorBoundary>
             </React.Suspense>
-            <Card style={{ padding: spacing.md }}>
-              <div style={{ fontWeight: 700, marginBottom: spacing.sm }}>Quick actions</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: spacing.sm }}>
-                <Button
-                  variant="secondary"
-                  onClick={() => navigate("/properties")}
-                  aria-label="Add property"
-                  disabled={progressLoading}
-                >
-                  Add property
-                </Button>
-                <Button
-                  variant="primary"
-                  onClick={SCREENING_ENABLED ? handleOpenScreeningInvite : undefined}
-                  aria-label="Send screening invite"
-                  disabled={progressLoading || !SCREENING_ENABLED}
-                >
-                  {screeningLabel}
-                </Button>
-                {SCREENING_ENABLED && canManualScreen ? (
-                  <Button
-                    variant="secondary"
-                    onClick={() => navigate("/screening/manual")}
-                    aria-label="Run manual screening"
-                    disabled={progressLoading}
-                  >
-                    Run manual screening
-                  </Button>
-                ) : null}
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    const prereq = getApplicationPrereqState({
-                      propertiesCount: derivedPropertiesCount,
-                      unitsCount: derivedUnitsCount,
-                    });
-                    if (prereq.missingProperty) {
-                      track("onboarding_step_clicked", {
-                        stepKey: "applicationCreated",
-                        blockedBy: "no_property",
-                        source: "dashboard_quick_action",
-                      });
-                      setPendingPropertyAction("create_application");
-                      setPropertyGateOpen(true);
-                      return;
-                    }
-                    if (prereq.missingUnit) {
-                      track("onboarding_step_clicked", {
-                        stepKey: "applicationCreated",
-                        blockedBy: "no_units",
-                        source: "dashboard_quick_action",
-                      });
-                      // Units are optional for screening; don't block create application.
-                    }
-                    track("onboarding_step_clicked", {
-                      stepKey: "applicationCreated",
-                      source: "dashboard_quick_action",
-                    });
-                    handleCreateApplicationClick();
-                  }}
-                  aria-label="Send application link"
-                  disabled={progressLoading}
-                >
-                  Send application link
-                </Button>
-                <Button
-                  variant="ghost"
-                  onClick={() => navigate("/site/legal")}
-                  aria-label="View templates"
-                  disabled={progressLoading}
-                >
-                  View templates
-                </Button>
-              </div>
-            </Card>
           </>
         ) : null}
 
@@ -634,7 +587,7 @@ const DashboardPage: React.FC = () => {
           <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
             <div style={{ fontWeight: 700, marginBottom: 6 }}>Next: create an application</div>
             <div style={{ color: text.muted, marginBottom: 12 }}>
-              Invite a tenant or start an application to begin screening.
+              Invite a tenant or send an application link to keep your pipeline moving.
             </div>
             <Button onClick={handleCreateApplicationClick}>
               Send application link
@@ -668,8 +621,6 @@ const DashboardPage: React.FC = () => {
           </Card>
         ) : null}
 
-        {dataReady ? <KpiStrip kpis={kpis} loading={loading} /> : null}
-
         {dataReady && showAdvancedCollapsed ? (
           <details
             style={{
@@ -688,19 +639,12 @@ const DashboardPage: React.FC = () => {
                 marginTop: spacing.md,
               }}
             >
-              <ActionRequiredPanel
-                items={actions}
-                loading={loading}
-                viewAllEnabled={false}
-                title="Next actions"
-                emptyLabel="No next actions right now."
-              />
               <RecentEventsCard
                 events={events}
                 loading={loading}
                 openLedgerEnabled={false}
                 title="Recent activity"
-                emptyLabel="No recent activity yet."
+                emptyLabel="No recent activity yet. Add a property to start activity tracking."
               />
             </div>
           </details>
@@ -708,23 +652,16 @@ const DashboardPage: React.FC = () => {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+              gridTemplateColumns: "1fr",
               gap: spacing.md,
             }}
           >
-            <ActionRequiredPanel
-              items={actions}
-              loading={loading}
-              viewAllEnabled={false}
-              title="Next actions"
-              emptyLabel="No next actions right now."
-            />
             <RecentEventsCard
               events={events}
               loading={loading}
               openLedgerEnabled={false}
               title="Recent activity"
-              emptyLabel="No recent activity yet."
+              emptyLabel="No recent activity yet. Add a property to start activity tracking."
             />
           </div>
         ) : null}
@@ -755,13 +692,6 @@ const DashboardPage: React.FC = () => {
           setPropertyGateOpen(false);
         }}
       />
-      {SCREENING_ENABLED ? (
-        <SendScreeningInviteModal
-          open={screeningInviteOpen}
-          onClose={() => setScreeningInviteOpen(false)}
-          returnTo="/dashboard"
-        />
-      ) : null}
       <SendApplicationModal
         open={sendApplicationOpen}
         onClose={() => setSendApplicationOpen(false)}
