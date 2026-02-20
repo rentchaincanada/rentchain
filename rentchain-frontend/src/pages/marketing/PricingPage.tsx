@@ -35,6 +35,26 @@ const PricingPage: React.FC = () => {
   const currentPlan = normalizePlan((caps?.plan as string) || user?.plan || null);
   const isAuthed = Boolean(user?.id);
   const [interval, setInterval] = React.useState<PricingInterval>("monthly");
+  const [isMobile, setIsMobile] = React.useState(false);
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const media = window.matchMedia("(max-width: 767px)");
+    const update = () => setIsMobile(media.matches);
+    update();
+    const legacy = media as MediaQueryList & {
+      addListener?: (listener: () => void) => void;
+      removeListener?: (listener: () => void) => void;
+    };
+    if (typeof legacy.addEventListener === "function") {
+      legacy.addEventListener("change", update);
+      return () => legacy.removeEventListener("change", update);
+    }
+    if (typeof legacy.addListener === "function") {
+      legacy.addListener(update);
+      return () => legacy.removeListener?.(update);
+    }
+  }, []);
 
   const renderPrice = (planKey: PlanKey) => {
     const plan = DEFAULT_PLANS.find((item) => item.key === planKey);
@@ -74,7 +94,7 @@ const PricingPage: React.FC = () => {
 
   return (
     <MarketingLayout>
-      <div style={{ width: "100%", maxWidth: 1180, margin: "0 auto", display: "grid", gap: spacing.lg }}>
+      <div style={{ width: "100%", maxWidth: 1180, margin: "0 auto", display: "grid", gap: spacing.lg, overflowX: "hidden" }}>
         <div>
           <h1 style={{ margin: 0, fontSize: "clamp(2rem, 4vw, 3rem)", lineHeight: 1.1 }}>
             {copy.pricing.headline}
@@ -92,7 +112,19 @@ const PricingPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="rc-pricing-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))" }}>
+        <div
+          className="rc-pricing-grid"
+          style={{
+            display: "grid",
+            gap: spacing.md,
+            width: "100%",
+            maxWidth: isMobile ? 520 : "100%",
+            margin: "0 auto",
+            padding: isMobile ? "0 8px" : 0,
+            gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(250px, 1fr))",
+            boxSizing: "border-box",
+          }}
+        >
           <Card style={{ gridColumn: "1 / -1" }}>
             <div
               style={{
@@ -123,7 +155,7 @@ const PricingPage: React.FC = () => {
           </Card>
 
           {PLAN_ORDER.map((plan) => (
-            <Card key={plan} style={{ display: "grid", gap: spacing.sm }}>
+            <Card key={plan} style={{ display: "grid", gap: spacing.sm, width: "100%", minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing.xs, flexWrap: "wrap" }}>
                 <div style={{ fontSize: 20, fontWeight: 800 }}>{copy.pricing.tierLabels[plan]}</div>
                 {copy.pricing.tierBadges[plan] ? (
@@ -175,36 +207,88 @@ const PricingPage: React.FC = () => {
 
         <Card>
           <h2 style={{ marginTop: 0, marginBottom: spacing.sm }}>{copy.pricing.comparisonTitle}</h2>
-          <div style={{ width: "100%", overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
-              <thead>
-                <tr>
-                  <th
-                    style={{
-                      textAlign: "left",
-                      padding: "10px 12px",
-                      borderBottom: "1px solid rgba(15,23,42,0.12)",
-                    }}
-                  >
-                    {copy.pricing.capabilityTitle}
-                  </th>
-                  {PLAN_ORDER.map((plan) => (
+          {isMobile ? (
+            <div style={{ display: "grid", gap: spacing.md }}>
+              {PLAN_ORDER.map((plan) => (
+                <div
+                  key={`mobile-compare-${plan}`}
+                  style={{
+                    border: "1px solid rgba(15,23,42,0.12)",
+                    borderRadius: 12,
+                    padding: "12px 14px",
+                    display: "grid",
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ fontWeight: 800, fontSize: "1rem" }}>{copy.pricing.tierLabels[plan]}</div>
+                  {copy.pricing.featureGroups.map((group) => (
+                    <div key={`mobile-${plan}-${group.title}`} style={{ display: "grid", gap: 2 }}>
+                      <div style={{ color: text.secondary, fontWeight: 600, fontSize: "0.86rem" }}>{group.title}</div>
+                      <div style={{ color: text.muted, fontSize: "0.92rem" }}>{group.items[plan]}</div>
+                    </div>
+                  ))}
+                  <div style={{ display: "grid", gap: 2 }}>
+                    <div style={{ color: text.secondary, fontWeight: 600, fontSize: "0.86rem" }}>
+                      {copy.pricing.screeningRow.label}
+                    </div>
+                    <div style={{ color: text.muted, fontSize: "0.92rem" }}>
+                      {copy.pricing.screeningRow.values[plan]} - {copy.pricing.screeningRow.subtext}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ width: "100%", overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
+                <thead>
+                  <tr>
                     <th
-                      key={`heading-${plan}`}
                       style={{
                         textAlign: "left",
                         padding: "10px 12px",
                         borderBottom: "1px solid rgba(15,23,42,0.12)",
                       }}
                     >
-                      {copy.pricing.tierLabels[plan]}
+                      {copy.pricing.capabilityTitle}
                     </th>
+                    {PLAN_ORDER.map((plan) => (
+                      <th
+                        key={`heading-${plan}`}
+                        style={{
+                          textAlign: "left",
+                          padding: "10px 12px",
+                          borderBottom: "1px solid rgba(15,23,42,0.12)",
+                        }}
+                      >
+                        {copy.pricing.tierLabels[plan]}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {copy.pricing.featureGroups.map((group) => (
+                    <tr key={group.title}>
+                      <td
+                        style={{
+                          padding: "10px 12px",
+                          borderBottom: "1px solid rgba(15,23,42,0.08)",
+                          fontWeight: 600,
+                        }}
+                      >
+                        {group.title}
+                      </td>
+                      {PLAN_ORDER.map((plan) => (
+                        <td
+                          key={`${group.title}-${plan}`}
+                          style={{ padding: "10px 12px", borderBottom: "1px solid rgba(15,23,42,0.08)" }}
+                        >
+                          {group.items[plan]}
+                        </td>
+                      ))}
+                    </tr>
                   ))}
-                </tr>
-              </thead>
-              <tbody>
-                {copy.pricing.featureGroups.map((group) => (
-                  <tr key={group.title}>
+                  <tr>
                     <td
                       style={{
                         padding: "10px 12px",
@@ -212,46 +296,27 @@ const PricingPage: React.FC = () => {
                         fontWeight: 600,
                       }}
                     >
-                      {group.title}
+                      {copy.pricing.screeningRow.label}
+                      <div style={{ color: text.muted, fontWeight: 400, fontSize: "0.85rem" }}>
+                        {copy.pricing.screeningRow.subtext}
+                      </div>
                     </td>
                     {PLAN_ORDER.map((plan) => (
                       <td
-                        key={`${group.title}-${plan}`}
+                        key={`screening-${plan}`}
                         style={{ padding: "10px 12px", borderBottom: "1px solid rgba(15,23,42,0.08)" }}
                       >
-                        {group.items[plan]}
+                        {copy.pricing.screeningRow.values[plan]}
                       </td>
                     ))}
                   </tr>
-                ))}
-                <tr>
-                  <td
-                    style={{
-                      padding: "10px 12px",
-                      borderBottom: "1px solid rgba(15,23,42,0.08)",
-                      fontWeight: 600,
-                    }}
-                  >
-                    {copy.pricing.screeningRow.label}
-                    <div style={{ color: text.muted, fontWeight: 400, fontSize: "0.85rem" }}>
-                      {copy.pricing.screeningRow.subtext}
-                    </div>
-                  </td>
-                  {PLAN_ORDER.map((plan) => (
-                    <td
-                      key={`screening-${plan}`}
-                      style={{ padding: "10px 12px", borderBottom: "1px solid rgba(15,23,42,0.08)" }}
-                    >
-                      {copy.pricing.screeningRow.values[plan]}
-                    </td>
-                  ))}
-                </tr>
-              </tbody>
-            </table>
-          </div>
+                </tbody>
+              </table>
+            </div>
+          )}
         </Card>
 
-        <Card>
+        <Card style={{ marginTop: spacing.sm }}>
           <h2 style={{ marginTop: 0 }}>{copy.pricing.faqTitle}</h2>
           <details open style={{ border: "1px solid rgba(15,23,42,0.12)", borderRadius: 12, padding: "12px 14px" }}>
             <summary style={{ cursor: "pointer", fontWeight: 700 }}>{copy.pricing.faqQuestion}</summary>
