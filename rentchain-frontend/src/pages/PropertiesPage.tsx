@@ -620,28 +620,21 @@ const PropertiesPage: React.FC = () => {
           ) : null}
           {!isLoadingProperties && properties.length === 0 ? (
             <div style={{ display: "grid", gap: 8 }}>
+              <div style={{ color: text.primary, fontSize: 14, fontWeight: 700 }}>
+                No properties yet
+              </div>
               <div style={{ color: text.muted, fontSize: 13 }}>
-                No properties yet. Add your first property above.
+                Properties are the foundation for units, tenants, and applications.
               </div>
-              <div className="rc-wrap-row">
-                <Button
-                  onClick={() => {
-                    track("empty_state_cta_clicked", { pageKey: "properties", ctaKey: "add_property" });
-                    addPropertyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-                  }}
-                >
-                  Add property
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    track("empty_state_cta_clicked", { pageKey: "properties", ctaKey: "import_csv" });
-                    addPropertyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-                  }}
-                >
-                  Import CSV
-                </Button>
-              </div>
+              <Button
+                onClick={() => {
+                  track("empty_state_cta_clicked", { pageKey: "properties", ctaKey: "add_property" });
+                  addPropertyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+                style={{ width: "fit-content" }}
+              >
+                Add first property
+              </Button>
             </div>
           ) : null}
 

@@ -1,5 +1,5 @@
 import React from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { MacShell } from "../components/layout/MacShell";
 import { Card, Section, Button } from "../components/ui/Ui";
 import { spacing, text, colors } from "../styles/tokens";
@@ -29,6 +29,7 @@ import { useUnitsForProperty } from "../hooks/useUnitsForProperty";
 import { listReferrals } from "../api/referralsApi";
 import { hasTier, normalizeTier } from "@/billing/requireTier";
 import { markDashboardVisit } from "@/features/upgradeNudges/nudgeStore";
+import { GettingStartedCard } from "../components/onboarding/GettingStartedCard";
 
 const StarterOnboardingPanel = React.lazy(
   () => import("../components/dashboard/StarterOnboardingPanel")
@@ -307,6 +308,7 @@ const DashboardPage: React.FC = () => {
   const hasNoProperties = dataReady && (kpis?.propertiesCount ?? 0) === 0;
   const hasNoApplications = dataReady && applicationsCount === 0;
   const showEmptyCTA = hasNoProperties;
+  const showGettingStartedCard = isLandlord && showEmptyCTA;
   const progressLoading = !dataReady || onboarding.loading;
   const showOnboardingSkeleton = onboarding.loading && !isAdmin;
   const showStarterOnboarding =
@@ -599,25 +601,14 @@ const DashboardPage: React.FC = () => {
           </div>
         ) : null}
 
-        {dataReady && showEmptyCTA ? (
-          <Card
-            style={{
-              padding: spacing.md,
-              border: `1px solid ${colors.border}`,
-              background: colors.card,
-            }}
-          >
-            <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 6 }}>No properties yet</div>
-            <div style={{ color: text.muted, marginBottom: 12 }}>
-              Create your first property to start tracking tenants, rent, and records.
-            </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: spacing.sm }}>
-              <Button onClick={() => navigate("/properties")}>Add property</Button>
-              <Link to="/help/landlords" style={{ alignSelf: "center", color: colors.accent }}>
-                Learn more
-              </Link>
-            </div>
-          </Card>
+        {dataReady && showGettingStartedCard ? (
+          <GettingStartedCard
+            propertiesCount={derivedPropertiesCount}
+            unitsCount={derivedUnitsCount}
+            tenantsCount={tenantCount}
+            inviteTenantHref="/tenants?invite=1"
+            onAddProperty={() => navigate("/properties")}
+          />
         ) : null}
 
         {dataReady &&
