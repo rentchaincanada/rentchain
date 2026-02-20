@@ -4,6 +4,7 @@ import { colors, layout, radius, shadows, spacing, text, typography } from "../.
 import { useAuth } from "../../context/useAuth";
 import { useLanguage } from "../../context/LanguageContext";
 import { RentChainLogo } from "../../components/brand/RentChainLogo";
+import { marketingCopy } from "../../content/marketingCopy";
 
 interface MarketingLayoutProps {
   children: React.ReactNode;
@@ -18,6 +19,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
   const location = useLocation();
   const { user } = useAuth();
   const { locale, setLocale, t } = useLanguage();
+  const copy = marketingCopy[locale];
   const isAuthed = Boolean(user?.id);
 
   const localeButtonStyle = (active: boolean) => ({
@@ -519,7 +521,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
 
         <main
           style={{
-            maxWidth: "100vw",
+            maxWidth: "100%",
             width: "100%",
             margin: "0 auto",
             padding: `clamp(16px, 4vw, 40px) ${layout.pagePadding}`,
@@ -540,6 +542,62 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
           {children}
         </div>
       </main>
+
+      <section
+        style={{
+          maxWidth: layout.maxWidth,
+          width: "100%",
+          margin: "0 auto",
+          padding: `0 ${layout.pagePadding} ${spacing.xl}`,
+          boxSizing: "border-box",
+        }}
+      >
+        <div
+          style={{
+            border: `1px solid ${colors.border}`,
+            borderRadius: radius.xl,
+            background: colors.panel,
+            boxShadow: shadows.sm,
+            padding: "clamp(20px, 5vw, 32px)",
+          }}
+        >
+          <h2 style={{ margin: 0, fontSize: "clamp(1.3rem, 2.5vw, 1.8rem)", color: text.primary }}>
+            {copy.trust.testimonialsTitle}
+          </h2>
+          <p style={{ margin: `${spacing.sm} 0 ${spacing.lg}`, color: text.muted, maxWidth: "68ch" }}>
+            {copy.trust.testimonialsSubtitle}
+          </p>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: spacing.md,
+              marginBottom: spacing.lg,
+            }}
+          >
+            {copy.trust.testimonials.map((item) => (
+              <article
+                key={`${item.author}-${item.role}`}
+                style={{
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: radius.lg,
+                  background: colors.bgElevated,
+                  padding: spacing.md,
+                }}
+              >
+                <p style={{ margin: 0, color: text.primary, lineHeight: 1.6 }}>"{item.quote}"</p>
+                <p style={{ margin: `${spacing.sm} 0 0`, color: text.muted, fontWeight: 600 }}>
+                  {item.author}
+                </p>
+                <p style={{ margin: `${spacing.xs} 0 0`, color: text.subtle, fontSize: "0.88rem" }}>
+                  {item.role}
+                </p>
+              </article>
+            ))}
+          </div>
+          <p style={{ margin: 0, color: text.primary, fontWeight: 600 }}>{copy.trust.credibilityLine}</p>
+        </div>
+      </section>
 
       <footer
         style={{
