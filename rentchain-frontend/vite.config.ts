@@ -10,7 +10,7 @@ export default defineConfig({
     VitePWA({
       registerType: "autoUpdate",
       manifestFilename: "manifest.webmanifest",
-      includeAssets: ["icons/icon-192-light.png", "icons/icon-512-light.png"],
+      includeAssets: ["icons/icon-192-light.png", "icons/icon-512.png"],
       manifest: {
         name: "RentChain",
         short_name: "RentChain",

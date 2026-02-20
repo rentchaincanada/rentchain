@@ -5,12 +5,6 @@ import { spacing, text, colors, radius } from "../../styles/tokens";
 import { fetchProperties } from "../../api/propertiesApi";
 import { fetchUnitsForProperty } from "../../api/unitsApi";
 import { createScreeningOrder } from "../../api/rentalApplicationsApi";
-import {
-  SCREENING_ENABLED,
-  getUiLocale,
-  screeningComingSoonNotice,
-  screeningUnavailableMessage,
-} from "../../config/screening";
 
 type PropertyOption = { id: string; name: string };
 type UnitOption = { id: string; label: string };
@@ -35,7 +29,6 @@ const ManualScreeningPage: React.FC = () => {
   const [dob, setDob] = React.useState("");
   const [sin, setSin] = React.useState("");
   const [consentGiven, setConsentGiven] = React.useState(false);
-  const uiLocale = getUiLocale();
 
   React.useEffect(() => {
     let active = true;
@@ -148,36 +141,16 @@ const ManualScreeningPage: React.FC = () => {
         } as any,
       } as any);
       if (!result?.ok || !result?.checkoutUrl) {
-        setError(screeningUnavailableMessage(uiLocale));
+        setError(result?.error || "Unable to start checkout.");
         return;
       }
       window.location.assign(result.checkoutUrl);
     } catch (err: any) {
-      setError(screeningUnavailableMessage(uiLocale));
+      setError(String(err?.message || "Unable to start checkout."));
     } finally {
       setLoading(false);
     }
   };
-
-  if (!SCREENING_ENABLED) {
-    return (
-      <Section style={{ maxWidth: 760, margin: "0 auto" }}>
-        <Card elevated style={{ display: "grid", gap: spacing.md }}>
-          <div>
-            <h1 style={{ margin: 0, fontSize: "1.3rem", fontWeight: 700 }}>
-              {uiLocale === "fr" ? "Verification de credit" : "Credit screening"}
-            </h1>
-            <div style={{ marginTop: 6, color: text.muted }}>{screeningComingSoonNotice(uiLocale)}</div>
-          </div>
-          <div style={{ display: "flex", justifyContent: "flex-end" }}>
-            <Button type="button" onClick={() => navigate("/dashboard", { replace: true })}>
-              {uiLocale === "fr" ? "Retour au tableau de bord" : "Back to dashboard"}
-            </Button>
-          </div>
-        </Card>
-      </Section>
-    );
-  }
 
   return (
     <Section style={{ maxWidth: 760, margin: "0 auto" }}>
