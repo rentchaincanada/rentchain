@@ -1014,7 +1014,10 @@ const ApplicationsPage: React.FC = () => {
                 <div style={{ color: colors.danger }}>{error}</div>
               ) : filtered.length === 0 ? (
                 <div style={{ display: "grid", gap: 8 }}>
-                  <div style={{ color: text.muted }}>No applications found.</div>
+                  <div style={{ color: text.primary, fontSize: 14, fontWeight: 700 }}>No applications yet</div>
+                  <div style={{ color: text.muted }}>
+                    Applications keep screening decisions and applicant details in one auditable flow.
+                  </div>
                   <Button
                     variant="secondary"
                     onClick={() => {

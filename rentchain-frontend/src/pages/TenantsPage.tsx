@@ -315,7 +315,10 @@ export const TenantsPage: React.FC = () => {
               <div style={{ fontSize: 13, color: colors.danger }}>{error}</div>
             ) : filteredTenants.length === 0 ? (
               <div style={{ display: "grid", gap: 8 }}>
-                <div style={{ fontSize: 13, color: text.muted }}>No tenants found.</div>
+                <div style={{ fontSize: 14, color: text.primary, fontWeight: 700 }}>No tenants yet</div>
+                <div style={{ fontSize: 13, color: text.muted }}>
+                  Tenant records help you track occupancy, communication, and payment history in one place.
+                </div>
                 <button
                   type="button"
                   onClick={() => {
