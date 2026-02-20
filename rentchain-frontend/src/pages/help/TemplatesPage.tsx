@@ -28,7 +28,7 @@ type TemplateItem = {
   files: TemplateFile[];
 };
 
-const templateUrl = (fileName: string) => `/templates/${fileName}`;
+const templateUrl = (fileName: string) => (fileName.startsWith("http") ? fileName : `/templates/${fileName}`);
 
 const templates: TemplateItem[] = [
   {
@@ -76,6 +76,17 @@ const templates: TemplateItem[] = [
       { label: "PDF", file: "Rent_Ledger_Summary_Template.pdf" },
       { label: "DOCX", file: "Rent_Ledger_Summary_Template.docx" },
       { label: "CSV", file: "Rent_Ledger_Summary_Template.csv" },
+    ],
+  },
+  {
+    name: "Nova Scotia - Standard Form of Lease (Form P)",
+    description: "Official Nova Scotia residential lease form resource.",
+    category: "Landlord Templates",
+    files: [
+      {
+        label: "PDF",
+        file: "https://www.novascotia.ca/sites/default/files/documents/4-439/form-p-standard-form-lease-en.pdf",
+      },
     ],
   },
   {
@@ -149,7 +160,7 @@ const TemplatesPage: React.FC = () => {
           <a
             key={f.file}
             href={templateUrl(f.file)}
-            download
+            download={f.file.startsWith("http") ? undefined : true}
             target="_blank"
             rel="noopener noreferrer"
             style={{

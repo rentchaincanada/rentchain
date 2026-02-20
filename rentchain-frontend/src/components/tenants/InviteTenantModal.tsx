@@ -122,7 +122,7 @@ export const InviteTenantModal: React.FC<Props> = ({
   }, [open, propertyId, defaultUnitId]);
 
   if (!open) return null;
-  const selectedUnitEligible = unitId ? units.find((u) => u.id === unitId)?.inviteEligible !== false : true;
+  const selectedUnitRequiresLease = unitId ? units.find((u) => u.id === unitId)?.inviteEligible === false : false;
 
   async function sendInvite() {
     setErr("");
@@ -137,11 +137,6 @@ export const InviteTenantModal: React.FC<Props> = ({
       }
       if (!propertyId || !unitId) {
         setErr("Please select a property and unit before sending an invite.");
-        return;
-      }
-      const selectedUnit = units.find((u) => u.id === unitId);
-      if (selectedUnit && !selectedUnit.inviteEligible) {
-        setErr("Unit must have a signed lease before inviting a tenant.");
         return;
       }
       const data: any = await createTenantInvite({
@@ -178,7 +173,7 @@ export const InviteTenantModal: React.FC<Props> = ({
           return;
         }
         if (errorCode === "lease_required") {
-          setErr("Unit must have a signed lease before inviting a tenant.");
+          setErr("You can add a lease later. Invite creation is temporarily unavailable for this unit.");
           return;
         }
         setErr("Unable to send invite right now. Please try again.");
@@ -223,7 +218,7 @@ export const InviteTenantModal: React.FC<Props> = ({
         return;
       }
       if (msg.toLowerCase().includes("lease_required")) {
-        setErr("Unit must have a signed lease before inviting a tenant.");
+        setErr("You can add a lease later. Invite creation is temporarily unavailable for this unit.");
         return;
       }
       if (msg.includes("INVITE_EMAIL_SEND_FAILED") || msg.includes("SENDGRID")) {
@@ -313,9 +308,9 @@ export const InviteTenantModal: React.FC<Props> = ({
                 : "Select unit"}
             </option>
             {units.map((u) => (
-              <option key={u.id} value={u.id} disabled={!u.inviteEligible}>
+              <option key={u.id} value={u.id}>
                 {u.label}
-                {!u.inviteEligible ? " (lease required)" : ""}
+                {!u.inviteEligible ? " (add lease later)" : ""}
               </option>
             ))}
           </select>
@@ -332,10 +327,15 @@ export const InviteTenantModal: React.FC<Props> = ({
           units.length > 0 &&
           units.every((unit) => !unit.inviteEligible) ? (
             <div style={{ fontSize: 12, color: "#6b7280" }}>
-              Unit must have a signed lease before inviting a tenant.{" "}
+              You can add a lease later after inviting a tenant.{" "}
               <a href="/properties" style={{ color: "#2563eb", textDecoration: "underline" }}>
-                Create/sign a lease first
+                Manage lease details
               </a>
+            </div>
+          ) : null}
+          {selectedUnitRequiresLease ? (
+            <div style={{ fontSize: 12, color: "#6b7280" }}>
+              This unit is missing lease details right now. You can still continue and add the lease later.
             </div>
           ) : null}
         </div>
@@ -447,7 +447,7 @@ export const InviteTenantModal: React.FC<Props> = ({
           </Button>
           <Button
             onClick={sendInvite}
-            disabled={loading || !tenantEmail || !propertyId || !unitId || !selectedUnitEligible}
+            disabled={loading || !tenantEmail || !propertyId || !unitId}
             style={{ padding: "8px 12px" }}
           >
             {loading ? "Sending..." : "Send invite"}
