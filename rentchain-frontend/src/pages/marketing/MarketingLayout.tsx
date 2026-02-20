@@ -521,7 +521,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
 
         <main
           style={{
-            maxWidth: "100vw",
+            maxWidth: "100%",
             width: "100%",
             margin: "0 auto",
             padding: `clamp(16px, 4vw, 40px) ${layout.pagePadding}`,

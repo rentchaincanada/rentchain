@@ -54,6 +54,17 @@ function parseCents(value: string): number | null {
   return Math.round(num * 100);
 }
 
+function digitsOnly(value: string) {
+  return value.replace(/\D/g, "");
+}
+
+function decimalOnly(value: string) {
+  const clean = value.replace(/[^0-9.]/g, "");
+  const firstDot = clean.indexOf(".");
+  if (firstDot === -1) return clean;
+  return `${clean.slice(0, firstDot + 1)}${clean.slice(firstDot + 1).replace(/\./g, "")}`;
+}
+
 function isValidDob(value: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
@@ -339,8 +350,8 @@ export default function PublicApplyPage() {
       email: (applicant.email ?? "").trim(),
       dob: (applicant.dob ?? "").trim(),
       middleInitial: applicant.middleInitial ?? null,
-      phoneHome: applicant.phoneHome ?? null,
-      phoneWork: applicant.phoneWork ?? null,
+      phoneHome: applicant.phoneHome ? digitsOnly(applicant.phoneHome) : null,
+      phoneWork: applicant.phoneWork ? digitsOnly(applicant.phoneWork) : null,
       maritalStatus: applicant.maritalStatus ?? null,
     };
     const normalizedCoApplicant = coApplicantEnabled
@@ -350,8 +361,8 @@ export default function PublicApplyPage() {
           email: (coApplicant.email ?? "").trim(),
           dob: (coApplicant.dob ?? "").trim(),
           middleInitial: coApplicant.middleInitial ?? null,
-          phoneHome: coApplicant.phoneHome ?? null,
-          phoneWork: coApplicant.phoneWork ?? null,
+          phoneHome: coApplicant.phoneHome ? digitsOnly(coApplicant.phoneHome) : null,
+          phoneWork: coApplicant.phoneWork ? digitsOnly(coApplicant.phoneWork) : null,
           maritalStatus: coApplicant.maritalStatus ?? null,
         }
       : null;
@@ -433,8 +444,12 @@ export default function PublicApplyPage() {
         otherResidents: otherResidents.filter((r) => r.name.trim()),
         residentialHistory: history.filter((h) => h.address.trim()),
         employment: {
-          applicant: employment.applicant,
-          coApplicant: coApplicantEnabled ? employment.coApplicant ?? null : null,
+          applicant: { ...employment.applicant, incomeType: "GROSS" },
+          coApplicant: coApplicantEnabled
+            ? employment.coApplicant
+              ? { ...employment.coApplicant, incomeType: "GROSS" }
+              : null
+            : null,
         },
         references: references || null,
         loans: loans.filter((l) => l.institution || l.address || l.monthlyPaymentCents || l.balanceCents),
@@ -465,7 +480,7 @@ export default function PublicApplyPage() {
           },
           workReference: {
             name: workReferenceName.trim(),
-            phone: workReferencePhone.trim(),
+            phone: digitsOnly(workReferencePhone),
           },
           signature: {
             type: "typed",
@@ -576,11 +591,23 @@ export default function PublicApplyPage() {
               </label>
               <label style={labelStyle}>
                 Phone (home)
-                <input value={applicant.phoneHome || ""} onChange={(e) => updateApplicant({ phoneHome: e.target.value })} />
+                <input
+                  type="tel"
+                  inputMode="tel"
+                  pattern="[0-9]*"
+                  value={applicant.phoneHome || ""}
+                  onChange={(e) => updateApplicant({ phoneHome: digitsOnly(e.target.value) })}
+                />
               </label>
               <label style={labelStyle}>
                 Phone (work)
-                <input value={applicant.phoneWork || ""} onChange={(e) => updateApplicant({ phoneWork: e.target.value })} />
+                <input
+                  type="tel"
+                  inputMode="tel"
+                  pattern="[0-9]*"
+                  value={applicant.phoneWork || ""}
+                  onChange={(e) => updateApplicant({ phoneWork: digitsOnly(e.target.value) })}
+                />
               </label>
               <label style={labelStyle}>
                 Date of birth *
@@ -611,7 +638,7 @@ export default function PublicApplyPage() {
                 <div style={{ fontWeight: 700 }}>Co-applicant</div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 12 }}>
                   <label style={labelStyle}>
-                    First name
+                    First name *
                     <input value={coApplicant?.firstName || ""} onChange={(e) => updateCoApplicant({ firstName: e.target.value })} />
                   </label>
                   <label style={labelStyle}>
@@ -619,23 +646,35 @@ export default function PublicApplyPage() {
                     <input value={coApplicant?.middleInitial || ""} onChange={(e) => updateCoApplicant({ middleInitial: e.target.value })} />
                   </label>
                   <label style={labelStyle}>
-                    Last name
+                    Last name *
                     <input value={coApplicant?.lastName || ""} onChange={(e) => updateCoApplicant({ lastName: e.target.value })} />
                   </label>
                   <label style={labelStyle}>
-                    Email
+                    Email *
                     <input type="email" value={coApplicant?.email || ""} onChange={(e) => updateCoApplicant({ email: e.target.value })} />
                   </label>
                   <label style={labelStyle}>
                     Phone (home)
-                    <input value={coApplicant?.phoneHome || ""} onChange={(e) => updateCoApplicant({ phoneHome: e.target.value })} />
+                    <input
+                      type="tel"
+                      inputMode="tel"
+                      pattern="[0-9]*"
+                      value={coApplicant?.phoneHome || ""}
+                      onChange={(e) => updateCoApplicant({ phoneHome: digitsOnly(e.target.value) })}
+                    />
                   </label>
                   <label style={labelStyle}>
                     Phone (work)
-                    <input value={coApplicant?.phoneWork || ""} onChange={(e) => updateCoApplicant({ phoneWork: e.target.value })} />
+                    <input
+                      type="tel"
+                      inputMode="tel"
+                      pattern="[0-9]*"
+                      value={coApplicant?.phoneWork || ""}
+                      onChange={(e) => updateCoApplicant({ phoneWork: digitsOnly(e.target.value) })}
+                    />
                   </label>
                   <label style={labelStyle}>
-                    Date of birth
+                    Date of birth *
                     <input type="date" value={coApplicant?.dob || ""} onChange={(e) => updateCoApplicant({ dob: e.target.value })} />
                   </label>
                 </div>
@@ -650,7 +689,7 @@ export default function PublicApplyPage() {
             <div style={{ border: "1px solid #e5e7eb", borderRadius: 10, padding: 10, display: "grid", gap: 8 }}>
               <div style={{ fontWeight: 600 }}>Current address *</div>
               <label style={labelStyle}>
-                Address line 1
+                Address line 1 *
                 <input
                   value={profileAddress.line1}
                   onChange={(e) => setProfileAddress({ ...profileAddress, line1: e.target.value })}
@@ -665,21 +704,21 @@ export default function PublicApplyPage() {
               </label>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 8 }}>
                 <label style={labelStyle}>
-                  City
+                  City *
                   <input
                     value={profileAddress.city}
                     onChange={(e) => setProfileAddress({ ...profileAddress, city: e.target.value })}
                   />
                 </label>
                 <label style={labelStyle}>
-                  Province
+                  Province *
                   <input
                     value={profileAddress.provinceState}
                     onChange={(e) => setProfileAddress({ ...profileAddress, provinceState: e.target.value })}
                   />
                 </label>
                 <label style={labelStyle}>
-                  Postal code
+                  Postal code *
                   <input
                     value={profileAddress.postalCode}
                     onChange={(e) => setProfileAddress({ ...profileAddress, postalCode: e.target.value.toUpperCase() })}
@@ -688,18 +727,19 @@ export default function PublicApplyPage() {
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 8 }}>
                 <label style={labelStyle}>
-                  Time at current address (months)
+                  Time at current address (months) *
                   <input
-                    type="number"
+                    inputMode="numeric"
                     value={timeAtAddressMonths}
-                    onChange={(e) => setTimeAtAddressMonths(e.target.value)}
+                    onChange={(e) => setTimeAtAddressMonths(digitsOnly(e.target.value))}
                   />
                 </label>
                 <label style={labelStyle}>
-                  Current rent amount (monthly)
+                  Current rent amount (monthly) *
                   <input
+                    inputMode="decimal"
                     value={currentRentAmount}
-                    onChange={(e) => setCurrentRentAmount(e.target.value)}
+                    onChange={(e) => setCurrentRentAmount(decimalOnly(e.target.value))}
                   />
                 </label>
               </div>
@@ -715,9 +755,9 @@ export default function PublicApplyPage() {
                   <label style={labelStyle}>
                     Duration (months)
                     <input
-                      type="number"
+                      inputMode="numeric"
                       value={entry.durationMonths ?? ""}
-                      onChange={(e) => updateHistory(idx, { durationMonths: e.target.value ? Number(e.target.value) : null })}
+                      onChange={(e) => updateHistory(idx, { durationMonths: e.target.value ? Number(digitsOnly(e.target.value)) : null })}
                     />
                   </label>
                   <label style={labelStyle}>
@@ -735,7 +775,13 @@ export default function PublicApplyPage() {
                   </label>
                   <label style={labelStyle}>
                     Landlord phone
-                    <input value={entry.landlordPhone || ""} onChange={(e) => updateHistory(idx, { landlordPhone: e.target.value })} />
+                    <input
+                      type="tel"
+                      inputMode="tel"
+                      pattern="[0-9]*"
+                      value={entry.landlordPhone || ""}
+                      onChange={(e) => updateHistory(idx, { landlordPhone: digitsOnly(e.target.value) })}
+                    />
                   </label>
                 </div>
                 <label style={labelStyle}>
@@ -759,9 +805,9 @@ export default function PublicApplyPage() {
                 <label style={labelStyle}>
                   Age
                   <input
-                    type="number"
+                    inputMode="numeric"
                     value={entry.age ?? ""}
-                    onChange={(e) => updateResident(idx, { age: e.target.value ? Number(e.target.value) : null })}
+                    onChange={(e) => updateResident(idx, { age: e.target.value ? Number(digitsOnly(e.target.value)) : null })}
                   />
                 </label>
               </div>
@@ -790,11 +836,11 @@ export default function PublicApplyPage() {
                 </select>
               </label>
               <label style={labelStyle}>
-                Employer
+                Employer *
                 <input value={employment.applicant.employer || ""} onChange={(e) => setEmployment({ ...employment, applicant: { ...employment.applicant, employer: e.target.value } })} />
               </label>
               <label style={labelStyle}>
-                Job title
+                Job title *
                 <input value={employment.applicant.jobTitle || ""} onChange={(e) => setEmployment({ ...employment, applicant: { ...employment.applicant, jobTitle: e.target.value } })} />
               </label>
               <label style={labelStyle}>
@@ -803,26 +849,47 @@ export default function PublicApplyPage() {
               </label>
               <label style={labelStyle}>
                 Phone
-                <input value={employment.applicant.phone || ""} onChange={(e) => setEmployment({ ...employment, applicant: { ...employment.applicant, phone: e.target.value } })} />
+                <input
+                  type="tel"
+                  inputMode="tel"
+                  pattern="[0-9]*"
+                  value={employment.applicant.phone || ""}
+                  onChange={(e) =>
+                    setEmployment({
+                      ...employment,
+                      applicant: { ...employment.applicant, phone: digitsOnly(e.target.value) },
+                    })
+                  }
+                />
               </label>
               <label style={labelStyle}>
-                Monthly income
-                <input value={employment.applicant.monthlyIncomeCents ? `${employment.applicant.monthlyIncomeCents / 100}` : ""} onChange={(e) => setEmployment({ ...employment, applicant: { ...employment.applicant, monthlyIncomeCents: parseCents(e.target.value) } })} />
+                Gross income (monthly) *
+                <input
+                  inputMode="decimal"
+                  value={employment.applicant.monthlyIncomeCents ? `${employment.applicant.monthlyIncomeCents / 100}` : ""}
+                  onChange={(e) =>
+                    setEmployment({
+                      ...employment,
+                      applicant: { ...employment.applicant, monthlyIncomeCents: parseCents(decimalOnly(e.target.value)) },
+                    })
+                  }
+                />
               </label>
               <label style={labelStyle}>
-                Income type
-                <select
-                  value={employment.applicant.incomeType || ""}
-                  onChange={(e) => setEmployment({ ...employment, applicant: { ...employment.applicant, incomeType: (e.target.value as any) || null } })}
-                >
-                  <option value="">Select</option>
-                  <option value="NET">Net</option>
-                  <option value="GROSS">Gross</option>
-                </select>
-              </label>
-              <label style={labelStyle}>
-                Length (months)
-                <input type="number" value={employment.applicant.lengthMonths ?? ""} onChange={(e) => setEmployment({ ...employment, applicant: { ...employment.applicant, lengthMonths: e.target.value ? Number(e.target.value) : null } })} />
+                Length (months) *
+                <input
+                  inputMode="numeric"
+                  value={employment.applicant.lengthMonths ?? ""}
+                  onChange={(e) =>
+                    setEmployment({
+                      ...employment,
+                      applicant: {
+                        ...employment.applicant,
+                        lengthMonths: e.target.value ? Number(digitsOnly(e.target.value)) : null,
+                      },
+                    })
+                  }
+                />
               </label>
               <label style={labelStyle}>
                 Employer address
@@ -863,26 +930,50 @@ export default function PublicApplyPage() {
                   </label>
                   <label style={labelStyle}>
                     Phone
-                    <input value={employment.coApplicant?.phone || ""} onChange={(e) => setEmployment({ ...employment, coApplicant: { ...employment.coApplicant, phone: e.target.value } })} />
+                    <input
+                      type="tel"
+                      inputMode="tel"
+                      pattern="[0-9]*"
+                      value={employment.coApplicant?.phone || ""}
+                      onChange={(e) =>
+                        setEmployment({
+                          ...employment,
+                          coApplicant: { ...employment.coApplicant, phone: digitsOnly(e.target.value) },
+                        })
+                      }
+                    />
                   </label>
                   <label style={labelStyle}>
-                    Monthly income
-                    <input value={employment.coApplicant?.monthlyIncomeCents ? `${employment.coApplicant?.monthlyIncomeCents / 100}` : ""} onChange={(e) => setEmployment({ ...employment, coApplicant: { ...employment.coApplicant, monthlyIncomeCents: parseCents(e.target.value) } })} />
-                  </label>
-                  <label style={labelStyle}>
-                    Income type
-                    <select
-                      value={employment.coApplicant?.incomeType || ""}
-                      onChange={(e) => setEmployment({ ...employment, coApplicant: { ...employment.coApplicant, incomeType: (e.target.value as any) || null } })}
-                    >
-                      <option value="">Select</option>
-                      <option value="NET">Net</option>
-                      <option value="GROSS">Gross</option>
-                    </select>
+                    Gross income (monthly)
+                    <input
+                      inputMode="decimal"
+                      value={employment.coApplicant?.monthlyIncomeCents ? `${employment.coApplicant?.monthlyIncomeCents / 100}` : ""}
+                      onChange={(e) =>
+                        setEmployment({
+                          ...employment,
+                          coApplicant: {
+                            ...employment.coApplicant,
+                            monthlyIncomeCents: parseCents(decimalOnly(e.target.value)),
+                          },
+                        })
+                      }
+                    />
                   </label>
                   <label style={labelStyle}>
                     Length (months)
-                    <input type="number" value={employment.coApplicant?.lengthMonths ?? ""} onChange={(e) => setEmployment({ ...employment, coApplicant: { ...employment.coApplicant, lengthMonths: e.target.value ? Number(e.target.value) : null } })} />
+                    <input
+                      inputMode="numeric"
+                      value={employment.coApplicant?.lengthMonths ?? ""}
+                      onChange={(e) =>
+                        setEmployment({
+                          ...employment,
+                          coApplicant: {
+                            ...employment.coApplicant,
+                            lengthMonths: e.target.value ? Number(digitsOnly(e.target.value)) : null,
+                          },
+                        })
+                      }
+                    />
                   </label>
                   <label style={labelStyle}>
                     Employer address
@@ -900,12 +991,18 @@ export default function PublicApplyPage() {
               <div style={{ fontWeight: 600 }}>Work reference *</div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 8 }}>
                 <label style={labelStyle}>
-                  Reference name
+                  Reference name *
                   <input value={workReferenceName} onChange={(e) => setWorkReferenceName(e.target.value)} />
                 </label>
                 <label style={labelStyle}>
-                  Reference phone
-                  <input value={workReferencePhone} onChange={(e) => setWorkReferencePhone(e.target.value)} />
+                  Reference phone *
+                  <input
+                    type="tel"
+                    inputMode="tel"
+                    pattern="[0-9]*"
+                    value={workReferencePhone}
+                    onChange={(e) => setWorkReferencePhone(digitsOnly(e.target.value))}
+                  />
                 </label>
               </div>
             </div>
@@ -933,7 +1030,18 @@ export default function PublicApplyPage() {
               </label>
               <label style={labelStyle}>
                 Phone
-                <input value={references?.applicantPersonal?.phone || ""} onChange={(e) => setReferences({ ...references, applicantPersonal: { ...references?.applicantPersonal, phone: e.target.value } })} />
+                <input
+                  type="tel"
+                  inputMode="tel"
+                  pattern="[0-9]*"
+                  value={references?.applicantPersonal?.phone || ""}
+                  onChange={(e) =>
+                    setReferences({
+                      ...references,
+                      applicantPersonal: { ...references?.applicantPersonal, phone: digitsOnly(e.target.value) },
+                    })
+                  }
+                />
               </label>
               <label style={labelStyle}>
                 Address
@@ -953,7 +1061,18 @@ export default function PublicApplyPage() {
                 </label>
                 <label style={labelStyle}>
                   Phone
-                  <input value={references?.coApplicantPersonal?.phone || ""} onChange={(e) => setReferences({ ...references, coApplicantPersonal: { ...references?.coApplicantPersonal, phone: e.target.value } })} />
+                  <input
+                    type="tel"
+                    inputMode="tel"
+                    pattern="[0-9]*"
+                    value={references?.coApplicantPersonal?.phone || ""}
+                    onChange={(e) =>
+                      setReferences({
+                        ...references,
+                        coApplicantPersonal: { ...references?.coApplicantPersonal, phone: digitsOnly(e.target.value) },
+                      })
+                    }
+                  />
                 </label>
                 <label style={labelStyle}>
                   Address
@@ -975,11 +1094,19 @@ export default function PublicApplyPage() {
                 </label>
                 <label style={labelStyle}>
                   Monthly payment
-                  <input value={entry.monthlyPaymentCents ? `${entry.monthlyPaymentCents / 100}` : ""} onChange={(e) => updateLoan(idx, { monthlyPaymentCents: parseCents(e.target.value) })} />
+                  <input
+                    inputMode="decimal"
+                    value={entry.monthlyPaymentCents ? `${entry.monthlyPaymentCents / 100}` : ""}
+                    onChange={(e) => updateLoan(idx, { monthlyPaymentCents: parseCents(decimalOnly(e.target.value)) })}
+                  />
                 </label>
                 <label style={labelStyle}>
                   Balance
-                  <input value={entry.balanceCents ? `${entry.balanceCents / 100}` : ""} onChange={(e) => updateLoan(idx, { balanceCents: parseCents(e.target.value) })} />
+                  <input
+                    inputMode="decimal"
+                    value={entry.balanceCents ? `${entry.balanceCents / 100}` : ""}
+                    onChange={(e) => updateLoan(idx, { balanceCents: parseCents(decimalOnly(e.target.value)) })}
+                  />
                 </label>
               </div>
             ))}
@@ -1022,7 +1149,13 @@ export default function PublicApplyPage() {
               </label>
               <label style={labelStyle}>
                 Phone
-                <input value={nextOfKin?.phone || ""} onChange={(e) => setNextOfKin({ ...nextOfKin, phone: e.target.value })} />
+                <input
+                  type="tel"
+                  inputMode="tel"
+                  pattern="[0-9]*"
+                  value={nextOfKin?.phone || ""}
+                  onChange={(e) => setNextOfKin({ ...nextOfKin, phone: digitsOnly(e.target.value) })}
+                />
               </label>
               <label style={labelStyle}>
                 Address
@@ -1042,7 +1175,13 @@ export default function PublicApplyPage() {
                 </label>
                 <label style={labelStyle}>
                   Phone
-                  <input value={coNextOfKin?.phone || ""} onChange={(e) => setCoNextOfKin({ ...coNextOfKin, phone: e.target.value })} />
+                  <input
+                    type="tel"
+                    inputMode="tel"
+                    pattern="[0-9]*"
+                    value={coNextOfKin?.phone || ""}
+                    onChange={(e) => setCoNextOfKin({ ...coNextOfKin, phone: digitsOnly(e.target.value) })}
+                  />
                 </label>
                 <label style={labelStyle}>
                   Address
@@ -1070,12 +1209,12 @@ export default function PublicApplyPage() {
             </label>
             <div style={{ display: "grid", gap: 8 }}>
               <label style={labelStyle}>
-                Applicant full name (typed)
+                Applicant full name (typed) *
                 <input value={consent.applicantNameTyped || ""} onChange={(e) => setConsent({ ...consent, applicantNameTyped: e.target.value })} />
               </label>
               {coApplicantEnabled ? (
                 <label style={labelStyle}>
-                  Co-applicant full name (typed)
+                  Co-applicant full name (typed) *
                   <input value={consent.coApplicantNameTyped || ""} onChange={(e) => setConsent({ ...consent, coApplicantNameTyped: e.target.value })} />
                 </label>
               ) : null}
@@ -1083,7 +1222,7 @@ export default function PublicApplyPage() {
             <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: 10, display: "grid", gap: 8 }}>
               <div style={{ fontWeight: 600 }}>Signature *</div>
               <label style={labelStyle}>
-                Type your full name
+                Type your full name *
                 <input value={signatureTypedName} onChange={(e) => setSignatureTypedName(e.target.value)} />
               </label>
               <label style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
