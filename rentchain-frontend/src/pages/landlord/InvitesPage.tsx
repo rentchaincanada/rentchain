@@ -106,10 +106,8 @@ export default function InvitesPage() {
   }, [propertyId]);
 
   const canCreate = useMemo(() => {
-    const selectedUnit = units.find((u) => u.id === unitId);
-    const unitEligible = selectedUnit ? selectedUnit.inviteEligible !== false : true;
-    return !creating && canInvite && propertyId && unitId && tenantEmail && unitEligible;
-  }, [creating, canInvite, propertyId, unitId, tenantEmail, units]);
+    return !creating && canInvite && propertyId && unitId && tenantEmail;
+  }, [creating, canInvite, propertyId, unitId, tenantEmail]);
 
   async function handleCreate() {
     if (!canInvite) {
@@ -117,11 +115,6 @@ export default function InvitesPage() {
       return;
     }
     if (!canCreate) return;
-    const selectedUnit = units.find((u) => u.id === unitId);
-    if (selectedUnit && !selectedUnit.inviteEligible) {
-      setCreateError("Unit must have a signed lease before inviting a tenant.");
-      return;
-    }
     try {
       setCreating(true);
       setCreateError(null);
@@ -156,7 +149,7 @@ export default function InvitesPage() {
           return;
         }
         if (errorCode === "lease_required") {
-          setCreateError("Unit must have a signed lease before inviting a tenant.");
+          setCreateError("You can add a lease later. Invite creation is temporarily unavailable for this unit.");
           return;
         }
         setCreateError("Unable to send invite right now. Please try again.");
@@ -194,7 +187,7 @@ export default function InvitesPage() {
         return;
       }
       if (msg.toLowerCase().includes("lease_required")) {
-        setCreateError("Unit must have a signed lease before inviting a tenant.");
+        setCreateError("You can add a lease later. Invite creation is temporarily unavailable for this unit.");
         return;
       }
       setCreateError("Unable to send invite right now. Please try again.");
@@ -432,9 +425,9 @@ export default function InvitesPage() {
                         : "Select unit"}
                     </option>
                     {units.map((u) => (
-                      <option key={u.id} value={u.id} disabled={!u.inviteEligible}>
+                      <option key={u.id} value={u.id}>
                         {u.label}
-                        {!u.inviteEligible ? " (lease required)" : ""}
+                        {!u.inviteEligible ? " (add lease later)" : ""}
                       </option>
                     ))}
                   </select>
@@ -448,8 +441,13 @@ export default function InvitesPage() {
                   units.length > 0 &&
                   units.every((u) => !u.inviteEligible) ? (
                     <div style={{ fontSize: 12, color: text.muted }}>
-                      Unit must have a signed lease before inviting a tenant.{" "}
-                      <a href="/properties">Create/sign a lease first</a>
+                      You can add a lease later after inviting a tenant.{" "}
+                      <a href="/properties">Manage lease details</a>
+                    </div>
+                  ) : null}
+                  {unitId && units.find((u) => u.id === unitId)?.inviteEligible === false ? (
+                    <div style={{ fontSize: 12, color: text.muted }}>
+                      This unit is missing lease details right now. You can still continue and add the lease later.
                     </div>
                   ) : null}
                 </label>
