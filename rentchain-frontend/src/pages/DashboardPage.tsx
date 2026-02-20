@@ -30,6 +30,7 @@ import { listReferrals } from "../api/referralsApi";
 import { hasTier, normalizeTier } from "@/billing/requireTier";
 import { markDashboardVisit } from "@/features/upgradeNudges/nudgeStore";
 import { GettingStartedCard } from "../components/onboarding/GettingStartedCard";
+import { SCREENING_ENABLED, getUiLocale, screeningComingSoonLabel } from "../config/screening";
 
 const StarterOnboardingPanel = React.lazy(
   () => import("../components/dashboard/StarterOnboardingPanel")
@@ -117,6 +118,8 @@ const DashboardPage: React.FC = () => {
   const userTier = normalizeTier((caps?.plan as string) || user?.plan || null);
   const canUseProFeatures = isAdmin || hasTier(userTier, "pro");
   const canManualScreen = isAdmin || features?.screening_pay_per_use !== false;
+  const uiLocale = getUiLocale();
+  const screeningLabel = screeningComingSoonLabel(uiLocale);
   const canUseReferrals = isLandlord || isAdmin;
   const [properties, setProperties] = React.useState<any[]>([]);
   const [propsLoading, setPropsLoading] = React.useState(false);
@@ -274,7 +277,7 @@ const DashboardPage: React.FC = () => {
   const events = Array.isArray(data?.events) ? data.events : [];
   const fallbackActions = React.useMemo(() => {
     const items: Array<{ id: string; title: string; severity: "info"; href: string }> = [];
-    if (canManualScreen && (kpis.screeningsCount ?? 0) === 0) {
+    if (SCREENING_ENABLED && canManualScreen && (kpis.screeningsCount ?? 0) === 0) {
       items.push({
         id: "run-first-screening",
         title: "Run a manual screening",
@@ -516,13 +519,13 @@ const DashboardPage: React.FC = () => {
                 </Button>
                 <Button
                   variant="primary"
-                  onClick={handleOpenScreeningInvite}
+                  onClick={SCREENING_ENABLED ? handleOpenScreeningInvite : undefined}
                   aria-label="Send screening invite"
-                  disabled={progressLoading}
+                  disabled={progressLoading || !SCREENING_ENABLED}
                 >
-                  Send screening invite
+                  {screeningLabel}
                 </Button>
-                {canManualScreen ? (
+                {SCREENING_ENABLED && canManualScreen ? (
                   <Button
                     variant="secondary"
                     onClick={() => navigate("/screening/manual")}
@@ -639,13 +642,19 @@ const DashboardPage: React.FC = () => {
           </Card>
         ) : null}
 
-        {dataReady && canManualScreen ? (
+        {dataReady ? (
           <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>Manual screening</div>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>Credit screening</div>
             <div style={{ color: text.muted, marginBottom: 12 }}>
-              Run a pay-per-use screening without sending an application link.
+              {SCREENING_ENABLED
+                ? "Run a pay-per-use screening without sending an application link."
+                : screeningLabel}
             </div>
-            <Button onClick={() => navigate("/screening/manual")}>Run Manual Screening</Button>
+            {SCREENING_ENABLED ? (
+              <Button onClick={() => navigate("/screening/manual")}>Run Manual Screening</Button>
+            ) : (
+              <Button disabled>{screeningLabel}</Button>
+            )}
           </Card>
         ) : null}
 
@@ -746,11 +755,13 @@ const DashboardPage: React.FC = () => {
           setPropertyGateOpen(false);
         }}
       />
-      <SendScreeningInviteModal
-        open={screeningInviteOpen}
-        onClose={() => setScreeningInviteOpen(false)}
-        returnTo="/dashboard"
-      />
+      {SCREENING_ENABLED ? (
+        <SendScreeningInviteModal
+          open={screeningInviteOpen}
+          onClose={() => setScreeningInviteOpen(false)}
+          returnTo="/dashboard"
+        />
+      ) : null}
       <SendApplicationModal
         open={sendApplicationOpen}
         onClose={() => setSendApplicationOpen(false)}

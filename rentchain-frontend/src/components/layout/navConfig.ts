@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 import { LayoutDashboard, Building2, Users, ScrollText, MessagesSquare } from "lucide-react";
+import { SCREENING_ENABLED } from "../../config/screening";
 
 export type NavItem = {
   id: string;
@@ -18,6 +19,7 @@ export const getVisibleNavItems = (role?: string | null, features?: Record<strin
   const isAdmin = normalizedRole === "admin";
   const isLandlord = normalizedRole === "landlord";
   return NAV_ITEMS.filter((item) => {
+    if (!SCREENING_ENABLED && item.id === "screening") return false;
     if (item.requiresAdmin && !isAdmin) return false;
     if (item.requiresLandlordOrAdmin && !(isLandlord || isAdmin)) return false;
     if (!isAdmin && item.requiresFeature && features && features[item.requiresFeature] === false) return false;
