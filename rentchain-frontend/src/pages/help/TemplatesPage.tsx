@@ -15,6 +15,7 @@ import { NUDGE_COPY } from "@/features/upgradeNudges/nudgeTypes";
 import { UpgradeNudgeInlineCard } from "@/features/upgradeNudges/UpgradeNudgeInlineCard";
 import { openUpgradeFlow } from "@/billing/openUpgradeFlow";
 import { logTelemetryEvent } from "@/api/telemetryApi";
+import { useLanguage } from "../../context/LanguageContext";
 
 type TemplateFile = {
   label: "PDF" | "DOCX" | "CSV";
@@ -22,6 +23,8 @@ type TemplateFile = {
 };
 
 type TemplateItem = {
+  nameFr?: string;
+  descriptionFr?: string;
   name: string;
   description: string;
   category: "Landlord Templates" | "Tenant Templates";
@@ -80,7 +83,9 @@ const templates: TemplateItem[] = [
   },
   {
     name: "Nova Scotia - Standard Form of Lease (Form P)",
+    nameFr: "Nouvelle-Ecosse - Formulaire de bail standard (Formulaire P)",
     description: "Official Nova Scotia residential lease form resource.",
+    descriptionFr: "Formulaire officiel de bail standard de la Nouvelle-Ecosse pour les locations residentielles.",
     category: "Landlord Templates",
     files: [
       {
@@ -112,6 +117,7 @@ const templates: TemplateItem[] = [
 const TemplatesPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { locale } = useLanguage();
   const billingStatus = useBillingStatus();
   const [query, setQuery] = useState("");
   const [showNudge, setShowNudge] = useState(false);
@@ -152,8 +158,8 @@ const TemplatesPage: React.FC = () => {
   const renderTemplate = (item: TemplateItem) => (
     <Card key={item.name} style={{ display: "flex", flexDirection: "column", gap: spacing.sm }}>
       <div>
-        <div style={{ fontWeight: 700, fontSize: "1rem" }}>{item.name}</div>
-        <div style={{ color: text.muted }}>{item.description}</div>
+        <div style={{ fontWeight: 700, fontSize: "1rem" }}>{locale === "fr" && item.nameFr ? item.nameFr : item.name}</div>
+        <div style={{ color: text.muted }}>{locale === "fr" && item.descriptionFr ? item.descriptionFr : item.description}</div>
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: spacing.xs }}>
         {item.files.map((f) => (

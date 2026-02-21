@@ -9,6 +9,7 @@ import {
 import { colors, spacing, text } from "../../styles/tokens";
 import { useCapabilities } from "../../hooks/useCapabilities";
 import { dispatchUpgradePrompt } from "../../lib/upgradePrompt";
+import { useLanguage } from "../../context/LanguageContext";
 
 function deriveInviteUrl(token: string) {
   const base =
@@ -37,7 +38,29 @@ export default function InvitesPage() {
   const [createdInviteUrl, setCreatedInviteUrl] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
   const { features } = useCapabilities();
+  const { locale } = useLanguage();
   const canInvite = features?.tenant_invites !== false;
+  const copy = useMemo(
+    () =>
+      locale === "fr"
+        ? {
+            leaseUnavailable: "Vous pouvez ajouter le bail plus tard. La creation d'invitation est temporairement indisponible pour cette unite.",
+            addLeaseLaterSuffix: " (ajouter le bail plus tard)",
+            addLeaseLaterHint: "Vous pouvez ajouter un bail plus tard apres avoir invite un locataire.",
+            manageLeaseDetails: "Gerer les details du bail",
+            missingLeaseHint: "Cette unite n'a pas encore de details de bail. Vous pouvez continuer et ajouter le bail plus tard.",
+            postInviteHint: "Vous pouvez ajouter un bail plus tard depuis le profil du locataire.",
+          }
+        : {
+            leaseUnavailable: "You can add a lease later. Invite creation is temporarily unavailable for this unit.",
+            addLeaseLaterSuffix: " (add lease later)",
+            addLeaseLaterHint: "You can add a lease later after inviting a tenant.",
+            manageLeaseDetails: "Manage lease details",
+            missingLeaseHint: "This unit is missing lease details right now. You can still continue and add the lease later.",
+            postInviteHint: "You can add a lease later from the tenant profile.",
+          },
+    [locale]
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -149,7 +172,7 @@ export default function InvitesPage() {
           return;
         }
         if (errorCode === "lease_required") {
-          setCreateError("You can add a lease later. Invite creation is temporarily unavailable for this unit.");
+          setCreateError(copy.leaseUnavailable);
           return;
         }
         setCreateError("Unable to send invite right now. Please try again.");
@@ -187,7 +210,7 @@ export default function InvitesPage() {
         return;
       }
       if (msg.toLowerCase().includes("lease_required")) {
-        setCreateError("You can add a lease later. Invite creation is temporarily unavailable for this unit.");
+        setCreateError(copy.leaseUnavailable);
         return;
       }
       setCreateError("Unable to send invite right now. Please try again.");
@@ -427,7 +450,7 @@ export default function InvitesPage() {
                     {units.map((u) => (
                       <option key={u.id} value={u.id}>
                         {u.label}
-                        {!u.inviteEligible ? " (add lease later)" : ""}
+                        {!u.inviteEligible ? copy.addLeaseLaterSuffix : ""}
                       </option>
                     ))}
                   </select>
@@ -441,13 +464,12 @@ export default function InvitesPage() {
                   units.length > 0 &&
                   units.every((u) => !u.inviteEligible) ? (
                     <div style={{ fontSize: 12, color: text.muted }}>
-                      You can add a lease later after inviting a tenant.{" "}
-                      <a href="/properties">Manage lease details</a>
+                      {copy.addLeaseLaterHint} <a href="/properties">{copy.manageLeaseDetails}</a>
                     </div>
                   ) : null}
                   {unitId && units.find((u) => u.id === unitId)?.inviteEligible === false ? (
                     <div style={{ fontSize: 12, color: text.muted }}>
-                      This unit is missing lease details right now. You can still continue and add the lease later.
+                      {copy.missingLeaseHint}
                     </div>
                   ) : null}
                 </label>
@@ -543,6 +565,7 @@ export default function InvitesPage() {
           }}
         >
           <div style={{ fontWeight: 800, fontSize: 15 }}>Invite created</div>
+          <div style={{ fontSize: 13, color: text.muted }}>{copy.postInviteHint}</div>
           <div
             style={{
               display: "flex",

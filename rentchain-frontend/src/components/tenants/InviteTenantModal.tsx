@@ -255,7 +255,7 @@ export const InviteTenantModal: React.FC<Props> = ({
     }
   }
 
-  async function copy() {
+  async function copyInviteLink() {
     if (!inviteUrl) return;
     await navigator.clipboard.writeText(inviteUrl);
   }
@@ -452,7 +452,7 @@ export const InviteTenantModal: React.FC<Props> = ({
             <div style={{ fontWeight: 700 }}>Invite link</div>
             <div style={{ wordBreak: "break-all", color: "#6b7280" }}>{inviteUrl}</div>
             <div style={{ display: "flex", gap: 8 }}>
-              <Button onClick={copy} style={{ padding: "6px 10px" }}>
+              <Button onClick={copyInviteLink} style={{ padding: "6px 10px" }}>
                 Copy
               </Button>
               <Button
