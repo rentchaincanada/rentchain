@@ -6,6 +6,7 @@ import { fetchUnitsForProperty } from "../../api/unitsApi";
 import { useCapabilities } from "../../hooks/useCapabilities";
 import { dispatchUpgradePrompt } from "../../lib/upgradePrompt";
 import { useAuth } from "../../context/useAuth";
+import { useLanguage } from "../../context/LanguageContext";
 import { useToast } from "../ui/ToastProvider";
 import { Button } from "../ui/Ui";
 
@@ -43,9 +44,31 @@ export const InviteTenantModal: React.FC<Props> = ({
   const [loadingUnits, setLoadingUnits] = useState(false);
   const { features } = useCapabilities();
   const { user } = useAuth();
+  const { locale } = useLanguage();
   const { showToast } = useToast();
   const role = String(user?.role || "").toLowerCase();
   const canInvite = role === "admin" || features?.tenant_invites !== false;
+  const copy = React.useMemo(
+    () =>
+      locale === "fr"
+        ? {
+            leaseUnavailable: "Vous pouvez ajouter le bail plus tard. La creation d'invitation est temporairement indisponible pour cette unite.",
+            addLeaseLaterSuffix: " (ajouter le bail plus tard)",
+            addLeaseLaterHint: "Vous pouvez ajouter un bail plus tard apres avoir invite un locataire.",
+            manageLeaseDetails: "Gerer les details du bail",
+            missingLeaseHint: "Cette unite n'a pas encore de details de bail. Vous pouvez continuer et ajouter le bail plus tard.",
+            postInviteHint: "Vous pouvez ajouter un bail plus tard depuis le profil du locataire.",
+          }
+        : {
+            leaseUnavailable: "You can add a lease later. Invite creation is temporarily unavailable for this unit.",
+            addLeaseLaterSuffix: " (add lease later)",
+            addLeaseLaterHint: "You can add a lease later after inviting a tenant.",
+            manageLeaseDetails: "Manage lease details",
+            missingLeaseHint: "This unit is missing lease details right now. You can still continue and add the lease later.",
+            postInviteHint: "You can add a lease later from the tenant profile.",
+          },
+    [locale]
+  );
 
   React.useEffect(() => {
     if (!open) return;
@@ -173,7 +196,7 @@ export const InviteTenantModal: React.FC<Props> = ({
           return;
         }
         if (errorCode === "lease_required") {
-          setErr("You can add a lease later. Invite creation is temporarily unavailable for this unit.");
+          setErr(copy.leaseUnavailable);
           return;
         }
         setErr("Unable to send invite right now. Please try again.");
@@ -190,6 +213,7 @@ export const InviteTenantModal: React.FC<Props> = ({
         setSuccessMsg("Invite link created (email failed)");
         setInfoMsg(emailError || "Email was not sent. You can copy or open the link below.");
       }
+      setInfoMsg((prev) => (prev ? `${prev} ${copy.postInviteHint}` : copy.postInviteHint));
       await setOnboardingStep("tenantInvited", true).catch(() => {});
       onInviteCreated?.(data);
     } catch (e: any) {
@@ -218,7 +242,7 @@ export const InviteTenantModal: React.FC<Props> = ({
         return;
       }
       if (msg.toLowerCase().includes("lease_required")) {
-        setErr("You can add a lease later. Invite creation is temporarily unavailable for this unit.");
+        setErr(copy.leaseUnavailable);
         return;
       }
       if (msg.includes("INVITE_EMAIL_SEND_FAILED") || msg.includes("SENDGRID")) {
@@ -231,7 +255,7 @@ export const InviteTenantModal: React.FC<Props> = ({
     }
   }
 
-  async function copy() {
+  async function copyInviteLink() {
     if (!inviteUrl) return;
     await navigator.clipboard.writeText(inviteUrl);
   }
@@ -310,7 +334,7 @@ export const InviteTenantModal: React.FC<Props> = ({
             {units.map((u) => (
               <option key={u.id} value={u.id}>
                 {u.label}
-                {!u.inviteEligible ? " (add lease later)" : ""}
+                {!u.inviteEligible ? copy.addLeaseLaterSuffix : ""}
               </option>
             ))}
           </select>
@@ -327,15 +351,15 @@ export const InviteTenantModal: React.FC<Props> = ({
           units.length > 0 &&
           units.every((unit) => !unit.inviteEligible) ? (
             <div style={{ fontSize: 12, color: "#6b7280" }}>
-              You can add a lease later after inviting a tenant.{" "}
+              {copy.addLeaseLaterHint}{" "}
               <a href="/properties" style={{ color: "#2563eb", textDecoration: "underline" }}>
-                Manage lease details
+                {copy.manageLeaseDetails}
               </a>
             </div>
           ) : null}
           {selectedUnitRequiresLease ? (
             <div style={{ fontSize: 12, color: "#6b7280" }}>
-              This unit is missing lease details right now. You can still continue and add the lease later.
+              {copy.missingLeaseHint}
             </div>
           ) : null}
         </div>
@@ -428,7 +452,7 @@ export const InviteTenantModal: React.FC<Props> = ({
             <div style={{ fontWeight: 700 }}>Invite link</div>
             <div style={{ wordBreak: "break-all", color: "#6b7280" }}>{inviteUrl}</div>
             <div style={{ display: "flex", gap: 8 }}>
-              <Button onClick={copy} style={{ padding: "6px 10px" }}>
+              <Button onClick={copyInviteLink} style={{ padding: "6px 10px" }}>
                 Copy
               </Button>
               <Button
