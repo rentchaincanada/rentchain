@@ -9,11 +9,13 @@ import { LedgerTimeline } from "../ledger/LedgerTimeline";
 import { VerifyLedgerButton } from "../ledger/VerifyLedgerButton";
 import { RecordTenantEventModal } from "./RecordTenantEventModal";
 import { CreateNoticeModal } from "./CreateNoticeModal";
+import { LeasePackWizardModal } from "./LeasePackWizardModal";
 import { useToast } from "../ui/ToastProvider";
 import { colors, radius, spacing, text, shadows } from "../../styles/tokens";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { useUpgrade } from "@/context/UpgradeContext";
 import { upgradeStarterButtonStyle } from "../../lib/upgradeButtonStyles";
+import { useAuth } from "@/context/useAuth";
 
 interface TenantDetailPanelProps {
   tenantId: string | null;
@@ -77,6 +79,7 @@ interface LayoutProps {
 
 const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { showToast } = useToast();
   const { features, loading: capsLoading } = useCapabilities();
   const { openUpgrade } = useUpgrade();
@@ -94,6 +97,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
   const [signalsError, setSignalsError] = useState<string | null>(null);
   const [recordOpen, setRecordOpen] = useState(false);
   const [noticeOpen, setNoticeOpen] = useState(false);
+  const [leasePackOpen, setLeasePackOpen] = useState(false);
 
   useEffect(() => {
     cancelledRef.current = false;
@@ -116,7 +120,8 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
   const riskBg = riskBgMap[riskLevel] || riskBgMap.LOW;
   const riskBorder = riskBorderMap[riskLevel] || riskBorderMap.LOW;
 
-  const isLandlord = String(tenant?.role || "").toLowerCase() !== "tenant";
+  const viewerRole = String(user?.actorRole || user?.role || "").toLowerCase();
+  const isLandlord = viewerRole === "landlord" || viewerRole === "admin";
 
   const handleViewInLedger = () => {
     navigate(`/ledger?tenantId=${tenantId}`);
@@ -305,6 +310,25 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
                   }}
                 >
                   <span>Create notice</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLeasePackOpen(true)}
+                  style={{
+                    borderRadius: radius.pill,
+                    border: `1px solid ${colors.border}`,
+                    padding: "6px 10px",
+                    background: colors.panel,
+                    color: text.primary,
+                    fontSize: 12,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    cursor: "pointer",
+                    boxShadow: shadows.sm,
+                  }}
+                >
+                  <span>Create Lease Pack</span>
                 </button>
                 {capsLoading || ledgerEnabled ? (
                   <button
@@ -520,6 +544,13 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
         onCreated={() => {
           setNoticeOpen(false);
         }}
+      />
+      <LeasePackWizardModal
+        open={leasePackOpen}
+        onClose={() => setLeasePackOpen(false)}
+        tenant={tenant}
+        lease={lease}
+        landlordName={String(user?.displayName || user?.name || user?.email || "Landlord")}
       />
     </div>
   );
