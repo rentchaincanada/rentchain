@@ -85,6 +85,12 @@ const formatScreeningStatus = (value?: string | null) => {
   return value.replace(/_/g, " ");
 };
 
+const isRawScreeningStatusKey = (value?: string | null) => {
+  const raw = String(value || "").trim();
+  if (!raw) return false;
+  return /^[a-z0-9_]+$/i.test(raw) && raw.includes("_");
+};
+
 const formatEligibilityReason = (value?: string | null) => {
   if (!value) return null;
   return SCREENING_REASON_LABELS[value] || value;
@@ -194,6 +200,10 @@ const ApplicationsPage: React.FC = () => {
   const screeningSectionRef = React.useRef<HTMLDivElement | null>(null);
   const uiLocale = getUiLocale();
   const screeningComingSoonText = screeningComingSoonLabel(uiLocale);
+  const screeningComingSoonDetailText =
+    uiLocale === "fr"
+      ? "Verification de credit - bientot disponible."
+      : "Credit screening - coming soon.";
   const CONSENT_VERSION = "v1.0";
   const onboarding = useOnboardingState();
   const propertiesCount = propertyRecords.length;
@@ -256,6 +266,15 @@ const ApplicationsPage: React.FC = () => {
     detail?.screeningStatus === "complete";
 
   const isAdmin = String(user?.role || "").toLowerCase() === "admin";
+  const displayScreeningStatus = screeningStatus?.status || detail?.screeningStatus || null;
+  const hideRawScreeningStatus =
+    !SCREENING_ENABLED || isRawScreeningStatusKey(displayScreeningStatus);
+  const detailScreeningStatusText = (() => {
+    const raw = String(detail?.screening?.status || "").trim();
+    if (!raw) return "Status: not requested";
+    if (isRawScreeningStatusKey(raw)) return screeningComingSoonDetailText;
+    return `Status: ${formatScreeningStatus(raw)}`;
+  })();
   const userTier = normalizeTier((caps?.plan as string) || user?.plan || null);
   const canUseProFeatures = isAdmin || hasTier(userTier, "pro");
   const selectedLabel = detail
@@ -1180,6 +1199,11 @@ const ApplicationsPage: React.FC = () => {
                     </div>
                   </div>
                   <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
+                    {!SCREENING_ENABLED ? (
+                      <div style={{ fontSize: 13, color: text.muted }}>
+                        {screeningComingSoonDetailText}
+                      </div>
+                    ) : null}
                     <div
                       style={{
                         display: "inline-flex",
@@ -1198,10 +1222,14 @@ const ApplicationsPage: React.FC = () => {
                       <span style={{ fontWeight: 400, color: text.subtle }}>Soft inquiry (no score impact)</span>
                     </div>
                     <div className="rc-wrap-row">
-                      {screeningBadge ? (
+                      {screeningBadge && !hideRawScreeningStatus ? (
                         <ScreeningStatusBadge label={screeningBadge.label} tone={screeningBadge.tone} />
                       ) : (
-                        <Pill>{formatScreeningStatus(screeningStatus?.status || detail.screeningStatus || null)}</Pill>
+                        <Pill>
+                          {hideRawScreeningStatus
+                            ? screeningComingSoonDetailText
+                            : formatScreeningStatus(displayScreeningStatus)}
+                        </Pill>
                       )}
                       {screeningStatusLoading ? (
                         <span style={{ fontSize: 12, color: text.subtle }}>Refreshing…</span>
@@ -1290,14 +1318,16 @@ const ApplicationsPage: React.FC = () => {
                     </div>
                   ) : null}
                 </div>
-                {!loadingCaps && features?.screening === false ? (
+                {!SCREENING_ENABLED ? (
+                  <div style={{ color: text.muted }}>{screeningComingSoonDetailText}</div>
+                ) : !loadingCaps && features?.screening === false ? (
                   <div style={{ color: text.muted }}>
                     Screening is unavailable on your current plan.
                   </div>
                 ) : (
                   <div style={{ display: "grid", gap: 10 }}>
                     <div style={{ fontSize: 13, color: text.muted }}>
-                      {detail.screening?.status ? `Status: ${detail.screening.status}` : "Status: NOT_REQUESTED"}
+                      {detailScreeningStatusText}
                     </div>
                     {detail.screening?.status === "COMPLETE" && detail.screening.result ? (
                       <div className="rc-applications-screening-grid">
