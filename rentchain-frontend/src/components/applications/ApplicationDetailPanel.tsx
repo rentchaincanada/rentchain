@@ -11,6 +11,7 @@ import { colors, text, radius, shadows, spacing } from "../../styles/tokens";
 import { updateApplicationDetails, updateApplicationReferences } from "@/api/applicationsApi";
 import { useToast } from "../ui/ToastProvider";
 import { ConvertToTenantButton } from "./ConvertToTenantButton";
+import { SCREENING_ENABLED } from "../../config/screening";
 
 type ApplicationDetailPanelProps = {
   application: Application | null;
@@ -44,6 +45,25 @@ const statusLabel: Record<ApplicationStatus, string> = {
   approved: "Approved",
   rejected: "Rejected",
 };
+
+const SCREENING_STATUS_LABELS: Record<string, string> = {
+  complete: "Completed",
+  completed: "Completed",
+  paid: "Paid",
+  processing: "Processing",
+  in_progress: "Processing",
+  pending: "Pending",
+  failed: "Unable to complete",
+  not_requested: "Not requested",
+};
+
+function formatScreeningState(value?: string | null): string {
+  const key = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (!key) return "Not requested";
+  return SCREENING_STATUS_LABELS[key] || "Pending";
+}
 
 export const ApplicationDetailPanel: React.FC<ApplicationDetailPanelProps> = ({
   application,
@@ -1121,8 +1141,33 @@ export const ApplicationDetailPanel: React.FC<ApplicationDetailPanelProps> = ({
         )}
       </div>
 
-      {/* AI Screening Summary */}
-      {canUseAiScreening ? (
+      {/* Screening */}
+      {!SCREENING_ENABLED ? (
+        <div
+          style={{
+            marginTop: 12,
+            borderRadius: 14,
+            padding: 12,
+            background: colors.panel,
+            border: `1px solid ${colors.border}`,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 12,
+              textTransform: "uppercase",
+              letterSpacing: 0.08,
+              color: text.muted,
+              marginBottom: 6,
+            }}
+          >
+            Screening
+          </div>
+          <div style={{ fontSize: 13, color: text.primary }}>
+            Credit screening — coming soon
+          </div>
+        </div>
+      ) : canUseAiScreening ? (
         <div
           style={{
             marginTop: 12,
@@ -1151,8 +1196,11 @@ export const ApplicationDetailPanel: React.FC<ApplicationDetailPanelProps> = ({
                 color: text.subtle,
               }}
             >
-              Draft signals â€“ verify before deciding
+              Summary for application review
             </span>
+          </div>
+          <div style={{ fontSize: 12, color: text.subtle, marginBottom: 6 }}>
+            Status: {formatScreeningState((application as any)?.screeningStatus)}
           </div>
 
           {screeningInsights.length === 0 ? (
