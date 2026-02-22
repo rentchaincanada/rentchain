@@ -57,8 +57,10 @@ export const InviteTenantModal: React.FC<Props> = ({
             addLeaseLaterHint: "Vous pouvez ajouter un bail plus tard apres avoir invite un locataire.",
             managePropertyDetails: "Gerer les details de la propriete",
             missingLeaseHint: "Cette unite n'a pas encore de details de bail. Vous pouvez continuer et ajouter le bail plus tard.",
-            createLeasePackCta: "Creer un dossier de bail (profil du locataire)",
-            postInviteHint: "Vous pouvez creer un dossier de bail depuis le profil du locataire.",
+            createLeasePackHint:
+              "Vous pouvez creer un dossier de bail depuis le profil du locataire apres que le locataire accepte l'invitation.",
+            postInviteHint:
+              "Vous pouvez creer un dossier de bail depuis le profil du locataire apres que le locataire accepte l'invitation.",
           }
         : {
             leaseUnavailable: "You can add a lease later. Invite creation is temporarily unavailable for this unit.",
@@ -66,8 +68,10 @@ export const InviteTenantModal: React.FC<Props> = ({
             addLeaseLaterHint: "You can add a lease later after inviting a tenant.",
             managePropertyDetails: "Manage property details",
             missingLeaseHint: "This unit is missing lease details right now. You can still continue and add the lease later.",
-            createLeasePackCta: "Create lease pack (tenant profile)",
-            postInviteHint: "You can create a lease pack from the tenant profile.",
+            createLeasePackHint:
+              "You can create a lease pack from the tenant profile after the tenant accepts the invite.",
+            postInviteHint:
+              "You can create a lease pack from the tenant profile after the tenant accepts the invite.",
           },
     [locale]
   );
@@ -366,9 +370,7 @@ export const InviteTenantModal: React.FC<Props> = ({
           ) : null}
           {selectedUnitRequiresLease ? (
             <div style={{ fontSize: 12, color: "#6b7280" }}>
-              <a href="/tenants" style={{ color: "#2563eb", textDecoration: "underline" }}>
-                {copy.createLeasePackCta}
-              </a>
+              {copy.createLeasePackHint}
             </div>
           ) : null}
         </div>
