@@ -25,7 +25,6 @@ export const InviteTenantModal: React.FC<Props> = ({
   onInviteCreated,
   defaultPropertyId,
   defaultUnitId,
-  defaultLeaseId,
 }) => {
   const [tenantEmail, setTenantEmail] = useState("");
   const [tenantName, setTenantName] = useState("");
@@ -164,12 +163,16 @@ export const InviteTenantModal: React.FC<Props> = ({
         setErr("Please select a property and unit before sending an invite.");
         return;
       }
+      const normalizedEmail = String(tenantEmail || "").trim().toLowerCase();
+      if (!normalizedEmail || !normalizedEmail.includes("@")) {
+        setErr("Please enter a valid tenant email.");
+        return;
+      }
       const data: any = await createTenantInvite({
-        tenantEmail,
+        tenantEmail: normalizedEmail,
         tenantName: tenantName || undefined,
         propertyId,
         unitId,
-        leaseId: defaultLeaseId || null,
       });
 
       if (!data?.ok) {
@@ -198,7 +201,7 @@ export const InviteTenantModal: React.FC<Props> = ({
           return;
         }
         if (errorCode === "lease_required") {
-          setErr(copy.leaseUnavailable);
+          setInfoMsg(copy.postInviteHint);
           return;
         }
         setErr("Unable to send invite right now. Please try again.");
@@ -244,7 +247,7 @@ export const InviteTenantModal: React.FC<Props> = ({
         return;
       }
       if (msg.toLowerCase().includes("lease_required")) {
-        setErr(copy.leaseUnavailable);
+        setInfoMsg(copy.postInviteHint);
         return;
       }
       if (msg.includes("INVITE_EMAIL_SEND_FAILED") || msg.includes("SENDGRID")) {
