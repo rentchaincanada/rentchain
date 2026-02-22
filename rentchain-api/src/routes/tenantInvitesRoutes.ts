@@ -12,56 +12,23 @@ import { requireCapability } from "../services/capabilityGuard";
 
 const router = Router();
 
-function normalizeStatus(value: any): string {
-  return String(value || "").trim().toLowerCase();
-}
-
-function leaseIndicatesSigned(status: any): boolean {
-  const normalized = normalizeStatus(status);
-  return normalized === "signed" || normalized === "active" || normalized === "current";
-}
-
 async function loadEligibleUnit(opts: {
   landlordId: string;
   propertyId: string;
   unitId: string;
-}): Promise<{ found: boolean; eligible: boolean }> {
+}): Promise<{ found: boolean }> {
   const unitSnap = await db.collection("units").doc(opts.unitId).get();
-  if (!unitSnap.exists) return { found: false, eligible: false };
+  if (!unitSnap.exists) return { found: false };
 
   const unit = unitSnap.data() as any;
   if (
     String(unit?.landlordId || "") !== opts.landlordId ||
     String(unit?.propertyId || "") !== opts.propertyId
   ) {
-    return { found: false, eligible: false };
+    return { found: false };
   }
 
-  const occupancyStatus = normalizeStatus(unit?.occupancyStatus || unit?.status);
-  if (occupancyStatus === "occupied") {
-    return { found: true, eligible: true };
-  }
-
-  const leasesSnap = await db
-    .collection("leases")
-    .where("landlordId", "==", opts.landlordId)
-    .limit(400)
-    .get();
-
-  const unitNumber = String(unit?.unitNumber || unit?.label || "").trim();
-  const hasSignedLease = leasesSnap.docs.some((doc) => {
-    const lease = doc.data() as any;
-    const leaseUnitId = String(lease?.unitId || "").trim();
-    const leaseUnitNumber = String(lease?.unitNumber || lease?.unit || "").trim();
-    const leasePropertyId = String(lease?.propertyId || "").trim();
-    return (
-      leasePropertyId === opts.propertyId &&
-      leaseIndicatesSigned(lease?.status) &&
-      (leaseUnitId === opts.unitId || (unitNumber && leaseUnitNumber === unitNumber))
-    );
-  });
-
-  return { found: true, eligible: hasSignedLease };
+  return { found: true };
 }
 
 function signTenantJwt(payload: any) {
@@ -109,9 +76,6 @@ router.post(
       });
       if (!unitEligibility.found) {
         return res.status(400).json({ ok: false, error: "unit_required" });
-      }
-      if (!unitEligibility.eligible) {
-        return res.status(400).json({ ok: false, error: "lease_required" });
       }
       try {
         await db.collection("units").doc(String(unitId)).set(
