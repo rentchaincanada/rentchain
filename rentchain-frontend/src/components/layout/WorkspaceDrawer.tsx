@@ -37,7 +37,6 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
     if (!open) return;
     const scrollY = window.scrollY;
     const bodyStyle = document.body.style;
-    const htmlStyle = document.documentElement.style;
     const previous = {
       position: bodyStyle.position,
       top: bodyStyle.top,
@@ -45,9 +44,6 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
       right: bodyStyle.right,
       width: bodyStyle.width,
       overflow: bodyStyle.overflow,
-      htmlOverflow: htmlStyle.overflow,
-      htmlOverscrollBehavior: htmlStyle.overscrollBehavior,
-      htmlTouchAction: htmlStyle.touchAction,
     };
     bodyStyle.position = "fixed";
     bodyStyle.top = `-${scrollY}px`;
@@ -55,9 +51,6 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
     bodyStyle.right = "0";
     bodyStyle.width = "100%";
     bodyStyle.overflow = "hidden";
-    htmlStyle.overflow = "hidden";
-    htmlStyle.overscrollBehavior = "none";
-    htmlStyle.touchAction = "none";
     return () => {
       bodyStyle.position = previous.position;
       bodyStyle.top = previous.top;
@@ -65,9 +58,6 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
       bodyStyle.right = previous.right;
       bodyStyle.width = previous.width;
       bodyStyle.overflow = previous.overflow;
-      htmlStyle.overflow = previous.htmlOverflow;
-      htmlStyle.overscrollBehavior = previous.htmlOverscrollBehavior;
-      htmlStyle.touchAction = previous.htmlTouchAction;
       window.scrollTo(0, scrollY);
     };
   }, [open]);
@@ -104,7 +94,6 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
 
   return (
     <div
-      onTouchMove={(event) => event.preventDefault()}
       style={{
         position: "fixed",
         inset: 0,
@@ -114,17 +103,18 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
         alignItems: "flex-start",
         overscrollBehavior: "none",
         touchAction: "none",
+        pointerEvents: "auto",
       }}
     >
       <div
         onClick={onClose}
-        onTouchMove={(event) => event.preventDefault()}
         style={{
           position: "absolute",
           inset: 0,
           background: "rgba(0,0,0,0.35)",
           touchAction: "none",
           overscrollBehavior: "none",
+          pointerEvents: "auto",
         }}
       />
       <div
@@ -144,9 +134,11 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
           overflow: "hidden",
           overscrollBehaviorY: "contain",
           contain: "layout paint size",
+          isolation: "isolate",
           WebkitOverflowScrolling: "touch",
           paddingTop: "env(safe-area-inset-top)",
           paddingBottom: "env(safe-area-inset-bottom, 0px)",
+          pointerEvents: "auto",
         }}
       >
         <div
