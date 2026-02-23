@@ -16,6 +16,8 @@ import { UpgradeNudgeInlineCard } from "@/features/upgradeNudges/UpgradeNudgeInl
 import { openUpgradeFlow } from "@/billing/openUpgradeFlow";
 import { logTelemetryEvent } from "@/api/telemetryApi";
 import { useLanguage } from "../../context/LanguageContext";
+import { listProvinceLeasePacks } from "@/lib/leasePackCatalog";
+import { provinceLabelFromCode } from "@/lib/provinces";
 
 type TemplateFile = {
   label: "PDF" | "DOCX" | "CSV";
@@ -31,7 +33,11 @@ type TemplateItem = {
   files: TemplateFile[];
 };
 
-const templateUrl = (fileName: string) => (fileName.startsWith("http") ? fileName : `/templates/${fileName}`);
+const templateUrl = (fileName: string) => {
+  if (fileName.startsWith("http")) return fileName;
+  if (fileName.startsWith("/")) return fileName;
+  return `/templates/${fileName}`;
+};
 
 const templates: TemplateItem[] = [
   {
@@ -121,6 +127,7 @@ const TemplatesPage: React.FC = () => {
   const billingStatus = useBillingStatus();
   const [query, setQuery] = useState("");
   const [showNudge, setShowNudge] = useState(false);
+  const provincePacks = useMemo(() => listProvinceLeasePacks(), []);
 
   React.useEffect(() => {
     document.title = "Templates — RentChain";
@@ -224,6 +231,57 @@ const TemplatesPage: React.FC = () => {
         {filtered.length === 0 ? (
           <div style={{ color: text.muted }}>No templates match your search.</div>
         ) : null}
+
+        <div style={{ display: "flex", flexDirection: "column", gap: spacing.md }}>
+          <h2 style={{ margin: 0 }}>Province Lease Packs</h2>
+          <div style={{ display: "grid", gap: spacing.md, gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))" }}>
+            {provincePacks.map((pack) => (
+              <Card key={pack.version} style={{ display: "grid", gap: spacing.sm }}>
+                <div>
+                  <div style={{ fontWeight: 700 }}>{pack.title}</div>
+                  <div style={{ color: text.muted, fontSize: "0.9rem" }}>
+                    Province: {provinceLabelFromCode(pack.province)} · Version: {pack.version}
+                  </div>
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: spacing.xs }}>
+                  <a
+                    href={templateUrl(pack.bundleUrl)}
+                    download
+                    style={{
+                      border: "1px solid rgba(15,23,42,0.12)",
+                      borderRadius: 999,
+                      padding: "4px 10px",
+                      fontSize: "0.8rem",
+                      color: text.secondary,
+                      textDecoration: "none",
+                    }}
+                  >
+                    Bundle ZIP
+                  </a>
+                  {pack.contents.map((doc) => (
+                    <a
+                      key={doc.id}
+                      href={templateUrl(doc.url)}
+                      download={doc.url.startsWith("http") ? undefined : true}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        border: "1px solid rgba(15,23,42,0.12)",
+                        borderRadius: 999,
+                        padding: "4px 10px",
+                        fontSize: "0.8rem",
+                        color: text.secondary,
+                        textDecoration: "none",
+                      }}
+                    >
+                      {doc.name} ({doc.format})
+                    </a>
+                  ))}
+                </div>
+              </Card>
+            ))}
+          </div>
+        </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: spacing.md }}>
           <h2 style={{ margin: 0 }}>Landlord Templates</h2>

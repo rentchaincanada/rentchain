@@ -491,6 +491,14 @@ const DashboardPage: React.FC = () => {
                 </Button>
                 <Button
                   variant="secondary"
+                  onClick={() => navigate("/properties?openLeasePack=1")}
+                  aria-label="Generate lease pack"
+                  disabled={progressLoading}
+                >
+                  Generate Lease Pack
+                </Button>
+                <Button
+                  variant="secondary"
                   onClick={handleCreateApplicationClick}
                   aria-label="Send application link"
                   disabled={progressLoading}

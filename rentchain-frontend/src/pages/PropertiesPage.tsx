@@ -27,6 +27,7 @@ import { addUnitsManual, type UnitInput } from "../api/unitsApi";
 import { useToast } from "../components/ui/ToastProvider";
 import { unitsForProperty } from "../lib/propertyCounts";
 import { PropertySelector } from "../components/properties/PropertySelector";
+import { LeasePackGeneratorModal } from "../components/leases/LeasePackGeneratorModal";
 import "../styles/propertiesMobile.css";
 import "./PropertiesPage.css";
 import { track } from "../lib/analytics";
@@ -59,6 +60,8 @@ const PropertiesPage: React.FC = () => {
   const navigate = useNavigate();
   const [actionCounts, setActionCounts] = useState<Record<string, number>>({});
   const [actionCenterOpen, setActionCenterOpen] = useState(false);
+  const [leasePackOpen, setLeasePackOpen] = useState(false);
+  const [leasePackInitialPropertyId, setLeasePackInitialPropertyId] = useState<string | null>(null);
   const { showToast } = useToast();
   const currentProperties = properties?.length ?? 0;
   const unitsUsed = useMemo(
@@ -92,11 +95,12 @@ const PropertiesPage: React.FC = () => {
   const openEditUnits = params.get("openEditUnits") === "1";
   const openEditProperty = params.get("openEditProperty") === "1";
   const openSendApplication = params.get("openSendApplication") === "1";
+  const openLeasePack = params.get("openLeasePack") === "1";
   const deepLinkId = params.get("actionRequestId") || undefined;
   const panel = params.get("panel") || "";
 
   useEffect(() => {
-    if (!(openAddLease || openAddUnit || openEditUnits || openEditProperty || openSendApplication)) return;
+    if (!(openAddLease || openAddUnit || openEditUnits || openEditProperty || openSendApplication || openLeasePack)) return;
 
     const next = new URLSearchParams(location.search);
     next.delete("openAddLease");
@@ -104,6 +108,7 @@ const PropertiesPage: React.FC = () => {
     next.delete("openEditUnits");
     next.delete("openEditProperty");
     next.delete("openSendApplication");
+    next.delete("openLeasePack");
 
     navigate(
       { pathname: location.pathname, search: next.toString() },
@@ -115,10 +120,17 @@ const PropertiesPage: React.FC = () => {
     openEditUnits,
     openEditProperty,
     openSendApplication,
+    openLeasePack,
     location.pathname,
     location.search,
     navigate,
   ]);
+
+  useEffect(() => {
+    if (!openLeasePack) return;
+    setLeasePackInitialPropertyId(selectedPropertyId || null);
+    setLeasePackOpen(true);
+  }, [openLeasePack, selectedPropertyId]);
 
   useEffect(() => {
     if (panel !== "actionRequests") return;
@@ -716,6 +728,10 @@ const PropertiesPage: React.FC = () => {
               <PropertyDetailPanel
                 property={selectedProperty}
                 onRefresh={loadProperties}
+                onOpenLeasePack={() => {
+                  setLeasePackInitialPropertyId(selectedProperty?.id || null);
+                  setLeasePackOpen(true);
+                }}
                 openSendApplication={openSendApplication}
                 highlightUnitId={unitIdFromUrl || null}
                 onSendApplicationOpened={() => {
@@ -904,6 +920,12 @@ const PropertiesPage: React.FC = () => {
         setUnits={setDraftUnits}
         onSave={handleSaveUnits}
         saving={savingUnits}
+      />
+      <LeasePackGeneratorModal
+        open={leasePackOpen}
+        onClose={() => setLeasePackOpen(false)}
+        properties={properties}
+        initialPropertyId={leasePackInitialPropertyId}
       />
     </MacShell>
   );

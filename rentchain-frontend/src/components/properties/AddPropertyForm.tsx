@@ -8,6 +8,7 @@ import {
 import { colors, radius, text } from "../../styles/tokens";
 import { setOnboardingStep } from "../../api/onboardingApi";
 import { useToast } from "@/components/ui/ToastProvider";
+import { PROVINCE_OPTIONS } from "@/lib/provinces";
 import "../../styles/propertiesMobile.css";
 
 interface AddPropertyFormProps {
@@ -42,7 +43,7 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
   const [addressLine1, setAddressLine1] = useState("");
   const [addressLine2, setAddressLine2] = useState("");
   const [city, setCity] = useState("");
-  const [province, setProvince] = useState("");
+  const [province, setProvince] = useState("UNSET");
   const [postalCode, setPostalCode] = useState("");
   const [country, setCountry] = useState("Canada");
   const [totalUnits, setTotalUnits] = useState<number | "">("");
@@ -222,7 +223,7 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
       addressLine1: addressLine1.trim(),
       addressLine2: addressLine2.trim() || undefined,
       city: city.trim(),
-      province: province.trim() || undefined,
+      province: province.trim() || "UNSET",
       postalCode: postalCode.trim() || undefined,
       country: country.trim() || undefined,
       totalUnits: totalUnitCount,
@@ -254,7 +255,7 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
       setAddressLine1("");
       setAddressLine2("");
       setCity("");
-      setProvince("");
+      setProvince("UNSET");
       setPostalCode("");
       setCountry("Canada");
       setTotalUnits("");
@@ -355,14 +356,19 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
         </div>
         <div>
           <label style={{ display: "block", fontSize: "0.8rem", marginBottom: 4 }}>
-            Province / State
+            Province
           </label>
-          <input
-            type="text"
+          <select
             value={province}
             onChange={(e) => setProvince(e.target.value)}
             style={{ width: "100%", padding: 8, borderRadius: 8, border: "1px solid #374151" }}
-          />
+          >
+            {PROVINCE_OPTIONS.map((option) => (
+              <option key={option.code} value={option.code}>
+                {option.label}
+              </option>
+            ))}
+          </select>
         </div>
         <div>
           <label style={{ display: "block", fontSize: "0.8rem", marginBottom: 4 }}>

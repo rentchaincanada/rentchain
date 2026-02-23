@@ -2,6 +2,7 @@
 import { Router } from "express";
 import { requireCapability } from "../entitlements/entitlements.middleware";
 import { db, FieldValue } from "../config/firebase";
+import { normalizeProvince } from "../lib/province";
 
 const router = Router();
 
@@ -161,20 +162,27 @@ router.post(
       req.body?.address2
     );
     const resolvedCity = firstString(city, addressObj?.city);
-    const resolvedProvince = firstString(province, addressObj?.province, addressObj?.state);
+    const resolvedProvinceRaw = firstString(province, addressObj?.province, addressObj?.state);
+    const resolvedProvince = normalizeProvince(resolvedProvinceRaw);
     const resolvedPostalCode = firstString(postalCode, addressObj?.postalCode, addressObj?.zip);
     const resolvedCountry = firstString(country, addressObj?.country) || "Canada";
     const createdAt = new Date().toISOString();
     const addressKey = makeAddressKeyFromParts(
       resolvedAddressLine1,
       resolvedCity,
-      resolvedProvince,
+      resolvedProvince || "",
       resolvedPostalCode
     );
     if (!resolvedAddressLine1) {
       return res.status(400).json({
         error: "missing_address",
         message: "addressLine1 is required to create a property.",
+      });
+    }
+    if (!resolvedProvince) {
+      return res.status(400).json({
+        error: "invalid_province",
+        message: "province must be a supported Canadian province code.",
       });
     }
 

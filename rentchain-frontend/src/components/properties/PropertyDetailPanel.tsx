@@ -30,6 +30,7 @@ interface PropertyDetailPanelProps {
   openSendApplication?: boolean;
   onSendApplicationOpened?: () => void;
   highlightUnitId?: string | null;
+  onOpenLeasePack?: () => void;
 }
 
 import { safeLocaleNumber } from "@/utils/format";
@@ -52,6 +53,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   openSendApplication = false,
   onSendApplicationOpened,
   highlightUnitId = null,
+  onOpenLeasePack,
 }) => {
   const propertyId = property?.id;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -471,6 +473,21 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             </div>
           </div>
           <div className="rc-units-actions" style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={() => onOpenLeasePack?.()}
+              className="rc-units-action"
+              style={{
+                padding: "6px 10px",
+                borderRadius: 10,
+                border: "1px solid rgba(15,23,42,0.12)",
+                background: "#fff",
+                color: "#111827",
+                cursor: "pointer",
+              }}
+            >
+              Lease Pack
+            </button>
             <button
               type="button"
               title="Edit property (coming soon)"

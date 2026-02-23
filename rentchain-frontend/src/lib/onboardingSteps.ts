@@ -104,5 +104,16 @@ export function buildOnboardingSteps({
         navigate(url);
       },
     },
+    {
+      key: "leasePackGenerated",
+      title: "Generate lease pack",
+      description: "Choose a property and download a province lease pack bundle or individual docs.",
+      isComplete: !!onboarding.steps.leasePackGenerated,
+      actionLabel: "Generate Lease Pack",
+      onAction: () => {
+        track("onboarding_step_clicked", { stepKey: "leasePackGenerated" });
+        navigate("/properties?openLeasePack=1");
+      },
+    },
   ];
 }
