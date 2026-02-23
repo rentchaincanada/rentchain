@@ -96,6 +96,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
           maxWidth: "90vw",
           height: panelHeight,
           maxHeight: panelHeight,
+          minHeight: 0,
           background: colors.card,
           borderLeft: `1px solid ${colors.border}`,
           boxShadow: shadows.lg,
@@ -144,10 +145,10 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
             overflowY: "auto",
             WebkitOverflowScrolling: "touch",
             overscrollBehavior: "contain",
+            touchAction: "pan-y",
             padding: `0 ${spacing.lg}`,
             minHeight: 0,
             maxHeight: "100%",
-            paddingBottom: "calc(16px + env(safe-area-inset-bottom, 0px))",
           }}
         >
           <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.02em", color: text.muted, marginBottom: spacing.sm }}>Pages</div>
@@ -215,6 +216,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
               );
             })}
           </div>
+          <div aria-hidden style={{ height: "calc(84px + env(safe-area-inset-bottom, 0px))" }} />
         </div>
         <div
           style={{
