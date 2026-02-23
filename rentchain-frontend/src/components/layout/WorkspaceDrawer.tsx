@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { colors, radius, spacing, text, shadows } from "../../styles/tokens";
 import { getVisibleNavItems } from "./navConfig";
 import { useCapabilities } from "@/hooks/useCapabilities";
+import { useIsMobile } from "@/hooks/useIsMobile";
 
 type WorkspaceDrawerProps = {
   open: boolean;
@@ -16,22 +17,12 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
   const navigate = useNavigate();
   const location = useLocation();
   const { features, loading: capsLoading } = useCapabilities();
-  const [viewportHeight, setViewportHeight] = useState<number>(() =>
-    typeof window === "undefined" ? 0 : window.innerHeight
-  );
+  const isMobile = useIsMobile("(max-width: 1024px)");
   const navLoading = !userRole || capsLoading;
   const visibleItems = navLoading ? [] : getVisibleNavItems(userRole, features);
   const drawerItems = visibleItems.filter((item) => item.showInDrawer !== false);
   const primaryDrawerItems = drawerItems.filter((item) => !item.requiresAdmin);
   const adminDrawerItems = drawerItems.filter((item) => item.requiresAdmin);
-  const mobileBottomTabsReserve = 84;
-  const panelHeight = useMemo(
-    () =>
-      viewportHeight > 0
-        ? `calc(${viewportHeight}px - ${mobileBottomTabsReserve}px - env(safe-area-inset-bottom, 0px))`
-        : `calc(100dvh - ${mobileBottomTabsReserve}px - env(safe-area-inset-bottom, 0px))`,
-    [mobileBottomTabsReserve, viewportHeight]
-  );
 
   useEffect(() => {
     if (!open) return;
@@ -41,18 +32,6 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [open, onClose]);
-
-  useEffect(() => {
-    if (!open) return;
-    const resize = () => setViewportHeight(window.innerHeight);
-    resize();
-    window.addEventListener("resize", resize);
-    window.addEventListener("orientationchange", resize);
-    return () => {
-      window.removeEventListener("resize", resize);
-      window.removeEventListener("orientationchange", resize);
-    };
-  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -70,17 +49,40 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
     onClose();
   };
 
+  const footerContent = (
+    <>
+      {onSignOut ? (
+        <button
+          type="button"
+          onClick={onSignOut}
+          style={{
+            borderRadius: radius.md,
+            border: `1px solid ${colors.border}`,
+            background: colors.panel,
+            padding: "8px 12px",
+            cursor: "pointer",
+            fontWeight: 700,
+            textAlign: "left",
+          }}
+        >
+          Sign out
+        </button>
+      ) : null}
+      {userEmail ? <div style={{ fontSize: 12, color: text.muted }}>{userEmail}</div> : null}
+    </>
+  );
+
   return (
     <div
-        style={{
-          position: "fixed",
-          inset: 0,
-          zIndex: 3000,
-          display: "flex",
-          justifyContent: "flex-end",
-          alignItems: "flex-start",
-        }}
-      >
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 3000,
+        display: "flex",
+        justifyContent: "flex-end",
+        alignItems: "flex-start",
+      }}
+    >
       <div
         onClick={onClose}
         style={{
@@ -94,8 +96,8 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
           position: "relative",
           width: 320,
           maxWidth: "90vw",
-          height: panelHeight,
-          maxHeight: panelHeight,
+          height: "100dvh",
+          maxHeight: "100dvh",
           minHeight: 0,
           background: colors.card,
           borderLeft: `1px solid ${colors.border}`,
@@ -216,37 +218,35 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
               );
             })}
           </div>
-          <div aria-hidden style={{ height: "calc(84px + env(safe-area-inset-bottom, 0px))" }} />
-        </div>
-        <div
-          style={{
-            flex: "0 0 auto",
-            background: colors.card,
-            borderTop: `1px solid ${colors.border}`,
-            padding: `${spacing.sm} ${spacing.lg} calc(${spacing.sm} + env(safe-area-inset-bottom))`,
-            display: "grid",
-            gap: 8,
-          }}
-        >
-          {onSignOut ? (
-            <button
-              type="button"
-              onClick={onSignOut}
+          {isMobile ? (
+            <div
               style={{
-                borderRadius: radius.md,
-                border: `1px solid ${colors.border}`,
-                background: colors.panel,
-                padding: "8px 12px",
-                cursor: "pointer",
-                fontWeight: 700,
-                textAlign: "left",
+                marginTop: spacing.md,
+                borderTop: `1px solid ${colors.border}`,
+                paddingTop: spacing.sm,
+                display: "grid",
+                gap: 8,
               }}
             >
-              Sign out
-            </button>
+              {footerContent}
+            </div>
           ) : null}
-          {userEmail ? <div style={{ fontSize: 12, color: text.muted }}>{userEmail}</div> : null}
+          <div aria-hidden style={{ height: "calc(84px + env(safe-area-inset-bottom, 0px))" }} />
         </div>
+        {!isMobile ? (
+          <div
+            style={{
+              flex: "0 0 auto",
+              background: colors.card,
+              borderTop: `1px solid ${colors.border}`,
+              padding: `${spacing.sm} ${spacing.lg} calc(${spacing.sm} + env(safe-area-inset-bottom))`,
+              display: "grid",
+              gap: 8,
+            }}
+          >
+            {footerContent}
+          </div>
+        ) : null}
       </div>
     </div>
   );
