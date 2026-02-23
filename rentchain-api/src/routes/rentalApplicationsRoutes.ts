@@ -1928,6 +1928,18 @@ router.get("/rental-applications/:id/review-summary.pdf", async (req: any, res) 
     }
     const summary = buildReviewSummary(id, access.data);
     const pdfBuffer = await buildReviewSummaryPdf(summary);
+    const bucket = String(process.env.GCS_UPLOAD_BUCKET || "").trim();
+
+    if (!bucket) {
+      console.warn("[review_summary_pdf] GCS_UPLOAD_BUCKET missing; returning inline PDF", {
+        correlationId,
+        rentalApplicationId: id || null,
+      });
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", 'inline; filename="review-summary.pdf"');
+      return res.status(200).send(pdfBuffer);
+    }
+
     const timestamp = Date.now();
     const objectKey = `review-summaries/${id}/application-review-summary-${timestamp}.pdf`;
     const uploaded = await putPdfObject({
