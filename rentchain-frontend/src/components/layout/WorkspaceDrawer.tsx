@@ -17,7 +17,6 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
   const location = useLocation();
   const { features, loading: capsLoading } = useCapabilities();
   const headerHeightPx = 80;
-  const footerHeightPx = 92;
   const navLoading = !userRole || capsLoading;
   const visibleItems = navLoading ? [] : getVisibleNavItems(userRole, features);
   const drawerItems = visibleItems.filter((item) => item.showInDrawer !== false);
@@ -64,6 +63,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
           width: 320,
           maxWidth: "90vw",
           height: "100dvh",
+          minHeight: "100vh",
           maxHeight: "100dvh",
           background: colors.card,
           borderLeft: `1px solid ${colors.border}`,
@@ -74,6 +74,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
           overflow: "hidden",
           WebkitOverflowScrolling: "touch",
           paddingTop: "env(safe-area-inset-top)",
+          paddingBottom: "env(safe-area-inset-bottom, 0px)",
         }}
       >
         <div
@@ -83,6 +84,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
             alignItems: "center",
             position: "sticky",
             top: 0,
+            flex: "0 0 auto",
             background: colors.card,
             padding: `${spacing.lg} ${spacing.lg} ${spacing.sm}`,
             zIndex: 1,
@@ -107,14 +109,14 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
 
         <div
           style={{
-            flex: 1,
+            flex: "1 1 auto",
             overflowY: "auto",
             WebkitOverflowScrolling: "touch",
-            overscrollBehaviorY: "contain",
+            overscrollBehavior: "contain",
             padding: `0 ${spacing.lg}`,
             minHeight: 0,
-            maxHeight: `calc(100dvh - ${headerHeightPx}px - ${footerHeightPx}px - env(safe-area-inset-top) - env(safe-area-inset-bottom))`,
-            paddingBottom: `calc(${spacing.sm} + env(safe-area-inset-bottom))`,
+            maxHeight: `calc(100dvh - ${headerHeightPx}px)`,
+            paddingBottom: "calc(16px + env(safe-area-inset-bottom, 0px) + 84px)",
           }}
         >
           <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.02em", color: text.muted, marginBottom: spacing.sm }}>Pages</div>
@@ -185,8 +187,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
         </div>
         <div
           style={{
-            position: "sticky",
-            bottom: 0,
+            flex: "0 0 auto",
             background: colors.card,
             borderTop: `1px solid ${colors.border}`,
             padding: `${spacing.sm} ${spacing.lg} calc(${spacing.sm} + env(safe-area-inset-bottom))`,
