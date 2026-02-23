@@ -1143,34 +1143,29 @@ export const ApplicationDetailPanel: React.FC<ApplicationDetailPanelProps> = ({
 
       {/* Screening */}
       {!SCREENING_ENABLED ? (
-        <div
-          style={{
-            marginTop: 12,
-            borderRadius: 14,
-            padding: 12,
-            background: colors.panel,
-            border: `1px solid ${colors.border}`,
-          }}
-        >
-          <div
-            style={{
-              fontSize: 12,
-              textTransform: "uppercase",
-              letterSpacing: 0.08,
-              color: text.muted,
-              marginBottom: 6,
-            }}
-          >
-            Screening
-          </div>
-          <div style={{ fontSize: 13, color: text.primary }}>
-            Credit screening — coming soon
-          </div>
-        </div>
-      ) : canUseAiScreening ? (
-        <div
-          style={{
-            marginTop: 12,
+<div
+  style={{
+    marginTop: 12,
+    borderRadius: 14,
+    padding: 12,
+    background: colors.panel,
+    border: `1px solid ${colors.border}`,
+  }}
+>
+  <div
+    style={{
+      fontSize: 13,
+      color: text.primary,
+      fontWeight: 600,
+      marginBottom: 6,
+    }}
+  >
+    Credit screening — coming soon
+  </div>
+  <div style={{ fontSize: 13, color: text.muted }}>
+    Screening will be available soon. You&apos;ll be able to request tenant consent and run screening from here.
+  </div>
+</div>
             borderRadius: 14,
             padding: 12,
             background: colors.panel,
