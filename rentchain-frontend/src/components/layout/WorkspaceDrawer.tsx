@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { colors, radius, spacing, text, shadows } from "../../styles/tokens";
 import { getVisibleNavItems } from "./navConfig";
@@ -16,12 +16,18 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
   const navigate = useNavigate();
   const location = useLocation();
   const { features, loading: capsLoading } = useCapabilities();
-  const headerHeightPx = 80;
+  const [viewportHeight, setViewportHeight] = useState<number>(() =>
+    typeof window === "undefined" ? 0 : window.innerHeight
+  );
   const navLoading = !userRole || capsLoading;
   const visibleItems = navLoading ? [] : getVisibleNavItems(userRole, features);
   const drawerItems = visibleItems.filter((item) => item.showInDrawer !== false);
   const primaryDrawerItems = drawerItems.filter((item) => !item.requiresAdmin);
   const adminDrawerItems = drawerItems.filter((item) => item.requiresAdmin);
+  const panelHeight = useMemo(
+    () => (viewportHeight > 0 ? `${viewportHeight}px` : "100dvh"),
+    [viewportHeight]
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -31,6 +37,27 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [open, onClose]);
+
+  useEffect(() => {
+    if (!open) return;
+    const resize = () => setViewportHeight(window.innerHeight);
+    resize();
+    window.addEventListener("resize", resize);
+    window.addEventListener("orientationchange", resize);
+    return () => {
+      window.removeEventListener("resize", resize);
+      window.removeEventListener("orientationchange", resize);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [open]);
 
   if (!open) return null;
 
@@ -62,8 +89,8 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
           position: "relative",
           width: 320,
           maxWidth: "90vw",
-          height: "100dvh",
-          minHeight: "100vh",
+          height: panelHeight,
+          minHeight: panelHeight,
           maxHeight: "100dvh",
           background: colors.card,
           borderLeft: `1px solid ${colors.border}`,
@@ -115,7 +142,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
             overscrollBehavior: "contain",
             padding: `0 ${spacing.lg}`,
             minHeight: 0,
-            maxHeight: `calc(100dvh - ${headerHeightPx}px)`,
+            maxHeight: "100%",
             paddingBottom: "calc(16px + env(safe-area-inset-bottom, 0px) + 84px)",
           }}
         >
