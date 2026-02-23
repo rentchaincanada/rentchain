@@ -35,10 +35,30 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
 
   useEffect(() => {
     if (!open) return;
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const scrollY = window.scrollY;
+    const bodyStyle = document.body.style;
+    const previous = {
+      position: bodyStyle.position,
+      top: bodyStyle.top,
+      left: bodyStyle.left,
+      right: bodyStyle.right,
+      width: bodyStyle.width,
+      overflow: bodyStyle.overflow,
+    };
+    bodyStyle.position = "fixed";
+    bodyStyle.top = `-${scrollY}px`;
+    bodyStyle.left = "0";
+    bodyStyle.right = "0";
+    bodyStyle.width = "100%";
+    bodyStyle.overflow = "hidden";
     return () => {
-      document.body.style.overflow = previous;
+      bodyStyle.position = previous.position;
+      bodyStyle.top = previous.top;
+      bodyStyle.left = previous.left;
+      bodyStyle.right = previous.right;
+      bodyStyle.width = previous.width;
+      bodyStyle.overflow = previous.overflow;
+      window.scrollTo(0, scrollY);
     };
   }, [open]);
 
@@ -148,6 +168,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
         </div>
 
         <div
+          onTouchMove={(event) => event.stopPropagation()}
           style={{
             flex: "1 1 auto",
             overflowY: "auto",
