@@ -1154,17 +1154,16 @@ export const ApplicationDetailPanel: React.FC<ApplicationDetailPanelProps> = ({
         >
           <div
             style={{
-              fontSize: 12,
-              textTransform: "uppercase",
-              letterSpacing: 0.08,
-              color: text.muted,
+              fontSize: 13,
+              color: text.primary,
+              fontWeight: 600,
               marginBottom: 6,
             }}
           >
-            Screening
-          </div>
-          <div style={{ fontSize: 13, color: text.primary }}>
             Credit screening — coming soon
+          </div>
+          <div style={{ fontSize: 13, color: text.muted }}>
+            Screening will be available soon. You&apos;ll be able to request tenant consent and run screening from here.
           </div>
         </div>
       ) : canUseAiScreening ? (
