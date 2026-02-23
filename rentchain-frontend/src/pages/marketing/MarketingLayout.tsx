@@ -361,6 +361,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
             background: colors.panel,
             position: "relative",
             zIndex: 6,
+            overflowX: "hidden",
           }}
         >
           <div
@@ -372,6 +373,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
               display: "flex",
               flexDirection: "column",
               gap: spacing.md,
+              boxSizing: "border-box",
             }}
           >
             <div style={{ display: "flex", flexDirection: "column", gap: spacing.sm, fontWeight: 500 }}>
@@ -412,7 +414,17 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                 {t("nav.legal")}
               </Link>
             </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: spacing.sm, alignItems: "center" }}>
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: spacing.sm,
+                alignItems: "center",
+                width: "100%",
+                boxSizing: "border-box",
+                minWidth: 0,
+              }}
+            >
               <div
                 style={{
                   display: "inline-flex",
@@ -445,7 +457,17 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                 </button>
               </div>
             </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: spacing.sm, alignItems: "center" }}>
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: spacing.sm,
+                alignItems: "center",
+                width: "100%",
+                boxSizing: "border-box",
+                minWidth: 0,
+              }}
+            >
               {isAuthed ? (
                 <Link
                   to="/dashboard"
@@ -457,6 +479,9 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                     textDecoration: "none",
                     fontWeight: 600,
                     boxShadow: shadows.sm,
+                    maxWidth: "100%",
+                    whiteSpace: "normal",
+                    overflowWrap: "anywhere",
                   }}
                   onClick={() => setMenuOpen(false)}
                 >
@@ -474,6 +499,9 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                       textDecoration: "none",
                       fontWeight: 600,
                       boxShadow: shadows.sm,
+                      maxWidth: "100%",
+                      whiteSpace: "normal",
+                      overflowWrap: "anywhere",
                     }}
                     onClick={() => setMenuOpen(false)}
                   >
@@ -489,6 +517,9 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                       borderRadius: radius.pill,
                       textDecoration: "none",
                       fontWeight: 600,
+                      maxWidth: "100%",
+                      whiteSpace: "normal",
+                      overflowWrap: "anywhere",
                     }}
                     onClick={() => setMenuOpen(false)}
                   >
@@ -496,7 +527,13 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                   </Link>
                   <Link
                     to="/invite"
-                    style={{ color: text.muted, textDecoration: "none" }}
+                    style={{
+                      color: text.muted,
+                      textDecoration: "none",
+                      maxWidth: "100%",
+                      whiteSpace: "normal",
+                      overflowWrap: "anywhere",
+                    }}
                     onMouseEnter={(e) => onHover(e, true)}
                     onMouseLeave={(e) => onHover(e, false)}
                     onClick={() => setMenuOpen(false)}
@@ -505,7 +542,13 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                   </Link>
                   <Link
                     to="/login"
-                    style={{ color: text.muted, textDecoration: "none" }}
+                    style={{
+                      color: text.muted,
+                      textDecoration: "none",
+                      maxWidth: "100%",
+                      whiteSpace: "normal",
+                      overflowWrap: "anywhere",
+                    }}
                     onMouseEnter={(e) => onHover(e, true)}
                     onMouseLeave={(e) => onHover(e, false)}
                     onClick={() => setMenuOpen(false)}
