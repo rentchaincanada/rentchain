@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createHash } from "crypto";
+import { createHash, randomBytes } from "crypto";
 import { db } from "../config/firebase";
 import { authenticateJwt } from "../middleware/authMiddleware";
 import { attachAccount } from "../middleware/attachAccount";
@@ -37,6 +37,8 @@ const SERVICE_LEVELS = ["SELF_SERVE", "VERIFIED", "VERIFIED_AI"] as const;
 const CONSENT_VERSION = "v1.0";
 
 const ALLOWED_REDIRECT_ORIGINS = ["https://www.rentchain.ai", "https://rentchain.ai", "http://localhost:5173"];
+const REVIEW_SUMMARY_TEMPLATE_PATH = "src/lib/reviewSummary.ts";
+const REVIEW_SUMMARY_ASSET_FILENAMES: string[] = [];
 
 function isAllowedRedirectOrigin(origin: string) {
   if (!origin) return false;
@@ -133,6 +135,10 @@ function buildReferenceId(orderId: string) {
   const safe = String(orderId || "").replace(/[^a-z0-9]/gi, "");
   const suffix = safe.slice(-8).toUpperCase() || "UNKNOWN";
   return `RC-${suffix}`;
+}
+
+function createCorrelationId(): string {
+  return randomBytes(6).toString("hex");
 }
 
 function resolveProviderLabel(value?: string | null) {
@@ -1907,9 +1913,11 @@ router.get("/rental-applications/:id/review-summary", async (req: any, res) => {
 });
 
 router.get("/rental-applications/:id/review-summary.pdf", async (req: any, res) => {
+  const id = String(req.params?.id || "").trim();
+  const correlationId = createCorrelationId();
+  const resolvedTemplatePath = `${process.cwd().replace(/\\/g, "/")}/${REVIEW_SUMMARY_TEMPLATE_PATH}`;
   try {
     res.setHeader("x-route-source", "rentalApplicationsRoutes.ts");
-    const id = String(req.params?.id || "").trim();
     const access = await loadAuthorizedApplication(req, id);
     if (!access.ok) {
       return res.status(access.status).json({
@@ -1934,11 +1942,19 @@ router.get("/rental-applications/:id/review-summary.pdf", async (req: any, res) 
 
     return res.status(200).json({ ok: true, url });
   } catch (err: any) {
-    console.error("[review_summary_pdf] failed", err?.message || err);
+    console.error("[review_summary_pdf] failed", {
+      correlationId,
+      rentalApplicationId: id || null,
+      templatePath: resolvedTemplatePath,
+      assetFilenames: REVIEW_SUMMARY_ASSET_FILENAMES,
+      errorMessage: String(err?.message || "unknown_error"),
+      errorStack: String(err?.stack || ""),
+    });
     return res.status(500).json({
       ok: false,
       status: 500,
       error: "REVIEW_SUMMARY_PDF_FAILED",
+      correlationId,
     });
   }
 });
