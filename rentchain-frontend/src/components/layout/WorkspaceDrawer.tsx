@@ -110,10 +110,11 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
             flex: 1,
             overflowY: "auto",
             WebkitOverflowScrolling: "touch",
+            overscrollBehaviorY: "contain",
             padding: `0 ${spacing.lg}`,
             minHeight: 0,
             maxHeight: `calc(100dvh - ${headerHeightPx}px - ${footerHeightPx}px - env(safe-area-inset-top) - env(safe-area-inset-bottom))`,
-            paddingBottom: "env(safe-area-inset-bottom)",
+            paddingBottom: `calc(${spacing.sm} + env(safe-area-inset-bottom))`,
           }}
         >
           <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.02em", color: text.muted, marginBottom: spacing.sm }}>Pages</div>
