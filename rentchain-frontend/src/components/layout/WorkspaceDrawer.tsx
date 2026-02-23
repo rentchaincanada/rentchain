@@ -24,9 +24,13 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
   const drawerItems = visibleItems.filter((item) => item.showInDrawer !== false);
   const primaryDrawerItems = drawerItems.filter((item) => !item.requiresAdmin);
   const adminDrawerItems = drawerItems.filter((item) => item.requiresAdmin);
+  const mobileBottomTabsReserve = 84;
   const panelHeight = useMemo(
-    () => (viewportHeight > 0 ? `${viewportHeight}px` : "100dvh"),
-    [viewportHeight]
+    () =>
+      viewportHeight > 0
+        ? `calc(${viewportHeight}px - ${mobileBottomTabsReserve}px - env(safe-area-inset-bottom, 0px))`
+        : `calc(100dvh - ${mobileBottomTabsReserve}px - env(safe-area-inset-bottom, 0px))`,
+    [mobileBottomTabsReserve, viewportHeight]
   );
 
   useEffect(() => {
@@ -68,14 +72,15 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
 
   return (
     <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 3000,
-        display: "flex",
-        justifyContent: "flex-end",
-      }}
-    >
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 3000,
+          display: "flex",
+          justifyContent: "flex-end",
+          alignItems: "flex-start",
+        }}
+      >
       <div
         onClick={onClose}
         style={{
@@ -90,8 +95,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
           width: 320,
           maxWidth: "90vw",
           height: panelHeight,
-          minHeight: panelHeight,
-          maxHeight: "100dvh",
+          maxHeight: panelHeight,
           background: colors.card,
           borderLeft: `1px solid ${colors.border}`,
           boxShadow: shadows.lg,
@@ -143,7 +147,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
             padding: `0 ${spacing.lg}`,
             minHeight: 0,
             maxHeight: "100%",
-            paddingBottom: "calc(16px + env(safe-area-inset-bottom, 0px) + 84px)",
+            paddingBottom: "calc(16px + env(safe-area-inset-bottom, 0px))",
           }}
         >
           <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.02em", color: text.muted, marginBottom: spacing.sm }}>Pages</div>
