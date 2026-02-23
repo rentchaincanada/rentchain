@@ -6,6 +6,16 @@ import {
 } from "../services/leaseService";
 import { requireCapability } from "../services/capabilityGuard";
 import { db } from "../config/firebase";
+import { requireLandlord } from "../middleware/requireLandlord";
+import {
+  applyPatch,
+  generateScheduleA,
+  getDraftById,
+  getSnapshotById,
+  NS_PROVINCE,
+  NS_TEMPLATE_VERSION,
+  validateCreateInput,
+} from "../services/leaseDraftsService";
 
 const router = Router();
 const LEDGER_COLLECTION = "ledgerEntries";
@@ -77,6 +87,150 @@ async function enforceLeaseCapability(req: any, res: Response): Promise<boolean>
 router.get("/", (_req: Request, res: Response) => {
   const leases = leaseService.getAll();
   res.json({ leases });
+});
+
+router.post("/drafts", requireLandlord, async (req: any, res: Response) => {
+  try {
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+    const draft = validateCreateInput(landlordId, req.body || {});
+    const ref = db.collection("leaseDrafts").doc();
+    await ref.set(draft, { merge: false });
+    return res.status(201).json({ ok: true, draftId: ref.id, draft: { id: ref.id, ...draft } });
+  } catch (err: any) {
+    const status = Number(err?.status || 500);
+    if (status < 500) {
+      return res.status(status).json({ ok: false, error: String(err?.code || "invalid_input") });
+    }
+    console.error("[POST /api/leases/drafts] error", err);
+    return res.status(500).json({ ok: false, error: "Failed to create lease draft" });
+  }
+});
+
+router.get("/drafts/:id", requireLandlord, async (req: any, res: Response) => {
+  try {
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    const id = String(req.params?.id || "").trim();
+    if (!id) return res.status(400).json({ ok: false, error: "draft_id_required" });
+    const snap = await getDraftById(id);
+    if (!snap.exists) return res.status(404).json({ ok: false, error: "not_found" });
+    const draft = snap.data() as any;
+    if (String(draft?.landlordId || "").trim() !== landlordId) {
+      return res.status(403).json({ ok: false, error: "forbidden" });
+    }
+    return res.json({ ok: true, draft: { id: snap.id, ...draft } });
+  } catch (err) {
+    console.error("[GET /api/leases/drafts/:id] error", err);
+    return res.status(500).json({ ok: false, error: "Failed to load draft" });
+  }
+});
+
+router.patch("/drafts/:id", requireLandlord, async (req: any, res: Response) => {
+  try {
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    const id = String(req.params?.id || "").trim();
+    if (!id) return res.status(400).json({ ok: false, error: "draft_id_required" });
+    const ref = db.collection("leaseDrafts").doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) return res.status(404).json({ ok: false, error: "not_found" });
+    const existing = snap.data() as any;
+    if (String(existing?.landlordId || "").trim() !== landlordId) {
+      return res.status(403).json({ ok: false, error: "forbidden" });
+    }
+    const next = applyPatch(existing, req.body || {});
+    await ref.set(next, { merge: false });
+    return res.json({ ok: true, draft: { id, ...next } });
+  } catch (err: any) {
+    const status = Number(err?.status || 500);
+    if (status < 500) {
+      return res.status(status).json({ ok: false, error: String(err?.code || "invalid_input") });
+    }
+    console.error("[PATCH /api/leases/drafts/:id] error", err);
+    return res.status(500).json({ ok: false, error: "Failed to update draft" });
+  }
+});
+
+router.post("/drafts/:id/generate", requireLandlord, async (req: any, res: Response) => {
+  try {
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    const id = String(req.params?.id || "").trim();
+    if (!id) return res.status(400).json({ ok: false, error: "draft_id_required" });
+    const ref = db.collection("leaseDrafts").doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) return res.status(404).json({ ok: false, error: "not_found" });
+    const draft = snap.data() as any;
+    if (String(draft?.landlordId || "").trim() !== landlordId) {
+      return res.status(403).json({ ok: false, error: "forbidden" });
+    }
+    if (String(draft?.province || "").toUpperCase() !== NS_PROVINCE) {
+      return res.status(400).json({ ok: false, error: "province_not_supported" });
+    }
+    if (String(draft?.templateVersion || "") !== NS_TEMPLATE_VERSION) {
+      return res.status(400).json({ ok: false, error: "template_version_invalid" });
+    }
+
+    const file = await generateScheduleA({
+      landlordId,
+      draftId: id,
+      draft,
+      landlordDisplayName: String(
+        req.user?.displayName || req.user?.name || req.user?.email || "Landlord"
+      ),
+      tenantDisplayNames: Array.isArray(req.body?.tenantNames)
+        ? req.body.tenantNames.map((v: any) => String(v || "").trim()).filter(Boolean)
+        : [],
+      propertyAddressLine: String(req.body?.propertyAddress || "").trim() || String(draft.propertyId || ""),
+      unitLabel: String(req.body?.unitLabel || "").trim() || String(draft.unitId || ""),
+    });
+
+    const now = Date.now();
+    const snapshotRef = db.collection("leaseSnapshots").doc();
+    const snapshotDoc = {
+      ...draft,
+      status: "generated",
+      generatedAt: now,
+      generatedFiles: [file],
+    };
+    await snapshotRef.set(snapshotDoc, { merge: false });
+
+    await ref.set(
+      {
+        ...draft,
+        status: "generated",
+        updatedAt: now,
+        lastGeneratedSnapshotId: snapshotRef.id,
+      },
+      { merge: false }
+    );
+
+    return res.status(201).json({
+      ok: true,
+      snapshotId: snapshotRef.id,
+      scheduleAUrl: file.url,
+      generatedFiles: [file],
+    });
+  } catch (err: any) {
+    console.error("[POST /api/leases/drafts/:id/generate] error", err);
+    return res.status(500).json({ ok: false, error: "Failed to generate Schedule A PDF" });
+  }
+});
+
+router.get("/snapshots/:id", requireLandlord, async (req: any, res: Response) => {
+  try {
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    const id = String(req.params?.id || "").trim();
+    if (!id) return res.status(400).json({ ok: false, error: "snapshot_id_required" });
+    const snap = await getSnapshotById(id);
+    if (!snap.exists) return res.status(404).json({ ok: false, error: "not_found" });
+    const snapshot = snap.data() as any;
+    if (String(snapshot?.landlordId || "").trim() !== landlordId) {
+      return res.status(403).json({ ok: false, error: "forbidden" });
+    }
+    return res.json({ ok: true, snapshot: { id: snap.id, ...snapshot } });
+  } catch (err) {
+    console.error("[GET /api/leases/snapshots/:id] error", err);
+    return res.status(500).json({ ok: false, error: "Failed to load snapshot" });
+  }
 });
 
 router.get("/:id", (req: Request, res: Response) => {

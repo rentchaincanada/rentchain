@@ -16,6 +16,8 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
   const navigate = useNavigate();
   const location = useLocation();
   const { features, loading: capsLoading } = useCapabilities();
+  const headerHeightPx = 80;
+  const footerHeightPx = 92;
   const navLoading = !userRole || capsLoading;
   const visibleItems = navLoading ? [] : getVisibleNavItems(userRole, features);
   const drawerItems = visibleItems.filter((item) => item.showInDrawer !== false);
@@ -61,8 +63,8 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
           position: "relative",
           width: 320,
           maxWidth: "90vw",
-          height: "100vh",
-          maxHeight: "100vh",
+          height: "100dvh",
+          maxHeight: "100dvh",
           background: colors.card,
           borderLeft: `1px solid ${colors.border}`,
           boxShadow: shadows.lg,
@@ -71,6 +73,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
           zIndex: 3001,
           overflow: "hidden",
           WebkitOverflowScrolling: "touch",
+          paddingTop: "env(safe-area-inset-top)",
         }}
       >
         <div
@@ -109,6 +112,8 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
             WebkitOverflowScrolling: "touch",
             padding: `0 ${spacing.lg}`,
             minHeight: 0,
+            maxHeight: `calc(100dvh - ${headerHeightPx}px - ${footerHeightPx}px - env(safe-area-inset-top) - env(safe-area-inset-bottom))`,
+            paddingBottom: "env(safe-area-inset-bottom)",
           }}
         >
           <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.02em", color: text.muted, marginBottom: spacing.sm }}>Pages</div>

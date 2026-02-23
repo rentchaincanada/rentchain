@@ -25,7 +25,6 @@ export const InviteTenantModal: React.FC<Props> = ({
   onInviteCreated,
   defaultPropertyId,
   defaultUnitId,
-  defaultLeaseId,
 }) => {
   const [tenantEmail, setTenantEmail] = useState("");
   const [tenantName, setTenantName] = useState("");
@@ -55,17 +54,23 @@ export const InviteTenantModal: React.FC<Props> = ({
             leaseUnavailable: "Vous pouvez ajouter le bail plus tard. La creation d'invitation est temporairement indisponible pour cette unite.",
             addLeaseLaterSuffix: " (ajouter le bail plus tard)",
             addLeaseLaterHint: "Vous pouvez ajouter un bail plus tard apres avoir invite un locataire.",
-            manageLeaseDetails: "Gerer les details du bail",
+            managePropertyDetails: "Gerer les details de la propriete",
             missingLeaseHint: "Cette unite n'a pas encore de details de bail. Vous pouvez continuer et ajouter le bail plus tard.",
-            postInviteHint: "Vous pouvez ajouter un bail plus tard depuis le profil du locataire.",
+            createLeasePackHint:
+              "Vous pouvez creer un dossier de bail depuis le profil du locataire apres que le locataire accepte l'invitation.",
+            postInviteHint:
+              "Vous pouvez creer un dossier de bail depuis le profil du locataire apres que le locataire accepte l'invitation.",
           }
         : {
             leaseUnavailable: "You can add a lease later. Invite creation is temporarily unavailable for this unit.",
             addLeaseLaterSuffix: " (add lease later)",
             addLeaseLaterHint: "You can add a lease later after inviting a tenant.",
-            manageLeaseDetails: "Manage lease details",
+            managePropertyDetails: "Manage property details",
             missingLeaseHint: "This unit is missing lease details right now. You can still continue and add the lease later.",
-            postInviteHint: "You can add a lease later from the tenant profile.",
+            createLeasePackHint:
+              "You can create a lease pack from the tenant profile after the tenant accepts the invite.",
+            postInviteHint:
+              "You can create a lease pack from the tenant profile after the tenant accepts the invite.",
           },
     [locale]
   );
@@ -162,12 +167,16 @@ export const InviteTenantModal: React.FC<Props> = ({
         setErr("Please select a property and unit before sending an invite.");
         return;
       }
+      const normalizedEmail = String(tenantEmail || "").trim().toLowerCase();
+      if (!normalizedEmail || !normalizedEmail.includes("@")) {
+        setErr("Please enter a valid tenant email.");
+        return;
+      }
       const data: any = await createTenantInvite({
-        tenantEmail,
+        tenantEmail: normalizedEmail,
         tenantName: tenantName || undefined,
         propertyId,
         unitId,
-        leaseId: defaultLeaseId || null,
       });
 
       if (!data?.ok) {
@@ -196,7 +205,7 @@ export const InviteTenantModal: React.FC<Props> = ({
           return;
         }
         if (errorCode === "lease_required") {
-          setErr(copy.leaseUnavailable);
+          setInfoMsg(copy.postInviteHint);
           return;
         }
         setErr("Unable to send invite right now. Please try again.");
@@ -242,7 +251,7 @@ export const InviteTenantModal: React.FC<Props> = ({
         return;
       }
       if (msg.toLowerCase().includes("lease_required")) {
-        setErr(copy.leaseUnavailable);
+        setInfoMsg(copy.postInviteHint);
         return;
       }
       if (msg.includes("INVITE_EMAIL_SEND_FAILED") || msg.includes("SENDGRID")) {
@@ -353,13 +362,18 @@ export const InviteTenantModal: React.FC<Props> = ({
             <div style={{ fontSize: 12, color: "#6b7280" }}>
               {copy.addLeaseLaterHint}{" "}
               <a href="/properties" style={{ color: "#2563eb", textDecoration: "underline" }}>
-                {copy.manageLeaseDetails}
+                {copy.managePropertyDetails}
               </a>
             </div>
           ) : null}
           {selectedUnitRequiresLease ? (
             <div style={{ fontSize: 12, color: "#6b7280" }}>
               {copy.missingLeaseHint}
+            </div>
+          ) : null}
+          {selectedUnitRequiresLease ? (
+            <div style={{ fontSize: 12, color: "#6b7280" }}>
+              {copy.createLeasePackHint}
             </div>
           ) : null}
         </div>
