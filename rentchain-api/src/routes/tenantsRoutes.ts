@@ -6,6 +6,7 @@ import {
 } from "../services/tenantDetailsService";
 import { getTenantLedger } from "../services/tenantLedgerService";
 import { generateTenantReportPdfBuffer } from "../services/tenantReportService";
+import { listTenanciesByTenantId } from "../services/tenanciesService";
 
 const router = Router();
 
@@ -143,6 +144,34 @@ router.get("/:tenantId/report", async (req: any, res) => {
     console.error("[GET /tenants/:tenantId/report] error", err);
     return res.status(500).json({ ok: false, error: "Failed to generate tenant report" });
   }
+});
+
+/**
+ * GET /api/tenants/:tenantId/tenancies
+ * Compatibility alias for tenancy list.
+ */
+router.get("/:tenantId/tenancies", async (req: any, res) => {
+  const tenantId = String(req.params?.tenantId || "").trim();
+  if (!tenantId) return res.status(400).json({ ok: false, error: "tenantId is required" });
+
+  const role = String(req.user?.role || "").toLowerCase();
+  const isAdmin = role === "admin";
+  const landlordId = isAdmin ? null : req.user?.landlordId || req.user?.id || null;
+
+  try {
+    const tenancies = await listTenanciesByTenantId(tenantId, { landlordId, isAdmin });
+    return res.status(200).json({ ok: true, tenancies });
+  } catch (err: any) {
+    console.error("[GET /api/tenants/:tenantId/tenancies] error:", err);
+    return res.status(500).json({
+      ok: false,
+      error: err?.message ?? "Failed to load tenant tenancies",
+    });
+  }
+});
+
+router.options("/:tenantId/tenancies", (_req, res) => {
+  return res.sendStatus(204);
 });
 
 export default router;
