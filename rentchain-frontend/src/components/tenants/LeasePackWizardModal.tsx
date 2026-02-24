@@ -111,14 +111,8 @@ export const LeasePackWizardModal: React.FC<Props> = ({
     hasInitializedRef.current = true;
     if (!propertyId || !unitId || !tenantId) {
       setError("Missing tenant/property/unit data to create a lease pack draft.");
-      return;
     }
-    setSaving(true);
-    createLeaseDraft(payload)
-      .then((res) => setDraftId(res.draftId))
-      .catch((err: any) => setError(err?.message || "Failed to create lease draft."))
-      .finally(() => setSaving(false));
-  }, [open, payload, propertyId, tenantId, unitId]);
+  }, [open, propertyId, tenantId, unitId]);
 
   React.useEffect(() => {
     if (!open || !draftId) return;
@@ -141,14 +135,34 @@ export const LeasePackWizardModal: React.FC<Props> = ({
   };
 
   const handleGenerate = async () => {
-    if (!draftId) {
-      setError("Draft is not ready yet.");
+    if (!propertyId || !unitId || !tenantId) {
+      setError("Missing tenant/property/unit data to create a lease pack draft.");
+      return;
+    }
+    if (!state.startDate) {
+      setError("Start date is required.");
+      return;
+    }
+    if (state.termType === "fixed" && !state.endDate) {
+      setError("End date required for fixed term.");
+      return;
+    }
+    if (dollarsToCents(state.baseRent) <= 0) {
+      setError("Base rent must be greater than 0.");
       return;
     }
     setGenerating(true);
     setError("");
     try {
-      const generated = await generateLeaseDraftPdf(draftId, {
+      let nextDraftId = draftId;
+      if (!nextDraftId) {
+        const created = await createLeaseDraft(payload);
+        nextDraftId = created.draftId;
+        setDraftId(created.draftId);
+      } else {
+        await updateLeaseDraft(nextDraftId, payload);
+      }
+      const generated = await generateLeaseDraftPdf(nextDraftId, {
         tenantNames: [tenantName],
         propertyAddress,
         unitLabel,
@@ -253,7 +267,7 @@ export const LeasePackWizardModal: React.FC<Props> = ({
               onChange={(e) => setState((prev) => ({ ...prev, startDate: e.target.value }))}
             />
           </Field>
-          <Field label="End date">
+          <Field label={state.termType === "fixed" ? "End date *" : "End date (optional)"}>
             <input
               type="date"
               value={state.endDate}
@@ -383,4 +397,3 @@ const Field: React.FC<{ label: string; children: React.ReactNode }> = ({ label, 
     </div>
   </label>
 );
-
