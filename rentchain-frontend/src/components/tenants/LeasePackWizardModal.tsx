@@ -135,6 +135,15 @@ export const LeasePackWizardModal: React.FC<Props> = ({
   };
 
   const handleGenerate = async () => {
+    if (import.meta.env.MODE !== "production") {
+      console.debug("[leasepack] generate clicked", {
+        termType: state.termType,
+        startDate: state.startDate,
+        endDate: state.endDate || null,
+        baseRentCents: dollarsToCents(state.baseRent),
+        draftId: draftId || null,
+      });
+    }
     if (!propertyId || !unitId || !tenantId) {
       setError("Missing tenant/property/unit data to create a lease pack draft.");
       return;
@@ -363,16 +372,21 @@ export const LeasePackWizardModal: React.FC<Props> = ({
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {snapshotId ? (
-              <Button onClick={handleRedownload} style={{ padding: "8px 12px" }}>
+              <Button type="button" onClick={handleRedownload} style={{ padding: "8px 12px" }}>
                 Refresh Download URL
               </Button>
             ) : null}
             {downloadUrl ? (
-              <Button onClick={() => window.open(downloadUrl, "_blank")} style={{ padding: "8px 12px" }}>
+              <Button type="button" onClick={() => window.open(downloadUrl, "_blank")} style={{ padding: "8px 12px" }}>
                 Download Schedule A PDF
               </Button>
             ) : null}
-            <Button onClick={handleGenerate} disabled={saving || generating || !draftId} style={{ padding: "8px 12px" }}>
+            <Button
+              type="button"
+              onClick={handleGenerate}
+              disabled={saving || generating}
+              style={{ padding: "8px 12px" }}
+            >
               {generating ? "Generating..." : "Generate Schedule A PDF"}
             </Button>
           </div>
