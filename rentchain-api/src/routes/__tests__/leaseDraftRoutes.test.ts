@@ -1,6 +1,8 @@
 import express from "express";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { leaseService } from "../../services/leaseService";
+import { clearLeaseAutomationTasks } from "../../services/automationScheduler/leaseAutomationTaskStore";
 
 type DocShape = { id: string; data: any };
 
@@ -70,6 +72,8 @@ describe("lease draft routes", () => {
   beforeEach(() => {
     store.clear();
     idSeq = 0;
+    leaseService.getAll().splice(0);
+    clearLeaseAutomationTasks();
   });
 
   const payload = {
@@ -114,4 +118,34 @@ describe("lease draft routes", () => {
     expect(generateRes.body?.scheduleAUrl).toContain("https://example.invalid");
     expect(String(generateRes.body?.snapshotId || "")).toBeTruthy();
   }, 30000);
+
+  it("regenerates and lists automation tasks for a lease", async () => {
+    const router = (await import("../leaseRoutes")).default;
+    const app = express();
+    app.use(express.json());
+    app.use(router);
+
+    const lease = leaseService.create({
+      tenantId: "tenant-2",
+      propertyId: "prop-2",
+      unitNumber: "2A",
+      monthlyRent: 1800,
+      startDate: "2026-01-01",
+      endDate: "2026-12-31",
+    });
+
+    const regenerateRes = await request(app).post(
+      `/${encodeURIComponent(lease.id)}/automation/tasks/regenerate`
+    );
+    expect(regenerateRes.status).toBe(200);
+    expect(regenerateRes.body?.ok).toBe(true);
+    expect(Array.isArray(regenerateRes.body?.tasks)).toBe(true);
+    expect(regenerateRes.body?.tasks).toHaveLength(3);
+
+    const listRes = await request(app).get(`/${encodeURIComponent(lease.id)}/automation/tasks`);
+    expect(listRes.status).toBe(200);
+    expect(listRes.body?.ok).toBe(true);
+    expect(Array.isArray(listRes.body?.tasks)).toBe(true);
+    expect(listRes.body?.tasks).toHaveLength(3);
+  });
 });

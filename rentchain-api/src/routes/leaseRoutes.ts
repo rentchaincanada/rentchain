@@ -16,6 +16,10 @@ import {
   NS_TEMPLATE_VERSION,
   validateCreateInput,
 } from "../services/leaseDraftsService";
+import {
+  getLeaseAutomationTasks,
+  regenerateLeaseAutomationTasks,
+} from "../services/automationScheduler/leaseAutomationTaskStore";
 
 const router = Router();
 const LEDGER_COLLECTION = "ledgerEntries";
@@ -231,6 +235,30 @@ router.get("/snapshots/:id", requireLandlord, async (req: any, res: Response) =>
     console.error("[GET /api/leases/snapshots/:id] error", err);
     return res.status(500).json({ ok: false, error: "Failed to load snapshot" });
   }
+});
+
+router.post("/:id/automation/tasks/regenerate", requireLandlord, (req: any, res: Response) => {
+  const lease = leaseService.getById(String(req.params?.id || "").trim());
+  if (!lease) {
+    return res.status(404).json({ ok: false, error: "Lease not found" });
+  }
+  const tasks = regenerateLeaseAutomationTasks({
+    id: lease.id,
+    startDate: lease.startDate,
+    endDate: lease.endDate || null,
+    automationEnabled: (lease as any).automationEnabled,
+    renewalStatus: (lease as any).renewalStatus,
+  });
+  return res.status(200).json({ ok: true, tasks });
+});
+
+router.get("/:id/automation/tasks", requireLandlord, (req: any, res: Response) => {
+  const lease = leaseService.getById(String(req.params?.id || "").trim());
+  if (!lease) {
+    return res.status(404).json({ ok: false, error: "Lease not found" });
+  }
+  const tasks = getLeaseAutomationTasks(lease.id);
+  return res.status(200).json({ ok: true, tasks });
 });
 
 router.get("/:id", (req: Request, res: Response) => {
