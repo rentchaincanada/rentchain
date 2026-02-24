@@ -79,6 +79,7 @@ import referralsRoutes from "./routes/referralsRoutes";
 import telemetryRoutes from "./routes/telemetryRoutes";
 import invitesRoutes from "./routes/invitesRoutes";
 import accessRoutes from "./routes/accessRoutes";
+import complianceRoutes from "./routes/complianceRoutes";
 
 const app: Application = express();
 
@@ -312,6 +313,7 @@ app.use("/api/onboarding", routeSource("onboardingRoutes.ts"), onboardingRoutes)
 app.use("/api", routeSource("onboardingRoutes.ts"), onboardingRoutes);
 app.use("/api", routeSource("messagesRoutes.ts"), messagesRoutes);
 app.use("/api", routeSource("telemetryRoutes.ts"), telemetryRoutes);
+app.use("/api/compliance", routeSource("complianceRoutes.ts"), complianceRoutes);
 
 process.on("unhandledRejection", (reason) => {
   console.error("[FATAL] unhandledRejection", reason);
