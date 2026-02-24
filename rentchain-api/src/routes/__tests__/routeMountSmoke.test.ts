@@ -123,17 +123,20 @@ describe("route mount smoke", () => {
     expect(leasesRes.body?.ok).toBe(true);
     expect(Array.isArray(leasesRes.body?.leases)).toBe(true);
     expect(leasesRes.headers["x-route-source"]).toBe("leaseRoutes.ts");
+    expect(leasesRes.headers["x-route-source"]).not.toBe("verifiedScreeningRoutes.ts");
 
     const tenanciesRes = await request(app).get("/api/tenants/tenant-1/tenancies").set(auth);
     expect(tenanciesRes.status).toBe(200);
     expect(tenanciesRes.body).toEqual({ ok: true, tenancies: [] });
     expect(tenanciesRes.headers["x-route-source"]).toBe("tenantsRoutes.ts");
+    expect(tenanciesRes.headers["x-route-source"]).not.toBe("verifiedScreeningRoutes.ts");
 
     const rulesRes = await request(app).get("/api/compliance/rules?province=ON").set(auth);
     expect(rulesRes.status).toBe(200);
     expect(rulesRes.body?.ok).toBe(true);
     expect(rulesRes.body?.province).toBe("ON");
     expect(rulesRes.headers["x-route-source"]).toBe("complianceRoutes.ts");
+    expect(rulesRes.headers["x-route-source"]).not.toBe("verifiedScreeningRoutes.ts");
   });
 
   it("prefixed routers win when a broad /api router is mounted later", async () => {
@@ -168,13 +171,16 @@ describe("route mount smoke", () => {
     const rulesRes = await request(app).get("/api/compliance/rules?province=ON").set(auth);
     expect(rulesRes.status).toBe(200);
     expect(rulesRes.headers["x-route-source"]).toBe("complianceRoutes.ts");
+    expect(rulesRes.headers["x-route-source"]).not.toBe("verifiedScreeningRoutes.ts");
 
     const tenanciesRes = await request(app).get("/api/tenants/tenant-1/tenancies").set(auth);
     expect(tenanciesRes.status).toBe(200);
     expect(tenanciesRes.headers["x-route-source"]).toBe("tenantsRoutes.ts");
+    expect(tenanciesRes.headers["x-route-source"]).not.toBe("verifiedScreeningRoutes.ts");
 
     const leasesRes = await request(app).get("/api/leases/tenant/tenant-1").set(auth);
     expect(leasesRes.status).toBe(200);
     expect(leasesRes.headers["x-route-source"]).toBe("leaseRoutes.ts");
+    expect(leasesRes.headers["x-route-source"]).not.toBe("verifiedScreeningRoutes.ts");
   });
 });
