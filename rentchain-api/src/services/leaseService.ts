@@ -1,6 +1,7 @@
 import crypto from "crypto";
 
 export type LeaseStatus = "active" | "ended";
+export type LeaseRenewalStatus = "unknown" | "offered" | "accepted" | "declined";
 
 export interface Lease {
   id: string;
@@ -9,7 +10,9 @@ export interface Lease {
   unitNumber: string;
   monthlyRent: number;
   startDate: string;
-  endDate?: string;
+  endDate?: string | null;
+  automationEnabled: boolean;
+  renewalStatus: LeaseRenewalStatus;
   status: LeaseStatus;
   createdAt: string;
   updatedAt: string;
@@ -21,13 +24,17 @@ export interface CreateLeasePayload {
   unitNumber: string;
   monthlyRent: number;
   startDate: string;
-  endDate?: string;
+  endDate?: string | null;
+  automationEnabled?: boolean;
+  renewalStatus?: LeaseRenewalStatus;
 }
 
 export interface UpdateLeasePayload {
   monthlyRent?: number;
   startDate?: string;
-  endDate?: string;
+  endDate?: string | null;
+  automationEnabled?: boolean;
+  renewalStatus?: LeaseRenewalStatus;
   status?: LeaseStatus;
 }
 
@@ -76,6 +83,8 @@ export const leaseService = {
       monthlyRent: payload.monthlyRent,
       startDate: payload.startDate,
       endDate: payload.endDate,
+      automationEnabled: payload.automationEnabled ?? true,
+      renewalStatus: payload.renewalStatus ?? "unknown",
       status: "active",
       createdAt: now,
       updatedAt: now,
@@ -97,6 +106,12 @@ export const leaseService = {
     }
     if (payload.endDate !== undefined) {
       existing.endDate = payload.endDate;
+    }
+    if (payload.automationEnabled !== undefined) {
+      existing.automationEnabled = payload.automationEnabled;
+    }
+    if (payload.renewalStatus !== undefined) {
+      existing.renewalStatus = payload.renewalStatus;
     }
     if (payload.status !== undefined) {
       existing.status = payload.status;

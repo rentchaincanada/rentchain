@@ -2,7 +2,12 @@
 
 import { v4 as uuidv4 } from "uuid";
 import { db } from "../firebase";
-import { LeaseInput, LeaseRecord, LeaseStatus } from "../models/lease";
+import {
+  LeaseInput,
+  LeaseRecord,
+  LeaseRenewalStatus,
+  LeaseStatus,
+} from "../models/lease";
 
 const COLLECTION = "leases";
 
@@ -11,11 +16,15 @@ export async function createLease(input: LeaseInput): Promise<LeaseRecord> {
   const id = uuidv4();
 
   const status: LeaseStatus = input.status ?? "active";
+  const renewalStatus: LeaseRenewalStatus = input.renewalStatus ?? "unknown";
+  const automationEnabled = input.automationEnabled ?? true;
 
   const record: LeaseRecord = {
     ...input,
     id,
     status,
+    renewalStatus,
+    automationEnabled,
     createdAt: now,
     updatedAt: now,
     endDate: input.endDate ?? null,
@@ -50,4 +59,39 @@ export async function getLeasesForTenant(
     );
     throw err;
   }
+}
+
+type LeaseLifecycleUpdate = {
+  startDate?: string;
+  endDate?: string | null;
+  automationEnabled?: boolean;
+  renewalStatus?: LeaseRenewalStatus;
+};
+
+export async function updateLeaseLifecycle(
+  leaseId: string,
+  updates: LeaseLifecycleUpdate
+): Promise<LeaseRecord | null> {
+  const id = String(leaseId || "").trim();
+  if (!id) return null;
+
+  const ref = db.collection(COLLECTION).doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) return null;
+
+  const next: Partial<LeaseRecord> = {
+    updatedAt: new Date().toISOString(),
+  };
+
+  if (updates.startDate !== undefined) next.startDate = updates.startDate;
+  if (updates.endDate !== undefined) next.endDate = updates.endDate;
+  if (updates.automationEnabled !== undefined) {
+    next.automationEnabled = Boolean(updates.automationEnabled);
+  }
+  if (updates.renewalStatus !== undefined) next.renewalStatus = updates.renewalStatus;
+
+  await ref.set(next, { merge: true });
+  const refreshed = await ref.get();
+  if (!refreshed.exists) return null;
+  return refreshed.data() as LeaseRecord;
 }
