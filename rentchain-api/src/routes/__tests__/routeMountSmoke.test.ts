@@ -135,4 +135,46 @@ describe("route mount smoke", () => {
     expect(rulesRes.body?.province).toBe("ON");
     expect(rulesRes.headers["x-route-source"]).toBe("complianceRoutes.ts");
   });
+
+  it("prefixed routers win when a broad /api router is mounted later", async () => {
+    listTenanciesByTenantId.mockResolvedValueOnce([]);
+    leaseService.getAll().splice(0);
+    leaseService.create({
+      tenantId: "tenant-1",
+      propertyId: "property-1",
+      unitNumber: "A",
+      monthlyRent: 1000,
+      startDate: "2026-01-01",
+    });
+
+    const leaseRoutes = (await import("../leaseRoutes")).default;
+    const tenantsRoutes = (await import("../tenantsRoutes")).default;
+    const complianceRoutes = (await import("../complianceRoutes")).default;
+
+    const broadRouter = express.Router();
+    broadRouter.use((_req, res) => {
+      return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    });
+
+    const app = express();
+    app.use(express.json());
+    app.use("/api/compliance", routeSource("complianceRoutes.ts"), complianceRoutes);
+    app.use("/api/leases", routeSource("leaseRoutes.ts"), leaseRoutes);
+    app.use("/api/tenants", routeSource("tenantsRoutes.ts"), tenantsRoutes);
+    app.use("/api", routeSource("verifiedScreeningRoutes.ts"), broadRouter);
+
+    const auth = { Authorization: "Bearer test-token" };
+
+    const rulesRes = await request(app).get("/api/compliance/rules?province=ON").set(auth);
+    expect(rulesRes.status).toBe(200);
+    expect(rulesRes.headers["x-route-source"]).toBe("complianceRoutes.ts");
+
+    const tenanciesRes = await request(app).get("/api/tenants/tenant-1/tenancies").set(auth);
+    expect(tenanciesRes.status).toBe(200);
+    expect(tenanciesRes.headers["x-route-source"]).toBe("tenantsRoutes.ts");
+
+    const leasesRes = await request(app).get("/api/leases/tenant/tenant-1").set(auth);
+    expect(leasesRes.status).toBe(200);
+    expect(leasesRes.headers["x-route-source"]).toBe("leaseRoutes.ts");
+  });
 });
