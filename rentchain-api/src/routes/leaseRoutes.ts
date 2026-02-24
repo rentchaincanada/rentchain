@@ -155,6 +155,7 @@ router.patch("/drafts/:id", requireLandlord, async (req: any, res: Response) => 
 });
 
 router.post("/drafts/:id/generate", requireLandlord, async (req: any, res: Response) => {
+  const correlationId = Math.random().toString(36).slice(2, 10);
   try {
     const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
     const id = String(req.params?.id || "").trim();
@@ -173,7 +174,7 @@ router.post("/drafts/:id/generate", requireLandlord, async (req: any, res: Respo
       return res.status(400).json({ ok: false, error: "template_version_invalid" });
     }
 
-    const file = await generateScheduleA({
+    const generated = await generateScheduleA({
       landlordId,
       draftId: id,
       draft,
@@ -186,6 +187,14 @@ router.post("/drafts/:id/generate", requireLandlord, async (req: any, res: Respo
       propertyAddressLine: String(req.body?.propertyAddress || "").trim() || String(draft.propertyId || ""),
       unitLabel: String(req.body?.unitLabel || "").trim() || String(draft.unitId || ""),
     });
+    const file =
+      generated.file ||
+      ({
+        kind: "schedule-a-pdf",
+        url: "inline://schedule-a.pdf",
+        sha256: generated.sha256,
+        sizeBytes: generated.sizeBytes,
+      } as const);
 
     const now = Date.now();
     const snapshotRef = db.collection("leaseSnapshots").doc();
@@ -207,15 +216,34 @@ router.post("/drafts/:id/generate", requireLandlord, async (req: any, res: Respo
       { merge: false }
     );
 
+    const wantsInline =
+      String(req.query?.inline || "").toLowerCase() === "1" ||
+      String(req.headers?.accept || "").toLowerCase().includes("application/pdf") ||
+      !generated.file;
+
+    if (wantsInline) {
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", 'attachment; filename="schedule-a.pdf"');
+      return res.status(200).send(generated.pdfBuffer);
+    }
+
     return res.status(201).json({
       ok: true,
       snapshotId: snapshotRef.id,
-      scheduleAUrl: file.url,
+      scheduleAUrl: generated.file?.url || file.url,
       generatedFiles: [file],
     });
   } catch (err: any) {
-    console.error("[POST /api/leases/drafts/:id/generate] error", err);
-    return res.status(500).json({ ok: false, error: "Failed to generate Schedule A PDF" });
+    console.error("[POST /api/leases/drafts/:id/generate] error", {
+      correlationId,
+      draftId: String(req.params?.id || ""),
+      landlordId: String(req.user?.landlordId || req.user?.id || ""),
+      message: err?.message || String(err),
+      stack: err?.stack || null,
+    });
+    return res
+      .status(500)
+      .json({ ok: false, error: "Failed to generate Schedule A PDF", correlationId });
   }
 });
 

@@ -3,6 +3,7 @@ import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { leaseService } from "../../services/leaseService";
 import { clearLeaseAutomationTasks } from "../../services/automationScheduler/leaseAutomationTaskStore";
+import * as leaseDraftsService from "../../services/leaseDraftsService";
 
 type DocShape = { id: string; data: any };
 
@@ -58,12 +59,17 @@ vi.mock("../../services/leaseDraftsService", async () => {
   return {
     ...actual,
     generateScheduleA: vi.fn(async () => ({
-      kind: "schedule-a-pdf",
-      url: "https://example.invalid/schedule-a.pdf",
+      file: {
+        kind: "schedule-a-pdf",
+        url: "https://example.invalid/schedule-a.pdf",
+        sha256: "abc123",
+        sizeBytes: 1024,
+        bucket: "test-bucket",
+        objectKey: "leases/landlord-1/draft/schedule-a-v1.pdf",
+      },
+      pdfBuffer: Buffer.from("pdf"),
       sha256: "abc123",
       sizeBytes: 1024,
-      bucket: "test-bucket",
-      objectKey: "leases/landlord-1/draft/schedule-a-v1.pdf",
     })),
   };
 });
@@ -118,6 +124,36 @@ describe("lease draft routes", () => {
     expect(generateRes.body?.scheduleAUrl).toContain("https://example.invalid");
     expect(String(generateRes.body?.snapshotId || "")).toBeTruthy();
   }, 30000);
+
+  it("returns inline PDF when storage upload is unavailable", async () => {
+    vi.spyOn(leaseDraftsService, "generateScheduleA").mockResolvedValueOnce({
+      file: null,
+      pdfBuffer: Buffer.from("%PDF-1.4 inline"),
+      sha256: "inline123",
+      sizeBytes: 15,
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const app = express();
+    app.use(express.json());
+    app.use(router);
+
+    const createRes = await request(app).post("/drafts").send(payload);
+    expect(createRes.status).toBe(201);
+    const draftId = String(createRes.body?.draftId || "");
+
+    const generateRes = await request(app)
+      .post(`/drafts/${encodeURIComponent(draftId)}/generate`)
+      .send({
+        tenantNames: ["Tenant One"],
+        propertyAddress: "123 Main St, Halifax, NS",
+        unitLabel: "Unit 2A",
+      });
+
+    expect(generateRes.status).toBe(200);
+    expect(generateRes.headers["content-type"]).toContain("application/pdf");
+    expect(generateRes.headers["content-disposition"]).toContain("schedule-a.pdf");
+  });
 
   it("regenerates and lists automation tasks for a lease", async () => {
     const router = (await import("../leaseRoutes")).default;
