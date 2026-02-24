@@ -241,13 +241,17 @@ router.get("/:id", (req: Request, res: Response) => {
   res.json({ lease });
 });
 
-router.get("/tenant/:tenantId", (req: Request, res: Response) => {
+router.get("/tenant/:tenantId", requireLandlord, (req: Request, res: Response) => {
   const { tenantId } = req.params;
   if (!tenantId) {
-    return res.status(400).json({ error: "tenantId is required" });
+    return res.status(400).json({ ok: false, error: "tenantId is required" });
   }
   const leases = leaseService.getByTenantId(tenantId);
-  res.json({ leases });
+  return res.status(200).json({ ok: true, leases });
+});
+
+router.options("/tenant/:tenantId", (_req: Request, res: Response) => {
+  return res.sendStatus(204);
 });
 
 router.get("/property/:propertyId", (req: Request, res: Response) => {
