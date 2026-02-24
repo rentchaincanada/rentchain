@@ -1,6 +1,24 @@
 import { apiJson } from "@/api/http";
 
 export type LeaseStatus = "active" | "ended";
+export type LeaseRenewalStatus = "unknown" | "offered" | "accepted" | "declined";
+
+export interface LeaseAutomationTask {
+  id: string;
+  leaseId: string;
+  kind:
+    | "renewal_reminder"
+    | "rent_increase_eligibility_check"
+    | "renewal_offer_draft"
+    | "move_out_reminder_30"
+    | "move_out_reminder_14"
+    | "move_out_reminder_3";
+  mode: "draft" | "reminder";
+  dueDate: string;
+  reason: string;
+  status: "upcoming";
+  createdAt: string;
+}
 
 export interface Lease {
   id: string;
@@ -9,7 +27,9 @@ export interface Lease {
   unitNumber: string;
   monthlyRent: number;
   startDate: string;
-  endDate?: string;
+  endDate?: string | null;
+  automationEnabled?: boolean;
+  renewalStatus?: LeaseRenewalStatus;
   status: LeaseStatus;
   createdAt: string;
   updatedAt: string;
@@ -21,13 +41,17 @@ export interface CreateLeasePayload {
   unitNumber: string;
   monthlyRent: number;
   startDate: string;
-  endDate?: string;
+  endDate?: string | null;
+  automationEnabled?: boolean;
+  renewalStatus?: LeaseRenewalStatus;
 }
 
 export interface UpdateLeasePayload {
   monthlyRent?: number;
   startDate?: string;
-  endDate?: string;
+  endDate?: string | null;
+  automationEnabled?: boolean;
+  renewalStatus?: LeaseRenewalStatus;
   status?: LeaseStatus;
 }
 
@@ -79,5 +103,26 @@ export async function endLease(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ endDate }),
     }
+  );
+}
+
+export async function regenerateLeaseAutomationTasks(
+  id: string
+): Promise<{ ok: true; tasks: LeaseAutomationTask[] }> {
+  return apiJson<{ ok: true; tasks: LeaseAutomationTask[] }>(
+    `/leases/${encodeURIComponent(id)}/automation/tasks/regenerate`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    }
+  );
+}
+
+export async function getLeaseAutomationTasks(
+  id: string
+): Promise<{ ok: true; tasks: LeaseAutomationTask[] }> {
+  return apiJson<{ ok: true; tasks: LeaseAutomationTask[] }>(
+    `/leases/${encodeURIComponent(id)}/automation/tasks`
   );
 }

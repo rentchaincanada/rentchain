@@ -1,5 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { endLease, getLeasesForTenant, Lease } from "../../api/leasesApi";
+import {
+  endLease,
+  getLeaseAutomationTasks,
+  getLeasesForTenant,
+  Lease,
+  LeaseAutomationTask,
+  regenerateLeaseAutomationTasks,
+  updateLease,
+} from "../../api/leasesApi";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { useUpgrade } from "@/context/UpgradeContext";
 import { upgradeStarterButtonStyle } from "@/lib/upgradeButtonStyles";
@@ -21,6 +29,10 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [endingLeaseId, setEndingLeaseId] = useState<string | null>(null);
+  const [automationSaving, setAutomationSaving] = useState(false);
+  const [tasksLoading, setTasksLoading] = useState(false);
+  const [taskError, setTaskError] = useState<string | null>(null);
+  const [upcomingTasks, setUpcomingTasks] = useState<LeaseAutomationTask[]>([]);
   const { features, loading: capsLoading } = useCapabilities();
   const { openUpgrade } = useUpgrade();
   const leasesEnabled = features?.leases !== false;
@@ -86,6 +98,38 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
     [leases]
   );
 
+  useEffect(() => {
+    let cancelled = false;
+    const loadTasks = async () => {
+      if (!activeLease?.id) {
+        setUpcomingTasks([]);
+        setTaskError(null);
+        return;
+      }
+      setTasksLoading(true);
+      setTaskError(null);
+      try {
+        const result = await getLeaseAutomationTasks(activeLease.id);
+        if (!cancelled) setUpcomingTasks(Array.isArray(result.tasks) ? result.tasks : []);
+      } catch (err: any) {
+        if (cancelled) return;
+        const msg = String(err?.message || "");
+        if (msg.includes("404")) {
+          setUpcomingTasks([]);
+          setTaskError("Automation tasks endpoint is unavailable.");
+        } else {
+          setTaskError("Failed to load automation tasks.");
+        }
+      } finally {
+        if (!cancelled) setTasksLoading(false);
+      }
+    };
+    void loadTasks();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeLease?.id]);
+
   const formatDate = (value?: string) => {
     if (!value) return "--";
     const d = new Date(value);
@@ -109,6 +153,50 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
       console.error("[TenantLeasePanel] Failed to end lease", err);
     } finally {
       setEndingLeaseId(null);
+    }
+  };
+
+  const handleAutomationToggle = async (nextEnabled: boolean) => {
+    if (!activeLease?.id) return;
+    setAutomationSaving(true);
+    setTaskError(null);
+    const leaseId = activeLease.id;
+    setLeases((prev) =>
+      prev.map((lease) =>
+        lease.id === leaseId ? { ...lease, automationEnabled: nextEnabled } : lease
+      )
+    );
+    try {
+      await updateLease(leaseId, { automationEnabled: nextEnabled });
+      if (nextEnabled) {
+        const regenerated = await regenerateLeaseAutomationTasks(leaseId);
+        setUpcomingTasks(Array.isArray(regenerated.tasks) ? regenerated.tasks : []);
+      } else {
+        setUpcomingTasks([]);
+      }
+    } catch (err: any) {
+      setLeases((prev) =>
+        prev.map((lease) =>
+          lease.id === leaseId ? { ...lease, automationEnabled: !nextEnabled } : lease
+        )
+      );
+      setTaskError("Unable to update automation right now.");
+    } finally {
+      setAutomationSaving(false);
+    }
+  };
+
+  const handleRegenerateTasks = async () => {
+    if (!activeLease?.id) return;
+    setTasksLoading(true);
+    setTaskError(null);
+    try {
+      const regenerated = await regenerateLeaseAutomationTasks(activeLease.id);
+      setUpcomingTasks(Array.isArray(regenerated.tasks) ? regenerated.tasks : []);
+    } catch (_err) {
+      setTaskError("Failed to regenerate automation tasks.");
+    } finally {
+      setTasksLoading(false);
     }
   };
 
@@ -194,6 +282,105 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
             <div style={{ color: "#9ca3af", fontSize: 12, marginTop: 4 }}>
               {formatDate(activeLease.startDate)} →{" "}
               {activeLease.endDate ? formatDate(activeLease.endDate) : "Ongoing"}
+            </div>
+            <div
+              style={{
+                marginTop: 10,
+                paddingTop: 10,
+                borderTop: "1px solid rgba(148,163,184,0.2)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 10,
+              }}
+            >
+              <div style={{ display: "grid", gap: 2 }}>
+                <div style={{ color: "#e5e7eb", fontSize: 13, fontWeight: 600 }}>
+                  Lifecycle automation
+                </div>
+                <div style={{ color: "#9ca3af", fontSize: 12 }}>
+                  Drafts and reminders only. Legal notices are not auto-sent.
+                </div>
+              </div>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, color: "#e5e7eb", fontSize: 12 }}>
+                <input
+                  type="checkbox"
+                  checked={activeLease.automationEnabled !== false}
+                  disabled={automationSaving}
+                  onChange={(event) => handleAutomationToggle(event.target.checked)}
+                />
+                {automationSaving ? "Saving..." : activeLease.automationEnabled !== false ? "On" : "Off"}
+              </label>
+            </div>
+
+            <div
+              style={{
+                marginTop: 10,
+                borderRadius: 10,
+                border: "1px solid rgba(148,163,184,0.2)",
+                padding: 10,
+                background: "rgba(255,255,255,0.01)",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 8,
+                }}
+              >
+                <div style={{ color: "#e5e7eb", fontSize: 13, fontWeight: 600 }}>
+                  Upcoming automation tasks
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRegenerateTasks}
+                  disabled={tasksLoading || activeLease.automationEnabled === false}
+                  style={{
+                    borderRadius: 8,
+                    border: "1px solid rgba(148,163,184,0.35)",
+                    background: "transparent",
+                    color: "#e5e7eb",
+                    padding: "4px 8px",
+                    fontSize: 12,
+                    cursor: tasksLoading ? "default" : "pointer",
+                    opacity: tasksLoading ? 0.7 : 1,
+                  }}
+                >
+                  {tasksLoading ? "Refreshing..." : "Refresh tasks"}
+                </button>
+              </div>
+              {taskError ? (
+                <div style={{ color: "#f59e0b", fontSize: 12, marginTop: 8 }}>{taskError}</div>
+              ) : null}
+              {!taskError && upcomingTasks.length === 0 ? (
+                <div style={{ color: "#9ca3af", fontSize: 12, marginTop: 8 }}>
+                  No upcoming tasks yet.
+                </div>
+              ) : null}
+              {upcomingTasks.length > 0 ? (
+                <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+                  {upcomingTasks.map((task) => (
+                    <div
+                      key={task.id}
+                      style={{
+                        borderRadius: 8,
+                        border: "1px solid rgba(148,163,184,0.15)",
+                        padding: "6px 8px",
+                        fontSize: 12,
+                        color: "#e5e7eb",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 8,
+                      }}
+                    >
+                      <span>{task.reason}</span>
+                      <span style={{ color: "#9ca3af" }}>{formatDate(task.dueDate)}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
             <button
               type="button"
