@@ -188,6 +188,11 @@ app.get("/api/me", async (req: any, res: any, next: any) => {
   return res.json({ ok: true, user: req.user });
 });
 
+// Core prefixed APIs must mount before broad /api routers.
+app.use("/api/compliance", routeSource("complianceRoutes.ts"), complianceRoutes);
+app.use("/api/leases", routeSource("leaseRoutes.ts"), leaseRoutes);
+app.use("/api/tenants", routeSource("tenantsRoutes.ts"), tenantsRoutes);
+
 // Ledger V2 (after auth decode)
 app.use("/api/ledger-v2", routeSource("ledgerV2Routes.ts"), ledgerV2Routes);
 app.use("/api/tenant-history", tenantHistoryShareRoutes);
@@ -241,7 +246,6 @@ app.use("/api", stubsRoutes);
 app.use("/api", routeSource("screeningReportRoutes.ts"), screeningReportRoutes);
 
 // Core APIs
-app.use("/api/leases", routeSource("leaseRoutes.ts"), leaseRoutes);
 app.use("/api", tenantOnboardRoutes);
 app.use("/api/events", eventsRoutes);
 app.use("/api/dashboard", dashboardRoutes);
@@ -262,14 +266,12 @@ app.get("/api/__probe/revision", (_req, res) => {
     ts: Date.now(),
   });
 });
-app.use("/api/tenants", routeSource("tenantsRoutes.ts"), tenantsRoutes);
 app.use("/api", routeSource("tenanciesRoutes.ts"), tenanciesRoutes);
 app.use("/api/account", accountRoutes);
 app.use("/api/onboarding", routeSource("onboardingRoutes.ts"), onboardingRoutes);
 app.use("/api", routeSource("onboardingRoutes.ts"), onboardingRoutes);
 app.use("/api", routeSource("messagesRoutes.ts"), messagesRoutes);
 app.use("/api", routeSource("telemetryRoutes.ts"), telemetryRoutes);
-app.use("/api/compliance", routeSource("complianceRoutes.ts"), complianceRoutes);
 console.log(
   "[routes] /api/properties, /api/properties/:propertyId/units, /api/action-requests, /api/applications"
 );
