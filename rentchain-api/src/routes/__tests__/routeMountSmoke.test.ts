@@ -64,12 +64,17 @@ vi.mock("../../services/leaseDraftsService", () => ({
   getDraftById: vi.fn(async () => ({ exists: false, data: () => null, id: "draft" })),
   getSnapshotById: vi.fn(async () => ({ exists: false, data: () => null, id: "snap" })),
   generateScheduleA: vi.fn(async () => ({
-    kind: "schedule-a-pdf",
-    url: "https://example.invalid/schedule-a.pdf",
+    file: {
+      kind: "schedule-a-pdf",
+      url: "https://example.invalid/schedule-a.pdf",
+      sha256: "abc123",
+      sizeBytes: 123,
+      bucket: "bucket",
+      objectKey: "leases/x/y.pdf",
+    },
+    pdfBuffer: Buffer.from("pdf"),
     sha256: "abc123",
     sizeBytes: 123,
-    bucket: "bucket",
-    objectKey: "leases/x/y.pdf",
   })),
 }));
 

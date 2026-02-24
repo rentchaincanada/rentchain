@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { db } from "../config/firebase";
 import { createSignedUrl, putPdfObject } from "../storage/pdfStore";
+import { generateScheduleAPdfBuffer } from "./leasePdf/scheduleAPdf";
 
 export const NS_TEMPLATE_VERSION = "ns-schedule-a-v1";
 export const NS_PROVINCE = "NS";
@@ -38,6 +39,13 @@ export interface GeneratedFile {
   sizeBytes: number;
   bucket?: string;
   objectKey?: string;
+}
+
+export interface ScheduleAGenerationResult {
+  file: GeneratedFile | null;
+  pdfBuffer: Buffer;
+  sha256: string;
+  sizeBytes: number;
 }
 
 export interface LeaseSnapshot extends LeaseDraftCore {
@@ -355,19 +363,61 @@ export async function generateScheduleA(params: {
   tenantDisplayNames: string[];
   propertyAddressLine: string;
   unitLabel: string;
-}): Promise<GeneratedFile> {
+}): Promise<ScheduleAGenerationResult> {
   const objectKey = `leases/${params.landlordId}/${params.draftId}/schedule-a-v1.pdf`;
-  const html = renderNsScheduleAHtml({
-    draftId: params.draftId,
-    draft: params.draft,
-    landlordDisplayName: params.landlordDisplayName,
-    tenantDisplayNames: params.tenantDisplayNames,
-    propertyAddressLine: params.propertyAddressLine,
-    unitLabel: params.unitLabel,
-  });
-  const pdfBuffer = await renderHtmlToPdfBuffer(html);
+  let pdfBuffer: Buffer;
+  const preferPdfKit =
+    String(process.env.LEASE_SCHEDULE_A_PDF_ENGINE || "").toLowerCase() === "pdfkit" ||
+    String(process.env.NODE_ENV || "").toLowerCase() === "production";
+
+  if (preferPdfKit) {
+    pdfBuffer = await generateScheduleAPdfBuffer({
+      draftId: params.draftId,
+      draft: params.draft,
+      landlordDisplayName: params.landlordDisplayName,
+      tenantDisplayNames: params.tenantDisplayNames,
+      propertyAddressLine: params.propertyAddressLine,
+      unitLabel: params.unitLabel,
+    });
+  } else {
+    try {
+      const html = renderNsScheduleAHtml({
+        draftId: params.draftId,
+        draft: params.draft,
+        landlordDisplayName: params.landlordDisplayName,
+        tenantDisplayNames: params.tenantDisplayNames,
+        propertyAddressLine: params.propertyAddressLine,
+        unitLabel: params.unitLabel,
+      });
+      pdfBuffer = await renderHtmlToPdfBuffer(html);
+    } catch (err: any) {
+      console.warn("[schedule-a] html renderer unavailable, falling back to PDFKit", {
+        draftId: params.draftId,
+        message: err?.message || String(err),
+      });
+      pdfBuffer = await generateScheduleAPdfBuffer({
+        draftId: params.draftId,
+        draft: params.draft,
+        landlordDisplayName: params.landlordDisplayName,
+        tenantDisplayNames: params.tenantDisplayNames,
+        propertyAddressLine: params.propertyAddressLine,
+        unitLabel: params.unitLabel,
+      });
+    }
+  }
+
   const sha256 = crypto.createHash("sha256").update(pdfBuffer).digest("hex");
   const sizeBytes = pdfBuffer.byteLength;
+
+  if (!process.env.GCS_UPLOAD_BUCKET) {
+    return {
+      file: null,
+      pdfBuffer,
+      sha256,
+      sizeBytes,
+    };
+  }
+
   const uploaded = await putPdfObject({ objectKey, pdfBuffer });
   const url = await createSignedUrl({
     bucket: uploaded.bucket,
@@ -375,12 +425,17 @@ export async function generateScheduleA(params: {
     expiresSeconds: 60 * 60 * 24 * 7,
   });
   return {
-    kind: "schedule-a-pdf",
-    url,
+    file: {
+      kind: "schedule-a-pdf",
+      url,
+      sha256,
+      sizeBytes,
+      bucket: uploaded.bucket,
+      objectKey: uploaded.path,
+    },
+    pdfBuffer,
     sha256,
     sizeBytes,
-    bucket: uploaded.bucket,
-    objectKey: uploaded.path,
   };
 }
 
