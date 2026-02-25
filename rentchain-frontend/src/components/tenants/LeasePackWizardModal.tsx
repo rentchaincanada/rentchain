@@ -10,6 +10,8 @@ import {
   updateLeaseDraft,
 } from "@/api/leasePacksApi";
 import { useToast } from "../ui/ToastProvider";
+import { apiJson } from "@/api/http";
+import { normalizeProvinceCode, provinceLabelFromCode, type ProvinceCode } from "@/lib/provinces";
 
 interface Props {
   open: boolean;
@@ -62,6 +64,8 @@ export const LeasePackWizardModal: React.FC<Props> = ({
   const [generating, setGenerating] = React.useState(false);
   const [activating, setActivating] = React.useState(false);
   const [activatedLeaseId, setActivatedLeaseId] = React.useState<string>("");
+  const [provinceCode, setProvinceCode] = React.useState<ProvinceCode | null>(null);
+  const [provinceLoading, setProvinceLoading] = React.useState(false);
   const [state, setState] = React.useState<FormState>({
     termType: "fixed",
     startDate: String(tenant?.leaseStart || lease?.startDate || defaultStart),
@@ -104,6 +108,53 @@ export const LeasePackWizardModal: React.FC<Props> = ({
   }, [propertyId, state, tenantId, unitId]);
 
   React.useEffect(() => {
+    let cancelled = false;
+    async function resolveProvince() {
+      if (!open) return;
+      const fromTenantOrLease =
+        normalizeProvinceCode(String(tenant?.province || lease?.province || "")) || null;
+      if (fromTenantOrLease && fromTenantOrLease !== "UNSET") {
+        if (!cancelled) setProvinceCode(fromTenantOrLease);
+        return;
+      }
+      if (!propertyId) {
+        if (!cancelled) setProvinceCode("UNSET");
+        return;
+      }
+
+      setProvinceLoading(true);
+      try {
+        const resp = await apiJson<any>("/properties");
+        const list = Array.isArray(resp?.items)
+          ? resp.items
+          : Array.isArray(resp?.properties)
+            ? resp.properties
+            : [];
+        const match = list.find(
+          (item: any) =>
+            String(item?.id || "").trim() === propertyId || String(item?.propertyId || "").trim() === propertyId
+        );
+        const resolved = normalizeProvinceCode(String(match?.province || "")) || "UNSET";
+        if (!cancelled) setProvinceCode(resolved);
+      } catch {
+        if (!cancelled) setProvinceCode("UNSET");
+      } finally {
+        if (!cancelled) setProvinceLoading(false);
+      }
+    }
+    void resolveProvince();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, propertyId, tenant?.province, lease?.province]);
+
+  const isNsProvince = provinceCode === "NS";
+  const isOntario = provinceCode === "ON";
+  const provinceUnset = !provinceCode || provinceCode === "UNSET";
+  const blockingProvinceError =
+    !provinceLoading && provinceUnset ? "Set property province to generate lease pack" : "";
+
+  React.useEffect(() => {
     if (!open) {
       setDraftId("");
       setSnapshotId("");
@@ -141,6 +192,10 @@ export const LeasePackWizardModal: React.FC<Props> = ({
   };
 
   const handleGenerate = async () => {
+    if (!isNsProvince) {
+      setError("Schedule A generation is available for Nova Scotia properties only.");
+      return;
+    }
     if (import.meta.env.MODE !== "production") {
       console.debug("[leasepack] generate clicked", {
         termType: state.termType,
@@ -203,6 +258,10 @@ export const LeasePackWizardModal: React.FC<Props> = ({
   };
 
   const handleActivateLease = async () => {
+    if (!isNsProvince) {
+      setError("Lease activation from this modal is available for Nova Scotia Schedule A flow only.");
+      return;
+    }
     if (!draftId) {
       setError("Generate Schedule A PDF first, then activate the lease.");
       return;
@@ -259,9 +318,15 @@ export const LeasePackWizardModal: React.FC<Props> = ({
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
-            <div style={{ fontWeight: 800, fontSize: 18 }}>Create Lease Pack (NS)</div>
+            <div style={{ fontWeight: 800, fontSize: 18 }}>
+              Create Lease Pack ({provinceCode && provinceCode !== "UNSET" ? provinceCode : "Province required"})
+            </div>
             <div style={{ fontSize: 12, color: "#4b5563" }}>
-              This Schedule A is an addendum to Nova Scotia Standard Form of Lease (Form P).
+              {isNsProvince
+                ? "This Schedule A is an addendum to Nova Scotia Standard Form of Lease (Form P)."
+                : isOntario
+                  ? "Ontario lease pack documents are available for Ontario properties."
+                  : "Set property province to continue."}
             </div>
           </div>
           <Button onClick={onClose} style={{ padding: "6px 10px" }}>
@@ -270,7 +335,7 @@ export const LeasePackWizardModal: React.FC<Props> = ({
         </div>
 
         <div style={{ fontSize: 13, color: "#4b5563" }}>
-          Form P reference template:{" "}
+          {isNsProvince ? "Form P reference template:" : "Lease template library:"}{" "}
           <a href="/help/templates" style={{ color: "#2563eb", textDecoration: "underline" }}>
             Templates
           </a>
@@ -289,8 +354,36 @@ export const LeasePackWizardModal: React.FC<Props> = ({
           <Field label="Unit">
             <div>{unitLabel || unitId || "Unknown"}</div>
           </Field>
+          <Field label="Province">
+            <div>{provinceCode ? provinceLabelFromCode(provinceCode) : provinceLoading ? "Loading..." : "Unknown"}</div>
+          </Field>
         </div>
 
+        {blockingProvinceError ? (
+          <div style={{ border: "1px solid #fecaca", background: "#fef2f2", color: "#b91c1c", padding: 10, borderRadius: 8 }}>
+            {blockingProvinceError}
+          </div>
+        ) : null}
+
+        {!blockingProvinceError && !isNsProvince ? (
+          <div
+            style={{
+              border: "1px solid #d1d5db",
+              background: "#f9fafb",
+              color: "#374151",
+              padding: 12,
+              borderRadius: 8,
+              fontSize: 13,
+            }}
+          >
+            {isOntario
+              ? "Ontario pack selected. Nova Scotia Schedule A generation is not used for Ontario properties."
+              : "Select a supported province to continue."}
+          </div>
+        ) : null}
+
+        {isNsProvince ? (
+          <>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 10 }}>
           <Field label="Term type">
             <select
@@ -391,6 +484,8 @@ export const LeasePackWizardModal: React.FC<Props> = ({
             style={{ width: "100%", borderRadius: 8, border: "1px solid #d1d5db", padding: 8, fontSize: 13 }}
           />
         </Field>
+          </>
+        ) : null}
 
         {error ? (
           <div style={{ border: "1px solid #fecaca", background: "#fef2f2", color: "#b91c1c", padding: 10, borderRadius: 8 }}>
@@ -398,6 +493,7 @@ export const LeasePackWizardModal: React.FC<Props> = ({
           </div>
         ) : null}
 
+        {isNsProvince ? (
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <div style={{ color: "#4b5563", fontSize: 12 }}>
             {saving ? "Saving draft..." : draftId ? `Draft: ${draftId}` : "Preparing draft..."}
@@ -435,7 +531,8 @@ export const LeasePackWizardModal: React.FC<Props> = ({
             ) : null}
           </div>
         </div>
-        {snapshotId ? (
+        ) : null}
+        {isNsProvince && snapshotId ? (
           <div style={{ color: "#4b5563", fontSize: 12 }}>
             Activating creates the official lease record and enables lifecycle automation.
           </div>
