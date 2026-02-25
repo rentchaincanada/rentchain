@@ -5,6 +5,7 @@ import { requireAuth } from "../middleware/requireAuth";
 import { rateLimitReferralsUser } from "../middleware/rateLimit";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 import { sendEmail } from "../services/emailService";
+import { getEnvFlags } from "../config/requiredEnv";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ACTIVE_REFERRAL_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
@@ -22,11 +23,8 @@ function resolveFrontendBase(): string {
   return String(process.env.FRONTEND_URL || fallback).trim().replace(/\/$/, "");
 }
 
-function getSendgridConfig() {
-  const apiKey = process.env.SENDGRID_API_KEY;
-  const from =
-    process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM || process.env.FROM_EMAIL;
-  return { apiKey, from };
+function makeCorrelationId(prefix: string) {
+  return `${prefix}_${Date.now().toString(36)}_${crypto.randomBytes(3).toString("hex")}`;
 }
 
 async function createReferralCode() {
@@ -129,22 +127,29 @@ router.post("/referrals", requireAuth, rateLimitReferralsUser, async (req: any, 
       refereeEmail,
       refereeName,
       note,
-      status: "sent",
+      status: "created",
       referralCode,
       createdAt: now,
       updatedAt: now,
       acceptedAt: null,
       approvedAt: null,
       lastEmailSentAt: null,
+      emailError: null,
       metadata: {
         userAgent: req.get("user-agent") || null,
       },
     });
 
     const link = `${resolveFrontendBase()}/site/request-access?ref=${encodeURIComponent(referralCode)}`;
-    const { apiKey, from } = getSendgridConfig();
+    const envFlags = getEnvFlags();
+    const from =
+      process.env.EMAIL_FROM ||
+      process.env.SENDGRID_FROM_EMAIL ||
+      process.env.SENDGRID_FROM ||
+      process.env.FROM_EMAIL;
     let emailed = false;
-    if (apiKey && from) {
+    let emailError: string | null = null;
+    if (envFlags.emailConfigured && from) {
       try {
         const inviter = referrerName || "A RentChain landlord";
         await sendEmail({
@@ -177,10 +182,30 @@ router.post("/referrals", requireAuth, rateLimitReferralsUser, async (req: any, 
           }),
         });
         emailed = true;
-        await referralRef.set({ lastEmailSentAt: Date.now() }, { merge: true });
+        await referralRef.set(
+          { status: "sent", lastEmailSentAt: Date.now(), updatedAt: Date.now(), emailError: null },
+          { merge: true }
+        );
       } catch (err: any) {
-        console.error("[referrals] invite email failed", err?.message || err);
+        const correlationId = makeCorrelationId("referral_mail");
+        emailError = err?.message || "SEND_FAILED";
+        console.error("[referrals] invite email failed", {
+          provider: envFlags.emailProvider,
+          correlationId,
+          referralId: referralRef.id,
+          message: err?.message || "send_failed",
+        });
+        await referralRef.set(
+          { status: "created", updatedAt: Date.now(), emailError },
+          { merge: true }
+        );
       }
+    } else {
+      emailError = "EMAIL_NOT_CONFIGURED";
+      await referralRef.set(
+        { status: "created", updatedAt: Date.now(), emailError },
+        { merge: true }
+      );
     }
 
     return res.json({
@@ -188,10 +213,11 @@ router.post("/referrals", requireAuth, rateLimitReferralsUser, async (req: any, 
       referral: {
         id: referralRef.id,
         referralCode,
-        status: "sent",
+        status: emailed ? "sent" : "created",
         link,
       },
       emailed,
+      emailError,
     });
   } catch (err: any) {
     console.error("[referrals] create failed", err?.message || err);

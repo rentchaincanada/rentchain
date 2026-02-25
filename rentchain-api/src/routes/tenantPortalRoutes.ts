@@ -3,6 +3,8 @@ import { authenticateJwt } from "../middleware/authMiddleware";
 import { db } from "../config/firebase";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 import { sendEmail } from "../services/emailService";
+import { getEnvFlags } from "../config/requiredEnv";
+import { getAdminEmails } from "../lib/adminEmails";
 
 const router = Router();
 router.use(authenticateJwt);
@@ -27,6 +29,10 @@ function toMillis(value: any): number | null {
   if (typeof value?.toMillis === "function") return value.toMillis();
   if (typeof value?.seconds === "number") return value.seconds * 1000;
   return null;
+}
+
+function makeCorrelationId(prefix: string): string {
+  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
 router.get("/me", requireTenant, async (req: any, res) => {
@@ -742,7 +748,9 @@ router.post("/maintenance-requests", requireTenant, async (req: any, res) => {
 
     let emailed = false;
     let emailError: string | undefined;
-    const landlordFallbackEmail = String(process.env.MAINTENANCE_NOTIFY_EMAIL || "").trim();
+    const envFlags = getEnvFlags();
+    const maintenanceNotifyEmail = String(process.env.MAINTENANCE_NOTIFY_EMAIL || "").trim();
+    const adminEmails = getAdminEmails().filter((e) => emailRegex.test(e));
     let landlordEmail: string | null = null;
 
     if (landlordId) {
@@ -768,30 +776,40 @@ router.post("/maintenance-requests", requireTenant, async (req: any, res) => {
       }
     }
 
-    if (!landlordEmail && landlordFallbackEmail) {
-      landlordEmail = landlordFallbackEmail;
+    const recipients: string[] = [];
+    if (maintenanceNotifyEmail && emailRegex.test(maintenanceNotifyEmail)) {
+      recipients.push(maintenanceNotifyEmail);
+    } else if (landlordEmail && emailRegex.test(landlordEmail)) {
+      recipients.push(landlordEmail);
+    } else if (adminEmails.length > 0) {
+      recipients.push(...adminEmails);
     }
 
-    if (!landlordEmail) {
-      emailError = "MISSING_LANDLORD_EMAIL";
-    } else if (!emailRegex.test(landlordEmail)) {
-      emailError = "INVALID_LANDLORD_EMAIL";
+    if (recipients.length === 0) {
+      emailError = "MISSING_RECIPIENT_EMAIL";
+    } else if (!envFlags.emailConfigured) {
+      emailError = "EMAIL_NOT_CONFIGURED";
     } else {
-      const apiKey = process.env.SENDGRID_API_KEY;
       const from =
-        process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM || process.env.FROM_EMAIL;
-      const replyTo = process.env.SENDGRID_REPLY_TO || process.env.SENDGRID_REPLYTO_EMAIL;
+        process.env.EMAIL_FROM ||
+        process.env.SENDGRID_FROM_EMAIL ||
+        process.env.SENDGRID_FROM ||
+        process.env.FROM_EMAIL;
+      const replyTo =
+        process.env.EMAIL_REPLY_TO ||
+        process.env.SENDGRID_REPLY_TO ||
+        process.env.SENDGRID_REPLYTO_EMAIL;
       const baseUrl = (process.env.PUBLIC_APP_URL || process.env.VITE_PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
       const requestLink = `${baseUrl}/maintenance`;
       const excerpt =
         trimmedDescription.length > 400 ? `${trimmedDescription.slice(0, 400)}...` : trimmedDescription;
 
-      if (!apiKey || !from) {
+      if (!from) {
         emailError = "EMAIL_NOT_CONFIGURED";
       } else {
         try {
           await sendEmail({
-            to: landlordEmail,
+            to: recipients,
             from,
             replyTo: replyTo || from,
             subject: `New maintenance request: ${trimmedTitle}`,
@@ -809,14 +827,15 @@ router.post("/maintenance-requests", requireTenant, async (req: any, res) => {
           });
           emailed = true;
         } catch (err: any) {
+          const correlationId = makeCorrelationId("maint_mail");
           emailed = false;
           emailError = err?.message || "SEND_FAILED";
           console.error("[tenant/maintenance-requests] email send failed", {
+            provider: envFlags.emailProvider,
+            correlationId,
             requestId: ref.id,
             landlordId,
-            landlordEmail,
-            errMessage: err?.message,
-            errBody: err?.response?.body,
+            message: err?.message || "send_failed",
           });
         }
       }

@@ -4,6 +4,7 @@ import { db } from "../config/firebase";
 import { getAdminEmails } from "../lib/adminEmails";
 import { sendEmail } from "../services/emailService";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
+import { getEnvFlags } from "../config/requiredEnv";
 
 const router = Router();
 
@@ -24,6 +25,10 @@ function resolveFrontendBase(): string {
       : "http://localhost:5173";
   const base = String(process.env.FRONTEND_URL || fallback).trim();
   return base.replace(/\/$/, "");
+}
+
+function makeCorrelationId(prefix: string): string {
+  return `${prefix}_${Date.now().toString(36)}_${crypto.randomBytes(3).toString("hex")}`;
 }
 
 router.post("/request", async (req: any, res) => {
@@ -53,9 +58,14 @@ router.post("/request", async (req: any, res) => {
   );
 
   const from =
-    process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM || process.env.FROM_EMAIL;
+    process.env.EMAIL_FROM ||
+    process.env.SENDGRID_FROM_EMAIL ||
+    process.env.SENDGRID_FROM ||
+    process.env.FROM_EMAIL;
+  const envFlags = getEnvFlags();
   const admins = getAdminEmails();
   let emailed = false;
+  let emailError: string | undefined;
   let adminNotified = false;
 
   if (from) {
@@ -81,16 +91,22 @@ router.post("/request", async (req: any, res) => {
     } catch {
       emailed = false;
     }
+  }
 
-    if (admins.length > 0) {
+  if (admins.length > 0) {
+    const correlationId = makeCorrelationId("access_admin");
+    if (!envFlags.emailConfigured || !from) {
+      emailError = "EMAIL_NOT_CONFIGURED";
+    } else {
       try {
         await sendEmail({
           to: admins,
           from: from as string,
           subject: "New RentChain access request",
           text:
-            `New landlord lead:\n\n` +
+            `New access request:\n\n` +
             `Email: ${email}\n` +
+            `Requested at: ${new Date(now).toISOString()}\n` +
             `Name: ${firstName || "-"}\n` +
             `Portfolio: ${portfolioSize || "-"}\n` +
             `Note: ${note || "-"}\n`,
@@ -102,8 +118,17 @@ router.post("/request", async (req: any, res) => {
           }),
         });
         adminNotified = true;
-      } catch {
+        emailed = true;
+      } catch (err: any) {
         adminNotified = false;
+        emailed = false;
+        emailError = err?.message || "SEND_FAILED";
+        console.error("[access/request] admin email failed", {
+          provider: envFlags.emailProvider,
+          correlationId,
+          leadId,
+          message: err?.message || "send_failed",
+        });
       }
     }
   }
@@ -113,6 +138,7 @@ router.post("/request", async (req: any, res) => {
     status: "pending",
     emailed,
     adminNotified,
+    emailError,
   });
 });
 
