@@ -216,10 +216,9 @@ async function createAndEmailInvite(opts: {
     return { inviteUrl, inviteEmailed: false };
   }
 
-  const from =
-    process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM || process.env.FROM_EMAIL;
+  const from = process.env.EMAIL_FROM || process.env.FROM_EMAIL;
   if (!from) {
-    console.warn("[applicationConversion] missing sendgrid env, skipping email");
+    console.warn("[applicationConversion] missing email sender env, skipping email");
     return { inviteUrl, inviteEmailed: false };
   }
 

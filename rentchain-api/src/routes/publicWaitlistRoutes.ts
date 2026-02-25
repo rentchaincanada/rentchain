@@ -49,12 +49,15 @@ router.post("/waitlist", async (req, res) => {
       { merge: true }
     );
 
-    const apiKey = process.env.SENDGRID_API_KEY;
-    const from = process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM;
-    const hasKey = !!apiKey;
+    const provider = (process.env.EMAIL_PROVIDER || "mailgun").toLowerCase();
+    const from = process.env.EMAIL_FROM || process.env.FROM_EMAIL;
+    const hasProviderConfig =
+      provider === "mailgun"
+        ? Boolean(process.env.MAILGUN_API_KEY) && Boolean(process.env.MAILGUN_DOMAIN)
+        : false;
     const hasFrom = !!from;
-    if (!hasKey || !hasFrom) {
-      console.error("[waitlist] sendgrid not configured", { hasKey, hasFrom });
+    if (!hasProviderConfig || !hasFrom) {
+      console.error("[waitlist] email provider not configured", { provider, hasProviderConfig, hasFrom });
       return res
         .status(500)
         .json({ ok: false, error: "WAITLIST_EMAIL_NOT_CONFIGURED", emailed: false });
@@ -86,10 +89,11 @@ router.post("/waitlist", async (req, res) => {
         }),
       });
       emailed = true;
-      console.info("[waitlist] email sent", { to: maskEmail(email), provider: "sendgrid" });
+      console.info("[waitlist] email sent", { to: maskEmail(email), provider });
     } catch (e: any) {
-      console.error("[waitlist] sendgrid send failed", {
+      console.error("[waitlist] provider send failed", {
         to: maskEmail(email),
+        provider,
         message: e?.message,
         code: e?.code || e?.response?.statusCode,
         body: e?.response?.body,
@@ -110,11 +114,16 @@ router.post("/waitlist", async (req, res) => {
 router.get("/waitlist/_ping", (_req, res) => res.json({ ok: true, route: "waitlist" }));
 
 router.get("/waitlist/health", (_req, res) => {
-  const apiKey = process.env.SENDGRID_API_KEY;
-  const from = process.env.SENDGRID_FROM_EMAIL;
+  const provider = (process.env.EMAIL_PROVIDER || "mailgun").toLowerCase();
+  const configured =
+    provider === "mailgun"
+      ? Boolean(process.env.MAILGUN_API_KEY) && Boolean(process.env.MAILGUN_DOMAIN)
+      : false;
+  const from = process.env.EMAIL_FROM || process.env.FROM_EMAIL;
   return res.json({
     ok: true,
-    sendgridConfigured: Boolean(apiKey),
+    provider,
+    configured,
     fromSet: Boolean(from),
   });
 });

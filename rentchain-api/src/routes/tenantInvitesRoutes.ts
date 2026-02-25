@@ -111,10 +111,8 @@ router.post(
       const baseUrl = (process.env.PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
       const inviteUrl = `${baseUrl}/tenant/invite/${token}`;
 
-      const apiKey = process.env.SENDGRID_API_KEY;
-      const from =
-        process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM || process.env.FROM_EMAIL;
-      if (!apiKey || !from) {
+      const from = process.env.EMAIL_FROM || process.env.FROM_EMAIL;
+      if (!from) {
         return res.json({
           ok: true,
           token,
@@ -131,7 +129,7 @@ router.post(
             createdAt: now,
           },
           emailed: false,
-          emailError: "SendGrid not configured",
+          emailError: "EMAIL_NOT_CONFIGURED",
         });
       }
 

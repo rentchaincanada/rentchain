@@ -100,12 +100,10 @@ router.post("/", authenticateJwt, async (req: any, res) => {
     if (applicantEmail && !hasValidEmail) {
       emailError = "INVALID_APPLICANT_EMAIL";
     } else if (hasValidEmail) {
-      const apiKey = process.env.SENDGRID_API_KEY;
-      const from =
-        process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM || process.env.FROM_EMAIL;
-      const replyTo = process.env.SENDGRID_REPLY_TO || process.env.SENDGRID_REPLYTO_EMAIL;
+      const from = process.env.EMAIL_FROM || process.env.FROM_EMAIL;
+      const replyTo = process.env.EMAIL_REPLY_TO || process.env.REPLY_TO_EMAIL;
 
-      if (!apiKey || !from) {
+      if (!from) {
         emailError = "EMAIL_NOT_CONFIGURED";
       } else {
         try {
@@ -158,11 +156,10 @@ router.post("/", authenticateJwt, async (req: any, res) => {
           emailed = false;
           emailError = err?.message || "SEND_FAILED";
           console.error("[application-links] email send failed", {
-            applicantEmail,
             propertyId,
             unitId,
             errMessage: err?.message,
-            errBody: err?.response?.body,
+            provider: "mailgun",
           });
         }
       }
