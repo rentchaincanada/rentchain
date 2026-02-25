@@ -4,13 +4,13 @@ type EnvRequirement =
   | { kind: "name"; name: string }
   | { kind: "oneOf"; label: string; names: string[] };
 
-const HARD_REQUIREMENTS: EnvRequirement[] = [
+const BASE_HARD_REQUIREMENTS: EnvRequirement[] = [
   { kind: "name", name: "JWT_SECRET" },
-  { kind: "oneOf", label: "APP_BASE_URL|FRONTEND_URL|PUBLIC_APP_URL", names: ["APP_BASE_URL", "FRONTEND_URL", "PUBLIC_APP_URL"] },
-  { kind: "name", name: "EMAIL_PROVIDER" },
-  { kind: "name", name: "MAILGUN_API_KEY" },
-  { kind: "name", name: "MAILGUN_DOMAIN" },
-  { kind: "name", name: "EMAIL_FROM" },
+  {
+    kind: "oneOf",
+    label: "APP_BASE_URL|FRONTEND_URL|PUBLIC_APP_URL",
+    names: ["APP_BASE_URL", "FRONTEND_URL", "PUBLIC_APP_URL"],
+  },
   { kind: "name", name: "STRIPE_SECRET_KEY" },
   { kind: "name", name: "STRIPE_WEBHOOK_SECRET" },
   { kind: "name", name: "INTERNAL_JOB_TOKEN" },
@@ -35,9 +35,26 @@ function hasEnv(name: string): boolean {
   return Boolean(raw && String(raw).trim());
 }
 
+function getEmailProvider(): "mailgun" | "sendgrid" {
+  const provider = String(process.env.EMAIL_PROVIDER || "sendgrid")
+    .trim()
+    .toLowerCase();
+  return provider === "mailgun" ? "mailgun" : "sendgrid";
+}
+
 function missingHardRequirements(): string[] {
   const missing: string[] = [];
-  for (const req of HARD_REQUIREMENTS) {
+  const provider = getEmailProvider();
+  const emailRequirements =
+    provider === "mailgun"
+      ? ["MAILGUN_API_KEY", "MAILGUN_DOMAIN", "EMAIL_FROM"]
+      : ["SENDGRID_API_KEY", "SENDGRID_FROM_EMAIL"];
+  const hardRequirements: EnvRequirement[] = [
+    ...BASE_HARD_REQUIREMENTS,
+    ...emailRequirements.map((name) => ({ kind: "name", name } as const)),
+  ];
+
+  for (const req of hardRequirements) {
     if (req.kind === "name") {
       if (!hasEnv(req.name)) missing.push(req.name);
       continue;
@@ -54,15 +71,24 @@ function missingSoftRequirements(): string[] {
 
 export function getEnvFlags() {
   const pricingHealth = getPricingHealth();
+  const emailProvider = getEmailProvider();
+  const mailgunConfigured =
+    hasEnv("MAILGUN_API_KEY") &&
+    hasEnv("MAILGUN_DOMAIN") &&
+    hasEnv("EMAIL_FROM");
+  const sendgridConfigured =
+    hasEnv("SENDGRID_API_KEY") && hasEnv("SENDGRID_FROM_EMAIL");
+
   return {
+    emailProvider,
     jwtConfigured: hasEnv("JWT_SECRET"),
     firebaseConfigured: hasEnv("FIREBASE_API_KEY"),
     emailConfigured:
-      hasEnv("EMAIL_PROVIDER") &&
-      hasEnv("MAILGUN_API_KEY") &&
-      hasEnv("MAILGUN_DOMAIN") &&
-      hasEnv("EMAIL_FROM"),
-    stripeConfigured: hasEnv("STRIPE_SECRET_KEY") && hasEnv("STRIPE_WEBHOOK_SECRET"),
+      emailProvider === "mailgun" ? mailgunConfigured : sendgridConfigured,
+    mailgunConfigured,
+    sendgridConfigured,
+    stripeConfigured:
+      hasEnv("STRIPE_SECRET_KEY") && hasEnv("STRIPE_WEBHOOK_SECRET"),
     pricingConfigured: pricingHealth.ok,
   };
 }
