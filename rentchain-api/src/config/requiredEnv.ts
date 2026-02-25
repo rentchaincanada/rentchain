@@ -7,8 +7,10 @@ type EnvRequirement =
 const HARD_REQUIREMENTS: EnvRequirement[] = [
   { kind: "name", name: "JWT_SECRET" },
   { kind: "oneOf", label: "APP_BASE_URL|FRONTEND_URL|PUBLIC_APP_URL", names: ["APP_BASE_URL", "FRONTEND_URL", "PUBLIC_APP_URL"] },
-  { kind: "name", name: "SENDGRID_API_KEY" },
-  { kind: "name", name: "SENDGRID_FROM_EMAIL" },
+  { kind: "name", name: "EMAIL_PROVIDER" },
+  { kind: "name", name: "MAILGUN_API_KEY" },
+  { kind: "name", name: "MAILGUN_DOMAIN" },
+  { kind: "name", name: "EMAIL_FROM" },
   { kind: "name", name: "STRIPE_SECRET_KEY" },
   { kind: "name", name: "STRIPE_WEBHOOK_SECRET" },
   { kind: "name", name: "INTERNAL_JOB_TOKEN" },
@@ -19,7 +21,7 @@ const HARD_REQUIREMENTS: EnvRequirement[] = [
 ];
 
 const SOFT_REQUIREMENTS = [
-  "SENDGRID_REPLY_TO",
+  "EMAIL_REPLY_TO",
   "MAINTENANCE_NOTIFY_EMAIL",
   "VERIFIED_SCREENING_NOTIFY_EMAIL",
   "ADMIN_EMAILS",
@@ -55,7 +57,11 @@ export function getEnvFlags() {
   return {
     jwtConfigured: hasEnv("JWT_SECRET"),
     firebaseConfigured: hasEnv("FIREBASE_API_KEY"),
-    sendgridConfigured: hasEnv("SENDGRID_API_KEY") && hasEnv("SENDGRID_FROM_EMAIL"),
+    emailConfigured:
+      hasEnv("EMAIL_PROVIDER") &&
+      hasEnv("MAILGUN_API_KEY") &&
+      hasEnv("MAILGUN_DOMAIN") &&
+      hasEnv("EMAIL_FROM"),
     stripeConfigured: hasEnv("STRIPE_SECRET_KEY") && hasEnv("STRIPE_WEBHOOK_SECRET"),
     pricingConfigured: pricingHealth.ok,
   };
