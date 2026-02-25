@@ -80,3 +80,14 @@ export async function getLeaseSnapshot(snapshotId: string) {
     `/leases/snapshots/${encodeURIComponent(snapshotId)}`
   );
 }
+
+export async function activateLeaseDraft(draftId: string) {
+  return apiJson<{ ok: true; leaseId: string; lease: any }>(
+    `/leases/drafts/${encodeURIComponent(draftId)}/activate`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    }
+  );
+}

@@ -37,56 +37,45 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
   const { openUpgrade } = useUpgrade();
   const leasesEnabled = features?.leases !== false;
 
-  useEffect(() => {
-    let cancelled = false;
-    if (!tenantId) {
+  const loadLeases = React.useCallback(async () => {
+    if (!tenantId || !leasesEnabled) {
       setLeases([]);
       setError(null);
       setIsLoading(false);
-      return () => {
-        cancelled = true;
-      };
+      return;
     }
-    if (!leasesEnabled) {
-      setLeases([]);
+    try {
+      setIsLoading(true);
+      const data = await getLeasesForTenant(tenantId);
+      setLeases(data.leases);
       setError(null);
-      setIsLoading(false);
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    const load = async () => {
-      try {
-        setIsLoading(true);
-        const data = await getLeasesForTenant(tenantId);
-        if (!cancelled) {
-          setLeases(data.leases);
-          setError(null);
-        }
-      } catch (err: any) {
-        console.error("[TenantLeasePanel] Failed to load leases", err);
-        if (!cancelled) {
-          setLeases([]);
-          if (isNotFound(err)) {
-            setError(null);
-          } else {
-            setError("Failed to load leases");
-          }
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
+    } catch (err: any) {
+      console.error("[TenantLeasePanel] Failed to load leases", err);
+      setLeases([]);
+      if (isNotFound(err)) {
+        setError(null);
+      } else {
+        setError("Failed to load leases");
       }
-    };
-
-    void load();
-
-    return () => {
-      cancelled = true;
-    };
+    } finally {
+      setIsLoading(false);
+    }
   }, [tenantId, leasesEnabled]);
+
+  useEffect(() => {
+    void loadLeases();
+  }, [loadLeases]);
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent)?.detail || {};
+      const activatedTenantId = String(detail?.tenantId || "");
+      if (!tenantId || !activatedTenantId || activatedTenantId !== tenantId) return;
+      void loadLeases();
+    };
+    window.addEventListener("lease:activated", handler as EventListener);
+    return () => window.removeEventListener("lease:activated", handler as EventListener);
+  }, [loadLeases, tenantId]);
 
   const activeLease = useMemo(
     () => leases.find((l) => l.status === "active") ?? null,
@@ -147,8 +136,7 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
     try {
       setEndingLeaseId(leaseId);
       await endLease(leaseId, new Date().toISOString());
-      const refreshed = await getLeasesForTenant(tenantId as string);
-      setLeases(refreshed.leases);
+      await loadLeases();
     } catch (err) {
       console.error("[TenantLeasePanel] Failed to end lease", err);
     } finally {

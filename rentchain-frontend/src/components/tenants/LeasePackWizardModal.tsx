@@ -1,6 +1,7 @@
 import React from "react";
 import { Button } from "../ui/Ui";
 import {
+  activateLeaseDraft,
   createLeaseDraft,
   generateLeaseDraftPdf,
   getLeaseSnapshot,
@@ -8,6 +9,7 @@ import {
   LeaseTermType,
   updateLeaseDraft,
 } from "@/api/leasePacksApi";
+import { useToast } from "../ui/ToastProvider";
 
 interface Props {
   open: boolean;
@@ -58,6 +60,8 @@ export const LeasePackWizardModal: React.FC<Props> = ({
   const [error, setError] = React.useState<string>("");
   const [saving, setSaving] = React.useState(false);
   const [generating, setGenerating] = React.useState(false);
+  const [activating, setActivating] = React.useState(false);
+  const [activatedLeaseId, setActivatedLeaseId] = React.useState<string>("");
   const [state, setState] = React.useState<FormState>({
     termType: "fixed",
     startDate: String(tenant?.leaseStart || lease?.startDate || defaultStart),
@@ -71,6 +75,7 @@ export const LeasePackWizardModal: React.FC<Props> = ({
     additionalClauses: "",
   });
   const hasInitializedRef = React.useRef(false);
+  const { showToast } = useToast();
 
   const tenantId = String(tenant?.id || tenant?.tenantId || "").trim();
   const tenantName = String(tenant?.fullName || tenant?.name || tenant?.email || "Tenant").trim();
@@ -103,6 +108,7 @@ export const LeasePackWizardModal: React.FC<Props> = ({
       setDraftId("");
       setSnapshotId("");
       setDownloadUrl("");
+      setActivatedLeaseId("");
       setError("");
       hasInitializedRef.current = false;
       return;
@@ -193,6 +199,33 @@ export const LeasePackWizardModal: React.FC<Props> = ({
       if (url) setDownloadUrl(url);
     } catch (err: any) {
       setError(err?.message || "Failed to fetch snapshot.");
+    }
+  };
+
+  const handleActivateLease = async () => {
+    if (!draftId) {
+      setError("Generate Schedule A PDF first, then activate the lease.");
+      return;
+    }
+    setActivating(true);
+    setError("");
+    try {
+      const result = await activateLeaseDraft(draftId);
+      setActivatedLeaseId(result.leaseId);
+      showToast({
+        message: "Lease activated",
+        description: "Lifecycle automation is now enabled for this tenant lease.",
+        variant: "success",
+      });
+      window.dispatchEvent(
+        new CustomEvent("lease:activated", {
+          detail: { tenantId, leaseId: result.leaseId, draftId },
+        })
+      );
+    } catch (err: any) {
+      setError(err?.message || "Failed to activate lease.");
+    } finally {
+      setActivating(false);
     }
   };
 
@@ -369,6 +402,7 @@ export const LeasePackWizardModal: React.FC<Props> = ({
           <div style={{ color: "#4b5563", fontSize: 12 }}>
             {saving ? "Saving draft..." : draftId ? `Draft: ${draftId}` : "Preparing draft..."}
             {snapshotId ? ` • Snapshot: ${snapshotId}` : ""}
+            {activatedLeaseId ? ` • Lease: ${activatedLeaseId}` : ""}
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {snapshotId ? (
@@ -389,8 +423,23 @@ export const LeasePackWizardModal: React.FC<Props> = ({
             >
               {generating ? "Generating..." : "Generate Schedule A PDF"}
             </Button>
+            {snapshotId ? (
+              <Button
+                type="button"
+                onClick={handleActivateLease}
+                disabled={activating}
+                style={{ padding: "8px 12px" }}
+              >
+                {activating ? "Activating..." : "Activate Lease"}
+              </Button>
+            ) : null}
           </div>
         </div>
+        {snapshotId ? (
+          <div style={{ color: "#4b5563", fontSize: 12 }}>
+            Activating creates the official lease record and enables lifecycle automation.
+          </div>
+        ) : null}
       </div>
     </div>
   );

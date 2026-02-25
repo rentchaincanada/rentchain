@@ -43,7 +43,11 @@ vi.mock("../../config/firebase", () => ({
 }));
 
 vi.mock("../../middleware/requireLandlord", () => ({
-  requireLandlord: (req: any, _res: any, next: any) => {
+  requireLandlord: (req: any, res: any, next: any) => {
+    const auth = String(req.headers?.authorization || "");
+    if (!auth.startsWith("Bearer ")) {
+      return res.status(401).json({ ok: false, error: "Unauthorized" });
+    }
     req.user = {
       id: "landlord-1",
       landlordId: "landlord-1",
@@ -99,6 +103,7 @@ describe("lease draft routes", () => {
     depositCents: 92500,
     additionalClauses: "No smoking in common areas.",
   };
+  const auth = { Authorization: "Bearer test-token" };
 
   it("create draft then generate snapshot with URL", async () => {
     const router = (await import("../leaseRoutes")).default;
@@ -106,7 +111,7 @@ describe("lease draft routes", () => {
     app.use(express.json());
     app.use(router);
 
-    const createRes = await request(app).post("/drafts").send(payload);
+    const createRes = await request(app).post("/drafts").set(auth).send(payload);
     expect(createRes.status).toBe(201);
     expect(createRes.body?.ok).toBe(true);
     const draftId = String(createRes.body?.draftId || "");
@@ -114,6 +119,7 @@ describe("lease draft routes", () => {
 
     const generateRes = await request(app)
       .post(`/drafts/${encodeURIComponent(draftId)}/generate`)
+      .set(auth)
       .send({
         tenantNames: ["Tenant One"],
         propertyAddress: "123 Main St, Halifax, NS",
@@ -138,12 +144,13 @@ describe("lease draft routes", () => {
     app.use(express.json());
     app.use(router);
 
-    const createRes = await request(app).post("/drafts").send(payload);
+    const createRes = await request(app).post("/drafts").set(auth).send(payload);
     expect(createRes.status).toBe(201);
     const draftId = String(createRes.body?.draftId || "");
 
     const generateRes = await request(app)
       .post(`/drafts/${encodeURIComponent(draftId)}/generate`)
+      .set(auth)
       .send({
         tenantNames: ["Tenant One"],
         propertyAddress: "123 Main St, Halifax, NS",
@@ -172,16 +179,91 @@ describe("lease draft routes", () => {
 
     const regenerateRes = await request(app).post(
       `/${encodeURIComponent(lease.id)}/automation/tasks/regenerate`
-    );
+    ).set(auth);
     expect(regenerateRes.status).toBe(200);
     expect(regenerateRes.body?.ok).toBe(true);
     expect(Array.isArray(regenerateRes.body?.tasks)).toBe(true);
     expect(regenerateRes.body?.tasks).toHaveLength(3);
 
-    const listRes = await request(app).get(`/${encodeURIComponent(lease.id)}/automation/tasks`);
+    const listRes = await request(app).get(`/${encodeURIComponent(lease.id)}/automation/tasks`).set(auth);
     expect(listRes.status).toBe(200);
     expect(listRes.body?.ok).toBe(true);
     expect(Array.isArray(listRes.body?.tasks)).toBe(true);
     expect(listRes.body?.tasks).toHaveLength(3);
+  });
+
+  it("activates lease from draft and tenant lease fetch includes it", async () => {
+    const router = (await import("../leaseRoutes")).default;
+    const app = express();
+    app.use(express.json());
+    app.use(router);
+
+    const createRes = await request(app).post("/drafts").set(auth).send(payload);
+    expect(createRes.status).toBe(201);
+    const draftId = String(createRes.body?.draftId || "");
+
+    const activateRes = await request(app)
+      .post(`/drafts/${encodeURIComponent(draftId)}/activate`)
+      .set(auth)
+      .send({});
+    expect(activateRes.status).toBe(200);
+    expect(activateRes.body?.ok).toBe(true);
+    expect(String(activateRes.body?.leaseId || "")).toBeTruthy();
+
+    const leasesRes = await request(app).get("/tenant/tenant-1").set(auth);
+    expect(leasesRes.status).toBe(200);
+    expect(leasesRes.body?.ok).toBe(true);
+    expect(Array.isArray(leasesRes.body?.leases)).toBe(true);
+    expect(leasesRes.body.leases.length).toBeGreaterThan(0);
+  });
+
+  it("returns 401 for activate when unauthorized", async () => {
+    const router = (await import("../leaseRoutes")).default;
+    const app = express();
+    app.use(express.json());
+    app.use(router);
+
+    const res = await request(app).post("/drafts/draft-missing/activate").send({});
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 404 when activating unknown draft", async () => {
+    const router = (await import("../leaseRoutes")).default;
+    const app = express();
+    app.use(express.json());
+    app.use(router);
+
+    const res = await request(app)
+      .post("/drafts/draft-missing/activate")
+      .set(auth)
+      .send({});
+    expect(res.status).toBe(404);
+    expect(res.body?.error).toBe("draft_not_found");
+  });
+
+  it("returns 400 end_date_required when fixed term draft has no end date", async () => {
+    const router = (await import("../leaseRoutes")).default;
+    const app = express();
+    app.use(express.json());
+    app.use(router);
+
+    const draftId = "draft_fixed_missing_end";
+    await fakeDb.collection("leaseDrafts").doc(draftId).set({
+      ...payload,
+      landlordId: "landlord-1",
+      termType: "fixed",
+      endDate: null,
+      status: "generated",
+      templateVersion: "ns-schedule-a-v1",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    const res = await request(app)
+      .post(`/drafts/${encodeURIComponent(draftId)}/activate`)
+      .set(auth)
+      .send({});
+    expect(res.status).toBe(400);
+    expect(res.body?.error).toBe("end_date_required");
   });
 });
