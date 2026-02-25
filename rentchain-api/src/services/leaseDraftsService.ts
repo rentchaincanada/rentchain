@@ -6,7 +6,7 @@ import { generateScheduleAPdfBuffer } from "./leasePdf/scheduleAPdf";
 export const NS_TEMPLATE_VERSION = "ns-schedule-a-v1";
 export const NS_PROVINCE = "NS";
 
-export type LeaseDraftStatus = "draft" | "generated";
+export type LeaseDraftStatus = "draft" | "generated" | "activated";
 export type LeaseTermType = "fixed" | "month-to-month" | "year-to-year";
 
 export interface LeaseDraftCore {

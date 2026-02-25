@@ -247,6 +247,137 @@ router.post("/drafts/:id/generate", requireLandlord, async (req: any, res: Respo
   }
 });
 
+router.post("/drafts/:draftId/activate", requireLandlord, async (req: any, res: Response) => {
+  try {
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+
+    const draftId = String(req.params?.draftId || "").trim();
+    if (!draftId) return res.status(400).json({ ok: false, error: "draft_id_required" });
+
+    const draftRef = db.collection("leaseDrafts").doc(draftId);
+    const draftSnap = await draftRef.get();
+    if (!draftSnap.exists) {
+      return res.status(404).json({ ok: false, error: "draft_not_found" });
+    }
+    const draft = draftSnap.data() as any;
+    if (String(draft?.landlordId || "").trim() !== landlordId) {
+      return res.status(403).json({ ok: false, error: "forbidden" });
+    }
+
+    const propertyId = String(draft?.propertyId || "").trim();
+    const unitId = String(draft?.unitId || "").trim();
+    const tenantIds = Array.isArray(draft?.tenantIds)
+      ? draft.tenantIds.map((v: any) => String(v || "").trim()).filter(Boolean)
+      : [];
+    const termType = String(draft?.termType || "").trim();
+    const startDate = String(draft?.startDate || "").trim();
+    const endDate = draft?.endDate == null ? null : String(draft.endDate || "").trim();
+    const baseRentCents = Number(draft?.baseRentCents || 0);
+    const dueDay = Number(draft?.dueDay || 0);
+    const paymentMethod = String(draft?.paymentMethod || "").trim();
+    const province = String(draft?.province || "").toUpperCase();
+
+    if (!propertyId) return res.status(400).json({ ok: false, error: "property_required" });
+    if (!unitId) return res.status(400).json({ ok: false, error: "unit_required" });
+    if (!tenantIds.length) return res.status(400).json({ ok: false, error: "tenant_required" });
+    if (!startDate) return res.status(400).json({ ok: false, error: "start_date_required" });
+    if (!termType) return res.status(400).json({ ok: false, error: "term_type_required" });
+    if (termType === "fixed" && !endDate) {
+      return res.status(400).json({ ok: false, error: "end_date_required" });
+    }
+    if (!Number.isFinite(baseRentCents) || baseRentCents <= 0) {
+      return res.status(400).json({ ok: false, error: "base_rent_required" });
+    }
+    if (!Number.isFinite(dueDay) || dueDay < 1 || dueDay > 31) {
+      return res.status(400).json({ ok: false, error: "due_day_required" });
+    }
+    if (!paymentMethod) {
+      return res.status(400).json({ ok: false, error: "payment_method_required" });
+    }
+
+    if (String(draft?.leaseId || "").trim()) {
+      const existingLeaseId = String(draft.leaseId).trim();
+      const existingLeaseSnap = await db.collection("leases").doc(existingLeaseId).get();
+      if (existingLeaseSnap.exists) {
+        return res.status(200).json({
+          ok: true,
+          leaseId: existingLeaseId,
+          lease: { id: existingLeaseId, ...(existingLeaseSnap.data() as any) },
+        });
+      }
+    }
+
+    const now = Date.now();
+    const tenantId = tenantIds[0];
+    const leaseRef = db.collection("leases").doc();
+    const leaseRecord: any = {
+      landlordId,
+      tenantId,
+      tenantIds,
+      propertyId,
+      unitId,
+      unitNumber: unitId,
+      province: province || "NS",
+      termType,
+      startDate,
+      endDate: endDate || null,
+      baseRentCents,
+      monthlyRent: Math.round(baseRentCents / 100),
+      parkingCents: Number(draft?.parkingCents || 0),
+      dueDay,
+      paymentMethod,
+      nsfFeeCents: draft?.nsfFeeCents ?? null,
+      utilitiesIncluded: Array.isArray(draft?.utilitiesIncluded) ? draft.utilitiesIncluded : [],
+      depositCents: draft?.depositCents ?? null,
+      additionalClauses: String(draft?.additionalClauses || ""),
+      automationEnabled: true,
+      renewalStatus: "unknown",
+      status: "active",
+      sourceDraftId: draftId,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await leaseRef.set(leaseRecord, { merge: false });
+
+    // Keep in-memory lease service in sync for existing automation/toggle flows.
+    leaseService.getAll().push({
+      id: leaseRef.id,
+      tenantId,
+      propertyId,
+      unitNumber: unitId,
+      monthlyRent: Math.round(baseRentCents / 100),
+      startDate,
+      endDate: endDate || null,
+      automationEnabled: true,
+      renewalStatus: "unknown",
+      status: "active",
+      createdAt: new Date(now).toISOString(),
+      updatedAt: new Date(now).toISOString(),
+    });
+
+    await draftRef.set(
+      {
+        ...draft,
+        status: "activated",
+        leaseId: leaseRef.id,
+        activatedAt: now,
+        updatedAt: now,
+      },
+      { merge: false }
+    );
+
+    return res.status(200).json({
+      ok: true,
+      leaseId: leaseRef.id,
+      lease: { id: leaseRef.id, ...leaseRecord },
+    });
+  } catch (err: any) {
+    console.error("[POST /api/leases/drafts/:draftId/activate] error", err);
+    return res.status(500).json({ ok: false, error: "Failed to activate lease draft" });
+  }
+});
+
 router.get("/snapshots/:id", requireLandlord, async (req: any, res: Response) => {
   try {
     const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
@@ -297,13 +428,26 @@ router.get("/:id", (req: Request, res: Response) => {
   res.json({ lease });
 });
 
-router.get("/tenant/:tenantId", requireLandlord, (req: Request, res: Response) => {
+router.get("/tenant/:tenantId", requireLandlord, async (req: Request, res: Response) => {
   const { tenantId } = req.params;
   if (!tenantId) {
     return res.status(400).json({ ok: false, error: "tenantId is required" });
   }
-  const leases = leaseService.getByTenantId(tenantId);
-  return res.status(200).json({ ok: true, leases });
+  const memoryLeases = leaseService.getByTenantId(tenantId);
+  try {
+    const collectionRef: any = (db as any).collection("leases");
+    if (!collectionRef || typeof collectionRef.where !== "function") {
+      return res.status(200).json({ ok: true, leases: memoryLeases });
+    }
+    const snap = await collectionRef.where("tenantIds", "array-contains", tenantId).get();
+    const firestoreLeases = snap.docs.map((doc: any) => ({ id: doc.id, ...(doc.data() as any) }));
+    const byId = new Map<string, any>();
+    for (const lease of memoryLeases) byId.set(String(lease.id), lease);
+    for (const lease of firestoreLeases) byId.set(String(lease.id), lease);
+    return res.status(200).json({ ok: true, leases: Array.from(byId.values()) });
+  } catch {
+    return res.status(200).json({ ok: true, leases: memoryLeases });
+  }
 });
 
 router.options("/tenant/:tenantId", (_req: Request, res: Response) => {
