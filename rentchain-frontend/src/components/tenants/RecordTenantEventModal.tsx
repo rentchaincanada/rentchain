@@ -52,15 +52,13 @@ export const RecordTenantEventModal: React.FC<Props> = ({
   const [createdId, setCreatedId] = useState<string | null>(null);
 
   const typeMeta = useMemo(() => TYPES.find((t) => t.type === type), [type]);
+  React.useEffect(() => {
+    if (!open) return;
+    setCreatedId(null);
+    setConfirm(false);
+  }, [open, tenantId]);
 
   if (!open) return null;
-
-  React.useEffect(() => {
-    if (open) {
-      setCreatedId(null);
-      setConfirm(false);
-    }
-  }, [open, tenantId]);
 
   const financeTypes: TenantEventType[] = ["PAYMENT_RECORDED", "CHARGE_ADDED", "ADJUSTMENT_RECORDED"];
   const showAmount = financeTypes.includes(type);

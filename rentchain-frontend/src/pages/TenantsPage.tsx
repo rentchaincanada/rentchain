@@ -99,6 +99,7 @@ export const TenantsPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [inviteOpen, setInviteOpen] = useState(false);
   const [savingTenancyId, setSavingTenancyId] = useState<string | null>(null);
+  const [occupancySaveError, setOccupancySaveError] = useState<string | null>(null);
   const [occupancyEditor, setOccupancyEditor] = useState<OccupancyEditorState>(EMPTY_EDITOR);
 
   const selectedTenantIdFromUrl = searchParams.get("tenantId");
@@ -173,6 +174,7 @@ export const TenantsPage: React.FC = () => {
   };
 
   const openOccupancyEditor = (tenantId: string, tenancy: TenancyApiModel) => {
+    setOccupancySaveError(null);
     setOccupancyEditor({
       open: true,
       tenantId,
@@ -185,12 +187,17 @@ export const TenantsPage: React.FC = () => {
   };
 
   const closeOccupancyEditor = () => {
+    setOccupancySaveError(null);
     setOccupancyEditor(EMPTY_EDITOR);
   };
 
   const handleSaveOccupancy = async () => {
     const tenancy = occupancyEditor.tenancy;
-    if (!tenancy?.id || !occupancyEditor.tenantId) return;
+    if (!tenancy?.id || !occupancyEditor.tenantId) {
+      setOccupancySaveError("Missing tenancy details. Close and try again.");
+      return;
+    }
+    setOccupancySaveError(null);
 
     if (occupancyEditor.moveOutAt && !occupancyEditor.moveOutReason) {
       showToast({ message: "Select a move-out reason", variant: "warning" });
@@ -217,6 +224,9 @@ export const TenantsPage: React.FC = () => {
         moveOutReason: occupancyEditor.moveOutReason || null,
         moveOutReasonNote: occupancyEditor.moveOutReasonNote.trim() || null,
       });
+      if (!updated || typeof updated !== "object" || !updated.id) {
+        throw new Error("Invalid tenancy update response");
+      }
 
       setTenants((prev) =>
         prev.map((tenant) => {
@@ -231,6 +241,7 @@ export const TenantsPage: React.FC = () => {
       showToast({ message: "Occupancy updated", variant: "success" });
       closeOccupancyEditor();
     } catch (err: any) {
+      setOccupancySaveError(err?.message || "Failed to update occupancy.");
       showToast({
         message: "Failed to update occupancy",
         description: err?.message || "Please try again.",
@@ -563,6 +574,21 @@ export const TenantsPage: React.FC = () => {
           >
             <div style={{ display: "grid", gap: 12 }}>
               <div style={{ fontWeight: 700, fontSize: 16 }}>Update occupancy</div>
+              {occupancySaveError ? (
+                <div
+                  role="alert"
+                  style={{
+                    borderRadius: radius.md,
+                    border: `1px solid ${colors.danger}`,
+                    background: "rgba(239,68,68,0.08)",
+                    color: colors.danger,
+                    fontSize: 12,
+                    padding: "8px 10px",
+                  }}
+                >
+                  {occupancySaveError}
+                </div>
+              ) : null}
               <label style={{ display: "grid", gap: 4, fontSize: 12, color: text.muted }}>
                 Move-in date
                 <input
