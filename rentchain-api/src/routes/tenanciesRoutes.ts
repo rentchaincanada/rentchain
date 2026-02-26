@@ -8,6 +8,7 @@ import {
 
 const router = Router();
 
+router.options("/tenancies/:tenancyId", (_req, res) => res.sendStatus(204));
 router.use(requireLandlord);
 
 router.get("/tenants/:tenantId/tenancies", async (req: any, res) => {
@@ -40,17 +41,19 @@ router.patch("/tenancies/:tenancyId", async (req: any, res) => {
 
   try {
     const tenancy = await getTenancyById(tenancyId);
-    if (!tenancy) return res.status(404).json({ ok: false, error: "Tenancy not found" });
+    if (!tenancy) return res.status(404).json({ ok: false, error: "tenancy_not_found" });
     if (!isAdmin && String(tenancy.landlordId || "") !== String(landlordId || "")) {
-      return res.status(403).json({ ok: false, error: "Forbidden" });
+      return res.status(403).json({ ok: false, error: "forbidden" });
     }
 
+    const nextStatus = String(req.body?.status || "").trim().toLowerCase();
+    const status =
+      req.body?.status === undefined ? undefined : nextStatus === "inactive" ? "inactive" : "active";
     const updated = await updateTenancyLifecycle(tenancyId, {
-      moveInAt: req.body?.moveInAt,
-      moveOutAt: req.body?.moveOutAt,
-      moveOutReason: req.body?.moveOutReason,
-      moveOutReasonNote: req.body?.moveOutReasonNote,
-      status: req.body?.status,
+      moveOutAt: req.body?.moveOutAt ?? undefined,
+      moveOutReason: req.body?.moveOutReason ?? undefined,
+      moveOutReasonNote: req.body?.moveOutReasonNote ?? undefined,
+      status,
     });
     return res.status(200).json({ ok: true, tenancy: updated });
   } catch (err: any) {
@@ -62,7 +65,7 @@ router.patch("/tenancies/:tenancyId", async (req: any, res) => {
       return res.status(400).json({ ok: false, error: "moveOutReasonNote is required when moveOutReason is OTHER" });
     }
     if (message === "TENANCY_NOT_FOUND") {
-      return res.status(404).json({ ok: false, error: "Tenancy not found" });
+      return res.status(404).json({ ok: false, error: "tenancy_not_found" });
     }
     console.error("[PATCH /api/tenancies/:tenancyId] error:", err);
     return res.status(500).json({ ok: false, error: "Failed to update tenancy" });
