@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   fetchLandlordConversations,
@@ -17,6 +17,7 @@ import "./MessagesPage.css";
 
 const POLL_CONVERSATIONS_MS = 15000;
 const POLL_THREAD_MS = 12000;
+const MAX_CONVERSATIONS_BACKOFF_MS = 120000;
 
 export default function MessagesPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -31,8 +32,10 @@ export default function MessagesPage() {
   const { features, loading: capsLoading } = useCapabilities();
   const { openUpgrade } = useUpgrade();
   const messagingEnabled = features?.messaging !== false;
+  const conversationPollTimeoutRef = useRef<number | null>(null);
+  const conversationPollFailureRef = useRef(0);
 
-  const loadConversations = async (preferredId?: string | null) => {
+  const loadConversations = useCallback(async (preferredId?: string | null): Promise<boolean> => {
     try {
       setLoadingList(true);
       const data = await fetchLandlordConversations();
@@ -42,12 +45,14 @@ export default function MessagesPage() {
       } else if (!selectedId && data.length > 0) {
         setSelectedId(data[0].id);
       }
+      return true;
     } catch (err: any) {
       setError(err?.message || "Failed to load conversations");
+      return false;
     } finally {
       setLoadingList(false);
     }
-  };
+  }, [selectedId]);
 
   const loadThread = async (id: string) => {
     try {
@@ -72,10 +77,49 @@ export default function MessagesPage() {
         await loadThread(deepLinkId);
       }
     })();
+  }, [location.search, messagingEnabled, loadConversations]);
+
+  useEffect(() => {
     if (!messagingEnabled) return;
-    const t = window.setInterval(() => void loadConversations(selectedId), POLL_CONVERSATIONS_MS);
-    return () => window.clearInterval(t);
-  }, [location.search, selectedId, messagingEnabled]);
+    let cancelled = false;
+
+    const scheduleNext = () => {
+      const attempts = conversationPollFailureRef.current;
+      const delay = Math.min(
+        POLL_CONVERSATIONS_MS * Math.pow(2, attempts),
+        MAX_CONVERSATIONS_BACKOFF_MS
+      );
+      if (conversationPollTimeoutRef.current) {
+        window.clearTimeout(conversationPollTimeoutRef.current);
+      }
+      conversationPollTimeoutRef.current = window.setTimeout(() => {
+        void tick();
+      }, delay);
+    };
+
+    const tick = async () => {
+      if (cancelled) return;
+      try {
+        const ok = await loadConversations(selectedId);
+        conversationPollFailureRef.current = ok
+          ? 0
+          : Math.min(conversationPollFailureRef.current + 1, 6);
+      } catch {
+        conversationPollFailureRef.current = Math.min(conversationPollFailureRef.current + 1, 6);
+      } finally {
+        if (!cancelled) scheduleNext();
+      }
+    };
+
+    void tick();
+    return () => {
+      cancelled = true;
+      if (conversationPollTimeoutRef.current) {
+        window.clearTimeout(conversationPollTimeoutRef.current);
+        conversationPollTimeoutRef.current = null;
+      }
+    };
+  }, [messagingEnabled, loadConversations, selectedId]);
 
   useEffect(() => {
     if (!selectedId) return;
