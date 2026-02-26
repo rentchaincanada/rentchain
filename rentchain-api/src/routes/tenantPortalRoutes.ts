@@ -35,6 +35,18 @@ function makeCorrelationId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function timestampToSort(value: any): number {
+  if (!value) return 0;
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    const ts = Date.parse(value);
+    return Number.isNaN(ts) ? 0 : ts;
+  }
+  if (typeof value?.toMillis === "function") return value.toMillis();
+  if (typeof value?.seconds === "number") return value.seconds * 1000;
+  return 0;
+}
+
 router.get("/me", requireTenant, async (req: any, res) => {
   try {
     const tenantId = req.user?.tenantId;
@@ -126,21 +138,55 @@ router.get("/me", requireTenant, async (req: any, res) => {
       }
     }
 
+    let tenancySnapshot: any | null = null;
+    try {
+      const tenanciesSnap = await db
+        .collection("tenancies")
+        .where("tenantId", "==", tenantId)
+        .limit(20)
+        .get();
+      const records = tenanciesSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as any) }));
+      records.sort((a, b) => {
+        const aActive = String(a?.status || "").toLowerCase() === "active" ? 1 : 0;
+        const bActive = String(b?.status || "").toLowerCase() === "active" ? 1 : 0;
+        if (aActive !== bActive) return bActive - aActive;
+        return (
+          timestampToSort(b?.updatedAt ?? b?.createdAt) -
+          timestampToSort(a?.updatedAt ?? a?.createdAt)
+        );
+      });
+      tenancySnapshot = records[0] || null;
+    } catch {
+      tenancySnapshot = null;
+    }
+
+    if (tenancySnapshot) {
+      propertyId = propertyId ?? tenancySnapshot.propertyId ?? null;
+      unitId = unitId ?? tenancySnapshot.unitId ?? null;
+      landlordId = landlordId ?? tenancySnapshot.landlordId ?? null;
+      unitLabel = unitLabel ?? tenancySnapshot.unitLabel ?? null;
+    }
+
     const leaseStart = toMillis(
+      tenancySnapshot?.moveInAt ??
       tenantData.leaseStart ??
         tenantData.lease_begin ??
         tenantData.leaseStartDate ??
         tenantData.createdAt ??
         null
     );
+    const leaseEnd = toMillis(tenancySnapshot?.moveOutAt ?? tenantData.leaseEnd ?? null);
     const hasLeaseContext =
       Boolean(propertyId || propertyName) && Boolean(unitId || unitLabel);
     const leaseStatusRaw = String(
+      tenancySnapshot?.status ??
       tenantData.leaseStatus ?? tenantData.status ?? ""
     ).toLowerCase();
     const leaseStatus =
       hasLeaseContext && (leaseStatusRaw === "active" || leaseStatusRaw === "current")
         ? "Active"
+        : hasLeaseContext && leaseStatusRaw === "inactive"
+        ? "Inactive"
         : hasLeaseContext && leaseStatusRaw === "pending"
         ? "Pending"
         : "Unknown";
@@ -168,6 +214,7 @@ router.get("/me", requireTenant, async (req: any, res) => {
         lease: {
           status: leaseStatus,
           startDate: hasLeaseContext ? leaseStart : null,
+          endDate: hasLeaseContext ? leaseEnd : null,
           rentCents,
           currency: hasLeaseContext ? tenantData.currency ?? null : null,
         },
