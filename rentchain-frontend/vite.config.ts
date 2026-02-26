@@ -9,6 +9,9 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
+      cleanupOutdatedCaches: true,
+      clientsClaim: true,
+      skipWaiting: true,
       manifestFilename: "manifest.webmanifest",
       includeAssets: ["icons/icon-192-light.png", "icons/icon-512-light.png"],
       manifest: {
@@ -59,7 +62,7 @@ export default defineConfig({
     },
   },
   build:  {
-    sourcemap: true,
+    sourcemap: false,
     rollupOptions: {
       output: {
         manualChunks(id) {

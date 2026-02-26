@@ -99,6 +99,9 @@ const AdminScreeningsPage = lazy(() => import("./pages/AdminScreeningsPage"));
 const AdminVerifiedScreeningsPage = lazy(() => import("./pages/AdminVerifiedScreeningsPage"));
 const AdminDashboardPage = lazy(() => import("./pages/admin/AdminDashboardPage"));
 const AdminLeadsPage = lazyWithRetry(() => import("./pages/admin/AdminLeadsPage"));
+const AutomationTimelinePage = lazy(
+  () => import("./features/automation/timeline/AutomationTimelinePage")
+);
 
 const AuthLoadingScreen = () => (
   <div
