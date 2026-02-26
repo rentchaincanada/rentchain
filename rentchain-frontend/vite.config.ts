@@ -58,13 +58,15 @@ export default defineConfig({
       },
     },
   },
-  build: {
+  build:  {
+    sourcemap: true,
     rollupOptions: {
       output: {
         manualChunks(id) {
           if (id.includes("node_modules")) {
             if (id.includes("react")) return "react";
             return "vendor";
+
           }
         },
       },
