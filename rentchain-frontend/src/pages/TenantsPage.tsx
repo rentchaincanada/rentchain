@@ -92,6 +92,96 @@ function buildPropertyLink(tenancy: TenancyApiModel): string | null {
   return `/properties?propertyId=${propertyId}`;
 }
 
+type TenantsErrorBoundaryState = {
+  hasError: boolean;
+  debugId: string;
+};
+
+class TenantsErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  TenantsErrorBoundaryState
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, debugId: "" };
+  }
+
+  static getDerivedStateFromError(): TenantsErrorBoundaryState {
+    return {
+      hasError: true,
+      debugId: `tenants_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+    };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo): void {
+    console.error("[TenantsPage] render crash", {
+      debugId: this.state.debugId,
+      message: error?.message || "unknown",
+      stack: error?.stack || null,
+      componentStack: info?.componentStack || null,
+    });
+  }
+
+  private copyDebugId = async () => {
+    const id = this.state.debugId || "unknown";
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(id);
+      }
+    } catch {
+      // no-op fallback
+    }
+  };
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <Card elevated>
+          <div style={{ display: "grid", gap: 10 }}>
+            <div style={{ fontWeight: 700, fontSize: 16, color: text.primary }}>
+              Something went wrong. Reload.
+            </div>
+            <div style={{ fontSize: 12, color: text.muted }}>
+              Debug ID: {this.state.debugId || "unknown"}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                style={{
+                  padding: "8px 10px",
+                  borderRadius: radius.md,
+                  border: `1px solid ${colors.border}`,
+                  background: colors.card,
+                  color: text.primary,
+                  cursor: "pointer",
+                }}
+              >
+                Reload
+              </button>
+              <button
+                type="button"
+                onClick={() => void this.copyDebugId()}
+                style={{
+                  padding: "8px 10px",
+                  borderRadius: radius.md,
+                  border: `1px solid ${colors.border}`,
+                  background: colors.panel,
+                  color: text.primary,
+                  cursor: "pointer",
+                }}
+              >
+                Copy debug id
+              </button>
+            </div>
+          </div>
+        </Card>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export const TenantsPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -103,6 +193,7 @@ export const TenantsPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [inviteOpen, setInviteOpen] = useState(false);
   const [savingTenancyId, setSavingTenancyId] = useState<string | null>(null);
+  const [occupancySaveError, setOccupancySaveError] = useState<string | null>(null);
   const [occupancyEditor, setOccupancyEditor] = useState<OccupancyEditorState>(EMPTY_EDITOR);
 
   const selectedTenantIdFromUrl = searchParams.get("tenantId");
@@ -188,6 +279,7 @@ export const TenantsPage: React.FC = () => {
   };
 
   const openOccupancyEditor = (tenantId: string, tenancy: TenancyApiModel) => {
+    setOccupancySaveError(null);
     setOccupancyEditor({
       open: true,
       tenantId,
@@ -200,12 +292,17 @@ export const TenantsPage: React.FC = () => {
   };
 
   const closeOccupancyEditor = () => {
+    setOccupancySaveError(null);
     setOccupancyEditor(EMPTY_EDITOR);
   };
 
   const handleSaveOccupancy = async () => {
     const tenancy = occupancyEditor.tenancy;
-    if (!tenancy?.id || !occupancyEditor.tenantId) return;
+    if (!tenancy?.id || !occupancyEditor.tenantId) {
+      setOccupancySaveError("Missing tenancy details. Close and try again.");
+      return;
+    }
+    setOccupancySaveError(null);
 
     if (occupancyEditor.moveOutAt && !occupancyEditor.moveOutReason) {
       showToast({ message: "Select a move-out reason", variant: "warning" });
@@ -233,12 +330,16 @@ export const TenantsPage: React.FC = () => {
         moveOutReasonNote: occupancyEditor.moveOutReasonNote.trim() || null,
         status: occupancyEditor.moveOutAt ? "inactive" : "active",
       });
+      if (!updated || typeof updated !== "object" || !updated.id) {
+        throw new Error("Invalid tenancy update response");
+      }
 
       await refreshTenantTenancies(String(occupancyEditor.tenantId));
 
       showToast({ message: "Occupancy updated", variant: "success" });
       closeOccupancyEditor();
     } catch (err: any) {
+      setOccupancySaveError(err?.message || "Failed to update occupancy.");
       showToast({
         message: "Failed to update occupancy",
         description: err?.message || "Please try again.",
@@ -276,7 +377,8 @@ export const TenantsPage: React.FC = () => {
   }, [visibleTenantIds]);
 
   return (
-    <div className="page-content" style={{ display: "flex", flexDirection: "column", gap: spacing.lg }}>
+    <TenantsErrorBoundary>
+      <div className="page-content" style={{ display: "flex", flexDirection: "column", gap: spacing.lg }}>
       <Card elevated className="rc-tenants-header">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
@@ -597,6 +699,21 @@ export const TenantsPage: React.FC = () => {
           >
             <div style={{ display: "grid", gap: 12 }}>
               <div style={{ fontWeight: 700, fontSize: 16 }}>Update occupancy</div>
+              {occupancySaveError ? (
+                <div
+                  role="alert"
+                  style={{
+                    borderRadius: radius.md,
+                    border: `1px solid ${colors.danger}`,
+                    background: "rgba(239,68,68,0.08)",
+                    color: colors.danger,
+                    fontSize: 12,
+                    padding: "8px 10px",
+                  }}
+                >
+                  {occupancySaveError}
+                </div>
+              ) : null}
               <label style={{ display: "grid", gap: 4, fontSize: 12, color: text.muted }}>
                 Move-in date
                 <input
@@ -683,7 +800,8 @@ export const TenantsPage: React.FC = () => {
           </Card>
         </div>
       ) : null}
-    </div>
+      </div>
+    </TenantsErrorBoundary>
   );
 };
 
