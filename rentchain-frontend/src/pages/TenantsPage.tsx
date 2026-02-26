@@ -78,6 +78,10 @@ function summarizeTenancy(tenancy: TenancyApiModel): string {
   return tenancy.status === "inactive" ? "Inactive" : "Active";
 }
 
+function tenancyStatusLabel(status?: string | null): "Active" | "Inactive" {
+  return String(status || "").toLowerCase() === "inactive" ? "Inactive" : "Active";
+}
+
 function buildPropertyLink(tenancy: TenancyApiModel): string | null {
   if (!tenancy.propertyId) return null;
   const propertyId = encodeURIComponent(String(tenancy.propertyId));
@@ -113,6 +117,17 @@ export const TenantsPage: React.FC = () => {
     }
     setInviteOpen(true);
   }, [inviteEnabled]);
+
+  const refreshTenantTenancies = useCallback(async (tenantId: string) => {
+    const nextTenancies = await fetchTenantTenancies(tenantId);
+    setTenants((prev) =>
+      prev.map((tenant) =>
+        String(tenant.id) === String(tenantId)
+          ? { ...tenant, tenancies: nextTenancies }
+          : tenant
+      )
+    );
+  }, []);
 
   const loadTenants = useCallback(async () => {
     try {
@@ -216,17 +231,10 @@ export const TenantsPage: React.FC = () => {
           : null,
         moveOutReason: occupancyEditor.moveOutReason || null,
         moveOutReasonNote: occupancyEditor.moveOutReasonNote.trim() || null,
+        status: occupancyEditor.moveOutAt ? "inactive" : "active",
       });
 
-      setTenants((prev) =>
-        prev.map((tenant) => {
-          if (String(tenant.id) !== String(occupancyEditor.tenantId)) return tenant;
-          const nextTenancies = (tenant.tenancies || []).map((row) =>
-            row.id === updated.id ? { ...row, ...updated } : row
-          );
-          return { ...tenant, tenancies: nextTenancies };
-        })
-      );
+      await refreshTenantTenancies(String(occupancyEditor.tenantId));
 
       showToast({ message: "Occupancy updated", variant: "success" });
       closeOccupancyEditor();
@@ -399,25 +407,46 @@ export const TenantsPage: React.FC = () => {
                             return (
                               <div key={tenancy.id} style={{ display: "grid", gap: 4 }}>
                                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                                  {link ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => navigate(link)}
+                                  <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                                    {link ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => navigate(link)}
+                                        style={{
+                                          border: "none",
+                                          background: "transparent",
+                                          color: colors.accent,
+                                          cursor: "pointer",
+                                          fontSize: 12,
+                                          padding: 0,
+                                          textDecoration: "underline",
+                                        }}
+                                      >
+                                        {unitText}
+                                      </button>
+                                    ) : (
+                                      <span style={{ fontSize: 12, color: text.primary }}>{unitText}</span>
+                                    )}
+                                    <span
                                       style={{
-                                        border: "none",
-                                        background: "transparent",
-                                        color: colors.accent,
-                                        cursor: "pointer",
-                                        fontSize: 12,
-                                        padding: 0,
-                                        textDecoration: "underline",
+                                        fontSize: 10,
+                                        fontWeight: 700,
+                                        borderRadius: radius.pill,
+                                        border: `1px solid ${colors.border}`,
+                                        padding: "2px 7px",
+                                        background:
+                                          tenancyStatusLabel(tenancy.status) === "Inactive"
+                                            ? "rgba(239,68,68,0.08)"
+                                            : "rgba(34,197,94,0.08)",
+                                        color:
+                                          tenancyStatusLabel(tenancy.status) === "Inactive"
+                                            ? colors.danger
+                                            : "#166534",
                                       }}
                                     >
-                                      {unitText}
-                                    </button>
-                                  ) : (
-                                    <span style={{ fontSize: 12, color: text.primary }}>{unitText}</span>
-                                  )}
+                                      {tenancyStatusLabel(tenancy.status)}
+                                    </span>
+                                  </div>
                                   <button
                                     type="button"
                                     onClick={() => openOccupancyEditor(String(tenant.id), tenancy)}
@@ -435,6 +464,11 @@ export const TenantsPage: React.FC = () => {
                                   </button>
                                 </div>
                                 <div style={{ fontSize: 11, color: text.muted }}>{summarizeTenancy(tenancy)}</div>
+                                {tenancy.moveOutAt ? (
+                                  <div style={{ fontSize: 11, color: text.muted }}>
+                                    Move-out date: {formatDate(tenancy.moveOutAt)}
+                                  </div>
+                                ) : null}
                               </div>
                             );
                           })

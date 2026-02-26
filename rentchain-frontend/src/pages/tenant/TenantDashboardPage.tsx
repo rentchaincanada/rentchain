@@ -27,8 +27,9 @@ type TenantMeResponse = {
     property: { name: string | null };
     unit: { label: string | null };
     lease: {
-      status: "Active" | "Pending" | "Unknown";
+      status: "Active" | "Inactive" | "Pending" | "Unknown";
       startDate: number | null;
+      endDate?: number | null;
       rentCents: number | null;
       currency: string | null;
     };
@@ -236,9 +237,10 @@ const InfoRow: React.FC<{ label: string; value: React.ReactNode }> = ({ label, v
   </div>
 );
 
-const LeaseStatusBadge: React.FC<{ status: "Active" | "Pending" | "Unknown" }> = ({ status }) => {
+const LeaseStatusBadge: React.FC<{ status: "Active" | "Inactive" | "Pending" | "Unknown" }> = ({ status }) => {
   const palette: Record<string, { bg: string; color: string }> = {
     Active: { bg: "rgba(34,197,94,0.12)", color: "#166534" },
+    Inactive: { bg: "rgba(239,68,68,0.12)", color: "#991b1b" },
     Pending: { bg: "rgba(234,179,8,0.16)", color: "#854d0e" },
     Unknown: { bg: "rgba(148,163,184,0.2)", color: "#475569" },
   };
@@ -652,6 +654,7 @@ export default function TenantDashboardPage() {
             <div style={{ display: "grid", gap: spacing.sm }}>
               <InfoRow label="Unit" value={loading ? "Loading..." : valueOrDash(unit?.label)} />
               <InfoRow label="Lease start" value={loading ? "Loading..." : fmtDate(lease?.startDate)} />
+              <InfoRow label="Move out" value={loading ? "Loading..." : fmtDate(lease?.endDate ?? null)} />
               <InfoRow
                 label="Monthly rent"
                 value={loading ? "Loading..." : fmtMoney(lease?.rentCents, lease?.currency)}
