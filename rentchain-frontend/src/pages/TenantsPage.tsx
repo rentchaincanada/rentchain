@@ -88,6 +88,96 @@ function buildPropertyLink(tenancy: TenancyApiModel): string | null {
   return `/properties?propertyId=${propertyId}`;
 }
 
+type TenantsErrorBoundaryState = {
+  hasError: boolean;
+  debugId: string;
+};
+
+class TenantsErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  TenantsErrorBoundaryState
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, debugId: "" };
+  }
+
+  static getDerivedStateFromError(): TenantsErrorBoundaryState {
+    return {
+      hasError: true,
+      debugId: `tenants_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+    };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo): void {
+    console.error("[TenantsPage] render crash", {
+      debugId: this.state.debugId,
+      message: error?.message || "unknown",
+      stack: error?.stack || null,
+      componentStack: info?.componentStack || null,
+    });
+  }
+
+  private copyDebugId = async () => {
+    const id = this.state.debugId || "unknown";
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(id);
+      }
+    } catch {
+      // no-op fallback
+    }
+  };
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <Card elevated>
+          <div style={{ display: "grid", gap: 10 }}>
+            <div style={{ fontWeight: 700, fontSize: 16, color: text.primary }}>
+              Something went wrong. Reload.
+            </div>
+            <div style={{ fontSize: 12, color: text.muted }}>
+              Debug ID: {this.state.debugId || "unknown"}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                style={{
+                  padding: "8px 10px",
+                  borderRadius: radius.md,
+                  border: `1px solid ${colors.border}`,
+                  background: colors.card,
+                  color: text.primary,
+                  cursor: "pointer",
+                }}
+              >
+                Reload
+              </button>
+              <button
+                type="button"
+                onClick={() => void this.copyDebugId()}
+                style={{
+                  padding: "8px 10px",
+                  borderRadius: radius.md,
+                  border: `1px solid ${colors.border}`,
+                  background: colors.panel,
+                  color: text.primary,
+                  cursor: "pointer",
+                }}
+              >
+                Copy debug id
+              </button>
+            </div>
+          </div>
+        </Card>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export const TenantsPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -279,7 +369,8 @@ export const TenantsPage: React.FC = () => {
   }, [visibleTenantIds]);
 
   return (
-    <div className="page-content" style={{ display: "flex", flexDirection: "column", gap: spacing.lg }}>
+    <TenantsErrorBoundary>
+      <div className="page-content" style={{ display: "flex", flexDirection: "column", gap: spacing.lg }}>
       <Card elevated className="rc-tenants-header">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
@@ -675,7 +766,8 @@ export const TenantsPage: React.FC = () => {
           </Card>
         </div>
       ) : null}
-    </div>
+      </div>
+    </TenantsErrorBoundary>
   );
 };
 
