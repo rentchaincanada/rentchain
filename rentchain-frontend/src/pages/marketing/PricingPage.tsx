@@ -9,6 +9,7 @@ import { startCheckout } from "../../billing/startCheckout";
 import { DEFAULT_PLANS, type PricingInterval, type PricingPlanKey } from "../../constants/pricingPlans";
 import { useLanguage } from "../../context/LanguageContext";
 import { marketingCopy } from "../../content/marketingCopy";
+import { track } from "../../lib/analytics";
 
 type PlanKey = PricingPlanKey;
 
@@ -44,6 +45,13 @@ const PricingPage: React.FC = () => {
   const isAuthed = Boolean(user?.id);
   const [interval, setInterval] = React.useState<PricingInterval>("monthly");
   const [isMobile, setIsMobile] = React.useState(false);
+  const safeTrack = (eventName: string, props: Record<string, unknown>) => {
+    try {
+      track(eventName, props);
+    } catch {
+      // telemetry must never interrupt UX
+    }
+  };
   const mobileSectionStyle: React.CSSProperties = {
     width: "100%",
     maxWidth: isMobile ? 520 : "100%",
@@ -91,6 +99,9 @@ const PricingPage: React.FC = () => {
   };
 
   const handleUpgrade = (plan: Exclude<PlanKey, "free">) => {
+    if (plan === "pro") {
+      safeTrack("pricing_timeline_cta_clicked", { surface: "marketing" });
+    }
     if (!isAuthed) {
       navigate("/login?next=/site/pricing");
       return;
