@@ -1,0 +1,98 @@
+## Discovery Report (Pricing / Upgrade / Nav / Account)
+
+- A) Pricing Surfaces
+  - `rentchain-frontend/src/App.tsx`
+    - `PricingGate` component controls auth split for pricing.
+    - Routes:
+      - `/pricing` -> `PricingGate` -> authenticated users see in-app pricing.
+      - `/site/pricing` -> marketing pricing page.
+  - `rentchain-frontend/src/pages/PricingPage.tsx`
+    - In-app pricing surface (inside `LandlordNav` via `PricingGate`).
+    - Uses `DEFAULT_PLANS`, `startCheckout`, and `createBillingPortalSession`.
+    - Primary copy is local to this file.
+  - `rentchain-frontend/src/pages/marketing/PricingPage.tsx`
+    - Marketing/public pricing page.
+    - Uses localized copy from `rentchain-frontend/src/content/marketingCopy.ts`.
+    - Starts checkout directly for authenticated users, otherwise routes to login.
+  - `rentchain-frontend/src/content/marketingCopy.ts`
+    - Canonical marketing pricing copy (`headline`, `subheadline`, tier labels, CTA text, comparison table content).
+
+- B) Upgrade Flow
+  - Provider and modal system:
+    - `rentchain-frontend/src/main.tsx` wraps app with `UpgradeProvider`.
+    - `rentchain-frontend/src/context/UpgradeContext.tsx` exposes `useUpgrade().openUpgrade(...)` and renders:
+      - `rentchain-frontend/src/components/billing/UpgradeModal.tsx`
+      - `rentchain-frontend/src/components/billing/UpgradePromptModal.tsx`
+  - Checkout utility:
+    - `rentchain-frontend/src/billing/startCheckout.ts` is the payment entry helper used by pricing/modals.
+  - Billing portal/upgrade redirect utility:
+    - `rentchain-frontend/src/billing/openUpgradeFlow.ts` (`openUpgradeFlow({ navigate })`) sends users to billing portal if available, otherwise fallback route.
+  - Existing nudge system:
+    - `rentchain-frontend/src/features/upgradeNudges/UpgradeNudgeHost.tsx` is mounted globally in `LandlordNav`.
+    - Inline nudge card exists at `rentchain-frontend/src/features/upgradeNudges/UpgradeNudgeInlineCard.tsx`.
+  - Recommended single action for new “Upgrade to Pro” nudges:
+    - Use `openUpgradeFlow({ navigate })` for timeline paywall CTA and dashboard soft nudge.
+    - Reason: already used by nudge stack and templates/screening/report nudges; avoids duplicating modal wiring.
+
+- C) Navigation System
+  - Primary landlord nav shell:
+    - `rentchain-frontend/src/components/layout/LandlordNav.tsx`
+    - Uses `getVisibleNavItems(...)` and feature/role gating.
+    - Mounts `UpgradeNudgeHost`.
+  - Canonical nav item source:
+    - `rentchain-frontend/src/components/layout/navConfig.ts`
+    - `NAV_ITEMS` + `getVisibleNavItems(...)` are the correct place to add a new nav item.
+  - Drawer implementations:
+    - `rentchain-frontend/src/components/layout/LandlordNav.tsx` includes one drawer.
+    - `rentchain-frontend/src/components/layout/TopNav.tsx` opens `WorkspaceDrawer`.
+    - `rentchain-frontend/src/components/layout/WorkspaceDrawer.tsx` also reads `navConfig`.
+  - Mobile tabs in active landlord shell:
+    - `LandlordNav.tsx` builds bottom tabs from `navConfig` (`showInTabs`).
+  - Legacy/alternate tab component:
+    - `rentchain-frontend/src/components/layout/MobileTabBar.tsx` has `/account` tab, but no `/account` route is registered in `App.tsx`.
+    - Treat as non-canonical for new nav work unless you confirm usage.
+
+- D) Account-Related Pages and Routes
+  - Existing routes in `rentchain-frontend/src/App.tsx`:
+    - `/account/security` -> `AccountSecurityPage`
+    - `/billing` -> `BillingPage`
+    - `/billing/checkout-success` -> `BillingCheckoutSuccessPage`
+    - `/privacy` -> `PrivacyPage`
+    - `/terms` -> `TermsPage`
+    - `/help/templates` -> `TemplatesPage`
+  - Existing pages/components:
+    - `rentchain-frontend/src/pages/AccountSecurityPage.tsx` (2FA + account security controls).
+    - `rentchain-frontend/src/pages/BillingPage.tsx` (subscription + receipts table).
+    - `rentchain-frontend/src/pages/BillingCheckoutSuccessPage.tsx`.
+    - `rentchain-frontend/src/pages/legal/PrivacyPage.tsx`.
+    - `rentchain-frontend/src/pages/legal/TermsPage.tsx`.
+  - Missing today:
+    - No `/account` hub route/page is currently registered.
+    - No explicit frontend “data export/delete account” account settings page found; only legal copy mentions deletion in `PrivacyPage`.
+
+- E) Timeline Monetization Enforcement
+  - Entitlement logic:
+    - `rentchain-frontend/src/features/automation/timeline/timelineEntitlements.ts`
+    - `canUseTimeline(...)` allows `pro`, `elite`, `elite_enterprise`.
+  - Timeline gate location:
+    - `rentchain-frontend/src/features/automation/timeline/AutomationTimelinePage.tsx`
+    - Non-entitled users see paywall content and upgrade CTAs.
+  - Route:
+    - `/automation/timeline` registered in `rentchain-frontend/src/App.tsx` under `RequireAuth + LandlordNav`.
+
+- Recommendation: where to implement upcoming work
+  - Pricing copy updates (Timeline Pro conversion):
+    - Marketing: `rentchain-frontend/src/content/marketingCopy.ts` + `rentchain-frontend/src/pages/marketing/PricingPage.tsx`
+    - In-app: `rentchain-frontend/src/pages/PricingPage.tsx` and optionally `rentchain-frontend/src/pages/BillingPage.tsx`
+  - Upgrade nudges:
+    - Timeline paywall CTA in `rentchain-frontend/src/features/automation/timeline/AutomationTimelinePage.tsx`
+    - Dashboard soft nudge in `rentchain-frontend/src/pages/DashboardPage.tsx` (or reusable `UpgradeNudgeInlineCard` placement), action via `openUpgradeFlow`
+  - “My Account” hub:
+    - Add route in `rentchain-frontend/src/App.tsx` (new `/account`)
+    - Add nav item in `rentchain-frontend/src/components/layout/navConfig.ts`
+    - Add new page `rentchain-frontend/src/pages/AccountPage.tsx` linking existing `/account/security`, `/billing`, `/privacy`, `/terms`
+
+- Implementation Branch Plan
+  - `feat/pricing-timeline-pro-copy`
+  - `feat/timeline-upgrade-nudges`
+  - `feat/nav-my-account-hub`

@@ -13,6 +13,10 @@ import { marketingCopy } from "../../content/marketingCopy";
 type PlanKey = PricingPlanKey;
 
 const PLAN_ORDER: PlanKey[] = ["free", "starter", "pro", "elite"];
+const TIMELINE_MARKERS: Record<string, string> = {
+  X: "❌",
+  check: "✅",
+};
 
 function normalizePlan(input?: string | null): PlanKey {
   const raw = String(input || "").trim().toLowerCase();
@@ -24,6 +28,10 @@ function normalizePlan(input?: string | null): PlanKey {
 
 function isAtOrAbove(plan: PlanKey, target: PlanKey) {
   return PLAN_ORDER.indexOf(plan) >= PLAN_ORDER.indexOf(target);
+}
+
+function displayFeatureValue(value: string) {
+  return TIMELINE_MARKERS[value] || value;
 }
 
 const PricingPage: React.FC = () => {
@@ -187,13 +195,36 @@ const PricingPage: React.FC = () => {
                 {copy.pricing.featureGroups.map((group) => (
                   <li key={`${plan}-${group.title}`}>
                     <span style={{ color: text.secondary, fontWeight: 600 }}>{group.title}:</span>{" "}
-                    {group.items[plan]}
+                    {displayFeatureValue(group.items[plan])}
                   </li>
                 ))}
                 <li>
                   {copy.pricing.screeningRow.label}: {copy.pricing.screeningRow.subtext}
                 </li>
               </ul>
+              {plan === "pro" || plan === "elite" ? (
+                <div
+                  style={{
+                    border: "1px solid rgba(37,99,235,0.28)",
+                    borderRadius: 12,
+                    background: "rgba(37,99,235,0.06)",
+                    padding: "10px 12px",
+                    display: "grid",
+                    gap: 6,
+                  }}
+                >
+                  <div style={{ fontWeight: 700, color: text.primary }}>{copy.pricing.timelineSection.title}</div>
+                  <div style={{ color: text.muted, fontSize: "0.88rem" }}>{copy.pricing.timelineSection.description}</div>
+                  <ul style={{ margin: 0, paddingLeft: "1rem", color: text.muted, fontSize: "0.85rem", lineHeight: 1.6 }}>
+                    {copy.pricing.timelineSection.bullets.map((bullet) => (
+                      <li key={`${plan}-${bullet}`}>{bullet}</li>
+                    ))}
+                  </ul>
+                  {plan === "pro" ? (
+                    <div style={{ color: text.muted, fontSize: "0.82rem" }}>{copy.pricing.timelineSection.proofLine}</div>
+                  ) : null}
+                </div>
+              ) : null}
               <div style={{ marginTop: spacing.sm }}>
                 {plan === "free" ? (
                   <Button type="button" onClick={handleStartFree}>
@@ -201,7 +232,7 @@ const PricingPage: React.FC = () => {
                   </Button>
                 ) : (
                   <Button type="button" onClick={() => handleUpgrade(plan)}>
-                    {copy.pricing.ctaUpgrade}
+                    {copy.pricing.ctaByTier?.[plan] || copy.pricing.ctaUpgrade}
                   </Button>
                 )}
               </div>
@@ -229,7 +260,7 @@ const PricingPage: React.FC = () => {
                     {copy.pricing.featureGroups.map((group) => (
                       <div key={`mobile-${plan}-${group.title}`} style={{ display: "grid", gap: 2 }}>
                         <div style={{ color: text.secondary, fontWeight: 600, fontSize: "0.86rem" }}>{group.title}</div>
-                        <div style={{ color: text.muted, fontSize: "0.92rem" }}>{group.items[plan]}</div>
+                        <div style={{ color: text.muted, fontSize: "0.92rem" }}>{displayFeatureValue(group.items[plan])}</div>
                       </div>
                     ))}
                     <div style={{ display: "grid", gap: 2 }}>
@@ -288,7 +319,7 @@ const PricingPage: React.FC = () => {
                             key={`${group.title}-${plan}`}
                             style={{ padding: "10px 12px", borderBottom: "1px solid rgba(15,23,42,0.08)" }}
                           >
-                            {group.items[plan]}
+                            {displayFeatureValue(group.items[plan])}
                           </td>
                         ))}
                       </tr>

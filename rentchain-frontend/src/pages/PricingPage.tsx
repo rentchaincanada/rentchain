@@ -24,6 +24,12 @@ function normalizePlan(input?: string | null): PlanKey {
   return "free";
 }
 
+function ctaLabel(plan: Exclude<PlanKey, "free">) {
+  if (plan === "pro") return "Unlock Timeline with Pro";
+  if (plan === "elite") return "Advanced compliance & reporting";
+  return "Upgrade";
+}
+
 const PricingPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -102,13 +108,55 @@ const PricingPage: React.FC = () => {
           </Card>
           {PLAN_ORDER.map((plan) => (
             <Card key={plan} style={{ display: "grid", gap: spacing.sm }}>
-              <div style={{ fontWeight: 800, fontSize: 18, textTransform: "capitalize" }}>{plan}</div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing.xs, flexWrap: "wrap" }}>
+                <div style={{ fontWeight: 800, fontSize: 18, textTransform: "capitalize" }}>{plan}</div>
+                {plan === "pro" ? (
+                  <span
+                    style={{
+                      border: "1px solid rgba(37,99,235,0.35)",
+                      borderRadius: 999,
+                      padding: "3px 10px",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: "#1d4ed8",
+                      background: "rgba(37,99,235,0.08)",
+                    }}
+                  >
+                    Most Popular for growing portfolios
+                  </span>
+                ) : null}
+              </div>
               <div style={{ fontSize: 22, fontWeight: 800 }}>{renderPrice(plan)}</div>
               <ul style={{ margin: 0, paddingLeft: "1.1rem", color: text.muted, lineHeight: 1.7 }}>
                 {PLAN_FEATURES[plan].map((feature) => (
                   <li key={feature}>{feature}</li>
                 ))}
               </ul>
+              {plan === "starter" ? (
+                <div style={{ color: text.muted, fontSize: 13 }}>
+                  Does not include Automation Timeline or advanced reporting.
+                </div>
+              ) : null}
+              {plan === "pro" ? (
+                <div
+                  style={{
+                    border: "1px solid rgba(37,99,235,0.28)",
+                    borderRadius: 12,
+                    background: "rgba(37,99,235,0.06)",
+                    padding: "10px 12px",
+                    display: "grid",
+                    gap: 6,
+                  }}
+                >
+                  <div style={{ fontWeight: 800 }}>Includes Automation Timeline</div>
+                  <ul style={{ margin: 0, paddingLeft: "1rem", color: text.muted, fontSize: 13, lineHeight: 1.6 }}>
+                    <li>Unified Event Ledger</li>
+                    <li>Integrity Verified</li>
+                    <li>Insights & Filters</li>
+                    <li>Export for audit</li>
+                  </ul>
+                </div>
+              ) : null}
               <div>
                 {plan === "free" ? (
                   <Button type="button" variant="secondary" onClick={() => navigate("/dashboard")}>
@@ -116,7 +164,7 @@ const PricingPage: React.FC = () => {
                   </Button>
                 ) : (
                   <Button type="button" onClick={() => void handleUpgrade(plan)}>
-                    Upgrade
+                    {ctaLabel(plan)}
                   </Button>
                 )}
               </div>
