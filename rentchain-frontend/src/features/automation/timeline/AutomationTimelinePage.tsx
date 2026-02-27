@@ -1,6 +1,9 @@
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/context/useAuth";
 import { useAutomationTimeline } from "./useAutomationTimeline";
 import type { AutomationEvent, AutomationEventType } from "./automationTimeline.types";
+import { canUseTimeline } from "./timelineEntitlements";
 
 type FilterValue = "ALL" | AutomationEventType;
 
@@ -44,7 +47,12 @@ const entityOrder: Array<keyof NonNullable<AutomationEvent["entity"]>> = [
 ];
 
 export default function AutomationTimelinePage() {
-  const { events, loading, error, mode, sources, refresh } = useAutomationTimeline();
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const userPlan = String(user?.plan || "").trim().toLowerCase();
+  const timelineEnabled = canUseTimeline(userPlan);
+  const { events, loading, error, mode, integrityMode, headChainHash, sources, refresh } =
+    useAutomationTimeline({ enabled: timelineEnabled });
   const [filter, setFilter] = useState<FilterValue>("ALL");
 
   const visibleEvents = useMemo(
@@ -65,14 +73,113 @@ export default function AutomationTimelinePage() {
     URL.revokeObjectURL(url);
   };
 
+  const handleCopyHash = async (value?: string | null) => {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+    } catch {
+      // no-op
+    }
+  };
+
+  if (!timelineEnabled) {
+    return (
+      <section style={{ display: "grid", gap: 14, padding: 20 }}>
+        <header style={{ display: "grid", gap: 4 }}>
+          <h1 style={{ margin: 0 }}>Automation Timeline</h1>
+          <p style={{ margin: 0, color: "#475569" }}>Unified Event Ledger (v1.3)</p>
+        </header>
+        <div
+          style={{
+            border: "1px solid #dbeafe",
+            background: "#eff6ff",
+            borderRadius: 12,
+            padding: 16,
+            display: "grid",
+            gap: 10,
+            maxWidth: 780,
+          }}
+        >
+          <div style={{ fontWeight: 800, color: "#1e3a8a" }}>Timeline is available on Pro and Elite plans.</div>
+          <div style={{ color: "#334155", fontSize: 14 }}>
+            Upgrade to unlock live event history, integrity checks, and export workflows.
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={() => navigate("/pricing")}
+              style={{
+                border: "1px solid #1d4ed8",
+                background: "#1d4ed8",
+                color: "#fff",
+                borderRadius: 10,
+                padding: "8px 12px",
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              Upgrade plan
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate("/billing")}
+              style={{
+                border: "1px solid #bfdbfe",
+                background: "#fff",
+                color: "#1d4ed8",
+                borderRadius: 10,
+                padding: "8px 12px",
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              Open billing
+            </button>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section style={{ display: "grid", gap: 14, padding: 20 }}>
       <header style={{ display: "grid", gap: 4 }}>
         <h1 style={{ margin: 0 }}>Automation Timeline</h1>
-        <p style={{ margin: 0, color: "#475569" }}>Unified Event Ledger (v1.2)</p>
+        <p style={{ margin: 0, color: "#475569" }}>Unified Event Ledger (v1.3)</p>
         <p style={{ margin: 0, fontSize: 13, color: "#64748b" }}>
           {mode === "live" ? "Live events (read-only)" : "Mock fallback (no live events yet)"}
         </p>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span
+            style={{
+              fontSize: 12,
+              fontWeight: 800,
+              color: integrityMode === "verified" ? "#166534" : "#92400e",
+              background: integrityMode === "verified" ? "#dcfce7" : "#fef3c7",
+              border: `1px solid ${integrityMode === "verified" ? "#86efac" : "#fcd34d"}`,
+              borderRadius: 999,
+              padding: "4px 8px",
+            }}
+          >
+            Integrity: {integrityMode === "verified" ? "Verified" : "Unverified"}
+          </span>
+          {headChainHash ? (
+            <button
+              type="button"
+              onClick={() => void handleCopyHash(headChainHash)}
+              style={{
+                border: "1px solid #cbd5e1",
+                background: "#fff",
+                borderRadius: 8,
+                padding: "4px 8px",
+                fontSize: 11,
+                cursor: "pointer",
+              }}
+            >
+              Copy head hash
+            </button>
+          ) : null}
+        </div>
         {import.meta.env.DEV ? (
           <p style={{ margin: 0, fontSize: 12, color: "#94a3b8" }}>
             Sources: {sources.ok.length} ok / {sources.tried.length} tried
@@ -214,19 +321,50 @@ export default function AutomationTimelinePage() {
                     }}
                   >
                     <div style={{ fontWeight: 800 }}>{event.title}</div>
-                    <span
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 800,
-                        color: badgeColorByType[event.type],
-                        background: "#f8fafc",
-                        border: `1px solid ${badgeColorByType[event.type]}33`,
-                        borderRadius: 999,
-                        padding: "4px 8px",
-                      }}
-                    >
-                      {event.type}
-                    </span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 800,
+                          color: badgeColorByType[event.type],
+                          background: "#f8fafc",
+                          border: `1px solid ${badgeColorByType[event.type]}33`,
+                          borderRadius: 999,
+                          padding: "4px 8px",
+                        }}
+                      >
+                        {event.type}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 800,
+                          color: (event.metadata as any)?.integrity ? "#166534" : "#92400e",
+                          background: (event.metadata as any)?.integrity ? "#dcfce7" : "#fef3c7",
+                          border: `1px solid ${(event.metadata as any)?.integrity ? "#86efac" : "#fcd34d"}`,
+                          borderRadius: 999,
+                          padding: "4px 8px",
+                        }}
+                      >
+                        {(event.metadata as any)?.integrity ? "Verified" : "Unverified"}
+                      </span>
+                      {(event.metadata as any)?.integrity?.chainHash ? (
+                        <button
+                          type="button"
+                          onClick={() => void handleCopyHash((event.metadata as any)?.integrity?.chainHash)}
+                          style={{
+                            border: "1px solid #cbd5e1",
+                            background: "#fff",
+                            borderRadius: 8,
+                            padding: "3px 7px",
+                            fontSize: 11,
+                            cursor: "pointer",
+                          }}
+                        >
+                          Copy hash
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
 
                   <div style={{ fontSize: 12, color: "#475569" }}>{formatTime(event.occurredAt)}</div>
