@@ -21,10 +21,14 @@ jobs:
             rentchain-api/package-lock.json
             rentchain-frontend/package-lock.json
 
-      - name: Install + build frontend
+      - name: Install + test + build frontend
         working-directory: rentchain-frontend
+        env:
+          CI: "true"
+          VITE_API_BASE_URL: "http://localhost:3000"
         run: |
           npm ci
+          npm run test
           npm run build
 
       - name: Install + build api
