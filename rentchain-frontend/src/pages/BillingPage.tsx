@@ -222,7 +222,7 @@ const BillingPage: React.FC = () => {
         </div>
       </Card>
 
-      <Card>
+      <Card id="plan">
         <div style={{ display: "grid", gap: spacing.xs }}>
           <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>Current plan</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: spacing.sm }}>
@@ -273,7 +273,7 @@ const BillingPage: React.FC = () => {
         </div>
       </Card>
 
-      <Card>
+      <Card id="receipts">
         <div style={{ fontWeight: 700, fontSize: "1.05rem", marginBottom: 12 }}>Plans</div>
         <BillingPlansPanel
           pricing={pricing}
