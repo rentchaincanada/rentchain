@@ -1,15 +1,15 @@
-import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useMemo } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/context/useAuth";
 import { useAutomationTimeline } from "./useAutomationTimeline";
 import type { AutomationEvent, AutomationEventType } from "./automationTimeline.types";
 import { canUseTimeline } from "./timelineEntitlements";
 import { computeTimelineAnalytics } from "./timelineAnalytics";
 
-type FilterValue = "ALL" | AutomationEventType;
+type FilterValue = "all" | AutomationEventType;
 
 const filterOptions: Array<{ label: string; value: FilterValue }> = [
-  { label: "All", value: "ALL" },
+  { label: "All", value: "all" },
   { label: "Lease", value: "LEASE" },
   { label: "Screening", value: "SCREENING" },
   { label: "Payment", value: "PAYMENT" },
@@ -58,17 +58,73 @@ const entityOrder: Array<keyof NonNullable<AutomationEvent["entity"]>> = [
 export default function AutomationTimelinePage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const userPlan = String(user?.plan || "").trim().toLowerCase();
   const timelineEnabled = canUseTimeline(userPlan);
   const { events, loading, error, mode, integrityMode, headChainHash, sources, refresh } =
     useAutomationTimeline({ enabled: timelineEnabled });
-  const [filter, setFilter] = useState<FilterValue>("ALL");
+  const rawType = String(searchParams.get("t") || "all").trim();
+  const typeFilter: FilterValue =
+    rawType === "all" || filterOptions.some((option) => option.value === rawType)
+      ? (rawType as FilterValue)
+      : "all";
+  const propertyFilter = String(searchParams.get("p") || "").trim();
+  const unitFilter = String(searchParams.get("u") || "").trim();
+  const tenantFilter = String(searchParams.get("n") || "").trim();
+
+  const setFilterParam = (key: string, value: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (value) {
+      next.set(key, value);
+    } else {
+      next.delete(key);
+    }
+    setSearchParams(next);
+  };
+
+  const clearFilters = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("t");
+    next.delete("p");
+    next.delete("u");
+    next.delete("n");
+    setSearchParams(next);
+  };
+
+  const propertyIds = useMemo(
+    () =>
+      Array.from(
+        new Set(events.map((event) => String(event.entity?.propertyId || "").trim()).filter(Boolean))
+      ).sort((a, b) => a.localeCompare(b)),
+    [events]
+  );
+  const unitIds = useMemo(
+    () =>
+      Array.from(new Set(events.map((event) => String(event.entity?.unitId || "").trim()).filter(Boolean))).sort(
+        (a, b) => a.localeCompare(b)
+      ),
+    [events]
+  );
+  const tenantIds = useMemo(
+    () =>
+      Array.from(
+        new Set(events.map((event) => String(event.entity?.tenantId || "").trim()).filter(Boolean))
+      ).sort((a, b) => a.localeCompare(b)),
+    [events]
+  );
 
   const visibleEvents = useMemo(
-    () => (filter === "ALL" ? events : events.filter((event) => event.type === filter)),
-    [events, filter]
+    () =>
+      events.filter((event) => {
+        if (typeFilter !== "all" && event.type !== typeFilter) return false;
+        if (propertyFilter && String(event.entity?.propertyId || "") !== propertyFilter) return false;
+        if (unitFilter && String(event.entity?.unitId || "") !== unitFilter) return false;
+        if (tenantFilter && String(event.entity?.tenantId || "") !== tenantFilter) return false;
+        return true;
+      }),
+    [events, typeFilter, propertyFilter, unitFilter, tenantFilter]
   );
-  const analytics = useMemo(() => computeTimelineAnalytics(events), [events]);
+  const analytics = useMemo(() => computeTimelineAnalytics(visibleEvents), [visibleEvents]);
 
   const handleExport = () => {
     const payload = JSON.stringify(visibleEvents, null, 2);
@@ -210,7 +266,7 @@ export default function AutomationTimelinePage() {
           padding: 14,
         }}
       >
-        <div style={{ fontWeight: 800 }}>Insights</div>
+        <div style={{ fontWeight: 800 }}>Insights (filtered)</div>
         <div style={{ fontSize: 13, color: "#334155" }}>Total events: {analytics.totalEvents}</div>
         <div style={{ fontSize: 13, color: "#334155" }}>
           Last activity: {analytics.lastActivityAt ? formatTime(analytics.lastActivityAt) : "n/a"}
@@ -252,12 +308,12 @@ export default function AutomationTimelinePage() {
       >
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {filterOptions.map((option) => {
-            const selected = filter === option.value;
+            const selected = typeFilter === option.value;
             return (
               <button
                 key={option.value}
                 type="button"
-                onClick={() => setFilter(option.value)}
+                onClick={() => setFilterParam("t", option.value)}
                 style={{
                   border: selected ? "1px solid #2563eb" : "1px solid #cbd5e1",
                   background: selected ? "#dbeafe" : "#ffffff",
@@ -273,6 +329,57 @@ export default function AutomationTimelinePage() {
               </button>
             );
           })}
+          <select
+            value={propertyFilter}
+            onChange={(event) => setFilterParam("p", event.target.value)}
+            style={{ border: "1px solid #cbd5e1", borderRadius: 8, padding: "6px 8px", fontSize: 12 }}
+          >
+            <option value="">All properties</option>
+            {propertyIds.map((id) => (
+              <option key={id} value={id}>
+                {id}
+              </option>
+            ))}
+          </select>
+          <select
+            value={unitFilter}
+            onChange={(event) => setFilterParam("u", event.target.value)}
+            style={{ border: "1px solid #cbd5e1", borderRadius: 8, padding: "6px 8px", fontSize: 12 }}
+          >
+            <option value="">All units</option>
+            {unitIds.map((id) => (
+              <option key={id} value={id}>
+                {id}
+              </option>
+            ))}
+          </select>
+          <select
+            value={tenantFilter}
+            onChange={(event) => setFilterParam("n", event.target.value)}
+            style={{ border: "1px solid #cbd5e1", borderRadius: 8, padding: "6px 8px", fontSize: 12 }}
+          >
+            <option value="">All tenants</option>
+            {tenantIds.map((id) => (
+              <option key={id} value={id}>
+                {id}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={clearFilters}
+            style={{
+              border: "1px solid #cbd5e1",
+              background: "#ffffff",
+              borderRadius: 10,
+              padding: "7px 12px",
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            Clear
+          </button>
         </div>
 
         <button
@@ -321,7 +428,26 @@ export default function AutomationTimelinePage() {
         }}
       >
         {visibleEvents.length === 0 ? (
-          <div style={{ color: "#64748b", padding: 6 }}>No events for this filter.</div>
+          <div style={{ display: "grid", gap: 8, padding: 6 }}>
+            <div style={{ color: "#64748b" }}>No events match your filters.</div>
+            <div>
+              <button
+                type="button"
+                onClick={clearFilters}
+                style={{
+                  border: "1px solid #cbd5e1",
+                  background: "#ffffff",
+                  borderRadius: 8,
+                  padding: "6px 10px",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                Clear filters
+              </button>
+            </div>
+          </div>
         ) : (
           visibleEvents.map((event, index) => {
             const entities = entityOrder
