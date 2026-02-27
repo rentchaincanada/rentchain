@@ -44,7 +44,7 @@ const entityOrder: Array<keyof NonNullable<AutomationEvent["entity"]>> = [
 ];
 
 export default function AutomationTimelinePage() {
-  const { events } = useAutomationTimeline();
+  const { events, loading, error, mode, sources, refresh } = useAutomationTimeline();
   const [filter, setFilter] = useState<FilterValue>("ALL");
 
   const visibleEvents = useMemo(
@@ -69,10 +69,18 @@ export default function AutomationTimelinePage() {
     <section style={{ display: "grid", gap: 14, padding: 20 }}>
       <header style={{ display: "grid", gap: 4 }}>
         <h1 style={{ margin: 0 }}>Automation Timeline</h1>
-        <p style={{ margin: 0, color: "#475569" }}>Unified Event Ledger (v1.1)</p>
+        <p style={{ margin: 0, color: "#475569" }}>Unified Event Ledger (v1.2)</p>
         <p style={{ margin: 0, fontSize: 13, color: "#64748b" }}>
-          Mock events (backend wiring next).
+          {mode === "live" ? "Live events (read-only)" : "Mock fallback (no live events yet)"}
         </p>
+        {import.meta.env.DEV ? (
+          <p style={{ margin: 0, fontSize: 12, color: "#94a3b8" }}>
+            Sources: {sources.ok.length} ok / {sources.tried.length} tried
+          </p>
+        ) : null}
+        {error ? (
+          <p style={{ margin: 0, fontSize: 12, color: "#b45309" }}>{error}</p>
+        ) : null}
       </header>
 
       <div
@@ -108,6 +116,24 @@ export default function AutomationTimelinePage() {
             );
           })}
         </div>
+
+        <button
+          type="button"
+          onClick={refresh}
+          disabled={loading}
+          style={{
+            border: "1px solid #cbd5e1",
+            background: "#ffffff",
+            borderRadius: 10,
+            padding: "7px 12px",
+            fontSize: 12,
+            fontWeight: 700,
+            cursor: loading ? "default" : "pointer",
+            opacity: loading ? 0.7 : 1,
+          }}
+        >
+          {loading ? "Refreshing..." : "Refresh"}
+        </button>
 
         <button
           type="button"
