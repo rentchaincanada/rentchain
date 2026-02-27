@@ -483,6 +483,18 @@ function App() {
           }
         />
         <Route
+          path="/automation/timeline"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <Suspense fallback={<div style={{ padding: 20 }}>Loading timeline...</div>}>
+                  <AutomationTimelinePage />
+                </Suspense>
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
           path="/leases/:leaseId/ledger"
           element={
             <RequireAuth>
