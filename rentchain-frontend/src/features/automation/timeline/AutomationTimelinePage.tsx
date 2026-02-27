@@ -1,10 +1,11 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/context/useAuth";
 import { openUpgradeFlow } from "@/billing/openUpgradeFlow";
+import { track } from "@/lib/analytics";
 import { useAutomationTimeline } from "./useAutomationTimeline";
 import type { AutomationEvent, AutomationEventType } from "./automationTimeline.types";
-import { canUseTimeline } from "./timelineEntitlements";
+import { canUseTimeline, normalizeTimelinePlan } from "./timelineEntitlements";
 import { computeTimelineAnalytics } from "./timelineAnalytics";
 
 type FilterValue = "all" | AutomationEventType;
@@ -61,7 +62,9 @@ export default function AutomationTimelinePage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const userPlan = String(user?.plan || "").trim().toLowerCase();
+  const planNormalized = normalizeTimelinePlan(user?.plan || "");
   const timelineEnabled = canUseTimeline(userPlan);
+  const paywallViewedRef = useRef(false);
   const { events, loading, error, mode, integrityMode, headChainHash, sources, refresh } =
     useAutomationTimeline({ enabled: timelineEnabled });
   const rawType = String(searchParams.get("t") || "all").trim();
@@ -149,6 +152,23 @@ export default function AutomationTimelinePage() {
     }
   };
 
+  const safeTrack = (eventName: string, props: Record<string, unknown>) => {
+    try {
+      track(eventName, props);
+    } catch {
+      // telemetry must never interrupt UX
+    }
+  };
+
+  useEffect(() => {
+    if (timelineEnabled || paywallViewedRef.current) return;
+    paywallViewedRef.current = true;
+    safeTrack("timeline_paywall_viewed", {
+      planNormalized,
+      path: "/automation/timeline",
+    });
+  }, [planNormalized, timelineEnabled]);
+
   if (!timelineEnabled) {
     return (
       <section style={{ display: "grid", gap: 14, padding: 20 }}>
@@ -175,6 +195,10 @@ export default function AutomationTimelinePage() {
             <button
               type="button"
               onClick={() => {
+                safeTrack("timeline_upgrade_clicked", {
+                  planNormalized,
+                  source: "timeline_paywall",
+                });
                 void openUpgradeFlow({ navigate, fallbackPath: "/pricing" });
               }}
               style={{

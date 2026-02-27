@@ -30,7 +30,7 @@ import { GettingStartedCard } from "../components/onboarding/GettingStartedCard"
 import { SCREENING_ENABLED, getUiLocale, screeningComingSoonLabel } from "../config/screening";
 import { openUpgradeFlow } from "@/billing/openUpgradeFlow";
 import { UpgradeNudgeInlineCard } from "@/features/upgradeNudges/UpgradeNudgeInlineCard";
-import { canUseTimeline } from "@/features/automation/timeline/timelineEntitlements";
+import { canUseTimeline, normalizeTimelinePlan } from "@/features/automation/timeline/timelineEntitlements";
 
 const StarterOnboardingPanel = React.lazy(
   () => import("../components/dashboard/StarterOnboardingPanel")
@@ -117,8 +117,10 @@ const DashboardPage: React.FC = () => {
   const isAdmin = roleLower === "admin";
   const isLandlord = roleLower === "landlord";
   const timelineEnabled = canUseTimeline(user?.plan || "");
+  const planNormalized = normalizeTimelinePlan(user?.plan || "");
   const shouldConsiderTimelineNudge = meLoaded && !isAdmin && !timelineEnabled;
   const [showTimelineNudge, setShowTimelineNudge] = React.useState(false);
+  const timelineNudgeViewedRef = React.useRef(false);
   const canManualScreen = isAdmin || features?.screening_pay_per_use !== false;
   const uiLocale = getUiLocale();
   const screeningLabel = screeningComingSoonLabel(uiLocale);
@@ -267,6 +269,16 @@ const DashboardPage: React.FC = () => {
       setShowTimelineNudge(true);
     }
   }, [shouldConsiderTimelineNudge]);
+
+  React.useEffect(() => {
+    if (!dataReady || !showTimelineNudge || timelineNudgeViewedRef.current) return;
+    timelineNudgeViewedRef.current = true;
+    try {
+      track("dashboard_timeline_nudge_viewed", { planNormalized });
+    } catch {
+      // telemetry must never interrupt UX
+    }
+  }, [dataReady, showTimelineNudge, planNormalized]);
 
   React.useEffect(() => {
     if (import.meta.env.DEV) {
@@ -487,6 +499,14 @@ const DashboardPage: React.FC = () => {
             primaryCtaLabel="Unlock with Pro"
             secondaryCtaLabel="Dismiss"
             onUpgrade={() => {
+              try {
+                track("dashboard_timeline_nudge_clicked", {
+                  planNormalized,
+                  source: "dashboard_nudge",
+                });
+              } catch {
+                // telemetry must never interrupt UX
+              }
               void openUpgradeFlow({ navigate, fallbackPath: "/pricing" });
             }}
             onDismiss={() => {

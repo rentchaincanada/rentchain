@@ -8,6 +8,7 @@ import { useCapabilities } from "../hooks/useCapabilities";
 import { startCheckout } from "../billing/startCheckout";
 import { createBillingPortalSession } from "../api/billingApi";
 import { DEFAULT_PLANS, type PricingInterval, type PricingPlanKey } from "../constants/pricingPlans";
+import { track } from "@/lib/analytics";
 
 type PlanKey = PricingPlanKey;
 
@@ -36,6 +37,13 @@ const PricingPage: React.FC = () => {
   const { caps } = useCapabilities();
   const currentPlan = normalizePlan((caps?.plan as string) || user?.plan || null);
   const [interval, setInterval] = React.useState<PricingInterval>("monthly");
+  const safeTrack = (eventName: string, props: Record<string, unknown>) => {
+    try {
+      track(eventName, props);
+    } catch {
+      // telemetry must never interrupt UX
+    }
+  };
 
   const renderPrice = (planKey: PlanKey) => {
     const plan = DEFAULT_PLANS.find((item) => item.key === planKey);
@@ -46,6 +54,9 @@ const PricingPage: React.FC = () => {
   };
 
   const handleUpgrade = async (target: Exclude<PlanKey, "free">) => {
+    if (target === "pro") {
+      safeTrack("pricing_timeline_cta_clicked", { surface: "in_app" });
+    }
     if (PLAN_ORDER.indexOf(currentPlan) >= PLAN_ORDER.indexOf(target)) {
       try {
         const portal = await createBillingPortalSession();
