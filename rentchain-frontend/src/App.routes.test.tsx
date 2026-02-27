@@ -25,7 +25,9 @@ describe("Routes: /automation/timeline", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/Automation Timeline/i)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /^Automation Timeline$/i })).toBeInTheDocument();
+    expect(screen.getByText(/Unified Event Ledger \(v1\.1\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Mock events \(backend wiring next\)\./i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });
