@@ -21,10 +21,11 @@ jobs:
             rentchain-api/package-lock.json
             rentchain-frontend/package-lock.json
 
-      - name: Install + build frontend
+      - name: Install + test + build frontend
         working-directory: rentchain-frontend
         run: |
           npm ci
+          npm run test
           npm run build
 
       - name: Install + build api
