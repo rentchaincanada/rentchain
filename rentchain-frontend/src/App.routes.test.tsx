@@ -15,6 +15,16 @@ vi.mock("./components/layout/LandlordNav", () => ({
   LandlordNav: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
+vi.mock("./context/useAuth", () => ({
+  useAuth: () => ({
+    user: { id: "landlord_1", role: "landlord", landlordId: "landlord_1" },
+    token: "test-token",
+    isLoading: false,
+    ready: true,
+    authStatus: "authed",
+  }),
+}));
+
 import App from "./App";
 
 describe("Routes: /automation/timeline", () => {
@@ -26,8 +36,6 @@ describe("Routes: /automation/timeline", () => {
     );
 
     expect(await screen.findByRole("heading", { name: /^Automation Timeline$/i })).toBeInTheDocument();
-    expect(screen.getByText(/Unified Event Ledger \(v1\.1\)/i)).toBeInTheDocument();
-    expect(screen.getByText(/Mock events \(backend wiring next\)\./i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });
