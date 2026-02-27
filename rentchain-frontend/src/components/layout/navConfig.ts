@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { LayoutDashboard, Building2, Users, ScrollText, MessagesSquare } from "lucide-react";
+import { LayoutDashboard, Building2, Users, ScrollText, MessagesSquare, User } from "lucide-react";
 import { SCREENING_ENABLED } from "../../config/screening";
 
 export type NavItem = {
@@ -80,6 +80,15 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Billing",
     to: "/billing",
     showInDrawer: true,
+  },
+  {
+    id: "account",
+    label: "My Account",
+    to: "/account",
+    icon: User,
+    showInDrawer: true,
+    showInTabs: false,
+    requiresLandlordOrAdmin: true,
   },
   {
     id: "referrals",
