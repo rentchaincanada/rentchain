@@ -31,9 +31,16 @@ type PricingCopy = {
   tierBadges: Partial<Record<TierKey, string>>;
   ctaStartFree: string;
   ctaUpgrade: string;
+  ctaByTier?: Partial<Record<TierKey, string>>;
   comparisonTitle: string;
   capabilityTitle: string;
   featureGroups: PricingFeatureGroup[];
+  timelineSection: {
+    title: string;
+    description: string;
+    bullets: string[];
+    proofLine: string;
+  };
   screeningRow: {
     label: string;
     subtext: string;
@@ -123,6 +130,11 @@ export const marketingCopy: Record<Locale, MarketingCopy> = {
       },
       ctaStartFree: "Start Free",
       ctaUpgrade: "Upgrade",
+      ctaByTier: {
+        starter: "Upgrade",
+        pro: "Unlock Timeline with Pro",
+        elite: "Advanced compliance & reporting",
+      },
       comparisonTitle: "Plan comparison",
       capabilityTitle: "Capability",
       featureGroups: [
@@ -162,7 +174,29 @@ export const marketingCopy: Record<Locale, MarketingCopy> = {
             elite: "Portfolio analytics",
           },
         },
+        {
+          title: "Automation Timeline",
+          items: {
+            free: "X",
+            starter: "X",
+            pro: "check",
+            elite: "check",
+          },
+        },
       ],
+      timelineSection: {
+        title: "Automation Timeline (Event Ledger)",
+        description:
+          "See every key event across applications, screening, leases, payments, messages, and maintenance in one unified timeline.",
+        bullets: [
+          "Unified event ledger",
+          "Integrity Verified (tamper-evident hash chain)",
+          "Insights (activity, payments 30d, event mix)",
+          "Property / unit / tenant filters",
+          "JSON export",
+        ],
+        proofLine: "Designed for compliance-grade traceability without crypto complexity.",
+      },
       screeningRow: {
         label: "Credit Screening",
         subtext: "Coming soon",
@@ -279,6 +313,11 @@ export const marketingCopy: Record<Locale, MarketingCopy> = {
       },
       ctaStartFree: "Commencer gratuitement",
       ctaUpgrade: "Mettre a niveau",
+      ctaByTier: {
+        starter: "Mettre a niveau",
+        pro: "Debloquer Timeline avec Pro",
+        elite: "Conformite et rapports avances",
+      },
       comparisonTitle: "Comparaison des forfaits",
       capabilityTitle: "Capacite",
       featureGroups: [
@@ -318,7 +357,29 @@ export const marketingCopy: Record<Locale, MarketingCopy> = {
             elite: "Analytique portefeuille",
           },
         },
+        {
+          title: "Timeline d'automatisation",
+          items: {
+            free: "X",
+            starter: "X",
+            pro: "check",
+            elite: "check",
+          },
+        },
       ],
+      timelineSection: {
+        title: "Timeline d'automatisation (registre d'evenements)",
+        description:
+          "Voyez tous les evenements cles des candidatures, verifications, baux, paiements, messages et maintenance dans une seule timeline.",
+        bullets: [
+          "Registre d'evenements unifie",
+          "Integrity Verified (chaine de hachage evidente)",
+          "Insights (activite, paiements 30 j, mix des evenements)",
+          "Filtres par propriete / unite / locataire",
+          "Export JSON",
+        ],
+        proofLine: "Concu pour une tracabilite de conformite sans complexite crypto.",
+      },
       screeningRow: {
         label: "Verification de credit",
         subtext: "Bientot disponible",
