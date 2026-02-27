@@ -69,6 +69,7 @@ import PdfSamplePage from "./pages/PdfSamplePage";
 import LeaseLedgerPage from "./pages/LeaseLedgerPage";
 import ApplicationReviewSummaryPage from "./pages/ApplicationReviewSummaryPage";
 import ReferralsPage from "./pages/ReferralsPage";
+import AccountPage from "./pages/AccountPage";
 
 const TENANT_PORTAL_ENABLED = import.meta.env.VITE_TENANT_PORTAL_ENABLED === "true";
 
@@ -528,6 +529,16 @@ function App() {
           }
         />
         ) : null}
+        <Route
+          path="/account"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <AccountPage />
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
         <Route
           path="/account/security"
           element={
