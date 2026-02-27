@@ -28,10 +28,15 @@ import { listReferrals } from "../api/referralsApi";
 import { markDashboardVisit } from "@/features/upgradeNudges/nudgeStore";
 import { GettingStartedCard } from "../components/onboarding/GettingStartedCard";
 import { SCREENING_ENABLED, getUiLocale, screeningComingSoonLabel } from "../config/screening";
+import { openUpgradeFlow } from "@/billing/openUpgradeFlow";
+import { UpgradeNudgeInlineCard } from "@/features/upgradeNudges/UpgradeNudgeInlineCard";
+import { canUseTimeline } from "@/features/automation/timeline/timelineEntitlements";
 
 const StarterOnboardingPanel = React.lazy(
   () => import("../components/dashboard/StarterOnboardingPanel")
 );
+const TIMELINE_NUDGE_DISMISSED_AT_KEY = "nudge.timeline.dismissedAt";
+const TIMELINE_NUDGE_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 
 class OnboardingErrorBoundary extends React.Component<
   { onError: () => void; children: React.ReactNode },
@@ -111,6 +116,9 @@ const DashboardPage: React.FC = () => {
   const roleLower = String(user?.role || "").toLowerCase();
   const isAdmin = roleLower === "admin";
   const isLandlord = roleLower === "landlord";
+  const timelineEnabled = canUseTimeline(user?.plan || "");
+  const shouldConsiderTimelineNudge = meLoaded && !isAdmin && !timelineEnabled;
+  const [showTimelineNudge, setShowTimelineNudge] = React.useState(false);
   const canManualScreen = isAdmin || features?.screening_pay_per_use !== false;
   const uiLocale = getUiLocale();
   const screeningLabel = screeningComingSoonLabel(uiLocale);
@@ -242,6 +250,23 @@ const DashboardPage: React.FC = () => {
     dashboardVisitMarkedRef.current = true;
     markDashboardVisit(String(user.id));
   }, [meLoaded, user?.id]);
+
+  React.useEffect(() => {
+    if (!shouldConsiderTimelineNudge) {
+      setShowTimelineNudge(false);
+      return;
+    }
+    try {
+      const dismissedAt = Number(localStorage.getItem(TIMELINE_NUDGE_DISMISSED_AT_KEY) || "0");
+      if (!dismissedAt || Date.now() - dismissedAt > TIMELINE_NUDGE_COOLDOWN_MS) {
+        setShowTimelineNudge(true);
+      } else {
+        setShowTimelineNudge(false);
+      }
+    } catch {
+      setShowTimelineNudge(true);
+    }
+  }, [shouldConsiderTimelineNudge]);
 
   React.useEffect(() => {
     if (import.meta.env.DEV) {
@@ -454,6 +479,45 @@ const DashboardPage: React.FC = () => {
         ) : null}
 
         {dataReady ? <KpiStrip kpis={kpis} loading={loading} /> : null}
+        {dataReady && showTimelineNudge ? (
+          <UpgradeNudgeInlineCard
+            type="GENERIC_UPGRADE"
+            title="New: Automation Timeline (Pro)"
+            body="Track applications -> screening -> leases -> payments in one unified event ledger. Includes Integrity Verified + Insights + Filters."
+            primaryCtaLabel="Unlock with Pro"
+            secondaryCtaLabel="Dismiss"
+            onUpgrade={() => {
+              void openUpgradeFlow({ navigate, fallbackPath: "/pricing" });
+            }}
+            onDismiss={() => {
+              try {
+                localStorage.setItem(TIMELINE_NUDGE_DISMISSED_AT_KEY, String(Date.now()));
+              } catch {
+                // no-op
+              }
+              setShowTimelineNudge(false);
+            }}
+          />
+        ) : null}
+        {dataReady && showTimelineNudge ? (
+          <div style={{ marginTop: -8 }}>
+            <button
+              type="button"
+              onClick={() => navigate("/pricing")}
+              style={{
+                border: "none",
+                background: "transparent",
+                color: colors.accent,
+                cursor: "pointer",
+                padding: 0,
+                fontSize: 13,
+                fontWeight: 600,
+              }}
+            >
+              Learn more
+            </button>
+          </div>
+        ) : null}
 
         {dataReady ? (
           <div

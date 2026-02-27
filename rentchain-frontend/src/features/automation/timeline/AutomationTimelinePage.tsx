@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/context/useAuth";
+import { openUpgradeFlow } from "@/billing/openUpgradeFlow";
 import { useAutomationTimeline } from "./useAutomationTimeline";
 import type { AutomationEvent, AutomationEventType } from "./automationTimeline.types";
 import { canUseTimeline } from "./timelineEntitlements";
@@ -173,7 +174,9 @@ export default function AutomationTimelinePage() {
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button
               type="button"
-              onClick={() => navigate("/pricing")}
+              onClick={() => {
+                void openUpgradeFlow({ navigate, fallbackPath: "/pricing" });
+              }}
               style={{
                 border: "1px solid #1d4ed8",
                 background: "#1d4ed8",
@@ -184,11 +187,11 @@ export default function AutomationTimelinePage() {
                 cursor: "pointer",
               }}
             >
-              Upgrade plan
+              Unlock with Pro
             </button>
             <button
               type="button"
-              onClick={() => navigate("/billing")}
+              onClick={() => navigate("/pricing")}
               style={{
                 border: "1px solid #bfdbfe",
                 background: "#fff",
@@ -199,7 +202,7 @@ export default function AutomationTimelinePage() {
                 cursor: "pointer",
               }}
             >
-              Open billing
+              Learn more
             </button>
           </div>
         </div>
