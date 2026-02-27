@@ -4,6 +4,7 @@ import { useAuth } from "@/context/useAuth";
 import { useAutomationTimeline } from "./useAutomationTimeline";
 import type { AutomationEvent, AutomationEventType } from "./automationTimeline.types";
 import { canUseTimeline } from "./timelineEntitlements";
+import { computeTimelineAnalytics } from "./timelineAnalytics";
 
 type FilterValue = "ALL" | AutomationEventType;
 
@@ -26,6 +27,14 @@ const formatTime = (value: string) =>
     hour: "numeric",
     minute: "2-digit",
   });
+
+const formatMoney = (cents: number) =>
+  new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency: "CAD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format((cents || 0) / 100);
 
 const badgeColorByType: Record<AutomationEventType, string> = {
   LEASE: "#0f766e",
@@ -59,6 +68,7 @@ export default function AutomationTimelinePage() {
     () => (filter === "ALL" ? events : events.filter((event) => event.type === filter)),
     [events, filter]
   );
+  const analytics = useMemo(() => computeTimelineAnalytics(events), [events]);
 
   const handleExport = () => {
     const payload = JSON.stringify(visibleEvents, null, 2);
@@ -189,6 +199,47 @@ export default function AutomationTimelinePage() {
           <p style={{ margin: 0, fontSize: 12, color: "#b45309" }}>{error}</p>
         ) : null}
       </header>
+
+      <section
+        style={{
+          display: "grid",
+          gap: 8,
+          border: "1px solid #e2e8f0",
+          borderRadius: 12,
+          background: "#ffffff",
+          padding: 14,
+        }}
+      >
+        <div style={{ fontWeight: 800 }}>Insights</div>
+        <div style={{ fontSize: 13, color: "#334155" }}>Total events: {analytics.totalEvents}</div>
+        <div style={{ fontSize: 13, color: "#334155" }}>
+          Last activity: {analytics.lastActivityAt ? formatTime(analytics.lastActivityAt) : "n/a"}
+        </div>
+        <div style={{ fontSize: 13, color: "#334155" }}>
+          Payment activity (30d): {analytics.payment30d.count} events, {formatMoney(analytics.payment30d.sumCents)}
+        </div>
+        <div style={{ fontSize: 13, color: "#334155" }}>
+          Maintenance: {analytics.maintenance.open} open / {analytics.maintenance.completed} completed
+        </div>
+        <div style={{ fontSize: 13, color: "#334155" }}>
+          App → Screening median:{" "}
+          {typeof analytics.funnels.appToScreeningMedianHours === "number"
+            ? `${analytics.funnels.appToScreeningMedianHours.toFixed(1)}h`
+            : "n/a"}
+        </div>
+        <div style={{ fontSize: 13, color: "#334155" }}>
+          Screening → Lease median:{" "}
+          {typeof analytics.funnels.screeningToLeaseMedianHours === "number"
+            ? `${analytics.funnels.screeningToLeaseMedianHours.toFixed(1)}h`
+            : "n/a"}
+        </div>
+        <div style={{ fontSize: 12, color: "#64748b" }}>
+          Event mix: Lease {analytics.countsByType.LEASE}, Screening {analytics.countsByType.SCREENING}, Payment{" "}
+          {analytics.countsByType.PAYMENT}, Message {analytics.countsByType.MESSAGE}, Property{" "}
+          {analytics.countsByType.PROPERTY}, Tenant {analytics.countsByType.TENANT}, System{" "}
+          {analytics.countsByType.SYSTEM}
+        </div>
+      </section>
 
       <div
         style={{
