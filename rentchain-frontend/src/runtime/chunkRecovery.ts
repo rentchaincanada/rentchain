@@ -31,7 +31,27 @@ if (typeof window !== "undefined") {
   const shouldReloadForChunkError = (msg: string) =>
     msg.includes("Failed to fetch dynamically imported module") ||
     msg.includes("Importing a module script failed") ||
-    msg.includes("ChunkLoadError");
+    msg.includes("ChunkLoadError") ||
+    (msg.includes("Cannot access") && msg.includes("before initialization"));
+
+  const clearRuntimeCaches = async () => {
+    try {
+      if ("caches" in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((key) => caches.delete(key)));
+      }
+    } catch {
+      // ignore cache clear errors
+    }
+    try {
+      if ("serviceWorker" in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((reg) => reg.unregister()));
+      }
+    } catch {
+      // ignore service worker errors
+    }
+  };
 
   const reloadOnce = () => {
     const key = "chunkReloaded";
@@ -41,8 +61,10 @@ if (typeof window !== "undefined") {
     if (!sessionStorage.getItem(key) || !lastAt || now - lastAt > 60_000) {
       sessionStorage.setItem(key, "1");
       sessionStorage.setItem(tsKey, String(now));
-      const sep = window.location.search ? "&" : "?";
-      window.location.replace(`${window.location.pathname}${window.location.search}${sep}v=${now}`);
+      void clearRuntimeCaches().finally(() => {
+        const sep = window.location.search ? "&" : "?";
+        window.location.replace(`${window.location.pathname}${window.location.search}${sep}v=${now}`);
+      });
       return;
     }
     showReloadBanner("Update available — tap to reload", () => window.location.reload());
