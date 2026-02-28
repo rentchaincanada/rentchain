@@ -6,6 +6,7 @@ import { getTimelineEventsForLandlord } from "./getTimelineEventsForLandlord";
 import { computeIntegrity, type IntegrityMode } from "./timelineIntegrity";
 
 type TimelineMode = "live" | "mock";
+type TimelineSources = { tried: string[]; ok: string[]; failed: string[] };
 
 export function useAutomationTimeline(options?: { enabled?: boolean }) {
   const { user } = useAuth();
@@ -15,9 +16,10 @@ export function useAutomationTimeline(options?: { enabled?: boolean }) {
   const [mode, setMode] = useState<TimelineMode>("mock");
   const [integrityMode, setIntegrityMode] = useState<IntegrityMode>("unverified");
   const [headChainHash, setHeadChainHash] = useState<string | null>(null);
-  const [sources, setSources] = useState<{ tried: string[]; ok: string[] }>({
+  const [sources, setSources] = useState<TimelineSources>({
     tried: [],
     ok: [],
+    failed: [],
   });
   const enabled = options?.enabled !== false;
 
@@ -34,7 +36,7 @@ export function useAutomationTimeline(options?: { enabled?: boolean }) {
   const refresh = useCallback(async () => {
     if (!enabled) {
       setEvents([]);
-      setSources({ tried: [], ok: [] });
+      setSources({ tried: [], ok: [], failed: [] });
       setMode("mock");
       setIntegrityMode("unverified");
       setHeadChainHash(null);
@@ -68,7 +70,7 @@ export function useAutomationTimeline(options?: { enabled?: boolean }) {
       setIntegrityMode(fallback.mode);
       setHeadChainHash(fallback.headChainHash);
       setMode("mock");
-      setSources({ tried: [], ok: [] });
+      setSources({ tried: [], ok: [], failed: [] });
       setError(String(err?.message || "Timeline fallback active."));
     } finally {
       setLoading(false);
@@ -94,5 +96,27 @@ export function useAutomationTimeline(options?: { enabled?: boolean }) {
     };
   }, [refresh]);
 
-  return { events, loading, error, mode, integrityMode, headChainHash, sources, refresh };
+  const sourceHealth = useMemo(() => {
+    const triedCount = sources.tried.length;
+    const okCount = sources.ok.length;
+    const failedCount = sources.failed.length;
+    return {
+      triedCount,
+      okCount,
+      failedCount,
+      degraded: failedCount > 0,
+    };
+  }, [sources.failed.length, sources.ok.length, sources.tried.length]);
+
+  return {
+    events,
+    loading,
+    error,
+    mode,
+    integrityMode,
+    headChainHash,
+    sources,
+    sourceHealth,
+    refresh,
+  };
 }

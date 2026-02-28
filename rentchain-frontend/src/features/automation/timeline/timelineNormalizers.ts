@@ -6,6 +6,15 @@ import type { LedgerEventV2 } from "@/api/ledgerV2";
 import type { ActionRequest } from "@/api/actionRequestsApi";
 import type { AutomationEvent, AutomationEventType } from "./automationTimeline.types";
 
+export type TimelineSourceKey =
+  | "ledgerV2"
+  | "payments"
+  | "leases"
+  | "applications"
+  | "messages"
+  | "actionRequests"
+  | "unknown";
+
 function toIso(input: unknown): { iso: string; missingTimestamp: boolean } {
   if (typeof input === "string" && input.trim()) {
     const date = new Date(input);
@@ -240,4 +249,52 @@ export function normalizeLedgerV2Events(
       }
     )
   );
+}
+
+export function getTimelineSourceKey(event: AutomationEvent): TimelineSourceKey {
+  const source = String((event.metadata as Record<string, unknown> | undefined)?.source || "").toLowerCase();
+  if (source.includes("ledgerv2")) return "ledgerV2";
+  if (source.includes("paymentsapi")) return "payments";
+  if (source.includes("leasesapi")) return "leases";
+  if (source.includes("rentalapplicationsapi")) return "applications";
+  if (source.includes("messagesapi")) return "messages";
+  if (source.includes("actionrequestsapi")) return "actionRequests";
+  return "unknown";
+}
+
+const sourcePriority: Record<TimelineSourceKey, number> = {
+  ledgerV2: 0,
+  payments: 1,
+  leases: 2,
+  applications: 3,
+  messages: 4,
+  actionRequests: 5,
+  unknown: 6,
+};
+
+export function getTimelineSourcePriority(source: TimelineSourceKey): number {
+  return sourcePriority[source] ?? sourcePriority.unknown;
+}
+
+export function toTwoMinuteBucketIso(value: string): string {
+  const time = new Date(value).getTime();
+  if (Number.isNaN(time)) return new Date(0).toISOString();
+  const bucketMs = 2 * 60 * 1000;
+  const bucketed = Math.floor(time / bucketMs) * bucketMs;
+  return new Date(bucketed).toISOString();
+}
+
+export function buildEventFingerprint(event: AutomationEvent): string {
+  const roundedTime = toTwoMinuteBucketIso(event.occurredAt);
+  const entity = event.entity || {};
+  return [
+    event.type,
+    roundedTime,
+    String(entity.propertyId || ""),
+    String(entity.unitId || ""),
+    String(entity.tenantId || ""),
+    String(entity.applicationId || ""),
+    String(entity.leaseId || ""),
+    String(entity.paymentId || ""),
+  ].join("|");
 }
