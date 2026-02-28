@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/context/useAuth";
+import { track } from "@/lib/analytics";
 import { getMockAutomationEvents } from "./mockAutomationEvents";
 import type { AutomationEvent } from "./automationTimeline.types";
-import { getTimelineEventsForLandlord } from "./getTimelineEventsForLandlord";
+import {
+  getTimelineEventsForLandlord,
+  type TimelineSourceReportItem,
+} from "./getTimelineEventsForLandlord";
 import { computeIntegrity, type IntegrityMode } from "./timelineIntegrity";
 
 type TimelineMode = "live" | "mock";
-type TimelineSources = { tried: string[]; ok: string[]; failed: string[] };
+type TimelineSources = { tried: string[]; ok: string[]; report: TimelineSourceReportItem[] };
 
 export function useAutomationTimeline(options?: { enabled?: boolean }) {
   const { user } = useAuth();
@@ -19,7 +23,7 @@ export function useAutomationTimeline(options?: { enabled?: boolean }) {
   const [sources, setSources] = useState<TimelineSources>({
     tried: [],
     ok: [],
-    failed: [],
+    report: [],
   });
   const enabled = options?.enabled !== false;
 
@@ -36,7 +40,7 @@ export function useAutomationTimeline(options?: { enabled?: boolean }) {
   const refresh = useCallback(async () => {
     if (!enabled) {
       setEvents([]);
-      setSources({ tried: [], ok: [], failed: [] });
+      setSources({ tried: [], ok: [], report: [] });
       setMode("mock");
       setIntegrityMode("unverified");
       setHeadChainHash(null);
@@ -50,6 +54,25 @@ export function useAutomationTimeline(options?: { enabled?: boolean }) {
     try {
       const live = await getTimelineEventsForLandlord(landlordId);
       setSources(live.sources);
+      if (!import.meta.env.DEV) {
+        try {
+          const msTotal = live.sources.report.reduce((total, item) => total + item.ms, 0);
+          void track("timeline_sources_health", {
+            okCount: live.sources.ok.length,
+            triedCount: live.sources.tried.length,
+            msTotal,
+            sources: live.sources.report.map((item) => ({
+              source: item.source,
+              ok: item.ok,
+              ms: item.ms,
+              count: item.count,
+              errorCode: item.errorCode || null,
+            })),
+          });
+        } catch {
+          // telemetry must not block timeline rendering
+        }
+      }
       if (live.events.length > 0) {
         const integrity = await computeIntegrity(live.events);
         setEvents(integrity.events);
@@ -70,7 +93,7 @@ export function useAutomationTimeline(options?: { enabled?: boolean }) {
       setIntegrityMode(fallback.mode);
       setHeadChainHash(fallback.headChainHash);
       setMode("mock");
-      setSources({ tried: [], ok: [], failed: [] });
+      setSources({ tried: [], ok: [], report: [] });
       setError(String(err?.message || "Timeline fallback active."));
     } finally {
       setLoading(false);
@@ -88,6 +111,7 @@ export function useAutomationTimeline(options?: { enabled?: boolean }) {
         setMode("mock");
         setIntegrityMode("unverified");
         setHeadChainHash(null);
+        setSources({ tried: [], ok: [], report: [] });
         setError("No live events yet. Showing mock fallback.");
       }
     });
@@ -99,14 +123,14 @@ export function useAutomationTimeline(options?: { enabled?: boolean }) {
   const sourceHealth = useMemo(() => {
     const triedCount = sources.tried.length;
     const okCount = sources.ok.length;
-    const failedCount = sources.failed.length;
+    const failedCount = sources.report.filter((item) => !item.ok).length;
     return {
       triedCount,
       okCount,
       failedCount,
       degraded: failedCount > 0,
     };
-  }, [sources.failed.length, sources.ok.length, sources.tried.length]);
+  }, [sources.ok.length, sources.report, sources.tried.length]);
 
   return {
     events,
@@ -116,6 +140,7 @@ export function useAutomationTimeline(options?: { enabled?: boolean }) {
     integrityMode,
     headChainHash,
     sources,
+    sourcesReport: sources.report,
     sourceHealth,
     refresh,
   };
