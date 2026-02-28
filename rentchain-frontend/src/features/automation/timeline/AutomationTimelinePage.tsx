@@ -5,7 +5,7 @@ import { openUpgradeFlow } from "@/billing/openUpgradeFlow";
 import { track } from "@/lib/analytics";
 import { useAutomationTimeline } from "./useAutomationTimeline";
 import type { AutomationEvent, AutomationEventType } from "./automationTimeline.types";
-import { canUseTimeline, normalizeTimelinePlan } from "./timelineEntitlements";
+import { canUseTimeline, canUseTimelineCsv, normalizeTimelinePlan } from "./timelineEntitlements";
 import { computeTimelineAnalytics } from "./timelineAnalytics";
 
 type FilterValue = "all" | AutomationEventType;
@@ -64,6 +64,11 @@ export default function AutomationTimelinePage() {
   const userPlan = String(user?.plan || "").trim().toLowerCase();
   const planNormalized = normalizeTimelinePlan(user?.plan || "");
   const timelineEnabled = canUseTimeline(userPlan);
+  const canExportCsv = canUseTimelineCsv(userPlan);
+  const retentionMessage =
+    planNormalized === "elite" || planNormalized === "elite_enterprise"
+      ? "Retention: Up to 24 months visible."
+      : "Retention: Up to 90 days visible.";
   const paywallViewedRef = useRef(false);
   const { events, loading, error, mode, integrityMode, headChainHash, sources, refresh } =
     useAutomationTimeline({ enabled: timelineEnabled });
@@ -172,6 +177,62 @@ export default function AutomationTimelinePage() {
     URL.revokeObjectURL(url);
   };
 
+  const csvEscape = (value: unknown) => {
+    const text = String(value ?? "");
+    return `"${text.replace(/"/g, '""')}"`;
+  };
+
+  const handleCsvExport = () => {
+    try {
+      const headers = [
+        "id",
+        "type",
+        "occurredAt",
+        "title",
+        "summary",
+        "propertyId",
+        "unitId",
+        "tenantId",
+        "applicationId",
+        "leaseId",
+        "paymentId",
+        "source",
+      ];
+      const lines = [
+        headers.join(","),
+        ...visibleEvents.map((event) =>
+          [
+            event.id,
+            event.type,
+            event.occurredAt,
+            event.title,
+            event.summary || "",
+            event.entity?.propertyId || "",
+            event.entity?.unitId || "",
+            event.entity?.tenantId || "",
+            event.entity?.applicationId || "",
+            event.entity?.leaseId || "",
+            event.entity?.paymentId || "",
+            String((event.metadata as Record<string, unknown> | undefined)?.source || ""),
+          ]
+            .map(csvEscape)
+            .join(",")
+        ),
+      ];
+      const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "rentchain-automation-timeline.csv";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      // export should never block UX
+    }
+  };
+
   const handleCopyHash = async (value?: string | null) => {
     if (!value) return;
     try {
@@ -271,6 +332,7 @@ export default function AutomationTimelinePage() {
         <p style={{ margin: 0, fontSize: 13, color: "#64748b" }}>
           {mode === "live" ? "Live events (read-only)" : "Mock fallback (no live events yet)"}
         </p>
+        <p style={{ margin: 0, fontSize: 12, color: "#64748b" }}>{retentionMessage}</p>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <span
             style={{
@@ -503,6 +565,23 @@ export default function AutomationTimelinePage() {
         >
           Export (JSON)
         </button>
+        {canExportCsv ? (
+          <button
+            type="button"
+            onClick={handleCsvExport}
+            style={{
+              border: "1px solid #cbd5e1",
+              background: "#ffffff",
+              borderRadius: 10,
+              padding: "7px 12px",
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            Export CSV
+          </button>
+        ) : null}
       </div>
 
       <div

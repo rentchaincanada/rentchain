@@ -14,3 +14,8 @@ export function canUseTimeline(plan?: string | null): boolean {
   const normalized = normalizeTimelinePlan(plan);
   return normalized === "pro" || normalized === "elite" || normalized === "elite_enterprise";
 }
+
+export function canUseTimelineCsv(plan?: string | null): boolean {
+  const normalized = normalizeTimelinePlan(plan);
+  return normalized === "elite" || normalized === "elite_enterprise";
+}
