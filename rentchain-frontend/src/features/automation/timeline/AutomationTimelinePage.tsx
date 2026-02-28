@@ -70,7 +70,7 @@ export default function AutomationTimelinePage() {
       ? "Retention: Up to 24 months visible."
       : "Retention: Up to 90 days visible.";
   const paywallViewedRef = useRef(false);
-  const { events, loading, error, mode, integrityMode, headChainHash, sources, refresh } =
+  const { events, loading, error, mode, integrityMode, headChainHash, sources, sourcesReport, refresh } =
     useAutomationTimeline({ enabled: timelineEnabled });
   const rawType = String(searchParams.get("t") || "all").trim();
   const typeFilter: FilterValue =
@@ -365,9 +365,35 @@ export default function AutomationTimelinePage() {
           ) : null}
         </div>
         {import.meta.env.DEV ? (
-          <p style={{ margin: 0, fontSize: 12, color: "#94a3b8" }}>
-            Sources: {sources.ok.length} ok / {sources.tried.length} tried
-          </p>
+          <div
+            style={{
+              marginTop: 4,
+              border: "1px solid #e2e8f0",
+              borderRadius: 10,
+              padding: "8px 10px",
+              background: "#f8fafc",
+              display: "grid",
+              gap: 6,
+            }}
+          >
+            <div style={{ fontSize: 12, color: "#334155", fontWeight: 700 }}>
+              Sources: {sources.ok.length}/{sources.tried.length} live
+            </div>
+            {sourcesReport.map((item) => (
+              <div
+                key={item.source}
+                style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 11, color: "#475569" }}
+              >
+                <span style={{ minWidth: 120, fontWeight: 600 }}>{item.source}</span>
+                <span>{item.ok ? "ok" : "failed"}</span>
+                <span>{item.ms}ms</span>
+                <span>{item.count} items</span>
+                {!item.ok && item.errorCode ? <span>({item.errorCode})</span> : null}
+              </div>
+            ))}
+          </div>
+        ) : sourcesReport.some((item) => !item.ok) ? (
+          <p style={{ margin: 0, fontSize: 12, color: "#b45309" }}>Some sources are temporarily unavailable.</p>
         ) : null}
         {error ? (
           <p style={{ margin: 0, fontSize: 12, color: "#b45309" }}>{error}</p>
