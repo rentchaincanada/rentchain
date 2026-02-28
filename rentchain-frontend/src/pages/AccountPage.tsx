@@ -5,6 +5,7 @@ import { spacing, text, colors } from "../styles/tokens";
 import { useAuth } from "../context/useAuth";
 import { useBillingStatus, billingTierLabel } from "@/hooks/useBillingStatus";
 import { openUpgradeFlow } from "@/billing/openUpgradeFlow";
+import { useAccountSummary } from "./account/useAccountSummary";
 
 type HubCardProps = {
   title: string;
@@ -27,6 +28,12 @@ const AccountPage: React.FC = () => {
   const { user } = useAuth();
   const billingStatus = useBillingStatus();
   const planLabel = billingTierLabel(billingStatus.tier);
+  const { loading: summaryLoading, error: summaryError, summary } = useAccountSummary();
+
+  const formatDate = (value?: string | null) =>
+    value ? new Date(value).toLocaleDateString() : "Unavailable";
+  const formatAmount = (amountCents?: number | null) =>
+    typeof amountCents === "number" ? `${(amountCents / 100).toFixed(2)} CAD` : "Unavailable";
 
   return (
     <Section style={{ maxWidth: 1080, margin: "0 auto", display: "grid", gap: spacing.md }}>
@@ -40,6 +47,58 @@ const AccountPage: React.FC = () => {
             {user?.email ? `Signed in as ${user.email}` : "Signed in"} · Plan: {planLabel}
           </div>
         </div>
+      </Card>
+
+      <Card style={{ display: "grid", gap: spacing.sm, border: `1px solid ${colors.border}` }}>
+        <div style={{ fontWeight: 800, fontSize: "1rem" }}>Account Summary</div>
+        {summaryLoading ? (
+          <div style={{ display: "grid", gap: 6, color: text.muted, fontSize: 13 }}>
+            <div>Loading summary...</div>
+            <div>Fetching billing status...</div>
+          </div>
+        ) : (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              gap: spacing.sm,
+              fontSize: 14,
+            }}
+          >
+            <div>
+              <div style={{ color: text.muted, fontSize: 12 }}>Plan</div>
+              <div style={{ fontWeight: 700 }}>
+                {summary.planNormalized ? summary.planNormalized.replace("_", " ") : planLabel}
+              </div>
+            </div>
+            <div>
+              <div style={{ color: text.muted, fontSize: 12 }}>Billing status</div>
+              <div style={{ fontWeight: 700 }}>{summary.status || "Unavailable"}</div>
+            </div>
+            <div>
+              <div style={{ color: text.muted, fontSize: 12 }}>Next renewal</div>
+              <div style={{ fontWeight: 700 }}>{formatDate(summary.nextRenewalAt)}</div>
+            </div>
+            <div>
+              <div style={{ color: text.muted, fontSize: 12 }}>Last invoice</div>
+              <div style={{ fontWeight: 700 }}>
+                {formatDate(summary.lastInvoiceAt)} · {formatAmount(summary.lastInvoiceAmountCents)}
+              </div>
+            </div>
+            <div>
+              <div style={{ color: text.muted, fontSize: 12 }}>Receipts</div>
+              <div style={{ fontWeight: 700 }}>{summary.receiptsCount ?? "Unavailable"}</div>
+            </div>
+          </div>
+        )}
+        {summaryError ? (
+          <div style={{ display: "flex", alignItems: "center", gap: spacing.sm, color: text.muted, fontSize: 13 }}>
+            <span>{summaryError}</span>
+            <Button type="button" variant="secondary" onClick={() => navigate("/billing")}>
+              Go to Billing
+            </Button>
+          </div>
+        ) : null}
       </Card>
 
       <div
