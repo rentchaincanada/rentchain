@@ -271,14 +271,25 @@ const DashboardPage: React.FC = () => {
   }, [shouldConsiderTimelineNudge]);
 
   React.useEffect(() => {
-    if (!dataReady || !showTimelineNudge || timelineNudgeViewedRef.current) return;
+    const dataReadyForNudge =
+      !loading && !propsLoading && !applicationsLoading && !tenantsLoading && !invitesLoading && !error;
+    if (!dataReadyForNudge || !showTimelineNudge || timelineNudgeViewedRef.current) return;
     timelineNudgeViewedRef.current = true;
     try {
       track("dashboard_timeline_nudge_viewed", { planNormalized });
     } catch {
       // telemetry must never interrupt UX
     }
-  }, [dataReady, showTimelineNudge, planNormalized]);
+  }, [
+    loading,
+    propsLoading,
+    applicationsLoading,
+    tenantsLoading,
+    invitesLoading,
+    error,
+    showTimelineNudge,
+    planNormalized,
+  ]);
 
   React.useEffect(() => {
     if (import.meta.env.DEV) {
