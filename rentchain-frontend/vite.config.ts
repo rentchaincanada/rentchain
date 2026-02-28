@@ -4,11 +4,13 @@ import { VitePWA } from "vite-plugin-pwa";
 import path from "path";
 
 // https://vitejs.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  const isTdzDebug = mode === "tdzdebug";
+  return {
   plugins: [
     react(),
     VitePWA({
-      registerType: "autoUpdate",
+      registerType: isTdzDebug ? "prompt" : "autoUpdate",
       cleanupOutdatedCaches: true,
       clientsClaim: true,
       skipWaiting: true,
@@ -62,7 +64,7 @@ export default defineConfig({
     },
   },
   build:  {
-    sourcemap: false,
+    sourcemap: isTdzDebug ? true : false,
     rollupOptions: {
       output: {
         manualChunks(id) {
@@ -81,4 +83,5 @@ export default defineConfig({
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
     exclude: ["tests/**", "node_modules/**", "dist/**"],
   },
+  };
 });

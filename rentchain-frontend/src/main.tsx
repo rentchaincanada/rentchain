@@ -17,6 +17,10 @@ import { API_BASE_URL } from "./api/config";
 import { AuthDebugOverlay } from "./components/debug/AuthDebugOverlay";
 import { getAuthToken } from "./lib/authToken";
 
+if (import.meta.env.MODE === "tdzdebug" && typeof window !== "undefined") {
+  console.info("[tdzdebug] build", (import.meta.env as any).VITE_BUILD_ID || "no_build_id");
+}
+
 // Enforce canonical host (www) to keep storage/sessions consistent
 if (typeof window !== "undefined" && window.location.hostname === "rentchain.ai") {
   const target = new URL(window.location.href);

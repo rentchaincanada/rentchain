@@ -11,6 +11,7 @@
     "preflight": "node ./scripts/check-node.js",
     "dev": "npm run preflight && vite --host",
     "build": "npm run preflight && node scripts/build.mjs",
+    "build:tdzdebug": "vite build --mode tdzdebug",
     "build:app": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
