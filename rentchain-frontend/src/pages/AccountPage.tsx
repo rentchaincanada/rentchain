@@ -50,8 +50,8 @@ const AccountPage: React.FC = () => {
         }}
       >
         <HubCard title="Personal" description="Profile and notification preferences.">
-          <Button type="button" variant="secondary" disabled>
-            Profile (Coming soon)
+          <Button type="button" variant="secondary" onClick={() => navigate("/account/profile")}>
+            Profile
           </Button>
         </HubCard>
 
@@ -83,8 +83,8 @@ const AccountPage: React.FC = () => {
         </HubCard>
 
         <HubCard title="Data management" description="Export your data and manage retention (coming soon).">
-          <Button type="button" variant="secondary" disabled>
-            Manage data (Coming soon)
+          <Button type="button" variant="secondary" onClick={() => navigate("/account/data")}>
+            Manage data
           </Button>
         </HubCard>
 
