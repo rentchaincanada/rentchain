@@ -72,6 +72,8 @@ export default function AutomationTimelinePage() {
   const propertyFilter = String(searchParams.get("p") || "").trim();
   const unitFilter = String(searchParams.get("u") || "").trim();
   const tenantFilter = String(searchParams.get("n") || "").trim();
+  const queryFilter = String(searchParams.get("q") || "").trim();
+  const queryFilterLower = queryFilter.toLowerCase();
 
   const setFilterParam = (key: string, value: string) => {
     const next = new URLSearchParams(searchParams);
@@ -89,6 +91,12 @@ export default function AutomationTimelinePage() {
     next.delete("p");
     next.delete("u");
     next.delete("n");
+    setSearchParams(next);
+  };
+
+  const clearSearch = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("q");
     setSearchParams(next);
   };
 
@@ -121,9 +129,30 @@ export default function AutomationTimelinePage() {
         if (propertyFilter && String(event.entity?.propertyId || "") !== propertyFilter) return false;
         if (unitFilter && String(event.entity?.unitId || "") !== unitFilter) return false;
         if (tenantFilter && String(event.entity?.tenantId || "") !== tenantFilter) return false;
+        if (queryFilterLower) {
+          const metadata = (event.metadata || {}) as Record<string, unknown>;
+          const haystack = [
+            event.title,
+            event.summary,
+            event.type,
+            event.entity?.propertyId,
+            event.entity?.unitId,
+            event.entity?.tenantId,
+            event.entity?.applicationId,
+            event.entity?.leaseId,
+            event.entity?.paymentId,
+            metadata.status,
+            metadata.amount,
+            metadata.amountCents,
+          ]
+            .filter((value) => value !== undefined && value !== null)
+            .map((value) => String(value).toLowerCase())
+            .join(" ");
+          if (!haystack.includes(queryFilterLower)) return false;
+        }
         return true;
       }),
-    [events, typeFilter, propertyFilter, unitFilter, tenantFilter]
+    [events, typeFilter, propertyFilter, unitFilter, tenantFilter, queryFilterLower]
   );
   const analytics = useMemo(() => computeTimelineAnalytics(visibleEvents), [visibleEvents]);
 
@@ -310,6 +339,38 @@ export default function AutomationTimelinePage() {
         }}
       >
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+            <input
+              type="search"
+              value={queryFilter}
+              onChange={(event) => setFilterParam("q", event.target.value)}
+              placeholder="Search events (tenant, property, lease, payment...)"
+              style={{
+                border: "1px solid #cbd5e1",
+                borderRadius: 8,
+                padding: "7px 10px",
+                fontSize: 12,
+                minWidth: 280,
+              }}
+            />
+            {queryFilter ? (
+              <button
+                type="button"
+                onClick={clearSearch}
+                style={{
+                  border: "1px solid #cbd5e1",
+                  background: "#ffffff",
+                  borderRadius: 8,
+                  padding: "7px 10px",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                x
+              </button>
+            ) : null}
+          </div>
           {filterOptions.map((option) => {
             const selected = typeFilter === option.value;
             return (
