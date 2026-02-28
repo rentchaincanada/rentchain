@@ -18,7 +18,15 @@ import {
   normalizeScreeningPipeline,
 } from "./timelineNormalizers";
 
-type SourceMeta = { tried: string[]; ok: string[]; failed: string[] };
+export type TimelineSourceReportItem = {
+  source: string;
+  ok: boolean;
+  ms: number;
+  count: number;
+  errorCode?: "unauthorized" | "forbidden" | "not_found" | "timeout" | "network" | "unknown";
+};
+
+type SourceMeta = { tried: string[]; ok: string[]; report: TimelineSourceReportItem[] };
 
 export const MAX_EVENTS_TOTAL = 200;
 export const MAX_APPS = 25;
@@ -44,17 +52,40 @@ const sortByTimeDesc = <T>(items: T[], readTime: (item: T) => unknown): T[] =>
   [...items].sort((a, b) => toMs(readTime(b)) - toMs(readTime(a)));
 
 const cap = <T>(items: T[], limit: number): T[] => (limit > 0 ? items.slice(0, limit) : []);
+const nowMs = () =>
+  typeof performance !== "undefined" && typeof performance.now === "function"
+    ? performance.now()
+    : Date.now();
+
+const classifyError = (
+  error: unknown
+): "unauthorized" | "forbidden" | "not_found" | "timeout" | "network" | "unknown" => {
+  const message = String((error as any)?.message || "").toLowerCase();
+  if (message.includes("401") || message.includes("unauthorized")) return "unauthorized";
+  if (message.includes("403") || message.includes("forbidden")) return "forbidden";
+  if (message.includes("404") || message.includes("not found")) return "not_found";
+  if (message.includes("timeout") || message.includes("408")) return "timeout";
+  if (
+    message.includes("network") ||
+    message.includes("failed to fetch") ||
+    message.includes("fetch error") ||
+    message.includes("ecconn")
+  ) {
+    return "network";
+  }
+  return "unknown";
+};
 
 export async function getTimelineEventsForLandlord(
   landlordId: string
 ): Promise<{ events: AutomationEvent[]; sources: SourceMeta }> {
   if (!landlordId) {
-    return { events: [], sources: { tried: [], ok: [], failed: [] } };
+    return { events: [], sources: { tried: [], ok: [], report: [] } };
   }
 
   const tried: string[] = [];
   const ok: string[] = [];
-  const failed: string[] = [];
+  const report: TimelineSourceReportItem[] = [];
   const events: AutomationEvent[] = [];
   const propertyLastActivity = new Map<string, number>();
 
@@ -66,112 +97,185 @@ export async function getTimelineEventsForLandlord(
     if (ts > existing) propertyLastActivity.set(key, ts);
   };
 
-  const markFailure = (source: string, error: unknown) => {
-    failed.push(source);
+  const markFailure = (source: string, error: unknown, ms: number) => {
+    report.push({ source, ok: false, ms, count: 0, errorCode: classifyError(error) });
     if (import.meta.env.DEV) {
-      console.debug("[timeline] source failed", { source, error });
+      console.debug("[timeline] source failed", {
+        source,
+        errorCode: classifyError(error),
+        ms,
+      });
     }
   };
 
-  tried.push("rentalApplicationsApi.fetchRentalApplications");
+  const applicationsSource = "rentalApplications";
+  tried.push(applicationsSource);
+  const applicationsStart = nowMs();
+  let applicationsCount = 0;
+  let limitedApplications: any[] = [];
   try {
     const applications = sortByTimeDesc(await fetchRentalApplications(), (application) => application.submittedAt);
-    const limitedApplications = cap(applications, MAX_APPS);
+    limitedApplications = cap(applications, MAX_APPS);
     if (Array.isArray(limitedApplications) && limitedApplications.length > 0) {
-      ok.push("rentalApplicationsApi.fetchRentalApplications");
+      ok.push(applicationsSource);
+      applicationsCount = limitedApplications.length;
       events.push(...normalizeRentalApplicationSummary(limitedApplications));
       for (const application of limitedApplications) {
         rememberProperty(application.propertyId, application.submittedAt);
       }
-
-      const screeningTargets = cap(limitedApplications, MAX_SCREENING_LOOKUPS);
-      for (const application of screeningTargets) {
-        const screeningSource = `rentalApplicationsApi.fetchScreening:${application.id}`;
-        tried.push(screeningSource);
-        try {
-          const screening = await fetchScreening(application.id);
-          if (screening?.ok && screening.screening) {
-            ok.push(screeningSource);
-            events.push(...normalizeScreeningPipeline(application.id, screening.screening));
-          }
-        } catch (error) {
-          markFailure(screeningSource, error);
-        }
-      }
     }
+    report.push({
+      source: applicationsSource,
+      ok: true,
+      ms: Math.round(nowMs() - applicationsStart),
+      count: applicationsCount,
+    });
   } catch (error) {
-    markFailure("rentalApplicationsApi.fetchRentalApplications", error);
+    markFailure(applicationsSource, error, Math.round(nowMs() - applicationsStart));
   }
 
-  tried.push("paymentsApi.fetchPayments");
+  const screeningSource = "screeningPipeline";
+  tried.push(screeningSource);
+  const screeningStart = nowMs();
+  let screeningCount = 0;
+  try {
+    const screeningTargets = cap(limitedApplications, MAX_SCREENING_LOOKUPS);
+    for (const application of screeningTargets) {
+      const screening = await fetchScreening(application.id);
+      if (screening?.ok && screening.screening) {
+        events.push(...normalizeScreeningPipeline(application.id, screening.screening));
+        screeningCount += 1;
+      }
+    }
+    if (screeningCount > 0) ok.push(screeningSource);
+    report.push({
+      source: screeningSource,
+      ok: true,
+      ms: Math.round(nowMs() - screeningStart),
+      count: screeningCount,
+    });
+  } catch (error) {
+    markFailure(screeningSource, error, Math.round(nowMs() - screeningStart));
+  }
+
+  const paymentsSource = "payments";
+  tried.push(paymentsSource);
+  const paymentsStart = nowMs();
+  let paymentsCount = 0;
   try {
     const payments = sortByTimeDesc(await fetchPayments(), (payment) => payment.paidAt || payment.updatedAt || payment.createdAt);
     const limitedPayments = cap(payments, MAX_PAYMENTS);
     if (Array.isArray(limitedPayments) && limitedPayments.length > 0) {
-      ok.push("paymentsApi.fetchPayments");
+      ok.push(paymentsSource);
+      paymentsCount = limitedPayments.length;
       events.push(...normalizePayments(limitedPayments));
       for (const payment of limitedPayments) {
         rememberProperty(payment.propertyId, payment.paidAt || payment.updatedAt || payment.createdAt);
       }
     }
+    report.push({
+      source: paymentsSource,
+      ok: true,
+      ms: Math.round(nowMs() - paymentsStart),
+      count: paymentsCount,
+    });
   } catch (error) {
-    markFailure("paymentsApi.fetchPayments", error);
+    markFailure(paymentsSource, error, Math.round(nowMs() - paymentsStart));
   }
 
+  const leasesSource = "leases";
   const leasePropertyIds = Array.from(propertyLastActivity.entries())
     .sort((a, b) => b[1] - a[1])
     .slice(0, MAX_LEASE_PROPERTIES)
     .map(([propertyId]) => propertyId);
-  for (const propertyId of leasePropertyIds) {
-    const leaseSource = `leasesApi.getLeasesForProperty:${propertyId}`;
-    tried.push(leaseSource);
-    try {
+  tried.push(leasesSource);
+  const leasesStart = nowMs();
+  let leasesCount = 0;
+  try {
+    for (const propertyId of leasePropertyIds) {
       const response = await getLeasesForProperty(propertyId);
       if (Array.isArray(response?.leases) && response.leases.length > 0) {
-        ok.push(leaseSource);
         events.push(...normalizeLeases(response.leases));
+        leasesCount += response.leases.length;
       }
-    } catch (error) {
-      markFailure(leaseSource, error);
     }
+    if (leasesCount > 0) ok.push(leasesSource);
+    report.push({
+      source: leasesSource,
+      ok: true,
+      ms: Math.round(nowMs() - leasesStart),
+      count: leasesCount,
+    });
+  } catch (error) {
+    markFailure(leasesSource, error, Math.round(nowMs() - leasesStart));
   }
 
-  tried.push("messagesApi.fetchLandlordConversations");
+  const messagesSource = "messages";
+  tried.push(messagesSource);
+  const messagesStart = nowMs();
+  let messagesCount = 0;
   try {
     const conversations = sortByTimeDesc(await fetchLandlordConversations(), (conversation) => conversation.lastMessageAt || conversation.createdAt);
     const limitedConversations = cap(conversations, MAX_MESSAGES);
     if (Array.isArray(limitedConversations) && limitedConversations.length > 0) {
-      ok.push("messagesApi.fetchLandlordConversations");
+      ok.push(messagesSource);
+      messagesCount = limitedConversations.length;
       events.push(...normalizeConversations(limitedConversations));
     }
+    report.push({
+      source: messagesSource,
+      ok: true,
+      ms: Math.round(nowMs() - messagesStart),
+      count: messagesCount,
+    });
   } catch (error) {
-    markFailure("messagesApi.fetchLandlordConversations", error);
+    markFailure(messagesSource, error, Math.round(nowMs() - messagesStart));
   }
 
-  tried.push("actionRequestsApi.listActionRequests");
+  const actionRequestsSource = "actionRequests";
+  tried.push(actionRequestsSource);
+  const actionRequestsStart = nowMs();
+  let actionRequestsCount = 0;
   try {
     const requests = sortByTimeDesc(await listActionRequests({}), (request: any) => request.updatedAt || request.createdAt);
     const limitedRequests = cap(requests as any[], MAX_ACTION_REQUESTS);
     if (Array.isArray(limitedRequests) && limitedRequests.length > 0) {
-      ok.push("actionRequestsApi.listActionRequests");
+      ok.push(actionRequestsSource);
+      actionRequestsCount = limitedRequests.length;
       events.push(...normalizeActionRequests(limitedRequests as any[]));
       for (const request of limitedRequests as any[]) {
         rememberProperty(request?.propertyId, request?.updatedAt || request?.createdAt);
       }
     }
+    report.push({
+      source: actionRequestsSource,
+      ok: true,
+      ms: Math.round(nowMs() - actionRequestsStart),
+      count: actionRequestsCount,
+    });
   } catch (error) {
-    markFailure("actionRequestsApi.listActionRequests", error);
+    markFailure(actionRequestsSource, error, Math.round(nowMs() - actionRequestsStart));
   }
 
-  tried.push("ledgerV2.listLedgerV2");
+  const ledgerSource = "ledgerV2";
+  tried.push(ledgerSource);
+  const ledgerStart = nowMs();
+  let ledgerCount = 0;
   try {
     const ledger = await listLedgerV2({ limit: LEDGER_FETCH_LIMIT });
     if (ledger?.ok && Array.isArray(ledger.items) && ledger.items.length > 0) {
-      ok.push("ledgerV2.listLedgerV2");
+      ok.push(ledgerSource);
+      ledgerCount = ledger.items.length;
       events.push(...normalizeLedgerV2Events(ledger.items));
     }
+    report.push({
+      source: ledgerSource,
+      ok: true,
+      ms: Math.round(nowMs() - ledgerStart),
+      count: ledgerCount,
+    });
   } catch (error) {
-    markFailure("ledgerV2.listLedgerV2", error);
+    markFailure(ledgerSource, error, Math.round(nowMs() - ledgerStart));
   }
 
   const candidates = events
@@ -206,5 +310,5 @@ export async function getTimelineEventsForLandlord(
     .sort((a, b) => toMs(b.occurredAt) - toMs(a.occurredAt))
     .slice(0, MAX_EVENTS_TOTAL);
 
-  return { events: sorted, sources: { tried, ok, failed } };
+  return { events: sorted, sources: { tried, ok, report } };
 }
