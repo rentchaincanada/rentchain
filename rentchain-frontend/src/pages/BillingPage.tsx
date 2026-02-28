@@ -15,6 +15,7 @@ import { BillingPlansPanel } from "../components/billing/BillingPlansPanel";
 import { apiFetch } from "@/lib/apiClient";
 import { track } from "@/lib/analytics";
 import { billingTierLabel, useBillingStatus } from "@/hooks/useBillingStatus";
+import { refreshEntitlements } from "@/lib/entitlements";
 
 const formatAmount = (amountCents: number, currency: string) => {
   const amount = (amountCents || 0) / 100;
@@ -73,7 +74,7 @@ const BillingPage: React.FC = () => {
   const [pricingError, setPricingError] = useState(false);
   const [planActionLoading, setPlanActionLoading] = useState<string | null>(null);
   const [interval, setInterval] = useState<"month" | "year">("month");
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const billingStatus = useBillingStatus();
   const currentPlan = billingStatus.tier;
   const isPaidPlan = currentPlan !== "free";
@@ -103,6 +104,7 @@ const BillingPage: React.FC = () => {
 
   useEffect(() => {
     track("billing_page_opened", { tier: currentPlan });
+    void refreshEntitlements(updateUser);
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
