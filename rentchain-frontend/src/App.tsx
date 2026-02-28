@@ -70,6 +70,8 @@ import LeaseLedgerPage from "./pages/LeaseLedgerPage";
 import ApplicationReviewSummaryPage from "./pages/ApplicationReviewSummaryPage";
 import ReferralsPage from "./pages/ReferralsPage";
 import AccountPage from "./pages/AccountPage";
+import AccountProfilePage from "./pages/account/AccountProfilePage";
+import AccountDataPage from "./pages/account/AccountDataPage";
 
 const TENANT_PORTAL_ENABLED = import.meta.env.VITE_TENANT_PORTAL_ENABLED === "true";
 
@@ -545,6 +547,26 @@ function App() {
             <RequireAuth>
               <LandlordNav>
                 <AccountSecurityPage />
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/account/profile"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <AccountProfilePage />
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/account/data"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <AccountDataPage />
               </LandlordNav>
             </RequireAuth>
           }
