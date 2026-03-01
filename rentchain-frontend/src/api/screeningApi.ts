@@ -1,5 +1,10 @@
 // src/api/screeningApi.ts
 import { apiFetch } from "./apiFetch";
+import { getBureauAdapter } from "@/bureau";
+import { comparePrimaryVsShadow } from "@/bureau/shadow/compare";
+import { runShadowTask } from "@/bureau/shadow/runShadow";
+import { getShadowTimeoutMs } from "@/bureau/shadow/shadowMode";
+import { logShadowEvent } from "@/bureau/shadow/shadowLogger";
 
 export type ScreeningStatus =
   | "requested"
@@ -49,6 +54,21 @@ export interface ScreeningRequestResponse {
   screeningRequest: ScreeningRequest;
 }
 
+const nowMs = () =>
+  typeof performance !== "undefined" && typeof performance.now === "function"
+    ? performance.now()
+    : Date.now();
+
+const classifyShadowError = (error: unknown): string => {
+  const message = String((error as any)?.message || "").toLowerCase();
+  if (message.includes("timeout")) return "timeout";
+  if (message.includes("401") || message.includes("unauthorized")) return "unauthorized";
+  if (message.includes("403") || message.includes("forbidden")) return "forbidden";
+  if (message.includes("404") || message.includes("not found")) return "not_found";
+  if (message.includes("network") || message.includes("fetch")) return "network";
+  return "unknown";
+};
+
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     let message = `Request failed with status ${response.status}`;
@@ -86,10 +106,88 @@ export async function runScreening(applicationId: string): Promise<ScreeningRequ
 }
 
 export async function checkoutScreening(id: string): Promise<string> {
+  const primaryStart = nowMs();
   const data = await apiFetch<{ url: string }>(
     `/screenings/${encodeURIComponent(id)}/checkout`,
     { method: "POST" }
   );
+
+  const primaryDurationMs = Math.round(nowMs() - primaryStart);
+
+  void runShadowTask({
+    name: "legacy_checkout",
+    seedKey: id,
+    timeoutMs: getShadowTimeoutMs(),
+    task: async () => {
+      const adapter = getBureauAdapter();
+      const shadowStart = nowMs();
+      const result = await adapter.startScreeningRedirect({ applicationId: id });
+      return {
+        provider: adapter.providerId,
+        ok: Boolean(result?.redirectUrl),
+        checkoutUrlPresent: Boolean(result?.redirectUrl),
+        orderIdPresent: Boolean(result?.requestId),
+        durationMs: Math.round(nowMs() - shadowStart),
+      };
+    },
+    onResult: (shadow) => {
+      const primary = {
+        provider: "transunion",
+        ok: Boolean(data?.url),
+        checkoutUrlPresent: Boolean(data?.url),
+        orderIdPresent: false,
+      };
+      const diff = comparePrimaryVsShadow(primary, shadow);
+      logShadowEvent({
+        eventType: "bureau_shadow",
+        name: "legacy_checkout",
+        seedKey: id,
+        primary: {
+          provider: primary.provider,
+          ok: primary.ok,
+          status: primary.ok ? 200 : 400,
+          durationMs: primaryDurationMs,
+        },
+        shadow: {
+          provider: shadow.provider,
+          ok: shadow.ok,
+          status: shadow.ok ? 200 : 400,
+          durationMs: shadow.durationMs,
+        },
+        diff,
+        meta: {
+          envMode: import.meta.env.MODE,
+          buildSha: (import.meta.env as any).VITE_BUILD_ID,
+          ts: new Date().toISOString(),
+        },
+      });
+    },
+    onError: (error) => {
+      logShadowEvent({
+        eventType: "bureau_shadow",
+        name: "legacy_checkout",
+        seedKey: id,
+        primary: {
+          provider: "transunion",
+          ok: Boolean(data?.url),
+          status: data?.url ? 200 : 400,
+          durationMs: primaryDurationMs,
+        },
+        shadow: {
+          provider: getBureauAdapter().providerId,
+          ok: false,
+          errorCode: classifyShadowError(error),
+        },
+        diff: { isMatch: false, fields: ["shadow_error"] },
+        meta: {
+          envMode: import.meta.env.MODE,
+          buildSha: (import.meta.env as any).VITE_BUILD_ID,
+          ts: new Date().toISOString(),
+        },
+      });
+    },
+  });
+
   return data.url;
 }
 
