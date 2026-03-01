@@ -30,6 +30,10 @@ import { getFlags } from "../services/featureFlagService";
 import { runScreeningWithCredits } from "../services/screeningsService";
 import { attachAccount } from "../middleware/attachAccount";
 import { getScreeningProviderHealth } from "../services/screening/providerHealth";
+import { compareCheckoutResponses } from "../services/screening/cutoverCompare";
+import { getPrimaryTimeoutMs } from "../services/screening/cutoverConfig";
+import { runPrimaryWithFallback } from "../services/screening/runPrimaryWithFallback";
+import { getBureauProvider } from "../services/screening/providers/bureauProvider";
 
 const router = Router();
 
@@ -176,6 +180,23 @@ router.post(
     if (!req.user?.id || screeningRequest.landlordId !== req.user.id) {
       return res.status(403).json({ error: "Forbidden" });
     }
+
+    await runPrimaryWithFallback({
+      name: "legacy_checkout",
+      seedKey: `${id}:${screeningRequest.landlordId || req.user?.id || ""}`,
+      timeoutMs: getPrimaryTimeoutMs(),
+      conservativeReturnLegacy: true,
+      runLegacy: async () => ({ ok: true, url: "" }),
+      runAdapter: async () => {
+        const provider = getBureauProvider();
+        const preflight = await provider.preflight();
+        if (!preflight.ok) {
+          throw new Error(preflight.detail || "adapter_preflight_failed");
+        }
+        return { ok: true, provider: provider.name, url: "adapter-ready" };
+      },
+      compare: compareCheckoutResponses,
+    });
 
     const providerHealth = await getScreeningProviderHealth();
     if (

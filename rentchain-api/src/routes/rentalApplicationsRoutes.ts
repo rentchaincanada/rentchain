@@ -13,6 +13,10 @@ import { writeScreeningEvent } from "../services/screening/screeningEvents";
 import { buildScreeningPdf } from "../services/screening/reportPdf";
 import { buildShareUrl, createReportExport } from "../services/screening/reportExportService";
 import { getScreeningProviderHealth } from "../services/screening/providerHealth";
+import { getBureauProvider } from "../services/screening/providers/bureauProvider";
+import { compareQuoteResponses } from "../services/screening/cutoverCompare";
+import { getPrimaryTimeoutMs } from "../services/screening/cutoverConfig";
+import { runPrimaryWithFallback } from "../services/screening/runPrimaryWithFallback";
 import { buildTenantInviteUrl, createInviteToken } from "../services/screening/inviteTokens";
 import { createSignedUrl, putPdfObject } from "../storage/pdfStore";
 import { buildReviewSummary, buildReviewSummaryPdf } from "../lib/reviewSummary";
@@ -346,6 +350,45 @@ function resolvePricingInput(body: any) {
   return { screeningTier, addons, serviceLevel, scoreAddOn, expeditedAddOn, pricing };
 }
 
+function buildQuotePayload(pricing: any) {
+  return {
+    ok: true,
+    data: {
+      baseAmountCents: pricing.baseAmountCents,
+      verifiedAddOnCents: pricing.verifiedAddOnCents,
+      aiAddOnCents: pricing.aiAddOnCents,
+      scoreAddOnCents: pricing.scoreAddOnCents,
+      expeditedAddOnCents: pricing.expeditedAddOnCents || 0,
+      totalAmountCents: pricing.totalAmountCents,
+      currency: pricing.currency,
+      eligible: true,
+    },
+  };
+}
+
+async function runAdapterPrimaryProbe(params: {
+  name: "checkout" | "run";
+  seedKey: string;
+  timeoutMs: number;
+}) {
+  await runPrimaryWithFallback({
+    name: params.name,
+    seedKey: params.seedKey,
+    timeoutMs: params.timeoutMs,
+    conservativeReturnLegacy: true,
+    runLegacy: async () => ({ ok: true }),
+    // Adapter probe is bounded and side-effect free; primary result remains legacy in Phase 2.
+    runAdapter: async () => {
+      const provider = getBureauProvider();
+      const preflight = await provider.preflight();
+      if (!preflight.ok) {
+        throw new Error(preflight.detail || "adapter_preflight_failed");
+      }
+      return { ok: true, provider: provider.name };
+    },
+  });
+}
+
 function sanitizeAddressLine(line: any): string {
   return String(line || "").trim();
 }
@@ -575,7 +618,6 @@ router.post(
       if (data?.landlordId && data.landlordId !== landlordId) {
         return res.status(403).json({ ok: false, error: "FORBIDDEN" });
       }
-
       const eligibility = evaluateEligibility(data);
       await writeScreeningEvent({
         applicationId: id,
@@ -599,22 +641,19 @@ router.post(
           detail: consentCheck.error,
         });
       }
-      const { screeningTier, addons, serviceLevel, scoreAddOn, expeditedAddOn, pricing } =
-        resolvePricingInput(body);
-
-      return res.json({
-        ok: true,
-        data: {
-          baseAmountCents: pricing.baseAmountCents,
-          verifiedAddOnCents: pricing.verifiedAddOnCents,
-          aiAddOnCents: pricing.aiAddOnCents,
-          scoreAddOnCents: pricing.scoreAddOnCents,
-          expeditedAddOnCents: pricing.expeditedAddOnCents || 0,
-          totalAmountCents: pricing.totalAmountCents,
-          currency: pricing.currency,
-          eligible: true,
-        },
+      const { pricing } = resolvePricingInput(body);
+      const seedKey = [id, data?.landlordId || landlordId].filter(Boolean).join(":");
+      const quoteResult = await runPrimaryWithFallback({
+        name: "quote",
+        seedKey,
+        timeoutMs: getPrimaryTimeoutMs(),
+        runLegacy: async () => buildQuotePayload(pricing),
+        // Adapter pathway is intentionally conservative in Phase 2: keep legacy contract/result.
+        runAdapter: async () => buildQuotePayload(pricing),
+        compare: compareQuoteResponses,
       });
+
+      return res.json(quoteResult);
     } catch (err: any) {
       console.error("[rental-applications] screening quote failed", err?.message || err);
       return res.status(500).json({ ok: false, error: "SCREENING_QUOTE_FAILED" });
@@ -646,6 +685,11 @@ router.post(
       if (data?.landlordId && data.landlordId !== landlordId) {
         return res.status(401).json({ ok: false, error: "unauthorized" });
       }
+      await runAdapterPrimaryProbe({
+        name: "checkout",
+        seedKey: [id, data?.landlordId || landlordId].filter(Boolean).join(":"),
+        timeoutMs: getPrimaryTimeoutMs(),
+      });
 
       if (isScreeningAlreadyPaid(data)) {
         await writeScreeningEvent({
@@ -1414,6 +1458,11 @@ router.post(
       if (data?.landlordId && data.landlordId !== landlordId) {
         return res.status(403).json({ ok: false, error: "FORBIDDEN" });
       }
+      await runAdapterPrimaryProbe({
+        name: "run",
+        seedKey: [id, data?.landlordId || landlordId].filter(Boolean).join(":"),
+        timeoutMs: getPrimaryTimeoutMs(),
+      });
 
       const eligibility = evaluateEligibility(data);
       if (!eligibility.eligible) {
