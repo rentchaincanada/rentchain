@@ -4,6 +4,8 @@ import { getLeasesForProperty } from "@/api/leasesApi";
 import { fetchLandlordConversations } from "@/api/messagesApi";
 import { fetchPayments } from "@/api/paymentsApi";
 import { fetchRentalApplications, fetchScreening } from "@/api/rentalApplicationsApi";
+import { getBureauAdapter } from "@/bureau";
+import type { NormalizedScreeningEvent } from "@/bureau";
 import type { AutomationEvent } from "./automationTimeline.types";
 import {
   buildEventFingerprint,
@@ -75,6 +77,24 @@ const classifyError = (
   }
   return "unknown";
 };
+
+const normalizeBureauEvent = (event: NormalizedScreeningEvent): AutomationEvent => ({
+  id: `bureau:${event.provider}:${event.requestId}:${event.status}`,
+  type: "SCREENING",
+  occurredAt: event.occurredAt || new Date().toISOString(),
+  title: `Screening ${String(event.status).replaceAll("_", " ")}`,
+  summary: event.summary,
+  entity: {
+    propertyId: event.propertyId,
+    tenantId: event.tenantId,
+    applicationId: event.applicationId,
+  },
+  metadata: {
+    source: "bureauAdapter.listScreeningsForLandlord",
+    provider: event.provider,
+    ...(event.metadata || {}),
+  },
+});
 
 export async function getTimelineEventsForLandlord(
   landlordId: string
@@ -276,6 +296,29 @@ export async function getTimelineEventsForLandlord(
     });
   } catch (error) {
     markFailure(ledgerSource, error, Math.round(nowMs() - ledgerStart));
+  }
+
+  if (import.meta.env.VITE_BUREAU_ADAPTER_TEST === "true") {
+    const bureauSource = "bureauAdapter";
+    tried.push(bureauSource);
+    const bureauStart = nowMs();
+    let bureauCount = 0;
+    try {
+      const bureauEvents = await getBureauAdapter().listScreeningsForLandlord(landlordId);
+      if (Array.isArray(bureauEvents) && bureauEvents.length > 0) {
+        bureauCount = bureauEvents.length;
+        ok.push(bureauSource);
+        events.push(...bureauEvents.map(normalizeBureauEvent));
+      }
+      report.push({
+        source: bureauSource,
+        ok: true,
+        ms: Math.round(nowMs() - bureauStart),
+        count: bureauCount,
+      });
+    } catch (error) {
+      markFailure(bureauSource, error, Math.round(nowMs() - bureauStart));
+    }
   }
 
   const candidates = events
