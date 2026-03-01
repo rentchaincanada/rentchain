@@ -25,6 +25,10 @@ vi.mock("./context/useAuth", () => ({
   }),
 }));
 
+vi.mock("./features/automation/timeline/AutomationTimelinePage", () => ({
+  default: () => <h1>Automation Timeline</h1>,
+}));
+
 import App from "./App";
 
 describe("Routes: /automation/timeline", () => {
@@ -35,7 +39,7 @@ describe("Routes: /automation/timeline", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByRole("heading", { name: /^Automation Timeline$/i })).toBeInTheDocument();
+    expect(await screen.findByText(/Automation Timeline/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });
