@@ -298,14 +298,10 @@ export async function getTimelineEventsForLandlord(
     markFailure(ledgerSource, error, Math.round(nowMs() - ledgerStart));
   }
 
-<<<<<<< HEAD
   const bureauAdapterTestEnabled =
     import.meta.env.MODE !== "test" && import.meta.env.VITE_BUREAU_ADAPTER_TEST === "true";
 
   if (bureauAdapterTestEnabled) {
-=======
-  if (import.meta.env.VITE_BUREAU_ADAPTER_TEST === "true") {
->>>>>>> main
     const bureauSource = "bureauAdapter";
     tried.push(bureauSource);
     const bureauStart = nowMs();

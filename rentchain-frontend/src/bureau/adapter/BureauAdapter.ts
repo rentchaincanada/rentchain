@@ -4,7 +4,6 @@ import { EquifaxProvider } from "../providers/EquifaxProvider";
 import { TransUnionProvider } from "../providers/TransUnionProvider";
 
 export function getBureauAdapter(): BureauAdapter {
-<<<<<<< HEAD
   const raw = String(import.meta.env.VITE_BUREAU_PROVIDER || "transunion")
     .toLowerCase()
     .trim();
@@ -24,9 +23,6 @@ export function getBureauAdapter(): BureauAdapter {
         return "transunion";
     }
   })();
-=======
-  const provider = import.meta.env.VITE_BUREAU_PROVIDER ?? "transunion";
->>>>>>> main
 
   switch (provider) {
     case "transunion":
