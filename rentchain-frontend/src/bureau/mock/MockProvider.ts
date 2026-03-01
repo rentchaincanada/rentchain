@@ -1,7 +1,11 @@
 import type {
   BureauAdapter,
+  BureauCheckoutInput,
+  BureauCheckoutResult,
   NormalizedScreeningEvent,
   NormalizedScreeningStatus,
+  BureauQuoteInput,
+  BureauQuoteResult,
 } from "../types";
 
 export class MockProvider implements BureauAdapter {
@@ -33,6 +37,25 @@ export class MockProvider implements BureauAdapter {
     return {
       available: true,
       scoreBand: "B",
+    };
+  }
+
+  async quoteScreening(_input: BureauQuoteInput): Promise<BureauQuoteResult> {
+    return {
+      ok: true,
+      provider: this.providerId,
+      totalAmountCents: 2995,
+      currency: "CAD",
+      eligible: true,
+    };
+  }
+
+  async createCheckout(_input: BureauCheckoutInput): Promise<BureauCheckoutResult> {
+    return {
+      ok: true,
+      provider: this.providerId,
+      checkoutUrlPresent: true,
+      orderIdPresent: true,
     };
   }
 

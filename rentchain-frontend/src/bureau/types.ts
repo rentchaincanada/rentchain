@@ -21,6 +21,46 @@ export interface NormalizedScreeningEvent {
   metadata?: Record<string, unknown>;
 }
 
+export interface BureauQuoteInput {
+  applicationId: string;
+  screeningTier?: "basic" | "verify" | "verify_ai";
+  addons?: string[];
+  totalAmount?: number;
+  serviceLevel?: "SELF_SERVE" | "VERIFIED" | "VERIFIED_AI";
+  scoreAddOn?: boolean;
+}
+
+export interface BureauQuoteResult {
+  ok: boolean;
+  provider?: BureauProviderId;
+  totalAmountCents?: number;
+  currency?: string;
+  eligible?: boolean;
+  errorCode?: string;
+}
+
+export interface BureauCheckoutInput {
+  applicationId: string;
+  screeningTier?: "basic" | "verify" | "verify_ai";
+  addons?: string[];
+  totalAmount?: number;
+  scoreAddOn: boolean;
+  serviceLevel: "SELF_SERVE" | "VERIFIED" | "VERIFIED_AI";
+  consent?: {
+    given: boolean;
+    timestamp: string;
+    version: string;
+  };
+}
+
+export interface BureauCheckoutResult {
+  ok: boolean;
+  provider?: BureauProviderId;
+  checkoutUrlPresent: boolean;
+  orderIdPresent: boolean;
+  errorCode?: string;
+}
+
 export interface BureauAdapter {
   providerId: BureauProviderId;
 
@@ -39,4 +79,7 @@ export interface BureauAdapter {
   }>;
 
   listScreeningsForLandlord(landlordId: string): Promise<NormalizedScreeningEvent[]>;
+
+  quoteScreening?(input: BureauQuoteInput): Promise<BureauQuoteResult>;
+  createCheckout?(input: BureauCheckoutInput): Promise<BureauCheckoutResult>;
 }

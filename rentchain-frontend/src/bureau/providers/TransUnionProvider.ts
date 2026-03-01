@@ -1,12 +1,12 @@
-import {
-  createScreeningOrder,
-  fetchRentalApplications,
-  fetchScreening,
-} from "@/api/rentalApplicationsApi";
+import { apiFetch } from "@/api/apiFetch";
 import type {
   BureauAdapter,
+  BureauCheckoutInput,
+  BureauCheckoutResult,
   NormalizedScreeningEvent,
   NormalizedScreeningStatus,
+  BureauQuoteInput,
+  BureauQuoteResult,
 } from "../types";
 
 const mapPipelineStatus = (status: string | null | undefined): NormalizedScreeningStatus => {
@@ -32,11 +32,15 @@ export class TransUnionProvider implements BureauAdapter {
   async startScreeningRedirect(input: {
     applicationId: string;
   }): Promise<{ redirectUrl: string; requestId: string }> {
-    const response = await createScreeningOrder({
-      applicationId: input.applicationId,
-      scoreAddOn: false,
-      serviceLevel: "SELF_SERVE",
-    });
+    const response = (await apiFetch(`/screening/orders`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        applicationId: input.applicationId,
+        scoreAddOn: false,
+        serviceLevel: "SELF_SERVE",
+      }),
+    })) as any;
 
     if (!response?.ok || !response.checkoutUrl) {
       throw new Error(response?.error || "Unable to create screening redirect");
@@ -48,11 +52,63 @@ export class TransUnionProvider implements BureauAdapter {
     };
   }
 
+  async quoteScreening(input: BureauQuoteInput): Promise<BureauQuoteResult> {
+    const response = (await apiFetch(
+      `/rental-applications/${encodeURIComponent(input.applicationId)}/screening/quote`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          screeningTier: input.screeningTier,
+          addons: input.addons,
+          totalAmount: input.totalAmount,
+          serviceLevel: input.serviceLevel,
+          scoreAddOn: input.scoreAddOn,
+        }),
+      }
+    )) as any;
+
+    return {
+      ok: Boolean(response?.ok),
+      provider: this.providerId,
+      totalAmountCents: response?.data?.totalAmountCents,
+      currency: response?.data?.currency,
+      eligible: response?.data?.eligible,
+      errorCode: response?.error,
+    };
+  }
+
+  async createCheckout(input: BureauCheckoutInput): Promise<BureauCheckoutResult> {
+    const response = (await apiFetch(`/screening/orders`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        applicationId: input.applicationId,
+        screeningTier: input.screeningTier,
+        addons: input.addons,
+        totalAmount: input.totalAmount,
+        scoreAddOn: input.scoreAddOn,
+        serviceLevel: input.serviceLevel,
+        consent: input.consent,
+      }),
+    })) as any;
+
+    return {
+      ok: Boolean(response?.ok),
+      provider: this.providerId,
+      checkoutUrlPresent: Boolean(response?.checkoutUrl),
+      orderIdPresent: Boolean(response?.orderId),
+      errorCode: response?.error,
+    };
+  }
+
   async getScreeningStatus(requestId: string): Promise<{
     status: NormalizedScreeningStatus;
     updatedAt: string;
   }> {
-    const response = await fetchScreening(requestId);
+    const response = (await apiFetch(
+      `/rental-applications/${encodeURIComponent(requestId)}/screening`
+    )) as any;
     const status = mapPipelineStatus(response?.screening?.status);
     const updatedAtMs =
       response?.screening?.lastUpdatedAt ||
@@ -74,12 +130,19 @@ export class TransUnionProvider implements BureauAdapter {
   }
 
   async listScreeningsForLandlord(_landlordId: string): Promise<NormalizedScreeningEvent[]> {
-    const applications = await fetchRentalApplications();
+    const listResponse = (await apiFetch(`/rental-applications?`)) as any;
+    const applications = (listResponse?.data || []) as Array<{
+      id: string;
+      propertyId?: string | null;
+      submittedAt?: number | null;
+    }>;
     const latest = applications.slice(0, 10);
 
     const events = await Promise.all(
       latest.map(async (application) => {
-        const screeningResponse = await fetchScreening(application.id);
+        const screeningResponse = (await apiFetch(
+          `/rental-applications/${encodeURIComponent(application.id)}/screening`
+        )) as any;
         const screening = screeningResponse?.screening;
         if (!screening?.status) {
           return null;
