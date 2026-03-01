@@ -7,36 +7,47 @@ import * as leaseDraftsService from "../../services/leaseDraftsService";
 
 type DocShape = { id: string; data: any };
 
-const store = new Map<string, Map<string, DocShape>>();
-let idSeq = 0;
+const { store, fakeDb, resetFakeDb } = vi.hoisted(() => {
+  const store = new Map<string, Map<string, DocShape>>();
+  let idSeq = 0;
 
-function ensureCollection(name: string) {
-  if (!store.has(name)) store.set(name, new Map());
-  return store.get(name)!;
-}
+  function ensureCollection(name: string) {
+    if (!store.has(name)) store.set(name, new Map());
+    return store.get(name)!;
+  }
 
-const fakeDb = {
-  collection: (name: string) => ({
-    doc: (id?: string) => {
-      const actualId = id || `doc_${++idSeq}`;
-      const col = ensureCollection(name);
-      return {
-        id: actualId,
-        set: async (value: any) => {
-          col.set(actualId, { id: actualId, data: value });
-        },
-        get: async () => {
-          const entry = col.get(actualId);
-          return {
-            id: actualId,
-            exists: Boolean(entry),
-            data: () => entry?.data,
-          };
-        },
-      };
+  const fakeDb = {
+    collection: (name: string) => ({
+      doc: (id?: string) => {
+        const actualId = id || `doc_${++idSeq}`;
+        const col = ensureCollection(name);
+        return {
+          id: actualId,
+          set: async (value: any) => {
+            col.set(actualId, { id: actualId, data: value });
+          },
+          get: async () => {
+            const entry = col.get(actualId);
+            return {
+              id: actualId,
+              exists: Boolean(entry),
+              data: () => entry?.data,
+            };
+          },
+        };
+      },
+    }),
+  };
+
+  return {
+    store,
+    fakeDb,
+    resetFakeDb: () => {
+      store.clear();
+      idSeq = 0;
     },
-  }),
-};
+  };
+});
 
 vi.mock("../../config/firebase", () => ({
   db: fakeDb,
@@ -80,8 +91,7 @@ vi.mock("../../services/leaseDraftsService", async () => {
 
 describe("lease draft routes", () => {
   beforeEach(() => {
-    store.clear();
-    idSeq = 0;
+    resetFakeDb();
     leaseService.getAll().splice(0);
     clearLeaseAutomationTasks();
   });
