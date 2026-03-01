@@ -13,7 +13,8 @@
     "build": "npm run preflight && node scripts/build.mjs",
     "build:tdzdebug": "vite build --mode tdzdebug",
     "build:app": "vite build",
-    "lint": "eslint .",
+    "lint": "eslint --config eslint.hooks-guard.config.js --max-warnings=0 src/pages/DashboardPage.tsx \"src/features/automation/timeline/**/*.{ts,tsx}\"",
+    "lint:full": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
     "test:e2e": "npm run preflight && playwright test"

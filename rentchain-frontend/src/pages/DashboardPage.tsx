@@ -97,6 +97,7 @@ function formatDate(ts: number | null): string {
 }
 
 const DashboardPage: React.FC = () => {
+  // Guardrail: declare derived values used in hook deps above the hooks that depend on them.
   const [data, setData] = React.useState<any | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -386,12 +387,15 @@ const DashboardPage: React.FC = () => {
     setSendApplicationOpen(true);
   };
 
-  const derivedSteps = {
-    propertyAdded: derivedPropertiesCount > 0,
-    unitAdded: derivedUnitsCount > 0,
-    tenantInvited: tenantCount > 0 || invitesCount > 0,
-    applicationCreated: applicationsCount > 0,
-  };
+  const derivedSteps = React.useMemo(
+    () => ({
+      propertyAdded: derivedPropertiesCount > 0,
+      unitAdded: derivedUnitsCount > 0,
+      tenantInvited: tenantCount > 0 || invitesCount > 0,
+      applicationCreated: applicationsCount > 0,
+    }),
+    [derivedPropertiesCount, derivedUnitsCount, tenantCount, invitesCount, applicationsCount]
+  );
 
   React.useEffect(() => {
     if (progressLoading || !countsReady) return;
