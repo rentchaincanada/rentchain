@@ -1,7 +1,11 @@
 import type {
   BureauAdapter,
+  BureauCheckoutInput,
+  BureauCheckoutResult,
   NormalizedScreeningEvent,
   NormalizedScreeningStatus,
+  BureauQuoteInput,
+  BureauQuoteResult,
 } from "../types";
 
 const notImplemented = () => {
@@ -24,6 +28,14 @@ export class EquifaxProvider implements BureauAdapter {
   }
 
   async fetchReportSummary(_requestId: string): Promise<{ available: boolean; scoreBand?: string }> {
+    return notImplemented();
+  }
+
+  async quoteScreening(_input: BureauQuoteInput): Promise<BureauQuoteResult> {
+    return notImplemented();
+  }
+
+  async createCheckout(_input: BureauCheckoutInput): Promise<BureauCheckoutResult> {
     return notImplemented();
   }
 

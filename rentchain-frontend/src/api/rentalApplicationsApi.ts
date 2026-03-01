@@ -1,4 +1,9 @@
 import { apiFetch } from "./apiFetch";
+import { getBureauAdapter } from "@/bureau";
+import { comparePrimaryVsShadow } from "@/bureau/shadow/compare";
+import { runShadowTask } from "@/bureau/shadow/runShadow";
+import { getShadowTimeoutMs } from "@/bureau/shadow/shadowMode";
+import { logShadowEvent } from "@/bureau/shadow/shadowLogger";
 
 export type RentalApplicationStatus =
   | "DRAFT"
@@ -316,6 +321,21 @@ export type ScreeningRunResult = {
   ai?: RentalApplication["screening"]["ai"] | null;
 };
 
+const nowMs = () =>
+  typeof performance !== "undefined" && typeof performance.now === "function"
+    ? performance.now()
+    : Date.now();
+
+const classifyShadowError = (error: unknown): string => {
+  const message = String((error as any)?.message || "").toLowerCase();
+  if (message.includes("timeout")) return "timeout";
+  if (message.includes("401") || message.includes("unauthorized")) return "unauthorized";
+  if (message.includes("403") || message.includes("forbidden")) return "forbidden";
+  if (message.includes("404") || message.includes("not found")) return "not_found";
+  if (message.includes("network") || message.includes("fetch")) return "network";
+  return "unknown";
+};
+
 export async function fetchRentalApplications(params?: {
   propertyId?: string;
   status?: string;
@@ -355,12 +375,102 @@ export async function fetchScreeningQuote(
     scoreAddOn?: boolean;
   }
 ): Promise<{ ok: boolean; data?: ScreeningQuote; error?: string; detail?: string }> {
+  const primaryStart = nowMs();
   const res: any = await apiFetch(`/rental-applications/${encodeURIComponent(id)}/screening/quote`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(params || {}),
   });
-  return res as { ok: boolean; data?: ScreeningQuote; error?: string; detail?: string };
+  const primaryDurationMs = Math.round(nowMs() - primaryStart);
+  const typed = res as { ok: boolean; data?: ScreeningQuote; error?: string; detail?: string };
+
+  void runShadowTask({
+    name: "quote",
+    seedKey: `quote:${id}`,
+    timeoutMs: getShadowTimeoutMs(),
+    task: async () => {
+      const adapter = getBureauAdapter();
+      if (!adapter.quoteScreening) throw new Error("shadow_not_supported");
+      const shadowStart = nowMs();
+      const shadowResult = await adapter.quoteScreening({
+        applicationId: id,
+        screeningTier: params?.screeningTier,
+        addons: params?.addons,
+        totalAmount: params?.totalAmount,
+        serviceLevel: params?.serviceLevel,
+        scoreAddOn: params?.scoreAddOn,
+      });
+      return {
+        result: shadowResult,
+        durationMs: Math.round(nowMs() - shadowStart),
+      };
+    },
+    onResult: ({ result, durationMs }) => {
+      const primary = {
+        provider: "transunion",
+        ok: Boolean(typed?.ok),
+        totalAmountCents: typed?.data?.totalAmountCents,
+        currency: typed?.data?.currency,
+        eligible: typed?.data?.eligible,
+        errorCode: typed?.error,
+      };
+      const diff = comparePrimaryVsShadow(primary, result);
+      logShadowEvent({
+        eventType: "bureau_shadow",
+        name: "quote",
+        seedKey: `quote:${id}`,
+        primary: {
+          provider: primary.provider,
+          ok: primary.ok,
+          status: primary.ok ? 200 : 400,
+          durationMs: primaryDurationMs,
+          errorCode: primary.errorCode,
+        },
+        shadow: {
+          provider: result.provider,
+          ok: result.ok,
+          status: result.ok ? 200 : 400,
+          durationMs,
+          errorCode: result.errorCode,
+        },
+        diff,
+        meta: {
+          appId: id,
+          envMode: import.meta.env.MODE,
+          buildSha: (import.meta.env as any).VITE_BUILD_ID,
+          ts: new Date().toISOString(),
+        },
+      });
+    },
+    onError: (error) => {
+      logShadowEvent({
+        eventType: "bureau_shadow",
+        name: "quote",
+        seedKey: `quote:${id}`,
+        primary: {
+          provider: "transunion",
+          ok: Boolean(typed?.ok),
+          status: typed?.ok ? 200 : 400,
+          durationMs: primaryDurationMs,
+          errorCode: typed?.error,
+        },
+        shadow: {
+          provider: getBureauAdapter().providerId,
+          ok: false,
+          errorCode: classifyShadowError(error),
+        },
+        diff: { isMatch: false, fields: ["shadow_error"] },
+        meta: {
+          appId: id,
+          envMode: import.meta.env.MODE,
+          buildSha: (import.meta.env as any).VITE_BUILD_ID,
+          ts: new Date().toISOString(),
+        },
+      });
+    },
+  });
+
+  return typed;
 }
 
 export async function runScreening(
@@ -401,12 +511,104 @@ export async function createScreeningOrder(params: {
   successPath?: string;
   cancelPath?: string;
 }): Promise<{ ok: boolean; checkoutUrl?: string; orderId?: string; tenantInviteUrl?: string; error?: string; detail?: string }> {
+  const primaryStart = nowMs();
   const res: any = await apiFetch(`/screening/orders`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(params),
   });
-  return res as { ok: boolean; checkoutUrl?: string; orderId?: string; tenantInviteUrl?: string; error?: string; detail?: string };
+  const primaryDurationMs = Math.round(nowMs() - primaryStart);
+  const typed = res as { ok: boolean; checkoutUrl?: string; orderId?: string; tenantInviteUrl?: string; error?: string; detail?: string };
+  const appId = String(params.applicationId || "");
+  const seed = `checkout:${appId || params.propertyId || "unknown"}`;
+
+  void runShadowTask({
+    name: "checkout",
+    seedKey: seed,
+    timeoutMs: getShadowTimeoutMs(),
+    task: async () => {
+      const adapter = getBureauAdapter();
+      if (!adapter.createCheckout || !appId) throw new Error("shadow_not_supported");
+      const shadowStart = nowMs();
+      const shadowResult = await adapter.createCheckout({
+        applicationId: appId,
+        screeningTier: params.screeningTier,
+        addons: params.addons,
+        totalAmount: params.totalAmount,
+        scoreAddOn: params.scoreAddOn,
+        serviceLevel: params.serviceLevel,
+        consent: params.consent,
+      });
+      return {
+        result: shadowResult,
+        durationMs: Math.round(nowMs() - shadowStart),
+      };
+    },
+    onResult: ({ result, durationMs }) => {
+      const primary = {
+        provider: "transunion",
+        ok: Boolean(typed?.ok),
+        checkoutUrlPresent: Boolean(typed?.checkoutUrl),
+        orderIdPresent: Boolean(typed?.orderId),
+        errorCode: typed?.error,
+      };
+      const diff = comparePrimaryVsShadow(primary, result);
+      logShadowEvent({
+        eventType: "bureau_shadow",
+        name: "checkout",
+        seedKey: seed,
+        primary: {
+          provider: primary.provider,
+          ok: primary.ok,
+          status: primary.ok ? 200 : 400,
+          durationMs: primaryDurationMs,
+          errorCode: primary.errorCode,
+        },
+        shadow: {
+          provider: result.provider,
+          ok: result.ok,
+          status: result.ok ? 200 : 400,
+          durationMs,
+          errorCode: result.errorCode,
+        },
+        diff,
+        meta: {
+          appId: appId || undefined,
+          envMode: import.meta.env.MODE,
+          buildSha: (import.meta.env as any).VITE_BUILD_ID,
+          ts: new Date().toISOString(),
+        },
+      });
+    },
+    onError: (error) => {
+      logShadowEvent({
+        eventType: "bureau_shadow",
+        name: "checkout",
+        seedKey: seed,
+        primary: {
+          provider: "transunion",
+          ok: Boolean(typed?.ok),
+          status: typed?.ok ? 200 : 400,
+          durationMs: primaryDurationMs,
+          errorCode: typed?.error,
+        },
+        shadow: {
+          provider: getBureauAdapter().providerId,
+          ok: false,
+          errorCode: classifyShadowError(error),
+        },
+        diff: { isMatch: false, fields: ["shadow_error"] },
+        meta: {
+          appId: appId || undefined,
+          envMode: import.meta.env.MODE,
+          buildSha: (import.meta.env as any).VITE_BUILD_ID,
+          ts: new Date().toISOString(),
+        },
+      });
+    },
+  });
+
+  return typed;
 }
 
 export async function createScreeningCheckout(
