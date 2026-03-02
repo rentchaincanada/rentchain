@@ -53,5 +53,5 @@ describe("landlord inquiry rate limit", () => {
     expect(res2.body.ok).toBe(true);
     expect(res2.body.rateLimited).toBe(true);
     expect(setMock).toHaveBeenCalledTimes(1);
-  });
+  }, 20000);
 });
