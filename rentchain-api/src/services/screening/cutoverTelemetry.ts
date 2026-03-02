@@ -1,6 +1,6 @@
 import { hashSeedKey } from "./cutoverConfig";
 
-export type CutoverRoute = "adapter" | "legacy";
+export type CutoverRoute = "adapter" | "legacy" | "none";
 
 export type CutoverTelemetryEvent = {
   eventType: "bureau_cutover";
@@ -28,6 +28,7 @@ export type CutoverTelemetryEvent = {
     env: string;
     ts: string;
     revision?: string;
+    skippedReason?: string;
   };
 };
 
@@ -77,4 +78,3 @@ export function logCutoverEvent(event: CutoverTelemetryEvent): void {
     console.info("[bureau_cutover] failed_to_serialize");
   }
 }
-

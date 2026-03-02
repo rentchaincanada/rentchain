@@ -15,7 +15,8 @@ import { buildShareUrl, createReportExport } from "../services/screening/reportE
 import { getScreeningProviderHealth } from "../services/screening/providerHealth";
 import { getBureauProvider } from "../services/screening/providers/bureauProvider";
 import { compareQuoteResponses } from "../services/screening/cutoverCompare";
-import { getPrimaryTimeoutMs } from "../services/screening/cutoverConfig";
+import { getPrimaryTimeoutMs, hashSeedKey } from "../services/screening/cutoverConfig";
+import { logCutoverEvent } from "../services/screening/cutoverTelemetry";
 import { runPrimaryWithFallback } from "../services/screening/runPrimaryWithFallback";
 import { buildTenantInviteUrl, createInviteToken } from "../services/screening/inviteTokens";
 import { createSignedUrl, putPdfObject } from "../storage/pdfStore";
@@ -291,13 +292,23 @@ async function loadAuthorizedApplication(req: any, applicationId: string) {
   return { ok: true as const, data, role, landlordId };
 }
 
-function resolveConsentPayload(body: any) {
+function resolveConsentPayload(body: any, application?: any) {
   const consent = body?.consent || {};
+  const appConsent = application?.consent || {};
+  const timestamp = String(consent?.timestamp || appConsent?.acceptedAt || "").trim();
+  const version = String(consent?.version || appConsent?.version || CONSENT_VERSION).trim();
+  const textHash = consent?.textHash
+    ? String(consent.textHash).trim()
+    : appConsent?.textHash
+    ? String(appConsent.textHash).trim()
+    : null;
   return {
-    given: Boolean(consent?.given),
-    timestamp: String(consent?.timestamp || "").trim(),
-    version: String(consent?.version || "").trim(),
-    textHash: consent?.textHash ? String(consent.textHash).trim() : null,
+    given: Boolean(
+      consent?.given || (appConsent?.creditConsent === true && appConsent?.referenceConsent === true)
+    ),
+    timestamp,
+    version,
+    textHash,
   };
 }
 
@@ -391,6 +402,28 @@ async function runAdapterPrimaryProbe(params: {
 
 function sanitizeAddressLine(line: any): string {
   return String(line || "").trim();
+}
+
+function logQuoteCutoverSkip(params: {
+  seedKey: string;
+  skippedReason: "NOT_ELIGIBLE" | "consent_required";
+}) {
+  logCutoverEvent({
+    eventType: "bureau_cutover",
+    name: "quote",
+    seedHash: hashSeedKey(params.seedKey || ""),
+    selectedRoute: "none",
+    fallbackUsed: false,
+    adapter: { ok: false },
+    legacy: { ok: false },
+    diff: { isMatch: true, fields: [] },
+    meta: {
+      env: process.env.NODE_ENV || "development",
+      ts: new Date().toISOString(),
+      revision: process.env.K_REVISION || process.env.GIT_SHA || undefined,
+      skippedReason: params.skippedReason,
+    },
+  });
 }
 
 async function createManualApplicationFromOrderBody(opts: {
@@ -559,6 +592,51 @@ router.get("/rental-applications/:id", async (req: any, res) => {
   }
 });
 
+router.post("/rental-applications/:id/dev/seed-consent", attachAccount, async (req: any, res) => {
+  try {
+    const role = String(req.user?.role || "").toLowerCase();
+    const isAdmin = role === "admin";
+    const isProd = process.env.NODE_ENV === "production";
+    if (isProd && !isAdmin) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const landlordId = req.user?.landlordId || req.user?.id || null;
+    if (!landlordId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+
+    const id = String(req.params?.id || "").trim();
+    if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    const snap = await db.collection("rentalApplications").doc(id).get();
+    if (!snap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+    const data = snap.data() as any;
+    if (!isAdmin && data?.landlordId && data.landlordId !== landlordId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const now = Date.now();
+    const updates: any = {
+      consent: {
+        creditConsent: true,
+        referenceConsent: true,
+        dataSharingConsent: true,
+        acceptedAt: now,
+        version: CONSENT_VERSION,
+        textHash: createHash("sha256")
+          .update(`seed-consent:${id}:${now}`)
+          .digest("hex"),
+      },
+      updatedAt: now,
+    };
+
+    await db.collection("rentalApplications").doc(id).set(updates, { merge: true });
+    return res.json({ ok: true });
+  } catch (err: any) {
+    console.error("[rental-applications] dev seed consent failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "DEV_SEED_CONSENT_FAILED" });
+  }
+});
+
 router.patch("/rental-applications/:id", async (req: any, res) => {
   try {
     const role = String(req.user?.role || "").toLowerCase();
@@ -618,6 +696,7 @@ router.post(
       if (data?.landlordId && data.landlordId !== landlordId) {
         return res.status(403).json({ ok: false, error: "FORBIDDEN" });
       }
+      const seedKey = [id, data?.landlordId || landlordId].filter(Boolean).join(":");
       const eligibility = evaluateEligibility(data);
       await writeScreeningEvent({
         applicationId: id,
@@ -628,13 +707,15 @@ router.post(
         actor: role === "admin" ? "admin" : "landlord",
       });
       if (!eligibility.eligible) {
+        logQuoteCutoverSkip({ seedKey, skippedReason: "NOT_ELIGIBLE" });
         return res.json({ ok: false, error: "NOT_ELIGIBLE", detail: eligibility.detail });
       }
 
       const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
-      const consent = resolveConsentPayload(body);
+      const consent = resolveConsentPayload(body, data);
       const consentCheck = validateConsent(consent);
       if (!consentCheck.ok) {
+        logQuoteCutoverSkip({ seedKey, skippedReason: "consent_required" });
         return res.status(400).json({
           ok: false,
           error: "consent_required",
@@ -642,7 +723,6 @@ router.post(
         });
       }
       const { pricing } = resolvePricingInput(body);
-      const seedKey = [id, data?.landlordId || landlordId].filter(Boolean).join(":");
       const quoteResult = await runPrimaryWithFallback({
         name: "quote",
         seedKey,
