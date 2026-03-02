@@ -592,17 +592,21 @@ router.get("/rental-applications/:id", async (req: any, res) => {
   }
 });
 
+// Internal QA endpoint only. In production this requires ALLOW_DEV_SEED_ENDPOINTS=true and admin role.
 router.post("/rental-applications/:id/dev/seed-consent", attachAccount, async (req: any, res) => {
   try {
     const role = String(req.user?.role || "").toLowerCase();
     const isAdmin = role === "admin";
     const isProd = process.env.NODE_ENV === "production";
-    if (isProd && !isAdmin) {
-      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    const allowDevSeed = process.env.ALLOW_DEV_SEED_ENDPOINTS === "true";
+    if (isProd && (!allowDevSeed || !isAdmin)) {
+      return res.status(404).json({ ok: false, error: "not_found" });
     }
 
     const landlordId = req.user?.landlordId || req.user?.id || null;
     if (!landlordId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    const body = req.body && typeof req.body === "object" ? req.body : {};
+    const consentVersion = String((body as any)?.consentVersion || CONSENT_VERSION).trim() || CONSENT_VERSION;
 
     const id = String(req.params?.id || "").trim();
     if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
@@ -621,7 +625,7 @@ router.post("/rental-applications/:id/dev/seed-consent", attachAccount, async (r
         referenceConsent: true,
         dataSharingConsent: true,
         acceptedAt: now,
-        version: CONSENT_VERSION,
+        version: consentVersion,
         textHash: createHash("sha256")
           .update(`seed-consent:${id}:${now}`)
           .digest("hex"),
