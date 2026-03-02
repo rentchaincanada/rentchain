@@ -241,4 +241,67 @@ describe("rental applications checkout mock override", () => {
       })
     );
   });
+
+  it("uses stored application consent when checkout body omits consent", async () => {
+    process.env.NODE_ENV = "development";
+    const app = await createApp();
+
+    const res = await request(app)
+      .post(`/api/rental-applications/${encodeURIComponent(appId)}/screening/checkout`)
+      .set("Authorization", "Bearer landlord")
+      .send({});
+
+    expect(res.status).toBe(200);
+    expect(res.body?.ok).toBe(true);
+    expect(typeof res.body?.checkoutUrl).toBe("string");
+  });
+
+  it("supports flattened consent payload fields in checkout body", async () => {
+    process.env.NODE_ENV = "development";
+    const noStoredConsentId = "app_no_stored_consent_flat";
+    seedRentalApplication(noStoredConsentId, {
+      ...eligibleApplication(noStoredConsentId),
+      consent: {
+        creditConsent: true,
+        referenceConsent: true,
+        dataSharingConsent: true,
+      },
+    });
+    const app = await createApp();
+
+    const res = await request(app)
+      .post(`/api/rental-applications/${encodeURIComponent(noStoredConsentId)}/screening/checkout`)
+      .set("Authorization", "Bearer landlord")
+      .send({
+        given: true,
+        timestamp: "2026-03-02T10:00:00.000Z",
+        version: "v1.0",
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.ok).toBe(true);
+    expect(typeof res.body?.checkoutUrl).toBe("string");
+  });
+
+  it("returns consent_required when no usable consent is provided", async () => {
+    process.env.NODE_ENV = "development";
+    const missingConsentTimestampId = "app_missing_consent_timestamp";
+    seedRentalApplication(missingConsentTimestampId, {
+      ...eligibleApplication(missingConsentTimestampId),
+      consent: {
+        creditConsent: true,
+        referenceConsent: true,
+        dataSharingConsent: true,
+      },
+    });
+    const app = await createApp();
+
+    const res = await request(app)
+      .post(`/api/rental-applications/${encodeURIComponent(missingConsentTimestampId)}/screening/checkout`)
+      .set("Authorization", "Bearer landlord")
+      .send({});
+
+    expect(res.status).toBe(400);
+    expect(res.body?.error).toBe("consent_required");
+  });
 });
