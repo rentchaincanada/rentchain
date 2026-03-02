@@ -15,7 +15,7 @@ import { buildShareUrl, createReportExport } from "../services/screening/reportE
 import { getScreeningProviderHealth } from "../services/screening/providerHealth";
 import { getBureauProvider } from "../services/screening/providers/bureauProvider";
 import { compareQuoteResponses } from "../services/screening/cutoverCompare";
-import { getPrimaryTimeoutMs, hashSeedKey } from "../services/screening/cutoverConfig";
+import { getPrimaryTimeoutMs, hashSeedKey, isAllowlistedSeed, parseAllowlist } from "../services/screening/cutoverConfig";
 import { logCutoverEvent } from "../services/screening/cutoverTelemetry";
 import { runPrimaryWithFallback } from "../services/screening/runPrimaryWithFallback";
 import { buildTenantInviteUrl, createInviteToken } from "../services/screening/inviteTokens";
@@ -405,7 +405,7 @@ function sanitizeAddressLine(line: any): string {
 }
 
 function logCutoverBlocked(params: {
-  name: "quote" | "checkout";
+  name: "quote" | "checkout" | "run";
   seedKey: string;
   skippedReason: "NOT_ELIGIBLE" | "consent_required" | "provider_not_ready";
 }) {
@@ -424,6 +424,36 @@ function logCutoverBlocked(params: {
       ts: new Date().toISOString(),
       revision: process.env.K_REVISION || process.env.GIT_SHA || undefined,
       skippedReason: params.skippedReason,
+    },
+  });
+}
+
+function shouldUseMockCheckoutOverride(params: {
+  role: string;
+  seedKey: string;
+}) {
+  const allowMock = process.env.ALLOW_MOCK_PROVIDER_CHECKOUT === "true";
+  if (!allowMock) return false;
+  if (params.role !== "admin") return false;
+  return isAllowlistedSeed(params.seedKey, parseAllowlist());
+}
+
+function logMockProviderCheckout(params: { name: "checkout" | "run"; seedKey: string }) {
+  logCutoverEvent({
+    eventType: "bureau_cutover",
+    name: params.name,
+    seedHash: hashSeedKey(params.seedKey || ""),
+    selectedRoute: "adapter",
+    responseSource: "adapter",
+    fallbackUsed: false,
+    adapter: { ok: true, status: 200 },
+    legacy: { ok: false },
+    diff: { isMatch: true, fields: [] },
+    meta: {
+      env: process.env.NODE_ENV || "development",
+      ts: new Date().toISOString(),
+      revision: process.env.K_REVISION || process.env.GIT_SHA || undefined,
+      providerMode: "mock",
     },
   });
 }
@@ -768,7 +798,7 @@ router.post(
       const snap = await db.collection("rentalApplications").doc(id).get();
       if (!snap.exists) return res.status(404).json({ ok: false, error: "not_found" });
       const data = snap.data() as any;
-      if (data?.landlordId && data.landlordId !== landlordId) {
+      if (role !== "admin" && data?.landlordId && data.landlordId !== landlordId) {
         return res.status(401).json({ ok: false, error: "unauthorized" });
       }
       await runAdapterPrimaryProbe({
@@ -817,12 +847,13 @@ router.post(
       }
 
       const providerHealth = await getScreeningProviderHealth();
+      const allowMockOverride = shouldUseMockCheckoutOverride({ role, seedKey: id });
       if (
         process.env.NODE_ENV === "production" &&
-        (!providerHealth.configured || !providerHealth.preflightOk)
+        (!providerHealth.configured || !providerHealth.preflightOk) &&
+        !allowMockOverride
       ) {
-        const seedKey = [id, data?.landlordId || landlordId].filter(Boolean).join(":");
-        logCutoverBlocked({ name: "checkout", seedKey, skippedReason: "provider_not_ready" });
+        logCutoverBlocked({ name: "checkout", seedKey: id, skippedReason: "provider_not_ready" });
         await writeScreeningEvent({
           applicationId: id,
           landlordId: data?.landlordId || null,
@@ -836,6 +867,13 @@ router.post(
           error: "screening_unavailable",
           detail: "provider_not_ready",
         });
+      }
+      if (
+        process.env.NODE_ENV === "production" &&
+        (!providerHealth.configured || !providerHealth.preflightOk) &&
+        allowMockOverride
+      ) {
+        logMockProviderCheckout({ name: "checkout", seedKey: id });
       }
 
       const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
@@ -1118,7 +1156,7 @@ router.post(
         const snap = await db.collection("rentalApplications").doc(applicationId).get();
         if (!snap.exists) return res.status(404).json({ ok: false, error: "not_found" });
         data = snap.data() as any;
-        if (data?.landlordId && data.landlordId !== landlordId) {
+        if (role !== "admin" && data?.landlordId && data.landlordId !== landlordId) {
           return res.status(401).json({ ok: false, error: "unauthorized" });
         }
 
@@ -1174,10 +1212,13 @@ router.post(
       }
 
       const providerHealth = await getScreeningProviderHealth();
+      const allowMockOverride = shouldUseMockCheckoutOverride({ role, seedKey: applicationId });
       if (
         process.env.NODE_ENV === "production" &&
-        (!providerHealth.configured || !providerHealth.preflightOk)
+        (!providerHealth.configured || !providerHealth.preflightOk) &&
+        !allowMockOverride
       ) {
+        logCutoverBlocked({ name: "checkout", seedKey: applicationId, skippedReason: "provider_not_ready" });
         await writeScreeningEvent({
           applicationId,
           landlordId: data?.landlordId || null,
@@ -1191,6 +1232,13 @@ router.post(
           error: "screening_unavailable",
           detail: "provider_not_ready",
         });
+      }
+      if (
+        process.env.NODE_ENV === "production" &&
+        (!providerHealth.configured || !providerHealth.preflightOk) &&
+        allowMockOverride
+      ) {
+        logMockProviderCheckout({ name: "checkout", seedKey: applicationId });
       }
 
       const { screeningTier, addons, serviceLevel, scoreAddOn, expeditedAddOn, pricing } =
@@ -1558,10 +1606,13 @@ router.post(
       }
 
       const providerHealth = await getScreeningProviderHealth();
+      const allowMockOverride = shouldUseMockCheckoutOverride({ role, seedKey: id });
       if (
         process.env.NODE_ENV === "production" &&
-        (!providerHealth.configured || !providerHealth.preflightOk)
+        (!providerHealth.configured || !providerHealth.preflightOk) &&
+        !allowMockOverride
       ) {
+        logCutoverBlocked({ name: "run", seedKey: id, skippedReason: "provider_not_ready" });
         await writeScreeningEvent({
           applicationId: id,
           landlordId: data?.landlordId || null,
@@ -1575,6 +1626,13 @@ router.post(
           error: "screening_unavailable",
           detail: "provider_not_ready",
         });
+      }
+      if (
+        process.env.NODE_ENV === "production" &&
+        (!providerHealth.configured || !providerHealth.preflightOk) &&
+        allowMockOverride
+      ) {
+        logMockProviderCheckout({ name: "run", seedKey: id });
       }
 
       const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
@@ -1965,7 +2023,7 @@ router.get(
       const snap = await db.collection("rentalApplications").doc(id).get();
       if (!snap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
       const data = snap.data() as any;
-      if (data?.landlordId && data.landlordId !== landlordId) {
+      if (role !== "admin" && data?.landlordId && data.landlordId !== landlordId) {
         return res.status(403).json({ ok: false, error: "FORBIDDEN" });
       }
 
