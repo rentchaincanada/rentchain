@@ -673,6 +673,58 @@ router.post("/rental-applications/:id/dev/seed-consent", attachAccount, async (r
   }
 });
 
+// Internal QA endpoint only. In production this requires ALLOW_DEV_SEED_ENDPOINTS=true and admin role.
+router.post("/rental-applications/dev/create-submitted", attachAccount, async (req: any, res) => {
+  try {
+    const role = String(req.user?.role || "").toLowerCase();
+    const isAdmin = role === "admin";
+    const allowDev =
+      process.env.NODE_ENV !== "production" || process.env.ALLOW_DEV_SEED_ENDPOINTS === "true";
+    if (!isAdmin || !allowDev) {
+      return res.status(404).json({ ok: false, error: "not_found" });
+    }
+
+    const landlordId = String(req.user?.landlordId || "").trim();
+    if (!landlordId) {
+      return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    }
+
+    const now = Date.now();
+    const applicationRef = db.collection("rentalApplications").doc();
+    const rentalApplicationId = applicationRef.id;
+    const seededApplication = {
+      id: rentalApplicationId,
+      landlordId,
+      status: "SUBMITTED",
+      screeningStatus: "unpaid",
+      createdAt: now,
+      updatedAt: now,
+      submittedAt: now,
+      applicant: {
+        firstName: "Dev",
+        lastName: "Seed",
+        email: `dev-seed+${rentalApplicationId}@example.com`,
+        dob: "1990-01-01",
+        sinLast4: "1234",
+      },
+      residentialHistory: [{ address: "123 Dev Street" }],
+      consent: {
+        creditConsent: true,
+        referenceConsent: true,
+        dataSharingConsent: true,
+        acceptedAt: now,
+        version: CONSENT_VERSION,
+      },
+    };
+
+    await applicationRef.set(seededApplication, { merge: false });
+    return res.json({ ok: true, data: { rentalApplicationId, landlordId } });
+  } catch (err: any) {
+    console.error("[rental-applications] dev create submitted failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "DEV_CREATE_SUBMITTED_FAILED" });
+  }
+});
+
 router.patch("/rental-applications/:id", async (req: any, res) => {
   try {
     const role = String(req.user?.role || "").toLowerCase();
