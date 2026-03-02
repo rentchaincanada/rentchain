@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { Readable } from "stream";
 import { createReportExport, getExportPdfBuffer, getReportExport, validateToken } from "../screening/reportExportService";
 
-const { collectionStore, dbMock } = vi.hoisted(() => {
+const { collectionStore, dbMock, uploadBufferToGcsMock, getFileReadStreamMock } = vi.hoisted(() => {
   const collectionStore = new Map<string, Map<string, any>>();
   let autoId = 0;
 
@@ -31,7 +32,16 @@ const { collectionStore, dbMock } = vi.hoisted(() => {
     })),
   };
 
-  return { collectionStore, dbMock };
+  const uploadBufferToGcsMock = vi.fn(async ({ path }: { path: string }) => ({
+    path,
+    bucket: "test-bucket",
+  }));
+
+  const getFileReadStreamMock = vi.fn(({ path }: { path: string }) => {
+    return Readable.from([Buffer.from(`pdf:${path}`)]);
+  });
+
+  return { collectionStore, dbMock, uploadBufferToGcsMock, getFileReadStreamMock };
 });
 
 vi.mock("../../config/firebase", () => ({
@@ -39,14 +49,18 @@ vi.mock("../../config/firebase", () => ({
 }));
 
 vi.mock("../../lib/gcs", () => ({
-  uploadBufferToGcs: vi.fn(() => {
-    throw new Error("no bucket");
-  }),
+  uploadBufferToGcs: uploadBufferToGcsMock,
+}));
+
+vi.mock("../../lib/gcsRead", () => ({
+  getFileReadStream: getFileReadStreamMock,
 }));
 
 describe("report export service", () => {
   beforeEach(() => {
     collectionStore.clear();
+    uploadBufferToGcsMock.mockClear();
+    getFileReadStreamMock.mockClear();
   });
 
   it("creates export doc and validates token", async () => {
@@ -62,12 +76,15 @@ describe("report export service", () => {
     expect(exportDoc?.applicationId).toBe("app_1");
     expect(exportDoc?.status).toBe("ready");
     expect(exportDoc?.tokenHash).toBeTruthy();
-    expect(exportDoc?.pdfBase64).toBeTruthy();
+    expect(exportDoc?.storageBucket).toBe("test-bucket");
+    expect(exportDoc?.storagePath).toBe(`screening-exports/${result.exportId}.pdf`);
 
     expect(validateToken(exportDoc, result.token)).toBe(true);
     expect(validateToken(exportDoc, "badtoken")).toBe(false);
 
     const buffer = await getExportPdfBuffer(exportDoc);
-    expect(buffer?.toString()).toBe("pdfdata");
+    expect(buffer?.toString()).toBe(`pdf:screening-exports/${result.exportId}.pdf`);
+    expect(uploadBufferToGcsMock).toHaveBeenCalledTimes(1);
+    expect(getFileReadStreamMock).toHaveBeenCalledTimes(1);
   });
 });

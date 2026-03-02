@@ -20,12 +20,16 @@ vi.mock("@sendgrid/mail", () => ({
   },
 }));
 
+vi.mock("../../services/emailService", () => ({
+  sendEmail: vi.fn().mockResolvedValue({ ok: true }),
+}));
+
 describe("landlord inquiry rate limit", () => {
   it("returns ok on rate limit without creating a lead", async () => {
     process.env.LEAD_INQUIRY_RATE_LIMIT_MAX = "1";
     process.env.LEAD_INQUIRY_RATE_LIMIT_WINDOW_MS = "86400000";
-    process.env.SENDGRID_API_KEY = "test";
-    process.env.SENDGRID_FROM_EMAIL = "no-reply@example.com";
+    process.env.SENDGRID_API_KEY = "";
+    process.env.SENDGRID_FROM_EMAIL = "";
 
     vi.resetModules();
     const { publicRouter } = await import("../landlordInquiryRoutes");
