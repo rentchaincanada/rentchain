@@ -404,13 +404,14 @@ function sanitizeAddressLine(line: any): string {
   return String(line || "").trim();
 }
 
-function logQuoteCutoverSkip(params: {
+function logCutoverBlocked(params: {
+  name: "quote" | "checkout";
   seedKey: string;
-  skippedReason: "NOT_ELIGIBLE" | "consent_required";
+  skippedReason: "NOT_ELIGIBLE" | "consent_required" | "provider_not_ready";
 }) {
   logCutoverEvent({
     eventType: "bureau_cutover",
-    name: "quote",
+    name: params.name,
     seedHash: hashSeedKey(params.seedKey || ""),
     selectedRoute: "none",
     responseSource: "blocked",
@@ -712,7 +713,7 @@ router.post(
         actor: role === "admin" ? "admin" : "landlord",
       });
       if (!eligibility.eligible) {
-        logQuoteCutoverSkip({ seedKey, skippedReason: "NOT_ELIGIBLE" });
+        logCutoverBlocked({ name: "quote", seedKey, skippedReason: "NOT_ELIGIBLE" });
         return res.json({ ok: false, error: "NOT_ELIGIBLE", detail: eligibility.detail });
       }
 
@@ -720,7 +721,7 @@ router.post(
       const consent = resolveConsentPayload(body, data);
       const consentCheck = validateConsent(consent);
       if (!consentCheck.ok) {
-        logQuoteCutoverSkip({ seedKey, skippedReason: "consent_required" });
+        logCutoverBlocked({ name: "quote", seedKey, skippedReason: "consent_required" });
         return res.status(400).json({
           ok: false,
           error: "consent_required",
@@ -820,6 +821,8 @@ router.post(
         process.env.NODE_ENV === "production" &&
         (!providerHealth.configured || !providerHealth.preflightOk)
       ) {
+        const seedKey = [id, data?.landlordId || landlordId].filter(Boolean).join(":");
+        logCutoverBlocked({ name: "checkout", seedKey, skippedReason: "provider_not_ready" });
         await writeScreeningEvent({
           applicationId: id,
           landlordId: data?.landlordId || null,
