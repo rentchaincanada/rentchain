@@ -47,6 +47,7 @@ export async function runPrimaryWithFallback<T>(args: RunPrimaryWithFallbackArgs
     name: args.name,
     seedKey: args.seedKey,
     selectedRoute,
+    responseSource: selectedRoute === "legacy" ? "legacy" : "adapter",
   });
 
   if (!adapterPrimary) {
@@ -79,6 +80,7 @@ export async function runPrimaryWithFallback<T>(args: RunPrimaryWithFallbackArgs
   } catch (err) {
     event.adapter = { ...buildCutoverErrorSnapshot(err), durationMs: Date.now() - adapterStart };
     if (!isFallbackEnabled()) {
+      event.responseSource = "adapter";
       logCutoverEvent(event);
       throw err;
     }
@@ -91,6 +93,7 @@ export async function runPrimaryWithFallback<T>(args: RunPrimaryWithFallbackArgs
         durationMs: Date.now() - legacyStart,
         status: extractStatus(legacy),
       };
+      event.responseSource = "legacy";
       logCutoverEvent(event);
       return legacy;
     } catch (legacyErr) {
@@ -102,6 +105,7 @@ export async function runPrimaryWithFallback<T>(args: RunPrimaryWithFallbackArgs
 
   if (!args.conservativeReturnLegacy) {
     if (adapterResult !== null) {
+      event.responseSource = "adapter";
       logCutoverEvent(event);
       return adapterResult;
     }
@@ -118,6 +122,7 @@ export async function runPrimaryWithFallback<T>(args: RunPrimaryWithFallbackArgs
     if (adapterResult !== null && args.compare) {
       event.diff = args.compare(legacy, adapterResult);
     }
+    event.responseSource = "legacy";
     logCutoverEvent(event);
     return legacy;
   } catch (legacyErr) {

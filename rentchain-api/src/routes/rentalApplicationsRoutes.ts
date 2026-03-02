@@ -413,6 +413,7 @@ function logQuoteCutoverSkip(params: {
     name: "quote",
     seedHash: hashSeedKey(params.seedKey || ""),
     selectedRoute: "none",
+    responseSource: "blocked",
     fallbackUsed: false,
     adapter: { ok: false },
     legacy: { ok: false },
