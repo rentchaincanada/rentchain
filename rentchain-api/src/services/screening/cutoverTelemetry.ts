@@ -7,6 +7,7 @@ export type CutoverTelemetryEvent = {
   name: "quote" | "checkout" | "run" | "legacy_checkout";
   seedHash: string;
   selectedRoute: CutoverRoute;
+  responseSource: "adapter" | "legacy" | "blocked";
   fallbackUsed: boolean;
   adapter: {
     ok: boolean;
@@ -52,6 +53,7 @@ export function buildBaseCutoverTelemetry(params: {
   name: CutoverTelemetryEvent["name"];
   seedKey: string;
   selectedRoute: CutoverRoute;
+  responseSource: CutoverTelemetryEvent["responseSource"];
   fallbackUsed?: boolean;
 }): CutoverTelemetryEvent {
   return {
@@ -59,6 +61,7 @@ export function buildBaseCutoverTelemetry(params: {
     name: params.name,
     seedHash: hashSeedKey(params.seedKey || ""),
     selectedRoute: params.selectedRoute,
+    responseSource: params.responseSource,
     fallbackUsed: Boolean(params.fallbackUsed),
     adapter: { ok: false },
     legacy: { ok: false },

@@ -3,6 +3,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { hashSeedKey, parseAllowlist, shouldUseAdapterPrimary } from "../screening/cutoverConfig";
 import { runPrimaryWithFallback } from "../screening/runPrimaryWithFallback";
 
+function parseCutoverEvents(spy: any) {
+  return spy.mock.calls
+    .filter((args: any[]) => args?.[0] === "[bureau_cutover]" && typeof args?.[1] === "string")
+    .map((args: any[]) => JSON.parse(args[1]));
+}
+
 describe("cutoverConfig", () => {
   const originalEnv = { ...process.env };
 
@@ -57,6 +63,7 @@ describe("runPrimaryWithFallback", () => {
     process.env.BUREAU_ADAPTER_PRIMARY_SAMPLE_RATE = "1";
     process.env.BUREAU_ADAPTER_FALLBACK_ENABLED = "true";
 
+    const consoleSpy = vi.spyOn(console, "info").mockImplementation(() => {});
     const result = await runPrimaryWithFallback({
       name: "quote",
       seedKey: "seed-1",
@@ -67,6 +74,9 @@ describe("runPrimaryWithFallback", () => {
     });
 
     expect(result).toEqual({ ok: true, source: "legacy" });
+    const events = parseCutoverEvents(consoleSpy);
+    const last = events[events.length - 1];
+    expect(last?.responseSource).toBe("legacy");
   });
 
   it("falls back to legacy when adapter times out", async () => {
@@ -75,6 +85,7 @@ describe("runPrimaryWithFallback", () => {
     process.env.BUREAU_ADAPTER_PRIMARY_TIMEOUT_MS = "5";
     process.env.BUREAU_ADAPTER_FALLBACK_ENABLED = "true";
 
+    const consoleSpy = vi.spyOn(console, "info").mockImplementation(() => {});
     const result = await runPrimaryWithFallback({
       name: "checkout",
       seedKey: "seed-timeout",
@@ -87,6 +98,45 @@ describe("runPrimaryWithFallback", () => {
     });
 
     expect(result).toEqual({ ok: true, source: "legacy" });
+    const events = parseCutoverEvents(consoleSpy);
+    const last = events[events.length - 1];
+    expect(last?.responseSource).toBe("legacy");
+  });
+
+  it("returns adapter when adapter primary succeeds", async () => {
+    process.env.BUREAU_ADAPTER_PRIMARY_MODE = "true";
+    process.env.BUREAU_ADAPTER_PRIMARY_SAMPLE_RATE = "1";
+    process.env.BUREAU_ADAPTER_FALLBACK_ENABLED = "true";
+
+    const consoleSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    const result = await runPrimaryWithFallback({
+      name: "quote",
+      seedKey: "seed-adapter-success",
+      runAdapter: async () => ({ ok: true, source: "adapter" }),
+      runLegacy: async () => ({ ok: true, source: "legacy" }),
+    });
+
+    expect(result).toEqual({ ok: true, source: "adapter" });
+    const events = parseCutoverEvents(consoleSpy);
+    const last = events[events.length - 1];
+    expect(last?.responseSource).toBe("adapter");
+  });
+
+  it("returns legacy when adapter is not selected", async () => {
+    process.env.BUREAU_ADAPTER_PRIMARY_MODE = "false";
+    process.env.BUREAU_ADAPTER_PRIMARY_SAMPLE_RATE = "1";
+
+    const consoleSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    const result = await runPrimaryWithFallback({
+      name: "quote",
+      seedKey: "seed-legacy-selected",
+      runAdapter: async () => ({ ok: true, source: "adapter" }),
+      runLegacy: async () => ({ ok: true, source: "legacy" }),
+    });
+
+    expect(result).toEqual({ ok: true, source: "legacy" });
+    const events = parseCutoverEvents(consoleSpy);
+    const last = events[events.length - 1];
+    expect(last?.responseSource).toBe("legacy");
   });
 });
-
