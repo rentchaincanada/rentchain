@@ -69,6 +69,11 @@ function isAllowlisted(seedKey: string, allowlist: Set<string>): boolean {
   return false;
 }
 
+export function isAllowlistedSeed(seedKey: string, allowlist?: Set<string>): boolean {
+  const source = allowlist || parseAllowlist();
+  return isAllowlisted(seedKey, source);
+}
+
 function ratioFromHash(seedKey: string): number {
   const hash = hashSeedKey(seedKey);
   const firstEightHex = hash.slice(0, 8);
@@ -89,4 +94,3 @@ export function shouldUseAdapterPrimary(seedKey: string): boolean {
 
   return ratioFromHash(seedKey) < sampleRate;
 }
-

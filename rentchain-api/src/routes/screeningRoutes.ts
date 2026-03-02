@@ -31,11 +31,39 @@ import { runScreeningWithCredits } from "../services/screeningsService";
 import { attachAccount } from "../middleware/attachAccount";
 import { getScreeningProviderHealth } from "../services/screening/providerHealth";
 import { compareCheckoutResponses } from "../services/screening/cutoverCompare";
-import { getPrimaryTimeoutMs } from "../services/screening/cutoverConfig";
+import { getPrimaryTimeoutMs, hashSeedKey, isAllowlistedSeed, parseAllowlist } from "../services/screening/cutoverConfig";
+import { logCutoverEvent } from "../services/screening/cutoverTelemetry";
 import { runPrimaryWithFallback } from "../services/screening/runPrimaryWithFallback";
 import { getBureauProvider } from "../services/screening/providers/bureauProvider";
 
 const router = Router();
+
+function shouldUseMockCheckoutOverride(params: { role: string; seedKey: string }) {
+  const allowMock = process.env.ALLOW_MOCK_PROVIDER_CHECKOUT === "true";
+  if (!allowMock) return false;
+  if (params.role !== "admin") return false;
+  return isAllowlistedSeed(params.seedKey, parseAllowlist());
+}
+
+function logMockProviderCheckout(seedKey: string) {
+  logCutoverEvent({
+    eventType: "bureau_cutover",
+    name: "checkout",
+    seedHash: hashSeedKey(seedKey || ""),
+    selectedRoute: "adapter",
+    responseSource: "adapter",
+    fallbackUsed: false,
+    adapter: { ok: true, status: 200 },
+    legacy: { ok: false },
+    diff: { isMatch: true, fields: [] },
+    meta: {
+      env: process.env.NODE_ENV || "development",
+      ts: new Date().toISOString(),
+      revision: process.env.K_REVISION || process.env.GIT_SHA || undefined,
+      providerMode: "mock",
+    },
+  });
+}
 
 router.use(authenticateJwt, attachAccount);
 
@@ -162,6 +190,8 @@ router.post(
   "/screenings/:id/checkout",
   async (req: AuthenticatedRequest, res: Response) => {
     const { id } = req.params;
+    const role = String(req.user?.role || "").toLowerCase();
+    const isAdmin = role === "admin";
     const screeningRequest = getScreeningRequestById(id);
     const frontendUrl = String(
       process.env.FRONTEND_URL ||
@@ -177,7 +207,7 @@ router.post(
       return res.status(404).json({ error: "Screening request not found" });
     }
 
-    if (!req.user?.id || screeningRequest.landlordId !== req.user.id) {
+    if (!req.user?.id || (screeningRequest.landlordId !== req.user.id && !isAdmin)) {
       return res.status(403).json({ error: "Forbidden" });
     }
 
@@ -199,15 +229,41 @@ router.post(
     });
 
     const providerHealth = await getScreeningProviderHealth();
+    const allowMockOverride = shouldUseMockCheckoutOverride({ role, seedKey: id });
     if (
       process.env.NODE_ENV === "production" &&
-      (!providerHealth.configured || !providerHealth.preflightOk)
+      (!providerHealth.configured || !providerHealth.preflightOk) &&
+      !allowMockOverride
     ) {
+      logCutoverEvent({
+        eventType: "bureau_cutover",
+        name: "checkout",
+        seedHash: hashSeedKey(id || ""),
+        selectedRoute: "none",
+        responseSource: "blocked",
+        fallbackUsed: false,
+        adapter: { ok: false },
+        legacy: { ok: false },
+        diff: { isMatch: true, fields: [] },
+        meta: {
+          env: process.env.NODE_ENV || "development",
+          ts: new Date().toISOString(),
+          revision: process.env.K_REVISION || process.env.GIT_SHA || undefined,
+          skippedReason: "provider_not_ready",
+        },
+      });
       return res.status(503).json({
         ok: false,
         error: "screening_unavailable",
         detail: "provider_not_ready",
       });
+    }
+    if (
+      process.env.NODE_ENV === "production" &&
+      (!providerHealth.configured || !providerHealth.preflightOk) &&
+      allowMockOverride
+    ) {
+      logMockProviderCheckout(id);
     }
 
     if (!isStripeConfigured()) {

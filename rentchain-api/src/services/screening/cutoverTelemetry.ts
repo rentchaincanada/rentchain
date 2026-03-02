@@ -30,6 +30,7 @@ export type CutoverTelemetryEvent = {
     ts: string;
     revision?: string;
     skippedReason?: string;
+    providerMode?: "mock";
   };
 };
 
