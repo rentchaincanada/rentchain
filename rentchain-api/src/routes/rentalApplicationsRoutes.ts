@@ -293,7 +293,9 @@ async function loadAuthorizedApplication(req: any, applicationId: string) {
 }
 
 function resolveConsentPayload(body: any, application?: any) {
-  const consent = body?.consent || {};
+  const payload = body && typeof body === "object" ? body : {};
+  const nestedConsent = payload?.consent && typeof payload.consent === "object" ? payload.consent : {};
+  const consent = Object.keys(nestedConsent).length ? nestedConsent : payload;
   const appConsent = application?.consent || {};
   const timestamp = String(consent?.timestamp || appConsent?.acceptedAt || "").trim();
   const version = String(consent?.version || appConsent?.version || CONSENT_VERSION).trim();
@@ -929,7 +931,7 @@ router.post(
       }
 
       const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
-      const consent = resolveConsentPayload(body);
+      const consent = resolveConsentPayload(body, data);
       const consentCheck = validateConsent(consent);
       if (!consentCheck.ok) {
         return res.status(400).json({ ok: false, error: "consent_required", detail: consentCheck.error });
@@ -1251,7 +1253,7 @@ router.post(
         data = manualApp.data;
       }
 
-      const consent = resolveConsentPayload(body);
+      const consent = resolveConsentPayload(body, data);
       if (existingApplicationId) {
         const consentCheck = validateConsent(consent);
         if (!consentCheck.ok) {
@@ -1688,7 +1690,7 @@ router.post(
       }
 
       const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
-      const consent = resolveConsentPayload(body);
+      const consent = resolveConsentPayload(body, data);
       const consentCheck = validateConsent(consent);
       if (!consentCheck.ok) {
         return res.status(400).json({ ok: false, error: "consent_required", detail: consentCheck.error });
