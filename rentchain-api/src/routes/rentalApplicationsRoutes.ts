@@ -152,16 +152,16 @@ function normalizeOrderStatus(order: any): CanonicalScreeningOrderStatus {
   const rawStatus = String(order?.status || "").trim().toLowerCase();
   const paymentStatus = String(order?.paymentStatus || "").trim().toLowerCase();
   if (
-    paymentStatus === "paid" ||
     rawStatus === "paid" ||
     rawStatus === "complete" ||
     rawStatus === "completed" ||
     rawStatus === "report_ready" ||
+    paymentStatus === "paid" ||
     order?.finalized === true
   ) {
     return "paid";
   }
-  if (paymentStatus === "refunded" || rawStatus === "refunded") {
+  if (rawStatus === "refunded" || paymentStatus === "refunded") {
     return "refunded";
   }
   if (
@@ -171,7 +171,7 @@ function normalizeOrderStatus(order: any): CanonicalScreeningOrderStatus {
   ) {
     return "processing";
   }
-  if (paymentStatus === "failed" || rawStatus === "failed" || rawStatus === "kba_failed") {
+  if (rawStatus === "failed" || rawStatus === "kba_failed" || paymentStatus === "failed") {
     return "failed";
   }
   return "unpaid";
@@ -1770,6 +1770,12 @@ router.post(
     if (currentStatus === "paid") {
       return res.json({ ok: true, data: normalizeOrderView(orderDoc.id, order) });
     }
+    const now = Date.now();
+    const lastReconcileAt = Number(order?.lastReconcileAt || 0);
+    if (lastReconcileAt > 0 && now - lastReconcileAt < 20_000) {
+      return res.json({ ok: true, data: normalizeOrderView(orderDoc.id, order) });
+    }
+    await db.collection("screeningOrders").doc(orderDoc.id).set({ lastReconcileAt: now }, { merge: true });
 
     let stripe: any;
     try {
@@ -1781,7 +1787,6 @@ router.post(
       throw err;
     }
 
-    const now = Date.now();
     const stripeSessionId = String(order?.stripeCheckoutSessionId || order?.stripeSessionId || "").trim();
     const stripePaymentIntentId = String(order?.stripePaymentIntentId || "").trim();
     let paid = false;

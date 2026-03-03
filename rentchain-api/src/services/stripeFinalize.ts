@@ -116,7 +116,10 @@ export async function finalizeStripePayment(
     }
 
     order = orderSnap.data() || {};
-    alreadyFinalized = Boolean(order.finalized) || order.paymentStatus === "paid";
+    const canonicalStatus = String(order?.status || "").toLowerCase();
+    const mirroredPaymentStatus = String(order?.paymentStatus || "").toLowerCase();
+    alreadyFinalized =
+      Boolean(order.finalized) || canonicalStatus === "paid" || mirroredPaymentStatus === "paid";
 
     const applicationId = normStr(args.applicationId) || normStr(order.applicationId);
     if (applicationId) {

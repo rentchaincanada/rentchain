@@ -196,4 +196,50 @@ describe("screening order status + reconcile", () => {
     expect(status.status).toBe(200);
     expect(status.body?.data?.status).toBe("paid");
   }, 20000);
+
+  it("status endpoint treats canonical status as source of truth over paymentStatus mirror", async () => {
+    upsertDoc("screeningOrders", "order_status_canonical", {
+      id: "order_status_canonical",
+      applicationId: "app_status_canonical",
+      landlordId: "landlord-1",
+      status: "paid",
+      paymentStatus: "unpaid",
+      amountTotalCents: 4900,
+      currency: "cad",
+    });
+    const app = await createApp();
+
+    const res = await request(app)
+      .get("/api/screening/orders/status")
+      .query({ applicationId: "app_status_canonical" })
+      .set("Authorization", "Bearer landlord");
+
+    expect(res.status).toBe(200);
+    expect(res.body?.ok).toBe(true);
+    expect(res.body?.data?.status).toBe("paid");
+  });
+
+  it("throttles reconcile calls within 20s and avoids duplicate Stripe fetches", async () => {
+    upsertDoc("screeningOrders", "order_throttle", {
+      id: "order_throttle",
+      applicationId: "app_throttle",
+      landlordId: "landlord-1",
+      status: "unpaid",
+      paymentStatus: "unpaid",
+      stripeSessionId: "sess_test",
+      amountTotalCents: 4900,
+      currency: "cad",
+      lastReconcileAt: Date.now() - 5000,
+    });
+    const app = await createApp();
+
+    const first = await request(app)
+      .post("/api/screening/orders/reconcile")
+      .set("Authorization", "Bearer landlord")
+      .send({ applicationId: "app_throttle" });
+    expect(first.status).toBe(200);
+    expect(first.body?.ok).toBe(true);
+    expect(first.body?.data?.status).toBe("unpaid");
+    expect(retrieveSessionMock).toHaveBeenCalledTimes(0);
+  });
 });

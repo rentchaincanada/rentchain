@@ -134,5 +134,34 @@ describe("finalizeStripePayment", () => {
     expect(app?.screening?.orderId).toBe("order_1");
     expect(enqueueScreeningJobMock).toHaveBeenCalledTimes(1);
   });
-});
 
+  it("treats canonical status=paid as already finalized even if paymentStatus mirror is stale", async () => {
+    upsertDoc("screeningOrders", "order_2", {
+      id: "order_2",
+      applicationId: "app_2",
+      landlordId: "landlord_1",
+      status: "paid",
+      paymentStatus: "unpaid",
+      finalized: false,
+    });
+
+    const { finalizeStripePayment } = await import("../stripeFinalize");
+    const result = await finalizeStripePayment({
+      eventId: "evt_2",
+      eventType: "checkout.session.completed",
+      orderId: "order_2",
+      sessionId: "sess_2",
+      paymentIntentId: "pi_2",
+      stripeChargeId: "ch_2",
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.alreadyFinalized).toBe(true);
+    }
+    const order = getDoc("screeningOrders", "order_2");
+    expect(order?.status).toBe("paid");
+    expect(order?.stripeCheckoutSessionId).toBe("sess_2");
+    expect(order?.stripePaymentIntentId).toBe("pi_2");
+  });
+});
