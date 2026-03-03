@@ -147,6 +147,12 @@ function createCorrelationId(): string {
 }
 
 type CanonicalScreeningOrderStatus = "unpaid" | "paid" | "processing" | "failed" | "refunded";
+type CanonicalScreeningJobStatus =
+  | "queued"
+  | "running"
+  | "provider_calling"
+  | "completed"
+  | "failed";
 
 function normalizeOrderStatus(order: any): CanonicalScreeningOrderStatus {
   const rawStatus = String(order?.status || "").trim().toLowerCase();
@@ -204,6 +210,58 @@ async function getLatestOrderByApplicationId(applicationId: string) {
     const bData = b.data() as any;
     const aTs = Number(aData?.updatedAt || aData?.createdAt || 0);
     const bTs = Number(bData?.updatedAt || bData?.createdAt || 0);
+    return bTs - aTs;
+  });
+  return docs[0] || null;
+}
+
+function normalizeJobStatus(raw: unknown): CanonicalScreeningJobStatus {
+  const value = String(raw || "")
+    .trim()
+    .toLowerCase();
+  if (value === "queued") return "queued";
+  if (value === "running") return "running";
+  if (value === "provider_calling") return "provider_calling";
+  if (value === "completed" || value === "complete") return "completed";
+  if (value === "failed") return "failed";
+  const legacy = String(raw || "").trim().toUpperCase();
+  if (legacy === "QUEUED") return "queued";
+  if (legacy === "RUNNING") return "running";
+  if (legacy === "COMPLETE") return "completed";
+  if (legacy === "FAILED") return "failed";
+  return "queued";
+}
+
+function normalizeJobView(orderId: string, job: any) {
+  return {
+    orderId,
+    applicationId: job?.applicationId || null,
+    landlordId: job?.landlordId || null,
+    status: normalizeJobStatus(job?.status),
+    provider: job?.provider || null,
+    attempt: Number(job?.attempt || 1) || 1,
+    queuedAt: Number(job?.queuedAt || 0) || null,
+    startedAt: Number(job?.startedAt || 0) || null,
+    providerCalledAt: Number(job?.providerCalledAt || 0) || null,
+    completedAt: Number(job?.completedAt || 0) || null,
+    failedAt: Number(job?.failedAt || 0) || null,
+    lastError: job?.lastError || null,
+    updatedAt: Number(job?.updatedAt || 0) || null,
+  };
+}
+
+async function getLatestJobByApplicationId(applicationId: string) {
+  const snap = await db
+    .collection("screeningJobs")
+    .where("applicationId", "==", applicationId)
+    .limit(20)
+    .get();
+  if (snap.empty) return null;
+  const docs = snap.docs.slice().sort((a, b) => {
+    const aData = a.data() as any;
+    const bData = b.data() as any;
+    const aTs = Number(aData?.updatedAt || aData?.queuedAt || 0);
+    const bTs = Number(bData?.updatedAt || bData?.queuedAt || 0);
     return bTs - aTs;
   });
   return docs[0] || null;
@@ -1653,6 +1711,53 @@ router.get(
         stripeIdentitySessionId: data?.stripeIdentitySessionId || null,
         updatedAt: data?.updatedAt || null,
       },
+    });
+  }
+);
+
+router.get(
+  "/screening/jobs/status",
+  attachAccount,
+  async (req: any, res) => {
+    res.setHeader("x-route-source", "rentalApplicationsRoutes:screeningJobStatus");
+    const role = String(req.user?.role || "").toLowerCase();
+    if (role !== "landlord" && role !== "admin") {
+      return res.status(401).json({ ok: false, error: "unauthorized" });
+    }
+    const landlordId = req.user?.landlordId || req.user?.id || null;
+    if (!landlordId && role !== "admin") {
+      return res.status(401).json({ ok: false, error: "unauthorized" });
+    }
+
+    const orderId = String(req.query?.orderId || "").trim();
+    const applicationId = String(req.query?.applicationId || "").trim();
+    if (!orderId && !applicationId) {
+      return res.status(400).json({ ok: false, error: "missing_order_or_application_id" });
+    }
+
+    let jobDoc: FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestore.DocumentSnapshot | null = null;
+    if (orderId) {
+      const snap = await db.collection("screeningJobs").doc(orderId).get();
+      if (snap.exists) jobDoc = snap;
+    } else if (applicationId) {
+      jobDoc = await getLatestJobByApplicationId(applicationId);
+    }
+
+    if (!jobDoc) {
+      return res.status(404).json({ ok: false, error: "not_found" });
+    }
+
+    const job = jobDoc.data() as any;
+    if (
+      role !== "admin" &&
+      (!job?.landlordId || String(job.landlordId).trim() !== String(landlordId || "").trim())
+    ) {
+      return res.status(403).json({ ok: false, error: "forbidden" });
+    }
+
+    return res.json({
+      ok: true,
+      data: normalizeJobView(jobDoc.id, job),
     });
   }
 );
