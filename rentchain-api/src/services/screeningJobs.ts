@@ -1,6 +1,13 @@
 import { db } from "../config/firebase";
 
-export type ScreeningJobStatus = "queued" | "running" | "provider_calling" | "completed" | "failed";
+export type ScreeningJobStatus =
+  | "queued"
+  | "running"
+  | "provider_calling"
+  | "completed"
+  | "failed"
+  | "external_pending"
+  | "external_completed";
 
 export type ScreeningJob = {
   id: string;
@@ -31,6 +38,8 @@ const STATUS_RANK: Record<ScreeningJobStatus, number> = {
   provider_calling: 3,
   completed: 4,
   failed: 4,
+  external_pending: 3,
+  external_completed: 4,
 };
 
 function nowMs() {
@@ -50,6 +59,8 @@ function normalizeStatus(value: unknown): ScreeningJobStatus {
   if (raw === "provider_calling") return "provider_calling";
   if (raw === "completed" || raw === "complete") return "completed";
   if (raw === "failed") return "failed";
+  if (raw === "external_pending") return "external_pending";
+  if (raw === "external_completed") return "external_completed";
 
   const legacy = String(value || "").trim().toUpperCase();
   if (legacy === "QUEUED") return "queued";
@@ -76,8 +87,12 @@ export function canProgressJobStatus(
 ): boolean {
   if (current === next) return true;
   if (current === "completed") return false;
+  if (current === "external_completed") return false;
   if (current === "failed") {
     return allowRetry && next === "queued";
+  }
+  if (current === "external_pending") {
+    return next === "external_completed" || next === "failed" || (allowRetry && next === "queued");
   }
   return STATUS_RANK[next] >= STATUS_RANK[current];
 }
@@ -234,6 +249,51 @@ export async function runJob(job: ScreeningJob) {
   const orderRef = db.collection("screeningOrders").doc(job.orderId);
   const appRef = db.collection("rentalApplications").doc(job.applicationId);
   const jobRef = db.collection("screeningJobs").doc(job.id);
+  const providerKey = String(job.provider || "").trim().toLowerCase();
+
+  if (providerKey === "transunion_referral") {
+    const pendingAt = nowMs();
+    await jobRef.set(
+      {
+        status: "external_pending",
+        startedAt: pendingAt,
+        providerCalledAt: pendingAt,
+        completedAt: null,
+        failedAt: null,
+        lockOwner: null,
+        lockExpiresAt: null,
+        lastError: null,
+        updatedAt: pendingAt,
+        lastStep: "external_pending",
+        retryEligible: false,
+      },
+      { merge: true }
+    );
+    await orderRef.set(
+      {
+        processingStatus: "EXTERNAL_PENDING",
+        processingStartedAt: pendingAt,
+        provider: job.provider,
+        status: "external_pending",
+        updatedAt: pendingAt,
+      },
+      { merge: true }
+    );
+    await appRef.set(
+      {
+        screening: {
+          status: "external_pending",
+          startedAt: pendingAt,
+          provider: job.provider,
+          orderId: job.orderId,
+        },
+        updatedAt: pendingAt,
+      },
+      { merge: true }
+    );
+    console.log("[screening-jobs] external pending", { jobId: job.id, provider: job.provider });
+    return { ok: true, external: true as const };
+  }
 
   try {
     await setScreeningJobStatus({

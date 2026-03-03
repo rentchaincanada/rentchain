@@ -1,5 +1,6 @@
 import { BureauProvider } from "./types";
 import { TransUnionProvider } from "./transunionProvider";
+import { TransUnionReferralProvider } from "./transunionReferralProvider";
 
 class DisabledProvider implements BureauProvider {
   name: string;
@@ -21,7 +22,12 @@ class DisabledProvider implements BureauProvider {
 }
 
 export function getBureauProvider(): BureauProvider {
-  const key = String(process.env.SCREENING_PROVIDER || "transunion").trim().toLowerCase();
+  const key = String(
+    process.env.BUREAU_PROVIDER || process.env.SCREENING_PROVIDER || "transunion"
+  )
+    .trim()
+    .toLowerCase();
+  if (key === "transunion_referral") return new TransUnionReferralProvider();
   if (key === "transunion") return new TransUnionProvider();
   return new DisabledProvider(key);
 }

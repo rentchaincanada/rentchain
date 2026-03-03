@@ -8,12 +8,14 @@ describe("screening job status progression", () => {
     expect(canProgressJobStatus("running", "provider_calling")).toBe(true);
     expect(canProgressJobStatus("provider_calling", "completed")).toBe(true);
     expect(canProgressJobStatus("provider_calling", "failed")).toBe(true);
+    expect(canProgressJobStatus("external_pending", "external_completed")).toBe(true);
   });
 
   it("prevents regressions and terminal rewrites", () => {
     expect(canProgressJobStatus("running", "queued")).toBe(false);
     expect(canProgressJobStatus("provider_calling", "running")).toBe(false);
     expect(canProgressJobStatus("completed", "running")).toBe(false);
+    expect(canProgressJobStatus("external_completed", "running")).toBe(false);
     expect(canProgressJobStatus("failed", "running")).toBe(false);
   });
 
@@ -22,4 +24,3 @@ describe("screening job status progression", () => {
     expect(canProgressJobStatus("failed", "queued", true)).toBe(true);
   });
 });
-

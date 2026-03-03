@@ -28,6 +28,9 @@ export type BureauProviderPreflight = {
 
 export type BureauProviderRequest = {
   orderId: string;
+  applicationId?: string | null;
+  landlordId?: string | null;
+  returnTo?: string | null;
   tenant: {
     firstName: string;
     lastName: string;
