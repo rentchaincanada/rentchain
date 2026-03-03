@@ -245,7 +245,7 @@ app.use("/api/admin", routeSource("adminRoutes.ts"), adminRoutes);
 app.use("/api/admin", routeSource("landlordInvitesAdminRoutes.ts"), landlordInvitesAdminRoutes);
 app.use("/api/admin", routeSource("landlordInquiryRoutes.ts"), landlordInquiryAdminRoutes);
 app.use("/api/admin", routeSource("adminBootstrapRoutes"), adminBootstrapRoutes);
-app.use("/api/admin", routeSource("screeningJobsAdminRoutes.ts"), screeningJobsAdminRoutes);
+app.use("/api", routeSource("screeningJobsAdminRoutes.ts"), screeningJobsAdminRoutes);
 app.use("/api/admin", routeSource("adminPropertiesRoutes.ts"), adminPropertiesRoutes);
 app.use("/api/admin", routeSource("adminScreeningResultsRoutes.ts"), adminScreeningResultsRoutes);
 app.use("/api/admin/demo", routeSource("adminDemoRoutes.ts"), adminDemoRoutes);
