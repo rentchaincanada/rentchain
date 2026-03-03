@@ -19,6 +19,8 @@ import { getPrimaryTimeoutMs, hashSeedKey, isAllowlistedSeed, parseAllowlist } f
 import { logCutoverEvent } from "../services/screening/cutoverTelemetry";
 import { runPrimaryWithFallback } from "../services/screening/runPrimaryWithFallback";
 import { buildTenantInviteUrl, createInviteToken } from "../services/screening/inviteTokens";
+import { buildTransUnionReferralUrl } from "../services/screening/transunionReferral";
+import { enqueueScreeningJob } from "../services/screeningJobs";
 import { createSignedUrl, putPdfObject } from "../storage/pdfStore";
 import { buildReviewSummary, buildReviewSummaryPdf } from "../lib/reviewSummary";
 import { rateLimitScreeningIp, rateLimitScreeningUser } from "../middleware/rateLimit";
@@ -151,6 +153,8 @@ type CanonicalScreeningJobStatus =
   | "queued"
   | "running"
   | "provider_calling"
+  | "external_pending"
+  | "external_completed"
   | "completed"
   | "failed";
 
@@ -162,6 +166,7 @@ function normalizeOrderStatus(order: any): CanonicalScreeningOrderStatus {
     rawStatus === "complete" ||
     rawStatus === "completed" ||
     rawStatus === "report_ready" ||
+    rawStatus === "external_completed" ||
     paymentStatus === "paid" ||
     order?.finalized === true
   ) {
@@ -172,6 +177,8 @@ function normalizeOrderStatus(order: any): CanonicalScreeningOrderStatus {
   }
   if (
     rawStatus === "processing" ||
+    rawStatus === "external_pending" ||
+    rawStatus === "queued_external" ||
     rawStatus === "kba_in_progress" ||
     rawStatus === "in_progress"
   ) {
@@ -222,6 +229,8 @@ function normalizeJobStatus(raw: unknown): CanonicalScreeningJobStatus {
   if (value === "queued") return "queued";
   if (value === "running") return "running";
   if (value === "provider_calling") return "provider_calling";
+  if (value === "external_pending") return "external_pending";
+  if (value === "external_completed") return "external_completed";
   if (value === "completed" || value === "complete") return "completed";
   if (value === "failed") return "failed";
   const legacy = String(raw || "").trim().toUpperCase();
@@ -498,6 +507,56 @@ function buildQuotePayload(pricing: any) {
       eligible: true,
     },
   };
+}
+
+function isTransUnionReferralMode() {
+  const key = String(process.env.BUREAU_PROVIDER || process.env.SCREENING_PROVIDER || "")
+    .trim()
+    .toLowerCase();
+  return key === "transunion_referral";
+}
+
+function buildReferralQuotePayload() {
+  return {
+    ok: true,
+    data: {
+      baseAmountCents: 0,
+      verifiedAddOnCents: 0,
+      aiAddOnCents: 0,
+      scoreAddOnCents: 0,
+      expeditedAddOnCents: 0,
+      totalAmountCents: 0,
+      currency: "CAD",
+      eligible: true,
+      note: "Billing handled by TransUnion",
+      mode: "transunion_referral",
+    },
+  };
+}
+
+function logTuReferralEvent(params: {
+  orderId: string;
+  applicationId: string;
+  landlordId: string;
+  redirectUrl: string;
+}) {
+  let redirectDomain = "unknown";
+  try {
+    redirectDomain = new URL(params.redirectUrl).host;
+  } catch {
+    redirectDomain = "invalid_url";
+  }
+  console.info(
+    "[tu_referral]",
+    JSON.stringify({
+      eventType: "tu_referral",
+      orderHash: hashSeedKey(params.orderId),
+      applicationHash: hashSeedKey(params.applicationId),
+      landlordHash: hashSeedKey(params.landlordId),
+      redirectDomain,
+      ts: new Date().toISOString(),
+    })
+  );
 }
 
 async function runAdapterPrimaryProbe(params: {
@@ -918,6 +977,14 @@ router.post(
         actor: role === "admin" ? "admin" : "landlord",
       });
       if (!eligibility.eligible) {
+        if (eligibility.reasonCode === "MISSING_CONSENT") {
+          logCutoverBlocked({ name: "quote", seedKey, skippedReason: "consent_required" });
+          return res.status(400).json({
+            ok: false,
+            error: "consent_required",
+            detail: eligibility.detail,
+          });
+        }
         logCutoverBlocked({ name: "quote", seedKey, skippedReason: "NOT_ELIGIBLE" });
         return res.json({ ok: false, error: "NOT_ELIGIBLE", detail: eligibility.detail });
       }
@@ -932,6 +999,9 @@ router.post(
           error: "consent_required",
           detail: consentCheck.error,
         });
+      }
+      if (isTransUnionReferralMode()) {
+        return res.json(buildReferralQuotePayload());
       }
       const { pricing } = resolvePricingInput(body);
       const quoteResult = await runPrimaryWithFallback({
@@ -1022,9 +1092,11 @@ router.post(
       }
 
       const providerHealth = await getScreeningProviderHealth();
+      const referralMode = isTransUnionReferralMode();
       const allowMockOverride = shouldUseMockCheckoutOverride({ role, seedKey: id });
       if (
         process.env.NODE_ENV === "production" &&
+        !referralMode &&
         (!providerHealth.configured || !providerHealth.preflightOk) &&
         !allowMockOverride
       ) {
@@ -1045,6 +1117,7 @@ router.post(
       }
       if (
         process.env.NODE_ENV === "production" &&
+        !referralMode &&
         (!providerHealth.configured || !providerHealth.preflightOk) &&
         allowMockOverride
       ) {
@@ -1080,6 +1153,102 @@ router.post(
         console.warn("[screening_checkout] invalid redirect origin", logBase);
         return res.status(400).json({ ok: false, error: "invalid_redirect_origin" });
       }
+
+      if (isTransUnionReferralMode()) {
+        const now = Date.now();
+        const orderRef = db.collection("screeningOrders").doc();
+        const orderId = orderRef.id;
+        const referralUrl = buildTransUnionReferralUrl({
+          landlordId: String(landlordId),
+          applicationId: id,
+          orderId,
+          returnTo,
+          env: process.env.NODE_ENV || "development",
+        });
+
+        const orderPayload: any = {
+          id: orderId,
+          referenceId: buildReferenceId(orderId),
+          landlordId,
+          applicationId: id,
+          propertyId: data?.propertyId || null,
+          unitId: data?.unitId || null,
+          createdAt: now,
+          updatedAt: now,
+          amountCents: 0,
+          currency: "CAD",
+          status: "external_pending",
+          paymentStatus: "external_pending",
+          finalized: false,
+          finalizedAt: null,
+          lastStripeEventId: null,
+          amountTotalCents: 0,
+          screeningTier,
+          addons,
+          scoreAddOn: false,
+          scoreAddOnCents: 0,
+          expeditedAddOn: false,
+          expeditedAddOnCents: 0,
+          provider: "transunion_referral",
+          inquiryType: "soft",
+          providerRequestId: null,
+          paidAt: null,
+          error: null,
+          serviceLevel,
+          aiVerification: false,
+          aiPriceCents: 0,
+          totalAmountCents: 0,
+          reviewerStatus: "EXTERNAL_PENDING",
+          stripeSessionId: null,
+          stripeCheckoutSessionId: null,
+          stripePaymentIntentId: null,
+          stripeChargeId: null,
+          consentGiven: true,
+          consentTimestamp: consent.timestamp,
+          consentVersion: consent.version,
+          consentTextHash: consent.textHash,
+          externalRedirectUrl: referralUrl,
+          externalProvider: "transunion",
+        };
+        await orderRef.set(orderPayload, { merge: true });
+        await enqueueScreeningJob({
+          orderId,
+          applicationId: id,
+          landlordId: data?.landlordId || landlordId,
+          provider: "transunion_referral",
+        });
+        await db.collection("rentalApplications").doc(id).set(
+          {
+            screeningStatus: "external_pending",
+            screeningOrderId: orderId,
+            screeningProvider: "transunion_referral",
+            screeningLastUpdatedAt: now,
+            screening: {
+              ...(data?.screening || {}),
+              status: "external_pending",
+              provider: "transunion_referral",
+              orderId,
+            },
+            updatedAt: now,
+          },
+          { merge: true }
+        );
+        logTuReferralEvent({
+          orderId,
+          applicationId: id,
+          landlordId: String(landlordId),
+          redirectUrl: referralUrl,
+        });
+        return res.json({
+          ok: true,
+          mode: "transunion_referral",
+          orderId,
+          applicationId: id,
+          redirectUrl: referralUrl,
+          checkoutUrl: referralUrl,
+        });
+      }
+
       let stripe: any;
       try {
         stripe = getStripeClient();
@@ -1389,9 +1558,11 @@ router.post(
       }
 
       const providerHealth = await getScreeningProviderHealth();
+      const referralMode = isTransUnionReferralMode();
       const allowMockOverride = shouldUseMockCheckoutOverride({ role, seedKey: applicationId });
       if (
         process.env.NODE_ENV === "production" &&
+        !referralMode &&
         (!providerHealth.configured || !providerHealth.preflightOk) &&
         !allowMockOverride
       ) {
@@ -1412,6 +1583,7 @@ router.post(
       }
       if (
         process.env.NODE_ENV === "production" &&
+        !referralMode &&
         (!providerHealth.configured || !providerHealth.preflightOk) &&
         allowMockOverride
       ) {
@@ -1420,6 +1592,111 @@ router.post(
 
       const { screeningTier, addons, serviceLevel, scoreAddOn, expeditedAddOn, pricing } =
         resolvePricingInput(body);
+
+      if (isTransUnionReferralMode()) {
+        const now = Date.now();
+        const orderRef = db.collection("screeningOrders").doc();
+        const orderId = orderRef.id;
+        const rawReturnTo = String(body?.returnTo || "/dashboard");
+        const returnTo = rawReturnTo.startsWith("/") ? rawReturnTo : "/dashboard";
+        const referralUrl = buildTransUnionReferralUrl({
+          landlordId: String(landlordId),
+          applicationId: applicationId || null,
+          orderId,
+          returnTo,
+          env: process.env.NODE_ENV || "development",
+        });
+
+        const orderPayload: any = {
+          id: orderId,
+          referenceId: buildReferenceId(orderId),
+          landlordId,
+          applicationId: applicationId || null,
+          propertyId: data?.propertyId || propertyIdInput || null,
+          unitId: data?.unitId || unitIdInput || null,
+          createdAt: now,
+          updatedAt: now,
+          amountCents: 0,
+          currency: "CAD",
+          status: "external_pending",
+          paymentStatus: "external_pending",
+          finalized: false,
+          finalizedAt: null,
+          lastStripeEventId: null,
+          amountTotalCents: 0,
+          screeningTier,
+          addons,
+          scoreAddOn: false,
+          scoreAddOnCents: 0,
+          expeditedAddOn: false,
+          expeditedAddOnCents: 0,
+          provider: "transunion_referral",
+          inquiryType: "soft",
+          providerRequestId: null,
+          paidAt: null,
+          error: null,
+          serviceLevel,
+          aiVerification: false,
+          aiPriceCents: 0,
+          totalAmountCents: 0,
+          reviewerStatus: "EXTERNAL_PENDING",
+          stripeSessionId: null,
+          stripeCheckoutSessionId: null,
+          stripePaymentIntentId: null,
+          stripeChargeId: null,
+          tenantInviteTokenHash: null,
+          tenantInviteCreatedAt: null,
+          tenantInviteSentAt: null,
+          tenantName: null,
+          tenantEmail: null,
+          consentGiven: applicationId ? true : null,
+          consentTimestamp: applicationId ? consent.timestamp : null,
+          consentVersion: applicationId ? consent.version : null,
+          consentTextHash: applicationId ? consent.textHash : null,
+          externalRedirectUrl: referralUrl,
+          externalProvider: "transunion",
+        };
+
+        await orderRef.set(orderPayload, { merge: true });
+        if (applicationId) {
+          await enqueueScreeningJob({
+            orderId,
+            applicationId,
+            landlordId: data?.landlordId || landlordId,
+            provider: "transunion_referral",
+          });
+          await db.collection("rentalApplications").doc(applicationId).set(
+            {
+              screeningStatus: "external_pending",
+              screeningOrderId: orderId,
+              screeningProvider: "transunion_referral",
+              screeningLastUpdatedAt: now,
+              screening: {
+                ...(data?.screening || {}),
+                status: "external_pending",
+                provider: "transunion_referral",
+                orderId,
+              },
+              updatedAt: now,
+            },
+            { merge: true }
+          );
+        }
+        logTuReferralEvent({
+          orderId,
+          applicationId: applicationId || "manual",
+          landlordId: String(landlordId),
+          redirectUrl: referralUrl,
+        });
+        return res.json({
+          ok: true,
+          mode: "transunion_referral",
+          orderId,
+          applicationId: applicationId || null,
+          redirectUrl: referralUrl,
+          checkoutUrl: referralUrl,
+        });
+      }
 
       let stripe: any;
       try {
@@ -2048,9 +2325,11 @@ router.post(
       }
 
       const providerHealth = await getScreeningProviderHealth();
+      const referralMode = isTransUnionReferralMode();
       const allowMockOverride = shouldUseMockCheckoutOverride({ role, seedKey: id });
       if (
         process.env.NODE_ENV === "production" &&
+        !referralMode &&
         (!providerHealth.configured || !providerHealth.preflightOk) &&
         !allowMockOverride
       ) {
@@ -2071,6 +2350,7 @@ router.post(
       }
       if (
         process.env.NODE_ENV === "production" &&
+        !referralMode &&
         (!providerHealth.configured || !providerHealth.preflightOk) &&
         allowMockOverride
       ) {
@@ -2085,6 +2365,101 @@ router.post(
       }
       const { screeningTier, addons, serviceLevel, scoreAddOn, expeditedAddOn, pricing } =
         resolvePricingInput(body);
+
+      if (isTransUnionReferralMode()) {
+        const now = Date.now();
+        const orderRef = db.collection("screeningOrders").doc();
+        const orderId = orderRef.id;
+        const rawReturnTo = String(body?.returnTo || "/dashboard");
+        const returnTo = rawReturnTo.startsWith("/") ? rawReturnTo : "/dashboard";
+        const referralUrl = buildTransUnionReferralUrl({
+          landlordId: String(landlordId),
+          applicationId: id,
+          orderId,
+          returnTo,
+          env: process.env.NODE_ENV || "development",
+        });
+
+        await orderRef.set(
+          {
+            id: orderId,
+            referenceId: buildReferenceId(orderId),
+            landlordId,
+            applicationId: id,
+            propertyId: data?.propertyId || null,
+            unitId: data?.unitId || null,
+            createdAt: now,
+            updatedAt: now,
+            amountCents: 0,
+            currency: "CAD",
+            status: "external_pending",
+            paymentStatus: "external_pending",
+            finalized: false,
+            finalizedAt: null,
+            lastStripeEventId: null,
+            amountTotalCents: 0,
+            screeningTier,
+            addons,
+            scoreAddOn: false,
+            scoreAddOnCents: 0,
+            expeditedAddOn: false,
+            expeditedAddOnCents: 0,
+            provider: "transunion_referral",
+            inquiryType: "soft",
+            providerRequestId: null,
+            paidAt: null,
+            error: null,
+            serviceLevel,
+            aiVerification: false,
+            aiPriceCents: 0,
+            totalAmountCents: 0,
+            reviewerStatus: "EXTERNAL_PENDING",
+            consentGiven: true,
+            consentTimestamp: consent.timestamp,
+            consentVersion: consent.version,
+            consentTextHash: consent.textHash,
+            externalRedirectUrl: referralUrl,
+            externalProvider: "transunion",
+          },
+          { merge: true }
+        );
+        await enqueueScreeningJob({
+          orderId,
+          applicationId: id,
+          landlordId: data?.landlordId || landlordId,
+          provider: "transunion_referral",
+        });
+        await db.collection("rentalApplications").doc(id).set(
+          {
+            screeningStatus: "external_pending",
+            screeningOrderId: orderId,
+            screeningProvider: "transunion_referral",
+            screeningLastUpdatedAt: now,
+            screening: {
+              ...(data?.screening || {}),
+              status: "external_pending",
+              provider: "transunion_referral",
+              orderId,
+            },
+            updatedAt: now,
+          },
+          { merge: true }
+        );
+        logTuReferralEvent({
+          orderId,
+          applicationId: id,
+          landlordId: String(landlordId),
+          redirectUrl: referralUrl,
+        });
+        return res.json({
+          ok: true,
+          mode: "transunion_referral",
+          orderId,
+          applicationId: id,
+          redirectUrl: referralUrl,
+        });
+      }
+
       const now = Date.now();
       const orderRef = db.collection("screeningOrders").doc();
       const orderId = orderRef.id;
