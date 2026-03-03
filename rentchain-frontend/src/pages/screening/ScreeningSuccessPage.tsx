@@ -11,6 +11,10 @@ import {
   reconcileScreeningOrder,
   type ScreeningOrderStatusView,
 } from "../../api/screeningOrdersApi";
+import {
+  getScreeningJobStatus,
+  type ScreeningJobStatusView,
+} from "../../api/screeningJobsApi";
 import { ScreeningStatusBadge } from "../../components/screening/ScreeningStatusBadge";
 
 const ScreeningSuccessPage: React.FC = () => {
@@ -22,6 +26,11 @@ const ScreeningSuccessPage: React.FC = () => {
   const returnTo = rawReturnTo.startsWith("/") ? rawReturnTo : "/dashboard";
   const [status, setStatus] = useState<ScreeningPipeline | null>(null);
   const [orderStatus, setOrderStatus] = useState<ScreeningOrderStatusView | null>(null);
+  const [jobStatus, setJobStatus] = useState<ScreeningJobStatusView | null>(null);
+  const [jobStatusState, setJobStatusState] = useState<
+    "processing" | "queued" | "running" | "provider_calling" | "completed" | "failed"
+  >("processing");
+  const [jobError, setJobError] = useState<string | null>(null);
   const [syncState, setSyncState] = useState<"processing" | "paid" | "failed" | "refunded" | "timeout">(
     "processing"
   );
@@ -31,11 +40,19 @@ const ScreeningSuccessPage: React.FC = () => {
   const reconcileCountRef = useRef(0);
   const pollStartRef = useRef(0);
   const timerRef = useRef<number | null>(null);
+  const jobTimerRef = useRef<number | null>(null);
+  const jobPollStartRef = useRef(0);
 
   const clearTimer = () => {
     if (timerRef.current) {
       window.clearTimeout(timerRef.current);
       timerRef.current = null;
+    }
+  };
+  const clearJobTimer = () => {
+    if (jobTimerRef.current) {
+      window.clearTimeout(jobTimerRef.current);
+      jobTimerRef.current = null;
     }
   };
 
@@ -44,6 +61,7 @@ const ScreeningSuccessPage: React.FC = () => {
     return () => {
       mountedRef.current = false;
       clearTimer();
+      clearJobTimer();
     };
   }, []);
 
@@ -105,6 +123,37 @@ const ScreeningSuccessPage: React.FC = () => {
     setError(res.error || "Unable to reconcile payment yet.");
   };
 
+  const loadJobStatus = async (): Promise<
+    "processing" | "queued" | "running" | "provider_calling" | "completed" | "failed" | null
+  > => {
+    const resolvedOrderId = orderStatus?.orderId || orderId || "";
+    const resolvedApplicationId = applicationId || orderStatus?.applicationId || "";
+    if (!resolvedOrderId && !resolvedApplicationId) return null;
+    try {
+      const res = await getScreeningJobStatus({
+        orderId: resolvedOrderId || undefined,
+        applicationId: resolvedApplicationId || undefined,
+      });
+      if (!mountedRef.current) return null;
+      if (!res?.ok || !res?.data) return null;
+      setJobStatus(res.data);
+      setJobStatusState(res.data.status);
+      setJobError(null);
+      return res.data.status;
+    } catch (err: any) {
+      if (!mountedRef.current) return null;
+      const message = String(err?.message || "").toLowerCase();
+      if (message.includes("not_found")) {
+        setJobStatus(null);
+        setJobStatusState("queued");
+        setJobError(null);
+        return "queued";
+      }
+      setJobError("Unable to fetch screening job status.");
+      return null;
+    }
+  };
+
   useEffect(() => {
     if (!applicationId && !orderId) {
       setLoading(false);
@@ -154,6 +203,72 @@ const ScreeningSuccessPage: React.FC = () => {
     };
   }, [applicationId, orderId]);
 
+  useEffect(() => {
+    const pipelineStatus = String(status?.status || "").toLowerCase();
+    const shouldPollJob =
+      syncState === "paid" ||
+      pipelineStatus === "processing" ||
+      pipelineStatus === "in_progress" ||
+      pipelineStatus === "queued" ||
+      pipelineStatus === "running" ||
+      pipelineStatus === "paid";
+
+    if (!shouldPollJob || (!applicationId && !orderId && !orderStatus?.orderId)) {
+      return;
+    }
+
+    let active = true;
+    jobPollStartRef.current = Date.now();
+    setJobStatusState((prev) => (prev === "completed" || prev === "failed" ? prev : "processing"));
+
+    const tickJob = async () => {
+      if (!active || !mountedRef.current) return;
+      const latest = await loadJobStatus();
+      if (!active || !mountedRef.current) return;
+      if (latest === "completed" || latest === "failed") {
+        clearJobTimer();
+        return;
+      }
+
+      const elapsed = Date.now() - jobPollStartRef.current;
+      if (elapsed >= 60000) {
+        clearJobTimer();
+        return;
+      }
+
+      jobTimerRef.current = window.setTimeout(tickJob, 3000);
+    };
+
+    void tickJob();
+    return () => {
+      active = false;
+      clearJobTimer();
+    };
+  }, [applicationId, orderId, orderStatus?.orderId, status?.status, syncState, orderStatus?.applicationId]);
+
+  const jobPipelineText = useMemo(() => {
+    switch (jobStatusState) {
+      case "queued":
+        return "Screening queued";
+      case "running":
+        return "Screening started";
+      case "provider_calling":
+        return "Contacting provider";
+      case "completed":
+        return "Screening complete";
+      case "failed":
+        return "Screening failed";
+      default:
+        return "Screening processing";
+    }
+  }, [jobStatusState]);
+
+  const shortJobErrorMessage = useMemo(() => {
+    const raw = String(jobStatus?.lastError?.message || "").trim();
+    if (!raw) return null;
+    return raw.length > 120 ? `${raw.slice(0, 120)}...` : raw;
+  }, [jobStatus?.lastError?.message]);
+
   const orderBadge = useMemo(() => {
     if (syncState === "paid") return { label: "Payment received", tone: "success" as const };
     if (syncState === "failed") return { label: "Payment failed", tone: "danger" as const };
@@ -181,16 +296,28 @@ const ScreeningSuccessPage: React.FC = () => {
           </div>
           {loading ? <div style={{ color: text.subtle, fontSize: "0.85rem" }}>Checking payment status…</div> : null}
           {error ? <div style={{ color: "#b42318", fontSize: "0.85rem" }}>{error}</div> : null}
-          {syncState === "timeout" ? (
+          {syncState === "timeout" || jobStatusState === "failed" ? (
             <div style={{ display: "flex", gap: spacing.xs, alignItems: "center" }}>
-              <Button type="button" variant="secondary" onClick={() => void runReconcile()}>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={async () => {
+                  await runReconcile();
+                  await loadJobStatus();
+                }}
+              >
                 Refresh status
               </Button>
             </div>
           ) : null}
-          {status?.status ? (
-            <div style={{ color: text.subtle, fontSize: "0.85rem" }}>Pipeline: {status.status}</div>
+          <div style={{ color: text.subtle, fontSize: "0.85rem" }}>
+            Pipeline: {jobPipelineText}
+            {jobStatus?.status ? ` (${jobStatus.status})` : ""}
+          </div>
+          {jobStatusState === "failed" && shortJobErrorMessage ? (
+            <div style={{ color: "#b42318", fontSize: "0.85rem" }}>{shortJobErrorMessage}</div>
           ) : null}
+          {jobError ? <div style={{ color: text.subtle, fontSize: "0.8rem" }}>{jobError}</div> : null}
           <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
             {applicationId ? (
               <Button
