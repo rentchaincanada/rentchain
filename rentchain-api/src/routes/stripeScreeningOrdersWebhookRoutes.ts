@@ -303,6 +303,7 @@ export const stripeWebhookHandler = async (req: StripeWebhookRequest, res: Respo
       let orderId: string | undefined;
       let sessionId: string | undefined;
       let paymentIntentId: string | undefined;
+      let stripeChargeId: string | undefined;
       let amountTotalCents: number | undefined;
       let currency: string | undefined;
       let landlordId: string | undefined;
@@ -314,6 +315,7 @@ export const stripeWebhookHandler = async (req: StripeWebhookRequest, res: Respo
         applicationId = pi.metadata?.applicationId;
         landlordId = pi.metadata?.landlordId;
         paymentIntentId = pi.id;
+        stripeChargeId = typeof pi.latest_charge === "string" ? pi.latest_charge : undefined;
         amountTotalCents = typeof pi.amount_received === "number" ? pi.amount_received : undefined;
         currency = pi.currency;
 
@@ -362,6 +364,12 @@ export const stripeWebhookHandler = async (req: StripeWebhookRequest, res: Respo
         landlordId = session.metadata?.landlordId;
         sessionId = session.id;
         paymentIntentId = typeof session.payment_intent === "string" ? session.payment_intent : undefined;
+        stripeChargeId =
+          typeof session.payment_intent === "object" && session.payment_intent
+            ? typeof (session.payment_intent as any).latest_charge === "string"
+              ? String((session.payment_intent as any).latest_charge)
+              : undefined
+            : undefined;
         amountTotalCents = typeof session.amount_total === "number" ? session.amount_total : undefined;
         currency = session.currency || undefined;
 
@@ -402,6 +410,7 @@ export const stripeWebhookHandler = async (req: StripeWebhookRequest, res: Respo
         orderId,
         sessionId,
         paymentIntentId,
+        stripeChargeId,
         amountTotalCents,
         currency,
         landlordId,
