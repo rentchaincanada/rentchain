@@ -1,24 +1,37 @@
 import { db } from "../config/firebase";
 
-type ScreeningJobStatus = "QUEUED" | "RUNNING" | "COMPLETE" | "FAILED";
+export type ScreeningJobStatus = "queued" | "running" | "provider_calling" | "completed" | "failed";
 
 export type ScreeningJob = {
   id: string;
   orderId: string;
   applicationId: string;
   landlordId: string | null;
-  provider: "STUB" | "VERIFIED";
+  provider: string | null;
   status: ScreeningJobStatus;
-  createdAt: number;
+  attempt: number;
+  queuedAt: number;
   startedAt: number | null;
-  finishedAt: number | null;
-  attempts: number;
-  lastError: string | null;
+  providerCalledAt: number | null;
+  completedAt: number | null;
+  failedAt: number | null;
+  lastError: { code?: string; message?: string } | null;
+  updatedAt: number;
   lockOwner: string | null;
   lockExpiresAt: number | null;
+  traceId?: string | null;
+  lastStep?: string | null;
+  retryEligible?: boolean;
 };
 
-const DEFAULT_PROVIDER: ScreeningJob["provider"] = "STUB";
+const DEFAULT_PROVIDER = "stub";
+const STATUS_RANK: Record<ScreeningJobStatus, number> = {
+  queued: 1,
+  running: 2,
+  provider_calling: 3,
+  completed: 4,
+  failed: 4,
+};
 
 function nowMs() {
   return Date.now();
@@ -28,11 +41,90 @@ function lockOwnerId() {
   return process.env.K_REVISION || "local";
 }
 
+function normalizeStatus(value: unknown): ScreeningJobStatus {
+  const raw = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (raw === "queued") return "queued";
+  if (raw === "running") return "running";
+  if (raw === "provider_calling") return "provider_calling";
+  if (raw === "completed" || raw === "complete") return "completed";
+  if (raw === "failed") return "failed";
+
+  const legacy = String(value || "").trim().toUpperCase();
+  if (legacy === "QUEUED") return "queued";
+  if (legacy === "RUNNING") return "running";
+  if (legacy === "COMPLETE") return "completed";
+  if (legacy === "FAILED") return "failed";
+  return "queued";
+}
+
+function normalizeProvider(value: unknown): string | null {
+  const raw = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (!raw) return null;
+  if (raw === "stub") return "stub";
+  if (raw === "verified") return "verified";
+  return raw;
+}
+
+export function canProgressJobStatus(
+  current: ScreeningJobStatus,
+  next: ScreeningJobStatus,
+  allowRetry = false
+): boolean {
+  if (current === next) return true;
+  if (current === "completed") return false;
+  if (current === "failed") {
+    return allowRetry && next === "queued";
+  }
+  return STATUS_RANK[next] >= STATUS_RANK[current];
+}
+
+export async function setScreeningJobStatus(args: {
+  orderId: string;
+  status: ScreeningJobStatus;
+  patch?: Record<string, unknown>;
+  allowRetry?: boolean;
+}) {
+  const orderId = String(args.orderId || "").trim();
+  if (!orderId) return { ok: false as const, error: "missing_order_id" as const };
+
+  const jobRef = db.collection("screeningJobs").doc(orderId);
+  const now = nowMs();
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(jobRef);
+    if (!snap.exists) {
+      return { ok: false as const, error: "not_found" as const };
+    }
+
+    const existing = (snap.data() || {}) as any;
+    const currentStatus = normalizeStatus(existing.status);
+    const nextStatus = normalizeStatus(args.status);
+    const canProgress = canProgressJobStatus(currentStatus, nextStatus, Boolean(args.allowRetry));
+    if (!canProgress) {
+      return { ok: true as const, applied: false, status: currentStatus };
+    }
+
+    tx.set(
+      jobRef,
+      {
+        status: nextStatus,
+        updatedAt: now,
+        ...(args.patch || {}),
+      },
+      { merge: true }
+    );
+    return { ok: true as const, applied: true, status: nextStatus };
+  });
+}
+
 export async function enqueueScreeningJob(args: {
   orderId: string;
   applicationId: string;
   landlordId?: string | null;
-  provider?: ScreeningJob["provider"];
+  provider?: string | null;
 }) {
   const orderId = String(args.orderId || "").trim();
   const applicationId = String(args.applicationId || "").trim();
@@ -40,37 +132,48 @@ export async function enqueueScreeningJob(args: {
     return { ok: false, error: "missing_order_or_application" as const };
   }
 
-  const existing = await db
-    .collection("screeningJobs")
-    .where("orderId", "==", orderId)
-    .where("status", "in", ["QUEUED", "RUNNING"])
-    .limit(1)
-    .get();
-  if (!existing.empty) {
-    return { ok: true, alreadyQueued: true as const };
-  }
+  const jobRef = db.collection("screeningJobs").doc(orderId);
+  const queuedAt = nowMs();
+  const result = await db.runTransaction(async (tx) => {
+    const existingSnap = await tx.get(jobRef);
+    const existing = existingSnap.exists ? ((existingSnap.data() || {}) as any) : null;
+    const existingStatus = existing ? normalizeStatus(existing.status) : null;
+    if (existingStatus && (existingStatus === "queued" || existingStatus === "running" || existingStatus === "provider_calling")) {
+      return { ok: true as const, alreadyQueued: true as const, jobId: orderId };
+    }
+    if (existingStatus && (existingStatus === "completed" || existingStatus === "failed")) {
+      return { ok: true as const, alreadyQueued: true as const, jobId: orderId };
+    }
 
-  const jobRef = db.collection("screeningJobs").doc();
-  const createdAt = nowMs();
-  const job: ScreeningJob = {
-    id: jobRef.id,
-    orderId,
-    applicationId,
-    landlordId: args.landlordId ?? null,
-    provider: args.provider || DEFAULT_PROVIDER,
-    status: "QUEUED",
-    createdAt,
-    startedAt: null,
-    finishedAt: null,
-    attempts: 0,
-    lastError: null,
-    lockOwner: null,
-    lockExpiresAt: null,
-  };
+    const attempt = Number(existing?.attempt || 0) > 0 ? Number(existing.attempt) : 1;
+    const job: ScreeningJob = {
+      id: orderId,
+      orderId,
+      applicationId,
+      landlordId: args.landlordId ?? existing?.landlordId ?? null,
+      provider: normalizeProvider(args.provider || existing?.provider || DEFAULT_PROVIDER),
+      status: "queued",
+      attempt,
+      queuedAt: Number(existing?.queuedAt || queuedAt),
+      startedAt: null,
+      providerCalledAt: null,
+      completedAt: null,
+      failedAt: null,
+      lastError: null,
+      updatedAt: queuedAt,
+      lockOwner: null,
+      lockExpiresAt: null,
+      traceId: existing?.traceId || null,
+      lastStep: "queued",
+      retryEligible: existing?.retryEligible ?? false,
+    };
 
-  await jobRef.set(job, { merge: true });
-  console.log("[screening-jobs] enqueue", { orderId, jobId: jobRef.id });
-  return { ok: true, jobId: jobRef.id };
+    tx.set(jobRef, job, { merge: true });
+    return { ok: true as const, jobId: orderId };
+  });
+
+  console.log("[screening-jobs] enqueue", { orderId, jobId: orderId, alreadyQueued: Boolean((result as any).alreadyQueued) });
+  return result;
 }
 
 export async function claimNextJob(args?: { maxLockMs?: number }) {
@@ -80,8 +183,8 @@ export async function claimNextJob(args?: { maxLockMs?: number }) {
 
   const snap = await db
     .collection("screeningJobs")
-    .where("status", "==", "QUEUED")
-    .orderBy("createdAt", "asc")
+    .where("status", "==", "queued")
+    .orderBy("queuedAt", "asc")
     .limit(1)
     .get();
   if (snap.empty) {
@@ -92,16 +195,19 @@ export async function claimNextJob(args?: { maxLockMs?: number }) {
   return db.runTransaction(async (tx) => {
     const fresh = await tx.get(jobRef);
     if (!fresh.exists) return { ok: true, job: null };
-    const data = fresh.data() as ScreeningJob;
-    if (data.status !== "QUEUED") return { ok: true, job: null };
+    const data = (fresh.data() || {}) as any;
+    const status = normalizeStatus(data.status);
+    if (status !== "queued") return { ok: true, job: null };
 
-    const attempts = (data.attempts || 0) + 1;
+    const attempt = (Number(data.attempt || 0) || 0) + 1;
     tx.set(
       jobRef,
       {
-        status: "RUNNING",
+        status: "running",
         startedAt: now,
-        attempts,
+        attempt,
+        updatedAt: now,
+        lastStep: "running",
         lockOwner,
         lockExpiresAt: now + maxLockMs,
       },
@@ -109,7 +215,17 @@ export async function claimNextJob(args?: { maxLockMs?: number }) {
     );
 
     console.log("[screening-jobs] claim", { jobId: jobRef.id });
-    return { ok: true, job: { ...data, id: jobRef.id, status: "RUNNING", attempts } as ScreeningJob };
+    return {
+      ok: true,
+      job: {
+        ...data,
+        id: jobRef.id,
+        orderId: String(data.orderId || jobRef.id),
+        status: "running",
+        attempt,
+        provider: normalizeProvider(data.provider),
+      } as ScreeningJob,
+    };
   });
 }
 
@@ -120,6 +236,17 @@ export async function runJob(job: ScreeningJob) {
   const jobRef = db.collection("screeningJobs").doc(job.id);
 
   try {
+    await setScreeningJobStatus({
+      orderId: job.orderId,
+      status: "running",
+      patch: {
+        startedAt: now,
+        lockOwner: lockOwnerId(),
+        lockExpiresAt: now + 5 * 60 * 1000,
+        lastStep: "running",
+      },
+    });
+
     await orderRef.set(
       {
         processingStatus: "IN_PROGRESS",
@@ -139,6 +266,17 @@ export async function runJob(job: ScreeningJob) {
       },
       { merge: true }
     );
+
+    const providerCalledAt = nowMs();
+    await setScreeningJobStatus({
+      orderId: job.orderId,
+      status: "provider_calling",
+      patch: {
+        providerCalledAt,
+        updatedAt: providerCalledAt,
+        lastStep: "provider_calling",
+      },
+    });
 
     const finishedAt = nowMs();
     await orderRef.set(
@@ -163,11 +301,15 @@ export async function runJob(job: ScreeningJob) {
 
     await jobRef.set(
       {
-        status: "COMPLETE",
-        finishedAt,
+        status: "completed",
+        completedAt: finishedAt,
+        failedAt: null,
         lockOwner: null,
         lockExpiresAt: null,
         lastError: null,
+        updatedAt: finishedAt,
+        lastStep: "completed",
+        retryEligible: false,
       },
       { merge: true }
     );
@@ -175,20 +317,30 @@ export async function runJob(job: ScreeningJob) {
     console.log("[screening-jobs] complete", { jobId: job.id });
     return { ok: true };
   } catch (err: any) {
-    const message = err?.message || "UNKNOWN_ERROR";
-    const attempts = (job.attempts || 0) + 1;
-    const status = attempts >= 5 ? "FAILED" : "QUEUED";
+    const message = String(err?.message || "UNKNOWN_ERROR");
+    const code = String(err?.code || "provider_error");
+    const failedAt = nowMs();
     await jobRef.set(
       {
-        status,
-        lastError: message,
+        status: "failed",
+        failedAt,
+        lastError: { code, message: message.slice(0, 256) },
         lockOwner: null,
         lockExpiresAt: null,
-        attempts,
+        updatedAt: failedAt,
+        lastStep: "failed",
+        retryEligible: true,
       },
       { merge: true }
     );
-    console.error("[screening-jobs] failed", { jobId: job.id, attempts, error: message });
+    await orderRef.set(
+      {
+        processingStatus: "FAILED",
+        processingFailedAt: failedAt,
+      },
+      { merge: true }
+    );
+    console.error("[screening-jobs] failed", { jobId: job.id, error: message, code });
     return { ok: false, error: message };
   }
 }
