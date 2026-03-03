@@ -7,6 +7,7 @@ export type FinalizeStripeArgs = {
   orderId?: string;
   sessionId?: string;
   paymentIntentId?: string;
+  stripeChargeId?: string;
   amountTotalCents?: number;
   currency?: string;
   applicationId?: string;
@@ -78,9 +79,10 @@ export async function finalizeStripePayment(
         createdAt: nowMs(),
         type: normStr(args.eventType) || "unknown",
         orderId: normStr(args.orderId) || null,
-        sessionId: normStr(args.sessionId) || null,
-        paymentIntentId: normStr(args.paymentIntentId) || null,
-        resolved: false,
+      sessionId: normStr(args.sessionId) || null,
+      paymentIntentId: normStr(args.paymentIntentId) || null,
+      stripeChargeId: normStr(args.stripeChargeId) || null,
+      resolved: false,
       },
       { merge: true }
     );
@@ -114,7 +116,10 @@ export async function finalizeStripePayment(
     }
 
     order = orderSnap.data() || {};
-    alreadyFinalized = Boolean(order.finalized) || order.paymentStatus === "paid";
+    const canonicalStatus = String(order?.status || "").toLowerCase();
+    const mirroredPaymentStatus = String(order?.paymentStatus || "").toLowerCase();
+    alreadyFinalized =
+      Boolean(order.finalized) || canonicalStatus === "paid" || mirroredPaymentStatus === "paid";
 
     const applicationId = normStr(args.applicationId) || normStr(order.applicationId);
     if (applicationId) {
@@ -131,7 +136,10 @@ export async function finalizeStripePayment(
         orderRef: orderRef.path,
         orderId: orderRef.id,
         sessionId: normStr(args.sessionId) || order.stripeSessionId || null,
+        stripeCheckoutSessionId:
+          normStr(args.sessionId) || order.stripeCheckoutSessionId || order.stripeSessionId || null,
         paymentIntentId: normStr(args.paymentIntentId) || order.stripePaymentIntentId || null,
+        stripeChargeId: normStr(args.stripeChargeId) || order.stripeChargeId || null,
       },
       { merge: true }
     );
@@ -144,6 +152,9 @@ export async function finalizeStripePayment(
       const sid = normStr(args.sessionId);
       if (pi && !order.stripePaymentIntentId) patch.stripePaymentIntentId = pi;
       if (sid && !order.stripeSessionId) patch.stripeSessionId = sid;
+      if (sid && !order.stripeCheckoutSessionId) patch.stripeCheckoutSessionId = sid;
+      const chargeId = normStr(args.stripeChargeId);
+      if (chargeId && !order.stripeChargeId) patch.stripeChargeId = chargeId;
       if (currency && !order.currency) patch.currency = currency;
       if (amountTotalCents != null && order.amountTotalCents == null) {
         patch.amountTotalCents = amountTotalCents;
@@ -163,13 +174,17 @@ export async function finalizeStripePayment(
     tx.set(
       orderRef,
       {
+        status: "paid",
         paymentStatus: "paid",
         finalized: true,
         paidAt: finalizedAt,
         finalizedAt,
         lastStripeEventId: eventId,
         stripeSessionId: normStr(args.sessionId) || order.stripeSessionId || null,
+        stripeCheckoutSessionId:
+          normStr(args.sessionId) || order.stripeCheckoutSessionId || order.stripeSessionId || null,
         stripePaymentIntentId: normStr(args.paymentIntentId) || order.stripePaymentIntentId || null,
+        stripeChargeId: normStr(args.stripeChargeId) || order.stripeChargeId || null,
         amountTotalCents: amountTotalCents ?? order.amountTotalCents ?? null,
         currency: currency ?? order.currency ?? null,
         updatedAt: finalizedAt,

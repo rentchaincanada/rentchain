@@ -146,6 +146,69 @@ function createCorrelationId(): string {
   return randomBytes(6).toString("hex");
 }
 
+type CanonicalScreeningOrderStatus = "unpaid" | "paid" | "processing" | "failed" | "refunded";
+
+function normalizeOrderStatus(order: any): CanonicalScreeningOrderStatus {
+  const rawStatus = String(order?.status || "").trim().toLowerCase();
+  const paymentStatus = String(order?.paymentStatus || "").trim().toLowerCase();
+  if (
+    rawStatus === "paid" ||
+    rawStatus === "complete" ||
+    rawStatus === "completed" ||
+    rawStatus === "report_ready" ||
+    paymentStatus === "paid" ||
+    order?.finalized === true
+  ) {
+    return "paid";
+  }
+  if (rawStatus === "refunded" || paymentStatus === "refunded") {
+    return "refunded";
+  }
+  if (
+    rawStatus === "processing" ||
+    rawStatus === "kba_in_progress" ||
+    rawStatus === "in_progress"
+  ) {
+    return "processing";
+  }
+  if (rawStatus === "failed" || rawStatus === "kba_failed" || paymentStatus === "failed") {
+    return "failed";
+  }
+  return "unpaid";
+}
+
+function normalizeOrderView(orderId: string | null, order: any) {
+  const status = normalizeOrderStatus(order);
+  return {
+    applicationId: order?.applicationId || null,
+    orderId: orderId || null,
+    status,
+    paidAt: order?.paidAt || null,
+    amountTotalCents: Number(order?.amountTotalCents || order?.totalAmountCents || 0) || 0,
+    currency: String(order?.currency || "cad").toLowerCase(),
+    stripePaymentIntentId: order?.stripePaymentIntentId || null,
+    stripeCheckoutSessionId: order?.stripeCheckoutSessionId || order?.stripeSessionId || null,
+    lastUpdatedAt: order?.updatedAt || order?.finalizedAt || order?.createdAt || null,
+  };
+}
+
+async function getLatestOrderByApplicationId(applicationId: string) {
+  const snap = await db
+    .collection("screeningOrders")
+    .where("applicationId", "==", applicationId)
+    .limit(20)
+    .get();
+  if (snap.empty) return null;
+  const docs = snap.docs.slice().sort((a, b) => {
+    const aData = a.data() as any;
+    const bData = b.data() as any;
+    const aTs = Number(aData?.updatedAt || aData?.createdAt || 0);
+    const bTs = Number(bData?.updatedAt || bData?.createdAt || 0);
+    return bTs - aTs;
+  });
+  return docs[0] || null;
+}
+
 function resolveProviderLabel(value?: string | null) {
   const raw = String(value || "").toLowerCase();
   if (!raw) return "TransUnion";
@@ -983,7 +1046,7 @@ router.post(
           createdAt: now,
           amountCents: pricing.baseAmountCents,
           currency: "CAD",
-          status: "CREATED",
+          status: "unpaid",
           paymentStatus: "unpaid",
           finalized: false,
           finalizedAt: null,
@@ -1006,7 +1069,9 @@ router.post(
           totalAmountCents: pricing.totalAmountCents,
           reviewerStatus: "QUEUED",
           stripeSessionId: null,
-        stripePaymentIntentId: null,
+          stripeCheckoutSessionId: null,
+          stripePaymentIntentId: null,
+          stripeChargeId: null,
         consentGiven: true,
         consentTimestamp: consent.timestamp,
         consentVersion: consent.version,
@@ -1125,7 +1190,7 @@ router.post(
       });
 
       await orderRef.set(
-        { stripeSessionId: session.id },
+        { stripeSessionId: session.id, stripeCheckoutSessionId: session.id, updatedAt: Date.now() },
         { merge: true }
       );
 
@@ -1357,7 +1422,7 @@ router.post(
         createdAt: now,
         amountCents: pricing.baseAmountCents,
         currency: "CAD",
-        status: "CREATED",
+        status: "unpaid",
         paymentStatus: "unpaid",
         finalized: false,
         finalizedAt: null,
@@ -1380,7 +1445,9 @@ router.post(
         totalAmountCents: pricing.totalAmountCents,
         reviewerStatus: "QUEUED",
         stripeSessionId: null,
+        stripeCheckoutSessionId: null,
         stripePaymentIntentId: null,
+        stripeChargeId: null,
         tenantInviteTokenHash: tokenHash,
         tenantInviteCreatedAt: now,
         tenantInviteSentAt: null,
@@ -1491,7 +1558,10 @@ router.post(
         },
       });
 
-      await orderRef.set({ stripeSessionId: session.id }, { merge: true });
+      await orderRef.set(
+        { stripeSessionId: session.id, stripeCheckoutSessionId: session.id, updatedAt: Date.now() },
+        { merge: true }
+      );
 
       if (tenantEmail) {
         const apiKey = String(process.env.SENDGRID_API_KEY || "").trim();
@@ -1540,7 +1610,7 @@ router.post(
 );
 
 router.get(
-  "/screening/orders/:id",
+  "/screening/orders/:id((?!status|reconcile)[^/]+)",
   attachAccount,
   async (req: any, res) => {
     res.setHeader("x-route-source", "rentalApplicationsRoutes:screeningOrderGet");
@@ -1588,7 +1658,220 @@ router.get(
 );
 
 router.get(
-  "/screening/orders/:id/report",
+  "/screening/orders/status",
+  attachAccount,
+  async (req: any, res) => {
+    res.setHeader("x-route-source", "rentalApplicationsRoutes:screeningOrderStatus");
+    const role = String(req.user?.role || "").toLowerCase();
+    if (role !== "landlord" && role !== "admin") {
+      return res.status(401).json({ ok: false, error: "unauthorized" });
+    }
+    const landlordId = req.user?.landlordId || req.user?.id || null;
+    if (!landlordId && role !== "admin") {
+      return res.status(401).json({ ok: false, error: "unauthorized" });
+    }
+
+    const orderId = String(req.query?.orderId || "").trim();
+    const applicationId = String(req.query?.applicationId || "").trim();
+    if (!orderId && !applicationId) {
+      return res.status(400).json({ ok: false, error: "missing_order_or_application_id" });
+    }
+
+    let orderDoc: FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestore.DocumentSnapshot | null = null;
+    if (orderId) {
+      const snap = await db.collection("screeningOrders").doc(orderId).get();
+      if (snap.exists) orderDoc = snap;
+    } else if (applicationId) {
+      orderDoc = await getLatestOrderByApplicationId(applicationId);
+    }
+
+    if (!orderDoc) {
+      if (applicationId) {
+        const access = await loadAuthorizedApplication(req, applicationId);
+        if (!access.ok) {
+          return res.status(access.status).json({ ok: false, error: access.error });
+        }
+      }
+      return res.json({
+        ok: true,
+        data: {
+          applicationId: applicationId || null,
+          orderId: null,
+          status: "unpaid",
+          paidAt: null,
+          amountTotalCents: 0,
+          currency: "cad",
+          stripePaymentIntentId: null,
+          stripeCheckoutSessionId: null,
+          lastUpdatedAt: null,
+        },
+      });
+    }
+
+    const data = orderDoc.data() as any;
+    if (role !== "admin" && data?.landlordId && data.landlordId !== landlordId) {
+      return res.status(403).json({ ok: false, error: "forbidden" });
+    }
+    return res.json({ ok: true, data: normalizeOrderView(orderDoc.id, data) });
+  }
+);
+
+router.post(
+  "/screening/orders/reconcile",
+  attachAccount,
+  async (req: any, res) => {
+    res.setHeader("x-route-source", "rentalApplicationsRoutes:screeningOrderReconcile");
+    const role = String(req.user?.role || "").toLowerCase();
+    if (role !== "landlord" && role !== "admin") {
+      return res.status(401).json({ ok: false, error: "unauthorized" });
+    }
+    const landlordId = req.user?.landlordId || req.user?.id || null;
+    if (!landlordId && role !== "admin") {
+      return res.status(401).json({ ok: false, error: "unauthorized" });
+    }
+    const body = req.body && typeof req.body === "object" ? req.body : {};
+    const orderId = String(body?.orderId || "").trim();
+    const applicationId = String(body?.applicationId || "").trim();
+    if (!orderId && !applicationId) {
+      return res.status(400).json({ ok: false, error: "missing_order_or_application_id" });
+    }
+
+    let orderDoc: FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestore.DocumentSnapshot | null = null;
+    if (orderId) {
+      const snap = await db.collection("screeningOrders").doc(orderId).get();
+      if (snap.exists) orderDoc = snap;
+    } else {
+      orderDoc = await getLatestOrderByApplicationId(applicationId);
+    }
+
+    if (!orderDoc) {
+      return res.json({
+        ok: true,
+        data: {
+          applicationId: applicationId || null,
+          orderId: null,
+          status: "unpaid",
+          paidAt: null,
+          amountTotalCents: 0,
+          currency: "cad",
+          stripePaymentIntentId: null,
+          stripeCheckoutSessionId: null,
+          lastUpdatedAt: null,
+        },
+      });
+    }
+
+    const order = orderDoc.data() as any;
+    if (role !== "admin" && order?.landlordId && order.landlordId !== landlordId) {
+      return res.status(403).json({ ok: false, error: "forbidden" });
+    }
+
+    const currentStatus = normalizeOrderStatus(order);
+    if (currentStatus === "paid") {
+      return res.json({ ok: true, data: normalizeOrderView(orderDoc.id, order) });
+    }
+    const now = Date.now();
+    const lastReconcileAt = Number(order?.lastReconcileAt || 0);
+    if (lastReconcileAt > 0 && now - lastReconcileAt < 20_000) {
+      return res.json({ ok: true, data: normalizeOrderView(orderDoc.id, order) });
+    }
+    await db.collection("screeningOrders").doc(orderDoc.id).set({ lastReconcileAt: now }, { merge: true });
+
+    let stripe: any;
+    try {
+      stripe = getStripeClient();
+    } catch (err: any) {
+      if (err?.code === "stripe_not_configured" || err?.message === "stripe_not_configured") {
+        return res.status(400).json({ ok: false, error: "stripe_not_configured" });
+      }
+      throw err;
+    }
+
+    const stripeSessionId = String(order?.stripeCheckoutSessionId || order?.stripeSessionId || "").trim();
+    const stripePaymentIntentId = String(order?.stripePaymentIntentId || "").trim();
+    let paid = false;
+    let resolvedPaymentIntentId = stripePaymentIntentId || null;
+    let resolvedChargeId: string | null = null;
+    let paidAt = order?.paidAt || now;
+    try {
+      if (stripeSessionId) {
+        const session = await stripe.checkout.sessions.retrieve(stripeSessionId, {
+          expand: ["payment_intent"],
+        });
+        const sessionPi =
+          typeof session?.payment_intent === "string"
+            ? session.payment_intent
+            : session?.payment_intent?.id || null;
+        resolvedPaymentIntentId = resolvedPaymentIntentId || sessionPi;
+        const paymentIntent =
+          typeof session?.payment_intent === "string" ? null : session?.payment_intent || null;
+        const piSucceeded = String(paymentIntent?.status || "").toLowerCase() === "succeeded";
+        paid = String(session?.payment_status || "").toLowerCase() === "paid" || piSucceeded;
+        if (paid && paymentIntent && paymentIntent.latest_charge) {
+          resolvedChargeId = String(paymentIntent.latest_charge);
+        }
+      } else if (stripePaymentIntentId) {
+        const paymentIntent = await stripe.paymentIntents.retrieve(stripePaymentIntentId);
+        paid = String(paymentIntent?.status || "").toLowerCase() === "succeeded";
+        if (paid && paymentIntent?.latest_charge) {
+          resolvedChargeId = String(paymentIntent.latest_charge);
+        }
+      }
+    } catch (err: any) {
+      console.warn("[screening/orders/reconcile] stripe lookup failed", {
+        orderId: orderDoc.id,
+        applicationId: order?.applicationId || applicationId || null,
+        error: err?.message || String(err),
+      });
+    }
+
+    if (paid) {
+      const updates: any = {
+        status: "paid",
+        paymentStatus: "paid",
+        paidAt,
+        finalized: true,
+        finalizedAt: order?.finalizedAt || now,
+        updatedAt: now,
+        stripeCheckoutSessionId: stripeSessionId || null,
+        stripeSessionId: stripeSessionId || null,
+        stripePaymentIntentId: resolvedPaymentIntentId || null,
+      };
+      if (resolvedChargeId) {
+        updates.stripeChargeId = resolvedChargeId;
+      }
+      await db.collection("screeningOrders").doc(orderDoc.id).set(updates, { merge: true });
+      if (order?.applicationId) {
+        await db
+          .collection("rentalApplications")
+          .doc(String(order.applicationId))
+          .set(
+            {
+              screeningStatus: "paid",
+              screeningPaidAt: paidAt,
+              screeningSessionId: stripeSessionId || null,
+              screeningPaymentIntentId: resolvedPaymentIntentId || null,
+              screeningLastUpdatedAt: now,
+              screening: {
+                status: "paid",
+                paidAt,
+                orderId: orderDoc.id,
+              },
+              updatedAt: now,
+            },
+            { merge: true }
+          );
+      }
+    }
+
+    const refreshed = await db.collection("screeningOrders").doc(orderDoc.id).get();
+    const refreshedData = (refreshed.data() as any) || order;
+    return res.json({ ok: true, data: normalizeOrderView(orderDoc.id, refreshedData) });
+  }
+);
+
+router.get(
+  "/screening/orders/:id((?!status|reconcile)[^/]+)/report",
   attachAccount,
   async (req: any, res) => {
     res.setHeader("x-route-source", "rentalApplicationsRoutes:screeningOrderReport");
