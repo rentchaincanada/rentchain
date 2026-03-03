@@ -112,6 +112,12 @@ app.post(
   stripeWebhookHandler
 );
 app.post(
+  "/api/stripe/webhook",
+  express.raw({ type: "application/json" }),
+  routeSource("stripeScreeningOrdersWebhookRoutes.ts"),
+  stripeWebhookHandler
+);
+app.post(
   "/api/webhooks/transunion",
   express.raw({ type: "application/json" }),
   routeSource("transunionWebhookRoutes.ts"),
