@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type StoredDoc = { id: string; data: any };
 
-const { dbMock, resetDb, seedRentalApplication, enqueueScreeningJobMock } = vi.hoisted(() => {
+const { dbMock, resetDb, seedRentalApplication, enqueueScreeningJobMock, getDocData } = vi.hoisted(() => {
   const collections = new Map<string, Map<string, StoredDoc>>();
   let autoId = 0;
 
@@ -80,6 +80,9 @@ const { dbMock, resetDb, seedRentalApplication, enqueueScreeningJobMock } = vi.h
     seedRentalApplication: (id: string, data: any) => {
       const col = ensureCollection("rentalApplications");
       col.set(id, { id, data });
+    },
+    getDocData: (collection: string, id: string) => {
+      return ensureCollection(collection).get(id)?.data ?? null;
     },
   };
 });
@@ -239,6 +242,37 @@ describe("transunion referral provider mode", () => {
         provider: "transunion_referral",
       })
     );
+    const referral = getDocData("screeningReferrals", String(res.body?.orderId));
+    expect(referral).toMatchObject({
+      referralId: String(res.body?.orderId),
+      provider: "transunion_referral",
+      applicationId: appId,
+      orderId: String(res.body?.orderId),
+      status: "initiated",
+      version: 1,
+    });
+    expect(typeof referral?.landlordIdHash).toBe("string");
+    expect(referral?.landlordIdHash).not.toBe("landlord-1");
+  });
+
+  it("marks referral complete via manual endpoint", async () => {
+    const app = await createApp();
+    const checkout = await request(app)
+      .post(`/api/rental-applications/${encodeURIComponent(appId)}/screening/checkout`)
+      .send({
+        consent: {
+          given: true,
+          timestamp: "2026-03-03T10:00:00.000Z",
+          version: "v1.0",
+        },
+      });
+    expect(checkout.status).toBe(200);
+
+    const orderId = String(checkout.body?.orderId || "");
+    const complete = await request(app).post("/api/screening/referrals/mark-complete").send({ orderId });
+    expect(complete.status).toBe(200);
+    expect(complete.body?.ok).toBe(true);
+    expect(complete.body?.data?.status).toBe("completed");
+    expect(complete.body?.data?.completionSource).toBe("manual");
   });
 });
-
