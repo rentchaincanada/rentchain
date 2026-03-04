@@ -32,7 +32,9 @@ export interface Property extends PropertyInput {
   id: string;
   createdAt: string;
   landlordId?: string;
-  status?: "draft" | "active";
+  status?: "DRAFT" | "PUBLISHED" | "draft" | "published" | "active";
+  publishedAt?: number | null;
+  screeningRequiredBeforeApproval?: boolean;
   units: PropertyUnit[];
   unitCount?: number;
   occupiedCount?: number;
@@ -58,6 +60,25 @@ export async function fetchPropertyLedger(
 ): Promise<PropertyLedgerEntry[]> {
   const res = await api.get(`/properties/${encodeURIComponent(propertyId)}/ledger`);
   return res.data as PropertyLedgerEntry[];
+}
+
+export async function updateProperty(
+  propertyId: string,
+  payload: Partial<Property>
+): Promise<{ property: Property }> {
+  const res = await api.patch(`/properties/${encodeURIComponent(propertyId)}`, payload);
+  const data = res.data;
+  const property = (data as any)?.property ?? (data as any);
+  return { property } as { property: Property };
+}
+
+export async function publishProperty(
+  propertyId: string
+): Promise<{ property: Property }> {
+  const res = await api.post(`/properties/${encodeURIComponent(propertyId)}/publish`, {});
+  const data = res.data;
+  const property = (data as any)?.property ?? (data as any);
+  return { property } as { property: Property };
 }
 
 export async function importUnitsCsv(propertyId: string, csvText: string) {

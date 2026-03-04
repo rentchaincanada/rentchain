@@ -60,6 +60,24 @@ function normalizeUnits(units: any[]): Array<{
       sqft: number | null;
     }>;
 }
+
+function parseScreeningRequiredBeforeApproval(input: any, fallback = true): boolean {
+  if (typeof input === "boolean") return input;
+  if (typeof input === "string") {
+    const normalized = input.trim().toLowerCase();
+    if (normalized === "true") return true;
+    if (normalized === "false") return false;
+  }
+  return fallback;
+}
+
+function isAdminRole(req: any): boolean {
+  return String(req.user?.role || "").toLowerCase() === "admin";
+}
+
+function resolveLandlordId(req: any): string {
+  return String(req.user?.landlordId || req.user?.id || "").trim();
+}
 /**
  * GET /api/properties
  * Returns properties for the authenticated landlord.
@@ -236,7 +254,14 @@ router.post(
       unitCount: resolvedUnitCount,
       unitsCount: resolvedUnitCount,
       totalUnits: resolvedUnitCount,
+      status: "DRAFT",
+      screeningRequiredBeforeApproval: parseScreeningRequiredBeforeApproval(
+        (req.body ?? {})?.screeningRequiredBeforeApproval,
+        true
+      ),
+      publishedAt: null,
       createdAt,
+      updatedAt: createdAt,
       addressKey: addressKey || null,
     };
 
@@ -350,6 +375,133 @@ router.post(
     }
   }
 );
+
+/**
+ * PATCH /api/properties/:propertyId
+ * Updates editable property fields and automation toggle fields.
+ */
+router.patch("/:propertyId", async (req: any, res) => {
+  const roleAdmin = isAdminRole(req);
+  const landlordId = resolveLandlordId(req);
+  const propertyId = String(req.params?.propertyId || "").trim();
+
+  if (!propertyId) return res.status(400).json({ ok: false, error: "property_id_required" });
+  if (!roleAdmin && !landlordId) return res.status(401).json({ ok: false, error: "unauthorized" });
+
+  try {
+    const ref = db.collection("properties").doc(propertyId);
+    const snap = await ref.get();
+    if (!snap.exists) return res.status(404).json({ ok: false, error: "not_found" });
+
+    const current = (snap.data() || {}) as any;
+    const ownerLandlordId = String(current?.landlordId || "").trim();
+    if (!roleAdmin && ownerLandlordId !== landlordId) {
+      return res.status(403).json({ ok: false, error: "forbidden" });
+    }
+
+    const body = (req.body && typeof req.body === "object" ? req.body : {}) as any;
+    const updates: any = {};
+    const stringFields = [
+      "name",
+      "nickname",
+      "address",
+      "addressLine1",
+      "addressLine2",
+      "city",
+      "province",
+      "postalCode",
+      "country",
+    ];
+
+    for (const field of stringFields) {
+      if (body[field] !== undefined) {
+        updates[field] = body[field] === null ? null : String(body[field]).trim();
+      }
+    }
+
+    if (body.screeningRequiredBeforeApproval !== undefined) {
+      updates.screeningRequiredBeforeApproval = parseScreeningRequiredBeforeApproval(
+        body.screeningRequiredBeforeApproval,
+        true
+      );
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.json({ ok: true, property: { id: propertyId, ...current } });
+    }
+
+    updates.updatedAt = new Date().toISOString();
+    updates.updatedAtServer = FieldValue.serverTimestamp();
+
+    await ref.set(updates, { merge: true });
+    return res.json({ ok: true, property: { id: propertyId, ...current, ...updates } });
+  } catch (err: any) {
+    console.error("[PATCH /api/properties/:propertyId] failed", err);
+    return res.status(500).json({
+      ok: false,
+      error: "db_failed",
+      message: err?.message || "Failed to update property",
+    });
+  }
+});
+
+/**
+ * POST /api/properties/:propertyId/publish
+ * Publishes a property once at least one unit exists.
+ */
+router.post("/:propertyId/publish", async (req: any, res) => {
+  const roleAdmin = isAdminRole(req);
+  const landlordId = resolveLandlordId(req);
+  const propertyId = String(req.params?.propertyId || "").trim();
+
+  if (!propertyId) return res.status(400).json({ ok: false, error: "property_id_required" });
+  if (!roleAdmin && !landlordId) return res.status(401).json({ ok: false, error: "unauthorized" });
+
+  try {
+    const propertyRef = db.collection("properties").doc(propertyId);
+    const propertySnap = await propertyRef.get();
+    if (!propertySnap.exists) return res.status(404).json({ ok: false, error: "not_found" });
+
+    const property = (propertySnap.data() || {}) as any;
+    const ownerLandlordId = String(property?.landlordId || "").trim();
+    if (!roleAdmin && ownerLandlordId !== landlordId) {
+      return res.status(403).json({ ok: false, error: "forbidden" });
+    }
+
+    const unitsSnap = await db
+      .collection("units")
+      .where("propertyId", "==", propertyId)
+      .where("landlordId", "==", ownerLandlordId || landlordId)
+      .limit(1)
+      .get();
+
+    if (unitsSnap.empty) {
+      return res.status(400).json({
+        ok: false,
+        error: "units_required",
+        detail: "Add at least one unit before publishing.",
+      });
+    }
+
+    const nowMs = Date.now();
+    const updates = {
+      status: "PUBLISHED",
+      publishedAt: nowMs,
+      updatedAt: new Date(nowMs).toISOString(),
+      updatedAtServer: FieldValue.serverTimestamp(),
+    };
+
+    await propertyRef.set(updates, { merge: true });
+    return res.json({ ok: true, property: { id: propertyId, ...property, ...updates } });
+  } catch (err: any) {
+    console.error("[POST /api/properties/:propertyId/publish] failed", err);
+    return res.status(500).json({
+      ok: false,
+      error: "db_failed",
+      message: err?.message || "Failed to publish property",
+    });
+  }
+});
 
 /**
  * POST /api/properties/:propertyId/units

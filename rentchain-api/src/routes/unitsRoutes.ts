@@ -355,17 +355,31 @@ router.patch("/units/:unitId", authenticateJwt, requireLandlord, async (req: any
     }
   }
 
-  const { unitNumber, rent, beds, baths, notes, status } = req.body || {};
+  const {
+    unitNumber,
+    unit,
+    name,
+    label,
+    rent,
+    marketRent,
+    beds,
+    baths,
+    notes,
+    status,
+  } = req.body || {};
   const updates: any = {};
 
-  if (unitNumber !== undefined) {
-    updates.unitNumber = String(unitNumber || "").trim();
+  const nextUnitNumber = unitNumber ?? unit ?? name ?? label;
+  if (nextUnitNumber !== undefined) {
+    updates.unitNumber = String(nextUnitNumber || "").trim();
   }
-  if (rent !== undefined) {
-    updates.rent = rent === null || rent === "" ? null : Number(rent);
+  const nextRent = rent !== undefined ? rent : marketRent;
+  if (nextRent !== undefined) {
+    updates.rent = nextRent === null || nextRent === "" ? null : Number(nextRent);
     if (updates.rent !== null && !Number.isFinite(updates.rent)) {
       return res.status(400).json({ ok: false, error: "Invalid rent" });
     }
+    updates.marketRent = updates.rent;
   }
   if (beds !== undefined) {
     updates.beds = beds === null || beds === "" ? null : Number(beds);
