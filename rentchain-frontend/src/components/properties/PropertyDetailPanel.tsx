@@ -1,6 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import type { Property } from "../../api/propertiesApi";
+import {
+  publishProperty,
+  updateProperty,
+  type Property,
+} from "../../api/propertiesApi";
 import {
   getLeasesForProperty,
   Lease,
@@ -80,6 +84,8 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   const [units, setUnits] = useState<any[]>([]);
   const [unitsLoading, setUnitsLoading] = useState(false);
   const [editingUnit, setEditingUnit] = useState<any | null>(null);
+  const [isPublishingProperty, setIsPublishingProperty] = useState(false);
+  const [isSavingScreeningToggle, setIsSavingScreeningToggle] = useState(false);
   const [sendAppUnit, setSendAppUnit] = useState<any | null>(null);
   const sendApplicationOpenedRef = useRef(false);
   const [highlightedUnitKey, setHighlightedUnitKey] = useState<string | null>(null);
@@ -368,6 +374,10 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
     Array.isArray(units) && units.length > 0
       ? units.length
       : Number((property as any)?.unitsCount ?? (property as any)?.unitCount ?? 0) || 0;
+  const propertyStatus = String((property as any)?.status || "DRAFT").toUpperCase();
+  const publishDisabled = unitCount < 1 || isPublishingProperty;
+  const screeningRequiredBeforeApproval =
+    (property as any)?.screeningRequiredBeforeApproval !== false;
   const totalRentConfigured = units.reduce(
     (sum, u) =>
       sum + (typeof (u as any).rent === "number" ? (u as any).rent : 0),
@@ -407,6 +417,47 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   const showLoading = !!property && (isLeasesLoading || isPaymentsLoading);
   const showLeasesError = !!leasesError;
   const showPaymentsError = !!paymentsError;
+
+  const handlePublishProperty = useCallback(async () => {
+    if (!property?.id || publishDisabled) return;
+    try {
+      setIsPublishingProperty(true);
+      await publishProperty(String(property.id));
+      showToast({ message: "Property published", variant: "success" });
+      await onRefresh?.();
+    } catch (e: any) {
+      const detail = String(e?.response?.data?.detail || e?.message || "Could not publish property");
+      showToast({ message: "Publish failed", description: detail, variant: "error" });
+    } finally {
+      setIsPublishingProperty(false);
+    }
+  }, [onRefresh, property?.id, publishDisabled, showToast]);
+
+  const handleScreeningRequiredToggle = useCallback(async () => {
+    if (!property?.id) return;
+    const nextValue = !screeningRequiredBeforeApproval;
+    try {
+      setIsSavingScreeningToggle(true);
+      await updateProperty(String(property.id), {
+        screeningRequiredBeforeApproval: nextValue,
+      } as any);
+      showToast({
+        message: nextValue
+          ? "Screening required before approval enabled"
+          : "Screening requirement disabled",
+        variant: "success",
+      });
+      await onRefresh?.();
+    } catch (e: any) {
+      showToast({
+        message: "Could not update screening rule",
+        description: String(e?.message || "Please try again"),
+        variant: "error",
+      });
+    } finally {
+      setIsSavingScreeningToggle(false);
+    }
+  }, [onRefresh, property?.id, screeningRequiredBeforeApproval, showToast]);
 
   const getUnitKey = useCallback((u: any, idx: number) => {
     return String(u?.id || u?.unitId || u?.uid || u?.unitNumber || `unit-${idx}`);
@@ -468,11 +519,61 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             <div className="rc-property-unit-count" style={{ color: "#0f172a", fontSize: "0.8rem", fontWeight: 600 }}>
               Units: {unitCount}
             </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span
+                style={{
+                  padding: "2px 8px",
+                  borderRadius: 999,
+                  fontSize: "0.72rem",
+                  fontWeight: 700,
+                  border: "1px solid rgba(148,163,184,0.35)",
+                  color: propertyStatus === "PUBLISHED" ? "#166534" : "#92400e",
+                  background:
+                    propertyStatus === "PUBLISHED"
+                      ? "rgba(34,197,94,0.1)"
+                      : "rgba(245,158,11,0.12)",
+                }}
+              >
+                {propertyStatus}
+              </span>
+            </div>
             <div className="rc-property-meta" style={{ color: "#6b7280", fontSize: "0.8rem" }}>
               Added {formatDate(property.createdAt)}
             </div>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: "0.82rem", color: "#1f2937" }}>
+              <input
+                type="checkbox"
+                checked={screeningRequiredBeforeApproval}
+                disabled={isSavingScreeningToggle}
+                onChange={() => {
+                  void handleScreeningRequiredToggle();
+                }}
+              />
+              Require screening before approval
+            </label>
           </div>
           <div className="rc-units-actions" style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {propertyStatus === "DRAFT" ? (
+              <button
+                type="button"
+                onClick={() => {
+                  void handlePublishProperty();
+                }}
+                disabled={publishDisabled}
+                className="rc-units-action"
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 10,
+                  border: "1px solid rgba(16,185,129,0.45)",
+                  background: publishDisabled ? "rgba(15,23,42,0.06)" : "rgba(16,185,129,0.1)",
+                  color: publishDisabled ? "#9ca3af" : "#065f46",
+                  cursor: publishDisabled ? "not-allowed" : "pointer",
+                }}
+                title={unitCount < 1 ? "Add at least one unit before publishing." : undefined}
+              >
+                {isPublishingProperty ? "Publishing..." : "Publish Property"}
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => onOpenLeasePack?.()}
@@ -658,6 +759,11 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             {unitCount}
           </div>
         </div>
+        {propertyStatus === "DRAFT" && unitCount < 1 ? (
+          <div style={{ color: "#92400e", fontSize: "0.8rem" }}>
+            Add at least one unit to publish this property.
+          </div>
+        ) : null}
         <div
           className="rc-kpi-card"
           style={{
