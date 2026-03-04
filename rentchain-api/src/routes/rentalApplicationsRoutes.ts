@@ -20,6 +20,12 @@ import { logCutoverEvent } from "../services/screening/cutoverTelemetry";
 import { runPrimaryWithFallback } from "../services/screening/runPrimaryWithFallback";
 import { buildTenantInviteUrl, createInviteToken } from "../services/screening/inviteTokens";
 import { buildTransUnionReferralUrl } from "../services/screening/transunionReferral";
+import {
+  findReferralDoc,
+  hashLandlordId,
+  markReferralCompleted,
+  writeReferralInitiated,
+} from "../services/screening/referralTracking";
 import { enqueueScreeningJob } from "../services/screeningJobs";
 import { createSignedUrl, putPdfObject } from "../storage/pdfStore";
 import { buildReviewSummary, buildReviewSummaryPdf } from "../lib/reviewSummary";
@@ -549,7 +555,7 @@ function logTuReferralEvent(params: {
   console.info(
     "[tu_referral]",
     JSON.stringify({
-      eventType: "tu_referral",
+      eventType: "tu_referral_redirect",
       orderHash: hashSeedKey(params.orderId),
       applicationHash: hashSeedKey(params.applicationId),
       landlordHash: hashSeedKey(params.landlordId),
@@ -557,6 +563,20 @@ function logTuReferralEvent(params: {
       ts: new Date().toISOString(),
     })
   );
+}
+
+function extractTuTrackingParams(redirectUrl: string): { source?: string; ts?: string } {
+  try {
+    const url = new URL(redirectUrl);
+    const source = String(url.searchParams.get("source") || "").trim();
+    const ts = String(url.searchParams.get("ts") || "").trim();
+    return {
+      ...(source ? { source } : {}),
+      ...(ts ? { ts } : {}),
+    };
+  } catch {
+    return {};
+  }
 }
 
 async function runAdapterPrimaryProbe(params: {
@@ -1233,6 +1253,14 @@ router.post(
           },
           { merge: true }
         );
+        await writeReferralInitiated({
+          referralId: orderId,
+          landlordId: String(landlordId),
+          applicationId: id,
+          orderId,
+          returnTo,
+          tuTrackingParams: extractTuTrackingParams(referralUrl),
+        });
         logTuReferralEvent({
           orderId,
           applicationId: id,
@@ -1682,6 +1710,14 @@ router.post(
             { merge: true }
           );
         }
+        await writeReferralInitiated({
+          referralId: orderId,
+          landlordId: String(landlordId),
+          applicationId: applicationId || null,
+          orderId,
+          returnTo,
+          tuTrackingParams: extractTuTrackingParams(referralUrl),
+        });
         logTuReferralEvent({
           orderId,
           applicationId: applicationId || "manual",
@@ -2252,6 +2288,59 @@ router.post(
   }
 );
 
+router.post(
+  "/screening/referrals/mark-complete",
+  attachAccount,
+  async (req: any, res) => {
+    res.setHeader("x-route-source", "rentalApplicationsRoutes:screeningReferralMarkComplete");
+    const role = String(req.user?.role || "").toLowerCase();
+    if (role !== "landlord" && role !== "admin") {
+      return res.status(401).json({ ok: false, error: "unauthorized" });
+    }
+    const landlordId = req.user?.landlordId || req.user?.id || null;
+    if (!landlordId && role !== "admin") {
+      return res.status(401).json({ ok: false, error: "unauthorized" });
+    }
+
+    const body = req.body && typeof req.body === "object" ? req.body : {};
+    const referralId = String(body?.referralId || "").trim();
+    const orderId = String(body?.orderId || "").trim();
+    const applicationId = String(body?.applicationId || "").trim();
+
+    if (!referralId && !orderId && !applicationId) {
+      return res.status(400).json({ ok: false, error: "missing_referral_identifier" });
+    }
+
+    const referralDoc = await findReferralDoc({ referralId, orderId, applicationId });
+    if (!referralDoc) {
+      return res.status(404).json({ ok: false, error: "not_found" });
+    }
+
+    const current = referralDoc.data() as any;
+    const expectedLandlordHash = String(current?.landlordIdHash || "").trim();
+    if (role !== "admin" && expectedLandlordHash !== hashLandlordId(String(landlordId))) {
+      return res.status(403).json({ ok: false, error: "forbidden" });
+    }
+
+    const completed = await markReferralCompleted({
+      referralId: referralDoc.id,
+      completionSource: "manual",
+    });
+
+    return res.json({
+      ok: true,
+      data: {
+        referralId: String(completed?.referralId || referralDoc.id),
+        orderId: completed?.orderId || null,
+        applicationId: completed?.applicationId || null,
+        status: completed?.status || "completed",
+        completedAtMs: Number(completed?.completedAtMs || Date.now()),
+        completionSource: completed?.completionSource || "manual",
+      },
+    });
+  }
+);
+
 router.get(
   "/screening/orders/:id((?!status|reconcile)[^/]+)/report",
   attachAccount,
@@ -2445,6 +2534,14 @@ router.post(
           },
           { merge: true }
         );
+        await writeReferralInitiated({
+          referralId: orderId,
+          landlordId: String(landlordId),
+          applicationId: id,
+          orderId,
+          returnTo,
+          tuTrackingParams: extractTuTrackingParams(referralUrl),
+        });
         logTuReferralEvent({
           orderId,
           applicationId: id,
