@@ -21,12 +21,34 @@ class DisabledProvider implements BureauProvider {
   }
 }
 
-export function getBureauProvider(): BureauProvider {
-  const key = String(
-    process.env.BUREAU_PROVIDER || process.env.SCREENING_PROVIDER || "transunion"
-  )
+function isProdEnv() {
+  const appEnv = String(process.env.APP_ENV || "").trim().toLowerCase();
+  const nodeEnv = String(process.env.NODE_ENV || "").trim().toLowerCase();
+  return appEnv === "production" || nodeEnv === "production";
+}
+
+function normalizeProviderKey(raw: string) {
+  const key = String(raw || "")
     .trim()
     .toLowerCase();
+  if (key === "tu_referral" || key === "transunion-referral") {
+    return "transunion_referral";
+  }
+  return key;
+}
+
+export function getBureauProvider(): BureauProvider {
+  const explicitRaw = String(process.env.BUREAU_PROVIDER || process.env.SCREENING_PROVIDER || "").trim();
+  const explicit = normalizeProviderKey(explicitRaw);
+  let key = explicit;
+  if (!key) {
+    if (isProdEnv()) {
+      key = "disabled";
+      console.warn("[screening] provider fallback: missing BUREAU_PROVIDER in production; defaulting to disabled");
+    } else {
+      key = "transunion";
+    }
+  }
   if (key === "transunion_referral") return new TransUnionReferralProvider();
   if (key === "transunion") return new TransUnionProvider();
   return new DisabledProvider(key);
