@@ -91,10 +91,11 @@ describe("GET /api/admin/metrics/tu-referrals/chart", () => {
     expect(res.body?.ok).toBe(true);
     expect(res.body?.month).toBe("2026-03");
     expect(res.body?.totals?.referralClicks).toBe(5);
-    expect(res.body?.series).toEqual([
-      { day: "2026-03-01", initiated: 2, completed: 0 },
-      { day: "2026-03-02", initiated: 0, completed: 1 },
-      { day: "2026-03-03", initiated: 3, completed: 2 },
-    ]);
+    expect(Array.isArray(res.body?.series)).toBe(true);
+    expect(res.body?.series).toHaveLength(31);
+    expect(res.body?.series?.[0]).toEqual({ day: "2026-03-01", initiated: 2, completed: 0 });
+    expect(res.body?.series?.[1]).toEqual({ day: "2026-03-02", initiated: 0, completed: 1 });
+    expect(res.body?.series?.[2]).toEqual({ day: "2026-03-03", initiated: 3, completed: 2 });
+    expect(res.body?.series?.[30]).toEqual({ day: "2026-03-31", initiated: 0, completed: 0 });
   });
 });
