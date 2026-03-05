@@ -24,6 +24,22 @@ function safeMessage(err: any): string | null {
     .replace(/bearer\s+[a-z0-9\-_\.]+/gi, "bearer [redacted]");
 }
 
+function monthDaysFromKey(month: string): string[] {
+  const match = /^(\d{4})-(\d{2})$/.exec(String(month || "").trim());
+  if (!match) return [];
+  const year = Number(match[1]);
+  const monthIndex = Number(match[2]) - 1;
+  if (!Number.isFinite(year) || !Number.isFinite(monthIndex) || monthIndex < 0 || monthIndex > 11) {
+    return [];
+  }
+  const lastDay = new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
+  const days: string[] = [];
+  for (let day = 1; day <= lastDay; day += 1) {
+    days.push(`${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`);
+  }
+  return days;
+}
+
 router.get("/ping", requireAdmin, (_req, res) => res.json({ ok: true }));
 
 router.post("/users/create-landlord", requireAdmin, async (req, res) => {
@@ -386,7 +402,9 @@ router.get("/metrics/tu-referrals/chart", requireAdmin, async (req, res) => {
     const payload = await getTuReferralMetricsForMonth(String(req.query?.month || "").trim() || undefined);
     const initiatedMap = new Map(payload.dailyInitiated.map((p) => [p.day, p.count]));
     const completedMap = new Map(payload.dailyCompleted.map((p) => [p.day, p.count]));
-    const days = Array.from(new Set([...initiatedMap.keys(), ...completedMap.keys()])).sort();
+    const monthDays = monthDaysFromKey(payload.month);
+    const observedDays = Array.from(new Set([...initiatedMap.keys(), ...completedMap.keys()])).sort();
+    const days = monthDays.length > 0 ? monthDays : observedDays;
     const series = days.map((day) => ({
       day,
       initiated: initiatedMap.get(day) || 0,
