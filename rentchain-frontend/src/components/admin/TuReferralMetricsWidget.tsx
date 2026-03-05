@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { getTuReferralChart, type TuReferralChartResponse } from "../../api/adminMetricsApi";
 import { Button, Card, Input, Section } from "../ui/Ui";
 import { colors, radius, spacing, text } from "../../styles/tokens";
-import TuReferralMetricsChartTest from "./TuReferralMetricsChartTest";
 
 function currentMonthInputValue() {
   const now = new Date();
@@ -73,6 +72,9 @@ function TuReferralMetricsWidget() {
     screeningsPerLandlord: 0,
     conversionRate: 0,
   };
+  const rows = (data?.series || []).slice(0, 31);
+  const hasRows = rows.some((row) => Number(row.initiated || 0) > 0 || Number(row.completed || 0) > 0);
+
   return (
     <Card elevated>
       <Section style={{ display: "grid", gap: spacing.sm }}>
@@ -114,8 +116,45 @@ function TuReferralMetricsWidget() {
 
         <Card style={{ padding: spacing.md }}>
           <div style={{ fontWeight: 700, marginBottom: spacing.sm }}>Daily Trend</div>
-          <div style={{ border: `1px solid ${colors.border}`, borderRadius: radius.md, padding: spacing.sm }}>
-            <TuReferralMetricsChartTest data={data?.series || null} />
+          <div style={{ color: text.muted, marginBottom: spacing.sm }}>Chart temporarily unavailable.</div>
+          <div style={{ border: `1px solid ${colors.border}`, borderRadius: radius.md, overflow: "hidden" }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "2fr 1fr 1fr",
+                gap: spacing.xs,
+                fontSize: 12,
+                color: text.muted,
+                padding: "8px 10px",
+                borderBottom: `1px solid ${colors.border}`,
+                background: "rgba(148,163,184,0.08)",
+              }}
+            >
+              <div>Day</div>
+              <div>Initiated</div>
+              <div>Completed</div>
+            </div>
+            {!hasRows ? (
+              <div style={{ padding: spacing.md, color: text.muted }}>No data for this month yet.</div>
+            ) : (
+              rows.map((row) => (
+                <div
+                  key={row.day}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "2fr 1fr 1fr",
+                    gap: spacing.xs,
+                    padding: "8px 10px",
+                    borderBottom: `1px solid ${colors.border}`,
+                    fontSize: 13,
+                  }}
+                >
+                  <div>{row.day}</div>
+                  <div>{row.initiated || 0}</div>
+                  <div>{row.completed || 0}</div>
+                </div>
+              ))
+            )}
           </div>
           {loading ? <div style={{ color: text.muted }}>Loading KPI data...</div> : null}
           {error ? <div style={{ color: colors.danger }}>KPI data error: {error}</div> : null}
