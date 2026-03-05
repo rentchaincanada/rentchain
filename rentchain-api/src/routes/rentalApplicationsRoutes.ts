@@ -1133,6 +1133,7 @@ router.post(
           ok: false,
           error: "screening_unavailable",
           detail: "provider_not_ready",
+          ...(role === "admin" ? { preflightDetail: providerHealth.preflightDetail || null } : {}),
         });
       }
       if (
@@ -1607,6 +1608,7 @@ router.post(
           ok: false,
           error: "screening_unavailable",
           detail: "provider_not_ready",
+          ...(role === "admin" ? { preflightDetail: providerHealth.preflightDetail || null } : {}),
         });
       }
       if (
@@ -2435,6 +2437,7 @@ router.post(
           ok: false,
           error: "screening_unavailable",
           detail: "provider_not_ready",
+          ...(role === "admin" ? { preflightDetail: providerHealth.preflightDetail || null } : {}),
         });
       }
       if (
