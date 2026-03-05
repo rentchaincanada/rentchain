@@ -14,11 +14,23 @@ const sampleData = [
   { day: "2026-03-02", initiated: 2, completed: 1 },
 ];
 
-function TuReferralMetricsChartTest() {
+type TuReferralChartPoint = {
+  day: string;
+  initiated: number;
+  completed: number;
+};
+
+type TuReferralMetricsChartTestProps = {
+  data?: TuReferralChartPoint[] | null;
+};
+
+function TuReferralMetricsChartTest({ data }: TuReferralMetricsChartTestProps) {
+  const chartData = Array.isArray(data) && data.length > 0 ? data : sampleData;
+
   return (
     <div style={{ width: "100%", height: 300 }}>
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={sampleData}>
+        <LineChart data={chartData}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="day" />
           <YAxis allowDecimals={false} />

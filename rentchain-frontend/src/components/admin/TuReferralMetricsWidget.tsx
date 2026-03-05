@@ -115,7 +115,7 @@ function TuReferralMetricsWidget() {
         <Card style={{ padding: spacing.md }}>
           <div style={{ fontWeight: 700, marginBottom: spacing.sm }}>Daily Trend</div>
           <div style={{ border: `1px solid ${colors.border}`, borderRadius: radius.md, padding: spacing.sm }}>
-            <TuReferralMetricsChartTest />
+            <TuReferralMetricsChartTest data={data?.series || null} />
           </div>
           {loading ? <div style={{ color: text.muted }}>Loading KPI data...</div> : null}
           {error ? <div style={{ color: colors.danger }}>KPI data error: {error}</div> : null}
