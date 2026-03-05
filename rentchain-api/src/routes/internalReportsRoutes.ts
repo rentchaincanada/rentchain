@@ -4,6 +4,7 @@ import { sendEmail } from "../services/emailService";
 import {
   getTuReferralMetricsForMonth,
   renderTuReferralCsv,
+  renderTuReferralEmail,
   renderTuReferralJson,
   renderTuReferralReportText,
 } from "../services/metrics/tuReferralReport";
@@ -76,14 +77,15 @@ router.post("/reports/tu-referrals", requireInternalJobToken, async (req: any, r
         String(process.env.TU_REPORT_SENDER || "").trim() ||
         String(process.env.EMAIL_FROM || process.env.FROM_EMAIL || "").trim() ||
         undefined;
-      const links = artifactPaths
-        ? `\n\nArtifacts:\n- CSV: ${artifactPaths.csv}\n- JSON: ${artifactPaths.json}`
-        : "";
+      const email = renderTuReferralEmail(metrics, {
+        csv: artifactPaths?.csv || null,
+        json: artifactPaths?.json || null,
+      });
       await sendEmail({
         to: recipients,
         from: sender,
-        subject: `[RentChain] TU Referral Metrics — ${metrics.month}`,
-        text: `${textSummary}${links}`,
+        subject: email.subject,
+        text: email.body || textSummary,
       });
     }
 
@@ -118,4 +120,3 @@ router.post("/reports/tu-referrals", requireInternalJobToken, async (req: any, r
 });
 
 export default router;
-

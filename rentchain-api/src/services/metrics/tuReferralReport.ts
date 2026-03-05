@@ -14,6 +14,10 @@ export type TuReferralMetricsPayload = {
   dailyInitiated: TuDailyPoint[];
   dailyCompleted: TuDailyPoint[];
 };
+export type TuReferralEmailRender = {
+  subject: string;
+  body: string;
+};
 
 function parseMonthRange(rawMonth: string | undefined) {
   const now = new Date();
@@ -161,3 +165,47 @@ export function renderTuReferralJson(payload: TuReferralMetricsPayload): string 
   return JSON.stringify(payload, null, 2);
 }
 
+export function renderTuReferralEmail(
+  payload: TuReferralMetricsPayload,
+  artifacts?: { csv?: string | null; json?: string | null } | null
+): TuReferralEmailRender {
+  const initiatedMap = new Map(payload.dailyInitiated.map((p) => [p.day, p.count]));
+  const completedMap = new Map(payload.dailyCompleted.map((p) => [p.day, p.count]));
+  const days = Array.from(new Set([...initiatedMap.keys(), ...completedMap.keys()])).sort();
+  const topInitiated = bestDay(payload.dailyInitiated);
+  const topCompleted = bestDay(payload.dailyCompleted);
+  const conversionPct = (payload.metrics.conversionRate * 100).toFixed(2);
+
+  const lines: string[] = [];
+  lines.push(`Month: ${payload.month}`);
+  lines.push("");
+  lines.push("Summary:");
+  lines.push(`- Referral clicks: ${payload.metrics.referralClicks}`);
+  lines.push(`- Completed screenings: ${payload.metrics.completedScreenings}`);
+  lines.push(`- Active landlords: ${payload.metrics.activeLandlords}`);
+  lines.push(`- Screenings per landlord: ${payload.metrics.screeningsPerLandlord}`);
+  lines.push(`- Conversion rate: ${conversionPct}%`);
+  lines.push("");
+  lines.push("Daily Activity:");
+  lines.push("day | initiated | completed");
+  for (const day of days) {
+    lines.push(`${day} | ${initiatedMap.get(day) || 0} | ${completedMap.get(day) || 0}`);
+  }
+  lines.push("");
+  lines.push("Top Day:");
+  lines.push(
+    `- Initiated: ${topInitiated ? `${topInitiated.day} (${topInitiated.count})` : "n/a"}`
+  );
+  lines.push(
+    `- Completed: ${topCompleted ? `${topCompleted.day} (${topCompleted.count})` : "n/a"}`
+  );
+  lines.push("");
+  lines.push("Artifact links:");
+  lines.push(`- CSV: ${artifacts?.csv || "not_uploaded"}`);
+  lines.push(`- JSON: ${artifacts?.json || "not_uploaded"}`);
+
+  return {
+    subject: `[RentChain] TransUnion Referral Metrics — ${payload.month}`,
+    body: lines.join("\n"),
+  };
+}

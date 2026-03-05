@@ -381,6 +381,36 @@ router.get("/metrics/tu-referrals", requireAdmin, async (req, res) => {
   }
 });
 
+router.get("/metrics/tu-referrals/chart", requireAdmin, async (req, res) => {
+  try {
+    const payload = await getTuReferralMetricsForMonth(String(req.query?.month || "").trim() || undefined);
+    const initiatedMap = new Map(payload.dailyInitiated.map((p) => [p.day, p.count]));
+    const completedMap = new Map(payload.dailyCompleted.map((p) => [p.day, p.count]));
+    const days = Array.from(new Set([...initiatedMap.keys(), ...completedMap.keys()])).sort();
+    const series = days.map((day) => ({
+      day,
+      initiated: initiatedMap.get(day) || 0,
+      completed: completedMap.get(day) || 0,
+    }));
+
+    return res.json({
+      ok: true,
+      month: payload.month,
+      series,
+      totals: payload.metrics,
+    });
+  } catch (err: any) {
+    console.error("[admin] tu referral chart failed", err?.message || err);
+    const role = String((req as any)?.user?.role || "").toLowerCase();
+    const detail = safeMessage(err);
+    return res.status(500).json({
+      ok: false,
+      error: "METRICS_FAILED",
+      ...(role === "admin" && detail ? { detail } : {}),
+    });
+  }
+});
+
 async function sumStripePaymentIntents(start: number, end: number) {
   if (!isStripeConfigured()) {
     return { grossCents: 0, netCents: 0 };

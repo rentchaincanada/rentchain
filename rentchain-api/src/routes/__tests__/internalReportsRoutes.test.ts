@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const {
   getMetricsMock,
   renderTextMock,
+  renderEmailMock,
   renderCsvMock,
   renderJsonMock,
   sendEmailMock,
@@ -24,6 +25,10 @@ const {
     dailyCompleted: [{ day: "2026-03-01", count: 1 }],
   })),
   renderTextMock: vi.fn(() => "summary"),
+  renderEmailMock: vi.fn(() => ({
+    subject: "[RentChain] TransUnion Referral Metrics — 2026-03",
+    body: "email-body",
+  })),
   renderCsvMock: vi.fn(() => "csv"),
   renderJsonMock: vi.fn(() => "{}"),
   sendEmailMock: vi.fn(async () => undefined),
@@ -33,6 +38,7 @@ const {
 vi.mock("../../services/metrics/tuReferralReport", () => ({
   getTuReferralMetricsForMonth: getMetricsMock,
   renderTuReferralReportText: renderTextMock,
+  renderTuReferralEmail: renderEmailMock,
   renderTuReferralCsv: renderCsvMock,
   renderTuReferralJson: renderJsonMock,
 }));
@@ -88,5 +94,23 @@ describe("internalReportsRoutes", () => {
     expect(res.body?.month).toBe("2026-03");
     expect(getMetricsMock).toHaveBeenCalledWith("2026-03");
   });
-});
 
+  it("uses rendered email template when recipients are configured", async () => {
+    process.env.TU_REPORT_RECIPIENTS = "ops@example.com";
+    process.env.EMAIL_FROM = "no-reply@example.com";
+    const app = await createApp();
+    const res = await request(app)
+      .post("/api/internal/reports/tu-referrals")
+      .set("X-Internal-Job-Token", "secret-token")
+      .send({ month: "2026-03", cadence: "monthly" });
+
+    expect(res.status).toBe(200);
+    expect(renderEmailMock).toHaveBeenCalled();
+    expect(sendEmailMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        subject: "[RentChain] TransUnion Referral Metrics — 2026-03",
+        text: "email-body",
+      })
+    );
+  });
+});
