@@ -1,17 +1,8 @@
-import React, { useEffect, useMemo, useState } from "react";
-import {
-  CartesianGrid,
-  Legend,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { useEffect, useState } from "react";
 import { getTuReferralChart, type TuReferralChartResponse } from "../../api/adminMetricsApi";
 import { Button, Card, Input, Section } from "../ui/Ui";
 import { colors, radius, spacing, text } from "../../styles/tokens";
+import TuReferralMetricsChartTest from "./TuReferralMetricsChartTest";
 
 function currentMonthInputValue() {
   const now = new Date();
@@ -24,11 +15,6 @@ function formatNumber(value: number) {
 
 function formatPercent(value: number) {
   return `${(Number(value || 0) * 100).toFixed(2)}%`;
-}
-
-function dayLabel(day: string) {
-  if (!day || day.length < 10) return day;
-  return day.slice(5);
 }
 
 function toCsv(data: TuReferralChartResponse | null) {
@@ -50,7 +36,7 @@ function downloadFile(filename: string, content: string, contentType: string) {
   URL.revokeObjectURL(url);
 }
 
-export const TuReferralMetricsWidget: React.FC = () => {
+function TuReferralMetricsWidget() {
   const [month, setMonth] = useState(currentMonthInputValue);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,11 +73,6 @@ export const TuReferralMetricsWidget: React.FC = () => {
     screeningsPerLandlord: 0,
     conversionRate: 0,
   };
-  const hasData = useMemo(
-    () => (data?.series || []).some((item) => Number(item.initiated || 0) > 0 || Number(item.completed || 0) > 0),
-    [data]
-  );
-
   return (
     <Card elevated>
       <Section style={{ display: "grid", gap: spacing.sm }}>
@@ -133,41 +114,11 @@ export const TuReferralMetricsWidget: React.FC = () => {
 
         <Card style={{ padding: spacing.md }}>
           <div style={{ fontWeight: 700, marginBottom: spacing.sm }}>Daily Trend</div>
-          {loading ? (
-            <div style={{ color: text.muted }}>Loading metrics...</div>
-          ) : error ? (
-            <div style={{ color: colors.danger }}>Failed to load chart: {error}</div>
-          ) : !hasData ? (
-            <div style={{ color: text.muted }}>No data for this month yet.</div>
-          ) : (
-            <div style={{ width: "100%", height: 300 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={data?.series || []} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="day" tickFormatter={dayLabel} />
-                  <YAxis allowDecimals={false} />
-                  <Tooltip labelFormatter={(value: string) => value} />
-                  <Legend />
-                  <Line
-                    type="monotone"
-                    dataKey="initiated"
-                    name="Initiated"
-                    stroke={colors.accent}
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="completed"
-                    name="Completed"
-                    stroke="#16a34a"
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          )}
+          <div style={{ border: `1px solid ${colors.border}`, borderRadius: radius.md, padding: spacing.sm }}>
+            <TuReferralMetricsChartTest data={data?.series || null} />
+          </div>
+          {loading ? <div style={{ color: text.muted }}>Loading KPI data...</div> : null}
+          {error ? <div style={{ color: colors.danger }}>KPI data error: {error}</div> : null}
         </Card>
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing.sm, flexWrap: "wrap" }}>
@@ -197,6 +148,6 @@ export const TuReferralMetricsWidget: React.FC = () => {
       </Section>
     </Card>
   );
-};
+}
 
 export default TuReferralMetricsWidget;
