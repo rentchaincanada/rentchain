@@ -16,6 +16,7 @@ import {
 } from "../../api/adminDashboardApi";
 import { adminSystems } from "./adminSystems";
 import { colors, spacing, text, radius } from "../../styles/tokens";
+import TuReferralMetricsWidget from "../../components/admin/TuReferralMetricsWidget";
 import "./AdminDashboardPage.css";
 
 const categories = ["All", ...Array.from(new Set(adminSystems.map((s) => s.category)))];
@@ -151,6 +152,8 @@ export const AdminDashboardPage: React.FC = () => {
             Refresh
           </Button>
         </div>
+
+        <TuReferralMetricsWidget />
 
         <Card elevated>
           <Section style={{ display: "grid", gap: spacing.sm }}>

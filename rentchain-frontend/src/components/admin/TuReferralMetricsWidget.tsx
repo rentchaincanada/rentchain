@@ -1,14 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
-import {
-  CartesianGrid,
-  Legend,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { useEffect, useState } from "react";
 import { getTuReferralChart, type TuReferralChartResponse } from "../../api/adminMetricsApi";
 import { Button, Card, Input, Section } from "../ui/Ui";
 import { colors, radius, spacing, text } from "../../styles/tokens";
@@ -24,11 +14,6 @@ function formatNumber(value: number) {
 
 function formatPercent(value: number) {
   return `${(Number(value || 0) * 100).toFixed(2)}%`;
-}
-
-function dayLabel(day: string) {
-  if (!day || day.length < 10) return day;
-  return day.slice(5);
 }
 
 function toCsv(data: TuReferralChartResponse | null) {
@@ -50,7 +35,7 @@ function downloadFile(filename: string, content: string, contentType: string) {
   URL.revokeObjectURL(url);
 }
 
-export const TuReferralMetricsWidget: React.FC = () => {
+function TuReferralMetricsWidget() {
   const [month, setMonth] = useState(currentMonthInputValue);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,11 +72,6 @@ export const TuReferralMetricsWidget: React.FC = () => {
     screeningsPerLandlord: 0,
     conversionRate: 0,
   };
-  const hasData = useMemo(
-    () => (data?.series || []).some((item) => Number(item.initiated || 0) > 0 || Number(item.completed || 0) > 0),
-    [data]
-  );
-
   return (
     <Card elevated>
       <Section style={{ display: "grid", gap: spacing.sm }}>
@@ -137,35 +117,19 @@ export const TuReferralMetricsWidget: React.FC = () => {
             <div style={{ color: text.muted }}>Loading metrics...</div>
           ) : error ? (
             <div style={{ color: colors.danger }}>Failed to load chart: {error}</div>
-          ) : !hasData ? (
-            <div style={{ color: text.muted }}>No data for this month yet.</div>
           ) : (
-            <div style={{ width: "100%", height: 300 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={data?.series || []} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="day" tickFormatter={dayLabel} />
-                  <YAxis allowDecimals={false} />
-                  <Tooltip labelFormatter={(value: string) => value} />
-                  <Legend />
-                  <Line
-                    type="monotone"
-                    dataKey="initiated"
-                    name="Initiated"
-                    stroke={colors.accent}
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="completed"
-                    name="Completed"
-                    stroke="#16a34a"
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
+            <div
+              style={{
+                border: `1px dashed ${colors.border}`,
+                borderRadius: radius.md,
+                padding: spacing.md,
+                color: text.muted,
+                minHeight: 96,
+                display: "flex",
+                alignItems: "center",
+              }}
+            >
+              Chart temporarily disabled during stability isolation.
             </div>
           )}
         </Card>
@@ -197,6 +161,6 @@ export const TuReferralMetricsWidget: React.FC = () => {
       </Section>
     </Card>
   );
-};
+}
 
 export default TuReferralMetricsWidget;
