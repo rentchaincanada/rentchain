@@ -175,8 +175,11 @@ export function renderTuReferralEmail(
   const topInitiated = bestDay(payload.dailyInitiated);
   const topCompleted = bestDay(payload.dailyCompleted);
   const conversionPct = (payload.metrics.conversionRate * 100).toFixed(2);
+  const csvArtifact = artifacts?.csv || "not_uploaded";
+  const jsonArtifact = artifacts?.json || "not_uploaded";
 
   const lines: string[] = [];
+  lines.push(`TransUnion Referral Metrics (${payload.month})`);
   lines.push(`Month: ${payload.month}`);
   lines.push("");
   lines.push("Summary:");
@@ -187,9 +190,10 @@ export function renderTuReferralEmail(
   lines.push(`- Conversion rate: ${conversionPct}%`);
   lines.push("");
   lines.push("Daily Activity:");
-  lines.push("day | initiated | completed");
+  lines.push("day        | initiated | completed");
+  lines.push("-----------|-----------|----------");
   for (const day of days) {
-    lines.push(`${day} | ${initiatedMap.get(day) || 0} | ${completedMap.get(day) || 0}`);
+    lines.push(`${day} | ${String(initiatedMap.get(day) || 0).padStart(9, " ")} | ${String(completedMap.get(day) || 0).padStart(9, " ")}`);
   }
   lines.push("");
   lines.push("Top Day:");
@@ -201,8 +205,8 @@ export function renderTuReferralEmail(
   );
   lines.push("");
   lines.push("Artifact links:");
-  lines.push(`- CSV: ${artifacts?.csv || "not_uploaded"}`);
-  lines.push(`- JSON: ${artifacts?.json || "not_uploaded"}`);
+  lines.push(`- CSV: ${csvArtifact}`);
+  lines.push(`- JSON: ${jsonArtifact}`);
 
   return {
     subject: `[RentChain] TransUnion Referral Metrics — ${payload.month}`,
