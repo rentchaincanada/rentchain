@@ -9,10 +9,11 @@
   "engineStrict": true,
   "scripts": {
     "preflight": "node ./scripts/check-node.js",
+    "check-react-pin": "node ./scripts/check-react-pin.js",
     "dev": "npm run preflight && vite --host",
-    "build": "npm run preflight && node scripts/build.mjs",
+    "build": "npm run preflight && npm run check-react-pin && node scripts/build.mjs",
     "build:tdzdebug": "vite build --mode tdzdebug",
-    "build:app": "vite build",
+    "build:app": "npm run check-react-pin && vite build",
     "lint": "eslint --config eslint.hooks-guard.config.js --max-warnings=0 src/pages/DashboardPage.tsx \"src/features/automation/timeline/**/*.{ts,tsx}\"",
     "lint:full": "eslint .",
     "preview": "vite preview",
