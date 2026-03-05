@@ -9,10 +9,11 @@
   "engineStrict": true,
   "scripts": {
     "preflight": "node ./scripts/check-node.js",
+    "check-react-pin": "node ./scripts/check-react-pin.js",
     "dev": "npm run preflight && vite --host",
-    "build": "npm run preflight && node scripts/build.mjs",
+    "build": "npm run preflight && npm run check-react-pin && node scripts/build.mjs",
     "build:tdzdebug": "vite build --mode tdzdebug",
-    "build:app": "vite build",
+    "build:app": "npm run check-react-pin && vite build",
     "lint": "eslint --config eslint.hooks-guard.config.js --max-warnings=0 src/pages/DashboardPage.tsx \"src/features/automation/timeline/**/*.{ts,tsx}\"",
     "lint:full": "eslint .",
     "preview": "vite preview",
@@ -24,8 +25,8 @@
     "firebase": "^12.6.0",
     "lucide-react": "^0.562.0",
     "qrcode.react": "^4.2.0",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
     "react-router-dom": "^7.9.6",
     "recharts": "^3.5.0",
     "zustand": "^5.0.9"
@@ -36,8 +37,8 @@
     "@testing-library/react": "^16.3.0",
     "@playwright/test": "^1.50.1",
     "@types/node": "^24.10.1",
-    "@types/react": "^19.2.5",
-    "@types/react-dom": "^19.2.3",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react-swc": "^4.2.2",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
@@ -49,5 +50,9 @@
     "vite": "^7.2.4",
     "vitest": "^4.0.7",
     "vite-plugin-pwa": "^1.2.0"
+  },
+  "overrides": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
   }
 }
