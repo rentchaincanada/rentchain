@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { getTuReferralChart, type TuReferralChartResponse } from "../../api/adminMetricsApi";
 import { Button, Card, Input, Section } from "../ui/Ui";
 import { colors, radius, spacing, text } from "../../styles/tokens";
+import TuReferralMetricsChartTest from "./TuReferralMetricsChartTest";
 
 function currentMonthInputValue() {
   const now = new Date();
@@ -113,25 +114,11 @@ function TuReferralMetricsWidget() {
 
         <Card style={{ padding: spacing.md }}>
           <div style={{ fontWeight: 700, marginBottom: spacing.sm }}>Daily Trend</div>
-          {loading ? (
-            <div style={{ color: text.muted }}>Loading metrics...</div>
-          ) : error ? (
-            <div style={{ color: colors.danger }}>Failed to load chart: {error}</div>
-          ) : (
-            <div
-              style={{
-                border: `1px dashed ${colors.border}`,
-                borderRadius: radius.md,
-                padding: spacing.md,
-                color: text.muted,
-                minHeight: 96,
-                display: "flex",
-                alignItems: "center",
-              }}
-            >
-              Chart temporarily disabled during stability isolation.
-            </div>
-          )}
+          <div style={{ border: `1px solid ${colors.border}`, borderRadius: radius.md, padding: spacing.sm }}>
+            <TuReferralMetricsChartTest />
+          </div>
+          {loading ? <div style={{ color: text.muted }}>Loading KPI data...</div> : null}
+          {error ? <div style={{ color: colors.danger }}>KPI data error: {error}</div> : null}
         </Card>
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing.sm, flexWrap: "wrap" }}>
