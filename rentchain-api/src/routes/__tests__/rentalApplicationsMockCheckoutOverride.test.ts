@@ -196,6 +196,7 @@ describe("rental applications checkout mock override", () => {
 
     expect(res.status).toBe(503);
     expect(res.body?.detail).toBe("provider_not_ready");
+    expect(res.body?.preflightDetail).toBe("provider_not_ready");
   });
 
   it("returns 503 when ALLOW_MOCK_PROVIDER_CHECKOUT is true but caller is non-admin", async () => {
@@ -211,6 +212,7 @@ describe("rental applications checkout mock override", () => {
 
     expect(res.status).toBe(503);
     expect(res.body?.detail).toBe("provider_not_ready");
+    expect(res.body?.preflightDetail).toBeUndefined();
   });
 
   it("returns 200 for admin when allowlisted and emits mock telemetry", async () => {
