@@ -5,6 +5,7 @@ import { requireAdmin } from "../middleware/requireAdmin";
 import { getCountersSummary } from "../services/telemetryService";
 import { getStripeClient, isStripeConfigured } from "../services/stripeService";
 import { getPlanConfig, resolvePlanFromPriceId, type BillingPlanKey } from "../config/planMatrix";
+import { getTuReferralMetricsForMonth } from "../services/metrics/tuReferralReport";
 
 const router = Router();
 const FUNNEL_EVENT_NAMES = [
@@ -13,32 +14,6 @@ const FUNNEL_EVENT_NAMES = [
   "upgrade_modal_opened",
   "upgrade_modal_upgrade_clicked",
 ];
-
-function parseMonthRange(rawMonth: string | undefined) {
-  const now = new Date();
-  const fallbackYear = now.getUTCFullYear();
-  const fallbackMonth = now.getUTCMonth();
-  const value = String(rawMonth || "").trim();
-
-  const match = /^(\d{4})-(\d{2})$/.exec(value);
-  const year = match ? Number(match[1]) : fallbackYear;
-  const monthIndexRaw = match ? Number(match[2]) - 1 : fallbackMonth;
-  const monthIndex = Number.isFinite(monthIndexRaw)
-    ? Math.min(Math.max(monthIndexRaw, 0), 11)
-    : fallbackMonth;
-
-  const startMs = Date.UTC(year, monthIndex, 1, 0, 0, 0, 0);
-  const endMs = Date.UTC(year, monthIndex + 1, 1, 0, 0, 0, 0);
-  const monthKey = `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
-  return { startMs, endMs, monthKey };
-}
-
-function dayKeyUtc(ms: number) {
-  const d = new Date(ms);
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(
-    d.getUTCDate()
-  ).padStart(2, "0")}`;
-}
 
 function safeMessage(err: any): string | null {
   const raw = String(err?.message || "").trim();
@@ -392,75 +367,8 @@ router.get("/metrics", requireAdmin, async (_req, res) => {
 
 router.get("/metrics/tu-referrals", requireAdmin, async (req, res) => {
   try {
-    const { startMs, endMs, monthKey } = parseMonthRange(String(req.query?.month || ""));
-
-    const [initiatedSnap, completedSnap] = await Promise.all([
-      db
-        .collection("screeningReferrals")
-        .where("provider", "==", "transunion_referral")
-        .where("createdAtMs", ">=", startMs)
-        .where("createdAtMs", "<", endMs)
-        .get(),
-      db
-        .collection("screeningReferrals")
-        .where("provider", "==", "transunion_referral")
-        .where("completedAtMs", ">=", startMs)
-        .where("completedAtMs", "<", endMs)
-        .get(),
-    ]);
-
-    const initiatedDocs = initiatedSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as any) }));
-    const completedDocs = completedSnap.docs
-      .map((doc) => ({ id: doc.id, ...(doc.data() as any) }))
-      .filter((doc) => String(doc.status || "").toLowerCase() === "completed");
-
-    const referralClicks = initiatedDocs.length;
-    const completedScreenings = completedDocs.length;
-    const activeLandlordsSet = new Set<string>();
-    const dailyInitiatedMap = new Map<string, number>();
-    const dailyCompletedMap = new Map<string, number>();
-
-    for (const doc of initiatedDocs) {
-      const landlordHash = String(doc.landlordIdHash || "").trim();
-      if (landlordHash) activeLandlordsSet.add(landlordHash);
-      const at = Number(doc.createdAtMs || 0);
-      if (at > 0) {
-        const key = dayKeyUtc(at);
-        dailyInitiatedMap.set(key, (dailyInitiatedMap.get(key) || 0) + 1);
-      }
-    }
-    for (const doc of completedDocs) {
-      const at = Number(doc.completedAtMs || 0);
-      if (at > 0) {
-        const key = dayKeyUtc(at);
-        dailyCompletedMap.set(key, (dailyCompletedMap.get(key) || 0) + 1);
-      }
-    }
-
-    const activeLandlords = activeLandlordsSet.size;
-    const screeningsPerLandlord =
-      activeLandlords > 0
-        ? Number((completedScreenings / activeLandlords).toFixed(2))
-        : 0;
-    const conversionRate = referralClicks > 0 ? Number((completedScreenings / referralClicks).toFixed(4)) : 0;
-
-    return res.json({
-      ok: true,
-      month: monthKey,
-      metrics: {
-        referralClicks,
-        completedScreenings,
-        activeLandlords,
-        screeningsPerLandlord,
-        conversionRate,
-      },
-      dailyInitiated: Array.from(dailyInitiatedMap.entries())
-        .map(([day, count]) => ({ day, count }))
-        .sort((a, b) => a.day.localeCompare(b.day)),
-      dailyCompleted: Array.from(dailyCompletedMap.entries())
-        .map(([day, count]) => ({ day, count }))
-        .sort((a, b) => a.day.localeCompare(b.day)),
-    });
+    const payload = await getTuReferralMetricsForMonth(String(req.query?.month || "").trim() || undefined);
+    return res.json(payload);
   } catch (err: any) {
     console.error("[admin] tu referral metrics failed", err?.message || err);
     const role = String((req as any)?.user?.role || "").toLowerCase();
