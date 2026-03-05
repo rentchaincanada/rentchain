@@ -40,6 +40,15 @@ function dayKeyUtc(ms: number) {
   ).padStart(2, "0")}`;
 }
 
+function safeMessage(err: any): string | null {
+  const raw = String(err?.message || "").trim();
+  if (!raw) return null;
+  const compact = raw.replace(/\s+/g, " ").slice(0, 240);
+  return compact
+    .replace(/(api[_-]?key|token|secret)\s*[:=]\s*\S+/gi, "$1=[redacted]")
+    .replace(/bearer\s+[a-z0-9\-_\.]+/gi, "bearer [redacted]");
+}
+
 router.get("/ping", requireAdmin, (_req, res) => res.json({ ok: true }));
 
 router.post("/users/create-landlord", requireAdmin, async (req, res) => {
@@ -454,7 +463,13 @@ router.get("/metrics/tu-referrals", requireAdmin, async (req, res) => {
     });
   } catch (err: any) {
     console.error("[admin] tu referral metrics failed", err?.message || err);
-    return res.status(500).json({ ok: false, error: "METRICS_FAILED" });
+    const role = String((req as any)?.user?.role || "").toLowerCase();
+    const detail = safeMessage(err);
+    return res.status(500).json({
+      ok: false,
+      error: "METRICS_FAILED",
+      ...(role === "admin" && detail ? { detail } : {}),
+    });
   }
 });
 
