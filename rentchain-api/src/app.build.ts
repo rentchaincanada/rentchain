@@ -81,6 +81,7 @@ import telemetryRoutes from "./routes/telemetryRoutes";
 import invitesRoutes from "./routes/invitesRoutes";
 import accessRoutes from "./routes/accessRoutes";
 import complianceRoutes from "./routes/complianceRoutes";
+import internalReportsRoutes from "./routes/internalReportsRoutes";
 
 process.on("unhandledRejection", (reason) => {
   console.error("[FATAL] unhandledRejection", reason);
@@ -176,6 +177,7 @@ app.use("/api/auth", routeSource("authRoutes.ts"), authRoutes);
 app.use("/api/invites", routeSource("invitesRoutes.ts"), invitesRoutes);
 app.use("/api/access", routeSource("accessRoutes.ts"), accessRoutes);
 app.use("/api/capabilities", routeSource("capabilitiesRoutes.ts"), capabilitiesRoutes);
+app.use("/api/internal", routeSource("internalReportsRoutes.ts"), internalReportsRoutes);
 
 // Auth decode (non-blocking if header missing)
 app.use(authenticateJwt);
