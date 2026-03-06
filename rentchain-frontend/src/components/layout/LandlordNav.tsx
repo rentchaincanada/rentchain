@@ -5,7 +5,6 @@ import { useAuth } from "../../context/useAuth";
 import { fetchLandlordConversations } from "../../api/messagesApi";
 import { getVisibleNavItems } from "./navConfig";
 import { useCapabilities } from "@/hooks/useCapabilities";
-import { billingTierLabel, useBillingStatus } from "@/hooks/useBillingStatus";
 import { UpgradeNudgeHost } from "@/features/upgradeNudges/UpgradeNudgeHost";
 import "./LandlordNav.css";
 
@@ -19,8 +18,6 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
   const loc = useLocation();
   const { logout, user, ready, isLoading, authStatus } = useAuth();
   const { features, loading: capsLoading } = useCapabilities();
-  const billingStatus = useBillingStatus();
-  const planLabel = billingTierLabel(billingStatus.tier);
   const [hasUnread, setHasUnread] = useState<boolean>(false);
   const unreadFlag = typeof unreadMessages === "boolean" ? unreadMessages : hasUnread;
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -44,6 +41,15 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
   const drawerItems = visibleItems.filter((item) => item.showInDrawer !== false);
   const primaryDrawerItems = drawerItems.filter((item) => !item.requiresAdmin);
   const adminDrawerItems = drawerItems.filter((item) => item.requiresAdmin);
+  const orderedPrimaryDrawerItems = React.useMemo(
+    () =>
+      [...primaryDrawerItems].sort((a, b) => {
+        if (a.id === "account") return -1;
+        if (b.id === "account") return 1;
+        return 0;
+      }),
+    [primaryDrawerItems]
+  );
   const tabItems = visibleItems.filter((item) => item.showInTabs);
 
   useEffect(() => {
@@ -111,11 +117,11 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
 
       <button
         type="button"
-        className="rc-landlord-plan-badge"
-        onClick={() => nav("/billing")}
-        aria-label={`Current plan ${planLabel}. Open billing`}
+        className="rc-landlord-account-badge"
+        onClick={() => nav("/account")}
+        aria-label="Open My Account"
       >
-        {billingStatus.isLoading ? "Plan..." : planLabel}
+        My Account
       </button>
 
       <button
@@ -162,7 +168,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
             </div>
           ) : (
             <div className="rc-landlord-drawer-links">
-              {primaryDrawerItems.map(({ to, label }) => (
+              {orderedPrimaryDrawerItems.map(({ to, label }) => (
                 <button
                   key={to}
                   type="button"

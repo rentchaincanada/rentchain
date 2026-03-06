@@ -22,6 +22,11 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
   const visibleItems = navLoading ? [] : getVisibleNavItems(userRole, features);
   const drawerItems = visibleItems.filter((item) => item.showInDrawer !== false);
   const primaryDrawerItems = drawerItems.filter((item) => !item.requiresAdmin);
+  const orderedPrimaryDrawerItems = [...primaryDrawerItems].sort((a, b) => {
+    if (a.id === "account") return -1;
+    if (b.id === "account") return 1;
+    return 0;
+  });
   const adminDrawerItems = drawerItems.filter((item) => item.requiresAdmin);
 
   useEffect(() => {
@@ -201,7 +206,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
                 Loading menu...
               </div>
             ) : null}
-            {primaryDrawerItems.map((link) => {
+            {orderedPrimaryDrawerItems.map((link) => {
               const active = location.pathname.startsWith(link.to);
               return (
                 <button
