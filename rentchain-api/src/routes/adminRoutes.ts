@@ -892,6 +892,29 @@ router.post("/status/component", requireAdmin, async (req, res) => {
   }
 });
 
+router.post("/status/refresh-all", requireAdmin, async (_req, res) => {
+  try {
+    const now = Date.now();
+    const componentsSnap = await db.collection("statusComponents").get();
+    await Promise.all(
+      componentsSnap.docs.map((doc) =>
+        doc.ref.set(
+          {
+            status: "operational",
+            message: "",
+            updatedAtMs: now,
+          },
+          { merge: true }
+        )
+      )
+    );
+    return res.json({ ok: true, updatedComponents: componentsSnap.size });
+  } catch (err: any) {
+    console.error("[admin] status refresh-all failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "STATUS_REFRESH_ALL_FAILED" });
+  }
+});
+
 router.post("/status/incident", requireAdmin, async (req, res) => {
   try {
     const data = await createStatusIncident(req.body || {});
