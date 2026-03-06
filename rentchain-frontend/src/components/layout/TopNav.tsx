@@ -70,6 +70,20 @@ const TopNav: React.FC = () => {
               Role: {roleBadge}
             </span>
             <Button
+              variant="secondary"
+              onClick={() => navigate("/account")}
+              style={{
+                borderRadius: radius.pill,
+                border: `1px solid ${colors.accent}`,
+                background: "rgba(37,99,235,0.12)",
+                color: text.primary,
+                boxShadow: shadows.sm,
+                fontWeight: 700,
+              }}
+            >
+              My Account
+            </Button>
+            <Button
               variant="ghost"
               onClick={() => navigate("/site")}
               style={{

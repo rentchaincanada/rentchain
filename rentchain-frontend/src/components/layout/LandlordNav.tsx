@@ -41,6 +41,15 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
   const drawerItems = visibleItems.filter((item) => item.showInDrawer !== false);
   const primaryDrawerItems = drawerItems.filter((item) => !item.requiresAdmin);
   const adminDrawerItems = drawerItems.filter((item) => item.requiresAdmin);
+  const orderedPrimaryDrawerItems = React.useMemo(
+    () =>
+      [...primaryDrawerItems].sort((a, b) => {
+        if (a.id === "account") return -1;
+        if (b.id === "account") return 1;
+        return 0;
+      }),
+    [primaryDrawerItems]
+  );
   const tabItems = visibleItems.filter((item) => item.showInTabs);
 
   useEffect(() => {
@@ -108,6 +117,15 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
 
       <button
         type="button"
+        className="rc-landlord-account-badge"
+        onClick={() => nav("/account")}
+        aria-label="Open My Account"
+      >
+        My Account
+      </button>
+
+      <button
+        type="button"
         className="rc-landlord-hamburger"
         aria-label="Open menu"
         aria-expanded={drawerOpen}
@@ -150,7 +168,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
             </div>
           ) : (
             <div className="rc-landlord-drawer-links">
-              {primaryDrawerItems.map(({ to, label }) => (
+              {orderedPrimaryDrawerItems.map(({ to, label }) => (
                 <button
                   key={to}
                   type="button"

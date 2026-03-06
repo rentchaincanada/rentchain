@@ -124,6 +124,9 @@ const AccountPage: React.FC = () => {
           <Button type="button" onClick={() => navigate("/billing")}>
             Billing
           </Button>
+          <Button type="button" variant="secondary" onClick={() => navigate("/site/pricing")}>
+            Pricing & plans
+          </Button>
           <Button
             type="button"
             variant="secondary"

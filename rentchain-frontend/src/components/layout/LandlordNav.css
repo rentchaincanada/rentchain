@@ -27,6 +27,22 @@
   z-index: 30;
 }
 
+.rc-landlord-account-badge {
+  display: none;
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(37, 99, 235, 0.35);
+  background: rgba(37, 99, 235, 0.12);
+  color: #111827;
+  font-size: 12px;
+  font-weight: 700;
+  z-index: 30;
+}
+
 .rc-landlord-hamburger span {
   display: block;
   width: 18px;
@@ -186,6 +202,11 @@
 
   .rc-landlord-hamburger {
     display: inline-flex;
+  }
+
+  .rc-landlord-account-badge {
+    display: inline-flex;
+    align-items: center;
   }
 
   .rc-landlord-content {
