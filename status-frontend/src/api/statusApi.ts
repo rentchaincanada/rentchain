@@ -41,3 +41,24 @@ export async function fetchPublicStatus() {
   if (!res.ok) throw new Error(`status_api_${res.status}`);
   return (await res.json()) as PublicStatusPayload;
 }
+
+export function readAdminToken() {
+  const fromQuery = new URLSearchParams(window.location.search).get("adminToken");
+  const token = String(fromQuery || localStorage.getItem("status_admin_token") || "").trim();
+  if (fromQuery && token) {
+    localStorage.setItem("status_admin_token", token);
+  }
+  return token || null;
+}
+
+export async function refreshAllStatusComponents(adminToken: string) {
+  const url = `${getApiBase()}/api/admin/status/refresh-all`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${adminToken}`,
+    },
+  });
+  if (!res.ok) throw new Error(`status_refresh_all_${res.status}`);
+  return (await res.json()) as { ok: true; updatedComponents: number };
+}
