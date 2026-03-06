@@ -76,12 +76,6 @@ export const NAV_ITEMS: NavItem[] = [
     showInDrawer: true,
   },
   {
-    id: "billing",
-    label: "Billing",
-    to: "/billing",
-    showInDrawer: true,
-  },
-  {
     id: "account",
     label: "My Account",
     to: "/account",
@@ -108,12 +102,6 @@ export const NAV_ITEMS: NavItem[] = [
     id: "screening",
     label: "Screening",
     to: "/screening",
-    showInDrawer: true,
-  },
-  {
-    id: "pricing",
-    label: "Pricing",
-    to: "/site/pricing",
     showInDrawer: true,
   },
   {

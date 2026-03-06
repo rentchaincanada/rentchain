@@ -5,7 +5,6 @@ import { useAuth } from "../../context/useAuth";
 import { fetchLandlordConversations } from "../../api/messagesApi";
 import { getVisibleNavItems } from "./navConfig";
 import { useCapabilities } from "@/hooks/useCapabilities";
-import { billingTierLabel, useBillingStatus } from "@/hooks/useBillingStatus";
 import { UpgradeNudgeHost } from "@/features/upgradeNudges/UpgradeNudgeHost";
 import "./LandlordNav.css";
 
@@ -19,8 +18,6 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
   const loc = useLocation();
   const { logout, user, ready, isLoading, authStatus } = useAuth();
   const { features, loading: capsLoading } = useCapabilities();
-  const billingStatus = useBillingStatus();
-  const planLabel = billingTierLabel(billingStatus.tier);
   const [hasUnread, setHasUnread] = useState<boolean>(false);
   const unreadFlag = typeof unreadMessages === "boolean" ? unreadMessages : hasUnread;
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -108,15 +105,6 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
       <div className="rc-landlord-topnav">
         <TopNav />
       </div>
-
-      <button
-        type="button"
-        className="rc-landlord-plan-badge"
-        onClick={() => nav("/billing")}
-        aria-label={`Current plan ${planLabel}. Open billing`}
-      >
-        {billingStatus.isLoading ? "Plan..." : planLabel}
-      </button>
 
       <button
         type="button"

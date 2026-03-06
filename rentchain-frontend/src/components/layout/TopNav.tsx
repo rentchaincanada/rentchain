@@ -6,7 +6,6 @@ import { WorkspaceDrawer } from "./WorkspaceDrawer";
 import { Button } from "../ui/Ui";
 import { colors, radius, shadows, spacing, text, layout, blur } from "../../styles/tokens";
 import { RentChainLogo } from "../brand/RentChainLogo";
-import { billingTierLabel, useBillingStatus } from "@/hooks/useBillingStatus";
 
 function roleLabel(raw: string): string {
   const normalized = String(raw || "").trim().toLowerCase();
@@ -27,8 +26,6 @@ const TopNav: React.FC = () => {
     if (actorRole === "admin" || role === "admin") return "admin";
     return actorRole || role || "landlord";
   }, [authResolved, user?.actorRole, user?.role]);
-  const billingStatus = useBillingStatus();
-  const planLabel = billingTierLabel(billingStatus.tier);
   const roleBadge = authResolved ? roleLabel(effectiveRole) : "Loading...";
 
   return (
@@ -72,25 +69,6 @@ const TopNav: React.FC = () => {
             >
               Role: {roleBadge}
             </span>
-            <button
-              type="button"
-              onClick={() => navigate("/billing")}
-              style={{
-                borderRadius: radius.pill,
-                border: `1px solid ${colors.border}`,
-                background: colors.card,
-                color: text.primary,
-                boxShadow: shadows.sm,
-                fontWeight: 700,
-                fontSize: "0.8rem",
-                padding: "8px 10px",
-                whiteSpace: "nowrap",
-                cursor: "pointer",
-              }}
-              aria-label={`Current plan ${planLabel}. Open billing`}
-            >
-              {billingStatus.isLoading ? "Plan..." : planLabel}
-            </button>
             <Button
               variant="ghost"
               onClick={() => navigate("/site")}
