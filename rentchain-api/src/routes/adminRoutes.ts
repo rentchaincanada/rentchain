@@ -894,6 +894,19 @@ router.post("/status/component", requireAdmin, async (req, res) => {
 
 router.post("/status/refresh-all", requireAdmin, async (_req, res) => {
   try {
+    const activeIncidentSnap = await db
+      .collection("statusIncidents")
+      .where("status", "in", ["investigating", "identified", "monitoring"])
+      .limit(1)
+      .get();
+    if (!activeIncidentSnap.empty) {
+      return res.status(409).json({
+        ok: false,
+        error: "ACTIVE_INCIDENT_PRESENT",
+        message: "Resolve active incident before resetting components.",
+      });
+    }
+
     const now = Date.now();
     const componentsSnap = await db.collection("statusComponents").get();
     await Promise.all(

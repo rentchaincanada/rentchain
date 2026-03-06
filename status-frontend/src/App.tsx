@@ -11,7 +11,8 @@ import IncidentList from "./components/IncidentList";
 
 function App() {
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionBanner, setActionBanner] = useState<string | null>(null);
   const [payload, setPayload] = useState<PublicStatusPayload | null>(null);
   const [refreshingAll, setRefreshingAll] = useState(false);
   const [confirmation, setConfirmation] = useState<string | null>(null);
@@ -21,11 +22,11 @@ function App() {
   const loadStatus = async (cancelledRef?: { value: boolean }) => {
     try {
       setLoading(true);
-      setError(null);
+      setLoadError(null);
       const data = await fetchPublicStatus();
       if (!cancelledRef?.value) setPayload(data);
     } catch (err: any) {
-      if (!cancelledRef?.value) setError(String(err?.message || "status_unavailable"));
+      if (!cancelledRef?.value) setLoadError(String(err?.message || "status_unavailable"));
     } finally {
       if (!cancelledRef?.value) setLoading(false);
     }
@@ -53,11 +54,19 @@ function App() {
     try {
       setRefreshingAll(true);
       setConfirmation(null);
+      setActionBanner(null);
       await refreshAllStatusComponents(adminToken);
       await loadStatus();
       setConfirmation("All components marked operational.");
     } catch (err: any) {
-      setError(String(err?.message || "status_refresh_all_failed"));
+      const code = String(err?.message || "");
+      if (code === "ACTIVE_INCIDENT_PRESENT") {
+        setActionBanner(
+          "An active incident exists. Resolve the incident before resetting component statuses."
+        );
+      } else {
+        setActionBanner("Unable to reset all components right now.");
+      }
     } finally {
       setRefreshingAll(false);
     }
@@ -95,7 +104,8 @@ function App() {
       </section>
 
       {loading ? <section className="card muted">Loading status...</section> : null}
-      {error ? <section className="card error">Unable to load status right now ({error}).</section> : null}
+      {loadError ? <section className="card error">Unable to load status right now ({loadError}).</section> : null}
+      {actionBanner ? <section className="card error">{actionBanner}</section> : null}
 
       {payload?.activeBanner ? (
         <section className="card banner banner-incident">
