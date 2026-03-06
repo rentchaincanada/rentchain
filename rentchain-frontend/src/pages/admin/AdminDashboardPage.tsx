@@ -148,9 +148,14 @@ export const AdminDashboardPage: React.FC = () => {
               {lastUpdated ? `Last updated ${new Date(lastUpdated).toLocaleString()}` : "Not loaded"}
             </div>
           </div>
-          <Button type="button" variant="secondary" onClick={load} disabled={loading}>
-            Refresh
-          </Button>
+          <div style={{ display: "flex", gap: spacing.xs, alignItems: "center", flexWrap: "wrap" }}>
+            <Button type="button" variant="navy" onClick={() => window.location.assign("/admin/control-tower")}>
+              Open Control Tower
+            </Button>
+            <Button type="button" variant="secondary" onClick={load} disabled={loading}>
+              Refresh
+            </Button>
+          </div>
         </div>
 
         <TuReferralMetricsWidget />

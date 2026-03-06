@@ -101,6 +101,7 @@ const BlockchainPage = lazy(() => import("./pages/BlockchainPage"));
 const AdminScreeningsPage = lazy(() => import("./pages/AdminScreeningsPage"));
 const AdminVerifiedScreeningsPage = lazy(() => import("./pages/AdminVerifiedScreeningsPage"));
 const AdminDashboardPage = lazy(() => import("./pages/admin/AdminDashboardPage"));
+const ControlTowerPage = lazy(() => import("./pages/admin/ControlTowerPage"));
 const AdminLeadsPage = lazyWithRetry(() => import("./pages/admin/AdminLeadsPage"));
 const AutomationTimelinePage = lazy(
   () => import("./features/automation/timeline/AutomationTimelinePage")
@@ -370,6 +371,16 @@ function App() {
             <RequireAdmin>
               <Suspense fallback={null}>
                 <AdminDashboardPage />
+              </Suspense>
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/admin/control-tower"
+          element={
+            <RequireAdmin>
+              <Suspense fallback={null}>
+                <ControlTowerPage />
               </Suspense>
             </RequireAdmin>
           }
