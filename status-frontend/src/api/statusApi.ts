@@ -59,6 +59,17 @@ export async function refreshAllStatusComponents(adminToken: string) {
       Authorization: `Bearer ${adminToken}`,
     },
   });
-  if (!res.ok) throw new Error(`status_refresh_all_${res.status}`);
+  if (!res.ok) {
+    let payload: any = null;
+    try {
+      payload = await res.json();
+    } catch {
+      payload = null;
+    }
+    if (res.status === 409 && String(payload?.error || "") === "ACTIVE_INCIDENT_PRESENT") {
+      throw new Error("ACTIVE_INCIDENT_PRESENT");
+    }
+    throw new Error(`status_refresh_all_${res.status}`);
+  }
   return (await res.json()) as { ok: true; updatedComponents: number };
 }
