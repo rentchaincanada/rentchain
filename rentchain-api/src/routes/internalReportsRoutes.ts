@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { uploadBufferToGcs } from "../lib/gcs";
 import { sendEmail } from "../services/emailService";
+import { runStatusHealthSync } from "../services/statusHealthSync";
 import {
   getTuReferralMetricsForMonth,
   renderTuReferralCsv,
@@ -116,6 +117,16 @@ router.post("/reports/tu-referrals", requireInternalJobToken, async (req: any, r
       durationMs: Date.now() - startedAt,
     });
     return res.status(500).json({ ok: false, error: "report_generation_failed" });
+  }
+});
+
+router.post("/status/health-sync", requireInternalJobToken, async (_req: any, res) => {
+  try {
+    const result = await runStatusHealthSync();
+    return res.json(result);
+  } catch (err: any) {
+    console.error("[status_health_sync] failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "status_health_sync_failed" });
   }
 });
 
