@@ -153,14 +153,6 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
             }}
           >
             <Link
-              to="/site/about"
-              style={{ color: text.muted, textDecoration: "none" }}
-              onMouseEnter={(e) => onHover(e, true)}
-              onMouseLeave={(e) => onHover(e, false)}
-            >
-              {t("nav.about")}
-            </Link>
-            <Link
               to="/site/pricing"
               style={{ color: text.muted, textDecoration: "none" }}
               onMouseEnter={(e) => onHover(e, true)}
@@ -385,15 +377,6 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
                 onClick={() => setMenuOpen(false)}
               >
                 {t("nav.home")}
-              </Link>
-              <Link
-                to="/site/about"
-                style={{ color: text.muted, textDecoration: "none" }}
-                onMouseEnter={(e) => onHover(e, true)}
-                onMouseLeave={(e) => onHover(e, false)}
-                onClick={() => setMenuOpen(false)}
-              >
-                {t("nav.about")}
               </Link>
               <Link
                 to="/site/pricing"
