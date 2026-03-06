@@ -683,6 +683,9 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
             <Link to="/terms" style={{ color: text.muted, textDecoration: "none" }}>
               {t("footer.terms")}
             </Link>
+            <a href="https://status.rentchain.ai" style={{ color: text.muted, textDecoration: "none" }}>
+              System Status
+            </a>
           </div>
         </div>
       </footer>
