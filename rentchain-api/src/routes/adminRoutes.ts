@@ -6,6 +6,7 @@ import { getCountersSummary } from "../services/telemetryService";
 import { getStripeClient, isStripeConfigured } from "../services/stripeService";
 import { getPlanConfig, resolvePlanFromPriceId, type BillingPlanKey } from "../config/planMatrix";
 import { getTuReferralMetricsForMonth } from "../services/metrics/tuReferralReport";
+import { getPublicStatusPayload } from "../services/statusService";
 import {
   createStatusIncident,
   resolveStatusIncident,
@@ -225,6 +226,258 @@ function startOfMonthMs(now = new Date()) {
 
 function startOfYearMs(now = new Date()) {
   return Date.UTC(now.getUTCFullYear(), 0, 1);
+}
+
+function startOfTodayUtcMs(now = new Date()) {
+  return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+}
+
+function toFiniteNumber(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function toUpperStatus(value: unknown) {
+  return String(value || "").trim().toUpperCase();
+}
+
+function safeRatio(numerator: number, denominator: number, decimals = 4) {
+  if (!(denominator > 0)) return 0;
+  return Number((numerator / denominator).toFixed(decimals));
+}
+
+function applicationSubmittedAtMs(data: any): number {
+  return (
+    toMillis(data?.submittedAtMs) ||
+    toMillis(data?.submittedAt) ||
+    toMillis(data?.createdAtMs) ||
+    toMillis(data?.createdAt) ||
+    0
+  );
+}
+
+function applicationApprovedAtMs(data: any): number {
+  return (
+    toMillis(data?.approvedAtMs) ||
+    toMillis(data?.approvedAt) ||
+    toMillis(data?.statusUpdatedAtMs) ||
+    toMillis(data?.updatedAtMs) ||
+    toMillis(data?.updatedAt) ||
+    0
+  );
+}
+
+function screeningOrderCreatedAtMs(data: any): number {
+  return (
+    toMillis(data?.createdAtMs) ||
+    toMillis(data?.createdAt) ||
+    toMillis(data?.queuedAt) ||
+    toMillis(data?.updatedAtMs) ||
+    toMillis(data?.updatedAt) ||
+    0
+  );
+}
+
+function screeningOrderCompletedAtMs(data: any): number {
+  return (
+    toMillis(data?.completedAtMs) ||
+    toMillis(data?.completedAt) ||
+    toMillis(data?.reportGeneratedAtMs) ||
+    toMillis(data?.reportGeneratedAt) ||
+    toMillis(data?.paidAtMs) ||
+    toMillis(data?.paidAt) ||
+    0
+  );
+}
+
+function leaseCreatedAtMs(data: any): number {
+  return (
+    toMillis(data?.createdAtMs) ||
+    toMillis(data?.createdAt) ||
+    toMillis(data?.activatedAtMs) ||
+    toMillis(data?.activatedAt) ||
+    0
+  );
+}
+
+function isApplicationApprovedStatus(status: string): boolean {
+  return status === "APPROVED" || status === "CONDITIONAL_COSIGNER" || status === "CONDITIONAL_DEPOSIT";
+}
+
+function isScreeningCompletedStatus(rawStatus: unknown, rawPaymentStatus: unknown): boolean {
+  const status = String(rawStatus || "").trim().toLowerCase();
+  const paymentStatus = String(rawPaymentStatus || "").trim().toLowerCase();
+  if (
+    status === "complete" ||
+    status === "completed" ||
+    status === "report_ready" ||
+    status === "external_completed"
+  ) {
+    return true;
+  }
+  return paymentStatus === "paid" && status !== "failed";
+}
+
+function isActivePropertyStatus(status: string): boolean {
+  return status !== "DRAFT" && status !== "INACTIVE" && status !== "ARCHIVED" && status !== "DELETED";
+}
+
+function isActiveUnitStatus(status: string): boolean {
+  return status !== "OFFLINE" && status !== "INACTIVE" && status !== "ARCHIVED" && status !== "DELETED";
+}
+
+async function getControlTowerPayload() {
+  const now = new Date();
+  const nowMs = now.getTime();
+  const todayStartMs = startOfTodayUtcMs(now);
+  const monthStartMs = startOfMonthMs(now);
+
+  const [applicationsSnap, screeningOrdersSnap, leasesSnap, propertiesSnap, unitsSnap, tuMetrics, statusPayload] =
+    await Promise.all([
+      db.collection("rentalApplications").get(),
+      db.collection("screeningOrders").get(),
+      db.collection("leases").get(),
+      db.collection("properties").get(),
+      db.collection("units").get(),
+      getTuReferralMetricsForMonth(),
+      getPublicStatusPayload(),
+    ]);
+
+  const applications = applicationsSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as any) }));
+  const screeningOrders = screeningOrdersSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as any) }));
+  const leases = leasesSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as any) }));
+  const properties = propertiesSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as any) }));
+  const units = unitsSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as any) }));
+
+  let applicationsToday = 0;
+  let applicationsMtd = 0;
+  let applicationsApprovedMtd = 0;
+  const activeLandlordIds = new Set<string>();
+
+  for (const app of applications) {
+    const submittedAtMs = applicationSubmittedAtMs(app);
+    const approvedAtMs = applicationApprovedAtMs(app);
+    const status = toUpperStatus(app?.status);
+    const landlordId = String(app?.landlordId || "").trim();
+
+    if (landlordId) activeLandlordIds.add(landlordId);
+
+    if (submittedAtMs >= todayStartMs) applicationsToday += 1;
+    if (submittedAtMs >= monthStartMs) applicationsMtd += 1;
+    if (isApplicationApprovedStatus(status) && approvedAtMs >= monthStartMs) {
+      applicationsApprovedMtd += 1;
+    }
+  }
+
+  let screeningsToday = 0;
+  let creditReportsRunMtd = 0;
+
+  for (const order of screeningOrders) {
+    const createdAtMs = screeningOrderCreatedAtMs(order);
+    const completedAtMs = screeningOrderCompletedAtMs(order);
+    const landlordId = String(order?.landlordId || "").trim();
+    if (landlordId) activeLandlordIds.add(landlordId);
+
+    if (createdAtMs >= todayStartMs) screeningsToday += 1;
+    if (
+      completedAtMs >= monthStartMs &&
+      isScreeningCompletedStatus(order?.status, order?.paymentStatus)
+    ) {
+      creditReportsRunMtd += 1;
+    }
+  }
+
+  let leasesToday = 0;
+  let leasesMtd = 0;
+  let depositCountToday = 0;
+  let depositsCollectedToday = 0;
+  let depositsCollectedMonth = 0;
+  let depositsCountMonth = 0;
+
+  for (const lease of leases) {
+    const createdAtMs = leaseCreatedAtMs(lease);
+    const landlordId = String(lease?.landlordId || "").trim();
+    if (landlordId) activeLandlordIds.add(landlordId);
+
+    if (createdAtMs >= todayStartMs) leasesToday += 1;
+    if (createdAtMs >= monthStartMs) leasesMtd += 1;
+
+    const depositCents = toFiniteNumber(lease?.depositCents);
+    if (!(depositCents > 0)) continue;
+    const depositDollars = Number((depositCents / 100).toFixed(2));
+    if (createdAtMs >= todayStartMs) {
+      depositCountToday += 1;
+      depositsCollectedToday += depositDollars;
+    }
+    if (createdAtMs >= monthStartMs) {
+      depositsCountMonth += 1;
+      depositsCollectedMonth += depositDollars;
+    }
+  }
+
+  const activeProperties = properties.filter((property) =>
+    isActivePropertyStatus(toUpperStatus(property?.status))
+  ).length;
+  const activeUnits = units.filter((unit) => isActiveUnitStatus(toUpperStatus(unit?.status))).length;
+  const applicationsPerUnit =
+    activeUnits > 0 ? Number((applicationsMtd / activeUnits).toFixed(2)) : 0;
+
+  const screeningRate = safeRatio(creditReportsRunMtd, applicationsMtd, 4);
+  const approvalRate = safeRatio(applicationsApprovedMtd, creditReportsRunMtd, 4);
+  const leaseConversionRate = safeRatio(leasesMtd, applicationsMtd, 4);
+  const averageDepositAmount =
+    depositsCountMonth > 0 ? Number((depositsCollectedMonth / depositsCountMonth).toFixed(2)) : 0;
+
+  const byComponent = new Map<string, any>();
+  for (const component of statusPayload.components || []) {
+    const key = String(component?.key || "").trim().toLowerCase();
+    if (key) byComponent.set(key, component);
+  }
+
+  const normalizeStatus = (key: string) => String(byComponent.get(key)?.status || "operational");
+
+  return {
+    ok: true as const,
+    today: {
+      applicationsSubmitted: applicationsToday,
+      screeningsInitiated: screeningsToday,
+      leasesGenerated: leasesToday,
+      depositsRecorded: depositCountToday,
+    },
+    funnelMonthToDate: {
+      applicationsReceived: applicationsMtd,
+      creditReportsRun: creditReportsRunMtd,
+      applicationsApproved: applicationsApprovedMtd,
+      leasesGenerated: leasesMtd,
+      screeningRate,
+      approvalRate,
+      leaseConversionRate,
+    },
+    utilization: {
+      activeLandlords: activeLandlordIds.size,
+      activeProperties,
+      activeUnits,
+      applicationsPerUnit,
+    },
+    screening: {
+      referralClicks: toFiniteNumber(tuMetrics.metrics?.referralClicks),
+      completedScreenings: toFiniteNumber(tuMetrics.metrics?.completedScreenings),
+      screeningsPerLandlord: toFiniteNumber(tuMetrics.metrics?.screeningsPerLandlord),
+      conversionRate: toFiniteNumber(tuMetrics.metrics?.conversionRate),
+    },
+    financial: {
+      depositsCollectedToday: Number(depositsCollectedToday.toFixed(2)),
+      depositsCollectedMonth: Number(depositsCollectedMonth.toFixed(2)),
+      averageDepositAmount,
+    },
+    statusSummary: {
+      website: normalizeStatus("website"),
+      api: normalizeStatus("api"),
+      screening: normalizeStatus("screening"),
+      payments: normalizeStatus("payments"),
+    },
+    updatedAtMs: nowMs,
+  };
 }
 
 function normalizeTier(input?: string | null): BillingPlanKey | null {
@@ -518,6 +771,16 @@ router.get("/summary", requireAdmin, async (_req, res) => {
   } catch (err: any) {
     console.error("[admin] summary failed", err?.message || err);
     return res.status(500).json({ ok: false, error: "SUMMARY_FAILED" });
+  }
+});
+
+router.get("/control-tower", requireAdmin, async (_req, res) => {
+  try {
+    const payload = await getControlTowerPayload();
+    return res.json(payload);
+  } catch (err: any) {
+    console.error("[admin] control tower failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "CONTROL_TOWER_FAILED" });
   }
 });
 
