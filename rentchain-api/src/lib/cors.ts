@@ -3,7 +3,9 @@ import type cors from "cors";
 const ALLOWED_ORIGINS = new Set<string>([
   "https://www.rentchain.ai",
   "https://rentchain.ai",
+  "https://status.rentchain.ai",
   "http://localhost:5173",
+  "http://127.0.0.1:5173",
   "http://localhost:4173",
   "http://localhost:4174",
   "http://localhost:3000",
@@ -21,7 +23,7 @@ export function isOriginAllowed(origin?: string | null): boolean {
     return false;
   }
   const hostname = url.hostname.toLowerCase();
-  if (hostname === "localhost") {
+  if (hostname === "localhost" || hostname === "127.0.0.1") {
     return ALLOWED_LOCALHOST_PORTS.has(url.port || "80");
   }
   if (hostname.endsWith(".vercel.app")) {
