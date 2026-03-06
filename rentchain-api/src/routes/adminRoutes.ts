@@ -6,6 +6,12 @@ import { getCountersSummary } from "../services/telemetryService";
 import { getStripeClient, isStripeConfigured } from "../services/stripeService";
 import { getPlanConfig, resolvePlanFromPriceId, type BillingPlanKey } from "../config/planMatrix";
 import { getTuReferralMetricsForMonth } from "../services/metrics/tuReferralReport";
+import {
+  createStatusIncident,
+  resolveStatusIncident,
+  updateStatusComponent,
+  updateStatusMeta,
+} from "../services/statusService";
 
 const router = Router();
 const FUNNEL_EVENT_NAMES = [
@@ -596,6 +602,54 @@ router.post("/expenses", requireAdmin, async (req, res) => {
   } catch (err: any) {
     console.error("[admin] expenses create failed", err?.message || err);
     return res.status(500).json({ ok: false, error: "EXPENSES_CREATE_FAILED" });
+  }
+});
+
+router.post("/status/meta", requireAdmin, async (req, res) => {
+  try {
+    const data = await updateStatusMeta(req.body || {});
+    return res.json({ ok: true, data });
+  } catch (err: any) {
+    console.error("[admin] status meta update failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "STATUS_META_UPDATE_FAILED" });
+  }
+});
+
+router.post("/status/component", requireAdmin, async (req, res) => {
+  try {
+    const data = await updateStatusComponent(req.body || {});
+    return res.json({ ok: true, data });
+  } catch (err: any) {
+    const message = String(err?.message || "");
+    if (message === "missing_component_key") {
+      return res.status(400).json({ ok: false, error: "missing_component_key" });
+    }
+    console.error("[admin] status component update failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "STATUS_COMPONENT_UPDATE_FAILED" });
+  }
+});
+
+router.post("/status/incident", requireAdmin, async (req, res) => {
+  try {
+    const data = await createStatusIncident(req.body || {});
+    return res.json({ ok: true, data });
+  } catch (err: any) {
+    console.error("[admin] status incident create failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "STATUS_INCIDENT_CREATE_FAILED" });
+  }
+});
+
+router.post("/status/incident/:id/resolve", requireAdmin, async (req, res) => {
+  try {
+    const data = await resolveStatusIncident(String(req.params?.id || ""), req.body?.message);
+    return res.json({ ok: true, data });
+  } catch (err: any) {
+    const message = String(err?.message || "");
+    if (message === "missing_incident_id") {
+      return res.status(400).json({ ok: false, error: "missing_incident_id" });
+    }
+    console.error("[admin] status incident resolve failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "STATUS_INCIDENT_RESOLVE_FAILED" });
   }
 });
 
