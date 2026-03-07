@@ -72,6 +72,7 @@ import ReferralsPage from "./pages/ReferralsPage";
 import AccountPage from "./pages/AccountPage";
 import AccountProfilePage from "./pages/account/AccountProfilePage";
 import AccountDataPage from "./pages/account/AccountDataPage";
+import ExpensesPage from "./pages/ExpensesPage";
 
 const TENANT_PORTAL_ENABLED = import.meta.env.VITE_TENANT_PORTAL_ENABLED === "true";
 
@@ -446,6 +447,16 @@ function App() {
             <RequireAuth>
               <LandlordNav>
                 <PaymentsPage />
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/expenses"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <ExpensesPage />
               </LandlordNav>
             </RequireAuth>
           }

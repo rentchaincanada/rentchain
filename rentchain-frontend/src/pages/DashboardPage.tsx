@@ -23,6 +23,7 @@ import { getApplicationPrereqState } from "../lib/applicationPrereqs";
 import { CreatePropertyFirstModal } from "../components/properties/CreatePropertyFirstModal";
 import { buildCreatePropertyUrl, buildReturnTo } from "../lib/propertyGate";
 import { SendApplicationModal } from "../components/properties/SendApplicationModal";
+import { AddExpenseModal } from "../components/expenses/AddExpenseModal";
 import { useUnitsForProperty } from "../hooks/useUnitsForProperty";
 import { listReferrals } from "../api/referralsApi";
 import { markDashboardVisit } from "@/features/upgradeNudges/nudgeStore";
@@ -133,6 +134,7 @@ const DashboardPage: React.FC = () => {
   const [propertyGateOpen, setPropertyGateOpen] = React.useState(false);
   const [pendingPropertyAction, setPendingPropertyAction] = React.useState<"create_application" | null>(null);
   const [sendApplicationOpen, setSendApplicationOpen] = React.useState(false);
+  const [addExpenseOpen, setAddExpenseOpen] = React.useState(false);
   const [modalPropertyId, setModalPropertyId] = React.useState<string | null>(null);
   const [modalUnitId, setModalUnitId] = React.useState<string | null>(null);
   const [onboardingChunkError, setOnboardingChunkError] = React.useState(false);
@@ -604,6 +606,14 @@ const DashboardPage: React.FC = () => {
                 >
                   Send application link
                 </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => setAddExpenseOpen(true)}
+                  aria-label="Add expense"
+                  disabled={progressLoading}
+                >
+                  Add Expense
+                </Button>
                 <Button variant="primary" disabled>
                   {screeningLabel}
                 </Button>
@@ -814,6 +824,12 @@ const DashboardPage: React.FC = () => {
           setModalUnitId(null);
         }}
         onUnitChange={(nextId) => setModalUnitId(nextId)}
+      />
+      <AddExpenseModal
+        open={addExpenseOpen}
+        properties={propertyOptions}
+        defaultPropertyId={propertyOptions[0]?.id || null}
+        onClose={() => setAddExpenseOpen(false)}
       />
     </MacShell>
   );
