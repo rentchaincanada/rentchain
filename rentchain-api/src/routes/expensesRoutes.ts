@@ -4,6 +4,7 @@ import { requireAuth } from "../middleware/requireAuth";
 import { uploadBufferToGcs } from "../lib/gcs";
 import multer from "multer";
 import path from "path";
+import { runAIAgent } from "../ai/agent";
 
 const router = Router();
 
@@ -50,6 +51,25 @@ function normalizeRole(req: any): "admin" | "landlord" | "other" {
   if (role === "admin") return "admin";
   if (role === "landlord") return "landlord";
   return "other";
+}
+
+function toTextPreview(file: Express.Multer.File): string {
+  const ext = path.extname(String(file?.originalname || "")).toLowerCase();
+  const buf = file?.buffer;
+  if (!buf?.length) return "";
+
+  // Spreadsheet CSV is plain text and yields best extraction quality.
+  if (ext === ".csv") {
+    return buf.toString("utf8").slice(0, 12000);
+  }
+
+  // For binary formats (pdf/doc/docx/xls/xlsx), extract printable runs as a lightweight fallback.
+  const latin = buf.toString("latin1");
+  const printable = latin
+    .replace(/[^\x20-\x7E\r\n\t]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return printable.slice(0, 12000);
 }
 
 function isAllowedDocument(file: Express.Multer.File): boolean {
@@ -125,6 +145,81 @@ function normalizeSource(raw: unknown, fallback: ExpenseSource = "manual"): Expe
   if (target === "work_order") return "work_order";
   if (target === "imported") return "imported";
   return fallback;
+}
+
+function findAmountCents(text: string): number | null {
+  const amountPattern =
+    /(?:total|amount|balance|invoice total|due|paid)?\s*[:\-]?\s*(?:CAD|USD|\$)\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})|[0-9]+(?:\.[0-9]{2})?)/gi;
+  let match: RegExpExecArray | null = null;
+  let best = 0;
+  while ((match = amountPattern.exec(text)) !== null) {
+    const raw = String(match[1] || "").replace(/,/g, "");
+    const value = Number(raw);
+    if (Number.isFinite(value) && value > best) best = value;
+  }
+  if (best <= 0) return null;
+  return Math.round(best * 100);
+}
+
+function findDateMs(text: string): number | null {
+  const patterns = [
+    /\b(\d{4}-\d{2}-\d{2})\b/g,
+    /\b(\d{2}\/\d{2}\/\d{4})\b/g,
+    /\b([A-Za-z]{3,9}\s+\d{1,2},\s+\d{4})\b/g,
+  ];
+  for (const pattern of patterns) {
+    const match = pattern.exec(text);
+    if (!match?.[1]) continue;
+    const parsed = Date.parse(match[1]);
+    if (Number.isFinite(parsed)) return Math.round(parsed);
+  }
+  return null;
+}
+
+function findVendor(text: string): string | undefined {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 30);
+
+  const tagged = lines.find((line) =>
+    /^(vendor|payee|supplier|bill from|from)\s*[:\-]/i.test(line)
+  );
+  if (tagged) {
+    return tagged.replace(/^(vendor|payee|supplier|bill from|from)\s*[:\-]\s*/i, "").slice(0, 180);
+  }
+
+  const candidate = lines.find((line) => /^[A-Za-z0-9&.,' -]{3,}$/.test(line));
+  return candidate ? candidate.slice(0, 180) : undefined;
+}
+
+function findCategoryHint(text: string): string | undefined {
+  const lower = text.toLowerCase();
+  const map: Array<{ category: (typeof EXPENSE_CATEGORIES)[number]; hints: string[] }> = [
+    { category: "Repairs", hints: ["repair", "fix", "service call"] },
+    { category: "Maintenance", hints: ["maintenance", "upkeep"] },
+    { category: "Utilities", hints: ["utility", "hydro", "electric", "water", "gas"] },
+    { category: "Cleaning", hints: ["cleaning", "janitorial"] },
+    { category: "Supplies", hints: ["supplies", "consumable"] },
+    { category: "Landscaping", hints: ["landscap", "lawn", "snow removal"] },
+    { category: "Insurance", hints: ["insurance", "premium"] },
+    { category: "Taxes", hints: ["tax", "municipal", "property tax"] },
+    { category: "Administration", hints: ["admin", "software", "subscription", "office"] },
+    { category: "Contractor Labor", hints: ["contractor", "labor", "labour", "hourly"] },
+    { category: "Materials", hints: ["materials", "parts", "building supply"] },
+  ];
+  for (const entry of map) {
+    if (entry.hints.some((hint) => lower.includes(hint))) return entry.category;
+  }
+  return undefined;
+}
+
+function firstMeaningfulLine(text: string): string | undefined {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line.length >= 8 && line.length <= 220);
 }
 
 async function getPropertyForWrite(req: any, propertyId: string) {
@@ -215,6 +310,7 @@ router.post("/expenses/source-document", requireAuth, (req: any, res) => {
       const landlordId = propertyCheck.propertyLandlordId;
       const expenseId = String(req.body?.expenseId || "").trim() || `tmp_${Date.now()}`;
       const safeName = sanitizeFilename(file.originalname);
+      const textPreview = toTextPreview(file);
       const targetPath = `expenses/source-documents/${landlordId}/${expenseId}/${safeName}`;
       const uploaded = await uploadBufferToGcs({
         path: targetPath,
@@ -236,6 +332,7 @@ router.post("/expenses/source-document", requireAuth, (req: any, res) => {
         sourceDocumentName: safeName,
         sourceDocumentMimeType: String(file.mimetype || "application/octet-stream"),
         sizeBytes: Number(file.size || file.buffer.length || 0),
+        textPreview,
         createdAtMs: nowMs(),
         updatedAtMs: nowMs(),
       });
@@ -253,6 +350,102 @@ router.post("/expenses/source-document", requireAuth, (req: any, res) => {
       return res.status(500).json({ ok: false, error: "EXPENSE_SOURCE_UPLOAD_FAILED" });
     }
   });
+});
+
+router.post("/expenses/analyze-upload", requireAuth, async (req: any, res) => {
+  try {
+    const role = normalizeRole(req);
+    if (role !== "landlord" && role !== "admin") {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const uploadSessionId = String(req.body?.uploadSessionId || "").trim();
+    const bodyTextPreview = truncate(req.body?.textPreview, 12000);
+    let textPreview = bodyTextPreview;
+    let sourceDocumentName = truncate(req.body?.sourceDocumentName, 180) || "uploaded document";
+    let sourceDocumentMimeType = truncate(req.body?.sourceDocumentMimeType, 120) || "";
+    let sourceDocumentUrl = truncate(req.body?.sourceDocumentUrl, 600) || "";
+
+    if (uploadSessionId) {
+      const sessionSnap = await db.collection("expenseUploadSessions").doc(uploadSessionId).get();
+      if (!sessionSnap.exists) {
+        return res.status(404).json({ ok: false, error: "UPLOAD_SESSION_NOT_FOUND" });
+      }
+      const session = sessionSnap.data() as any;
+      const sessionLandlordId = String(session?.landlordId || "").trim();
+      if (role !== "admin" && sessionLandlordId !== landlordIdFromReq(req)) {
+        return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+      }
+      textPreview = textPreview || truncate(session?.textPreview, 12000);
+      sourceDocumentName = sourceDocumentName || truncate(session?.sourceDocumentName, 180);
+      sourceDocumentMimeType = sourceDocumentMimeType || truncate(session?.sourceDocumentMimeType, 120);
+      sourceDocumentUrl = sourceDocumentUrl || truncate(session?.sourceDocumentUrl, 600);
+    }
+
+    const extractedFields: {
+      vendorName?: string;
+      amountCents?: number;
+      incurredAtMs?: number;
+      category?: string;
+      description?: string;
+    } = {};
+
+    const normalizedText = String(textPreview || "").trim();
+    if (normalizedText) {
+      const vendorName = findVendor(normalizedText);
+      const amountCents = findAmountCents(normalizedText);
+      const incurredAtMs = findDateMs(normalizedText);
+      const category = findCategoryHint(normalizedText);
+      const description = firstMeaningfulLine(normalizedText);
+
+      if (vendorName) extractedFields.vendorName = vendorName;
+      if (amountCents != null) extractedFields.amountCents = amountCents;
+      if (incurredAtMs != null) extractedFields.incurredAtMs = incurredAtMs;
+      if (category) extractedFields.category = category;
+      if (description) extractedFields.description = description;
+    }
+
+    let summary =
+      "Detected uploaded expense document. Review extracted values before saving.";
+    try {
+      const ai = await runAIAgent({
+        requestId: `expense_upload_${Date.now()}`,
+        inputType: "expense_document_summary",
+        inputData: {
+          sourceDocumentName,
+          sourceDocumentMimeType,
+          sourceDocumentUrl,
+          extractedFields,
+          textPreview: normalizedText.slice(0, 5000),
+        },
+      });
+      const aiSummary = String(ai?.output?.summary || "").trim();
+      if (aiSummary) {
+        summary = aiSummary.slice(0, 1200);
+      }
+    } catch {
+      const amountText =
+        extractedFields.amountCents != null
+          ? `${(extractedFields.amountCents / 100).toFixed(2)}`
+          : "unknown amount";
+      const dateText = extractedFields.incurredAtMs
+        ? new Date(extractedFields.incurredAtMs).toISOString().slice(0, 10)
+        : "unknown date";
+      const vendorText = extractedFields.vendorName || "unknown vendor";
+      summary = `Detected expense document with ${amountText} dated ${dateText} from ${vendorText}.`;
+    }
+
+    const confidenceSignals = Object.keys(extractedFields).length;
+    return res.json({
+      ok: true,
+      summary,
+      extractedFields,
+      lowConfidence: confidenceSignals < 2,
+    });
+  } catch (err: any) {
+    console.error("[expenses] analyze upload failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "EXPENSE_ANALYZE_UPLOAD_FAILED" });
+  }
 });
 
 router.post("/expenses", requireAuth, async (req: any, res) => {
