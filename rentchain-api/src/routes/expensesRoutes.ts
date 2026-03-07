@@ -1,6 +1,9 @@
 import { Router } from "express";
 import { db } from "../config/firebase";
 import { requireAuth } from "../middleware/requireAuth";
+import { uploadBufferToGcs } from "../lib/gcs";
+import multer from "multer";
+import path from "path";
 
 const router = Router();
 
@@ -14,6 +17,8 @@ const EXPENSE_CATEGORIES = [
   "Insurance",
   "Taxes",
   "Administration",
+  "Contractor Labor",
+  "Materials",
   "Other",
 ] as const;
 const EXPENSE_STATUSES = ["recorded", "reimbursable", "paid"] as const;
@@ -21,6 +26,18 @@ const EXPENSE_SOURCES = ["manual", "work_order", "imported"] as const;
 
 type ExpenseStatus = (typeof EXPENSE_STATUSES)[number];
 type ExpenseSource = (typeof EXPENSE_SOURCES)[number];
+
+const MAX_SOURCE_FILE_BYTES = Number(process.env.EXPENSE_UPLOAD_MAX_BYTES || 10 * 1024 * 1024);
+const ALLOWED_EXTENSIONS = new Set([".csv", ".xls", ".xlsx", ".doc", ".docx", ".pdf"]);
+const ALLOWED_MIME_TYPES = new Set([
+  "text/csv",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/pdf",
+  "application/octet-stream",
+]);
 
 function nowMs() {
   return Date.now();
@@ -33,6 +50,27 @@ function normalizeRole(req: any): "admin" | "landlord" | "other" {
   if (role === "admin") return "admin";
   if (role === "landlord") return "landlord";
   return "other";
+}
+
+function isAllowedDocument(file: Express.Multer.File): boolean {
+  const ext = path.extname(String(file?.originalname || "")).toLowerCase();
+  const mime = String(file?.mimetype || "").toLowerCase();
+  return ALLOWED_EXTENSIONS.has(ext) && (ALLOWED_MIME_TYPES.has(mime) || mime === "");
+}
+
+function sanitizeFilename(raw: string): string {
+  const base = path.basename(String(raw || "").trim()) || `expense_${Date.now()}`;
+  const cleaned = base.replace(/[^a-zA-Z0-9._-]/g, "_");
+  return cleaned.slice(0, 120) || `expense_${Date.now()}`;
+}
+
+function truncate(value: unknown, max = 2000): string {
+  return String(value || "").trim().slice(0, max);
+}
+
+function normalizeExtractedFields(value: unknown): Record<string, any> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, any>;
 }
 
 function landlordIdFromReq(req: any): string {
@@ -128,6 +166,95 @@ async function validateUnitForExpense(req: any, opts: { unitId: string; property
   return { ok: true as const };
 }
 
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_SOURCE_FILE_BYTES },
+  fileFilter: (_req, file, cb) => {
+    if (isAllowedDocument(file)) return cb(null, true);
+    return cb(new Error("UNSUPPORTED_FILE_TYPE"));
+  },
+});
+
+router.post("/expenses/source-document", requireAuth, (req: any, res) => {
+  upload.single("file")(req, res, async (uploadErr: any) => {
+    try {
+      if (uploadErr) {
+        const message = String(uploadErr?.message || "");
+        if (message.includes("UNSUPPORTED_FILE_TYPE")) {
+          return res.status(400).json({ ok: false, error: "UNSUPPORTED_FILE_TYPE" });
+        }
+        if (String(uploadErr?.code || "") === "LIMIT_FILE_SIZE") {
+          return res.status(400).json({ ok: false, error: "FILE_TOO_LARGE", maxBytes: MAX_SOURCE_FILE_BYTES });
+        }
+        return res.status(400).json({ ok: false, error: "UPLOAD_FAILED", detail: message || "upload_failed" });
+      }
+
+      const role = normalizeRole(req);
+      if (role !== "landlord" && role !== "admin") {
+        return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+      }
+
+      const propertyId = String(req.body?.propertyId || "").trim();
+      if (!propertyId) return res.status(400).json({ ok: false, error: "PROPERTY_REQUIRED" });
+      const propertyCheck = await getPropertyForWrite(req, propertyId);
+      if (!propertyCheck.ok) {
+        if (propertyCheck.code === "PROPERTY_NOT_FOUND") {
+          return res.status(404).json({ ok: false, error: "PROPERTY_NOT_FOUND" });
+        }
+        return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+      }
+
+      const file = req.file as Express.Multer.File | undefined;
+      if (!file?.buffer || !file.originalname) {
+        return res.status(400).json({ ok: false, error: "FILE_REQUIRED" });
+      }
+      if (!isAllowedDocument(file)) {
+        return res.status(400).json({ ok: false, error: "UNSUPPORTED_FILE_TYPE" });
+      }
+
+      const landlordId = propertyCheck.propertyLandlordId;
+      const expenseId = String(req.body?.expenseId || "").trim() || `tmp_${Date.now()}`;
+      const safeName = sanitizeFilename(file.originalname);
+      const targetPath = `expenses/source-documents/${landlordId}/${expenseId}/${safeName}`;
+      const uploaded = await uploadBufferToGcs({
+        path: targetPath,
+        contentType: String(file.mimetype || "application/octet-stream"),
+        buffer: file.buffer,
+        metadata: {
+          landlordId,
+          propertyId,
+          uploadedAtMs: String(nowMs()),
+        },
+      });
+
+      const sourceDocumentUrl = `gs://${uploaded.bucket}/${uploaded.path}`;
+      const uploadSessionRef = await db.collection("expenseUploadSessions").add({
+        landlordId,
+        propertyId,
+        expenseId: expenseId.startsWith("tmp_") ? null : expenseId,
+        sourceDocumentUrl,
+        sourceDocumentName: safeName,
+        sourceDocumentMimeType: String(file.mimetype || "application/octet-stream"),
+        sizeBytes: Number(file.size || file.buffer.length || 0),
+        createdAtMs: nowMs(),
+        updatedAtMs: nowMs(),
+      });
+
+      return res.json({
+        ok: true,
+        uploadSessionId: uploadSessionRef.id,
+        sourceDocumentUrl,
+        sourceDocumentName: safeName,
+        sourceDocumentMimeType: String(file.mimetype || "application/octet-stream"),
+        sizeBytes: Number(file.size || file.buffer.length || 0),
+      });
+    } catch (err: any) {
+      console.error("[expenses] source document upload failed", err?.message || err);
+      return res.status(500).json({ ok: false, error: "EXPENSE_SOURCE_UPLOAD_FAILED" });
+    }
+  });
+});
+
 router.post("/expenses", requireAuth, async (req: any, res) => {
   try {
     const role = normalizeRole(req);
@@ -189,6 +316,12 @@ router.post("/expenses", requireAuth, async (req: any, res) => {
       source: normalizeSource(req.body?.source, "manual"),
       linkedWorkOrderId: String(req.body?.linkedWorkOrderId || "").trim() || null,
       receiptFileUrl: String(req.body?.receiptFileUrl || "").trim() || null,
+      sourceDocumentUrl: truncate(req.body?.sourceDocumentUrl, 600) || null,
+      sourceDocumentName: truncate(req.body?.sourceDocumentName, 180) || null,
+      sourceDocumentMimeType: truncate(req.body?.sourceDocumentMimeType, 120) || null,
+      aiSummary: truncate(req.body?.aiSummary, 5000) || null,
+      aiExtractedFields: normalizeExtractedFields(req.body?.aiExtractedFields),
+      aiProcessedAtMs: parseNumber(req.body?.aiProcessedAtMs),
       createdAtMs,
       updatedAtMs: createdAtMs,
     };
@@ -333,6 +466,24 @@ router.patch("/expenses/:expenseId", requireAuth, async (req: any, res) => {
     if (Object.prototype.hasOwnProperty.call(req.body || {}, "receiptFileUrl")) {
       patch.receiptFileUrl = String(req.body?.receiptFileUrl || "").trim() || null;
     }
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "sourceDocumentUrl")) {
+      patch.sourceDocumentUrl = truncate(req.body?.sourceDocumentUrl, 600) || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "sourceDocumentName")) {
+      patch.sourceDocumentName = truncate(req.body?.sourceDocumentName, 180) || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "sourceDocumentMimeType")) {
+      patch.sourceDocumentMimeType = truncate(req.body?.sourceDocumentMimeType, 120) || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "aiSummary")) {
+      patch.aiSummary = truncate(req.body?.aiSummary, 5000) || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "aiExtractedFields")) {
+      patch.aiExtractedFields = normalizeExtractedFields(req.body?.aiExtractedFields);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "aiProcessedAtMs")) {
+      patch.aiProcessedAtMs = parseNumber(req.body?.aiProcessedAtMs);
+    }
 
     await ref.set(patch, { merge: true });
     const updatedSnap = await ref.get();
@@ -344,4 +495,3 @@ router.patch("/expenses/:expenseId", requireAuth, async (req: any, res) => {
 });
 
 export default router;
-
