@@ -10,6 +10,8 @@ export const EXPENSE_CATEGORIES = [
   "Insurance",
   "Taxes",
   "Administration",
+  "Contractor Labor",
+  "Materials",
   "Other",
 ] as const;
 
@@ -91,4 +93,3 @@ export async function updateExpense(expenseId: string, patch: Partial<CreateExpe
   if (!res?.ok || !res.item) throw new Error("Failed to update expense");
   return res.item;
 }
-

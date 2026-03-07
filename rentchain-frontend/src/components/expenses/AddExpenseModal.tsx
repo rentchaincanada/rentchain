@@ -1,5 +1,10 @@
 import React from "react";
-import { createExpense, EXPENSE_CATEGORIES, type ExpenseCategory } from "../../api/expensesApi";
+import {
+  createExpense,
+  EXPENSE_CATEGORIES,
+  type ExpenseCategory,
+  type ExpenseSource,
+} from "../../api/expensesApi";
 import { useUnitsForProperty } from "../../hooks/useUnitsForProperty";
 import { useToast } from "../ui/ToastProvider";
 
@@ -18,6 +23,7 @@ type Props = {
   open: boolean;
   properties: PropertyOption[];
   defaultPropertyId?: string | null;
+  defaultSource?: ExpenseSource;
   onClose: () => void;
   onSaved?: () => void;
 };
@@ -44,14 +50,22 @@ function dateInputToMs(value: string): number {
   return Number.isFinite(parsed) ? Math.round(parsed) : 0;
 }
 
-export function AddExpenseModal({ open, properties, defaultPropertyId, onClose, onSaved }: Props) {
+export function AddExpenseModal({
+  open,
+  properties,
+  defaultPropertyId,
+  defaultSource,
+  onClose,
+  onSaved,
+}: Props) {
   const { showToast } = useToast();
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   const [propertyId, setPropertyId] = React.useState<string>("");
   const [unitId, setUnitId] = React.useState<string>("");
-  const [category, setCategory] = React.useState<ExpenseCategory>("Maintenance");
+  const [source, setSource] = React.useState<ExpenseSource>("manual");
+  const [category, setCategory] = React.useState<ExpenseCategory | "">("");
   const [vendorName, setVendorName] = React.useState("");
   const [amountInput, setAmountInput] = React.useState("");
   const [dateInput, setDateInput] = React.useState(toDateInputValue(Date.now()));
@@ -65,16 +79,18 @@ export function AddExpenseModal({ open, properties, defaultPropertyId, onClose, 
   React.useEffect(() => {
     if (!open) return;
     const initialProperty = defaultPropertyId || properties[0]?.id || "";
+    const initialSource: ExpenseSource = defaultSource || "manual";
     setPropertyId(initialProperty);
     setUnitId("");
-    setCategory("Maintenance");
+    setSource(initialSource);
+    setCategory(initialSource === "work_order" ? "Repairs" : "");
     setVendorName("");
     setAmountInput("");
     setDateInput(toDateInputValue(Date.now()));
     setNotes("");
     setSaving(false);
     setError(null);
-  }, [open, defaultPropertyId, properties]);
+  }, [open, defaultPropertyId, defaultSource, properties]);
 
   if (!open) return null;
 
@@ -106,6 +122,7 @@ export function AddExpenseModal({ open, properties, defaultPropertyId, onClose, 
       amountCents,
       incurredAtMs,
       notes: notes.trim(),
+      source,
     };
 
     setSaving(true);
@@ -261,6 +278,7 @@ export function AddExpenseModal({ open, properties, defaultPropertyId, onClose, 
                 fontSize: "0.9rem",
               }}
             >
+              <option value="">Select category</option>
               {EXPENSE_CATEGORIES.map((item) => (
                 <option key={item} value={item}>
                   {item}
@@ -398,4 +416,3 @@ export function AddExpenseModal({ open, properties, defaultPropertyId, onClose, 
     </div>
   );
 }
-
