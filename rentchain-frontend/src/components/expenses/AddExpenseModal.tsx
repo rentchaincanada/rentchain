@@ -1,9 +1,11 @@
 import React from "react";
 import {
+  analyzeExpenseUpload,
   createExpense,
   EXPENSE_CATEGORIES,
   type ExpenseCategory,
   type ExpenseSource,
+  uploadExpenseSourceDocument,
 } from "../../api/expensesApi";
 import { useUnitsForProperty } from "../../hooks/useUnitsForProperty";
 import { useToast } from "../ui/ToastProvider";
@@ -17,6 +19,13 @@ type ExpensePayload = {
   amountCents: number;
   incurredAtMs: number;
   notes: string;
+  source: ExpenseSource;
+  sourceDocumentUrl?: string | null;
+  sourceDocumentName?: string | null;
+  sourceDocumentMimeType?: string | null;
+  aiSummary?: string | null;
+  aiExtractedFields?: Record<string, any> | null;
+  aiProcessedAtMs?: number | null;
 };
 
 type Props = {
@@ -27,6 +36,10 @@ type Props = {
   onClose: () => void;
   onSaved?: () => void;
 };
+
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+const ACCEPTED_EXTENSIONS = [".csv", ".xls", ".xlsx", ".doc", ".docx", ".pdf"];
+const ACCEPT_ATTR = ACCEPTED_EXTENSIONS.join(",");
 
 function centsFromAmountInput(raw: string): number {
   const normalized = String(raw || "").trim();
@@ -50,6 +63,13 @@ function dateInputToMs(value: string): number {
   return Number.isFinite(parsed) ? Math.round(parsed) : 0;
 }
 
+function normalizeCategorySuggestion(input: string | undefined): ExpenseCategory | "" {
+  const raw = String(input || "").trim().toLowerCase();
+  if (!raw) return "";
+  const match = EXPENSE_CATEGORIES.find((cat) => cat.toLowerCase() === raw);
+  return match || "Other";
+}
+
 export function AddExpenseModal({
   open,
   properties,
@@ -70,6 +90,15 @@ export function AddExpenseModal({
   const [amountInput, setAmountInput] = React.useState("");
   const [dateInput, setDateInput] = React.useState(toDateInputValue(Date.now()));
   const [notes, setNotes] = React.useState("");
+  const [selectedFile, setSelectedFile] = React.useState<File | null>(null);
+  const [uploadingFile, setUploadingFile] = React.useState(false);
+  const [analyzingFile, setAnalyzingFile] = React.useState(false);
+  const [sourceDocumentUrl, setSourceDocumentUrl] = React.useState<string | null>(null);
+  const [sourceDocumentName, setSourceDocumentName] = React.useState<string | null>(null);
+  const [sourceDocumentMimeType, setSourceDocumentMimeType] = React.useState<string | null>(null);
+  const [aiSummary, setAiSummary] = React.useState<string | null>(null);
+  const [aiExtracted, setAiExtracted] = React.useState<Record<string, any> | null>(null);
+  const [aiLowConfidence, setAiLowConfidence] = React.useState(false);
 
   const { units, loading: unitsLoading, error: unitsError, refetch: refetchUnits } = useUnitsForProperty(
     propertyId,
@@ -88,11 +117,151 @@ export function AddExpenseModal({
     setAmountInput("");
     setDateInput(toDateInputValue(Date.now()));
     setNotes("");
+    setSelectedFile(null);
+    setUploadingFile(false);
+    setAnalyzingFile(false);
+    setSourceDocumentUrl(null);
+    setSourceDocumentName(null);
+    setSourceDocumentMimeType(null);
+    setAiSummary(null);
+    setAiExtracted(null);
+    setAiLowConfidence(false);
     setSaving(false);
     setError(null);
   }, [open, defaultPropertyId, defaultSource, properties]);
 
   if (!open) return null;
+
+  const analyzeUpload = async (nextUploadSessionId: string, metadata?: { name?: string; mimeType?: string; url?: string }) => {
+    try {
+      setAnalyzingFile(true);
+      const analyzed = await analyzeExpenseUpload({
+        uploadSessionId: nextUploadSessionId,
+        sourceDocumentName: metadata?.name,
+        sourceDocumentMimeType: metadata?.mimeType,
+        sourceDocumentUrl: metadata?.url,
+      });
+      setAiSummary(String(analyzed.summary || "").trim() || null);
+      setAiExtracted(analyzed.extractedFields || null);
+      setAiLowConfidence(Boolean(analyzed.lowConfidence));
+    } catch (err: any) {
+      setAiSummary(null);
+      setAiExtracted(null);
+      setAiLowConfidence(false);
+      showToast({
+        message: "AI analysis unavailable",
+        description: String(err?.message || "You can still save this expense."),
+        variant: "error",
+      });
+    } finally {
+      setAnalyzingFile(false);
+    }
+  };
+
+  const handleFileSelected = async (file: File | null) => {
+    setSelectedFile(file);
+    setSourceDocumentUrl(null);
+    setSourceDocumentName(null);
+    setSourceDocumentMimeType(null);
+    setAiSummary(null);
+    setAiExtracted(null);
+    setAiLowConfidence(false);
+
+    if (!file) return;
+    if (!propertyId) {
+      setError("Select a property before uploading a document.");
+      return;
+    }
+
+    const ext = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
+    if (!ACCEPTED_EXTENSIONS.includes(ext)) {
+      setError("Unsupported file type. Use csv, xls/xlsx, doc/docx, or pdf.");
+      return;
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setError("File is too large. Max 10MB.");
+      return;
+    }
+
+    try {
+      setError(null);
+      setUploadingFile(true);
+      const uploaded = await uploadExpenseSourceDocument({
+        propertyId,
+        file,
+      });
+      setSourceDocumentUrl(uploaded.sourceDocumentUrl);
+      setSourceDocumentName(uploaded.sourceDocumentName);
+      setSourceDocumentMimeType(uploaded.sourceDocumentMimeType);
+      await analyzeUpload(uploaded.uploadSessionId, {
+        name: uploaded.sourceDocumentName,
+        mimeType: uploaded.sourceDocumentMimeType,
+        url: uploaded.sourceDocumentUrl,
+      });
+    } catch (err: any) {
+      const msg = String(err?.message || "Upload failed");
+      setError(msg);
+      showToast({ message: "Upload failed", description: msg, variant: "error" });
+    } finally {
+      setUploadingFile(false);
+    }
+  };
+
+  const applySuggestedValues = () => {
+    if (!aiExtracted) return;
+
+    const updates: Array<string> = [];
+    const wouldOverwrite: Array<string> = [];
+
+    if (aiExtracted.vendorName) {
+      if (vendorName && vendorName.trim().toLowerCase() !== String(aiExtracted.vendorName).trim().toLowerCase()) {
+        wouldOverwrite.push("Vendor / Payee");
+      }
+      updates.push("vendorName");
+    }
+    if (aiExtracted.amountCents != null) {
+      const currentCents = centsFromAmountInput(amountInput);
+      if (currentCents > 0 && currentCents !== Number(aiExtracted.amountCents)) {
+        wouldOverwrite.push("Amount");
+      }
+      updates.push("amount");
+    }
+    if (aiExtracted.incurredAtMs != null) {
+      const currentDateMs = dateInputToMs(dateInput);
+      if (currentDateMs > 0 && currentDateMs !== Number(aiExtracted.incurredAtMs)) {
+        wouldOverwrite.push("Date");
+      }
+      updates.push("date");
+    }
+    if (aiExtracted.category) {
+      const suggested = normalizeCategorySuggestion(String(aiExtracted.category));
+      if (category && suggested && category !== suggested) {
+        wouldOverwrite.push("Category");
+      }
+      updates.push("category");
+    }
+
+    if (updates.length === 0) return;
+    if (wouldOverwrite.length > 0) {
+      const confirmed = window.confirm(
+        `Apply suggested values and overwrite: ${wouldOverwrite.join(", ")}?`
+      );
+      if (!confirmed) return;
+    }
+
+    if (aiExtracted.vendorName) setVendorName(String(aiExtracted.vendorName).slice(0, 180));
+    if (aiExtracted.amountCents != null) {
+      const dollars = Number(aiExtracted.amountCents) / 100;
+      if (Number.isFinite(dollars) && dollars > 0) setAmountInput(String(dollars.toFixed(2)));
+    }
+    if (aiExtracted.incurredAtMs != null) {
+      setDateInput(toDateInputValue(Number(aiExtracted.incurredAtMs)));
+    }
+    if (aiExtracted.category) {
+      const nextCategory = normalizeCategorySuggestion(String(aiExtracted.category));
+      if (nextCategory) setCategory(nextCategory);
+    }
+  };
 
   const handleSave = async () => {
     const amountCents = centsFromAmountInput(amountInput);
@@ -123,6 +292,12 @@ export function AddExpenseModal({
       incurredAtMs,
       notes: notes.trim(),
       source,
+      sourceDocumentUrl,
+      sourceDocumentName,
+      sourceDocumentMimeType,
+      aiSummary,
+      aiExtractedFields: aiExtracted,
+      aiProcessedAtMs: aiSummary || aiExtracted ? Date.now() : null,
     };
 
     setSaving(true);
@@ -268,7 +443,7 @@ export function AddExpenseModal({
             Category
             <select
               value={category}
-              onChange={(e) => setCategory(e.target.value as ExpenseCategory)}
+              onChange={(e) => setCategory(e.target.value as ExpenseCategory | "")}
               style={{
                 width: "100%",
                 padding: "8px 10px",
@@ -367,6 +542,87 @@ export function AddExpenseModal({
           />
         </label>
 
+        <label style={{ display: "grid", gap: 6, fontSize: "0.9rem", color: "#0f172a" }}>
+          Upload invoice, bill, spreadsheet, or document
+          <input
+            type="file"
+            accept={ACCEPT_ATTR}
+            onChange={(e) => {
+              const next = e.target.files && e.target.files.length > 0 ? e.target.files[0] : null;
+              void handleFileSelected(next);
+            }}
+            style={{
+              width: "100%",
+              padding: "8px 10px",
+              borderRadius: 8,
+              border: "1px solid #cbd5e1",
+              fontSize: "0.9rem",
+              background: "#fff",
+            }}
+          />
+          {selectedFile ? (
+            <span style={{ fontSize: "0.82rem", color: "#475569" }}>
+              Selected: {selectedFile.name}
+            </span>
+          ) : null}
+          {uploadingFile ? (
+            <span style={{ fontSize: "0.82rem", color: "#475569" }}>Uploading document...</span>
+          ) : null}
+          {analyzingFile ? (
+            <span style={{ fontSize: "0.82rem", color: "#475569" }}>Analyzing uploaded document...</span>
+          ) : null}
+        </label>
+
+        {(aiSummary || aiExtracted) && !analyzingFile ? (
+          <div
+            style={{
+              border: "1px solid #dbeafe",
+              background: "#eff6ff",
+              borderRadius: 8,
+              padding: "10px 12px",
+              display: "grid",
+              gap: 8,
+            }}
+          >
+            <div style={{ fontWeight: 700, color: "#1e3a8a" }}>AI Summary</div>
+            {aiSummary ? <div style={{ color: "#1f2937", fontSize: "0.9rem" }}>{aiSummary}</div> : null}
+            {aiExtracted ? (
+              <div style={{ fontSize: "0.85rem", color: "#334155", display: "grid", gap: 4 }}>
+                {aiExtracted.vendorName ? <div>Vendor: {String(aiExtracted.vendorName)}</div> : null}
+                {aiExtracted.amountCents != null ? (
+                  <div>Amount: ${(Number(aiExtracted.amountCents) / 100).toFixed(2)}</div>
+                ) : null}
+                {aiExtracted.incurredAtMs != null ? (
+                  <div>Date: {toDateInputValue(Number(aiExtracted.incurredAtMs))}</div>
+                ) : null}
+                {aiExtracted.category ? <div>Category: {String(aiExtracted.category)}</div> : null}
+              </div>
+            ) : null}
+            {aiLowConfidence ? (
+              <div style={{ color: "#64748b", fontSize: "0.82rem" }}>
+                Review extracted values before saving.
+              </div>
+            ) : null}
+            <div>
+              <button
+                type="button"
+                onClick={applySuggestedValues}
+                style={{
+                  padding: "7px 10px",
+                  borderRadius: 8,
+                  border: "1px solid #93c5fd",
+                  background: "#fff",
+                  color: "#1d4ed8",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                }}
+              >
+                Apply suggested values
+              </button>
+            </div>
+          </div>
+        ) : null}
+
         {error ? (
           <div
             style={{
@@ -398,7 +654,7 @@ export function AddExpenseModal({
           </button>
           <button
             type="button"
-            disabled={saving}
+            disabled={saving || uploadingFile}
             onClick={handleSave}
             style={{
               padding: "8px 12px",

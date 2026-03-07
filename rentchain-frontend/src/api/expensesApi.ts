@@ -33,6 +33,12 @@ export type ExpenseRecord = {
   source: ExpenseSource;
   linkedWorkOrderId: string | null;
   receiptFileUrl: string | null;
+  sourceDocumentUrl: string | null;
+  sourceDocumentName: string | null;
+  sourceDocumentMimeType: string | null;
+  aiSummary: string | null;
+  aiExtractedFields: Record<string, any> | null;
+  aiProcessedAtMs: number | null;
   createdAtMs: number;
   updatedAtMs: number;
 };
@@ -49,6 +55,12 @@ export type CreateExpenseInput = {
   source?: ExpenseSource;
   linkedWorkOrderId?: string | null;
   receiptFileUrl?: string | null;
+  sourceDocumentUrl?: string | null;
+  sourceDocumentName?: string | null;
+  sourceDocumentMimeType?: string | null;
+  aiSummary?: string | null;
+  aiExtractedFields?: Record<string, any> | null;
+  aiProcessedAtMs?: number | null;
 };
 
 export type ListExpensesFilters = {
@@ -92,4 +104,61 @@ export async function updateExpense(expenseId: string, patch: Partial<CreateExpe
   });
   if (!res?.ok || !res.item) throw new Error("Failed to update expense");
   return res.item;
+}
+
+export type UploadExpenseSourceDocumentResponse = {
+  ok: true;
+  uploadSessionId: string;
+  sourceDocumentUrl: string;
+  sourceDocumentName: string;
+  sourceDocumentMimeType: string;
+  sizeBytes: number;
+};
+
+export async function uploadExpenseSourceDocument(input: {
+  propertyId: string;
+  expenseId?: string;
+  file: File;
+}) {
+  const form = new FormData();
+  form.append("propertyId", input.propertyId);
+  if (input.expenseId) form.append("expenseId", input.expenseId);
+  form.append("file", input.file);
+
+  const res = await apiFetch<UploadExpenseSourceDocumentResponse>("/expenses/source-document", {
+    method: "POST",
+    body: form,
+  });
+  if (!res?.ok || !res.uploadSessionId) {
+    throw new Error("Failed to upload expense source document");
+  }
+  return res;
+}
+
+export type AnalyzeExpenseUploadResponse = {
+  ok: true;
+  summary: string;
+  extractedFields: {
+    vendorName?: string;
+    amountCents?: number;
+    incurredAtMs?: number;
+    category?: string;
+    description?: string;
+  };
+  lowConfidence?: boolean;
+};
+
+export async function analyzeExpenseUpload(input: {
+  uploadSessionId?: string;
+  sourceDocumentUrl?: string;
+  sourceDocumentName?: string;
+  sourceDocumentMimeType?: string;
+  textPreview?: string;
+}) {
+  const res = await apiFetch<AnalyzeExpenseUploadResponse>("/expenses/analyze-upload", {
+    method: "POST",
+    body: input,
+  });
+  if (!res?.ok) throw new Error("Failed to analyze expense upload");
+  return res;
 }
