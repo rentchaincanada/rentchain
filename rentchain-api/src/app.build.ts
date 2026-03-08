@@ -185,6 +185,10 @@ app.use("/api/status", routeSource("statusRoutes.ts"), statusRoutes);
 
 // Auth decode (non-blocking if header missing)
 app.use(authenticateJwt);
+app.use("/api", routeSource("expensesRoutes.ts"), expensesRoutes);
+console.log("[route-mount] expensesRoutes mounted at /api");
+app.use("/api", routeSource("workOrdersRoutes.ts"), workOrdersRoutes);
+console.log("[route-mount] workOrdersRoutes mounted at /api");
 
 // Current user info
 app.get("/api/me", async (req: any, res: any, next: any) => {
@@ -284,10 +288,6 @@ app.use("/api/onboarding", routeSource("onboardingRoutes.ts"), onboardingRoutes)
 app.use("/api", routeSource("onboardingRoutes.ts"), onboardingRoutes);
 app.use("/api", routeSource("messagesRoutes.ts"), messagesRoutes);
 app.use("/api", routeSource("telemetryRoutes.ts"), telemetryRoutes);
-app.use("/api", routeSource("expensesRoutes.ts"), expensesRoutes);
-console.log("[route-mount] expensesRoutes mounted at /api");
-app.use("/api", routeSource("workOrdersRoutes.ts"), workOrdersRoutes);
-console.log("[route-mount] workOrdersRoutes mounted at /api");
 console.log(
   "[routes] /api/properties, /api/properties/:propertyId/units, /api/action-requests, /api/applications"
 );
