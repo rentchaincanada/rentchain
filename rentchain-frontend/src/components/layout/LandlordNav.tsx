@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import TopNav from "./TopNav";
 import { useAuth } from "../../context/useAuth";
 import { fetchLandlordConversations } from "../../api/messagesApi";
@@ -30,6 +30,9 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
     if (actorRole === "admin" || role === "admin") return "admin";
     return actorRole || role || "landlord";
   }, [navLoading, user?.actorRole, user?.role]);
+  if (!navLoading && effectiveRole === "contractor") {
+    return <Navigate to="/contractor" replace />;
+  }
   if (import.meta.env.DEV) {
     console.debug("[nav] role resolved", {
       effectiveRole,
