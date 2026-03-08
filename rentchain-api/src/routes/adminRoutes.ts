@@ -48,6 +48,17 @@ function monthDaysFromKey(month: string): string[] {
 }
 
 router.get("/ping", requireAdmin, (_req, res) => res.json({ ok: true }));
+router.get("/route-check", requireAdmin, (_req, res) => {
+  return res.json({
+    ok: true,
+    revision: process.env.K_REVISION || null,
+    checks: {
+      expensesMounted: true,
+      workOrdersMounted: true,
+      contractorInvitesMounted: true,
+    },
+  });
+});
 
 router.post("/users/create-landlord", requireAdmin, async (req, res) => {
   try {

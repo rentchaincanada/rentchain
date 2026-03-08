@@ -285,7 +285,9 @@ app.use("/api", routeSource("onboardingRoutes.ts"), onboardingRoutes);
 app.use("/api", routeSource("messagesRoutes.ts"), messagesRoutes);
 app.use("/api", routeSource("telemetryRoutes.ts"), telemetryRoutes);
 app.use("/api", routeSource("expensesRoutes.ts"), expensesRoutes);
+console.log("[route-mount] expensesRoutes mounted at /api");
 app.use("/api", routeSource("workOrdersRoutes.ts"), workOrdersRoutes);
+console.log("[route-mount] workOrdersRoutes mounted at /api");
 console.log(
   "[routes] /api/properties, /api/properties/:propertyId/units, /api/action-requests, /api/applications"
 );

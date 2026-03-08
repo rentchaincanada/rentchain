@@ -450,6 +450,11 @@ router.post("/expenses/analyze-upload", requireAuth, async (req: any, res) => {
 
 router.post("/expenses", requireAuth, async (req: any, res) => {
   try {
+    console.log("[route-hit] expenses", {
+      method: req.method,
+      path: req.path,
+      userId: String(req.user?.id || ""),
+    });
     const role = normalizeRole(req);
     if (role !== "landlord" && role !== "admin") {
       return res.status(403).json({ ok: false, error: "FORBIDDEN" });

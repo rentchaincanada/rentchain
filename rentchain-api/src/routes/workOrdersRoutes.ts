@@ -403,6 +403,11 @@ router.patch("/contractor/profile", requireAuth, async (req: any, res) => {
 
 router.post("/contractor/invites", requireAuth, async (req: any, res) => {
   try {
+    console.log("[route-hit] contractorInvites", {
+      method: req.method,
+      path: req.path,
+      userId: String(req.user?.id || ""),
+    });
     if (!isLandlord(req)) return res.status(403).json({ ok: false, error: "FORBIDDEN" });
     const landlordId = getLandlordId(req);
     if (!landlordId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
@@ -681,6 +686,11 @@ router.post("/contractor/invites/:inviteId/resend", requireAuth, async (req: any
 
 router.post("/work-orders", requireAuth, async (req: any, res) => {
   try {
+    console.log("[route-hit] workOrders", {
+      method: req.method,
+      path: req.path,
+      userId: String(req.user?.id || ""),
+    });
     if (!isLandlord(req)) return res.status(403).json({ ok: false, error: "FORBIDDEN" });
 
     const landlordId = getLandlordId(req);
