@@ -185,6 +185,7 @@ export type ContractorInvite = {
   token: string;
   status: "pending" | "accepted" | "expired";
   createdAtMs: number;
+  expiresAtMs?: number | null;
   acceptedAtMs: number | null;
   acceptedByUserId?: string;
   inviteLink?: string;
@@ -228,6 +229,15 @@ export async function createContractorInvite(payload: { email: string; message?:
     body: payload,
   });
   if (!res?.ok || !res.invite) throw new Error("Failed to create contractor invite");
+  return res.invite;
+}
+
+export async function resendContractorInvite(inviteId: string) {
+  const res = await apiFetch<{ ok: boolean; invite: ContractorInvite }>(
+    `/contractor/invites/${encodeURIComponent(inviteId)}/resend`,
+    { method: "POST" }
+  );
+  if (!res?.ok || !res.invite) throw new Error("Failed to resend contractor invite");
   return res.invite;
 }
 
