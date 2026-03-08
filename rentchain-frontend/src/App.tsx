@@ -73,6 +73,9 @@ import AccountPage from "./pages/AccountPage";
 import AccountProfilePage from "./pages/account/AccountProfilePage";
 import AccountDataPage from "./pages/account/AccountDataPage";
 import ExpensesPage from "./pages/ExpensesPage";
+import WorkOrdersPage from "./pages/landlord/WorkOrdersPage";
+import WorkOrderNewPage from "./pages/landlord/WorkOrderNewPage";
+import ContractorsPage from "./pages/landlord/ContractorsPage";
 
 const TENANT_PORTAL_ENABLED = import.meta.env.VITE_TENANT_PORTAL_ENABLED === "true";
 
@@ -457,6 +460,36 @@ function App() {
             <RequireAuth>
               <LandlordNav>
                 <ExpensesPage />
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/work-orders"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <WorkOrdersPage />
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/work-orders/new"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <WorkOrderNewPage />
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/contractors"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <ContractorsPage />
               </LandlordNav>
             </RequireAuth>
           }
