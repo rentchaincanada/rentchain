@@ -12,6 +12,7 @@ export type NavItem = {
   requiresAdmin?: boolean;
   requiresLandlordOrAdmin?: boolean;
   requiresFeature?: string;
+  requiresRoles?: string[];
 };
 
 export const getVisibleNavItems = (role?: string | null, features?: Record<string, boolean>) => {
@@ -22,6 +23,7 @@ export const getVisibleNavItems = (role?: string | null, features?: Record<strin
     if (!SCREENING_ENABLED && item.id === "screening") return false;
     if (item.requiresAdmin && !isAdmin) return false;
     if (item.requiresLandlordOrAdmin && !(isLandlord || isAdmin)) return false;
+    if (item.requiresRoles?.length && !item.requiresRoles.includes(normalizedRole)) return false;
     if (!isAdmin && item.requiresFeature && features && features[item.requiresFeature] === false) return false;
     return true;
   });
@@ -81,6 +83,27 @@ export const NAV_ITEMS: NavItem[] = [
     to: "/expenses",
     icon: ReceiptText,
     showInDrawer: true,
+  },
+  {
+    id: "work-orders",
+    label: "Work Orders",
+    to: "/work-orders",
+    showInDrawer: true,
+    requiresLandlordOrAdmin: true,
+  },
+  {
+    id: "contractors",
+    label: "Contractors",
+    to: "/contractors",
+    showInDrawer: true,
+    requiresLandlordOrAdmin: true,
+  },
+  {
+    id: "contractor-portal",
+    label: "Contractor Portal",
+    to: "/contractor",
+    showInDrawer: true,
+    requiresRoles: ["contractor", "admin"],
   },
   {
     id: "account",

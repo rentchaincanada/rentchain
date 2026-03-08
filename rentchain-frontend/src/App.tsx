@@ -39,6 +39,7 @@ import { TwoFactorPage } from "./pages/TwoFactorPage";
 import { AccountSecurityPage } from "./pages/AccountSecurityPage";
 import { RequireAuth } from "./components/auth/RequireAuth";
 import { RequireAdmin } from "./components/auth/RequireAdmin";
+import { RequireRole } from "./components/auth/RequireRole";
 import { useAuth } from "./context/useAuth";
 import ScreeningStartPage from "./pages/screening/ScreeningStartPage";
 import ScreeningSuccessPage from "./pages/screening/ScreeningSuccessPage";
@@ -73,6 +74,14 @@ import AccountPage from "./pages/AccountPage";
 import AccountProfilePage from "./pages/account/AccountProfilePage";
 import AccountDataPage from "./pages/account/AccountDataPage";
 import ExpensesPage from "./pages/ExpensesPage";
+import WorkOrdersPage from "./pages/landlord/WorkOrdersPage";
+import WorkOrderNewPage from "./pages/landlord/WorkOrderNewPage";
+import ContractorsPage from "./pages/landlord/ContractorsPage";
+import ContractorDashboardPage from "./pages/contractor/ContractorDashboardPage";
+import ContractorJobsPage from "./pages/contractor/ContractorJobsPage";
+import ContractorProfilePage from "./pages/contractor/ContractorProfilePage";
+import ContractorInviteAcceptPage from "./pages/contractor/ContractorInviteAcceptPage";
+import { ContractorNav } from "./components/layout/ContractorNav";
 
 const TENANT_PORTAL_ENABLED = import.meta.env.VITE_TENANT_PORTAL_ENABLED === "true";
 
@@ -458,6 +467,73 @@ function App() {
               <LandlordNav>
                 <ExpensesPage />
               </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/work-orders"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <WorkOrdersPage />
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/work-orders/new"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <WorkOrderNewPage />
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/contractors"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <ContractorsPage />
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/contractor"
+          element={
+            <RequireAuth>
+              <RequireRole allowed={["contractor", "admin"]} fallbackTo="/dashboard">
+                <ContractorNav>
+                  <ContractorDashboardPage />
+                </ContractorNav>
+              </RequireRole>
+            </RequireAuth>
+          }
+        />
+        <Route path="/contractor/signup" element={<ContractorInviteAcceptPage />} />
+        <Route
+          path="/contractor/jobs"
+          element={
+            <RequireAuth>
+              <RequireRole allowed={["contractor", "admin"]} fallbackTo="/dashboard">
+                <ContractorNav>
+                  <ContractorJobsPage />
+                </ContractorNav>
+              </RequireRole>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/contractor/profile"
+          element={
+            <RequireAuth>
+              <RequireRole allowed={["contractor", "admin"]} fallbackTo="/dashboard">
+                <ContractorNav>
+                  <ContractorProfilePage />
+                </ContractorNav>
+              </RequireRole>
             </RequireAuth>
           }
         />
