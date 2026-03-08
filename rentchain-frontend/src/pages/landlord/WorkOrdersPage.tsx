@@ -1,7 +1,18 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { Button, Card } from "../../components/ui/Ui";
-import { addWorkOrderUpdate, listWorkOrderUpdates, listWorkOrders, patchWorkOrder, type WorkOrderRecord, type WorkOrderUpdateRecord } from "../../api/workOrdersApi";
+import { AddExpenseModal } from "../../components/expenses/AddExpenseModal";
+import { fetchProperties } from "../../api/propertiesApi";
+import {
+  addWorkOrderUpdate,
+  getContractorProfileById,
+  listWorkOrderUpdates,
+  listWorkOrders,
+  patchWorkOrder,
+  type WorkOrderRecord,
+  type WorkOrderUpdateRecord,
+} from "../../api/workOrdersApi";
+import { type ExpenseCategory } from "../../api/expensesApi";
 
 function formatDate(ms?: number | null) {
   if (!ms) return "-";
@@ -16,6 +27,21 @@ export default function WorkOrdersPage() {
   const [updates, setUpdates] = React.useState<WorkOrderUpdateRecord[]>([]);
   const [newNote, setNewNote] = React.useState("");
   const [savingNote, setSavingNote] = React.useState(false);
+  const [properties, setProperties] = React.useState<Array<{ id: string; name: string }>>([]);
+  const [convertTarget, setConvertTarget] = React.useState<WorkOrderRecord | null>(null);
+  const [convertVendor, setConvertVendor] = React.useState("");
+
+  const normalizeCategory = React.useCallback((input: string): ExpenseCategory => {
+    const raw = String(input || "").trim().toLowerCase();
+    if (raw.includes("repair")) return "Repairs";
+    if (raw.includes("maint")) return "Maintenance";
+    if (raw.includes("clean")) return "Cleaning";
+    if (raw.includes("util")) return "Utilities";
+    if (raw.includes("land")) return "Landscaping";
+    if (raw.includes("tax")) return "Taxes";
+    if (raw.includes("insur")) return "Insurance";
+    return "Other";
+  }, []);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -40,6 +66,30 @@ export default function WorkOrdersPage() {
   React.useEffect(() => {
     void load();
   }, [load]);
+
+  React.useEffect(() => {
+    const run = async () => {
+      try {
+        const data = await fetchProperties();
+        const items = Array.isArray((data as any)?.items)
+          ? (data as any).items
+          : Array.isArray((data as any)?.properties)
+          ? (data as any).properties
+          : [];
+        setProperties(
+          items
+            .map((p: any) => ({
+              id: String(p?.id || ""),
+              name: String(p?.name || p?.addressLine1 || "Property"),
+            }))
+            .filter((p: any) => p.id)
+        );
+      } catch {
+        setProperties([]);
+      }
+    };
+    void run();
+  }, []);
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
@@ -116,6 +166,35 @@ export default function WorkOrdersPage() {
                             Mark Completed
                           </Button>
                         ) : null}
+                        {item.status === "completed" && !item.linkedExpenseId ? (
+                          <Button
+                            onClick={async () => {
+                              setConvertTarget(item);
+                              const contractorId = String(item.assignedContractorId || "").trim();
+                              if (!contractorId) {
+                                setConvertVendor("");
+                                return;
+                              }
+                              try {
+                                const contractor = await getContractorProfileById(contractorId);
+                                const vendor =
+                                  String(contractor?.businessName || "").trim() ||
+                                  String(contractor?.contactName || "").trim() ||
+                                  "";
+                                setConvertVendor(vendor);
+                              } catch {
+                                setConvertVendor("");
+                              }
+                            }}
+                          >
+                            Convert to Expense
+                          </Button>
+                        ) : null}
+                        {item.linkedExpenseId ? (
+                          <span style={{ fontSize: 12, color: "#16a34a", padding: "6px 2px" }}>
+                            Expense linked
+                          </span>
+                        ) : null}
                       </div>
                     </td>
                   </tr>
@@ -175,6 +254,34 @@ export default function WorkOrdersPage() {
           </Card>
         ) : null}
       </div>
+
+      <AddExpenseModal
+        open={Boolean(convertTarget)}
+        properties={properties}
+        defaultPropertyId={convertTarget?.propertyId || null}
+        defaultUnitId={convertTarget?.unitId || null}
+        defaultSource="work_order"
+        defaultCategory={normalizeCategory(String(convertTarget?.category || ""))}
+        defaultVendorName={convertVendor}
+        defaultNotes={
+          convertTarget
+            ? `Work order: ${convertTarget.title}\n${convertTarget.description || ""}`.trim()
+            : ""
+        }
+        defaultLinkedWorkOrderId={convertTarget?.id || null}
+        onClose={() => {
+          setConvertTarget(null);
+          setConvertVendor("");
+        }}
+        onSaved={async (expense) => {
+          if (!convertTarget?.id || !expense?.id) return;
+          await patchWorkOrder(convertTarget.id, { linkedExpenseId: expense.id });
+          await load();
+          if (selected?.id === convertTarget.id) {
+            setSelected((prev) => (prev ? { ...prev, linkedExpenseId: expense.id } : prev));
+          }
+        }}
+      />
     </div>
   );
 }

@@ -117,6 +117,9 @@ function canTransitionWorkOrder(params: {
 
   if (actor === "landlord" || actor === "admin") {
     if (to === "cancelled" && ACTIVE_INCIDENT_WORK_ORDER_STATUSES.has(from)) return true;
+    if (to === "completed" && (from === "accepted" || from === "in_progress" || from === "assigned")) {
+      return true;
+    }
     return false;
   }
 
@@ -331,6 +334,33 @@ router.get("/contractor/profile", requireAuth, async (req: any, res) => {
     return res.json({ ok: true, profile: data ? { id: snap.id, ...(data as any) } : null });
   } catch (err) {
     console.error("[contractor/profile] get failed", err);
+    return res.status(500).json({ ok: false, error: "CONTRACTOR_PROFILE_GET_FAILED" });
+  }
+});
+
+router.get("/contractor/:contractorId/profile", requireAuth, async (req: any, res) => {
+  try {
+    if (!isLandlord(req)) return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    const contractorId = asString(req.params?.contractorId, 120);
+    if (!contractorId) return res.status(400).json({ ok: false, error: "CONTRACTOR_ID_REQUIRED" });
+
+    const landlordId = getLandlordId(req);
+    if (!landlordId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+
+    const snap = await db.collection("contractorProfiles").doc(contractorId).get();
+    if (!snap.exists) return res.status(404).json({ ok: false, error: "CONTRACTOR_PROFILE_NOT_FOUND" });
+    const profile = { id: snap.id, ...(snap.data() as any) };
+
+    if (!isAdmin(req)) {
+      const invitedBy = uniqueStrings(profile.invitedByLandlordIds, 200);
+      if (!invitedBy.includes(landlordId)) {
+        return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+      }
+    }
+
+    return res.json({ ok: true, profile });
+  } catch (err) {
+    console.error("[contractor/profile] get by id failed", err);
     return res.status(500).json({ ok: false, error: "CONTRACTOR_PROFILE_GET_FAILED" });
   }
 });
