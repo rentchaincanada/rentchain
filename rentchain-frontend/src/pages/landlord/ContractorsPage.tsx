@@ -1,6 +1,11 @@
 import React from "react";
 import { Button, Card, Input } from "../../components/ui/Ui";
-import { createContractorInvite, listContractorInvites, type ContractorInvite } from "../../api/workOrdersApi";
+import {
+  createContractorInvite,
+  listContractorInvites,
+  resendContractorInvite,
+  type ContractorInvite,
+} from "../../api/workOrdersApi";
 
 function formatDate(ms?: number | null) {
   if (!ms) return "-";
@@ -96,8 +101,10 @@ export default function ContractorsPage() {
                 <th style={{ padding: 8 }}>Email</th>
                 <th style={{ padding: 8 }}>Status</th>
                 <th style={{ padding: 8 }}>Created</th>
+                <th style={{ padding: 8 }}>Expires</th>
                 <th style={{ padding: 8 }}>Accepted</th>
                 <th style={{ padding: 8 }}>Invite Link</th>
+                <th style={{ padding: 8 }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -106,12 +113,32 @@ export default function ContractorsPage() {
                   <td style={{ padding: 8 }}>{invite.email}</td>
                   <td style={{ padding: 8 }}>{invite.status}</td>
                   <td style={{ padding: 8 }}>{formatDate(invite.createdAtMs)}</td>
+                  <td style={{ padding: 8 }}>{formatDate(invite.expiresAtMs || null)}</td>
                   <td style={{ padding: 8 }}>{formatDate(invite.acceptedAtMs)}</td>
                   <td style={{ padding: 8 }}>
                     {invite.inviteLink ? (
                       <a href={invite.inviteLink} target="_blank" rel="noreferrer">
                         Open
                       </a>
+                    ) : (
+                      "-"
+                    )}
+                  </td>
+                  <td style={{ padding: 8 }}>
+                    {invite.status !== "accepted" ? (
+                      <Button
+                        variant="ghost"
+                        onClick={async () => {
+                          try {
+                            await resendContractorInvite(invite.id);
+                            await load();
+                          } catch (err: any) {
+                            setError(String(err?.message || "Failed to resend invite"));
+                          }
+                        }}
+                      >
+                        Resend
+                      </Button>
                     ) : (
                       "-"
                     )}

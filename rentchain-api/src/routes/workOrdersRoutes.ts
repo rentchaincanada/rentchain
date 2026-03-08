@@ -2,6 +2,8 @@ import { Router } from "express";
 import crypto from "crypto";
 import { db } from "../config/firebase";
 import { requireAuth } from "../middleware/requireAuth";
+import { sendEmail } from "../services/emailService";
+import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 
 const router = Router();
 
@@ -17,6 +19,11 @@ const WORK_ORDER_STATUSES = new Set([
 ]);
 
 const CONTRACTOR_VISIBLE_STATUSES = new Set(["accepted", "in_progress", "completed"]);
+const ACTIVE_INCIDENT_WORK_ORDER_STATUSES = new Set(["open", "invited", "assigned", "accepted", "in_progress"]);
+const CONTRACTOR_INVITE_TTL_MS = Math.max(
+  60_000,
+  Number(process.env.CONTRACTOR_INVITE_TTL_MS || 7 * 24 * 60 * 60 * 1000)
+);
 
 function nowMs() {
   return Date.now();
@@ -83,6 +90,101 @@ function isContractor(req: any): boolean {
 
 function toWorkOrderResponse(id: string, data: any) {
   return { id, ...(data || {}) };
+}
+
+function inviteIsExpired(invite: any, atMs = nowMs()) {
+  const expiresAtMs = Number(invite?.expiresAtMs || 0);
+  return expiresAtMs > 0 && atMs >= expiresAtMs;
+}
+
+function canTransitionWorkOrder(params: {
+  fromStatus: string;
+  toStatus: string;
+  actorRole: string;
+}) {
+  const from = String(params.fromStatus || "").toLowerCase();
+  const to = String(params.toStatus || "").toLowerCase();
+  const actor = String(params.actorRole || "").toLowerCase();
+  if (!WORK_ORDER_STATUSES.has(from) || !WORK_ORDER_STATUSES.has(to)) return false;
+  if (from === to) return true;
+
+  if (actor === "contractor") {
+    if ((from === "open" || from === "invited" || from === "assigned") && to === "accepted") return true;
+    if (from === "accepted" && to === "in_progress") return true;
+    if (from === "in_progress" && to === "completed") return true;
+    return false;
+  }
+
+  if (actor === "landlord" || actor === "admin") {
+    if (to === "cancelled" && ACTIVE_INCIDENT_WORK_ORDER_STATUSES.has(from)) return true;
+    return false;
+  }
+
+  return false;
+}
+
+async function trySendContractorEmail(params: {
+  to: string;
+  subject: string;
+  intro: string;
+  ctaText?: string;
+  ctaUrl?: string;
+  bullets?: string[];
+}) {
+  const to = asString(params.to, 320).toLowerCase();
+  const from = asString(process.env.EMAIL_FROM || process.env.FROM_EMAIL || "", 320);
+  if (!to || !from) return;
+
+  const ctaUrl = asString(
+    params.ctaUrl ||
+      String(process.env.PUBLIC_APP_URL || process.env.VITE_PUBLIC_APP_URL || "https://www.rentchain.ai"),
+    2000
+  );
+  const ctaText = asString(params.ctaText || "Open RentChain", 100);
+  const intro = asString(params.intro, 1000);
+  const subject = asString(params.subject, 180);
+
+  if (!subject || !intro) return;
+
+  try {
+    await sendEmail({
+      to,
+      from,
+      subject,
+      text: buildEmailText({
+        intro,
+        bullets: params.bullets || [],
+        ctaText,
+        ctaUrl,
+      }),
+      html: buildEmailHtml({
+        title: subject,
+        intro,
+        bullets: params.bullets || [],
+        ctaText,
+        ctaUrl,
+      }),
+    });
+  } catch (err: any) {
+    console.warn("[work-orders] email send failed (non-blocking)", {
+      to,
+      subject,
+      message: String(err?.message || err),
+    });
+  }
+}
+
+async function findUserEmailById(userId: string): Promise<string | null> {
+  const id = asString(userId, 120);
+  if (!id) return null;
+  const [userSnap, accountSnap] = await Promise.all([
+    db.collection("users").doc(id).get(),
+    db.collection("accounts").doc(id).get(),
+  ]);
+  const candidate =
+    asString((userSnap.data() as any)?.email, 320).toLowerCase() ||
+    asString((accountSnap.data() as any)?.email, 320).toLowerCase();
+  return candidate || null;
 }
 
 async function ensureLandlordOwnsProperty(propertyId: string, landlordId: string, adminAccess: boolean) {
@@ -282,6 +384,7 @@ router.post("/contractor/invites", requireAuth, async (req: any, res) => {
 
     const now = nowMs();
     const token = crypto.randomBytes(24).toString("hex");
+    const expiresAtMs = now + CONTRACTOR_INVITE_TTL_MS;
     const ref = db.collection("contractorInvites").doc();
     const invite = {
       id: ref.id,
@@ -290,6 +393,7 @@ router.post("/contractor/invites", requireAuth, async (req: any, res) => {
       token,
       status: "pending",
       createdAtMs: now,
+      expiresAtMs,
       acceptedAtMs: null,
       createdByUserId: getUserId(req),
       message: asString(req.body?.message, 1000),
@@ -304,7 +408,17 @@ router.post("/contractor/invites", requireAuth, async (req: any, res) => {
       inviteId: ref.id,
       landlordId,
       email,
+      expiresAtMs,
       inviteLink,
+    });
+
+    await trySendContractorEmail({
+      to: email,
+      subject: "You’ve been invited to RentChain Contractor",
+      intro: "A landlord has invited you to join their private contractor network on RentChain.",
+      bullets: [`Invite expires: ${new Date(expiresAtMs).toLocaleString()}`],
+      ctaText: "Accept Invite",
+      ctaUrl: inviteLink,
     });
 
     return res.status(201).json({ ok: true, invite: { ...invite, inviteLink } });
@@ -327,9 +441,18 @@ router.get("/contractor/invites", requireAuth, async (req: any, res) => {
         .where("landlordId", "==", landlordId)
         .limit(300)
         .get();
-      const invites = snap.docs
-        .map((d) => ({ id: d.id, ...(d.data() as any) }))
-        .sort((a, b) => Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0));
+      const now = nowMs();
+      const invites = await Promise.all(
+        snap.docs.map(async (d) => {
+          const item = { id: d.id, ...(d.data() as any) };
+          if (String(item.status || "") === "pending" && inviteIsExpired(item, now)) {
+            await d.ref.set({ status: "expired", updatedAtMs: now }, { merge: true });
+            return { ...item, status: "expired", updatedAtMs: now };
+          }
+          return item;
+        })
+      );
+      invites.sort((a, b) => Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0));
       return res.json({ ok: true, invites });
     }
 
@@ -340,9 +463,18 @@ router.get("/contractor/invites", requireAuth, async (req: any, res) => {
         .where("email", "==", userEmail)
         .limit(100)
         .get();
-      const invites = snap.docs
-        .map((d) => ({ id: d.id, ...(d.data() as any) }))
-        .sort((a, b) => Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0));
+      const now = nowMs();
+      const invites = await Promise.all(
+        snap.docs.map(async (d) => {
+          const item = { id: d.id, ...(d.data() as any) };
+          if (String(item.status || "") === "pending" && inviteIsExpired(item, now)) {
+            await d.ref.set({ status: "expired", updatedAtMs: now }, { merge: true });
+            return { ...item, status: "expired", updatedAtMs: now };
+          }
+          return item;
+        })
+      );
+      invites.sort((a, b) => Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0));
       return res.json({ ok: true, invites });
     }
 
@@ -368,6 +500,11 @@ router.post("/contractor/invites/:token/accept", requireAuth, async (req: any, r
 
     const inviteDoc = snap.docs[0];
     const invite = inviteDoc.data() as any;
+    const now = nowMs();
+    if (inviteIsExpired(invite, now)) {
+      await inviteDoc.ref.set({ status: "expired", updatedAtMs: now }, { merge: true });
+      return res.status(410).json({ ok: false, error: "INVITE_EXPIRED" });
+    }
     if (String(invite?.status || "") !== "pending") {
       return res.status(409).json({ ok: false, error: "INVITE_NOT_PENDING" });
     }
@@ -381,7 +518,6 @@ router.post("/contractor/invites/:token/accept", requireAuth, async (req: any, r
       return res.status(403).json({ ok: false, error: "INVITE_EMAIL_MISMATCH" });
     }
 
-    const now = nowMs();
     await inviteDoc.ref.set(
       {
         status: "accepted",
@@ -438,10 +574,78 @@ router.post("/contractor/invites/:token/accept", requireAuth, async (req: any, r
       ]);
     }
 
+    await trySendContractorEmail({
+      to: inviteEmail,
+      subject: "RentChain contractor invite accepted",
+      intro: "Your contractor invite has been accepted and your profile is now linked.",
+      ctaText: "Open Contractor Portal",
+      ctaUrl: `${String(process.env.PUBLIC_APP_URL || process.env.VITE_PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "")}/contractor`,
+    });
+
     return res.json({ ok: true, invite: { id: inviteDoc.id, ...invite, status: "accepted", acceptedAtMs: now } });
   } catch (err) {
     console.error("[contractor/invites] accept failed", err);
     return res.status(500).json({ ok: false, error: "CONTRACTOR_INVITE_ACCEPT_FAILED" });
+  }
+});
+
+router.post("/contractor/invites/:inviteId/resend", requireAuth, async (req: any, res) => {
+  try {
+    if (!isLandlord(req)) return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    const landlordId = getLandlordId(req);
+    const inviteId = asString(req.params?.inviteId, 120);
+    if (!landlordId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    if (!inviteId) return res.status(400).json({ ok: false, error: "INVITE_ID_REQUIRED" });
+
+    const ref = db.collection("contractorInvites").doc(inviteId);
+    const snap = await ref.get();
+    if (!snap.exists) return res.status(404).json({ ok: false, error: "INVITE_NOT_FOUND" });
+    const invite = snap.data() as any;
+    if (asString(invite?.landlordId, 120) !== landlordId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    if (String(invite?.status || "") === "accepted") {
+      return res.status(409).json({ ok: false, error: "INVITE_ALREADY_ACCEPTED" });
+    }
+
+    const now = nowMs();
+    const token = crypto.randomBytes(24).toString("hex");
+    const expiresAtMs = now + CONTRACTOR_INVITE_TTL_MS;
+    const email = asString(invite?.email, 320).toLowerCase();
+    const appBaseUrl = String(process.env.PUBLIC_APP_URL || process.env.VITE_PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
+    const inviteLink = `${appBaseUrl}/contractor/signup?invite=${encodeURIComponent(token)}`;
+
+    await ref.set(
+      {
+        token,
+        status: "pending",
+        expiresAtMs,
+        resentAtMs: now,
+        resentByUserId: getUserId(req),
+        acceptedAtMs: null,
+        acceptedByUserId: null,
+        updatedAtMs: now,
+      },
+      { merge: true }
+    );
+
+    await trySendContractorEmail({
+      to: email,
+      subject: "RentChain contractor invite resent",
+      intro: "A new invite link was issued to join RentChain as a contractor.",
+      bullets: [`Invite expires: ${new Date(expiresAtMs).toLocaleString()}`],
+      ctaText: "Accept Invite",
+      ctaUrl: inviteLink,
+    });
+
+    return res.json({
+      ok: true,
+      invite: { id: inviteId, ...invite, token, status: "pending", expiresAtMs, resentAtMs: now, inviteLink },
+    });
+  } catch (err) {
+    console.error("[contractor/invites] resend failed", err);
+    return res.status(500).json({ ok: false, error: "CONTRACTOR_INVITE_RESEND_FAILED" });
   }
 });
 
@@ -511,6 +715,8 @@ router.post("/work-orders", requireAuth, async (req: any, res) => {
       completedAtMs: null,
       notesInternal: asString(req.body?.notesInternal, 5000),
       linkedExpenseId: asOptionalString(req.body?.linkedExpenseId, 120),
+      estimatedCostCents: parseMoneyToCents(req.body?.estimatedCostCents),
+      finalCostCents: parseMoneyToCents(req.body?.finalCostCents),
       createdAtMs: now,
       updatedAtMs: now,
     };
@@ -570,7 +776,12 @@ router.get("/work-orders", requireAuth, async (req: any, res) => {
 
       const map = new Map<string, any>();
       for (const doc of [...assignedSnap.docs, ...invitedSnap.docs]) {
-        map.set(doc.id, toWorkOrderResponse(doc.id, doc.data()));
+        const item = toWorkOrderResponse(doc.id, doc.data());
+        const assigned = asString(item.assignedContractorId, 120);
+        const invited = uniqueStrings(item.invitedContractorIds, 200);
+        if (assigned === userId || invited.includes(userId)) {
+          map.set(doc.id, item);
+        }
       }
 
       let items = Array.from(map.values());
@@ -635,24 +846,34 @@ router.patch("/work-orders/:id", requireAuth, async (req: any, res) => {
       }
       if (req.body?.notesInternal !== undefined) patch.notesInternal = asString(req.body.notesInternal, 5000);
       if (req.body?.linkedExpenseId !== undefined) patch.linkedExpenseId = asOptionalString(req.body.linkedExpenseId, 120);
+      if (req.body?.estimatedCostCents !== undefined) {
+        patch.estimatedCostCents = parseMoneyToCents(req.body.estimatedCostCents);
+      }
+      if (req.body?.finalCostCents !== undefined) {
+        patch.finalCostCents = parseMoneyToCents(req.body.finalCostCents);
+      }
       if (req.body?.status !== undefined) {
         const nextStatus = asString(req.body.status, 40).toLowerCase();
-        if (WORK_ORDER_STATUSES.has(nextStatus)) {
-          patch.status = nextStatus;
-          if (nextStatus === "completed") patch.completedAtMs = nowMs();
-          if (nextStatus === "in_progress") patch.startedAtMs = nowMs();
-          updateMessage = `Status changed to ${nextStatus}`;
+        const currentStatus = asString((access.item as any)?.status, 40).toLowerCase();
+        if (!canTransitionWorkOrder({ fromStatus: currentStatus, toStatus: nextStatus, actorRole: access.role })) {
+          return res.status(400).json({ ok: false, error: "INVALID_STATUS_TRANSITION" });
         }
+        patch.status = nextStatus;
+        if (nextStatus === "completed") patch.completedAtMs = nowMs();
+        if (nextStatus === "in_progress") patch.startedAtMs = nowMs();
+        updateMessage = `Status changed to ${nextStatus}`;
       }
     } else if (access.role === "contractor") {
       if (req.body?.status !== undefined) {
         const nextStatus = asString(req.body.status, 40).toLowerCase();
-        if (CONTRACTOR_VISIBLE_STATUSES.has(nextStatus)) {
-          patch.status = nextStatus;
-          if (nextStatus === "in_progress") patch.startedAtMs = nowMs();
-          if (nextStatus === "completed") patch.completedAtMs = nowMs();
-          updateMessage = `Contractor status updated to ${nextStatus}`;
+        const currentStatus = asString((access.item as any)?.status, 40).toLowerCase();
+        if (!canTransitionWorkOrder({ fromStatus: currentStatus, toStatus: nextStatus, actorRole: access.role })) {
+          return res.status(400).json({ ok: false, error: "INVALID_STATUS_TRANSITION" });
         }
+        patch.status = nextStatus;
+        if (nextStatus === "in_progress") patch.startedAtMs = nowMs();
+        if (nextStatus === "completed") patch.completedAtMs = nowMs();
+        updateMessage = `Contractor status updated to ${nextStatus}`;
       }
     }
 
@@ -686,6 +907,10 @@ router.post("/work-orders/:id/accept", requireAuth, async (req: any, res) => {
     }
 
     const userId = getUserId(req);
+    const currentStatus = asString((access.item as any)?.status, 40).toLowerCase();
+    if (!canTransitionWorkOrder({ fromStatus: currentStatus, toStatus: "accepted", actorRole: "contractor" })) {
+      return res.status(400).json({ ok: false, error: "INVALID_STATUS_TRANSITION" });
+    }
     const now = nowMs();
     await db.collection("workOrders").doc(workOrderId).set(
       {
@@ -704,6 +929,17 @@ router.post("/work-orders/:id/accept", requireAuth, async (req: any, res) => {
       updateType: "accepted",
       message: "Work order accepted",
     });
+
+    const landlordEmail = await findUserEmailById(asString((access.item as any)?.landlordId, 120));
+    if (landlordEmail) {
+      await trySendContractorEmail({
+        to: landlordEmail,
+        subject: "Work order accepted",
+        intro: `A contractor accepted work order: ${asString((access.item as any)?.title, 180) || workOrderId}.`,
+        ctaText: "Open Work Orders",
+        ctaUrl: `${String(process.env.PUBLIC_APP_URL || process.env.VITE_PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "")}/work-orders`,
+      });
+    }
 
     const refreshed = await db.collection("workOrders").doc(workOrderId).get();
     return res.json({ ok: true, item: toWorkOrderResponse(refreshed.id, refreshed.data()) });
@@ -725,6 +961,10 @@ router.post("/work-orders/:id/decline", requireAuth, async (req: any, res) => {
     }
 
     const userId = getUserId(req);
+    const currentStatus = asString((access.item as any)?.status, 40).toLowerCase();
+    if (!(currentStatus === "open" || currentStatus === "invited" || currentStatus === "assigned")) {
+      return res.status(400).json({ ok: false, error: "INVALID_STATUS_TRANSITION" });
+    }
     const invited = uniqueStrings((access.item as any)?.invitedContractorIds, 100).filter((id) => id !== userId);
     const nextStatus = invited.length ? "invited" : "open";
 
@@ -749,6 +989,17 @@ router.post("/work-orders/:id/decline", requireAuth, async (req: any, res) => {
       message: "Work order declined",
     });
 
+    const landlordEmail = await findUserEmailById(asString((access.item as any)?.landlordId, 120));
+    if (landlordEmail) {
+      await trySendContractorEmail({
+        to: landlordEmail,
+        subject: "Work order declined",
+        intro: `A contractor declined work order: ${asString((access.item as any)?.title, 180) || workOrderId}.`,
+        ctaText: "Open Work Orders",
+        ctaUrl: `${String(process.env.PUBLIC_APP_URL || process.env.VITE_PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "")}/work-orders`,
+      });
+    }
+
     const refreshed = await db.collection("workOrders").doc(workOrderId).get();
     return res.json({ ok: true, item: toWorkOrderResponse(refreshed.id, refreshed.data()) });
   } catch (err) {
@@ -769,6 +1020,10 @@ router.post("/work-orders/:id/start", requireAuth, async (req: any, res) => {
     }
 
     const userId = getUserId(req);
+    const currentStatus = asString((access.item as any)?.status, 40).toLowerCase();
+    if (!canTransitionWorkOrder({ fromStatus: currentStatus, toStatus: "in_progress", actorRole: "contractor" })) {
+      return res.status(400).json({ ok: false, error: "INVALID_STATUS_TRANSITION" });
+    }
     const now = nowMs();
     await db.collection("workOrders").doc(workOrderId).set(
       {
@@ -808,6 +1063,10 @@ router.post("/work-orders/:id/complete", requireAuth, async (req: any, res) => {
     }
 
     const userId = getUserId(req);
+    const currentStatus = asString((access.item as any)?.status, 40).toLowerCase();
+    if (!canTransitionWorkOrder({ fromStatus: currentStatus, toStatus: "completed", actorRole: "contractor" })) {
+      return res.status(400).json({ ok: false, error: "INVALID_STATUS_TRANSITION" });
+    }
     const now = nowMs();
     await db.collection("workOrders").doc(workOrderId).set(
       {
@@ -826,6 +1085,17 @@ router.post("/work-orders/:id/complete", requireAuth, async (req: any, res) => {
       updateType: "completed",
       message: "Work order marked completed",
     });
+
+    const landlordEmail = await findUserEmailById(asString((access.item as any)?.landlordId, 120));
+    if (landlordEmail) {
+      await trySendContractorEmail({
+        to: landlordEmail,
+        subject: "Work order completed",
+        intro: `A contractor marked work order as completed: ${asString((access.item as any)?.title, 180) || workOrderId}.`,
+        ctaText: "Review Work Order",
+        ctaUrl: `${String(process.env.PUBLIC_APP_URL || process.env.VITE_PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "")}/work-orders`,
+      });
+    }
 
     const refreshed = await db.collection("workOrders").doc(workOrderId).get();
     return res.json({ ok: true, item: toWorkOrderResponse(refreshed.id, refreshed.data()) });
