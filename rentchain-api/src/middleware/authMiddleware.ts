@@ -7,7 +7,7 @@ import { jsonError } from "../lib/httpResponse";
 export interface AuthenticatedUser {
   id: string;
   email: string;
-  role: "landlord" | "admin" | "tenant";
+  role: "landlord" | "admin" | "tenant" | "contractor";
   landlordId?: string;
   tenantId?: string;
   leaseId?: string;
