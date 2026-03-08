@@ -198,6 +198,14 @@ export async function getContractorProfile(): Promise<ContractorProfile | null> 
   return res?.profile || null;
 }
 
+export async function getContractorProfileById(contractorId: string): Promise<ContractorProfile | null> {
+  const res = await apiFetch<{ ok: boolean; profile: ContractorProfile | null }>(
+    `/contractor/${encodeURIComponent(contractorId)}/profile`,
+    { method: "GET", allowStatuses: [403, 404] }
+  );
+  return res?.profile || null;
+}
+
 export async function createContractorProfile(payload: Partial<ContractorProfile>) {
   const res = await apiFetch<{ ok: boolean; profile: ContractorProfile }>("/contractor/profile", {
     method: "POST",

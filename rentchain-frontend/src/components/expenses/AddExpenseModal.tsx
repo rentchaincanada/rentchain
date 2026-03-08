@@ -3,6 +3,7 @@ import {
   analyzeExpenseUpload,
   createExpense,
   EXPENSE_CATEGORIES,
+  type ExpenseRecord,
   type ExpenseCategory,
   type ExpenseSource,
   uploadExpenseSourceDocument,
@@ -20,6 +21,7 @@ type ExpensePayload = {
   incurredAtMs: number;
   notes: string;
   source: ExpenseSource;
+  linkedWorkOrderId?: string | null;
   sourceDocumentUrl?: string | null;
   sourceDocumentName?: string | null;
   sourceDocumentMimeType?: string | null;
@@ -32,9 +34,14 @@ type Props = {
   open: boolean;
   properties: PropertyOption[];
   defaultPropertyId?: string | null;
+  defaultUnitId?: string | null;
   defaultSource?: ExpenseSource;
+  defaultCategory?: ExpenseCategory | "";
+  defaultVendorName?: string;
+  defaultNotes?: string;
+  defaultLinkedWorkOrderId?: string | null;
   onClose: () => void;
-  onSaved?: () => void;
+  onSaved?: (expense: ExpenseRecord) => void | Promise<void>;
 };
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
@@ -74,7 +81,12 @@ export function AddExpenseModal({
   open,
   properties,
   defaultPropertyId,
+  defaultUnitId,
   defaultSource,
+  defaultCategory,
+  defaultVendorName,
+  defaultNotes,
+  defaultLinkedWorkOrderId,
   onClose,
   onSaved,
 }: Props) {
@@ -110,13 +122,13 @@ export function AddExpenseModal({
     const initialProperty = defaultPropertyId || properties[0]?.id || "";
     const initialSource: ExpenseSource = defaultSource || "manual";
     setPropertyId(initialProperty);
-    setUnitId("");
+    setUnitId(defaultUnitId || "");
     setSource(initialSource);
-    setCategory(initialSource === "work_order" ? "Repairs" : "");
-    setVendorName("");
+    setCategory(defaultCategory || (initialSource === "work_order" ? "Repairs" : ""));
+    setVendorName(defaultVendorName || "");
     setAmountInput("");
     setDateInput(toDateInputValue(Date.now()));
-    setNotes("");
+    setNotes(defaultNotes || "");
     setSelectedFile(null);
     setUploadingFile(false);
     setAnalyzingFile(false);
@@ -128,7 +140,16 @@ export function AddExpenseModal({
     setAiLowConfidence(false);
     setSaving(false);
     setError(null);
-  }, [open, defaultPropertyId, defaultSource, properties]);
+  }, [
+    open,
+    defaultPropertyId,
+    defaultUnitId,
+    defaultSource,
+    defaultCategory,
+    defaultVendorName,
+    defaultNotes,
+    properties,
+  ]);
 
   if (!open) return null;
 
@@ -292,6 +313,7 @@ export function AddExpenseModal({
       incurredAtMs,
       notes: notes.trim(),
       source,
+      linkedWorkOrderId: defaultLinkedWorkOrderId || null,
       sourceDocumentUrl,
       sourceDocumentName,
       sourceDocumentMimeType,
@@ -303,9 +325,9 @@ export function AddExpenseModal({
     setSaving(true);
     setError(null);
     try {
-      await createExpense(payload);
+      const created = await createExpense(payload);
       showToast({ message: "Expense recorded", variant: "success" });
-      onSaved?.();
+      await onSaved?.(created);
       onClose();
     } catch (err: any) {
       const message = String(err?.message || "Unable to record expense.");
@@ -620,6 +642,12 @@ export function AddExpenseModal({
                 Apply suggested values
               </button>
             </div>
+          </div>
+        ) : null}
+
+        {defaultLinkedWorkOrderId ? (
+          <div style={{ fontSize: "0.82rem", color: "#64748b" }}>
+            Linked work order: {defaultLinkedWorkOrderId}
           </div>
         ) : null}
 
