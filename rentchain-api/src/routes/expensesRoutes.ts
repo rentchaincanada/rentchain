@@ -147,18 +147,94 @@ function normalizeSource(raw: unknown, fallback: ExpenseSource = "manual"): Expe
   return fallback;
 }
 
-function findAmountCents(text: string): number | null {
-  const amountPattern =
-    /(?:total|amount|balance|invoice total|due|paid)?\s*[:\-]?\s*(?:CAD|USD|\$)\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})|[0-9]+(?:\.[0-9]{2})?)/gi;
-  let match: RegExpExecArray | null = null;
-  let best = 0;
-  while ((match = amountPattern.exec(text)) !== null) {
-    const raw = String(match[1] || "").replace(/,/g, "");
-    const value = Number(raw);
-    if (Number.isFinite(value) && value > best) best = value;
+type AmountCandidate = {
+  amountCents: number;
+  raw: string;
+  context: string;
+  confidenceTag: "total" | "amount_due" | "balance_due" | "subtotal" | "generic";
+  score: number;
+};
+
+function scoreAmountCandidate(context: string): { tag: AmountCandidate["confidenceTag"]; score: number } {
+  const lower = String(context || "").toLowerCase();
+  if (/\b(grand total|invoice total|total due)\b/.test(lower)) return { tag: "total", score: 100 };
+  if (/\b(amount due|amount payable|pay this amount)\b/.test(lower)) return { tag: "amount_due", score: 96 };
+  if (/\b(balance due|balance)\b/.test(lower)) return { tag: "balance_due", score: 92 };
+  if (/\bsubtotal\b/.test(lower)) return { tag: "subtotal", score: 70 };
+  return { tag: "generic", score: 55 };
+}
+
+function extractAmountCandidates(text: string): {
+  amountCents: number | null;
+  candidateAmounts: number[];
+  rawCandidates: Array<{
+    amountCents: number;
+    raw: string;
+    context: string;
+    confidenceTag: AmountCandidate["confidenceTag"];
+  }>;
+  lowConfidence: boolean;
+} {
+  const rows = String(text || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 800);
+
+  const candidates: AmountCandidate[] = [];
+  const currencyPattern = /(?:CAD|USD|\$)\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})|[0-9]+(?:\.[0-9]{2})?)/gi;
+
+  for (const row of rows) {
+    let match: RegExpExecArray | null = null;
+    while ((match = currencyPattern.exec(row)) !== null) {
+      const amountRaw = String(match[1] || "").replace(/,/g, "");
+      const amount = Number(amountRaw);
+      if (!Number.isFinite(amount) || amount <= 0) continue;
+
+      const amountCents = Math.round(amount * 100);
+      const scored = scoreAmountCandidate(row);
+      let score = scored.score;
+      if (/\b(item|line item|qty|quantity|unit price|tax|fee|shipping)\b/i.test(row)) {
+        score -= 12;
+      }
+
+      candidates.push({
+        amountCents,
+        raw: amountRaw,
+        context: row.slice(0, 240),
+        confidenceTag: scored.tag,
+        score,
+      });
+    }
   }
-  if (best <= 0) return null;
-  return Math.round(best * 100);
+
+  if (!candidates.length) {
+    return { amountCents: null, candidateAmounts: [], rawCandidates: [], lowConfidence: true };
+  }
+
+  candidates.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return b.amountCents - a.amountCents;
+  });
+
+  const uniqueAmounts = Array.from(new Set(candidates.map((c) => c.amountCents)));
+  const top = candidates[0];
+  const second = candidates[1];
+  const scoreGap = second ? top.score - second.score : 999;
+  const topCount = candidates.filter((c) => c.score === top.score).length;
+  const lowConfidence = uniqueAmounts.length > 1 && (scoreGap < 12 || topCount > 1 || top.confidenceTag === "generic");
+
+  return {
+    amountCents: lowConfidence ? null : top.amountCents,
+    candidateAmounts: uniqueAmounts.slice(0, 6),
+    rawCandidates: candidates.slice(0, 6).map((c) => ({
+      amountCents: c.amountCents,
+      raw: c.raw,
+      context: c.context,
+      confidenceTag: c.confidenceTag,
+    })),
+    lowConfidence,
+  };
 }
 
 function findDateMs(text: string): number | null {
@@ -389,14 +465,26 @@ router.post("/expenses/analyze-upload", requireAuth, async (req: any, res) => {
       category?: string;
       description?: string;
     } = {};
+    let candidateAmounts: number[] = [];
+    let rawCandidates: Array<{
+      amountCents: number;
+      raw: string;
+      context: string;
+      confidenceTag: "total" | "amount_due" | "balance_due" | "subtotal" | "generic";
+    }> = [];
+    let amountLowConfidence = false;
 
     const normalizedText = String(textPreview || "").trim();
     if (normalizedText) {
       const vendorName = findVendor(normalizedText);
-      const amountCents = findAmountCents(normalizedText);
+      const amountExtraction = extractAmountCandidates(normalizedText);
+      const amountCents = amountExtraction.amountCents;
       const incurredAtMs = findDateMs(normalizedText);
       const category = findCategoryHint(normalizedText);
       const description = firstMeaningfulLine(normalizedText);
+      candidateAmounts = amountExtraction.candidateAmounts;
+      rawCandidates = amountExtraction.rawCandidates;
+      amountLowConfidence = amountExtraction.lowConfidence;
 
       if (vendorName) extractedFields.vendorName = vendorName;
       if (amountCents != null) extractedFields.amountCents = amountCents;
@@ -416,6 +504,13 @@ router.post("/expenses/analyze-upload", requireAuth, async (req: any, res) => {
           sourceDocumentMimeType,
           sourceDocumentUrl,
           extractedFields,
+          candidateAmounts,
+          rawCandidates,
+          summaryRules: [
+            "Never invent values.",
+            "Use only explicit values visible in the document.",
+            "If amount/date/vendor is ambiguous, explicitly say unclear.",
+          ],
           textPreview: normalizedText.slice(0, 5000),
         },
       });
@@ -425,22 +520,27 @@ router.post("/expenses/analyze-upload", requireAuth, async (req: any, res) => {
       }
     } catch {
       const amountText =
-        extractedFields.amountCents != null
+        amountLowConfidence && candidateAmounts.length > 1
+          ? "unclear"
+          : extractedFields.amountCents != null
           ? `${(extractedFields.amountCents / 100).toFixed(2)}`
-          : "unknown amount";
+          : "unclear";
       const dateText = extractedFields.incurredAtMs
         ? new Date(extractedFields.incurredAtMs).toISOString().slice(0, 10)
-        : "unknown date";
-      const vendorText = extractedFields.vendorName || "unknown vendor";
+        : "unclear";
+      const vendorText = extractedFields.vendorName || "unclear";
       summary = `Detected expense document with ${amountText} dated ${dateText} from ${vendorText}.`;
     }
 
     const confidenceSignals = Object.keys(extractedFields).length;
+    const lowConfidence = amountLowConfidence || confidenceSignals < 2;
     return res.json({
       ok: true,
       summary,
       extractedFields,
-      lowConfidence: confidenceSignals < 2,
+      lowConfidence,
+      candidateAmounts,
+      rawCandidates,
     });
   } catch (err: any) {
     console.error("[expenses] analyze upload failed", err?.message || err);
