@@ -24,14 +24,20 @@ import { validateLandlordCredentials } from "../services/authService";
 import { getOrCreateAccount } from "../services/accountService";
 import { getOrCreateLandlordProfile } from "../services/landlordProfileService";
 import { db } from "../config/firebase";
-import { rateLimitAuth } from "../middleware/rateLimit";
+import { rateLimitAuth, rateLimitSimple } from "../middleware/rateLimit";
 import { requireAuth } from "../middleware/requireAuth";
 import { buildCanonicalSessionUserFromClaims } from "../services/sessionUserService";
+import { sendEmail } from "../services/emailService";
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
 const TRUSTED_DEVICE_EXPIRY = "30d";
 let didWarnDevAuth = false;
+const PASSWORD_RESET_CONFIRM_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const rateLimitPasswordResetConfirmation = rateLimitSimple({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+});
 
 type Landlord2FAUser = {
   id: string;
@@ -67,6 +73,14 @@ function loginError(res: any, status: number, code: string, detail?: string) {
     error: status === 401 ? "UNAUTHORIZED" : "LOGIN_FAILED",
     detail,
   });
+}
+
+function maskEmail(value: string): string {
+  const email = String(value || "").trim().toLowerCase();
+  const [local, domain] = email.split("@");
+  if (!local || !domain) return "***";
+  if (local.length <= 2) return `${local[0] || "*"}*@${domain}`;
+  return `${local.slice(0, 2)}***@${domain}`;
 }
 
 const LoginSchema = z.object({
@@ -278,6 +292,50 @@ router.post("/signup", rateLimitAuth, async (req, res) => {
       code: "SIGNUP_FAILED",
       error: "Signup failed",
     });
+  }
+});
+
+router.post("/password-reset/confirmation", rateLimitPasswordResetConfirmation, async (req, res) => {
+  const email = String(req.body?.email || "").trim().toLowerCase();
+  if (!email || !PASSWORD_RESET_CONFIRM_EMAIL_RE.test(email)) {
+    return res.status(400).json({ ok: false, error: "invalid_email" });
+  }
+
+  const from = String(process.env.EMAIL_FROM || process.env.FROM_EMAIL || "").trim();
+  if (!from) {
+    console.warn("[auth/password-reset/confirmation] email sender not configured");
+    return res.status(503).json({ ok: false, error: "email_not_configured" });
+  }
+
+  try {
+    await sendEmail({
+      to: email,
+      from,
+      subject: "Your RentChain password was changed",
+      text: [
+        "Your RentChain password was changed successfully.",
+        "",
+        "If you made this change, no further action is required.",
+        "",
+        "If you did not make this change, please contact RentChain support immediately and secure your email account.",
+      ].join("\n"),
+      html: [
+        "<p>Your <strong>RentChain</strong> password was changed successfully.</p>",
+        "<p>If you made this change, no further action is required.</p>",
+        "<p>If you did not make this change, please contact RentChain support immediately and secure your email account.</p>",
+      ].join(""),
+    });
+
+    console.info("[auth/password-reset/confirmation] sent", {
+      to: maskEmail(email),
+    });
+    return res.status(204).send();
+  } catch (err: any) {
+    console.error("[auth/password-reset/confirmation] send failed", {
+      to: maskEmail(email),
+      message: String(err?.message || err),
+    });
+    return res.status(500).json({ ok: false, error: "email_send_failed" });
   }
 });
 

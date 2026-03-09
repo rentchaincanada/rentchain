@@ -13,6 +13,7 @@ import PricingPage from "./pages/PricingPage";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import AuthActionPage from "./pages/AuthActionPage";
 import TenantLoginPageV2 from "./pages/tenant/TenantLoginPage.v2";
 import LandingPage from "./pages/marketing/LandingPage";
 import AboutPage from "./pages/marketing/AboutPage";
@@ -211,6 +212,7 @@ function App() {
         <Route path="/invite" element={<InviteRedeemPage />} />
         <Route path="/invite/:token" element={<InviteRedeemPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/auth/action" element={<AuthActionPage />} />
         <Route
           path="/tenant/login"
           element={TENANT_PORTAL_ENABLED ? <TenantLoginPageV2 /> : <TenantPortalComingSoon />}
