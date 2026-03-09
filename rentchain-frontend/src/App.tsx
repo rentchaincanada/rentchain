@@ -513,6 +513,8 @@ function App() {
           }
         />
         <Route path="/contractor/signup" element={<ContractorInviteAcceptPage />} />
+        <Route path="/contractor/invite/:token" element={<ContractorInviteAcceptPage />} />
+        <Route path="/contractor/invite" element={<ContractorInviteAcceptPage />} />
         <Route
           path="/contractor/jobs"
           element={
