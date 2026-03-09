@@ -28,7 +28,11 @@ const ForgotPasswordPage: React.FC = () => {
     setSubmitting(true);
     try {
       const auth = getFirebaseAuth();
-      await sendPasswordResetEmail(auth, trimmed);
+      const appUrl = import.meta.env.VITE_APP_URL || "https://rentchain.ai";
+      await sendPasswordResetEmail(auth, trimmed, {
+        url: `${appUrl}/auth/action`,
+        handleCodeInApp: false,
+      });
       setSuccess(SUCCESS_MESSAGE);
     } catch (err: any) {
       const code = err?.code || "";
@@ -38,6 +42,10 @@ const ForgotPasswordPage: React.FC = () => {
         setError("Too many requests. Please try again later.");
       } else if (code === "firebase_not_configured") {
         setError("Password reset is not configured. Please contact support.");
+      } else if (code === "auth/missing-continue-uri") {
+        setError("Password reset link is temporarily unavailable. Please contact support.");
+      } else if (code === "auth/unauthorized-continue-uri") {
+        setError("Password reset link is not authorized. Please contact support.");
       } else {
         setError("Unable to send reset email. Please try again.");
       }
