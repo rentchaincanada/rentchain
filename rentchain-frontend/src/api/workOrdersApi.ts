@@ -191,6 +191,17 @@ export type ContractorInvite = {
   inviteLink?: string;
 };
 
+export type PublicContractorInviteStatus = "valid" | "expired" | "accepted" | "not_found";
+
+export type PublicContractorInvite = {
+  id: string;
+  landlordId: string | null;
+  landlordName: string | null;
+  emailMasked: string | null;
+  expiresAtMs: number | null;
+  createdAtMs: number | null;
+};
+
 export async function getContractorProfile(): Promise<ContractorProfile | null> {
   const res = await apiFetch<{ ok: boolean; profile: ContractorProfile | null }>("/contractor/profile", {
     method: "GET",
@@ -250,10 +261,27 @@ export async function resendContractorInvite(inviteId: string) {
 }
 
 export async function acceptContractorInvite(token: string, payload?: Partial<ContractorProfile>) {
-  const res = await apiFetch<{ ok: boolean }>(`/contractor/invites/${encodeURIComponent(token)}/accept`, {
+  const res = await apiFetch<{ ok: boolean }>(`/contractor/invites/${encodeURIComponent(token)}/redeem`, {
     method: "POST",
     body: payload || {},
   });
   if (!res?.ok) throw new Error("Failed to accept contractor invite");
   return res;
+}
+
+export async function getPublicContractorInvite(token: string): Promise<{
+  status: PublicContractorInviteStatus;
+  invite: PublicContractorInvite | null;
+}> {
+  const res = await apiFetch<{
+    ok: boolean;
+    status?: PublicContractorInviteStatus;
+    invite?: PublicContractorInvite | null;
+  }>(`/public/contractor-invites/${encodeURIComponent(token)}`, {
+    method: "GET",
+  });
+  return {
+    status: res?.status || "not_found",
+    invite: res?.invite || null,
+  };
 }

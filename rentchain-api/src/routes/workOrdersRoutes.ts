@@ -74,6 +74,15 @@ function getUserEmail(req: any): string {
   return asString(req.user?.email, 320).toLowerCase();
 }
 
+function maskEmail(email: string): string | null {
+  const value = asString(email, 320).toLowerCase();
+  if (!value.includes("@")) return null;
+  const [local, domain] = value.split("@");
+  if (!local || !domain) return null;
+  if (local.length <= 2) return `${local[0] || "*"}***@${domain}`;
+  return `${local.slice(0, 2)}***@${domain}`;
+}
+
 function isAdmin(req: any): boolean {
   return normalizeRole(req) === "admin";
 }
@@ -188,6 +197,28 @@ async function findUserEmailById(userId: string): Promise<string | null> {
     asString((userSnap.data() as any)?.email, 320).toLowerCase() ||
     asString((accountSnap.data() as any)?.email, 320).toLowerCase();
   return candidate || null;
+}
+
+async function getLandlordDisplayName(landlordId: string): Promise<string | null> {
+  const id = asString(landlordId, 120);
+  if (!id) return null;
+  try {
+    const [userSnap, accountSnap] = await Promise.all([
+      db.collection("users").doc(id).get(),
+      db.collection("accounts").doc(id).get(),
+    ]);
+    const user = (userSnap.data() as any) || {};
+    const account = (accountSnap.data() as any) || {};
+    const value =
+      asString(user?.fullName, 180) ||
+      asString(user?.name, 180) ||
+      asString(account?.fullName, 180) ||
+      asString(account?.name, 180) ||
+      asString(account?.businessName, 180);
+    return value || null;
+  } catch {
+    return null;
+  }
 }
 
 async function ensureLandlordOwnsProperty(propertyId: string, landlordId: string, adminAccess: boolean) {
@@ -401,6 +432,53 @@ router.patch("/contractor/profile", requireAuth, async (req: any, res) => {
   }
 });
 
+router.get("/public/contractor-invites/:token", async (req: any, res) => {
+  try {
+    const token = asString(req.params?.token, 120);
+    if (!token) {
+      return res.status(400).json({
+        ok: false,
+        error: "TOKEN_REQUIRED",
+      });
+    }
+
+    const snap = await db.collection("contractorInvites").where("token", "==", token).limit(1).get();
+    if (snap.empty) {
+      return res.json({
+        ok: true,
+        status: "not_found",
+      });
+    }
+
+    const inviteDoc = snap.docs[0];
+    const invite = inviteDoc.data() as any;
+    const now = nowMs();
+    let status = asString(invite?.status, 40).toLowerCase() || "pending";
+
+    if (status === "pending" && inviteIsExpired(invite, now)) {
+      status = "expired";
+      await inviteDoc.ref.set({ status: "expired", updatedAtMs: now }, { merge: true });
+    }
+
+    const landlordName = await getLandlordDisplayName(asString(invite?.landlordId, 120));
+    return res.json({
+      ok: true,
+      status: status === "pending" ? "valid" : status,
+      invite: {
+        id: inviteDoc.id,
+        landlordId: asString(invite?.landlordId, 120) || null,
+        landlordName,
+        emailMasked: maskEmail(asString(invite?.email, 320)),
+        expiresAtMs: Number(invite?.expiresAtMs || 0) || null,
+        createdAtMs: Number(invite?.createdAtMs || 0) || null,
+      },
+    });
+  } catch (err) {
+    console.error("[public/contractor-invites] verify failed", err);
+    return res.status(500).json({ ok: false, error: "CONTRACTOR_INVITE_VERIFY_FAILED" });
+  }
+});
+
 router.post("/contractor/invites", requireAuth, async (req: any, res) => {
   try {
     console.log("[route-hit] contractorInvites", {
@@ -437,7 +515,7 @@ router.post("/contractor/invites", requireAuth, async (req: any, res) => {
     await ref.set(invite);
 
     const appBaseUrl = String(process.env.PUBLIC_APP_URL || process.env.VITE_PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
-    const inviteLink = `${appBaseUrl}/contractor/signup?invite=${encodeURIComponent(token)}`;
+    const inviteLink = `${appBaseUrl}/contractor/invite/${encodeURIComponent(token)}`;
 
     console.log("[contractor-invite] created", {
       inviteId: ref.id,
@@ -520,7 +598,7 @@ router.get("/contractor/invites", requireAuth, async (req: any, res) => {
   }
 });
 
-router.post("/contractor/invites/:token/accept", requireAuth, async (req: any, res) => {
+async function redeemContractorInvite(req: any, res: any) {
   try {
     const token = asString(req.params?.token, 120);
     if (!token) return res.status(400).json({ ok: false, error: "TOKEN_REQUIRED" });
@@ -538,18 +616,36 @@ router.post("/contractor/invites/:token/accept", requireAuth, async (req: any, r
     const now = nowMs();
     if (inviteIsExpired(invite, now)) {
       await inviteDoc.ref.set({ status: "expired", updatedAtMs: now }, { merge: true });
-      return res.status(410).json({ ok: false, error: "INVITE_EXPIRED" });
+      return res.status(410).json({
+        ok: false,
+        error: "INVITE_EXPIRED",
+        message: "This contractor invite has expired.",
+      });
     }
-    if (String(invite?.status || "") !== "pending") {
+    if (String(invite?.status || "").toLowerCase() === "accepted") {
+      return res.status(409).json({
+        ok: false,
+        error: "INVITE_ALREADY_ACCEPTED",
+        message: "This invite has already been accepted.",
+      });
+    }
+    if (String(invite?.status || "").toLowerCase() !== "pending") {
       return res.status(409).json({ ok: false, error: "INVITE_NOT_PENDING" });
     }
-    const admin = isAdmin(req);
     const userId = getUserId(req);
     const userEmail = getUserEmail(req);
+    const role = normalizeRole(req);
     if (!userId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    if (role === "admin" || role === "landlord") {
+      return res.status(403).json({
+        ok: false,
+        error: "CONTRACTOR_ACCOUNT_REQUIRED",
+        message: "Use a separate contractor account to accept this invite.",
+      });
+    }
 
     const inviteEmail = asString(invite?.email, 320).toLowerCase();
-    if (!admin && inviteEmail && inviteEmail !== userEmail) {
+    if (inviteEmail && inviteEmail !== userEmail) {
       return res.status(403).json({ ok: false, error: "INVITE_EMAIL_MISMATCH" });
     }
 
@@ -584,30 +680,28 @@ router.post("/contractor/invites/:token/accept", requireAuth, async (req: any, r
     };
     await contractorProfileRef.set(nextProfile, { merge: true });
 
-    if (!admin) {
-      await Promise.all([
-        db.collection("users").doc(userId).set(
-          {
-            role: "contractor",
-            contractorId: userId,
-            contractorLandlordIds: invitedBy,
-            landlordId: null,
-            updatedAt: now,
-          },
-          { merge: true }
-        ),
-        db.collection("accounts").doc(userId).set(
-          {
-            role: "contractor",
-            contractorId: userId,
-            contractorLandlordIds: invitedBy,
-            landlordId: null,
-            updatedAt: now,
-          },
-          { merge: true }
-        ),
-      ]);
-    }
+    await Promise.all([
+      db.collection("users").doc(userId).set(
+        {
+          role: "contractor",
+          contractorId: userId,
+          contractorLandlordIds: invitedBy,
+          landlordId: null,
+          updatedAt: now,
+        },
+        { merge: true }
+      ),
+      db.collection("accounts").doc(userId).set(
+        {
+          role: "contractor",
+          contractorId: userId,
+          contractorLandlordIds: invitedBy,
+          landlordId: null,
+          updatedAt: now,
+        },
+        { merge: true }
+      ),
+    ]);
 
     await trySendContractorEmail({
       to: inviteEmail,
@@ -617,11 +711,22 @@ router.post("/contractor/invites/:token/accept", requireAuth, async (req: any, r
       ctaUrl: `${String(process.env.PUBLIC_APP_URL || process.env.VITE_PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "")}/contractor`,
     });
 
-    return res.json({ ok: true, invite: { id: inviteDoc.id, ...invite, status: "accepted", acceptedAtMs: now } });
+    return res.json({
+      ok: true,
+      invite: { id: inviteDoc.id, ...invite, status: "accepted", acceptedAtMs: now },
+    });
   } catch (err) {
-    console.error("[contractor/invites] accept failed", err);
-    return res.status(500).json({ ok: false, error: "CONTRACTOR_INVITE_ACCEPT_FAILED" });
+    console.error("[contractor/invites] redeem failed", err);
+    return res.status(500).json({ ok: false, error: "CONTRACTOR_INVITE_REDEEM_FAILED" });
   }
+}
+
+router.post("/contractor/invites/:token/accept", requireAuth, async (req: any, res) => {
+  return redeemContractorInvite(req, res);
+});
+
+router.post("/contractor/invites/:token/redeem", requireAuth, async (req: any, res) => {
+  return redeemContractorInvite(req, res);
 });
 
 router.post("/contractor/invites/:inviteId/resend", requireAuth, async (req: any, res) => {
@@ -649,7 +754,7 @@ router.post("/contractor/invites/:inviteId/resend", requireAuth, async (req: any
     const expiresAtMs = now + CONTRACTOR_INVITE_TTL_MS;
     const email = asString(invite?.email, 320).toLowerCase();
     const appBaseUrl = String(process.env.PUBLIC_APP_URL || process.env.VITE_PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
-    const inviteLink = `${appBaseUrl}/contractor/signup?invite=${encodeURIComponent(token)}`;
+    const inviteLink = `${appBaseUrl}/contractor/invite/${encodeURIComponent(token)}`;
 
     await ref.set(
       {

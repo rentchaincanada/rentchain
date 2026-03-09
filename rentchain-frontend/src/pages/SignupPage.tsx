@@ -1,12 +1,25 @@
 import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Card, Input, Button } from "../components/ui/Ui";
 import { colors, spacing, text } from "../styles/tokens";
 import { useAuth } from "../context/useAuth";
 
 const SignupPage: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { signup, isLoading } = useAuth();
+  const searchParams = new URLSearchParams(location.search);
+  const rawNext = searchParams.get("next");
+  const nextPath = React.useMemo(() => {
+    if (!rawNext) return "/dashboard";
+    try {
+      const decoded = decodeURIComponent(rawNext);
+      if (decoded.startsWith("/")) return decoded;
+      return "/dashboard";
+    } catch {
+      return "/dashboard";
+    }
+  }, [rawNext]);
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
@@ -26,7 +39,7 @@ const SignupPage: React.FC = () => {
     setSubmitting(true);
     try {
       await signup(email.trim().toLowerCase(), password, fullName.trim() || undefined);
-      navigate("/dashboard", { replace: true });
+      navigate(nextPath, { replace: true });
     } catch (err: any) {
       setError(err?.message || "Unable to create account.");
     } finally {
@@ -104,7 +117,10 @@ const SignupPage: React.FC = () => {
         </div>
 
         <div style={{ marginTop: spacing.sm, display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
-          <Link to="/login" style={{ color: colors.accent, textDecoration: "none", fontWeight: 600 }}>
+          <Link
+            to={nextPath !== "/dashboard" ? `/login?next=${encodeURIComponent(nextPath)}` : "/login"}
+            style={{ color: colors.accent, textDecoration: "none", fontWeight: 600 }}
+          >
             Go to login
           </Link>
           <Link to="/request-access" style={{ color: text.muted, textDecoration: "none" }}>
