@@ -146,6 +146,13 @@ export type AnalyzeExpenseUploadResponse = {
     description?: string;
   };
   lowConfidence?: boolean;
+  candidateAmounts?: number[];
+  rawCandidates?: Array<{
+    amountCents: number;
+    raw: string;
+    context: string;
+    confidenceTag: "total" | "amount_due" | "balance_due" | "subtotal" | "generic";
+  }>;
 };
 
 export async function analyzeExpenseUpload(input: {

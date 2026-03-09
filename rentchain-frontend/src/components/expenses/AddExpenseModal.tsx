@@ -111,6 +111,10 @@ export function AddExpenseModal({
   const [aiSummary, setAiSummary] = React.useState<string | null>(null);
   const [aiExtracted, setAiExtracted] = React.useState<Record<string, any> | null>(null);
   const [aiLowConfidence, setAiLowConfidence] = React.useState(false);
+  const [aiCandidateAmounts, setAiCandidateAmounts] = React.useState<number[]>([]);
+  const [aiRawCandidates, setAiRawCandidates] = React.useState<
+    Array<{ amountCents: number; raw: string; context: string; confidenceTag: string }>
+  >([]);
 
   const { units, loading: unitsLoading, error: unitsError, refetch: refetchUnits } = useUnitsForProperty(
     propertyId,
@@ -138,6 +142,8 @@ export function AddExpenseModal({
     setAiSummary(null);
     setAiExtracted(null);
     setAiLowConfidence(false);
+    setAiCandidateAmounts([]);
+    setAiRawCandidates([]);
     setSaving(false);
     setError(null);
   }, [
@@ -165,10 +171,14 @@ export function AddExpenseModal({
       setAiSummary(String(analyzed.summary || "").trim() || null);
       setAiExtracted(analyzed.extractedFields || null);
       setAiLowConfidence(Boolean(analyzed.lowConfidence));
+      setAiCandidateAmounts(Array.isArray(analyzed.candidateAmounts) ? analyzed.candidateAmounts : []);
+      setAiRawCandidates(Array.isArray(analyzed.rawCandidates) ? analyzed.rawCandidates : []);
     } catch (err: any) {
       setAiSummary(null);
       setAiExtracted(null);
       setAiLowConfidence(false);
+      setAiCandidateAmounts([]);
+      setAiRawCandidates([]);
       showToast({
         message: "AI analysis unavailable",
         description: String(err?.message || "You can still save this expense."),
@@ -187,6 +197,8 @@ export function AddExpenseModal({
     setAiSummary(null);
     setAiExtracted(null);
     setAiLowConfidence(false);
+    setAiCandidateAmounts([]);
+    setAiRawCandidates([]);
 
     if (!file) return;
     if (!propertyId) {
@@ -620,9 +632,26 @@ export function AddExpenseModal({
                 {aiExtracted.category ? <div>Category: {String(aiExtracted.category)}</div> : null}
               </div>
             ) : null}
+            {aiCandidateAmounts.length > 1 ? (
+              <div style={{ fontSize: "0.82rem", color: "#475569" }}>
+                Candidate amounts:{" "}
+                {aiCandidateAmounts
+                  .map((c) => `$${(Number(c || 0) / 100).toFixed(2)}`)
+                  .join(", ")}
+              </div>
+            ) : null}
+            {aiRawCandidates.length > 0 ? (
+              <div style={{ fontSize: "0.78rem", color: "#64748b", display: "grid", gap: 3 }}>
+                {aiRawCandidates.slice(0, 3).map((c, idx) => (
+                  <div key={`${c.raw}-${idx}`}>
+                    {c.confidenceTag}: ${(c.amountCents / 100).toFixed(2)} ({c.context})
+                  </div>
+                ))}
+              </div>
+            ) : null}
             {aiLowConfidence ? (
-              <div style={{ color: "#64748b", fontSize: "0.82rem" }}>
-                Review extracted values before saving.
+              <div style={{ color: "#b45309", fontSize: "0.84rem", fontWeight: 600 }}>
+                AI extracted values may be inaccurate. Please verify before saving.
               </div>
             ) : null}
             <div>
@@ -632,9 +661,9 @@ export function AddExpenseModal({
                 style={{
                   padding: "7px 10px",
                   borderRadius: 8,
-                  border: "1px solid #93c5fd",
-                  background: "#fff",
-                  color: "#1d4ed8",
+                  border: aiLowConfidence ? "1px solid #cbd5e1" : "1px solid #93c5fd",
+                  background: aiLowConfidence ? "#f8fafc" : "#fff",
+                  color: aiLowConfidence ? "#475569" : "#1d4ed8",
                   cursor: "pointer",
                   fontWeight: 600,
                 }}
