@@ -28,6 +28,8 @@ export const LoginPage: React.FC = () => {
       return "/dashboard";
     }
   }, [rawNext]);
+  const isContractorInviteFlow =
+    nextPath.startsWith("/contractor/invite/") || nextPath.startsWith("/contractor/signup?invite=");
 
   const defaultEmail = import.meta.env.DEV ? "demo@rentchain.dev" : "";
   const [email, setEmail] = useState(defaultEmail);
@@ -171,6 +173,22 @@ export const LoginPage: React.FC = () => {
             }}
           >
             Session expired. Please log in again.
+          </div>
+        ) : null}
+        {isContractorInviteFlow ? (
+          <div
+            style={{
+              marginBottom: spacing.sm,
+              padding: "8px 12px",
+              borderRadius: 10,
+              background: "rgba(37,99,235,0.08)",
+              border: "1px solid rgba(37,99,235,0.25)",
+              color: "#1d4ed8",
+              fontSize: "0.9rem",
+            }}
+          >
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>Contractor invitation detected</div>
+            <div>Sign in or create an account to accept your RentChain contractor invitation.</div>
           </div>
         ) : null}
 

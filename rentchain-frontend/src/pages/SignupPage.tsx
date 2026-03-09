@@ -20,6 +20,8 @@ const SignupPage: React.FC = () => {
       return "/dashboard";
     }
   }, [rawNext]);
+  const isContractorInviteFlow =
+    nextPath.startsWith("/contractor/invite/") || nextPath.startsWith("/contractor/signup?invite=");
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
@@ -67,6 +69,22 @@ const SignupPage: React.FC = () => {
           Sign up (Free)
         </h1>
         <p style={{ marginTop: 0, color: text.muted }}>Start with Free - upgrade anytime.</p>
+        {isContractorInviteFlow ? (
+          <div
+            style={{
+              marginBottom: spacing.sm,
+              padding: "8px 12px",
+              borderRadius: 10,
+              background: "rgba(37,99,235,0.08)",
+              border: "1px solid rgba(37,99,235,0.25)",
+              color: "#1d4ed8",
+              fontSize: "0.9rem",
+            }}
+          >
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>Complete your contractor invitation</div>
+            <div>Create your account to accept this RentChain contractor invitation and access assigned work orders.</div>
+          </div>
+        ) : null}
 
         <form onSubmit={onSubmit} style={{ display: "grid", gap: spacing.sm }}>
           <label style={{ display: "grid", gap: spacing.xs }}>
