@@ -1,6 +1,6 @@
 // src/App.tsx
 import React, { Suspense, lazy } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation, useParams } from "react-router-dom";
 
 import DashboardPage from "./pages/DashboardPage";
 import PropertiesPage from "./pages/PropertiesPage";
@@ -14,6 +14,7 @@ import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import AuthActionPage from "./pages/AuthActionPage";
+import AuthOnboardPage from "./pages/AuthOnboardPage";
 import TenantLoginPageV2 from "./pages/tenant/TenantLoginPage.v2";
 import LandingPage from "./pages/marketing/LandingPage";
 import AboutPage from "./pages/marketing/AboutPage";
@@ -53,7 +54,6 @@ import BillingCheckoutSuccessPage from "./pages/BillingCheckoutSuccessPage";
 import { DebugPanel } from "./components/DebugPanel";
 import MicroLiveInvitePage from "./pages/MicroLiveInvitePage";
 import TenantInviteRedeem from "./tenant/TenantInviteRedeem";
-import TenantInviteAcceptPage from "./pages/tenant/TenantInviteAcceptPage";
 import { LandlordNav } from "./components/layout/LandlordNav";
 import TenantPortalComingSoon from "./pages/tenant/TenantPortalComingSoon";
 import TenantDashboardPage from "./pages/tenant/TenantDashboardPage";
@@ -81,7 +81,6 @@ import ContractorsPage from "./pages/landlord/ContractorsPage";
 import ContractorDashboardPage from "./pages/contractor/ContractorDashboardPage";
 import ContractorJobsPage from "./pages/contractor/ContractorJobsPage";
 import ContractorProfilePage from "./pages/contractor/ContractorProfilePage";
-import ContractorInviteAcceptPage from "./pages/contractor/ContractorInviteAcceptPage";
 import { ContractorNav } from "./components/layout/ContractorNav";
 
 const TENANT_PORTAL_ENABLED = import.meta.env.VITE_TENANT_PORTAL_ENABLED === "true";
@@ -194,6 +193,25 @@ const PricingGate: React.FC = () => {
   );
 };
 
+function onboardPath(token: string, source?: string) {
+  const params = new URLSearchParams();
+  if (token) params.set("token", token);
+  if (source) params.set("source", source);
+  const query = params.toString();
+  return query ? `/auth/onboard?${query}` : "/auth/onboard";
+}
+
+const LegacyTokenInviteRedirect: React.FC<{ source?: string }> = ({ source }) => {
+  const { token } = useParams();
+  return <Navigate to={onboardPath(String(token || "").trim(), source)} replace />;
+};
+
+const LegacyQueryInviteRedirect: React.FC<{ source?: string }> = ({ source }) => {
+  const location = useLocation();
+  const token = String(new URLSearchParams(location.search).get("invite") || "").trim();
+  return <Navigate to={onboardPath(token, source)} replace />;
+};
+
 function App() {
   const applicantApplyRedirects = [
     "/applicant/apply",
@@ -210,9 +228,10 @@ function App() {
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/app/login" element={<LoginPage />} />
         <Route path="/invite" element={<InviteRedeemPage />} />
-        <Route path="/invite/:token" element={<InviteRedeemPage />} />
+        <Route path="/invite/:token" element={<LegacyTokenInviteRedirect source="landlord" />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/auth/action" element={<AuthActionPage />} />
+        <Route path="/auth/onboard" element={<AuthOnboardPage />} />
         <Route
           path="/tenant/login"
           element={TENANT_PORTAL_ENABLED ? <TenantLoginPageV2 /> : <TenantPortalComingSoon />}
@@ -249,7 +268,7 @@ function App() {
         <Route
           path="/tenant/invite/:token"
           element={
-            TENANT_PORTAL_ENABLED ? <TenantInviteAcceptPage /> : <TenantInviteRedeem />
+            TENANT_PORTAL_ENABLED ? <LegacyTokenInviteRedirect source="tenant" /> : <TenantInviteRedeem />
           }
         />
 
@@ -514,9 +533,9 @@ function App() {
             </RequireAuth>
           }
         />
-        <Route path="/contractor/signup" element={<ContractorInviteAcceptPage />} />
-        <Route path="/contractor/invite/:token" element={<ContractorInviteAcceptPage />} />
-        <Route path="/contractor/invite" element={<ContractorInviteAcceptPage />} />
+        <Route path="/contractor/signup" element={<LegacyQueryInviteRedirect source="contractor" />} />
+        <Route path="/contractor/invite/:token" element={<LegacyTokenInviteRedirect source="contractor" />} />
+        <Route path="/contractor/invite" element={<LegacyQueryInviteRedirect source="contractor" />} />
         <Route
           path="/contractor/jobs"
           element={

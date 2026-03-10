@@ -34,6 +34,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
 const TRUSTED_DEVICE_EXPIRY = "30d";
 let didWarnDevAuth = false;
 const PASSWORD_RESET_CONFIRM_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const ONBOARD_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const rateLimitPasswordResetConfirmation = rateLimitSimple({
   windowMs: 15 * 60 * 1000,
   max: 20,
@@ -81,6 +82,285 @@ function maskEmail(value: string): string {
   if (!local || !domain) return "***";
   if (local.length <= 2) return `${local[0] || "*"}*@${domain}`;
   return `${local.slice(0, 2)}***@${domain}`;
+}
+
+function tokenFingerprint(value: string): string {
+  const token = String(value || "").trim();
+  if (!token) return "none";
+  return `${token.slice(0, 6)}…${token.slice(-4)}`;
+}
+
+function hashToken(input: string) {
+  return crypto.createHash("sha256").update(String(input || "").trim()).digest("hex");
+}
+
+function normalizeUserRole(req: any): string {
+  const actorRole = String(req.user?.actorRole || "").trim().toLowerCase();
+  const role = String(req.user?.role || "").trim().toLowerCase();
+  return actorRole || role;
+}
+
+function onboardLog(event: string, extra?: Record<string, unknown>) {
+  console.info(`[auth.onboard.${event}]`, extra || {});
+}
+
+function signTenantJwt(payload: any) {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) throw new Error("JWT_SECRET missing");
+  return jwt.sign(payload, secret, { expiresIn: "7d" });
+}
+
+type OnboardResolveResult = {
+  ok: boolean;
+  token: string;
+  inviteType: "landlord" | "tenant" | "contractor" | "unknown";
+  role: "landlord" | "tenant" | "contractor" | "admin" | null;
+  email: string | null;
+  maskedEmail: string | null;
+  status: "valid" | "expired" | "invalid" | "accepted";
+  requiresAuth: boolean;
+  requiresSignup: boolean;
+  requiresExistingAccount: boolean;
+  alreadyAccepted: boolean;
+  workspaceId: string | null;
+  propertyId: string | null;
+  inviteId: string | null;
+  redirectTo: string | null;
+  legacyRedirectTo?: string | null;
+  copy: {
+    title: string;
+    description: string;
+    cta: string;
+  };
+  meta?: Record<string, unknown>;
+};
+
+async function resolveOnboardToken(token: string, sourceHint = ""): Promise<OnboardResolveResult> {
+  const now = Date.now();
+  const tokenValue = String(token || "").trim();
+  const hint = String(sourceHint || "").trim().toLowerCase();
+
+  const sourceOrder = (() => {
+    if (hint === "contractor") return ["contractor", "tenant", "landlord"] as const;
+    if (hint === "tenant") return ["tenant", "contractor", "landlord"] as const;
+    if (hint === "landlord") return ["landlord", "contractor", "tenant"] as const;
+    return ["contractor", "tenant", "landlord"] as const;
+  })();
+
+  const notFound = (): OnboardResolveResult => ({
+    ok: false,
+    token: tokenValue,
+    inviteType: "unknown",
+    role: null,
+    email: null,
+    maskedEmail: null,
+    status: "invalid",
+    requiresAuth: false,
+    requiresSignup: false,
+    requiresExistingAccount: false,
+    alreadyAccepted: false,
+    workspaceId: null,
+    propertyId: null,
+    inviteId: null,
+    redirectTo: null,
+    copy: {
+      title: "Invite not found",
+      description: "This invite is invalid or no longer available.",
+      cta: "Back to login",
+    },
+  });
+
+  for (const source of sourceOrder) {
+    if (source === "contractor") {
+      const snap = await db.collection("contractorInvites").where("token", "==", tokenValue).limit(1).get();
+      if (!snap.empty) {
+        const doc = snap.docs[0];
+        const item = doc.data() as any;
+        const statusRaw = String(item?.status || "pending").toLowerCase();
+        const expiresAtMs = Number(item?.expiresAtMs || 0);
+        const expired = expiresAtMs > 0 && now >= expiresAtMs;
+        const status = statusRaw === "accepted" ? "accepted" : expired ? "expired" : "valid";
+        return {
+          ok: status === "valid" || status === "accepted",
+          token: tokenValue,
+          inviteType: "contractor",
+          role: "contractor",
+          email: String(item?.email || "").trim().toLowerCase() || null,
+          maskedEmail: item?.email ? maskEmail(String(item.email)) : null,
+          status,
+          requiresAuth: true,
+          requiresSignup: true,
+          requiresExistingAccount: false,
+          alreadyAccepted: status === "accepted",
+          workspaceId: String(item?.landlordId || "").trim() || null,
+          propertyId: null,
+          inviteId: doc.id,
+          redirectTo: "/contractor",
+          copy:
+            status === "expired"
+              ? {
+                  title: "Invite expired",
+                  description: "This invite has expired. Request a new invite to continue.",
+                  cta: "Request a new invite",
+                }
+              : status === "accepted"
+              ? {
+                  title: "Invite already accepted",
+                  description: "This contractor invite has already been accepted.",
+                  cta: "Continue",
+                }
+              : {
+                  title: "You’re invited to join RentChain",
+                  description: "Accept this invite to access your contractor workspace.",
+                  cta: "Accept invite",
+                },
+        };
+      }
+    }
+
+    if (source === "tenant") {
+      const doc = await db.collection("tenantInvites").doc(tokenValue).get();
+      if (doc.exists) {
+        const item = doc.data() as any;
+        const statusRaw = String(item?.status || "pending").toLowerCase();
+        const expiresAt = Number(item?.expiresAt || 0);
+        const expired = expiresAt > 0 && now >= expiresAt;
+        const accepted = statusRaw !== "pending";
+        const status = accepted ? "accepted" : expired ? "expired" : "valid";
+        return {
+          ok: status === "valid" || status === "accepted",
+          token: tokenValue,
+          inviteType: "tenant",
+          role: "tenant",
+          email: String(item?.tenantEmail || item?.email || "").trim().toLowerCase() || null,
+          maskedEmail:
+            item?.tenantEmail || item?.email
+              ? maskEmail(String(item?.tenantEmail || item?.email))
+              : null,
+          status,
+          requiresAuth: false,
+          requiresSignup: false,
+          requiresExistingAccount: false,
+          alreadyAccepted: status === "accepted",
+          workspaceId: String(item?.landlordId || "").trim() || null,
+          propertyId: String(item?.propertyId || "").trim() || null,
+          inviteId: doc.id,
+          redirectTo: "/tenant",
+          copy:
+            status === "expired"
+              ? {
+                  title: "Invite expired",
+                  description: "This invite has expired. Request a new invite to continue.",
+                  cta: "Request a new invite",
+                }
+              : status === "accepted"
+              ? {
+                  title: "Invite already accepted",
+                  description: "This tenant invite has already been accepted.",
+                  cta: "Continue",
+                }
+              : {
+                  title: "You’re invited to join RentChain",
+                  description: "Accept this invite to access your tenant portal.",
+                  cta: "Accept invite",
+                },
+        };
+      }
+    }
+
+    if (source === "landlord") {
+      const inviteHash = hashToken(tokenValue);
+      const inviteDoc = await db.collection("landlordInvites").doc(inviteHash).get();
+      if (inviteDoc.exists) {
+        const item = inviteDoc.data() as any;
+        const used = item?.status === "used" || Boolean(item?.usedAt);
+        const expired = item?.expiresAt && now > Number(item.expiresAt);
+        const status = used ? "accepted" : expired ? "expired" : "valid";
+        return {
+          ok: status === "valid" || status === "accepted",
+          token: tokenValue,
+          inviteType: "landlord",
+          role: "landlord",
+          email: String(item?.email || "").trim().toLowerCase() || null,
+          maskedEmail: item?.email ? maskEmail(String(item.email)) : null,
+          status,
+          requiresAuth: false,
+          requiresSignup: true,
+          requiresExistingAccount: false,
+          alreadyAccepted: status === "accepted",
+          workspaceId: null,
+          propertyId: null,
+          inviteId: inviteDoc.id,
+          redirectTo: status === "accepted" ? "/login" : null,
+          legacyRedirectTo: status === "valid" ? `/invite/${encodeURIComponent(tokenValue)}` : null,
+          copy:
+            status === "expired"
+              ? {
+                  title: "Invite expired",
+                  description: "This invite has expired. Request a new invite to continue.",
+                  cta: "Request a new invite",
+                }
+              : status === "accepted"
+              ? {
+                  title: "Invite already accepted",
+                  description: "This landlord invite has already been accepted.",
+                  cta: "Continue",
+                }
+              : {
+                  title: "Create your account",
+                  description: "Complete account setup to accept this invite.",
+                  cta: "Continue to signup",
+                },
+        };
+      }
+
+      const referralCode = tokenValue.toUpperCase();
+      const referralSnap = await db.collection("referrals").where("referralCode", "==", referralCode).limit(1).get();
+      if (!referralSnap.empty) {
+        const item = referralSnap.docs[0].data() as any;
+        const statusRaw = String(item?.status || "").toLowerCase();
+        const status = statusRaw === "approved" ? "accepted" : statusRaw === "expired" ? "expired" : "valid";
+        return {
+          ok: status === "valid" || status === "accepted",
+          token: tokenValue,
+          inviteType: "landlord",
+          role: "landlord",
+          email: String(item?.refereeEmail || "").trim().toLowerCase() || null,
+          maskedEmail: item?.refereeEmail ? maskEmail(String(item.refereeEmail)) : null,
+          status,
+          requiresAuth: false,
+          requiresSignup: true,
+          requiresExistingAccount: false,
+          alreadyAccepted: status === "accepted",
+          workspaceId: String(item?.referrerLandlordId || "").trim() || null,
+          propertyId: null,
+          inviteId: referralSnap.docs[0].id,
+          redirectTo: status === "accepted" ? "/login" : null,
+          legacyRedirectTo: status === "valid" ? `/invite/${encodeURIComponent(tokenValue)}` : null,
+          copy:
+            status === "expired"
+              ? {
+                  title: "Invite expired",
+                  description: "This invite has expired. Request a new invite to continue.",
+                  cta: "Request a new invite",
+                }
+              : status === "accepted"
+              ? {
+                  title: "Invite already accepted",
+                  description: "This invite has already been used.",
+                  cta: "Continue",
+                }
+              : {
+                  title: "Create your account",
+                  description: "Complete account setup to accept this invite.",
+                  cta: "Continue to signup",
+                },
+        };
+      }
+    }
+  }
+
+  return notFound();
 }
 
 const LoginSchema = z.object({
@@ -336,6 +616,332 @@ router.post("/password-reset/confirmation", rateLimitPasswordResetConfirmation, 
       message: String(err?.message || err),
     });
     return res.status(500).json({ ok: false, error: "email_send_failed" });
+  }
+});
+
+router.get("/onboard/resolve", async (req: any, res) => {
+  const token = String(req.query?.token || "").trim();
+  const source = String(req.query?.source || "").trim().toLowerCase();
+  if (!token) {
+    onboardLog("invalid", { reason: "missing_token" });
+    return res.status(400).json({
+      ok: false,
+      status: "invalid",
+      copy: {
+        title: "Invite not found",
+        description: "This invite is invalid or no longer available.",
+        cta: "Back to login",
+      },
+    });
+  }
+
+  try {
+    const result = await resolveOnboardToken(token, source);
+    const event =
+      result.status === "valid"
+        ? "opened"
+        : result.status === "expired"
+        ? "expired"
+        : result.status === "accepted"
+        ? "opened"
+        : "invalid";
+    onboardLog(event, {
+      inviteType: result.inviteType,
+      status: result.status,
+      token: tokenFingerprint(token),
+      inviteId: result.inviteId || null,
+    });
+    return res.status(result.ok ? 200 : result.status === "expired" ? 410 : 404).json(result);
+  } catch (err: any) {
+    console.error("[auth.onboard.resolve] failed", {
+      token: tokenFingerprint(token),
+      message: String(err?.message || err),
+    });
+    return res.status(500).json({
+      ok: false,
+      status: "invalid",
+      copy: {
+        title: "Invite not found",
+        description: "This invite is invalid or no longer available.",
+        cta: "Back to login",
+      },
+    });
+  }
+});
+
+router.post("/onboard/accept", async (req: any, res) => {
+  const token = String(req.body?.token || "").trim();
+  const source = String(req.body?.source || req.query?.source || "").trim().toLowerCase();
+  if (!token) {
+    return res.status(400).json({ ok: false, code: "invalid_token", message: "Token is required." });
+  }
+
+  try {
+    const resolved = await resolveOnboardToken(token, source);
+    if (!resolved.ok && resolved.status === "invalid") {
+      onboardLog("invalid", { token: tokenFingerprint(token), inviteType: resolved.inviteType });
+      return res.status(404).json({ ok: false, code: "invalid", message: "Invite not found." });
+    }
+    if (resolved.status === "expired") {
+      onboardLog("expired", { token: tokenFingerprint(token), inviteType: resolved.inviteType });
+      return res.status(410).json({ ok: false, code: "expired", message: "Invite expired." });
+    }
+    if (resolved.status === "accepted") {
+      return res.json({
+        ok: true,
+        accepted: true,
+        role: resolved.role,
+        redirectTo: resolved.redirectTo || null,
+        workspaceId: resolved.workspaceId || null,
+        message: "Invite already accepted.",
+      });
+    }
+
+    if (resolved.inviteType === "landlord") {
+      onboardLog("signup_required", { token: tokenFingerprint(token), inviteType: resolved.inviteType });
+      return res.status(409).json({
+        ok: false,
+        code: "signup_required",
+        message: "Complete account setup to accept this invite.",
+        redirectTo: resolved.legacyRedirectTo || `/invite/${encodeURIComponent(token)}`,
+      });
+    }
+
+    if (resolved.inviteType === "contractor") {
+      const userId = String(req.user?.id || "").trim();
+      const userEmail = String(req.user?.email || "").trim().toLowerCase();
+      const role = normalizeUserRole(req);
+      if (!userId || !userEmail) {
+        onboardLog("login_required", { token: tokenFingerprint(token), inviteType: "contractor" });
+        return res.status(401).json({ ok: false, code: "login_required", message: "Sign in to continue." });
+      }
+      if (role === "admin" || role === "landlord") {
+        onboardLog("wrong_account", { token: tokenFingerprint(token), inviteType: "contractor", role });
+        return res.status(409).json({
+          ok: false,
+          code: "wrong_account",
+          expectedEmail: resolved.email,
+          maskedExpectedEmail: resolved.maskedEmail,
+          message: "This invite belongs to a different account.",
+        });
+      }
+      if (resolved.email && resolved.email !== userEmail) {
+        onboardLog("wrong_account", { token: tokenFingerprint(token), inviteType: "contractor", role });
+        return res.status(409).json({
+          ok: false,
+          code: "wrong_account",
+          expectedEmail: resolved.email,
+          maskedExpectedEmail: resolved.maskedEmail,
+          message: "This invite belongs to a different account.",
+        });
+      }
+
+      const snap = await db.collection("contractorInvites").where("token", "==", token).limit(1).get();
+      if (snap.empty) return res.status(404).json({ ok: false, code: "invalid", message: "Invite not found." });
+      const inviteDoc = snap.docs[0];
+      const invite = inviteDoc.data() as any;
+      const now = Date.now();
+      const expiresAtMs = Number(invite?.expiresAtMs || 0);
+      if (expiresAtMs > 0 && now >= expiresAtMs) {
+        await inviteDoc.ref.set({ status: "expired", updatedAtMs: now }, { merge: true });
+        return res.status(410).json({ ok: false, code: "expired", message: "Invite expired." });
+      }
+      if (String(invite?.status || "").toLowerCase() === "accepted") {
+        return res.json({
+          ok: true,
+          accepted: true,
+          role: "contractor",
+          redirectTo: "/contractor",
+          workspaceId: String(invite?.landlordId || "").trim() || null,
+          message: "Invite already accepted.",
+        });
+      }
+
+      await inviteDoc.ref.set(
+        {
+          status: "accepted",
+          acceptedAtMs: now,
+          acceptedByUserId: userId,
+          updatedAtMs: now,
+        },
+        { merge: true }
+      );
+
+      const profileRef = db.collection("contractorProfiles").doc(userId);
+      const profileSnap = await profileRef.get();
+      const prev = (profileSnap.data() as any) || {};
+      const landlordId = String(invite?.landlordId || "").trim();
+      const invitedBy = Array.from(
+        new Set(
+          [String(prev?.invitedByLandlordIds || ""), landlordId]
+            .flatMap((v: any) => (Array.isArray(v) ? v : [v]))
+            .map((v) => String(v || "").trim())
+            .filter(Boolean)
+        )
+      );
+      await profileRef.set(
+        {
+          id: userId,
+          userId,
+          email: userEmail,
+          businessName: String(prev?.businessName || "").trim(),
+          contactName: String(prev?.contactName || "").trim(),
+          phone: String(prev?.phone || "").trim(),
+          serviceCategories: Array.isArray(prev?.serviceCategories) ? prev.serviceCategories : [],
+          serviceAreas: Array.isArray(prev?.serviceAreas) ? prev.serviceAreas : [],
+          bio: String(prev?.bio || "").trim(),
+          isActive: true,
+          invitedByLandlordIds: invitedBy,
+          createdAtMs: Number(prev?.createdAtMs || now),
+          updatedAtMs: now,
+        },
+        { merge: true }
+      );
+
+      await Promise.all([
+        db.collection("users").doc(userId).set(
+          {
+            role: "contractor",
+            contractorId: userId,
+            contractorLandlordIds: invitedBy,
+            landlordId: null,
+            updatedAt: now,
+          },
+          { merge: true }
+        ),
+        db.collection("accounts").doc(userId).set(
+          {
+            role: "contractor",
+            contractorId: userId,
+            contractorLandlordIds: invitedBy,
+            landlordId: null,
+            updatedAt: now,
+          },
+          { merge: true }
+        ),
+      ]);
+
+      onboardLog("accepted", {
+        token: tokenFingerprint(token),
+        inviteType: "contractor",
+        inviteId: inviteDoc.id,
+      });
+      return res.json({
+        ok: true,
+        accepted: true,
+        role: "contractor",
+        redirectTo: "/contractor",
+        workspaceId: landlordId || null,
+        message: "Invite accepted successfully.",
+      });
+    }
+
+    if (resolved.inviteType === "tenant") {
+      const role = normalizeUserRole(req);
+      if (role === "landlord" || role === "admin" || role === "contractor") {
+        onboardLog("wrong_account", { token: tokenFingerprint(token), inviteType: "tenant", role });
+        return res.status(409).json({
+          ok: false,
+          code: "wrong_account",
+          expectedEmail: resolved.email,
+          maskedExpectedEmail: resolved.maskedEmail,
+          message: "This invite belongs to a different account.",
+        });
+      }
+
+      const ref = db.collection("tenantInvites").doc(token);
+      const snap = await ref.get();
+      if (!snap.exists) return res.status(404).json({ ok: false, code: "invalid", message: "Invite not found." });
+      const inv: any = snap.data();
+      const now = Date.now();
+      if (inv.expiresAt && now > Number(inv.expiresAt)) {
+        return res.status(410).json({ ok: false, code: "expired", message: "Invite expired." });
+      }
+      if (inv.status && String(inv.status) !== "pending") {
+        return res.json({
+          ok: true,
+          accepted: true,
+          role: "tenant",
+          redirectTo: "/tenant",
+          workspaceId: String(inv.landlordId || "").trim() || null,
+          message: "Invite already accepted.",
+        });
+      }
+
+      const email = String(inv.tenantEmail || inv.email || "").trim().toLowerCase();
+      if (!email || !ONBOARD_EMAIL_RE.test(email)) {
+        return res.status(400).json({ ok: false, code: "invite_invalid", message: "Invite invalid." });
+      }
+
+      const tenantId = crypto
+        .createHash("sha256")
+        .update(`${inv.landlordId}:${email}`.toLowerCase())
+        .digest("hex")
+        .slice(0, 24);
+
+      await db.collection("tenants").doc(tenantId).set(
+        {
+          id: tenantId,
+          tenantId,
+          landlordId: inv.landlordId,
+          email,
+          fullName: inv.tenantName || inv.fullName || null,
+          propertyId: inv.propertyId || null,
+          unitId: inv.unitId || null,
+          leaseId: inv.leaseId || null,
+          source: "invite",
+          createdAt: now,
+          updatedAt: now,
+        },
+        { merge: true }
+      );
+
+      await ref.set(
+        {
+          status: "redeemed",
+          redeemedAt: now,
+          tenantId,
+          updatedAt: now,
+        },
+        { merge: true }
+      );
+
+      const tenantToken = signTenantJwt({
+        sub: tenantId,
+        role: "tenant",
+        tenantId,
+        landlordId: inv.landlordId,
+        email,
+        propertyId: inv.propertyId || null,
+        unitId: inv.unitId || null,
+        leaseId: inv.leaseId || null,
+      });
+
+      onboardLog("accepted", { token: tokenFingerprint(token), inviteType: "tenant", inviteId: token });
+      return res.json({
+        ok: true,
+        accepted: true,
+        role: "tenant",
+        redirectTo: "/tenant",
+        workspaceId: String(inv.landlordId || "").trim() || null,
+        propertyId: String(inv.propertyId || "").trim() || null,
+        tenantToken,
+        message: "Invite accepted successfully.",
+      });
+    }
+
+    onboardLog("failed", { token: tokenFingerprint(token), inviteType: resolved.inviteType });
+    return res.status(400).json({ ok: false, code: "unsupported", message: "Unsupported invite type." });
+  } catch (err: any) {
+    onboardLog("failed", {
+      token: tokenFingerprint(token),
+      message: String(err?.message || err),
+    });
+    console.error("[auth.onboard.accept] failed", {
+      token: tokenFingerprint(token),
+      message: String(err?.message || err),
+    });
+    return res.status(500).json({ ok: false, code: "server_error", message: "Unable to complete onboarding." });
   }
 });
 

@@ -4,6 +4,7 @@ const PUBLIC_PREFIXES = [
   "/login",
   "/app/login",
   "/signup",
+  "/auth",
   "/invite",
   "/request-access",
   "/pricing",
