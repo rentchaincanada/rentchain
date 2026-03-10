@@ -47,7 +47,7 @@ export const ContractorNav: React.FC<Props> = ({ children }) => {
             </NavLink>
             <button
               type="button"
-              onClick={() => nav("/account")}
+              onClick={() => nav("/contractor/profile")}
               style={{
                 border: "1px solid #cbd5e1",
                 background: "#fff",
