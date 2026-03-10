@@ -50,9 +50,17 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
 
   const url = resolveApiUrl(p);
 
-  const firebaseToken = await getFirebaseIdToken();
+  const normalizedPath = (() => {
+    try {
+      return new URL(url).pathname || "";
+    } catch {
+      return p;
+    }
+  })();
+  const isTenantPath = /^\/api\/tenant(?:\/|$)/.test(String(normalizedPath || ""));
+  const firebaseToken = !isTenantPath ? await getFirebaseIdToken() : null;
   const token = getAuthToken();
-  const effectiveToken = firebaseToken || token;
+  const effectiveToken = token || firebaseToken;
   const headers = new Headers(init.headers || {});
   headers.set("Accept", "application/json");
   headers.set("x-api-client", "web");
@@ -61,7 +69,7 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
   }
   if (effectiveToken) {
     headers.set("Authorization", `Bearer ${effectiveToken}`);
-    headers.set("x-rc-auth", firebaseToken ? "firebase" : "bearer");
+    headers.set("x-rc-auth", token ? "bearer" : "firebase");
   } else {
     headers.set("x-rc-auth", "missing");
     if (import.meta.env.DEV) {

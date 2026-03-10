@@ -23,7 +23,7 @@ export async function apiFetch<T>(
   const explicitToken = (opts as any)?.token;
   const storedToken = isTenantPath ? getTenantToken() : getAuthToken();
   const token = explicitToken || storedToken;
-  const effectiveToken = firebaseToken || token;
+  const effectiveToken = token || firebaseToken;
   const headers = new Headers(opts.headers || {});
   headers.set("Accept", "application/json");
   headers.set("x-api-client", "web");
