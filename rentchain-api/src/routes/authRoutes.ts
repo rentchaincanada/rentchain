@@ -1065,30 +1065,52 @@ router.post("/onboard/accept", async (req: any, res) => {
       if (!snap.exists) return res.status(404).json({ ok: false, code: "invalid", message: "Invite not found." });
       const inv: any = snap.data();
       const now = Date.now();
+      const email = String(inv.tenantEmail || inv.email || "").trim().toLowerCase();
+      if (!email || !ONBOARD_EMAIL_RE.test(email)) {
+        return res.status(400).json({ ok: false, code: "invite_invalid", message: "Invite invalid." });
+      }
+      const tenantId =
+        String(inv.tenantId || "").trim() ||
+        crypto
+          .createHash("sha256")
+          .update(`${inv.landlordId}:${email}`.toLowerCase())
+          .digest("hex")
+          .slice(0, 24);
+
+      const tenantToken = signTenantJwt({
+        sub: tenantId,
+        role: "tenant",
+        tenantId,
+        landlordId: inv.landlordId,
+        email,
+        propertyId: inv.propertyId || null,
+        unitId: inv.unitId || null,
+        leaseId: inv.leaseId || null,
+      });
+
       if (inv.expiresAt && now > Number(inv.expiresAt)) {
         return res.status(410).json({ ok: false, code: "expired", message: "Invite expired." });
       }
       if (inv.status && String(inv.status) !== "pending") {
+        onboardLog("tenant_session_issued", {
+          token: tokenFingerprint(token),
+          inviteType: "tenant",
+          inviteStatus: String(inv.status || "unknown"),
+          tenantId,
+          issuedRole: "tenant",
+          hasTenantToken: true,
+        });
         return res.json({
           ok: true,
           accepted: true,
           role: "tenant",
           redirectTo: "/tenant",
           workspaceId: String(inv.landlordId || "").trim() || null,
+          propertyId: String(inv.propertyId || "").trim() || null,
+          tenantToken,
           message: "Invite already accepted.",
         });
       }
-
-      const email = String(inv.tenantEmail || inv.email || "").trim().toLowerCase();
-      if (!email || !ONBOARD_EMAIL_RE.test(email)) {
-        return res.status(400).json({ ok: false, code: "invite_invalid", message: "Invite invalid." });
-      }
-
-      const tenantId = crypto
-        .createHash("sha256")
-        .update(`${inv.landlordId}:${email}`.toLowerCase())
-        .digest("hex")
-        .slice(0, 24);
 
       await db.collection("tenants").doc(tenantId).set(
         {
@@ -1117,17 +1139,14 @@ router.post("/onboard/accept", async (req: any, res) => {
         { merge: true }
       );
 
-      const tenantToken = signTenantJwt({
-        sub: tenantId,
-        role: "tenant",
+      onboardLog("tenant_session_issued", {
+        token: tokenFingerprint(token),
+        inviteType: "tenant",
+        inviteStatus: "pending",
         tenantId,
-        landlordId: inv.landlordId,
-        email,
-        propertyId: inv.propertyId || null,
-        unitId: inv.unitId || null,
-        leaseId: inv.leaseId || null,
+        issuedRole: "tenant",
+        hasTenantToken: true,
       });
-
       onboardLog("accept_succeeded", { token: tokenFingerprint(token), inviteType: "tenant", inviteId: token });
       return res.json({
         ok: true,

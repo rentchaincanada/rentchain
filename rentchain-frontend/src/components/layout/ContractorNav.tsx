@@ -47,19 +47,6 @@ export const ContractorNav: React.FC<Props> = ({ children }) => {
             </NavLink>
             <button
               type="button"
-              onClick={() => nav("/contractor/profile")}
-              style={{
-                border: "1px solid #cbd5e1",
-                background: "#fff",
-                borderRadius: 8,
-                padding: "6px 10px",
-                cursor: "pointer",
-              }}
-            >
-              My Account
-            </button>
-            <button
-              type="button"
               onClick={() => {
                 void logout();
               }}

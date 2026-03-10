@@ -127,6 +127,8 @@ const AuthOnboardPage: React.FC = () => {
             role: data?.role || null,
             maskedInviteEmail: data?.maskedEmail || null,
             source: source || null,
+            copyTitle: data?.copy?.title || null,
+            suggestedAuthMethod: data?.suggestedAuthMethod || null,
           });
         }
         trackAuthEvent("auth.onboard.resolved", {
@@ -155,6 +157,13 @@ const AuthOnboardPage: React.FC = () => {
           return;
         }
         if (data.status === "accepted") {
+          if (import.meta.env.DEV) {
+            console.info("[onboard] accepted status resolved", {
+              inviteType: data.inviteType,
+              source: source || null,
+              redirectTo: data.redirectTo || null,
+            });
+          }
           setViewState("already-accepted");
           trackAuthEvent("auth.onboard.already_accepted", {
             inviteType: data.inviteType,
@@ -317,6 +326,13 @@ const AuthOnboardPage: React.FC = () => {
         } catch {
           // ignore
         }
+        if (import.meta.env.DEV) {
+          console.info("[tenant-auth] tenant token set from onboard accept", {
+            inviteType: resolved.inviteType,
+            source: source || null,
+            hasTenantToken: true,
+          });
+        }
       }
       setViewState("success");
       const redirectResolved = resolvePostAuthDestination({
@@ -423,16 +439,20 @@ const AuthOnboardPage: React.FC = () => {
             <p style={{ margin: 0, color: text.muted }}>
               Your access has already been configured. Continue to your workspace.
             </p>
-            <Button
-              onClick={() => {
-                const path =
-                  getSafeInternalRedirect(resolved?.redirectTo) ||
-                  getRoleDefaultDestination((resolved?.role || user?.actorRole || user?.role) as any);
-                navigate(path || "/dashboard", { replace: true });
-              }}
-            >
-              Continue
-            </Button>
+            {resolved?.inviteType === "tenant" ? (
+              <Button onClick={doAccept}>Continue to tenant portal</Button>
+            ) : (
+              <Button
+                onClick={() => {
+                  const path =
+                    getSafeInternalRedirect(resolved?.redirectTo) ||
+                    getRoleDefaultDestination((resolved?.role || user?.actorRole || user?.role) as any);
+                  navigate(path || "/dashboard", { replace: true });
+                }}
+              >
+                Continue
+              </Button>
+            )}
           </>
         ) : null}
 

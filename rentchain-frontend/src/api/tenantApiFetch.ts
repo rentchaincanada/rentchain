@@ -21,6 +21,13 @@ export async function tenantApiFetch<T = any>(path: string, init: TenantApiInit 
   })();
 
   const token = getTenantToken();
+  if (import.meta.env.DEV) {
+    console.info("[tenant-api] auth selection", {
+      path,
+      hasTenantToken: Boolean(token),
+      authSource: token ? "tenant-bearer" : "missing",
+    });
+  }
 
   const headers: Record<string, string> = {
     ...(init.headers as any),

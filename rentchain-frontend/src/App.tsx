@@ -244,7 +244,7 @@ function App() {
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/app/login" element={<LoginPage />} />
         <Route path="/invite" element={<InviteRedeemPage />} />
-        <Route path="/invite/:token" element={<LegacyTokenInviteRedirect source="landlord" />} />
+        <Route path="/invite/:token" element={<InviteRedeemPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/auth/action" element={<AuthActionPage />} />
         <Route path="/auth/onboard" element={<AuthOnboardPage />} />
