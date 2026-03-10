@@ -42,7 +42,36 @@ const SignupPage: React.FC = () => {
   const isContractorInviteFlow =
     nextPath.startsWith("/contractor/invite/") ||
     nextPath.startsWith("/contractor/signup?invite=") ||
-    nextPath.startsWith("/auth/onboard?");
+    (() => {
+      if (!nextPath.startsWith("/auth/onboard?")) return false;
+      try {
+        const nextUrl = new URL(nextPath, window.location.origin);
+        const source = String(nextUrl.searchParams.get("source") || "").trim().toLowerCase();
+        const inviteType = String(nextUrl.searchParams.get("inviteType") || "").trim().toLowerCase();
+        return source === "contractor" || inviteType === "contractor";
+      } catch {
+        return false;
+      }
+    })();
+  const onboardSource = React.useMemo(() => {
+    if (!nextPath.startsWith("/auth/onboard?")) return null;
+    try {
+      const nextUrl = new URL(nextPath, window.location.origin);
+      return String(nextUrl.searchParams.get("source") || "").trim().toLowerCase() || null;
+    } catch {
+      return null;
+    }
+  }, [nextPath]);
+
+  React.useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    if (!nextPath.startsWith("/auth/onboard?")) return;
+    console.info("[auth-shell] signup onboarding context", {
+      nextPath,
+      onboardSource,
+      contractorBanner: isContractorInviteFlow,
+    });
+  }, [isContractorInviteFlow, nextPath, onboardSource]);
   const contractorOnboardContext = React.useMemo(() => {
     if (!nextPath.startsWith("/auth/onboard?")) {
       return { token: "", source: "" };
