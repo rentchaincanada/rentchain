@@ -8,6 +8,8 @@ import {
 import { Card, Input, Button } from "@/components/ui/Ui";
 import { colors, spacing, text } from "@/styles/tokens";
 import { getFirebaseAuth } from "@/lib/firebase";
+import { resolvePostAuthDestination } from "@/lib/authDestination";
+import { trackAuthEvent } from "@/lib/authAnalytics";
 
 type ViewState =
   | "loading"
@@ -189,12 +191,24 @@ const AuthActionPage: React.FC = () => {
   };
 
   const goToLogin = () => {
-    const target = continueUrl || "/login";
-    if (target.startsWith("http://") || target.startsWith("https://")) {
-      window.location.assign(target);
-      return;
+    const resolved = resolvePostAuthDestination({
+      search: searchParams.toString() ? `?${searchParams.toString()}` : "",
+      explicitDestination: continueUrl,
+      fallback: "/login",
+    });
+    trackAuthEvent("auth.destination.resolved", {
+      source: "auth-action",
+      destination: resolved.destination,
+      resultSource: resolved.source,
+      usedFallback: resolved.usedFallback,
+    });
+    if (resolved.usedFallback) {
+      trackAuthEvent("auth.destination.fallback_used", {
+        source: "auth-action",
+        destination: resolved.destination,
+      });
     }
-    navigate(target);
+    navigate(resolved.destination, { replace: true });
   };
 
   return (

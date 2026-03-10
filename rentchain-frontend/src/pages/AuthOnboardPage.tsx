@@ -6,6 +6,13 @@ import { apiFetch } from "../api/apiFetch";
 import { useAuth } from "../context/useAuth";
 import { setTenantToken } from "../lib/tenantAuth";
 import { clearAuthToken } from "../lib/authToken";
+import {
+  buildOnboardContinuationPath,
+  getRoleDefaultDestination,
+  getSafeInternalRedirect,
+  resolvePostAuthDestination,
+} from "../lib/authDestination";
+import { fingerprintToken, trackAuthEvent } from "../lib/authAnalytics";
 
 /**
  * Auth onboarding gateway inventory (v1):
@@ -47,6 +54,7 @@ type ResolvePayload = {
   inviteId: string | null;
   redirectTo: string | null;
   legacyRedirectTo?: string | null;
+  suggestedAuthMethod?: "password" | "magic_link" | "password_or_magic" | null;
   copy: {
     title: string;
     description: string;
@@ -68,35 +76,6 @@ type AcceptPayload = {
   maskedExpectedEmail?: string | null;
 };
 
-function track(event: string, extra?: Record<string, unknown>) {
-  if (import.meta.env.DEV) {
-    console.info(`[auth.onboard.${event}]`, extra || {});
-  }
-}
-
-function roleDefaultPath(role?: string | null): string {
-  const value = String(role || "").trim().toLowerCase();
-  if (value === "tenant") return "/tenant";
-  if (value === "contractor") return "/contractor";
-  if (value === "admin") return "/admin";
-  return "/dashboard";
-}
-
-function safeInternalPath(path?: string | null): string | null {
-  const raw = String(path || "").trim();
-  if (!raw) return null;
-  if (!raw.startsWith("/")) return null;
-  if (raw.startsWith("//")) return null;
-  return raw;
-}
-
-function buildNextOnboardPath(token: string, source: string): string {
-  const params = new URLSearchParams();
-  params.set("token", token);
-  if (source) params.set("source", source);
-  return `/auth/onboard?${params.toString()}`;
-}
-
 const AuthOnboardPage: React.FC = () => {
   const [params] = useSearchParams();
   const navigate = useNavigate();
@@ -110,7 +89,7 @@ const AuthOnboardPage: React.FC = () => {
   const [error, setError] = React.useState<string | null>(null);
   const [wrongAccountMaskedEmail, setWrongAccountMaskedEmail] = React.useState<string | null>(null);
 
-  const nextOnboardPath = React.useMemo(() => buildNextOnboardPath(token, source), [token, source]);
+  const nextOnboardPath = React.useMemo(() => buildOnboardContinuationPath(token, source), [token, source]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -118,7 +97,7 @@ const AuthOnboardPage: React.FC = () => {
       if (!token) {
         setViewState("invalid");
         setError("Invite token missing.");
-        track("invalid", { reason: "missing_token" });
+        trackAuthEvent("auth.onboard.invalid", { reason: "missing_token" });
         return;
       }
 
@@ -133,21 +112,37 @@ const AuthOnboardPage: React.FC = () => {
           method: "GET",
           allowStatuses: [404, 410],
         });
+        trackAuthEvent("auth.onboard.resolved", {
+          inviteType: data?.inviteType || "unknown",
+          status: data?.status || "invalid",
+          tokenFingerprint: fingerprintToken(token),
+        });
         if (cancelled) return;
         setResolved(data);
 
         if (!data?.ok || data.status === "invalid") {
           setViewState("invalid");
-          track("invalid", { inviteType: data?.inviteType || "unknown", status: data?.status || "invalid" });
+          trackAuthEvent("auth.onboard.invalid", {
+            inviteType: data?.inviteType || "unknown",
+            status: data?.status || "invalid",
+            tokenFingerprint: fingerprintToken(token),
+          });
           return;
         }
         if (data.status === "expired") {
           setViewState("expired");
-          track("expired", { inviteType: data.inviteType });
+          trackAuthEvent("auth.onboard.expired", {
+            inviteType: data.inviteType,
+            tokenFingerprint: fingerprintToken(token),
+          });
           return;
         }
         if (data.status === "accepted") {
           setViewState("already-accepted");
+          trackAuthEvent("auth.onboard.already_accepted", {
+            inviteType: data.inviteType,
+            tokenFingerprint: fingerprintToken(token),
+          });
           return;
         }
 
@@ -159,40 +154,63 @@ const AuthOnboardPage: React.FC = () => {
 
         if (requiresAuth && !user) {
           setViewState("login-required");
-          track("login_required", { inviteType: data.inviteType });
+          trackAuthEvent("auth.onboard.login_required", {
+            inviteType: data.inviteType,
+            tokenFingerprint: fingerprintToken(token),
+          });
           return;
         }
         if (requiresSignup && !user) {
           setViewState("signup-required");
-          track("signup_required", { inviteType: data.inviteType });
+          trackAuthEvent("auth.onboard.signup_required", {
+            inviteType: data.inviteType,
+            tokenFingerprint: fingerprintToken(token),
+          });
           return;
         }
         if (user && invitedEmail && email && invitedEmail !== email) {
           setWrongAccountMaskedEmail(data.maskedEmail || null);
           setViewState("wrong-account");
-          track("wrong_account", { inviteType: data.inviteType });
+          trackAuthEvent("auth.onboard.wrong_account", {
+            inviteType: data.inviteType,
+            tokenFingerprint: fingerprintToken(token),
+          });
           return;
         }
         if (user && (role === "admin" || role === "landlord") && data.inviteType === "contractor") {
           setWrongAccountMaskedEmail(data.maskedEmail || null);
           setViewState("wrong-account");
-          track("wrong_account", { inviteType: data.inviteType, role });
+          trackAuthEvent("auth.onboard.wrong_account", {
+            inviteType: data.inviteType,
+            role,
+            tokenFingerprint: fingerprintToken(token),
+          });
           return;
         }
         if (user && (role === "admin" || role === "landlord" || role === "contractor") && data.inviteType === "tenant") {
           setWrongAccountMaskedEmail(data.maskedEmail || null);
           setViewState("wrong-account");
-          track("wrong_account", { inviteType: data.inviteType, role });
+          trackAuthEvent("auth.onboard.wrong_account", {
+            inviteType: data.inviteType,
+            role,
+            tokenFingerprint: fingerprintToken(token),
+          });
           return;
         }
 
         setViewState("ready-to-accept");
-        track("opened", { inviteType: data.inviteType });
+        trackAuthEvent("auth.onboard.opened", {
+          inviteType: data.inviteType,
+          tokenFingerprint: fingerprintToken(token),
+        });
       } catch (err: any) {
         if (cancelled) return;
         setError(String(err?.message || "Unable to resolve invite."));
         setViewState("error");
-        track("failed", { phase: "resolve" });
+        trackAuthEvent("auth.onboard.failed", {
+          phase: "resolve",
+          tokenFingerprint: fingerprintToken(token),
+        });
       }
     }
     void run();
@@ -205,6 +223,10 @@ const AuthOnboardPage: React.FC = () => {
     if (!token || !resolved) return;
     setViewState("accepting");
     setError(null);
+    trackAuthEvent("auth.onboard.accept_clicked", {
+      inviteType: resolved.inviteType,
+      tokenFingerprint: fingerprintToken(token),
+    });
     try {
       const payload = await apiFetch<AcceptPayload>("/auth/onboard/accept", {
         method: "POST",
@@ -216,7 +238,10 @@ const AuthOnboardPage: React.FC = () => {
         const code = String(payload?.code || "");
         if (code === "login_required") {
           setViewState("login-required");
-          track("login_required", { inviteType: resolved.inviteType });
+          trackAuthEvent("auth.onboard.login_required", {
+            inviteType: resolved.inviteType,
+            tokenFingerprint: fingerprintToken(token),
+          });
           return;
         }
         if (code === "signup_required") {
@@ -226,7 +251,10 @@ const AuthOnboardPage: React.FC = () => {
         if (code === "wrong_account") {
           setWrongAccountMaskedEmail(payload.maskedExpectedEmail || resolved.maskedEmail || null);
           setViewState("wrong-account");
-          track("wrong_account", { inviteType: resolved.inviteType });
+          trackAuthEvent("auth.onboard.wrong_account", {
+            inviteType: resolved.inviteType,
+            tokenFingerprint: fingerprintToken(token),
+          });
           return;
         }
         if (code === "expired") {
@@ -249,24 +277,46 @@ const AuthOnboardPage: React.FC = () => {
         }
       }
       setViewState("success");
-      const redirect =
-        safeInternalPath(payload.redirectTo) ||
-        safeInternalPath(resolved.redirectTo) ||
-        roleDefaultPath(payload.role || resolved.role);
-      track("accepted", { inviteType: resolved.inviteType, role: payload.role || resolved.role });
+      const redirectResolved = resolvePostAuthDestination({
+        explicitDestination: payload.redirectTo || resolved.redirectTo,
+        role: (payload.role || resolved.role) as any,
+        fallback: "/dashboard",
+      });
+      trackAuthEvent("auth.destination.resolved", {
+        source: "onboard-accept",
+        destination: redirectResolved.destination,
+        resultSource: redirectResolved.source,
+        usedFallback: redirectResolved.usedFallback,
+      });
+      if (redirectResolved.usedFallback) {
+        trackAuthEvent("auth.destination.fallback_used", {
+          source: "onboard-accept",
+          destination: redirectResolved.destination,
+        });
+      }
+      trackAuthEvent("auth.onboard.accept_succeeded", {
+        inviteType: resolved.inviteType,
+        role: payload.role || resolved.role,
+        destination: redirectResolved.destination,
+        tokenFingerprint: fingerprintToken(token),
+      });
       setTimeout(() => {
-        navigate(redirect || "/dashboard", { replace: true });
+        navigate(redirectResolved.destination || "/dashboard", { replace: true });
       }, 400);
     } catch (err: any) {
       setError(String(err?.message || "Unable to accept invite."));
       setViewState("error");
-      track("failed", { phase: "accept", inviteType: resolved.inviteType });
+      trackAuthEvent("auth.onboard.accept_failed", {
+        phase: "accept",
+        inviteType: resolved.inviteType,
+        tokenFingerprint: fingerprintToken(token),
+      });
     }
   };
 
   const loginPath = `/login?next=${encodeURIComponent(nextOnboardPath)}`;
   const signupPath = `/signup?next=${encodeURIComponent(nextOnboardPath)}`;
-  const legacyPath = safeInternalPath(resolved?.legacyRedirectTo || null);
+  const legacyPath = getSafeInternalRedirect(resolved?.legacyRedirectTo || null);
 
   return (
     <div
@@ -327,8 +377,8 @@ const AuthOnboardPage: React.FC = () => {
             <Button
               onClick={() => {
                 const path =
-                  safeInternalPath(resolved?.redirectTo) ||
-                  roleDefaultPath(resolved?.role || user?.actorRole || user?.role);
+                  getSafeInternalRedirect(resolved?.redirectTo) ||
+                  getRoleDefaultDestination((resolved?.role || user?.actorRole || user?.role) as any);
                 navigate(path || "/dashboard", { replace: true });
               }}
             >
@@ -346,6 +396,27 @@ const AuthOnboardPage: React.FC = () => {
             <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
               <Link to={loginPath}><Button>Go to login</Button></Link>
               <Link to={signupPath}><Button variant="secondary">Go to signup</Button></Link>
+              {resolved?.inviteType === "tenant" &&
+              (resolved?.suggestedAuthMethod === "magic_link" || resolved?.suggestedAuthMethod === "password_or_magic") ? (
+                <Link
+                  to={`/tenant/login?next=${encodeURIComponent(nextOnboardPath)}&token=${encodeURIComponent(
+                    token
+                  )}${source ? `&source=${encodeURIComponent(source)}` : ""}`}
+                >
+                  <Button
+                    variant="ghost"
+                    onClick={() =>
+                      trackAuthEvent("auth.onboard.magic_link_requested", {
+                        inviteType: resolved.inviteType,
+                        tokenFingerprint: fingerprintToken(token),
+                        destination: nextOnboardPath,
+                      })
+                    }
+                  >
+                    Use magic link
+                  </Button>
+                </Link>
+              ) : null}
             </div>
           </>
         ) : null}

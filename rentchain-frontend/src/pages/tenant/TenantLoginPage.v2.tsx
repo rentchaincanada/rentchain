@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { apiFetch } from "../../api/apiFetch";
+import { resolvePostAuthDestination } from "../../lib/authDestination";
+import { trackAuthEvent } from "../../lib/authAnalytics";
 
 function Card({ children }: { children: React.ReactNode }) {
   return (
@@ -25,9 +27,15 @@ const TenantLoginPageV2: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const location = useLocation();
   const next = useMemo(() => {
-    const raw = new URLSearchParams(location.search).get("next") ?? "";
-    return raw.startsWith("/tenant") ? raw : "/tenant";
+    const resolved = resolvePostAuthDestination({
+      search: location.search,
+      role: "tenant",
+      fallback: "/tenant",
+    });
+    return resolved.destination;
   }, [location.search]);
+  const inviteToken = useMemo(() => new URLSearchParams(location.search).get("token") || "", [location.search]);
+  const inviteSource = useMemo(() => new URLSearchParams(location.search).get("source") || "", [location.search]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -39,6 +47,11 @@ const TenantLoginPageV2: React.FC = () => {
         method: "POST",
         body: JSON.stringify({ email: email.trim().toLowerCase(), next }),
         headers: { "Content-Type": "application/json" },
+      });
+      trackAuthEvent("auth.onboard.magic_link_requested", {
+        source: "tenant-login",
+        destination: next,
+        inviteType: inviteSource || null,
       });
       setSent(true);
     } catch (err: any) {
@@ -84,10 +97,15 @@ const TenantLoginPageV2: React.FC = () => {
               {isSending ? "Sending…" : "Email me a login link"}
             </button>
 
+          <div style={{ fontSize: 13, opacity: 0.75 }}>
+            Have an invite link? Open it to accept your invite. <Link to="/">Back to main</Link>
+          </div>
+          {inviteToken ? (
             <div style={{ fontSize: 13, opacity: 0.75 }}>
-              Have an invite link? Open it to accept your invite. <Link to="/">Back to main</Link>
+              Invite context detected. We will return you to onboarding after sign-in.
             </div>
-          </form>
+          ) : null}
+        </form>
         ) : (
           <div style={{ marginTop: 16, display: "grid", gap: 10 }}>
             <div style={{ color: "green", fontWeight: 700 }}>
