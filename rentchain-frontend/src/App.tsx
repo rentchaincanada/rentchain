@@ -82,6 +82,7 @@ import ContractorDashboardPage from "./pages/contractor/ContractorDashboardPage"
 import ContractorJobsPage from "./pages/contractor/ContractorJobsPage";
 import ContractorProfilePage from "./pages/contractor/ContractorProfilePage";
 import { ContractorNav } from "./components/layout/ContractorNav";
+import { getRoleDefaultDestination } from "./lib/authDestination";
 
 const TENANT_PORTAL_ENABLED = import.meta.env.VITE_TENANT_PORTAL_ENABLED === "true";
 
@@ -216,6 +217,15 @@ const LegacyTenantMagicRedirect: React.FC = () => {
   const location = useLocation();
   const query = String(location.search || "");
   return <Navigate to={`/auth/magic${query}`} replace />;
+};
+
+const AccountRouteGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user } = useAuth();
+  const role = String(user?.actorRole || user?.role || "").trim().toLowerCase();
+  const isAllowed = role === "landlord" || role === "admin";
+  if (isAllowed) return <>{children}</>;
+  if (role === "contractor") return <Navigate to="/contractor/profile" replace />;
+  return <Navigate to={getRoleDefaultDestination(role as any)} replace />;
 };
 
 function App() {
@@ -666,9 +676,11 @@ function App() {
           path="/account"
           element={
             <RequireAuth>
-              <LandlordNav>
-                <AccountPage />
-              </LandlordNav>
+              <AccountRouteGate>
+                <LandlordNav>
+                  <AccountPage />
+                </LandlordNav>
+              </AccountRouteGate>
             </RequireAuth>
           }
         />
@@ -676,9 +688,11 @@ function App() {
           path="/account/security"
           element={
             <RequireAuth>
-              <LandlordNav>
-                <AccountSecurityPage />
-              </LandlordNav>
+              <AccountRouteGate>
+                <LandlordNav>
+                  <AccountSecurityPage />
+                </LandlordNav>
+              </AccountRouteGate>
             </RequireAuth>
           }
         />
@@ -686,9 +700,11 @@ function App() {
           path="/account/profile"
           element={
             <RequireAuth>
-              <LandlordNav>
-                <AccountProfilePage />
-              </LandlordNav>
+              <AccountRouteGate>
+                <LandlordNav>
+                  <AccountProfilePage />
+                </LandlordNav>
+              </AccountRouteGate>
             </RequireAuth>
           }
         />
@@ -696,12 +712,15 @@ function App() {
           path="/account/data"
           element={
             <RequireAuth>
-              <LandlordNav>
-                <AccountDataPage />
-              </LandlordNav>
+              <AccountRouteGate>
+                <LandlordNav>
+                  <AccountDataPage />
+                </LandlordNav>
+              </AccountRouteGate>
             </RequireAuth>
           }
         />
+        <Route path="/contractor/account" element={<Navigate to="/contractor/profile" replace />} />
         <Route path="/cosign/:applicationId" element={<CosignPage />} />
         <Route path="/apply" element={<ApplicantApplyPage />} />
         <Route

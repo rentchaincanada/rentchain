@@ -10,6 +10,7 @@ import { RentChainLogo } from "../brand/RentChainLogo";
 function roleLabel(raw: string): string {
   const normalized = String(raw || "").trim().toLowerCase();
   if (normalized === "admin") return "Admin";
+  if (normalized === "contractor") return "Contractor";
   if (normalized === "tenant") return "Tenant";
   return "Landlord";
 }
@@ -27,6 +28,7 @@ const TopNav: React.FC = () => {
     return actorRole || role || "landlord";
   }, [authResolved, user?.actorRole, user?.role]);
   const roleBadge = authResolved ? roleLabel(effectiveRole) : "Loading...";
+  const accountPath = effectiveRole === "contractor" ? "/contractor/profile" : "/account";
 
   return (
     <>
@@ -71,7 +73,7 @@ const TopNav: React.FC = () => {
             </span>
             <Button
               variant="secondary"
-              onClick={() => navigate("/account")}
+              onClick={() => navigate(accountPath)}
               style={{
                 borderRadius: radius.pill,
                 border: `1px solid ${colors.accent}`,
