@@ -378,6 +378,8 @@ const SignupSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
   fullName: z.string().trim().max(160).optional(),
+  inviteToken: z.string().trim().max(256).optional(),
+  inviteSource: z.string().trim().max(64).optional(),
 });
 
 function rateLimit(key: string) {
@@ -476,9 +478,67 @@ router.post("/signup", rateLimitAuth, async (req, res) => {
   const email = String(parsed.data.email || "").trim().toLowerCase();
   const password = String(parsed.data.password || "");
   const fullName = String(parsed.data.fullName || "").trim();
+  const inviteToken = String(parsed.data.inviteToken || "").trim();
+  const inviteSource = String(parsed.data.inviteSource || "").trim().toLowerCase();
   const now = Date.now();
+  const signupCorrelationId = `signup_${now.toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
   try {
+    let contractorInviteContext: {
+      token: string;
+      inviteId: string | null;
+      landlordId: string | null;
+      maskedEmail: string | null;
+    } | null = null;
+
+    if (inviteToken || inviteSource === "contractor") {
+      if (!inviteToken) {
+        return res.status(400).json({
+          ok: false,
+          code: "MISSING_INVITE_TOKEN",
+          error: "Invite token is required for contractor signup",
+        });
+      }
+      const resolved = await resolveOnboardToken(inviteToken, inviteSource || "contractor");
+      onboardLog("signup_context", {
+        correlationId: signupCorrelationId,
+        inviteType: resolved.inviteType,
+        status: resolved.status,
+        token: tokenFingerprint(inviteToken),
+      });
+
+      if (resolved.inviteType !== "contractor" || resolved.status !== "valid") {
+        return res.status(409).json({
+          ok: false,
+          code: "INVALID_CONTRACTOR_INVITE",
+          error: "Contractor invite is invalid or expired",
+        });
+      }
+      const invitedEmail = String(resolved.email || "").trim().toLowerCase();
+      if (!invitedEmail || invitedEmail !== email) {
+        onboardLog("wrong_account", {
+          correlationId: signupCorrelationId,
+          inviteType: "contractor",
+          token: tokenFingerprint(inviteToken),
+          invitedEmail: resolved.maskedEmail || null,
+          signupEmail: maskEmail(email),
+        });
+        return res.status(409).json({
+          ok: false,
+          code: "INVITE_EMAIL_MISMATCH",
+          error: "This invite must be accepted by the exact invited email address.",
+          maskedExpectedEmail: resolved.maskedEmail,
+        });
+      }
+
+      contractorInviteContext = {
+        token: inviteToken,
+        inviteId: resolved.inviteId || null,
+        landlordId: resolved.workspaceId || null,
+        maskedEmail: resolved.maskedEmail || null,
+      };
+    }
+
     let userRecord: admin.auth.UserRecord;
     try {
       userRecord = await admin.auth().createUser({
@@ -500,6 +560,90 @@ router.post("/signup", rateLimitAuth, async (req, res) => {
     }
 
     const uid = userRecord.uid;
+    if (contractorInviteContext) {
+      const invitedBy = contractorInviteContext.landlordId ? [contractorInviteContext.landlordId] : [];
+      await db.collection("users").doc(uid).set(
+        {
+          id: uid,
+          email,
+          role: "contractor",
+          contractorId: uid,
+          contractorLandlordIds: invitedBy,
+          landlordId: null,
+          status: "active",
+          approved: true,
+          approvedAt: now,
+          approvedBy: "contractor_invite_signup",
+          createdAt: now,
+          updatedAt: now,
+        },
+        { merge: true }
+      );
+      await db.collection("accounts").doc(uid).set(
+        {
+          id: uid,
+          email,
+          role: "contractor",
+          contractorId: uid,
+          contractorLandlordIds: invitedBy,
+          landlordId: null,
+          status: "active",
+          approved: true,
+          approvedAt: now,
+          approvedBy: "contractor_invite_signup",
+          createdAt: now,
+          updatedAt: now,
+        },
+        { merge: true }
+      );
+      await db.collection("contractorProfiles").doc(uid).set(
+        {
+          id: uid,
+          userId: uid,
+          email,
+          businessName: "",
+          contactName: fullName || "",
+          phone: "",
+          serviceCategories: [],
+          serviceAreas: [],
+          bio: "",
+          isActive: true,
+          invitedByLandlordIds: invitedBy,
+          createdAtMs: now,
+          updatedAtMs: now,
+        },
+        { merge: true }
+      );
+
+      const token = signAuthToken({
+        sub: uid,
+        email,
+        role: "contractor",
+        permissions: [],
+        revokedPermissions: [],
+      });
+      onboardLog("signup_completed", {
+        correlationId: signupCorrelationId,
+        mode: "contractor_invite",
+        token: tokenFingerprint(contractorInviteContext.token),
+        inviteId: contractorInviteContext.inviteId,
+        email: contractorInviteContext.maskedEmail || maskEmail(email),
+        userId: uid,
+      });
+      return res.status(201).json({
+        ok: true,
+        token,
+        user: {
+          id: uid,
+          email,
+          role: "contractor",
+          contractorId: uid,
+          landlordId: null,
+          approved: true,
+        },
+      });
+    }
+
     const userDoc = {
       id: uid,
       email,
@@ -555,7 +699,12 @@ router.post("/signup", rateLimitAuth, async (req, res) => {
       permissions: [],
       revokedPermissions: [],
     });
-
+    onboardLog("signup_completed", {
+      correlationId: signupCorrelationId,
+      mode: "default_landlord",
+      email: maskEmail(email),
+      userId: uid,
+    });
     return res.status(201).json({
       ok: true,
       token,
@@ -722,12 +871,26 @@ router.post("/onboard/accept", async (req: any, res) => {
       const userId = String(req.user?.id || "").trim();
       const userEmail = String(req.user?.email || "").trim().toLowerCase();
       const role = normalizeUserRole(req);
+      onboardLog("contractor_accept_attempt", {
+        token: tokenFingerprint(token),
+        inviteType: "contractor",
+        role: role || "unknown",
+        userId: userId || null,
+        userEmail: userEmail ? maskEmail(userEmail) : null,
+        invitedEmail: resolved.maskedEmail || null,
+      });
       if (!userId || !userEmail) {
         onboardLog("login_required", { token: tokenFingerprint(token), inviteType: "contractor" });
         return res.status(401).json({ ok: false, code: "login_required", message: "Sign in to continue." });
       }
       if (role === "admin" || role === "landlord") {
-        onboardLog("wrong_account", { token: tokenFingerprint(token), inviteType: "contractor", role });
+        onboardLog("wrong_account", {
+          token: tokenFingerprint(token),
+          inviteType: "contractor",
+          role,
+          signedInEmail: userEmail ? maskEmail(userEmail) : null,
+          invitedEmail: resolved.maskedEmail || null,
+        });
         return res.status(409).json({
           ok: false,
           code: "wrong_account",
@@ -737,7 +900,13 @@ router.post("/onboard/accept", async (req: any, res) => {
         });
       }
       if (resolved.email && resolved.email !== userEmail) {
-        onboardLog("wrong_account", { token: tokenFingerprint(token), inviteType: "contractor", role });
+        onboardLog("wrong_account", {
+          token: tokenFingerprint(token),
+          inviteType: "contractor",
+          role,
+          signedInEmail: userEmail ? maskEmail(userEmail) : null,
+          invitedEmail: resolved.maskedEmail || null,
+        });
         return res.status(409).json({
           ok: false,
           code: "wrong_account",
@@ -836,6 +1005,7 @@ router.post("/onboard/accept", async (req: any, res) => {
         token: tokenFingerprint(token),
         inviteType: "contractor",
         inviteId: inviteDoc.id,
+        userEmail: userEmail ? maskEmail(userEmail) : null,
       });
       return res.json({
         ok: true,

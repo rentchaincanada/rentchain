@@ -42,7 +42,12 @@ export interface AuthContextValue {
     password: string,
     opts?: RequestInit
   ) => Promise<{ requires2fa: boolean }>;
-  signup: (email: string, password: string, fullName?: string) => Promise<void>;
+  signup: (
+    email: string,
+    password: string,
+    fullName?: string,
+    opts?: { inviteToken?: string; inviteSource?: string }
+  ) => Promise<void>;
   loginDemo: (plan?: string) => Promise<void>;
   logout: () => Promise<void>;
   twoFactorPendingToken: string | null;
@@ -379,18 +384,33 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     [clearAuthStateBeforeNewSession, hydrateUserFromMe]
   );
 
-  const signup = useCallback(async (email: string, password: string, fullName?: string) => {
+  const signup = useCallback(
+    async (
+      email: string,
+      password: string,
+      fullName?: string,
+      opts?: { inviteToken?: string; inviteSource?: string }
+    ) => {
     setIsLoading(true);
     try {
       clearAuthStateBeforeNewSession();
-      const response = await apiSignup(email, password, fullName);
+      const response = await apiSignup(email, password, fullName, opts);
       if (!response.token) throw new Error("Token missing from signup response");
       storeToken(response.token);
       setToken(response.token);
-      await hydrateUserFromMe({
+      const hydrated = await hydrateUserFromMe({
         email: response.user?.email || email,
         id: response.user?.id || null,
       });
+      if (import.meta.env.DEV) {
+        const masked = normalizeEmail(hydrated?.email || email);
+        const [local, domain] = masked.split("@");
+        const safeEmail = local && domain ? `${local.slice(0, 2)}***@${domain}` : "***";
+        console.info("[auth] signup hydrated session", {
+          role: String(hydrated?.actorRole || hydrated?.role || "").toLowerCase() || null,
+          email: safeEmail,
+        });
+      }
       setTwoFactorPendingToken(null);
       setTwoFactorMethods([]);
     } catch (error) {
@@ -399,7 +419,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } finally {
       setIsLoading(false);
     }
-  }, [clearAuthStateBeforeNewSession, hydrateUserFromMe]);
+    },
+    [clearAuthStateBeforeNewSession, hydrateUserFromMe]
+  );
 
   const loginDemo = useCallback(async (plan: string = "core") => {
     setIsLoading(true);

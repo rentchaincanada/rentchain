@@ -89,6 +89,14 @@ const AuthOnboardPage: React.FC = () => {
   const [error, setError] = React.useState<string | null>(null);
   const [wrongAccountMaskedEmail, setWrongAccountMaskedEmail] = React.useState<string | null>(null);
 
+  const maskEmail = React.useCallback((value: string | null | undefined) => {
+    const email = String(value || "").trim().toLowerCase();
+    const [local, domain] = email.split("@");
+    if (!local || !domain) return "***";
+    if (local.length <= 2) return `${local[0] || "*"}*@${domain}`;
+    return `${local.slice(0, 2)}***@${domain}`;
+  }, []);
+
   const nextOnboardPath = React.useMemo(() => buildOnboardContinuationPath(token, source), [token, source]);
 
   React.useEffect(() => {
@@ -112,6 +120,15 @@ const AuthOnboardPage: React.FC = () => {
           method: "GET",
           allowStatuses: [404, 410],
         });
+        if (import.meta.env.DEV) {
+          console.info("[onboard] resolve result", {
+            inviteType: data?.inviteType || "unknown",
+            status: data?.status || "invalid",
+            role: data?.role || null,
+            maskedInviteEmail: data?.maskedEmail || null,
+            source: source || null,
+          });
+        }
         trackAuthEvent("auth.onboard.resolved", {
           inviteType: data?.inviteType || "unknown",
           status: data?.status || "invalid",
@@ -169,15 +186,32 @@ const AuthOnboardPage: React.FC = () => {
           return;
         }
         if (user && invitedEmail && email && invitedEmail !== email) {
+          if (import.meta.env.DEV) {
+            console.info("[onboard] wrong-account email mismatch", {
+              signedInEmail: maskEmail(email),
+              invitedEmail: data.maskedEmail || maskEmail(invitedEmail),
+              role,
+            });
+          }
           setWrongAccountMaskedEmail(data.maskedEmail || null);
           setViewState("wrong-account");
           trackAuthEvent("auth.onboard.wrong_account", {
             inviteType: data.inviteType,
+            role: role || "unknown",
+            signedInEmail: maskEmail(email),
+            invitedEmail: data.maskedEmail || null,
             tokenFingerprint: fingerprintToken(token),
           });
           return;
         }
         if (user && (role === "admin" || role === "landlord") && data.inviteType === "contractor") {
+          if (import.meta.env.DEV) {
+            console.info("[onboard] wrong-account role mismatch", {
+              role,
+              signedInEmail: maskEmail(email),
+              invitedEmail: data.maskedEmail || null,
+            });
+          }
           setWrongAccountMaskedEmail(data.maskedEmail || null);
           setViewState("wrong-account");
           trackAuthEvent("auth.onboard.wrong_account", {
@@ -228,6 +262,14 @@ const AuthOnboardPage: React.FC = () => {
       tokenFingerprint: fingerprintToken(token),
     });
     try {
+      if (import.meta.env.DEV) {
+        console.info("[onboard] accept attempt", {
+          inviteType: resolved.inviteType,
+          source: source || null,
+          signedInRole: String(user?.actorRole || user?.role || "").toLowerCase() || null,
+          signedInEmail: maskEmail(String(user?.email || "")),
+        });
+      }
       const payload = await apiFetch<AcceptPayload>("/auth/onboard/accept", {
         method: "POST",
         body: { token, source },
@@ -300,6 +342,13 @@ const AuthOnboardPage: React.FC = () => {
         destination: redirectResolved.destination,
         tokenFingerprint: fingerprintToken(token),
       });
+      if (import.meta.env.DEV) {
+        console.info("[onboard] accept success", {
+          inviteType: resolved.inviteType,
+          resolvedRole: payload.role || resolved.role || null,
+          destination: redirectResolved.destination,
+        });
+      }
       setTimeout(() => {
         navigate(redirectResolved.destination || "/dashboard", { replace: true });
       }, 400);

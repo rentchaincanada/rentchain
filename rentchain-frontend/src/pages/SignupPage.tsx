@@ -6,6 +6,14 @@ import { useAuth } from "../context/useAuth";
 import { resolvePostAuthDestination } from "../lib/authDestination";
 import { trackAuthEvent } from "../lib/authAnalytics";
 
+function maskEmail(value: string): string {
+  const email = String(value || "").trim().toLowerCase();
+  const [local, domain] = email.split("@");
+  if (!local || !domain) return "***";
+  if (local.length <= 2) return `${local[0] || "*"}*@${domain}`;
+  return `${local.slice(0, 2)}***@${domain}`;
+}
+
 const SignupPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -35,6 +43,19 @@ const SignupPage: React.FC = () => {
     nextPath.startsWith("/contractor/invite/") ||
     nextPath.startsWith("/contractor/signup?invite=") ||
     nextPath.startsWith("/auth/onboard?");
+  const contractorOnboardContext = React.useMemo(() => {
+    if (!nextPath.startsWith("/auth/onboard?")) {
+      return { token: "", source: "" };
+    }
+    try {
+      const nextUrl = new URL(nextPath, window.location.origin);
+      const token = String(nextUrl.searchParams.get("token") || "").trim();
+      const source = String(nextUrl.searchParams.get("source") || "").trim().toLowerCase();
+      return { token, source };
+    } catch {
+      return { token: "", source: "" };
+    }
+  }, [nextPath]);
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
@@ -53,7 +74,28 @@ const SignupPage: React.FC = () => {
 
     setSubmitting(true);
     try {
-      await signup(email.trim().toLowerCase(), password, fullName.trim() || undefined);
+      const normalizedEmail = email.trim().toLowerCase();
+      const isContractorOnboardSignup =
+        contractorOnboardContext.source === "contractor" && Boolean(contractorOnboardContext.token);
+      if (import.meta.env.DEV && isContractorOnboardSignup) {
+        console.info("[signup] contractor invite context detected", {
+          email: maskEmail(normalizedEmail),
+          source: contractorOnboardContext.source,
+          hasToken: Boolean(contractorOnboardContext.token),
+          destination: nextPath,
+        });
+      }
+      await signup(normalizedEmail, password, fullName.trim() || undefined, {
+        inviteToken: isContractorOnboardSignup ? contractorOnboardContext.token : undefined,
+        inviteSource: isContractorOnboardSignup ? "contractor" : undefined,
+      });
+      if (import.meta.env.DEV) {
+        console.info("[signup] completed", {
+          email: maskEmail(normalizedEmail),
+          destination: nextPath,
+          contractorContext: isContractorOnboardSignup,
+        });
+      }
       trackAuthEvent("auth.onboard.signup_completed", { destination: nextPath });
       navigate(nextPath, { replace: true });
     } catch (err: any) {
