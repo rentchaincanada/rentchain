@@ -12,6 +12,13 @@ const api = axios.create({
   withCredentials: true,
 });
 
+function isTenantApiPath(pathLike: string): boolean {
+  const raw = String(pathLike || "").trim();
+  if (!raw) return false;
+  const path = raw.startsWith("/") ? raw : `/${raw}`;
+  return /^\/(?:api\/)?tenant(?:\/|$)/.test(path);
+}
+
 api.interceptors.request.use(async (config) => {
   warnIfFirebaseDomainMismatch();
   const rawUrl = config.url || "";
@@ -23,16 +30,12 @@ api.interceptors.request.use(async (config) => {
   } catch {
     // ignore parse errors; fall back to raw
   }
-  const isTenantPath =
-    path === "/tenant" ||
-    path === "/api/tenant" ||
-    path.startsWith("/tenant/") ||
-    path.startsWith("/api/tenant/");
+  const isTenantPath = isTenantApiPath(path);
 
   const firebaseToken = !isTenantPath ? await getFirebaseIdToken() : null;
   const rawToken = isTenantPath ? getTenantToken() : getAuthToken();
   const token = typeof rawToken === "string" ? rawToken.trim() : rawToken;
-  const effectiveToken = firebaseToken || token;
+  const effectiveToken = token || firebaseToken;
   const hasToken = typeof effectiveToken === "string" ? effectiveToken.trim().length > 0 : false;
   const authHeaderSet = hasToken;
   if (authHeaderSet) {
@@ -41,7 +44,8 @@ api.interceptors.request.use(async (config) => {
   }
   config.headers = config.headers ?? {};
   (config.headers as any)["x-api-client"] = "web";
-  (config.headers as any)["x-rc-auth"] = firebaseToken ? "firebase" : authHeaderSet ? "bearer" : "missing";
+  (config.headers as any)["x-rc-auth"] =
+    token ? "bearer" : firebaseToken ? "firebase" : "missing";
   if (import.meta.env.DEV && !authHeaderSet && !isTenantPath) {
     console.warn("[api/axios] missing auth token for request", { path });
   }

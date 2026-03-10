@@ -7,6 +7,7 @@ import { isPublicRoutePath } from "../lib/publicRoute";
 type Jsonish = Record<string, any>;
 export type ApiFetchInit = Omit<RequestInit, "body"> & {
   body?: BodyInit | Jsonish;
+  token?: string;
   allowStatuses?: number[];
   allow404?: boolean;
   suppressToasts?: boolean;
@@ -71,13 +72,14 @@ export async function apiFetch<T = any>(
   }
   const isTenantPath = isTenantApiPath(pathForMatch);
   const firebaseToken = !isTenantPath ? await getFirebaseIdToken() : null;
-  const rawToken = isTenantPath ? getTenantToken() : getAuthToken();
+  const explicitToken = typeof init.token === "string" ? init.token : null;
+  const rawToken = explicitToken || (isTenantPath ? getTenantToken() : getAuthToken());
   const token = typeof rawToken === "string" ? rawToken.trim() : rawToken;
-  const effectiveToken = firebaseToken || token;
+  const effectiveToken = token || firebaseToken;
 
   const url = normalizedPath;
 
-  const { allowStatuses, allow404, suppressToasts, ...fetchInit } = init;
+  const { allowStatuses, allow404, suppressToasts, token: _ignoredToken, ...fetchInit } = init;
 
   const headers: Record<string, string> = {
     ...(fetchInit.headers as any),

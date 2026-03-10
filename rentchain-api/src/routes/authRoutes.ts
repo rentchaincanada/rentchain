@@ -19,7 +19,7 @@ import { setPlan } from "../services/accountService";
 import { resolvePlan } from "../entitlements/plans";
 import { z } from "zod";
 import { maybeGrantMicroLiveFromLead } from "../services/microLiveGrant";
-import { signAuthToken } from "../auth/jwt";
+import { signAuthToken, verifyAuthToken } from "../auth/jwt";
 import { validateLandlordCredentials } from "../services/authService";
 import { getOrCreateAccount } from "../services/accountService";
 import { getOrCreateLandlordProfile } from "../services/landlordProfileService";
@@ -103,6 +103,31 @@ function normalizeUserRole(req: any): string {
 function onboardLog(event: string, extra?: Record<string, unknown>) {
   // Operator verification: filter Cloud Run logs by `auth.onboard.` prefix.
   console.info(`[auth.onboard.${event}]`, extra || {});
+}
+
+function getBearerTokenFromRequest(req: any): string | null {
+  const raw = req?.headers?.authorization || req?.headers?.Authorization;
+  if (!raw || typeof raw !== "string") return null;
+  const m = raw.match(/^Bearer\s+(.+)$/i);
+  return m?.[1] ?? null;
+}
+
+async function resolveOptionalRequestUser(req: any): Promise<any | null> {
+  if (req?.user) return req.user;
+  const token = getBearerTokenFromRequest(req);
+  if (!token) return null;
+  try {
+    const claims = verifyAuthToken(token);
+    const hydrated = await buildCanonicalSessionUserFromClaims(claims, {
+      requestCache: req.__entitlementsCache || {},
+    });
+    req.__entitlementsCache = req.__entitlementsCache || {};
+    req.user = hydrated;
+    req.entitlements = hydrated.entitlements;
+    return hydrated;
+  } catch {
+    return null;
+  }
 }
 
 function signTenantJwt(payload: any) {
@@ -625,6 +650,7 @@ router.post("/signup", rateLimitAuth, async (req, res) => {
       onboardLog("signup_completed", {
         correlationId: signupCorrelationId,
         mode: "contractor_invite",
+        issuedRole: "contractor",
         token: tokenFingerprint(contractorInviteContext.token),
         inviteId: contractorInviteContext.inviteId,
         email: contractorInviteContext.maskedEmail || maskEmail(email),
@@ -702,6 +728,7 @@ router.post("/signup", rateLimitAuth, async (req, res) => {
     onboardLog("signup_completed", {
       correlationId: signupCorrelationId,
       mode: "default_landlord",
+      issuedRole: "landlord",
       email: maskEmail(email),
       userId: uid,
     });
@@ -832,11 +859,14 @@ router.post("/onboard/accept", async (req: any, res) => {
   }
 
   try {
+    const requestUser = await resolveOptionalRequestUser(req);
     const resolved = await resolveOnboardToken(token, source);
     onboardLog("accept_clicked", {
       inviteType: resolved.inviteType,
       token: tokenFingerprint(token),
       inviteId: resolved.inviteId || null,
+      requestRole: String(requestUser?.actorRole || requestUser?.role || "").toLowerCase() || null,
+      requestEmail: requestUser?.email ? maskEmail(String(requestUser.email)) : null,
     });
     if (!resolved.ok && resolved.status === "invalid") {
       onboardLog("invalid", { token: tokenFingerprint(token), inviteType: resolved.inviteType });
@@ -868,9 +898,9 @@ router.post("/onboard/accept", async (req: any, res) => {
     }
 
     if (resolved.inviteType === "contractor") {
-      const userId = String(req.user?.id || "").trim();
-      const userEmail = String(req.user?.email || "").trim().toLowerCase();
-      const role = normalizeUserRole(req);
+      const userId = String(requestUser?.id || "").trim();
+      const userEmail = String(requestUser?.email || "").trim().toLowerCase();
+      const role = String(requestUser?.actorRole || requestUser?.role || "").trim().toLowerCase();
       onboardLog("contractor_accept_attempt", {
         token: tokenFingerprint(token),
         inviteType: "contractor",
@@ -1018,7 +1048,7 @@ router.post("/onboard/accept", async (req: any, res) => {
     }
 
     if (resolved.inviteType === "tenant") {
-      const role = normalizeUserRole(req);
+      const role = String(requestUser?.actorRole || requestUser?.role || "").trim().toLowerCase();
       if (role === "landlord" || role === "admin" || role === "contractor") {
         onboardLog("wrong_account", { token: tokenFingerprint(token), inviteType: "tenant", role });
         return res.status(409).json({
