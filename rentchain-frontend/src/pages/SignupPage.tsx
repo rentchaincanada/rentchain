@@ -3,25 +3,38 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Card, Input, Button } from "../components/ui/Ui";
 import { colors, spacing, text } from "../styles/tokens";
 import { useAuth } from "../context/useAuth";
+import { resolvePostAuthDestination } from "../lib/authDestination";
+import { trackAuthEvent } from "../lib/authAnalytics";
 
 const SignupPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { signup, isLoading } = useAuth();
+  const { signup, isLoading, user } = useAuth();
   const searchParams = new URLSearchParams(location.search);
-  const rawNext = searchParams.get("next");
   const nextPath = React.useMemo(() => {
-    if (!rawNext) return "/dashboard";
-    try {
-      const decoded = decodeURIComponent(rawNext);
-      if (decoded.startsWith("/")) return decoded;
-      return "/dashboard";
-    } catch {
-      return "/dashboard";
+    const resolved = resolvePostAuthDestination({
+      search: location.search,
+      role: String(user?.actorRole || user?.role || "").toLowerCase() || undefined,
+      fallback: "/dashboard",
+    });
+    trackAuthEvent("auth.destination.resolved", {
+      source: "signup",
+      resultSource: resolved.source,
+      destination: resolved.destination,
+      usedFallback: resolved.usedFallback,
+    });
+    if (resolved.usedFallback) {
+      trackAuthEvent("auth.destination.fallback_used", {
+        source: "signup",
+        destination: resolved.destination,
+      });
     }
-  }, [rawNext]);
+    return resolved.destination;
+  }, [location.search, user?.actorRole, user?.role]);
   const isContractorInviteFlow =
-    nextPath.startsWith("/contractor/invite/") || nextPath.startsWith("/contractor/signup?invite=");
+    nextPath.startsWith("/contractor/invite/") ||
+    nextPath.startsWith("/contractor/signup?invite=") ||
+    nextPath.startsWith("/auth/onboard?");
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
@@ -41,6 +54,7 @@ const SignupPage: React.FC = () => {
     setSubmitting(true);
     try {
       await signup(email.trim().toLowerCase(), password, fullName.trim() || undefined);
+      trackAuthEvent("auth.onboard.signup_completed", { destination: nextPath });
       navigate(nextPath, { replace: true });
     } catch (err: any) {
       setError(err?.message || "Unable to create account.");

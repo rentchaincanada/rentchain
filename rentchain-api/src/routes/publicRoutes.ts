@@ -20,6 +20,16 @@ import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemp
 
 const router = Router();
 
+function authEvent(event: string, payload: Record<string, unknown>) {
+  console.info(`[auth.onboard.${event}]`, payload);
+}
+
+function tokenFingerprint(token: string) {
+  const value = String(token || "").trim();
+  if (!value) return "none";
+  return `${value.slice(0, 6)}…${value.slice(-4)}`;
+}
+
 router.get("/health", (_req, res) => {
   res.setHeader("x-route-source", "publicRoutes.ts");
   res.json({
@@ -1004,7 +1014,7 @@ router.post("/tenant/auth/magic-link", async (req: any, res) => {
     const emailRaw = String(req.body?.email || "").trim().toLowerCase();
     const nextRaw = String(req.body?.next || "").trim();
     const next =
-      nextRaw && (nextRaw.startsWith("/tenant") || nextRaw.startsWith("tenant"))
+      nextRaw && (nextRaw.startsWith("/tenant") || nextRaw.startsWith("/auth/onboard") || nextRaw.startsWith("tenant"))
         ? nextRaw
         : null;
     if (!emailRaw || !emailRaw.includes("@")) {
@@ -1030,6 +1040,11 @@ router.post("/tenant/auth/magic-link", async (req: any, res) => {
       usedAt: null,
       used: false,
     });
+    authEvent("magic_link_requested", {
+      route: "/tenant/auth/magic-link",
+      next: next || null,
+      tokenFingerprint: tokenFingerprint(token),
+    });
 
     const apiKey = process.env.SENDGRID_API_KEY;
     const from =
@@ -1037,7 +1052,7 @@ router.post("/tenant/auth/magic-link", async (req: any, res) => {
     if (apiKey && from) {
       try {
         const baseUrl = (process.env.PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
-        const link = `${baseUrl}/tenant/magic?token=${encodeURIComponent(token)}${
+        const link = `${baseUrl}/auth/magic?token=${encodeURIComponent(token)}${
           next ? `&next=${encodeURIComponent(next)}` : ""
         }`;
         const subject = "Your RentChain login link";
@@ -1105,9 +1120,19 @@ router.post("/tenant/auth/magic-redeem", async (req: any, res) => {
       leaseId: tenant?.leaseId || null,
     });
 
-    return res.json({ ok: true, tenantToken: tenantJwt });
+    authEvent("magic_link_completed", {
+      route: "/tenant/auth/magic-redeem",
+      next: String(data?.next || ""),
+      tokenFingerprint: tokenFingerprint(token),
+      tenantId: tenantId || null,
+    });
+    return res.json({ ok: true, tenantToken: tenantJwt, next: String(data?.next || "/tenant") });
   } catch (err) {
     console.error("[tenant magic-link] redeem error", err);
+    authEvent("magic_link_failed", {
+      route: "/tenant/auth/magic-redeem",
+      reason: String((err as any)?.message || err),
+    });
     return res.status(400).json({ ok: false, error: "MAGIC_LINK_INVALID" });
   }
 });

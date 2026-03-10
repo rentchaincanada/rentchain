@@ -127,6 +127,7 @@ type OnboardResolveResult = {
   inviteId: string | null;
   redirectTo: string | null;
   legacyRedirectTo?: string | null;
+  suggestedAuthMethod?: "password" | "magic_link" | "password_or_magic" | null;
   copy: {
     title: string;
     description: string;
@@ -196,6 +197,7 @@ async function resolveOnboardToken(token: string, sourceHint = ""): Promise<Onbo
           propertyId: null,
           inviteId: doc.id,
           redirectTo: "/contractor",
+          suggestedAuthMethod: "password",
           copy:
             status === "expired"
               ? {
@@ -246,6 +248,7 @@ async function resolveOnboardToken(token: string, sourceHint = ""): Promise<Onbo
           propertyId: String(item?.propertyId || "").trim() || null,
           inviteId: doc.id,
           redirectTo: "/tenant",
+          suggestedAuthMethod: "password_or_magic",
           copy:
             status === "expired"
               ? {
@@ -293,6 +296,7 @@ async function resolveOnboardToken(token: string, sourceHint = ""): Promise<Onbo
           inviteId: inviteDoc.id,
           redirectTo: status === "accepted" ? "/login" : null,
           legacyRedirectTo: status === "valid" ? `/invite/${encodeURIComponent(tokenValue)}` : null,
+          suggestedAuthMethod: "password",
           copy:
             status === "expired"
               ? {
@@ -337,6 +341,7 @@ async function resolveOnboardToken(token: string, sourceHint = ""): Promise<Onbo
           inviteId: referralSnap.docs[0].id,
           redirectTo: status === "accepted" ? "/login" : null,
           legacyRedirectTo: status === "valid" ? `/invite/${encodeURIComponent(tokenValue)}` : null,
+          suggestedAuthMethod: "password",
           copy:
             status === "expired"
               ? {
@@ -639,11 +644,11 @@ router.get("/onboard/resolve", async (req: any, res) => {
     const result = await resolveOnboardToken(token, source);
     const event =
       result.status === "valid"
-        ? "opened"
+        ? "resolved"
         : result.status === "expired"
         ? "expired"
         : result.status === "accepted"
-        ? "opened"
+        ? "already_accepted"
         : "invalid";
     onboardLog(event, {
       inviteType: result.inviteType,
@@ -678,6 +683,11 @@ router.post("/onboard/accept", async (req: any, res) => {
 
   try {
     const resolved = await resolveOnboardToken(token, source);
+    onboardLog("accept_clicked", {
+      inviteType: resolved.inviteType,
+      token: tokenFingerprint(token),
+      inviteId: resolved.inviteId || null,
+    });
     if (!resolved.ok && resolved.status === "invalid") {
       onboardLog("invalid", { token: tokenFingerprint(token), inviteType: resolved.inviteType });
       return res.status(404).json({ ok: false, code: "invalid", message: "Invite not found." });
@@ -821,7 +831,7 @@ router.post("/onboard/accept", async (req: any, res) => {
         ),
       ]);
 
-      onboardLog("accepted", {
+      onboardLog("accept_succeeded", {
         token: tokenFingerprint(token),
         inviteType: "contractor",
         inviteId: inviteDoc.id,
@@ -917,7 +927,7 @@ router.post("/onboard/accept", async (req: any, res) => {
         leaseId: inv.leaseId || null,
       });
 
-      onboardLog("accepted", { token: tokenFingerprint(token), inviteType: "tenant", inviteId: token });
+      onboardLog("accept_succeeded", { token: tokenFingerprint(token), inviteType: "tenant", inviteId: token });
       return res.json({
         ok: true,
         accepted: true,
@@ -930,10 +940,10 @@ router.post("/onboard/accept", async (req: any, res) => {
       });
     }
 
-    onboardLog("failed", { token: tokenFingerprint(token), inviteType: resolved.inviteType });
+    onboardLog("accept_failed", { token: tokenFingerprint(token), inviteType: resolved.inviteType });
     return res.status(400).json({ ok: false, code: "unsupported", message: "Unsupported invite type." });
   } catch (err: any) {
-    onboardLog("failed", {
+    onboardLog("accept_failed", {
       token: tokenFingerprint(token),
       message: String(err?.message || err),
     });

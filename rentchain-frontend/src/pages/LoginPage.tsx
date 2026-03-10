@@ -7,6 +7,8 @@ import { Card, Input, Button } from "../components/ui/Ui";
 import { DEBUG_AUTH_KEY, JUST_LOGGED_IN_KEY } from "../lib/authKeys";
 import { getAuthToken } from "../lib/authToken";
 import { useToast } from "../components/ui/ToastProvider";
+import { resolvePostAuthDestination } from "../lib/authDestination";
+import { trackAuthEvent } from "../lib/authAnalytics";
 
 export const LoginPage: React.FC = () => {
   const { login, loginDemo, user, isLoading, isTwoFactorRequired } = useAuth();
@@ -19,17 +21,29 @@ export const LoginPage: React.FC = () => {
   const expired = searchParams.get("reason") === "expired";
 
   const nextPath = React.useMemo(() => {
-    if (!rawNext) return "/dashboard";
-    try {
-      const decoded = decodeURIComponent(rawNext);
-      if (decoded.startsWith("/")) return decoded;
-      return "/dashboard";
-    } catch {
-      return "/dashboard";
+    const resolved = resolvePostAuthDestination({
+      search: location.search,
+      role: String(user?.actorRole || user?.role || "").toLowerCase() || undefined,
+      fallback: "/dashboard",
+    });
+    trackAuthEvent("auth.destination.resolved", {
+      source: "login",
+      resultSource: resolved.source,
+      destination: resolved.destination,
+      usedFallback: resolved.usedFallback,
+    });
+    if (resolved.usedFallback) {
+      trackAuthEvent("auth.destination.fallback_used", {
+        source: "login",
+        destination: resolved.destination,
+      });
     }
-  }, [rawNext]);
+    return resolved.destination;
+  }, [location.search, user?.actorRole, user?.role]);
   const isContractorInviteFlow =
-    nextPath.startsWith("/contractor/invite/") || nextPath.startsWith("/contractor/signup?invite=");
+    nextPath.startsWith("/contractor/invite/") ||
+    nextPath.startsWith("/contractor/signup?invite=") ||
+    nextPath.startsWith("/auth/onboard?");
 
   const defaultEmail = import.meta.env.DEV ? "demo@rentchain.dev" : "";
   const [email, setEmail] = useState(defaultEmail);
@@ -77,6 +91,11 @@ export const LoginPage: React.FC = () => {
       }
       await Promise.resolve();
       await new Promise((resolve) => setTimeout(resolve, 150));
+      if (nextPath.startsWith("/auth/onboard")) {
+        trackAuthEvent("auth.onboard.password_login_completed", {
+          destination: nextPath,
+        });
+      }
       navigate(nextPath, { replace: true });
     } catch (err: any) {
       setError(err?.message || "Demo login failed");
@@ -120,6 +139,11 @@ export const LoginPage: React.FC = () => {
       }
       await Promise.resolve();
       await new Promise((resolve) => setTimeout(resolve, 150));
+      if (nextPath.startsWith("/auth/onboard")) {
+        trackAuthEvent("auth.onboard.password_login_completed", {
+          destination: nextPath,
+        });
+      }
       navigate(nextPath, { replace: true });
     } catch (err: unknown) {
       const message =

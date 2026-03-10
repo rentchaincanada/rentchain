@@ -212,6 +212,12 @@ const LegacyQueryInviteRedirect: React.FC<{ source?: string }> = ({ source }) =>
   return <Navigate to={onboardPath(token, source)} replace />;
 };
 
+const LegacyTenantMagicRedirect: React.FC = () => {
+  const location = useLocation();
+  const query = String(location.search || "");
+  return <Navigate to={`/auth/magic${query}`} replace />;
+};
+
 function App() {
   const applicantApplyRedirects = [
     "/applicant/apply",
@@ -238,6 +244,10 @@ function App() {
         />
         <Route
           path="/tenant/magic"
+          element={TENANT_PORTAL_ENABLED ? <LegacyTenantMagicRedirect /> : <TenantPortalComingSoon />}
+        />
+        <Route
+          path="/auth/magic"
           element={TENANT_PORTAL_ENABLED ? <TenantMagicRedeemPage /> : <TenantPortalComingSoon />}
         />
         <Route path="/2fa" element={<TwoFactorPage />} />
