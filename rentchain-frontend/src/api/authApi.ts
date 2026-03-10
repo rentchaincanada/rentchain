@@ -84,12 +84,21 @@ export async function login(
 export async function signup(
   email: string,
   password: string,
-  fullName?: string
+  fullName?: string,
+  opts?: { inviteToken?: string; inviteSource?: string }
 ): Promise<LoginResponse> {
+  const inviteToken = String(opts?.inviteToken || "").trim();
+  const inviteSource = String(opts?.inviteSource || "").trim().toLowerCase();
   const response = await apiJson<LoginResponse>("/api/auth/signup", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password, fullName }),
+    body: JSON.stringify({
+      email,
+      password,
+      fullName,
+      inviteToken: inviteToken || undefined,
+      inviteSource: inviteSource || undefined,
+    }),
   });
   const token = (response as any)?.token;
   if (!token) throw new Error("Token missing from signup response");
