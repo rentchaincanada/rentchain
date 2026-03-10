@@ -101,6 +101,7 @@ function normalizeUserRole(req: any): string {
 }
 
 function onboardLog(event: string, extra?: Record<string, unknown>) {
+  // Operator verification: filter Cloud Run logs by `auth.onboard.` prefix.
   console.info(`[auth.onboard.${event}]`, extra || {});
 }
 
@@ -732,7 +733,7 @@ router.post("/onboard/accept", async (req: any, res) => {
           code: "wrong_account",
           expectedEmail: resolved.email,
           maskedExpectedEmail: resolved.maskedEmail,
-          message: "This invite belongs to a different account.",
+          message: "This invite belongs to a different exact email address.",
         });
       }
       if (resolved.email && resolved.email !== userEmail) {
@@ -742,7 +743,7 @@ router.post("/onboard/accept", async (req: any, res) => {
           code: "wrong_account",
           expectedEmail: resolved.email,
           maskedExpectedEmail: resolved.maskedEmail,
-          message: "This invite belongs to a different account.",
+          message: "This invite belongs to a different exact email address.",
         });
       }
 
@@ -855,7 +856,7 @@ router.post("/onboard/accept", async (req: any, res) => {
           code: "wrong_account",
           expectedEmail: resolved.email,
           maskedExpectedEmail: resolved.maskedEmail,
-          message: "This invite belongs to a different account.",
+          message: "This invite belongs to a different exact email address.",
         });
       }
 

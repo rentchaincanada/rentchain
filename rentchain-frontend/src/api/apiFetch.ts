@@ -20,6 +20,13 @@ function shouldRedirectToLogin() {
   return !isPublicRoutePath(window.location.pathname);
 }
 
+function isTenantApiPath(pathLike: string): boolean {
+  const raw = String(pathLike || "").trim();
+  if (!raw) return false;
+  const path = raw.startsWith("/") ? raw : `/${raw}`;
+  return /^\/(?:api\/)?tenant(?:\/|$)/.test(path);
+}
+
 export async function apiFetch<T = any>(
   path: string,
   init: ApiFetchInit = {}
@@ -62,11 +69,7 @@ export async function apiFetch<T = any>(
   } catch {
     // ignore parse errors
   }
-  const isTenantPath =
-    pathForMatch === "/tenant" ||
-    pathForMatch === "/api/tenant" ||
-    pathForMatch.startsWith("/tenant/") ||
-    pathForMatch.startsWith("/api/tenant/");
+  const isTenantPath = isTenantApiPath(pathForMatch);
   const firebaseToken = !isTenantPath ? await getFirebaseIdToken() : null;
   const rawToken = isTenantPath ? getTenantToken() : getAuthToken();
   const token = typeof rawToken === "string" ? rawToken.trim() : rawToken;

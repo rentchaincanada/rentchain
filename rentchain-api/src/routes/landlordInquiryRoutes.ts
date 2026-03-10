@@ -6,6 +6,7 @@ import { requireAuth } from "../middleware/requireAuth";
 import { rateLimitLeads } from "../middleware/rateLimit";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 import { sendEmail } from "../services/emailService";
+import { getEnvFlags } from "../config/requiredEnv";
 const publicRouter = Router();
 const adminRouter = Router();
 
@@ -42,11 +43,25 @@ function resolveFrontendBase(): string {
   return base.replace(/\/$/, "");
 }
 
-function getSendgridConfig() {
-  const apiKey = process.env.SENDGRID_API_KEY;
+function getEmailDeliveryConfig() {
   const from =
-    process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM || process.env.FROM_EMAIL;
-  return { apiKey, from };
+    process.env.EMAIL_FROM ||
+    process.env.FROM_EMAIL ||
+    process.env.SENDGRID_FROM_EMAIL ||
+    process.env.SENDGRID_FROM;
+  const envFlags = getEnvFlags();
+  return {
+    from,
+    emailProvider: envFlags.emailProvider,
+  };
+}
+
+function maskEmail(value: string): string {
+  const email = String(value || "").trim().toLowerCase();
+  const [local, domain] = email.split("@");
+  if (!local || !domain) return "***";
+  if (local.length <= 2) return `${local[0] || "*"}*@${domain}`;
+  return `${local.slice(0, 2)}***@${domain}`;
 }
 
 function checkLeadRateLimit(key: string) {
@@ -178,17 +193,31 @@ async function approveLeadById(leadId: string, req: any, res: any) {
   const inviteUrl = `${baseUrl}/invite/${token}`;
   const loginUrl = `${baseUrl}/login`;
 
-  const { apiKey, from } = getSendgridConfig();
-  if (!apiKey || !from) {
-    return res.json({ ok: true, inviteUrl, emailed: false, emailError: "SendGrid not configured" });
+  const { from, emailProvider } = getEmailDeliveryConfig();
+  if (!from) {
+    console.info("[landlord-inquiry] approval notification skipped", {
+      leadId,
+      to: maskEmail(email),
+      emailProvider,
+      reason: "missing_from",
+    });
+    return res.json({ ok: true, inviteUrl, emailed: false, emailError: "EMAIL_NOT_CONFIGURED" });
   }
 
+  const correlationId = `landlord_approval_${now.toString(36)}_${leadId.slice(0, 6)}`;
   try {
     const subject = "Your RentChain landlord access is approved";
     const actionUrl = userId ? loginUrl : inviteUrl;
     const intro = userId
       ? "Your landlord access has been approved."
       : "Your landlord access has been approved. Your invite expires in 7 days.";
+    console.info("[landlord-inquiry] approval notification attempted", {
+      leadId,
+      correlationId,
+      to: maskEmail(email),
+      emailProvider,
+      hasExistingUser: Boolean(userId),
+    });
     await sendEmail({
       to: email,
       from: from as string,
@@ -205,9 +234,21 @@ async function approveLeadById(leadId: string, req: any, res: any) {
         ctaUrl: actionUrl,
       }),
     });
+    console.info("[landlord-inquiry] approval notification sent", {
+      leadId,
+      correlationId,
+      to: maskEmail(email),
+      emailProvider,
+    });
     return res.json({ ok: true, inviteUrl, emailed: true });
   } catch (err: any) {
-    console.error("[landlord-inquiry] invite email failed", err?.message || err);
+    console.error("[landlord-inquiry] approval notification failed", {
+      leadId,
+      correlationId,
+      to: maskEmail(email),
+      emailProvider,
+      message: err?.message || String(err),
+    });
     return res.json({
       ok: true,
       inviteUrl,
@@ -303,8 +344,14 @@ publicRouter.post(
       { merge: true }
     );
 
-    const { apiKey, from } = getSendgridConfig();
-    if (!apiKey || !from) {
+    const { from, emailProvider } = getEmailDeliveryConfig();
+    if (!from) {
+      console.info("[landlord-inquiry] request notifications skipped", {
+        leadId: id,
+        leadEmail: maskEmail(email),
+        emailProvider,
+        reason: "missing_from",
+      });
       return res.json({ ok: true, emailed: false, adminNotified: false });
     }
 
@@ -325,7 +372,14 @@ publicRouter.post(
 
     let emailed = false;
     let adminNotified = false;
+    const leadAckCorrelationId = `lead_ack_${now.toString(36)}_${id.slice(0, 6)}`;
     try {
+      console.info("[landlord-inquiry] lead acknowledgement attempted", {
+        leadId: id,
+        correlationId: leadAckCorrelationId,
+        to: maskEmail(email),
+        emailProvider,
+      });
       await sendEmail({
         to: email,
         from: from as string,
@@ -343,12 +397,31 @@ publicRouter.post(
         }),
       });
       emailed = true;
+      console.info("[landlord-inquiry] lead acknowledgement sent", {
+        leadId: id,
+        correlationId: leadAckCorrelationId,
+        to: maskEmail(email),
+        emailProvider,
+      });
     } catch (err: any) {
-      console.error("[landlord-inquiry] lead email failed", err?.message || err);
+      console.error("[landlord-inquiry] lead acknowledgement failed", {
+        leadId: id,
+        correlationId: leadAckCorrelationId,
+        to: maskEmail(email),
+        emailProvider,
+        message: err?.message || String(err),
+      });
     }
 
     try {
       if (admins.length) {
+        const adminNotifyCorrelationId = `lead_admin_${now.toString(36)}_${id.slice(0, 6)}`;
+        console.info("[landlord-inquiry] admin notification attempted", {
+          leadId: id,
+          correlationId: adminNotifyCorrelationId,
+          adminCount: admins.length,
+          emailProvider,
+        });
         await sendEmail({
           to: admins,
           from: from as string,
@@ -363,9 +436,19 @@ publicRouter.post(
           }),
         });
         adminNotified = true;
+        console.info("[landlord-inquiry] admin notification sent", {
+          leadId: id,
+          correlationId: adminNotifyCorrelationId,
+          adminCount: admins.length,
+          emailProvider,
+        });
       }
     } catch (err: any) {
-      console.error("[landlord-inquiry] admin email failed", err?.message || err);
+      console.error("[landlord-inquiry] admin notification failed", {
+        leadId: id,
+        emailProvider,
+        message: err?.message || String(err),
+      });
     }
 
     return res.json({ ok: true, emailed, adminNotified });
