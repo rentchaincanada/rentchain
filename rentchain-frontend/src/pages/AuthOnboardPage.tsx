@@ -442,7 +442,7 @@ const AuthOnboardPage: React.FC = () => {
           <>
             <h1 style={{ margin: 0, color: text.primary, fontSize: "1.5rem" }}>Wrong account signed in</h1>
             <p style={{ margin: 0, color: text.muted }}>
-              This invite belongs to a different email address.
+              This invite must be accepted by the exact invited email address.
             </p>
             {wrongAccountMaskedEmail ? (
               <p style={{ margin: 0, color: text.muted }}>
