@@ -5,18 +5,21 @@ import { getAuthToken, getTenantToken } from "../lib/authToken";
 
 export type ApiError = Error & { status?: number; body?: any };
 
+function isTenantApiPath(pathLike: string): boolean {
+  const raw = String(pathLike || "").trim();
+  if (!raw) return false;
+  const path = raw.startsWith("/") ? raw : `/${raw}`;
+  return /^\/(?:api\/)?tenant(?:\/|$)/.test(path);
+}
+
 export async function apiFetch<T>(
   path: string,
   opts: RequestInit & { token?: string } = {}
 ): Promise<T> {
   warnIfFirebaseDomainMismatch();
-  const firebaseToken = await getFirebaseIdToken();
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  const isTenantPath =
-    normalizedPath === "/tenant" ||
-    normalizedPath.startsWith("/tenant/") ||
-    normalizedPath === "/api/tenant" ||
-    normalizedPath.startsWith("/api/tenant/");
+  const isTenantPath = isTenantApiPath(normalizedPath);
+  const firebaseToken = !isTenantPath ? await getFirebaseIdToken() : null;
   const explicitToken = (opts as any)?.token;
   const storedToken = isTenantPath ? getTenantToken() : getAuthToken();
   const token = explicitToken || storedToken;

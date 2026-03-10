@@ -85,7 +85,7 @@ export async function getTenantMe(): Promise<TenantProfile> {
 }
 
 export async function getTenantLease(): Promise<TenantLease> {
-  const res = await apiFetch<any>("tenant/lease");
+  const res = await apiFetch<any>("/tenant/lease");
   if (res?.lease && typeof res.lease === "object") {
     return res.lease as TenantLease;
   }
@@ -93,19 +93,19 @@ export async function getTenantLease(): Promise<TenantLease> {
 }
 
 export async function getTenantPayments(): Promise<TenantPayment[]> {
-  return apiFetch<TenantPayment[]>("tenant/payments");
+  return apiFetch<TenantPayment[]>("/tenant/payments");
 }
 
 export async function getTenantLedger(): Promise<TenantLedgerEntry[]> {
-  return apiFetch<TenantLedgerEntry[]>("tenant/ledger");
+  return apiFetch<TenantLedgerEntry[]>("/tenant/ledger");
 }
 
 export async function getTenantDocuments(): Promise<TenantDocument[]> {
-  return apiFetch<TenantDocument[]>("tenant/documents");
+  return apiFetch<TenantDocument[]>("/tenant/documents");
 }
 
 export async function getTenantPaymentsSummary(): Promise<TenantPaymentsSummary> {
-  return apiFetch<TenantPaymentsSummary>("tenant/payments/summary");
+  return apiFetch<TenantPaymentsSummary>("/tenant/payments/summary");
 }
 
 export interface TenantRentCharge {
@@ -120,11 +120,11 @@ export interface TenantRentCharge {
 }
 
 export async function getTenantRentCharges(): Promise<TenantRentCharge[]> {
-  return apiFetch<TenantRentCharge[]>("tenant/rent-charges");
+  return apiFetch<TenantRentCharge[]>("/tenant/rent-charges");
 }
 
 export async function confirmTenantRentCharge(id: string): Promise<{ ok: boolean; confirmedAt?: string }> {
-  return apiFetch<{ ok: boolean; confirmedAt?: string }>(`tenant/rent-charges/${encodeURIComponent(id)}/confirm`, {
+  return apiFetch<{ ok: boolean; confirmedAt?: string }>(`/tenant/rent-charges/${encodeURIComponent(id)}/confirm`, {
     method: "POST",
   });
 }

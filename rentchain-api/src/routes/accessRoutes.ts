@@ -31,6 +31,14 @@ function makeCorrelationId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${crypto.randomBytes(3).toString("hex")}`;
 }
 
+function maskEmail(value: string): string {
+  const email = String(value || "").trim().toLowerCase();
+  const [local, domain] = email.split("@");
+  if (!local || !domain) return "***";
+  if (local.length <= 2) return `${local[0] || "*"}*@${domain}`;
+  return `${local.slice(0, 2)}***@${domain}`;
+}
+
 router.post("/request", async (req: any, res) => {
   res.setHeader("x-route-source", "accessRoutes.ts");
   const email = normEmail(req.body?.email || "");
@@ -69,8 +77,15 @@ router.post("/request", async (req: any, res) => {
   let adminNotified = false;
 
   if (from) {
+    const correlationId = makeCorrelationId("access_ack");
     try {
       const baseUrl = resolveFrontendBase();
+      console.info("[access/request] lead acknowledgement attempted", {
+        correlationId,
+        leadId,
+        to: maskEmail(email),
+        emailProvider: envFlags.emailProvider,
+      });
       await sendEmail({
         to: email,
         from: from as string,
@@ -88,17 +103,49 @@ router.post("/request", async (req: any, res) => {
         }),
       });
       emailed = true;
+      console.info("[access/request] lead acknowledgement sent", {
+        correlationId,
+        leadId,
+        to: maskEmail(email),
+        emailProvider: envFlags.emailProvider,
+      });
     } catch {
       emailed = false;
+      console.error("[access/request] lead acknowledgement failed", {
+        correlationId,
+        leadId,
+        to: maskEmail(email),
+        emailProvider: envFlags.emailProvider,
+      });
     }
+  } else {
+    console.info("[access/request] lead acknowledgement skipped", {
+      leadId,
+      to: maskEmail(email),
+      emailProvider: envFlags.emailProvider,
+      reason: "missing_from",
+    });
   }
 
   if (admins.length > 0) {
     const correlationId = makeCorrelationId("access_admin");
-    if (!envFlags.emailConfigured || !from) {
+    if (!from) {
       emailError = "EMAIL_NOT_CONFIGURED";
+      console.info("[access/request] admin notification skipped", {
+        correlationId,
+        leadId,
+        adminCount: admins.length,
+        emailProvider: envFlags.emailProvider,
+        reason: "missing_from",
+      });
     } else {
       try {
+        console.info("[access/request] admin notification attempted", {
+          correlationId,
+          leadId,
+          adminCount: admins.length,
+          emailProvider: envFlags.emailProvider,
+        });
         await sendEmail({
           to: admins,
           from: from as string,
@@ -119,6 +166,12 @@ router.post("/request", async (req: any, res) => {
         });
         adminNotified = true;
         emailed = true;
+        console.info("[access/request] admin notification sent", {
+          correlationId,
+          leadId,
+          adminCount: admins.length,
+          emailProvider: envFlags.emailProvider,
+        });
       } catch (err: any) {
         adminNotified = false;
         emailed = false;

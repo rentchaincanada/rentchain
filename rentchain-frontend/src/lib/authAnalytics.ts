@@ -21,6 +21,12 @@ export function fingerprintToken(token: string | null | undefined): string {
   return `${value.slice(0, 6)}…${value.slice(-4)}`;
 }
 
+/**
+ * Operator verification notes:
+ * - Frontend local inspection: listen for `rentchain:auth-analytics` in browser devtools.
+ * - Backend production inspection: filter Cloud Run logs for `auth.onboard.` events.
+ * Privacy: raw tokens/password fields are redacted before emission.
+ */
 export function trackAuthEvent(event: string, payload: AuthAnalyticsPayload = {}) {
   const safePayload = redactPayload(payload);
   if (import.meta.env.DEV) {
@@ -34,4 +40,3 @@ export function trackAuthEvent(event: string, payload: AuthAnalyticsPayload = {}
     );
   }
 }
-

@@ -21,6 +21,7 @@ import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemp
 const router = Router();
 
 function authEvent(event: string, payload: Record<string, unknown>) {
+  // Operator verification: filter Cloud Run logs by `auth.onboard.` prefix.
   console.info(`[auth.onboard.${event}]`, payload);
 }
 
@@ -28,6 +29,24 @@ function tokenFingerprint(token: string) {
   const value = String(token || "").trim();
   if (!value) return "none";
   return `${value.slice(0, 6)}…${value.slice(-4)}`;
+}
+
+function maskEmail(value: string): string {
+  const email = String(value || "").trim().toLowerCase();
+  const [local, domain] = email.split("@");
+  if (!local || !domain) return "***";
+  if (local.length <= 2) return `${local[0] || "*"}*@${domain}`;
+  return `${local.slice(0, 2)}***@${domain}`;
+}
+
+function resolveEmailFromAddress(): string {
+  return String(
+    process.env.EMAIL_FROM ||
+      process.env.FROM_EMAIL ||
+      process.env.SENDGRID_FROM_EMAIL ||
+      process.env.SENDGRID_FROM ||
+      ""
+  ).trim();
 }
 
 router.get("/health", (_req, res) => {
@@ -1010,6 +1029,9 @@ router.post("/tenant/messages/conversation/:id/read", authenticateJwt, requireTe
  */
 router.post("/tenant/auth/magic-link", async (req: any, res) => {
   res.setHeader("x-route-source", "publicRoutes.ts");
+  const correlationId = `tenant_magic_req_${Date.now().toString(36)}_${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
   try {
     const emailRaw = String(req.body?.email || "").trim().toLowerCase();
     const nextRaw = String(req.body?.next || "").trim();
@@ -1017,12 +1039,27 @@ router.post("/tenant/auth/magic-link", async (req: any, res) => {
       nextRaw && (nextRaw.startsWith("/tenant") || nextRaw.startsWith("/auth/onboard") || nextRaw.startsWith("tenant"))
         ? nextRaw
         : null;
+    console.info("[tenant magic-link] request received", {
+      correlationId,
+      email: maskEmail(emailRaw),
+      hasNext: Boolean(next),
+    });
     if (!emailRaw || !emailRaw.includes("@")) {
+      console.info("[tenant magic-link] send skipped", {
+        correlationId,
+        reason: "invalid_email_format",
+      });
       return res.json({ ok: true });
     }
 
+    // Exact-email lookup by design; aliases are treated as separate identities.
     const tenantSnap = await db.collection("tenants").where("email", "==", emailRaw).limit(1).get();
     if (tenantSnap.empty) {
+      console.info("[tenant magic-link] send skipped", {
+        correlationId,
+        email: maskEmail(emailRaw),
+        reason: "tenant_not_found_exact_email",
+      });
       return res.json({ ok: true });
     }
     const tenantDoc = tenantSnap.docs[0];
@@ -1046,42 +1083,67 @@ router.post("/tenant/auth/magic-link", async (req: any, res) => {
       tokenFingerprint: tokenFingerprint(token),
     });
 
-    const apiKey = process.env.SENDGRID_API_KEY;
-    const from =
-      process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM || process.env.FROM_EMAIL;
-    if (apiKey && from) {
-      try {
-        const baseUrl = (process.env.PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
-        const link = `${baseUrl}/auth/magic?token=${encodeURIComponent(token)}${
-          next ? `&next=${encodeURIComponent(next)}` : ""
-        }`;
-        const subject = "Your RentChain login link";
-        const text = buildEmailText({
-          intro: "Use this secure link to sign in to your RentChain tenant portal. This link expires in 15 minutes and can be used once.",
-          ctaText: "Sign in",
-          ctaUrl: link,
-        });
-        const html = buildEmailHtml({
-          title: "Your RentChain login link",
-          intro: "Use this secure link to sign in to your tenant portal. This link expires in 15 minutes and can be used once.",
-          ctaText: "Sign in",
-          ctaUrl: link,
-        });
-        await sendEmail({
-          to: emailRaw,
-          from: from as string,
-          subject,
-          text,
-          html,
-        });
-      } catch (e: any) {
-        console.error("[tenant magic-link] email send failed", e?.message || e);
-      }
+    const envFlags = getEnvFlags();
+    const from = resolveEmailFromAddress();
+    if (!from) {
+      console.info("[tenant magic-link] send skipped", {
+        correlationId,
+        email: maskEmail(emailRaw),
+        emailProvider: envFlags.emailProvider,
+        reason: "missing_from",
+      });
+      return res.json({ ok: true });
+    }
+
+    try {
+      const baseUrl = (process.env.PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
+      const link = `${baseUrl}/auth/magic?token=${encodeURIComponent(token)}${
+        next ? `&next=${encodeURIComponent(next)}` : ""
+      }`;
+      const subject = "Your RentChain login link";
+      const text = buildEmailText({
+        intro: "Use this secure link to sign in to your RentChain tenant portal. This link expires in 15 minutes and can be used once.",
+        ctaText: "Sign in",
+        ctaUrl: link,
+      });
+      const html = buildEmailHtml({
+        title: "Your RentChain login link",
+        intro: "Use this secure link to sign in to your tenant portal. This link expires in 15 minutes and can be used once.",
+        ctaText: "Sign in",
+        ctaUrl: link,
+      });
+      console.info("[tenant magic-link] send attempted", {
+        correlationId,
+        email: maskEmail(emailRaw),
+        emailProvider: envFlags.emailProvider,
+      });
+      await sendEmail({
+        to: emailRaw,
+        from: from as string,
+        subject,
+        text,
+        html,
+      });
+      console.info("[tenant magic-link] send success", {
+        correlationId,
+        email: maskEmail(emailRaw),
+        emailProvider: envFlags.emailProvider,
+      });
+    } catch (e: any) {
+      console.error("[tenant magic-link] send failed", {
+        correlationId,
+        email: maskEmail(emailRaw),
+        emailProvider: envFlags.emailProvider,
+        message: e?.message || String(e),
+      });
     }
 
     return res.json({ ok: true });
   } catch (err) {
-    console.error("[tenant magic-link] request error", err);
+    console.error("[tenant magic-link] request error", {
+      correlationId,
+      message: (err as any)?.message || String(err),
+    });
     return res.json({ ok: true });
   }
 });
