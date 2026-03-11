@@ -54,6 +54,13 @@ export async function markTenantMessagesReadAll() {
   });
 }
 
+export async function markTenantMaintenanceUpdateRead(requestId: string) {
+  return tenantApiFetch<{ ok: boolean }>(`/tenant/messages/maintenance/${encodeURIComponent(requestId)}/read`, {
+    method: "POST",
+  });
+}
+
 export async function getTenantCommunicationSummary() {
   return tenantApiFetch<TenantCommunicationSummary>("/tenant/communication/summary");
 }
+

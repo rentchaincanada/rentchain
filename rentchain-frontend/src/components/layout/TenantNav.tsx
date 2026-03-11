@@ -27,6 +27,7 @@ const navItems = [
   { label: "Activity", to: "/tenant/activity" },
   { label: "Ledger", to: "/tenant/ledger" },
   { label: "Documents", to: "/tenant/attachments" },
+  { label: "Maintenance", to: "/tenant/maintenance" },
   { label: "Messages", to: "/tenant/messages" },
   { label: "Notices", to: "/tenant/notices" },
   { label: "Profile", to: "/tenant/profile" },

@@ -65,6 +65,8 @@ import TenantProfilePage from "./pages/tenant/TenantProfilePage";
 import TenantAccountPage from "./pages/tenant/TenantAccountPage";
 import TenantMagicRedeemPage from "./pages/tenant/TenantMagicRedeemPage";
 import TenantMaintenanceRequestDetailPage from "./pages/tenant/TenantMaintenanceRequestDetailPage";
+import TenantMaintenanceRequestsPage from "./pages/tenant/TenantMaintenanceRequestsPage";
+import TenantMaintenanceRequestNewPage from "./pages/tenant/TenantMaintenanceRequestNewPage";
 import MonthlyOpsReportPageWithNudge from "./pages/reports/MonthlyOpsReportPageWithNudge";
 import InvitesPage from "./pages/landlord/InvitesPage";
 import PublicApplyPage from "./pages/PublicApplyPage";
@@ -832,9 +834,39 @@ function App() {
           }
         />
         <Route
+          path="/tenant/maintenance"
+          element={
+            TENANT_PORTAL_ENABLED ? (
+              <TenantNav>
+                <TenantMaintenanceRequestsPage />
+              </TenantNav>
+            ) : (
+              <TenantPortalComingSoon />
+            )
+          }
+        />
+        <Route
+          path="/tenant/maintenance/new"
+          element={
+            TENANT_PORTAL_ENABLED ? (
+              <TenantNav>
+                <TenantMaintenanceRequestNewPage />
+              </TenantNav>
+            ) : (
+              <TenantPortalComingSoon />
+            )
+          }
+        />
+        <Route
           path="/tenant/maintenance/:id"
           element={
-            TENANT_PORTAL_ENABLED ? <TenantMaintenanceRequestDetailPage /> : <TenantPortalComingSoon />
+            TENANT_PORTAL_ENABLED ? (
+              <TenantNav>
+                <TenantMaintenanceRequestDetailPage />
+              </TenantNav>
+            ) : (
+              <TenantPortalComingSoon />
+            )
           }
         />
         {applicantApplyRedirects.map((path) => (
