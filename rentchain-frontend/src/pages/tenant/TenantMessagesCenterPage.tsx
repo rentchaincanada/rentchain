@@ -4,18 +4,18 @@ import { Card } from "../../components/ui/Ui";
 import {
   TenantCommunicationItem,
   getTenantMessages,
+  markTenantMaintenanceUpdateRead,
   markTenantMessageRead,
   markTenantMessagesReadAll,
 } from "../../api/tenantCommunicationsApi";
 import { colors, spacing, text as textTokens } from "../../styles/tokens";
 import { track } from "../../lib/analytics";
 
-type FilterKey = "all" | "unread" | "notice" | "message" | "maintenance_update";
+type FilterKey = "all" | "unread" | "message" | "maintenance_update";
 
 const filters: Array<{ key: FilterKey; label: string }> = [
   { key: "all", label: "All" },
   { key: "unread", label: "Unread" },
-  { key: "notice", label: "Notices" },
   { key: "message", label: "Messages" },
   { key: "maintenance_update", label: "Maintenance" },
 ];
@@ -39,9 +39,6 @@ function priorityTone(priority: TenantCommunicationItem["priority"]): string {
 }
 
 function relatedLink(item: TenantCommunicationItem): string | null {
-  if (item.relatedEntityType === "notice" && item.relatedEntityId) {
-    return `/tenant/notices/${item.relatedEntityId}`;
-  }
   if (item.relatedEntityType === "maintenance" && item.relatedEntityId) {
     return `/tenant/maintenance/${item.relatedEntityId}`;
   }
@@ -61,9 +58,9 @@ export default function TenantMessagesCenterPage() {
     setError(null);
     try {
       const res = await getTenantMessages();
-      setItems(Array.isArray(res?.items) ? res.items : []);
-      const first = (res?.items || [])[0];
-      setSelectedId(first?.id || null);
+      const nextItems = Array.isArray(res?.items) ? res.items : [];
+      setItems(nextItems);
+      setSelectedId((prev) => (prev && nextItems.some((item) => item.id === prev) ? prev : nextItems[0]?.id || null));
       track("tenant.messages.opened", {
         count: Array.isArray(res?.items) ? res.items.length : 0,
         unreadCount: Number(res?.unreadCount || 0),
@@ -92,10 +89,28 @@ export default function TenantMessagesCenterPage() {
     [filtered, selectedId]
   );
 
+  useEffect(() => {
+    if (!filtered.length) {
+      if (selectedId !== null) setSelectedId(null);
+      return;
+    }
+    if (!selectedId || !filtered.some((item) => item.id === selectedId)) {
+      setSelectedId(filtered[0].id);
+    }
+  }, [filtered, selectedId]);
+
   const markOneRead = async (item: TenantCommunicationItem) => {
     if (item.read) return;
     try {
-      await markTenantMessageRead(item.id);
+      if (item.type === "message") {
+        await markTenantMessageRead(item.id);
+      } else if (item.type === "maintenance_update") {
+        const requestId = item.relatedEntityId;
+        if (!requestId) return;
+        await markTenantMaintenanceUpdateRead(requestId);
+      } else {
+        return;
+      }
       setItems((prev) => prev.map((x) => (x.id === item.id ? { ...x, read: true } : x)));
       track("tenant.message.read", { id: item.id, type: item.type });
     } catch {
@@ -103,9 +118,9 @@ export default function TenantMessagesCenterPage() {
     }
   };
 
-  const onSelect = async (item: TenantCommunicationItem) => {
+  const onSelect = (item: TenantCommunicationItem) => {
     setSelectedId(item.id);
-    await markOneRead(item);
+    void markOneRead(item);
   };
 
   const markAll = async () => {
@@ -136,7 +151,7 @@ export default function TenantMessagesCenterPage() {
       >
         <div>
           <h1 style={{ margin: 0, color: textTokens.primary, fontSize: "1.4rem" }}>
-            Messages & Communication
+Messages & Maintenance Updates
           </h1>
           <div style={{ marginTop: 6, color: textTokens.muted }}>
             Unread: <strong>{unreadCount}</strong>
@@ -185,7 +200,7 @@ export default function TenantMessagesCenterPage() {
       {loading ? (
         <div style={{ color: textTokens.muted }}>Loading messages…</div>
       ) : filtered.length === 0 ? (
-        <div style={{ color: textTokens.muted }}>No communication items for this filter.</div>
+        <div style={{ color: textTokens.muted }}>No messages or maintenance updates for this filter.</div>
       ) : (
         <div
           style={{
@@ -308,3 +323,6 @@ export default function TenantMessagesCenterPage() {
     </Card>
   );
 }
+
+
+

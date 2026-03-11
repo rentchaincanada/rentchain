@@ -129,6 +129,22 @@ async function getNoticeReadMap(tenantId: string): Promise<Map<string, number>> 
   return map;
 }
 
+async function getMaintenanceReadMap(tenantId: string): Promise<Map<string, number>> {
+  const snap = await db
+    .collection("tenantMaintenanceReads")
+    .where("tenantId", "==", tenantId)
+    .limit(500)
+    .get();
+  const map = new Map<string, number>();
+  snap.docs.forEach((doc) => {
+    const data = (doc.data() as any) || {};
+    const requestId = String(data.requestId || "").trim();
+    const readAtMs = Number(data.readAtMs || 0);
+    if (requestId) map.set(requestId, readAtMs || Date.now());
+  });
+  return map;
+}
+
 async function buildTenantNoticeItems(tenantId: string): Promise<TenantCommunicationItem[]> {
   const [noticesSnap, readMap] = await Promise.all([
     db.collection("tenantNotices").where("tenantId", "==", tenantId).limit(100).get(),
@@ -208,7 +224,7 @@ async function buildTenantMessageItems(tenantId: string): Promise<TenantCommunic
 async function buildTenantMaintenanceUpdateItems(tenantId: string): Promise<TenantCommunicationItem[]> {
   const [maintSnap, readMap] = await Promise.all([
     db.collection("maintenanceRequests").where("tenantId", "==", tenantId).limit(50).get(),
-    getMessageReadMap(tenantId),
+    getMaintenanceReadMap(tenantId),
   ]);
   const highStatuses = new Set(["URGENT", "BLOCKED", "CANCELLED"]);
 
@@ -216,16 +232,15 @@ async function buildTenantMaintenanceUpdateItems(tenantId: string): Promise<Tena
     const data = (doc.data() as any) || {};
     const status = String(data.status || "NEW").toUpperCase();
     const createdAtMs = toMillis(data.updatedAt ?? data.createdAt) ?? Date.now();
-    const syntheticId = `maintenance_${doc.id}_${createdAtMs}`;
     const title = `Maintenance update: ${String(data.title || "Request").trim() || "Request"}`;
     const body = `Status: ${status}${data.landlordNote ? ` — ${String(data.landlordNote)}` : ""}`;
     return {
-      id: syntheticId,
+      id: `maintenance_${doc.id}`,
       type: "maintenance_update" as const,
       title,
       body,
       createdAt: isoFromMs(createdAtMs),
-      read: readMap.has(syntheticId),
+      read: readMap.has(doc.id),
       priority: highStatuses.has(status) ? ("high" as const) : ("normal" as const),
       fromLabel: "Maintenance Team" as const,
       relatedEntityType: "maintenance" as const,
@@ -566,16 +581,21 @@ router.post("/messages/read-all", requireTenant, async (req: any, res) => {
     const tenantId = String(req.user?.tenantId || "").trim();
     if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
 
-    const items = await buildTenantMessageItems(tenantId);
-    const unread = items.filter((item) => !item.read).slice(0, 400);
-    if (!unread.length) {
+    const [messageItems, maintenanceItems] = await Promise.all([
+      buildTenantMessageItems(tenantId),
+      buildTenantMaintenanceUpdateItems(tenantId),
+    ]);
+    const unreadMessages = messageItems.filter((item) => !item.read).slice(0, 400);
+    const unreadMaintenance = maintenanceItems.filter((item) => !item.read).slice(0, 400);
+    const totalUnread = unreadMessages.length + unreadMaintenance.length;
+    if (!totalUnread) {
       console.info("[tenant.messages.read_all]", { tenantId, count: 0 });
       return res.json({ ok: true, updated: 0 });
     }
 
     const batch = db.batch();
     const now = Date.now();
-    unread.forEach((item) => {
+    unreadMessages.forEach((item) => {
       const ref = db.collection("tenantMessageReads").doc(`${tenantId}_${item.id}`);
       batch.set(
         ref,
@@ -588,9 +608,24 @@ router.post("/messages/read-all", requireTenant, async (req: any, res) => {
         { merge: true }
       );
     });
+    unreadMaintenance.forEach((item) => {
+      const requestId = String(item.relatedEntityId || "").trim();
+      if (!requestId) return;
+      const ref = db.collection("tenantMaintenanceReads").doc(`${tenantId}_${requestId}`);
+      batch.set(
+        ref,
+        {
+          tenantId,
+          requestId,
+          readAtMs: now,
+          createdAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    });
     await batch.commit();
-    console.info("[tenant.messages.read_all]", { tenantId, count: unread.length });
-    return res.json({ ok: true, updated: unread.length });
+    console.info("[tenant.messages.read_all]", { tenantId, count: totalUnread });
+    return res.json({ ok: true, updated: totalUnread });
   } catch (err: any) {
     console.error("[tenant/messages/read-all] failed", {
       tenantId: req.user?.tenantId,
@@ -627,6 +662,43 @@ router.post("/messages/:id/read", requireTenant, async (req: any, res) => {
       message: err?.message || "failed",
     });
     return res.status(500).json({ ok: false, error: "TENANT_MESSAGE_READ_FAILED" });
+  }
+});
+
+router.post("/messages/maintenance/:requestId/read", requireTenant, async (req: any, res) => {
+  try {
+    const tenantId = String(req.user?.tenantId || "").trim();
+    const requestId = String(req.params?.requestId || "").trim();
+    if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    if (!requestId) return res.status(400).json({ ok: false, error: "REQUEST_ID_REQUIRED" });
+
+    const maintenanceDoc = await db.collection("maintenanceRequests").doc(requestId).get();
+    if (!maintenanceDoc.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    const maintenanceData = (maintenanceDoc.data() as any) || {};
+    if (maintenanceData.tenantId && maintenanceData.tenantId !== tenantId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const ref = db.collection("tenantMaintenanceReads").doc(`${tenantId}_${requestId}`);
+    await ref.set(
+      {
+        tenantId,
+        requestId,
+        readAtMs: Date.now(),
+        createdAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    console.info("[tenant.maintenance.read]", { tenantId, requestId });
+    return res.json({ ok: true });
+  } catch (err: any) {
+    console.error("[tenant/messages/maintenance/:requestId/read] failed", {
+      tenantId: req.user?.tenantId,
+      requestId: req.params?.requestId,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_MAINTENANCE_READ_FAILED" });
   }
 });
 
@@ -1327,3 +1399,4 @@ router.get("/maintenance-requests/:id", requireTenant, async (req: any, res) => 
 });
 
 export default router;
+
