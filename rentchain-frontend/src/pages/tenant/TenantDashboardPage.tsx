@@ -564,27 +564,6 @@ export default function TenantDashboardPage() {
               ) : null}
               <button
                 type="button"
-                onClick={() => {
-                  clearTenantToken();
-                  if (typeof window !== "undefined") {
-                    const next = encodeURIComponent("/tenant");
-                    window.location.href = `/tenant/login?next=${next}`;
-                  }
-                }}
-                style={{
-                  padding: "8px 12px",
-                  borderRadius: radius.md,
-                  border: `1px solid ${colors.border}`,
-                  background: colors.card,
-                  cursor: "pointer",
-                  fontWeight: 700,
-                  color: textTokens.primary,
-                }}
-              >
-                Sign out
-              </button>
-              <button
-                type="button"
                 onClick={() => void loadAll()}
                 disabled={refreshing}
                 style={{
