@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { authenticateJwt } from "../middleware/authMiddleware";
-import { db } from "../config/firebase";
+import { db, FieldValue } from "../config/firebase";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 import { sendEmail } from "../services/emailService";
 import { getEnvFlags } from "../config/requiredEnv";
@@ -59,6 +59,181 @@ function timestampToSort(value: any): number {
   if (typeof value?.toMillis === "function") return value.toMillis();
   if (typeof value?.seconds === "number") return value.seconds * 1000;
   return 0;
+}
+
+type TenantCommunicationType = "notice" | "message" | "maintenance_update" | "system";
+
+type TenantCommunicationItem = {
+  id: string;
+  type: TenantCommunicationType;
+  title: string;
+  body: string;
+  createdAt: string;
+  read: boolean;
+  priority: "low" | "normal" | "high";
+  fromLabel: "Landlord" | "RentChain" | "Maintenance Team";
+  relatedEntityType: "notice" | "maintenance" | "message" | null;
+  relatedEntityId: string | null;
+};
+
+function isoFromMs(ms: number | null | undefined): string {
+  const safe = typeof ms === "number" && Number.isFinite(ms) ? ms : Date.now();
+  return new Date(safe).toISOString();
+}
+
+function truncateText(value: any, max = 220): string {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  if (text.length <= max) return text;
+  return `${text.slice(0, max - 1)}…`;
+}
+
+async function getTenantConversationIds(tenantId: string): Promise<string[]> {
+  const snap = await db
+    .collection("conversations")
+    .where("tenantId", "==", tenantId)
+    .limit(20)
+    .get();
+  return snap.docs.map((doc) => doc.id);
+}
+
+async function getMessageReadMap(tenantId: string): Promise<Map<string, number>> {
+  const snap = await db
+    .collection("tenantMessageReads")
+    .where("tenantId", "==", tenantId)
+    .limit(500)
+    .get();
+  const map = new Map<string, number>();
+  snap.docs.forEach((doc) => {
+    const data = (doc.data() as any) || {};
+    const messageId = String(data.messageId || "").trim();
+    const readAtMs = Number(data.readAtMs || 0);
+    if (messageId) map.set(messageId, readAtMs || Date.now());
+  });
+  return map;
+}
+
+async function getNoticeReadMap(tenantId: string): Promise<Map<string, number>> {
+  const snap = await db
+    .collection("tenantNoticeReads")
+    .where("tenantId", "==", tenantId)
+    .limit(500)
+    .get();
+  const map = new Map<string, number>();
+  snap.docs.forEach((doc) => {
+    const data = (doc.data() as any) || {};
+    const noticeId = String(data.noticeId || "").trim();
+    const readAtMs = Number(data.readAtMs || 0);
+    if (noticeId) map.set(noticeId, readAtMs || Date.now());
+  });
+  return map;
+}
+
+async function buildTenantNoticeItems(tenantId: string): Promise<TenantCommunicationItem[]> {
+  const [noticesSnap, readMap] = await Promise.all([
+    db.collection("tenantNotices").where("tenantId", "==", tenantId).limit(100).get(),
+    getNoticeReadMap(tenantId),
+  ]);
+
+  return noticesSnap.docs
+    .map((doc) => {
+      const data = (doc.data() as any) || {};
+      const createdAtMs = toMillis(data.createdAt) ?? Date.now();
+      const noticeId = doc.id;
+      const typeRaw = String(data.type || "").toUpperCase();
+      const priority: "low" | "normal" | "high" =
+        typeRaw.includes("WARNING") || typeRaw.includes("LATE") ? "high" : "normal";
+      return {
+        id: noticeId,
+        type: "notice" as const,
+        title: String(data.title || "Notice"),
+        body: String(data.body || ""),
+        createdAt: isoFromMs(createdAtMs),
+        read: readMap.has(noticeId),
+        priority,
+        fromLabel: "Landlord" as const,
+        relatedEntityType: "notice" as const,
+        relatedEntityId: noticeId,
+      };
+    })
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+}
+
+async function buildTenantMessageItems(tenantId: string): Promise<TenantCommunicationItem[]> {
+  const [conversationIds, readMap] = await Promise.all([
+    getTenantConversationIds(tenantId),
+    getMessageReadMap(tenantId),
+  ]);
+
+  if (!conversationIds.length) return [];
+
+  const messageBatches = await Promise.all(
+    conversationIds.map((conversationId) =>
+      db
+        .collection("messages")
+        .where("conversationId", "==", conversationId)
+        .orderBy("createdAt", "desc")
+        .limit(50)
+        .get()
+    )
+  );
+
+  const items: TenantCommunicationItem[] = [];
+  messageBatches.forEach((batch) => {
+    batch.docs.forEach((doc) => {
+      const data = (doc.data() as any) || {};
+      const messageId = doc.id;
+      const createdAtMs = toMillis(data.createdAt ?? data.createdAtMs) ?? Date.now();
+      const senderRole = String(data.senderRole || "").toLowerCase();
+      const fromLabel =
+        senderRole === "tenant" ? "RentChain" : senderRole === "landlord" ? "Landlord" : "RentChain";
+      items.push({
+        id: messageId,
+        type: "message",
+        title: senderRole === "landlord" ? "Message from landlord" : "Message update",
+        body: String(data.body || ""),
+        createdAt: isoFromMs(createdAtMs),
+        read: readMap.has(messageId),
+        priority: "normal",
+        fromLabel: fromLabel as "Landlord" | "RentChain" | "Maintenance Team",
+        relatedEntityType: "message",
+        relatedEntityId: messageId,
+      });
+    });
+  });
+
+  return items.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+}
+
+async function buildTenantMaintenanceUpdateItems(tenantId: string): Promise<TenantCommunicationItem[]> {
+  const [maintSnap, readMap] = await Promise.all([
+    db.collection("maintenanceRequests").where("tenantId", "==", tenantId).limit(50).get(),
+    getMessageReadMap(tenantId),
+  ]);
+  const highStatuses = new Set(["URGENT", "BLOCKED", "CANCELLED"]);
+
+  const items = maintSnap.docs.map((doc) => {
+    const data = (doc.data() as any) || {};
+    const status = String(data.status || "NEW").toUpperCase();
+    const createdAtMs = toMillis(data.updatedAt ?? data.createdAt) ?? Date.now();
+    const syntheticId = `maintenance_${doc.id}_${createdAtMs}`;
+    const title = `Maintenance update: ${String(data.title || "Request").trim() || "Request"}`;
+    const body = `Status: ${status}${data.landlordNote ? ` — ${String(data.landlordNote)}` : ""}`;
+    return {
+      id: syntheticId,
+      type: "maintenance_update" as const,
+      title,
+      body,
+      createdAt: isoFromMs(createdAtMs),
+      read: readMap.has(syntheticId),
+      priority: highStatuses.has(status) ? ("high" as const) : ("normal" as const),
+      fromLabel: "Maintenance Team" as const,
+      relatedEntityType: "maintenance" as const,
+      relatedEntityId: doc.id,
+    };
+  });
+
+  return items.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 }
 
 router.get("/me", requireTenant, async (req: any, res) => {
@@ -353,6 +528,105 @@ router.get("/activity", requireTenant, async (req: any, res) => {
   } catch (err) {
     console.error("[tenantPortalRoutes] /tenant/activity error", err);
     return res.status(500).json({ ok: false, error: "TENANT_ACTIVITY_FAILED" });
+  }
+});
+
+router.get("/messages", requireTenant, async (req: any, res) => {
+  try {
+    const tenantId = String(req.user?.tenantId || "").trim();
+    if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+
+    const includeMaintenance = String(req.query?.includeMaintenance ?? "1") !== "0";
+    const [messageItems, maintenanceItems] = await Promise.all([
+      buildTenantMessageItems(tenantId),
+      includeMaintenance ? buildTenantMaintenanceUpdateItems(tenantId) : Promise.resolve([]),
+    ]);
+
+    const items = [...messageItems, ...maintenanceItems]
+      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+      .slice(0, 200);
+    const unreadCount = items.filter((item) => !item.read).length;
+    console.info("[tenant.messages.opened]", {
+      tenantId,
+      count: items.length,
+      unreadCount,
+    });
+    return res.json({ ok: true, items, unreadCount });
+  } catch (err: any) {
+    console.error("[tenant/messages] failed", {
+      tenantId: req.user?.tenantId,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_MESSAGES_FAILED" });
+  }
+});
+
+router.post("/messages/read-all", requireTenant, async (req: any, res) => {
+  try {
+    const tenantId = String(req.user?.tenantId || "").trim();
+    if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+
+    const items = await buildTenantMessageItems(tenantId);
+    const unread = items.filter((item) => !item.read).slice(0, 400);
+    if (!unread.length) {
+      console.info("[tenant.messages.read_all]", { tenantId, count: 0 });
+      return res.json({ ok: true, updated: 0 });
+    }
+
+    const batch = db.batch();
+    const now = Date.now();
+    unread.forEach((item) => {
+      const ref = db.collection("tenantMessageReads").doc(`${tenantId}_${item.id}`);
+      batch.set(
+        ref,
+        {
+          tenantId,
+          messageId: item.id,
+          readAtMs: now,
+          createdAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    });
+    await batch.commit();
+    console.info("[tenant.messages.read_all]", { tenantId, count: unread.length });
+    return res.json({ ok: true, updated: unread.length });
+  } catch (err: any) {
+    console.error("[tenant/messages/read-all] failed", {
+      tenantId: req.user?.tenantId,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_MESSAGES_READ_ALL_FAILED" });
+  }
+});
+
+router.post("/messages/:id/read", requireTenant, async (req: any, res) => {
+  try {
+    const tenantId = String(req.user?.tenantId || "").trim();
+    const messageId = String(req.params?.id || "").trim();
+    if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    if (!messageId) return res.status(400).json({ ok: false, error: "MESSAGE_ID_REQUIRED" });
+
+    const ref = db.collection("tenantMessageReads").doc(`${tenantId}_${messageId}`);
+    await ref.set(
+      {
+        tenantId,
+        messageId,
+        readAtMs: Date.now(),
+        createdAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    console.info("[tenant.message.read]", { tenantId, messageId });
+    return res.json({ ok: true });
+  } catch (err: any) {
+    console.error("[tenant/messages/:id/read] failed", {
+      tenantId: req.user?.tenantId,
+      messageId: req.params?.id,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_MESSAGE_READ_FAILED" });
   }
 });
 
@@ -672,29 +946,61 @@ router.get("/ledger", requireTenant, (_req: any, res) => {
 
 router.get("/notices", requireTenant, async (req: any, res) => {
   try {
-    const tenantId = req.user?.tenantId;
+    const tenantId = String(req.user?.tenantId || "").trim();
     if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
 
-    const snap = await db.collection("tenantNotices").where("tenantId", "==", tenantId).limit(50).get();
-    const items = snap.docs.map((doc) => {
-      const data = (doc.data() as any) || {};
-      return {
-        id: doc.id,
-        type: data.type ?? "GENERAL",
-        title: data.title ?? "Notice",
-        effectiveAt: toMillis(data.effectiveAt),
-        createdAt: toMillis(data.createdAt),
-        status: data.status ?? "ACTIVE",
-      };
+    const items = await buildTenantNoticeItems(tenantId);
+    const unreadCount = items.filter((item) => !item.read).length;
+    console.info("[tenant.notices.opened]", {
+      tenantId,
+      count: items.length,
+      unreadCount,
     });
-    items.sort((a, b) => (Number(b.createdAt || 0) || 0) - (Number(a.createdAt || 0) || 0));
-    return res.json({ ok: true, data: items });
+    return res.json({ ok: true, items, unreadCount, data: items });
   } catch (err) {
     console.error("[tenant/notices] failed", {
       tenantId: req.user?.tenantId,
       err,
     });
     return res.status(500).json({ ok: false, error: "TENANT_NOTICES_FAILED" });
+  }
+});
+
+router.post("/notices/:noticeId/read", requireTenant, async (req: any, res) => {
+  try {
+    const tenantId = String(req.user?.tenantId || "").trim();
+    const noticeId = String(req.params?.noticeId || "").trim();
+    if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    if (!noticeId) return res.status(400).json({ ok: false, error: "NOTICE_ID_REQUIRED" });
+
+    const noticeDoc = await db.collection("tenantNotices").doc(noticeId).get();
+    if (!noticeDoc.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    const noticeData = (noticeDoc.data() as any) || {};
+    if (noticeData.tenantId && noticeData.tenantId !== tenantId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    await db
+      .collection("tenantNoticeReads")
+      .doc(`${tenantId}_${noticeId}`)
+      .set(
+        {
+          tenantId,
+          noticeId,
+          readAtMs: Date.now(),
+          createdAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    console.info("[tenant.notice.read]", { tenantId, noticeId });
+    return res.json({ ok: true });
+  } catch (err: any) {
+    console.error("[tenant/notices/:noticeId/read] failed", {
+      tenantId: req.user?.tenantId,
+      noticeId: req.params?.noticeId,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_NOTICE_READ_FAILED" });
   }
 });
 
@@ -734,6 +1040,34 @@ router.get("/notices/:noticeId", requireTenant, async (req: any, res) => {
       err,
     });
     return res.status(500).json({ ok: false, error: "TENANT_NOTICE_READ_FAILED" });
+  }
+});
+
+router.get("/communication/summary", requireTenant, async (req: any, res) => {
+  try {
+    const tenantId = String(req.user?.tenantId || "").trim();
+    if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    const [messages, notices, maintenance] = await Promise.all([
+      buildTenantMessageItems(tenantId),
+      buildTenantNoticeItems(tenantId),
+      buildTenantMaintenanceUpdateItems(tenantId),
+    ]);
+    const unreadMessages = messages.filter((item) => !item.read).length;
+    const unreadNotices = notices.filter((item) => !item.read).length;
+    const unreadMaintenanceUpdates = maintenance.filter((item) => !item.read).length;
+    return res.json({
+      ok: true,
+      unreadMessages,
+      unreadNotices,
+      unreadMaintenanceUpdates,
+      unreadTotal: unreadMessages + unreadNotices + unreadMaintenanceUpdates,
+    });
+  } catch (err: any) {
+    console.error("[tenant/communication/summary] failed", {
+      tenantId: req.user?.tenantId,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_COMM_SUMMARY_FAILED" });
   }
 });
 

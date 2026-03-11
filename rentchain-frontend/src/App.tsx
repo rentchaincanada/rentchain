@@ -60,7 +60,7 @@ import TenantDashboardPage from "./pages/tenant/TenantDashboardPage";
 import TenantLedgerPage from "./pages/tenant/TenantLedgerPage";
 import TenantActivityPage from "./pages/tenant/TenantActivityPage";
 import TenantAttachmentsPage from "./pages/tenant/TenantAttachmentsPage";
-import TenantNoticesPage from "./pages/tenant/TenantNoticesPage";
+import TenantNoticesCenterPage from "./pages/tenant/TenantNoticesCenterPage";
 import TenantProfilePage from "./pages/tenant/TenantProfilePage";
 import TenantAccountPage from "./pages/tenant/TenantAccountPage";
 import TenantMagicRedeemPage from "./pages/tenant/TenantMagicRedeemPage";
@@ -69,7 +69,7 @@ import MonthlyOpsReportPageWithNudge from "./pages/reports/MonthlyOpsReportPageW
 import InvitesPage from "./pages/landlord/InvitesPage";
 import PublicApplyPage from "./pages/PublicApplyPage";
 import MessagesPage from "./pages/MessagesPage";
-import TenantMessagesPage from "./pages/tenant/TenantMessagesPage";
+import TenantMessagesCenterPage from "./pages/tenant/TenantMessagesCenterPage";
 import TenantNoticeDetailPage from "./pages/tenant/TenantNoticeDetailPage";
 import MaintenanceRequestsPage from "./pages/MaintenanceRequestsPage";
 import PdfSamplePage from "./pages/PdfSamplePage";
@@ -782,7 +782,7 @@ function App() {
           element={
             TENANT_PORTAL_ENABLED ? (
               <TenantNav>
-                <TenantNoticesPage />
+                <TenantNoticesCenterPage />
               </TenantNav>
             ) : (
               <TenantPortalComingSoon />
@@ -822,7 +822,13 @@ function App() {
         <Route
           path="/tenant/messages"
           element={
-            TENANT_PORTAL_ENABLED ? <TenantMessagesPage /> : <TenantPortalComingSoon />
+            TENANT_PORTAL_ENABLED ? (
+              <TenantNav>
+                <TenantMessagesCenterPage />
+              </TenantNav>
+            ) : (
+              <TenantPortalComingSoon />
+            )
           }
         />
         <Route

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { tenantApiFetch } from "../../api/tenantApiFetch";
+import { getTenantCommunicationSummary } from "../../api/tenantCommunicationsApi";
 import { logoutTenant } from "../../lib/logoutTenant";
 
 type Props = {
@@ -22,6 +23,7 @@ const navItems = [
   { label: "Activity", to: "/tenant/activity" },
   { label: "Ledger", to: "/tenant/ledger" },
   { label: "Documents", to: "/tenant/attachments" },
+  { label: "Messages", to: "/tenant/messages" },
   { label: "Notices", to: "/tenant/notices" },
   { label: "Profile", to: "/tenant/profile" },
   { label: "Account", to: "/tenant/account" },
@@ -30,6 +32,8 @@ const navItems = [
 export const TenantNav: React.FC<Props> = ({ children }) => {
   const [tenantName, setTenantName] = useState("Tenant User");
   const [tenantEmail, setTenantEmail] = useState("tenant@example.com");
+  const [unreadMessages, setUnreadMessages] = useState(0);
+  const [unreadNotices, setUnreadNotices] = useState(0);
   useEffect(() => {
     let cancelled = false;
     const loadIdentity = async () => {
@@ -47,6 +51,28 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
     };
 
     void loadIdentity();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadSummary = async () => {
+      try {
+        const summary = await getTenantCommunicationSummary();
+        if (!cancelled) {
+          setUnreadMessages(Number(summary?.unreadMessages || 0));
+          setUnreadNotices(Number(summary?.unreadNotices || 0));
+        }
+      } catch {
+        if (!cancelled) {
+          setUnreadMessages(0);
+          setUnreadNotices(0);
+        }
+      }
+    };
+    void loadSummary();
     return () => {
       cancelled = true;
     };
@@ -102,7 +128,49 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
           <nav style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             {navItems.map((item) => (
               <NavLink key={item.to} to={item.to} style={linkStyle} end={item.to === "/tenant"}>
-                {item.label}
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <span>{item.label}</span>
+                  {item.to === "/tenant/messages" && unreadMessages > 0 ? (
+                    <span
+                      style={{
+                        minWidth: 18,
+                        height: 18,
+                        borderRadius: 999,
+                        background: "#1d4ed8",
+                        color: "#fff",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        lineHeight: 1,
+                        padding: "0 5px",
+                      }}
+                    >
+                      {unreadMessages > 99 ? "99+" : unreadMessages}
+                    </span>
+                  ) : null}
+                  {item.to === "/tenant/notices" && unreadNotices > 0 ? (
+                    <span
+                      style={{
+                        minWidth: 18,
+                        height: 18,
+                        borderRadius: 999,
+                        background: "#475569",
+                        color: "#fff",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        lineHeight: 1,
+                        padding: "0 5px",
+                      }}
+                    >
+                      {unreadNotices > 99 ? "99+" : unreadNotices}
+                    </span>
+                  ) : null}
+                </span>
               </NavLink>
             ))}
             <button

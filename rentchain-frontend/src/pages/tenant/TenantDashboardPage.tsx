@@ -7,6 +7,7 @@ import {
   getTenantMaintenanceRequests,
   MaintenanceRequest,
 } from "../../api/tenantMaintenanceApi";
+import { TenantCommunicationItem } from "../../api/tenantCommunicationsApi";
 import { CreateMaintenanceRequestModal } from "../../components/tenant/CreateMaintenanceRequestModal";
 import { Card, Section } from "../../components/ui/Ui";
 import { clearTenantToken, getTenantToken } from "../../lib/tenantAuth";
@@ -289,6 +290,8 @@ export default function TenantDashboardPage() {
   const [maintRequests, setMaintRequests] = useState<MaintenanceSummary[]>([]);
   const [maintError, setMaintError] = useState<string | null>(null);
   const [maintLoading, setMaintLoading] = useState(true);
+  const [communications, setCommunications] = useState<TenantCommunicationItem[]>([]);
+  const [communicationsError, setCommunicationsError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const attachmentsByLedgerId = useMemo(() => {
     const map = new Map<string, Attachment[]>();
@@ -310,12 +313,14 @@ export default function TenantDashboardPage() {
     setLedger([]);
     setAttachments([]);
     setMaintRequests([]);
+    setCommunications([]);
     setError(null);
     setActivityError(null);
     setLedgerError(null);
     setAttachmentsError(null);
     setNoticesError(null);
     setMaintError(null);
+    setCommunicationsError(null);
   }, []);
 
   const loadAll = React.useCallback(async () => {
@@ -333,14 +338,16 @@ export default function TenantDashboardPage() {
     setNoticesError(null);
     setMaintLoading(true);
     setMaintError(null);
+    setCommunicationsError(null);
     try {
-      const [meRes, activityRes, ledgerRes, attachmentsRes, noticesRes, maintRes] = await Promise.allSettled([
+      const [meRes, activityRes, ledgerRes, attachmentsRes, noticesRes, maintRes, commsRes] = await Promise.allSettled([
         tenantApiFetch<TenantMeResponse>("/tenant/me"),
         tenantApiFetch<{ ok: boolean; data: ActivityItem[] }>("/tenant/activity"),
         tenantApiFetch<{ ok: boolean; data: LedgerItem[] }>("/tenant/ledger"),
         tenantApiFetch<{ ok: boolean; data: Attachment[] }>("/tenant/attachments"),
         tenantApiFetch<{ ok: boolean; data: Notice[] }>("/tenant/notices"),
         getTenantMaintenanceRequests(),
+        tenantApiFetch<{ ok: boolean; items: TenantCommunicationItem[] }>("/tenant/messages"),
       ]);
 
       const isUnauthorized = (err: any) =>
@@ -443,6 +450,22 @@ export default function TenantDashboardPage() {
         setMaintError(String(message));
         }
       }
+
+      if (commsRes.status === "fulfilled") {
+        const payload = commsRes.value;
+        const list = Array.isArray((payload as any)?.items) ? (payload as any).items : [];
+        setCommunications(list);
+      } else {
+        if (isUnauthorized(commsRes.reason)) {
+          expireSession();
+        } else {
+          const message =
+            (commsRes.reason as any)?.message ||
+            (commsRes.reason as any)?.payload?.error ||
+            "Unable to load communications";
+          setCommunicationsError(String(message));
+        }
+      }
     } catch (e: any) {
       if (e?.payload?.error === "UNAUTHORIZED" || e?.status === 401) {
         setSessionExpired(true);
@@ -480,6 +503,9 @@ export default function TenantDashboardPage() {
   const landlord = data?.landlord;
   const property = data?.property;
   const unit = data?.unit;
+  const unreadNotice = notices.find((item: any) => !(item as any).read) as any;
+  const unreadMessage = communications.find((item) => item.type === "message" && !item.read);
+  const latestMaintenanceUpdate = communications.find((item) => item.type === "maintenance_update");
 
   const checklist = useMemo(
     () => [
@@ -737,6 +763,83 @@ export default function TenantDashboardPage() {
                 ))}
               </div>
             )}
+          </Card>
+
+          <Card elevated style={{ gridColumn: "1 / -1" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: spacing.sm, gap: spacing.sm, flexWrap: "wrap" }}>
+              <div>
+                <div style={labelStyle}>Communication Center</div>
+                <div style={{ fontSize: "1.2rem", fontWeight: 800, color: textTokens.primary }}>
+                  Messages, notices, and maintenance updates
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <a
+                  href="/tenant/messages"
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: radius.md,
+                    border: `1px solid ${colors.border}`,
+                    textDecoration: "none",
+                    color: textTokens.primary,
+                    fontWeight: 700,
+                    background: colors.panel,
+                  }}
+                >
+                  View messages
+                </a>
+                <a
+                  href="/tenant/notices"
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: radius.md,
+                    border: `1px solid ${colors.border}`,
+                    textDecoration: "none",
+                    color: textTokens.primary,
+                    fontWeight: 700,
+                    background: colors.card,
+                  }}
+                >
+                  View notices
+                </a>
+              </div>
+            </div>
+            {communicationsError ? <div style={{ color: colors.danger }}>{communicationsError}</div> : null}
+            <div style={{ display: "grid", gap: 8 }}>
+              <div style={{ color: textTokens.secondary }}>
+                Latest unread notice:{" "}
+                {unreadNotice ? (
+                  <a href={`/tenant/notices/${unreadNotice.id}`} style={{ color: colors.accent, fontWeight: 700 }}>
+                    {unreadNotice.title}
+                  </a>
+                ) : (
+                  "None"
+                )}
+              </div>
+              <div style={{ color: textTokens.secondary }}>
+                Latest unread message:{" "}
+                {unreadMessage ? (
+                  <a href="/tenant/messages" style={{ color: colors.accent, fontWeight: 700 }}>
+                    {unreadMessage.title}
+                  </a>
+                ) : (
+                  "None"
+                )}
+              </div>
+              <div style={{ color: textTokens.secondary }}>
+                Maintenance update:{" "}
+                {latestMaintenanceUpdate ? (
+                  <a
+                    href={latestMaintenanceUpdate.relatedEntityId ? `/tenant/maintenance/${latestMaintenanceUpdate.relatedEntityId}` : "/tenant/messages"}
+                    style={{ color: colors.accent, fontWeight: 700 }}
+                  >
+                    {latestMaintenanceUpdate.title}
+                  </a>
+                ) : (
+                  "No recent updates"
+                )}
+              </div>
+            </div>
           </Card>
 
           <Card elevated style={{ gridColumn: "1 / -1" }}>
