@@ -1,4 +1,5 @@
 import { tenantApiFetch } from "./tenantApiFetch";
+import { getTenantToken } from "../lib/tenantAuth";
 
 export type TenantLedgerItem = {
   id: string;
@@ -12,5 +13,12 @@ export type TenantLedgerItem = {
 };
 
 export async function getTenantLedger(): Promise<{ ok: boolean; data: TenantLedgerItem[] }> {
+  if (import.meta.env.DEV) {
+    const hasTenantToken = Boolean(getTenantToken());
+    console.info("[tenant-ledger] request start", {
+      endpoint: "/api/tenant/ledger",
+      tokenSource: hasTenantToken ? "tenant-bearer" : "missing",
+    });
+  }
   return tenantApiFetch<{ ok: boolean; data: TenantLedgerItem[] }>("/tenant/ledger");
 }
