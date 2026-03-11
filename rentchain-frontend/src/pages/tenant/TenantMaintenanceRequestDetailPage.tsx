@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { getTenantMaintenanceRequest, MaintenanceRequest } from "../../api/tenantMaintenanceApi";
+import { getTenantMaintenance, type MaintenanceWorkflowItem } from "../../api/maintenanceWorkflowApi";
 import { Card, Section } from "../../components/ui/Ui";
 import { clearTenantToken, getTenantToken } from "../../lib/tenantAuth";
 import { colors, radius, spacing, text as textTokens } from "../../styles/tokens";
@@ -14,7 +14,7 @@ function fmtDate(ts?: number | null) {
 
 export default function TenantMaintenanceRequestDetailPage() {
   const { id } = useParams();
-  const [data, setData] = useState<MaintenanceRequest | null>(null);
+  const [data, setData] = useState<MaintenanceWorkflowItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sessionExpired, setSessionExpired] = useState(false);
@@ -37,8 +37,8 @@ export default function TenantMaintenanceRequestDetailPage() {
       setError(null);
       setSessionExpired(false);
       try {
-        const res = await getTenantMaintenanceRequest(id || "");
-        setData(res.data);
+        const res = await getTenantMaintenance(id || "");
+        setData((res as any)?.item || (res as any)?.data || null);
       } catch (err: any) {
         if (err?.payload?.error === "UNAUTHORIZED" || err?.status === 401) {
           setSessionExpired(true);
@@ -113,7 +113,7 @@ export default function TenantMaintenanceRequestDetailPage() {
             <div style={{ color: textTokens.muted }}>View details of your request</div>
           </div>
           <a
-            href="/tenant"
+            href="/tenant/maintenance"
             style={{
               padding: "8px 12px",
               borderRadius: radius.md,
@@ -167,12 +167,47 @@ export default function TenantMaintenanceRequestDetailPage() {
                 <span>Status: {data.status}</span>
                 <span>Priority: {data.priority}</span>
                 <span>Category: {data.category}</span>
+                {data.assignedContractorName ? <span>Contractor: {data.assignedContractorName}</span> : null}
               </div>
               <div style={{ color: textTokens.muted, fontSize: "0.95rem" }}>
                 Created {fmtDate(data.createdAt)} • Updated {fmtDate(data.updatedAt)}
               </div>
               <div style={{ color: textTokens.primary, fontSize: "1rem", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
                 {data.description}
+              </div>
+              <div style={{ display: "grid", gap: 8, marginTop: spacing.xs }}>
+                <div style={{ fontWeight: 700, color: textTokens.primary }}>Status timeline</div>
+                {Array.isArray(data.statusHistory) && data.statusHistory.length > 0 ? (
+                  <div style={{ display: "grid", gap: 8 }}>
+                    {[...data.statusHistory]
+                      .sort((a, b) => Number(b?.createdAt || 0) - Number(a?.createdAt || 0))
+                      .map((entry, idx) => (
+                        <div
+                          key={`${entry.status}-${entry.createdAt}-${idx}`}
+                          style={{
+                            border: `1px solid ${colors.border}`,
+                            borderRadius: radius.md,
+                            padding: "8px 10px",
+                            background: colors.panel,
+                          }}
+                        >
+                          <div style={{ color: textTokens.primary, fontWeight: 700, fontSize: "0.95rem" }}>
+                            {entry.status}
+                          </div>
+                          <div style={{ color: textTokens.muted, fontSize: "0.85rem", marginTop: 2 }}>
+                            {entry.actorRole || "system"} • {fmtDate(entry.createdAt)}
+                          </div>
+                          {entry.message ? (
+                            <div style={{ color: textTokens.secondary, fontSize: "0.9rem", marginTop: 4 }}>
+                              {entry.message}
+                            </div>
+                          ) : null}
+                        </div>
+                      ))}
+                  </div>
+                ) : (
+                  <div style={{ color: textTokens.muted }}>No timeline updates yet.</div>
+                )}
               </div>
             </div>
           </Card>
@@ -181,3 +216,4 @@ export default function TenantMaintenanceRequestDetailPage() {
     </div>
   );
 }
+
