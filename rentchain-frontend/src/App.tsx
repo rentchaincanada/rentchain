@@ -42,6 +42,7 @@ import { AccountSecurityPage } from "./pages/AccountSecurityPage";
 import { RequireAuth } from "./components/auth/RequireAuth";
 import { RequireAdmin } from "./components/auth/RequireAdmin";
 import { RequireRole } from "./components/auth/RequireRole";
+import { RequireTenant } from "./components/auth/RequireTenant";
 import { useAuth } from "./context/useAuth";
 import ScreeningStartPage from "./pages/screening/ScreeningStartPage";
 import ScreeningSuccessPage from "./pages/screening/ScreeningSuccessPage";
@@ -242,6 +243,14 @@ function App() {
     "/application/new",
     "/applypage",
   ];
+  const renderTenantShell = (page: React.ReactNode) =>
+    TENANT_PORTAL_ENABLED ? (
+      <RequireTenant>
+        <TenantNav>{page}</TenantNav>
+      </RequireTenant>
+    ) : (
+      <TenantPortalComingSoon />
+    );
 
   return (
     <>
@@ -733,87 +742,31 @@ function App() {
         <Route path="/apply" element={<ApplicantApplyPage />} />
         <Route
           path="/tenant"
-          element={
-            TENANT_PORTAL_ENABLED ? (
-              <TenantNav>
-                <TenantDashboardPage />
-              </TenantNav>
-            ) : (
-              <TenantPortalComingSoon />
-            )
-          }
+          element={renderTenantShell(<TenantDashboardPage />)}
         />
         <Route
           path="/tenant/activity"
-          element={
-            TENANT_PORTAL_ENABLED ? (
-              <TenantNav>
-                <TenantActivityPage />
-              </TenantNav>
-            ) : (
-              <TenantPortalComingSoon />
-            )
-          }
+          element={renderTenantShell(<TenantActivityPage />)}
         />
         <Route
           path="/tenant/ledger"
-          element={
-            TENANT_PORTAL_ENABLED ? (
-              <TenantNav>
-                <TenantLedgerPage />
-              </TenantNav>
-            ) : (
-              <TenantPortalComingSoon />
-            )
-          }
+          element={renderTenantShell(<TenantLedgerPage />)}
         />
         <Route
           path="/tenant/attachments"
-          element={
-            TENANT_PORTAL_ENABLED ? (
-              <TenantNav>
-                <TenantAttachmentsPage />
-              </TenantNav>
-            ) : (
-              <TenantPortalComingSoon />
-            )
-          }
+          element={renderTenantShell(<TenantAttachmentsPage />)}
         />
         <Route
           path="/tenant/notices"
-          element={
-            TENANT_PORTAL_ENABLED ? (
-              <TenantNav>
-                <TenantNoticesCenterPage />
-              </TenantNav>
-            ) : (
-              <TenantPortalComingSoon />
-            )
-          }
+          element={renderTenantShell(<TenantNoticesCenterPage />)}
         />
         <Route
           path="/tenant/profile"
-          element={
-            TENANT_PORTAL_ENABLED ? (
-              <TenantNav>
-                <TenantProfilePage />
-              </TenantNav>
-            ) : (
-              <TenantPortalComingSoon />
-            )
-          }
+          element={renderTenantShell(<TenantProfilePage />)}
         />
         <Route
           path="/tenant/account"
-          element={
-            TENANT_PORTAL_ENABLED ? (
-              <TenantNav>
-                <TenantAccountPage />
-              </TenantNav>
-            ) : (
-              <TenantPortalComingSoon />
-            )
-          }
+          element={renderTenantShell(<TenantAccountPage />)}
         />
         <Route
           path="/tenant/notices/:noticeId"
@@ -823,51 +776,19 @@ function App() {
         />
         <Route
           path="/tenant/messages"
-          element={
-            TENANT_PORTAL_ENABLED ? (
-              <TenantNav>
-                <TenantMessagesCenterPage />
-              </TenantNav>
-            ) : (
-              <TenantPortalComingSoon />
-            )
-          }
+          element={renderTenantShell(<TenantMessagesCenterPage />)}
         />
         <Route
           path="/tenant/maintenance"
-          element={
-            TENANT_PORTAL_ENABLED ? (
-              <TenantNav>
-                <TenantMaintenanceRequestsPage />
-              </TenantNav>
-            ) : (
-              <TenantPortalComingSoon />
-            )
-          }
+          element={renderTenantShell(<TenantMaintenanceRequestsPage />)}
         />
         <Route
           path="/tenant/maintenance/new"
-          element={
-            TENANT_PORTAL_ENABLED ? (
-              <TenantNav>
-                <TenantMaintenanceRequestNewPage />
-              </TenantNav>
-            ) : (
-              <TenantPortalComingSoon />
-            )
-          }
+          element={renderTenantShell(<TenantMaintenanceRequestNewPage />)}
         />
         <Route
           path="/tenant/maintenance/:id"
-          element={
-            TENANT_PORTAL_ENABLED ? (
-              <TenantNav>
-                <TenantMaintenanceRequestDetailPage />
-              </TenantNav>
-            ) : (
-              <TenantPortalComingSoon />
-            )
-          }
+          element={renderTenantShell(<TenantMaintenanceRequestDetailPage />)}
         />
         {applicantApplyRedirects.map((path) => (
           <Route
@@ -887,3 +808,5 @@ function App() {
 }
 
 export default App;
+
+
