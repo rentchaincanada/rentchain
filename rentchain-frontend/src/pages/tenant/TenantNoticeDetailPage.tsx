@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { getTenantNotice, TenantNoticeDetail } from "../../api/tenantNoticesApi";
+import { markTenantNoticeRead } from "../../api/tenantCommunicationsApi";
 import { Card, Section } from "../../components/ui/Ui";
 import { clearTenantToken, getTenantToken } from "../../lib/tenantAuth";
 import { colors, radius, spacing, text as textTokens } from "../../styles/tokens";
+import { track } from "../../lib/analytics";
 
 function fmtDate(ts: number | null | undefined): string {
   if (!ts) return "—";
@@ -56,6 +58,10 @@ export default function TenantNoticeDetailPage() {
       try {
         const res = await getTenantNotice(noticeId);
         setNotice(res.data);
+        if (noticeId) {
+          void markTenantNoticeRead(noticeId).catch(() => undefined);
+          track("tenant.notice.read", { id: noticeId, source: "detail" });
+        }
       } catch (err: any) {
         if (err?.payload?.error === "UNAUTHORIZED" || err?.status === 401) {
           setSessionExpired(true);
