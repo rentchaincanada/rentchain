@@ -382,6 +382,19 @@ const AuthOnboardPage: React.FC = () => {
   const loginPath = `/login?next=${encodeURIComponent(nextOnboardPath)}`;
   const signupPath = `/signup?next=${encodeURIComponent(nextOnboardPath)}`;
   const legacyPath = getSafeInternalRedirect(resolved?.legacyRedirectTo || null);
+  const resolvedInviteType = resolved?.inviteType || "unknown";
+  const defaultReadyDescription =
+    resolvedInviteType === "contractor"
+      ? "Accept this invite to access your contractor workspace."
+      : resolvedInviteType === "tenant"
+      ? "Accept this invite to access your tenant portal."
+      : resolvedInviteType === "landlord" || source === "landlord"
+      ? "Complete your account setup to access your landlord workspace."
+      : "Continue to complete your RentChain setup.";
+  const defaultSignupDescription =
+    resolvedInviteType === "landlord" || source === "landlord"
+      ? "Complete your account setup to access your landlord workspace."
+      : "Complete your account setup to accept this invite.";
 
   return (
     <div
@@ -494,7 +507,7 @@ const AuthOnboardPage: React.FC = () => {
           <>
             <h1 style={{ margin: 0, color: text.primary, fontSize: "1.5rem" }}>Create your account</h1>
             <p style={{ margin: 0, color: text.muted }}>
-              Complete your account setup to accept this invite.
+              {resolved?.copy?.description || defaultSignupDescription}
             </p>
             <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
               {legacyPath ? (
@@ -538,7 +551,7 @@ const AuthOnboardPage: React.FC = () => {
               {resolved?.copy?.title || "You’re invited to join RentChain"}
             </h1>
             <p style={{ margin: 0, color: text.muted }}>
-              {resolved?.copy?.description || "Accept this invite to continue."}
+              {resolved?.copy?.description || defaultReadyDescription}
             </p>
             {resolved?.maskedEmail ? (
               <p style={{ margin: 0, color: text.muted }}>

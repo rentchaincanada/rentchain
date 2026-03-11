@@ -68,7 +68,7 @@ const ForgotPasswordPage: React.FC = () => {
     >
       <Card elevated style={{ width: "100%", maxWidth: 460, padding: spacing.lg }}>
         <div style={{ marginBottom: spacing.xs, color: text.subtle, fontSize: "0.9rem" }}>
-          RentChain Landlord Portal
+          RentChain Secure Access
         </div>
         <h1
           style={{
@@ -81,6 +81,9 @@ const ForgotPasswordPage: React.FC = () => {
         >
           Reset your password
         </h1>
+        <p style={{ marginTop: 0, marginBottom: spacing.sm, color: text.muted }}>
+          Enter your email to receive a password reset link.
+        </p>
 
         <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: spacing.sm }}>
           <label style={{ display: "flex", flexDirection: "column", gap: spacing.xs }}>
