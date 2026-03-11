@@ -58,6 +58,11 @@ import { LandlordNav } from "./components/layout/LandlordNav";
 import TenantPortalComingSoon from "./pages/tenant/TenantPortalComingSoon";
 import TenantDashboardPage from "./pages/tenant/TenantDashboardPage";
 import TenantLedgerPage from "./pages/tenant/TenantLedgerPage";
+import TenantActivityPage from "./pages/tenant/TenantActivityPage";
+import TenantAttachmentsPage from "./pages/tenant/TenantAttachmentsPage";
+import TenantNoticesPage from "./pages/tenant/TenantNoticesPage";
+import TenantProfilePage from "./pages/tenant/TenantProfilePage";
+import TenantAccountPage from "./pages/tenant/TenantAccountPage";
 import TenantMagicRedeemPage from "./pages/tenant/TenantMagicRedeemPage";
 import TenantMaintenanceRequestDetailPage from "./pages/tenant/TenantMaintenanceRequestDetailPage";
 import MonthlyOpsReportPageWithNudge from "./pages/reports/MonthlyOpsReportPageWithNudge";
@@ -82,6 +87,7 @@ import ContractorDashboardPage from "./pages/contractor/ContractorDashboardPage"
 import ContractorJobsPage from "./pages/contractor/ContractorJobsPage";
 import ContractorProfilePage from "./pages/contractor/ContractorProfilePage";
 import { ContractorNav } from "./components/layout/ContractorNav";
+import { TenantNav } from "./components/layout/TenantNav";
 import { getRoleDefaultDestination } from "./lib/authDestination";
 
 const TENANT_PORTAL_ENABLED = import.meta.env.VITE_TENANT_PORTAL_ENABLED === "true";
@@ -727,7 +733,21 @@ function App() {
           path="/tenant"
           element={
             TENANT_PORTAL_ENABLED ? (
-              <TenantDashboardPage />
+              <TenantNav>
+                <TenantDashboardPage />
+              </TenantNav>
+            ) : (
+              <TenantPortalComingSoon />
+            )
+          }
+        />
+        <Route
+          path="/tenant/activity"
+          element={
+            TENANT_PORTAL_ENABLED ? (
+              <TenantNav>
+                <TenantActivityPage />
+              </TenantNav>
             ) : (
               <TenantPortalComingSoon />
             )
@@ -736,7 +756,61 @@ function App() {
         <Route
           path="/tenant/ledger"
           element={
-            TENANT_PORTAL_ENABLED ? <TenantLedgerPage /> : <TenantPortalComingSoon />
+            TENANT_PORTAL_ENABLED ? (
+              <TenantNav>
+                <TenantLedgerPage />
+              </TenantNav>
+            ) : (
+              <TenantPortalComingSoon />
+            )
+          }
+        />
+        <Route
+          path="/tenant/attachments"
+          element={
+            TENANT_PORTAL_ENABLED ? (
+              <TenantNav>
+                <TenantAttachmentsPage />
+              </TenantNav>
+            ) : (
+              <TenantPortalComingSoon />
+            )
+          }
+        />
+        <Route
+          path="/tenant/notices"
+          element={
+            TENANT_PORTAL_ENABLED ? (
+              <TenantNav>
+                <TenantNoticesPage />
+              </TenantNav>
+            ) : (
+              <TenantPortalComingSoon />
+            )
+          }
+        />
+        <Route
+          path="/tenant/profile"
+          element={
+            TENANT_PORTAL_ENABLED ? (
+              <TenantNav>
+                <TenantProfilePage />
+              </TenantNav>
+            ) : (
+              <TenantPortalComingSoon />
+            )
+          }
+        />
+        <Route
+          path="/tenant/account"
+          element={
+            TENANT_PORTAL_ENABLED ? (
+              <TenantNav>
+                <TenantAccountPage />
+              </TenantNav>
+            ) : (
+              <TenantPortalComingSoon />
+            )
           }
         />
         <Route
