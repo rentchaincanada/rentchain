@@ -7,6 +7,8 @@ export const RequireTenant: React.FC<{ children: React.ReactNode }> = ({ childre
   const { user, isLoading } = useAuth();
   const location = useLocation();
   const token = getTenantToken();
+  const next = `${location.pathname}${location.search || ""}`;
+  const loginPath = `/tenant/login?reason=expired&next=${encodeURIComponent(next)}`;
 
   if (isLoading) {
     return (
@@ -30,11 +32,11 @@ export const RequireTenant: React.FC<{ children: React.ReactNode }> = ({ childre
   }
 
   if (!token) {
-    return <Navigate to="/tenant/login" state={{ from: location }} replace />;
+    return <Navigate to={loginPath} state={{ from: location }} replace />;
   }
 
   if (user && user.role !== "tenant") {
-    return <Navigate to="/tenant/login" state={{ from: location }} replace />;
+    return <Navigate to={loginPath} state={{ from: location }} replace />;
   }
 
   return <>{children}</>;
