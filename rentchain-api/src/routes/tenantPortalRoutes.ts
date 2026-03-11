@@ -1357,6 +1357,34 @@ router.get("/maintenance-requests", requireTenant, async (req: any, res) => {
   }
 });
 
+router.get("/maintenance", requireTenant, async (req: any, res) => {
+  try {
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    const snap = await db.collection("maintenanceRequests").where("tenantId", "==", tenantId).limit(50).get();
+    const items = snap.docs.map((d) => {
+      const data = (d.data() as any) || {};
+      return {
+        id: d.id,
+        status: data.status ?? "NEW",
+        priority: data.priority ?? "NORMAL",
+        category: data.category ?? "GENERAL",
+        title: data.title ?? "",
+        createdAt: toMillis(data.createdAt),
+        updatedAt: toMillis(data.updatedAt),
+      };
+    });
+    items.sort((a, b) => (Number(b.updatedAt || 0) || 0) - (Number(a.updatedAt || 0) || 0));
+    return res.json({ ok: true, items, data: items });
+  } catch (err) {
+    console.error("[tenant/maintenance] list failed", {
+      tenantId: req.user?.tenantId,
+      err,
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_MAINTENANCE_LIST_FAILED" });
+  }
+});
+
 router.get("/maintenance-requests/:id", requireTenant, async (req: any, res) => {
   try {
     const tenantId = req.user?.tenantId;

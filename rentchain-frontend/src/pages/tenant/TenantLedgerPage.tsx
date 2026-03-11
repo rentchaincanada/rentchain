@@ -1,13 +1,7 @@
 import React, { useEffect, useState } from "react";
+import { Card } from "../../components/ui/Ui";
 import { getTenantLedger, type TenantLedgerItem } from "../../api/tenantLedgerApi";
-
-const cardStyle: React.CSSProperties = {
-  background: "rgba(17, 24, 39, 0.8)",
-  border: "1px solid rgba(255, 255, 255, 0.05)",
-  borderRadius: 16,
-  padding: "18px 20px",
-  boxShadow: "0 12px 32px rgba(0,0,0,0.35)",
-};
+import { colors, spacing, text as textTokens } from "../../styles/tokens";
 
 function formatAmount(amountCents: number | null, currency: string | null) {
   if (typeof amountCents !== "number") return "—";
@@ -72,23 +66,23 @@ export const TenantLedgerPage: React.FC = () => {
   }, []);
 
   return (
-    <div style={cardStyle}>
-      <div style={{ marginBottom: 12 }}>
-        <div style={{ color: "#9ca3af", fontSize: 12, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+    <Card elevated style={{ padding: spacing.lg }}>
+      <div style={{ marginBottom: spacing.md }}>
+        <div style={{ color: textTokens.muted, fontSize: 12, textTransform: "uppercase", letterSpacing: "0.04em" }}>
           Ledger
         </div>
-        <div style={{ fontSize: 20, fontWeight: 700 }}>Activity timeline</div>
-        <div style={{ color: "#9ca3af", fontSize: 13 }}>Verified record of your tenancy activity.</div>
+        <div style={{ fontSize: 20, fontWeight: 700, color: textTokens.primary }}>Activity timeline</div>
+        <div style={{ color: textTokens.muted, fontSize: 13 }}>Verified record of your tenancy activity.</div>
       </div>
 
       {error ? (
-        <div style={{ color: "#fca5a5" }}>{error}</div>
+        <div style={{ color: colors.danger }}>{error}</div>
       ) : loading ? (
-        <div style={{ color: "#cbd5e1" }}>Loading ledger…</div>
+        <div style={{ color: textTokens.muted }}>Loading ledger…</div>
       ) : items.length === 0 ? (
-        <div style={{ color: "#9ca3af" }}>No ledger events yet.</div>
+        <div style={{ color: textTokens.muted }}>No ledger events yet.</div>
       ) : (
-        <div style={{ display: "grid", gap: 10 }}>
+        <div style={{ display: "grid", gap: spacing.sm }}>
           {items.map((item) => (
             <div
               key={item.id}
@@ -97,29 +91,29 @@ export const TenantLedgerPage: React.FC = () => {
                 gridTemplateColumns: "1fr auto",
                 gap: 10,
                 alignItems: "center",
-                border: "1px solid rgba(255,255,255,0.08)",
+                border: `1px solid ${colors.border}`,
                 borderRadius: 12,
                 padding: "10px 12px",
-                background: "rgba(15,23,42,0.35)",
+                background: colors.card,
               }}
             >
               <div style={{ display: "grid", gap: 4 }}>
-                <div style={{ color: "#e2e8f0", fontWeight: 700 }}>{item.title || "Ledger entry"}</div>
-                <div style={{ color: "#94a3b8", fontSize: 13 }}>
+                <div style={{ color: textTokens.primary, fontWeight: 700 }}>{item.title || "Ledger entry"}</div>
+                <div style={{ color: textTokens.muted, fontSize: 13 }}>
                   {item.type} • {item.period || formatDate(item.occurredAt)}
                 </div>
                 {item.description ? (
-                  <div style={{ color: "#cbd5e1", fontSize: 13 }}>{item.description}</div>
+                  <div style={{ color: textTokens.secondary, fontSize: 13 }}>{item.description}</div>
                 ) : null}
               </div>
-              <div style={{ color: "#f8fafc", fontWeight: 800 }}>
+              <div style={{ color: textTokens.primary, fontWeight: 800 }}>
                 {formatAmount(item.amountCents, item.currency)}
               </div>
             </div>
           ))}
         </div>
       )}
-    </div>
+    </Card>
   );
 };
 
