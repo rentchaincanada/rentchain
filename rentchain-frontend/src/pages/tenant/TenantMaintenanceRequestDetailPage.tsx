@@ -61,20 +61,22 @@ export default function TenantMaintenanceRequestDetailPage() {
         style={{
           minHeight: "100vh",
           background: colors.bgAmbient,
-          padding: spacing.xl,
+          padding: "clamp(12px, 3vw, 24px)",
           boxSizing: "border-box",
         }}
       >
         <Section style={{ maxWidth: 900, margin: "0 auto" }}>
           <Card elevated style={{ borderColor: colors.borderStrong, background: "#fff7ed", color: "#9a3412" }}>
-            <div style={{ fontWeight: 800, marginBottom: 6 }}>Your session expired. Please sign in again.</div>
+            <div style={{ fontWeight: 800, marginBottom: 6 }}>Your tenant session has expired</div>
+            <div style={{ fontSize: "0.95rem", marginBottom: spacing.sm }}>
+              Please sign in again to continue to your RentChain tenant portal.
+            </div>
             <div style={{ marginTop: spacing.sm }}>
               <button
                 type="button"
                 onClick={() => {
                   if (typeof window !== "undefined") {
-                    const next = encodeURIComponent(window.location.pathname + (window.location.search || ""));
-                    window.location.href = `/tenant/login?next=${next}`;
+                    window.location.href = "/tenant/login";
                   }
                 }}
                 style={{
@@ -86,7 +88,7 @@ export default function TenantMaintenanceRequestDetailPage() {
                   fontWeight: 700,
                 }}
               >
-                Sign in
+                Go to tenant login
               </button>
             </div>
           </Card>
@@ -100,7 +102,7 @@ export default function TenantMaintenanceRequestDetailPage() {
       style={{
         minHeight: "100vh",
         background: colors.bgAmbient,
-        padding: spacing.xl,
+        padding: "clamp(12px, 3vw, 24px)",
         boxSizing: "border-box",
       }}
     >

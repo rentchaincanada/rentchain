@@ -14,6 +14,10 @@ type TenantMeResponse = {
     tenant?: {
       name?: string | null;
       email?: string | null;
+      shortId?: string | null;
+    };
+    unit?: {
+      label?: string | null;
     };
   };
 };
@@ -30,8 +34,13 @@ const navItems = [
 ];
 
 export const TenantNav: React.FC<Props> = ({ children }) => {
-  const [tenantName, setTenantName] = useState("Tenant User");
-  const [tenantEmail, setTenantEmail] = useState("tenant@example.com");
+  const [tenantName, setTenantName] = useState<string | null>(null);
+  const [tenantEmail, setTenantEmail] = useState<string | null>(null);
+  const [tenantUnit, setTenantUnit] = useState<string | null>(null);
+  const [identityLoading, setIdentityLoading] = useState(true);
+  const [isMobile, setIsMobile] = useState<boolean>(() =>
+    typeof window === "undefined" ? false : window.innerWidth < 900
+  );
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [unreadNotices, setUnreadNotices] = useState(0);
   useEffect(() => {
@@ -41,12 +50,22 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
         const res = await tenantApiFetch<TenantMeResponse>("/tenant/me");
         const name = String(res?.data?.tenant?.name || "").trim();
         const email = String(res?.data?.tenant?.email || "").trim();
+        const unit = String(res?.data?.unit?.label || "").trim();
         if (!cancelled) {
-          if (name) setTenantName(name);
-          if (email) setTenantEmail(email);
+          setTenantName(name || null);
+          setTenantEmail(email || null);
+          setTenantUnit(unit || null);
         }
       } catch {
-        // Keep safe fallback identity if /tenant/me is unavailable.
+        if (!cancelled) {
+          setTenantName(null);
+          setTenantEmail(null);
+          setTenantUnit(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setIdentityLoading(false);
+        }
       }
     };
 
@@ -54,6 +73,13 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onResize = () => setIsMobile(window.innerWidth < 900);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
   }, []);
 
   useEffect(() => {
@@ -108,7 +134,7 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
           style={{
             maxWidth: 1120,
             margin: "0 auto",
-            padding: "12px 16px",
+            padding: isMobile ? "10px 12px" : "12px 16px",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
@@ -119,13 +145,26 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
           <div style={{ display: "grid", gap: 2 }}>
             <div style={{ fontWeight: 700 }}>RentChain Tenant Portal</div>
             <div style={{ fontSize: 12, color: "#64748b" }}>
-              {tenantName}
+              {identityLoading ? "Loading profile..." : tenantName || "Tenant profile"}
             </div>
-            <div style={{ fontSize: 12, color: "#94a3b8" }}>
-              {tenantEmail}
+            <div style={{ fontSize: 12, color: "#94a3b8", minHeight: 16 }}>
+              {identityLoading
+                ? ""
+                : [tenantEmail, tenantUnit ? `Unit ${tenantUnit}` : null].filter(Boolean).join(" • ")}
             </div>
           </div>
-          <nav style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <nav
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              flexWrap: isMobile ? "nowrap" : "wrap",
+              overflowX: isMobile ? "auto" : "visible",
+              whiteSpace: isMobile ? "nowrap" : "normal",
+              width: isMobile ? "100%" : "auto",
+              paddingBottom: isMobile ? 2 : 0,
+            }}
+          >
             {navItems.map((item) => (
               <NavLink key={item.to} to={item.to} style={linkStyle} end={item.to === "/tenant"}>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
@@ -184,6 +223,7 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
                 cursor: "pointer",
                 color: "#334155",
                 fontWeight: 600,
+                flexShrink: 0,
               }}
             >
               Logout
@@ -191,7 +231,7 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
           </nav>
         </div>
       </header>
-      <main style={{ maxWidth: 1120, margin: "0 auto", padding: 16 }}>
+      <main style={{ maxWidth: 1120, margin: "0 auto", padding: isMobile ? 12 : 16 }}>
         {children}
       </main>
     </div>
