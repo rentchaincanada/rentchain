@@ -634,6 +634,12 @@ router.get("/ledger", requireTenant, async (req: any, res) => {
   try {
     const tenantId = req.user?.tenantId;
     if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    console.info("[tenant-ledger] request start", {
+      tenantId,
+      path: req.originalUrl || req.path || "",
+      hasAuthHeader: Boolean(req.headers?.authorization),
+      role: req.user?.role || null,
+    });
 
     const { getTenantLedger } = await import("../services/tenantLedgerService");
     const entries = await getTenantLedger(tenantId);
@@ -788,7 +794,12 @@ router.get("/ledger", requireTenant, async (req: any, res) => {
       return res.json({ ok: true, data: items.slice(0, 25) });
     }
   } catch (err) {
-    console.error("[tenantPortalRoutes] /tenant/ledger error", err);
+    console.error("[tenantPortalRoutes] /tenant/ledger error", {
+      tenantId: req.user?.tenantId || null,
+      path: req.originalUrl || req.path || "",
+      message: (err as any)?.message || "failed",
+      code: (err as any)?.code || null,
+    });
     return res.status(500).json({ ok: false, error: "TENANT_LEDGER_FAILED" });
   }
 });
