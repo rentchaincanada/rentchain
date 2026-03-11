@@ -128,13 +128,22 @@ export default function TenantMaintenanceRequestNewPage() {
         </label>
       </div>
 
-      <label style={{ display: "flex", alignItems: "center", gap: 8, color: textTokens.secondary }}>
+      <label style={{ display: "grid", gap: 6 }}>
+        <span style={{ color: textTokens.muted }}>Attachments</span>
         <input
-          type="checkbox"
-          checked={photoUploadPending}
-          onChange={(e) => setPhotoUploadPending(e.target.checked)}
+          type="file"
+          disabled
+          aria-disabled="true"
+          style={{
+            padding: "9px 10px",
+            borderRadius: radius.md,
+            border: `1px solid ${colors.border}`,
+            background: "#f8fafc",
+            color: textTokens.muted,
+            cursor: "not-allowed",
+          }}
         />
-        Optional photo upload (placeholder)
+        <span style={{ color: textTokens.muted, fontSize: "0.9rem" }}>Attachments coming soon.</span>
       </label>
 
       <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
@@ -148,3 +157,5 @@ export default function TenantMaintenanceRequestNewPage() {
     </Card>
   );
 }
+
+
