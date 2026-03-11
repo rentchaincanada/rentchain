@@ -9,9 +9,8 @@ import {
 const router = Router();
 
 router.options("/tenancies/:tenancyId", (_req, res) => res.sendStatus(204));
-router.use(requireLandlord);
 
-router.get("/tenants/:tenantId/tenancies", async (req: any, res) => {
+router.get("/tenants/:tenantId/tenancies", requireLandlord, async (req: any, res) => {
   const tenantId = String(req.params?.tenantId || "").trim();
   if (!tenantId) return res.status(400).json({ ok: false, error: "tenantId is required" });
 
@@ -31,7 +30,7 @@ router.get("/tenants/:tenantId/tenancies", async (req: any, res) => {
   }
 });
 
-router.patch("/tenancies/:tenancyId", async (req: any, res) => {
+router.patch("/tenancies/:tenancyId", requireLandlord, async (req: any, res) => {
   const tenancyId = String(req.params?.tenancyId || "").trim();
   if (!tenancyId) return res.status(400).json({ ok: false, error: "tenancyId is required" });
 

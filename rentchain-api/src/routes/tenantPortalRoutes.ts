@@ -13,9 +13,23 @@ const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function requireTenant(req: any, res: any, next: any) {
   const user = req.user;
-  if (!user || user.role !== "tenant" || !user.tenantId) {
+  const role = String(user?.role || "").trim().toLowerCase();
+  const tenantId = String(user?.tenantId || "").trim();
+  if (!user || role !== "tenant" || !tenantId) {
+    console.warn("[tenant-auth] denied", {
+      path: req.originalUrl || req.path || "",
+      reason: !user ? "missing_user" : role !== "tenant" ? "role_not_tenant" : "missing_tenant_id",
+      role: role || null,
+      tenantId: tenantId || null,
+      hasAuthHeader: Boolean(req.headers?.authorization),
+    });
     return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
   }
+  console.info("[tenant-auth] granted", {
+    path: req.originalUrl || req.path || "",
+    tenantId,
+    role,
+  });
   return next();
 }
 
