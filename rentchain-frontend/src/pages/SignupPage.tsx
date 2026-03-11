@@ -39,20 +39,23 @@ const SignupPage: React.FC = () => {
     }
     return resolved.destination;
   }, [location.search, user?.actorRole, user?.role]);
-  const isContractorInviteFlow =
-    nextPath.startsWith("/contractor/invite/") ||
-    nextPath.startsWith("/contractor/signup?invite=") ||
-    (() => {
-      if (!nextPath.startsWith("/auth/onboard?")) return false;
-      try {
-        const nextUrl = new URL(nextPath, window.location.origin);
-        const source = String(nextUrl.searchParams.get("source") || "").trim().toLowerCase();
-        const inviteType = String(nextUrl.searchParams.get("inviteType") || "").trim().toLowerCase();
-        return source === "contractor" || inviteType === "contractor";
-      } catch {
-        return false;
-      }
-    })();
+  const inviteContextType = React.useMemo<"contractor" | "tenant" | "landlord" | null>(() => {
+    if (nextPath.startsWith("/contractor/invite/") || nextPath.startsWith("/contractor/signup?invite=")) {
+      return "contractor";
+    }
+    if (nextPath.startsWith("/tenant/invite/")) {
+      return "tenant";
+    }
+    if (!nextPath.startsWith("/auth/onboard?")) return null;
+    try {
+      const nextUrl = new URL(nextPath, window.location.origin);
+      const source = String(nextUrl.searchParams.get("source") || "").trim().toLowerCase();
+      if (source === "contractor" || source === "tenant" || source === "landlord") return source;
+      return null;
+    } catch {
+      return null;
+    }
+  }, [nextPath]);
   const onboardSource = React.useMemo(() => {
     if (!nextPath.startsWith("/auth/onboard?")) return null;
     try {
@@ -69,9 +72,31 @@ const SignupPage: React.FC = () => {
     console.info("[auth-shell] signup onboarding context", {
       nextPath,
       onboardSource,
-      contractorBanner: isContractorInviteFlow,
+      inviteContextType,
     });
-  }, [isContractorInviteFlow, nextPath, onboardSource]);
+  }, [inviteContextType, nextPath, onboardSource]);
+
+  const inviteBanner = React.useMemo(() => {
+    if (inviteContextType === "contractor") {
+      return {
+        title: "Complete your contractor invitation",
+        body: "Create your account to accept this RentChain contractor invitation and access assigned work orders.",
+      };
+    }
+    if (inviteContextType === "tenant") {
+      return {
+        title: "Complete your tenant invitation",
+        body: "Create your account to accept this RentChain tenant invitation and access your tenant workspace.",
+      };
+    }
+    if (inviteContextType === "landlord") {
+      return {
+        title: "Complete your landlord setup",
+        body: "Create your account to continue your RentChain landlord workspace setup.",
+      };
+    }
+    return null;
+  }, [inviteContextType]);
   const contractorOnboardContext = React.useMemo(() => {
     if (!nextPath.startsWith("/auth/onboard?")) {
       return { token: "", source: "" };
@@ -151,10 +176,12 @@ const SignupPage: React.FC = () => {
           RentChain
         </div>
         <h1 style={{ marginTop: 0, marginBottom: spacing.xs, fontSize: "1.7rem" }}>
-          Sign up (Free)
+          Create your RentChain account
         </h1>
-        <p style={{ marginTop: 0, color: text.muted }}>Start with Free - upgrade anytime.</p>
-        {isContractorInviteFlow ? (
+        <p style={{ marginTop: 0, color: text.muted }}>
+          Create an account to access your RentChain workspace.
+        </p>
+        {inviteBanner ? (
           <div
             style={{
               marginBottom: spacing.sm,
@@ -166,8 +193,8 @@ const SignupPage: React.FC = () => {
               fontSize: "0.9rem",
             }}
           >
-            <div style={{ fontWeight: 700, marginBottom: 4 }}>Complete your contractor invitation</div>
-            <div>Create your account to accept this RentChain contractor invitation and access assigned work orders.</div>
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>{inviteBanner.title}</div>
+            <div>{inviteBanner.body}</div>
           </div>
         ) : null}
 

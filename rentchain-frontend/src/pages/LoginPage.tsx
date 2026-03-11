@@ -17,7 +17,6 @@ export const LoginPage: React.FC = () => {
   const { showToast } = useToast();
 
   const searchParams = new URLSearchParams(location.search);
-  const rawNext = searchParams.get("next");
   const expired = searchParams.get("reason") === "expired";
 
   const nextPath = React.useMemo(() => {
@@ -40,20 +39,23 @@ export const LoginPage: React.FC = () => {
     }
     return resolved.destination;
   }, [location.search, user?.actorRole, user?.role]);
-  const isContractorInviteFlow =
-    nextPath.startsWith("/contractor/invite/") ||
-    nextPath.startsWith("/contractor/signup?invite=") ||
-    (() => {
-      if (!nextPath.startsWith("/auth/onboard?")) return false;
-      try {
-        const nextUrl = new URL(nextPath, window.location.origin);
-        const source = String(nextUrl.searchParams.get("source") || "").trim().toLowerCase();
-        const inviteType = String(nextUrl.searchParams.get("inviteType") || "").trim().toLowerCase();
-        return source === "contractor" || inviteType === "contractor";
-      } catch {
-        return false;
-      }
-    })();
+  const inviteContextType = React.useMemo<"contractor" | "tenant" | "landlord" | null>(() => {
+    if (nextPath.startsWith("/contractor/invite/") || nextPath.startsWith("/contractor/signup?invite=")) {
+      return "contractor";
+    }
+    if (nextPath.startsWith("/tenant/invite/")) {
+      return "tenant";
+    }
+    if (!nextPath.startsWith("/auth/onboard?")) return null;
+    try {
+      const nextUrl = new URL(nextPath, window.location.origin);
+      const source = String(nextUrl.searchParams.get("source") || "").trim().toLowerCase();
+      if (source === "contractor" || source === "tenant" || source === "landlord") return source;
+      return null;
+    } catch {
+      return null;
+    }
+  }, [nextPath]);
   const onboardSource = React.useMemo(() => {
     if (!nextPath.startsWith("/auth/onboard?")) return null;
     try {
@@ -70,9 +72,31 @@ export const LoginPage: React.FC = () => {
     console.info("[auth-shell] login onboarding context", {
       nextPath,
       onboardSource,
-      contractorBanner: isContractorInviteFlow,
+      inviteContextType,
     });
-  }, [isContractorInviteFlow, nextPath, onboardSource]);
+  }, [inviteContextType, nextPath, onboardSource]);
+
+  const inviteBanner = React.useMemo(() => {
+    if (inviteContextType === "contractor") {
+      return {
+        title: "Contractor invitation detected",
+        body: "Sign in or create an account to accept your RentChain contractor invitation.",
+      };
+    }
+    if (inviteContextType === "tenant") {
+      return {
+        title: "Tenant invitation detected",
+        body: "Sign in or create an account to accept your RentChain tenant invitation.",
+      };
+    }
+    if (inviteContextType === "landlord") {
+      return {
+        title: "Landlord setup detected",
+        body: "Sign in or create an account to continue your RentChain landlord setup.",
+      };
+    }
+    return null;
+  }, [inviteContextType]);
 
   const defaultEmail = import.meta.env.DEV ? "demo@rentchain.dev" : "";
   const [email, setEmail] = useState(defaultEmail);
@@ -199,7 +223,7 @@ export const LoginPage: React.FC = () => {
     >
       <Card elevated style={{ width: "min(460px, 92vw)", padding: spacing.lg }}>
         <div style={{ marginBottom: spacing.xs, color: text.subtle, fontSize: "0.9rem" }}>
-          RentChain Landlord Portal
+          RentChain Secure Access
         </div>
         <h1
           style={{
@@ -210,8 +234,11 @@ export const LoginPage: React.FC = () => {
             color: text.primary,
           }}
         >
-          RentChain Landlord Login
+          Sign in to RentChain
         </h1>
+        <p style={{ marginTop: 0, marginBottom: spacing.sm, color: text.muted }}>
+          Sign in to continue to your workspace.
+        </p>
         {new URLSearchParams(location.search).get("reason") === "expired" ? (
           <div
             style={{
@@ -228,7 +255,7 @@ export const LoginPage: React.FC = () => {
             Session expired. Please log in again.
           </div>
         ) : null}
-        {isContractorInviteFlow ? (
+        {inviteBanner ? (
           <div
             style={{
               marginBottom: spacing.sm,
@@ -240,8 +267,8 @@ export const LoginPage: React.FC = () => {
               fontSize: "0.9rem",
             }}
           >
-            <div style={{ fontWeight: 700, marginBottom: 4 }}>Contractor invitation detected</div>
-            <div>Sign in or create an account to accept your RentChain contractor invitation.</div>
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>{inviteBanner.title}</div>
+            <div>{inviteBanner.body}</div>
           </div>
         ) : null}
 
@@ -326,7 +353,7 @@ export const LoginPage: React.FC = () => {
             ? error
             : expired
             ? "Session expired. Please log in again."
-            : "Sign in to access your landlord workspace."}
+            : "Sign in to continue to your workspace."}
         </div>
         <div style={{ marginTop: spacing.sm, display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
           <Link to="/signup" style={{ color: colors.accent, textDecoration: "none", fontWeight: 600 }}>
