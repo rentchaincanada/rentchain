@@ -183,7 +183,7 @@ function formatNoticeType(type?: string | null): string {
 const pageStyle: React.CSSProperties = {
   minHeight: "100vh",
   background: colors.bgAmbient,
-  padding: spacing.xl,
+  padding: "clamp(12px, 3vw, 24px)",
   boxSizing: "border-box",
 };
 
@@ -527,16 +527,19 @@ export default function TenantDashboardPage() {
               borderColor: colors.borderStrong,
               background: "#fff7ed",
               color: "#9a3412",
+              padding: "clamp(12px, 2.4vw, 18px)",
             }}
           >
-            <div style={{ fontWeight: 800, marginBottom: 6 }}>Your session expired. Please sign in again.</div>
+            <div style={{ fontWeight: 800, marginBottom: 6 }}>Your tenant session has expired</div>
+            <div style={{ fontSize: "0.95rem", marginBottom: spacing.sm }}>
+              Please sign in again to continue to your RentChain tenant portal.
+            </div>
             <div style={{ marginTop: spacing.sm }}>
               <button
                 type="button"
                 onClick={() => {
                   if (typeof window !== "undefined") {
-                    const next = encodeURIComponent(window.location.pathname + (window.location.search || ""));
-                    window.location.href = `/tenant/login?next=${next}`;
+                    window.location.href = "/tenant/login";
                   }
                 }}
                 style={{
@@ -548,7 +551,7 @@ export default function TenantDashboardPage() {
                   fontWeight: 700,
                 }}
               >
-                Sign in
+                Go to tenant login
               </button>
             </div>
           </Card>
@@ -646,7 +649,7 @@ export default function TenantDashboardPage() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
+            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
             gap: spacing.md,
           }}
         >
