@@ -250,18 +250,6 @@ function App() {
       </RequireTenant>
     ) : (
       <TenantPortalComingSoon />
-  const applicantApplyRedirects = [
-    "/applicant/apply",
-    "/application/new",
-    "/applypage",
-  ];
-  const renderTenantShell = (page: React.ReactNode) =>
-    TENANT_PORTAL_ENABLED ? (
-      <RequireTenant>
-        <TenantNav>{page}</TenantNav>
-      </RequireTenant>
-    ) : (
-      <TenantPortalComingSoon />
     );
 
   return (
