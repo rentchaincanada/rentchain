@@ -24,6 +24,14 @@ export async function apiFetch<T>(
   const storedToken = isTenantPath ? getTenantToken() : getAuthToken();
   const token = explicitToken || storedToken;
   const effectiveToken = token || firebaseToken;
+  if (import.meta.env.DEV && isTenantPath) {
+    console.info("[tenant-auth] api/http token selection", {
+      path: normalizedPath,
+      hasExplicitToken: Boolean(explicitToken),
+      hasStoredTenantToken: Boolean(storedToken),
+      authSource: token ? "tenant-bearer" : firebaseToken ? "firebase-fallback" : "missing",
+    });
+  }
   const headers = new Headers(opts.headers || {});
   headers.set("Accept", "application/json");
   headers.set("x-api-client", "web");

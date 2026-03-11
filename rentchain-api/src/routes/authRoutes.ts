@@ -1092,6 +1092,15 @@ router.post("/onboard/accept", async (req: any, res) => {
         return res.status(410).json({ ok: false, code: "expired", message: "Invite expired." });
       }
       if (inv.status && String(inv.status) !== "pending") {
+        onboardLog("tenant_association_resolved", {
+          token: tokenFingerprint(token),
+          inviteType: "tenant",
+          tenantId,
+          landlordId: String(inv.landlordId || "").trim() || null,
+          propertyId: String(inv.propertyId || "").trim() || null,
+          unitId: String(inv.unitId || "").trim() || null,
+          leaseId: String(inv.leaseId || "").trim() || null,
+        });
         onboardLog("tenant_session_issued", {
           token: tokenFingerprint(token),
           inviteType: "tenant",
@@ -1139,6 +1148,15 @@ router.post("/onboard/accept", async (req: any, res) => {
         { merge: true }
       );
 
+      onboardLog("tenant_association_resolved", {
+        token: tokenFingerprint(token),
+        inviteType: "tenant",
+        tenantId,
+        landlordId: String(inv.landlordId || "").trim() || null,
+        propertyId: String(inv.propertyId || "").trim() || null,
+        unitId: String(inv.unitId || "").trim() || null,
+        leaseId: String(inv.leaseId || "").trim() || null,
+      });
       onboardLog("tenant_session_issued", {
         token: tokenFingerprint(token),
         inviteType: "tenant",
