@@ -1428,4 +1428,3 @@ router.get("/maintenance-requests/:id", requireTenant, async (req: any, res) => 
 
 export default router;
 
-

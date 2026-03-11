@@ -157,5 +157,3 @@ export default function TenantMaintenanceRequestNewPage() {
     </Card>
   );
 }
-
-
