@@ -6,6 +6,7 @@ import { fetchLandlordConversations } from "../../api/messagesApi";
 import { getVisibleNavItems } from "./navConfig";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { UpgradeNudgeHost } from "@/features/upgradeNudges/UpgradeNudgeHost";
+import { getRoleDefaultDestination } from "@/lib/authDestination";
 import "./LandlordNav.css";
 
 type Props = {
@@ -30,9 +31,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
     if (actorRole === "admin" || role === "admin") return "admin";
     return actorRole || role || "landlord";
   }, [navLoading, user?.actorRole, user?.role]);
-  if (!navLoading && effectiveRole === "contractor") {
-    return <Navigate to="/contractor" replace />;
-  }
+  const isLandlordWorkspace = effectiveRole === "landlord" || effectiveRole === "admin";
   if (import.meta.env.DEV) {
     console.debug("[nav] role resolved", {
       effectiveRole,
@@ -40,7 +39,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
       actorRole: user?.actorRole || null,
     });
   }
-  const visibleItems = navLoading ? [] : getVisibleNavItems(effectiveRole, features);
+  const visibleItems = navLoading || !isLandlordWorkspace ? [] : getVisibleNavItems(effectiveRole, features);
   const drawerItems = visibleItems.filter((item) => item.showInDrawer !== false);
   const primaryDrawerItems = drawerItems.filter((item) => !item.requiresAdmin);
   const adminDrawerItems = drawerItems.filter((item) => item.requiresAdmin);
@@ -57,7 +56,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
 
   useEffect(() => {
     let mounted = true;
-    if (navLoading || features?.messaging === false) {
+    if (navLoading || !isLandlordWorkspace || features?.messaging === false) {
       setHasUnread(false);
       return () => {
         mounted = false;
@@ -82,7 +81,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
       mounted = false;
       window.clearInterval(t);
     };
-  }, [features?.messaging, navLoading]);
+  }, [features?.messaging, isLandlordWorkspace, navLoading]);
 
   useEffect(() => {
     setDrawerOpen(false);
@@ -111,6 +110,44 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
       document.body.style.overflow = "";
     };
   }, [drawerOpen]);
+
+  if (navLoading) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily:
+            "system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', sans-serif",
+          fontSize: "0.95rem",
+          color: "#0f172a",
+          background:
+            "radial-gradient(circle at top left, rgba(37,99,235,0.08) 0, rgba(14,165,233,0.06) 45%, rgba(255,255,255,0.9) 100%)",
+          padding: "24px",
+        }}
+      >
+        <div
+          style={{
+            width: "min(420px, 90vw)",
+            background: "rgba(255,255,255,0.9)",
+            border: "1px solid rgba(15,23,42,0.08)",
+            borderRadius: 16,
+            padding: "20px 22px",
+            boxShadow: "0 12px 30px rgba(15,23,42,0.12)",
+          }}
+        >
+          <div style={{ fontWeight: 700, marginBottom: 8 }}>Loading your workspace...</div>
+          <div style={{ color: "#475569" }}>Confirming your account role.</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isLandlordWorkspace) {
+    return <Navigate to={getRoleDefaultDestination(effectiveRole as any)} replace />;
+  }
 
   return (
     <div className="rc-landlord-shell">
