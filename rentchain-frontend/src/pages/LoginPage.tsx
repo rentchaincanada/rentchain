@@ -149,7 +149,6 @@ export const LoginPage: React.FC = () => {
           destination: nextPath,
         });
       }
-      navigate(nextPath, { replace: true });
     } catch (err: any) {
       setError(err?.message || "Demo login failed");
     } finally {
@@ -197,7 +196,6 @@ export const LoginPage: React.FC = () => {
           destination: nextPath,
         });
       }
-      navigate(nextPath, { replace: true });
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : "Invalid email or password";

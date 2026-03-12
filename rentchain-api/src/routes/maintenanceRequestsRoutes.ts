@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db, FieldValue } from "../config/firebase";
 import { authenticateJwt } from "../middleware/authMiddleware";
+import { verifyAuthToken } from "../auth/jwt";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 import { sendEmail } from "../services/emailService";
 
@@ -31,7 +32,17 @@ const WORKFLOW_STATUSES = [
   "scheduled",
   "in_progress",
   "completed",
+  "cancelled",
 ] as const;
+const WORKFLOW_TRANSITIONS: Record<(typeof WORKFLOW_STATUSES)[number], Array<(typeof WORKFLOW_STATUSES)[number]>> = {
+  submitted: ["reviewed", "cancelled"],
+  reviewed: ["assigned", "cancelled"],
+  assigned: ["scheduled", "cancelled"],
+  scheduled: ["in_progress", "cancelled"],
+  in_progress: ["completed", "cancelled"],
+  completed: [],
+  cancelled: [],
+};
 const LEGACY_TO_WORKFLOW_STATUS: Record<string, (typeof WORKFLOW_STATUSES)[number]> = {
   NEW: "submitted",
   IN_PROGRESS: "in_progress",
@@ -55,6 +66,146 @@ function contractorIdOf(req: any): string | null {
   return String(req.user?.contractorId || req.user?.id || "").trim() || null;
 }
 
+function getBearerToken(req: any): string | null {
+  const raw = req?.headers?.authorization || req?.headers?.Authorization;
+  if (!raw || typeof raw !== "string") return null;
+  const m = raw.match(/^Bearer\s+(.+)$/i);
+  return m?.[1] ?? null;
+}
+
+function fingerprint(value: string | null | undefined): string {
+  const token = String(value || "").trim();
+  if (!token) return "none";
+  return `${token.slice(0, 6)}...${token.slice(-4)}`;
+}
+
+async function resolveContractorAccess(req: any): Promise<{
+  role: string;
+  contractorId: string | null;
+  directRole: string;
+  directContractorId: string | null;
+  jwtSub: string | null;
+  jwtRole: string | null;
+  jwtEmail: string | null;
+  persistedUserRole: string | null;
+  persistedAccountRole: string | null;
+  source: string;
+}> {
+  const directRole = roleOf(req);
+  const directContractorId = contractorIdOf(req);
+  const rawToken = getBearerToken(req);
+  let jwtSub: string | null = null;
+  let jwtRole: string | null = null;
+  let jwtEmail: string | null = null;
+
+  try {
+    if (rawToken) {
+      const claims = verifyAuthToken(rawToken) as any;
+      jwtSub = String(claims?.sub || "").trim() || null;
+      jwtRole = String(claims?.role || "").trim().toLowerCase() || null;
+      jwtEmail = String(claims?.email || "").trim().toLowerCase() || null;
+    }
+  } catch {
+    // auth middleware already handles invalid bearer tokens
+  }
+
+  if (directRole === "contractor" || directRole === "admin") {
+    return {
+      role: directRole,
+      contractorId: directContractorId,
+      directRole,
+      directContractorId,
+      jwtSub,
+      jwtRole,
+      jwtEmail,
+      persistedUserRole: null,
+      persistedAccountRole: null,
+      source: "direct_request_user",
+    };
+  }
+
+  const userId = String(req.user?.id || jwtSub || "").trim();
+  let userData: any = null;
+  let accountData: any = null;
+
+  if (userId) {
+    const [userSnap, accountSnap] = await Promise.all([
+      db.collection("users").doc(userId).get(),
+      db.collection("accounts").doc(userId).get(),
+    ]);
+    userData = userSnap.exists ? (userSnap.data() as any) : null;
+    accountData = accountSnap.exists ? (accountSnap.data() as any) : null;
+  }
+
+  let persistedUserRole = String(userData?.actorRole || userData?.role || "").trim().toLowerCase() || null;
+  let persistedAccountRole = String(accountData?.actorRole || accountData?.role || "").trim().toLowerCase() || null;
+  let resolvedRole = persistedUserRole || persistedAccountRole || directRole || jwtRole || "";
+  let resolvedContractorId =
+    String(userData?.contractorId || accountData?.contractorId || directContractorId || userId || "").trim() || null;
+  let source = userId ? "persisted_by_user_id" : "no_identity";
+
+  if (resolvedRole !== "contractor" && resolvedRole !== "admin") {
+    const lookupEmail = String(req.user?.email || jwtEmail || "").trim().toLowerCase();
+    if (lookupEmail) {
+      const [userByEmailSnap, accountByEmailSnap, contractorProfileSnap] = await Promise.all([
+        db.collection("users").where("email", "==", lookupEmail).limit(1).get(),
+        db.collection("accounts").where("email", "==", lookupEmail).limit(1).get(),
+        db.collection("contractorProfiles").where("email", "==", lookupEmail).limit(1).get(),
+      ]);
+      const userByEmail = !userByEmailSnap.empty ? (userByEmailSnap.docs[0].data() as any) : null;
+      const accountByEmail = !accountByEmailSnap.empty ? (accountByEmailSnap.docs[0].data() as any) : null;
+      const contractorProfile = !contractorProfileSnap.empty ? (contractorProfileSnap.docs[0].data() as any) : null;
+      const emailUserRole = String(userByEmail?.actorRole || userByEmail?.role || "").trim().toLowerCase();
+      const emailAccountRole = String(accountByEmail?.actorRole || accountByEmail?.role || "").trim().toLowerCase();
+      const emailResolvedRole = emailUserRole || emailAccountRole || (contractorProfile ? "contractor" : "");
+      const emailResolvedContractorId =
+        String(
+          userByEmail?.contractorId ||
+            accountByEmail?.contractorId ||
+            contractorProfile?.userId ||
+            contractorProfileSnap.docs[0]?.id ||
+            ""
+        ).trim() || null;
+      if (emailResolvedRole === "contractor" || emailResolvedRole === "admin") {
+        resolvedRole = emailResolvedRole;
+        resolvedContractorId = emailResolvedContractorId || resolvedContractorId;
+        persistedUserRole = persistedUserRole || emailUserRole || null;
+        persistedAccountRole = persistedAccountRole || emailAccountRole || null;
+        source = "persisted_by_email";
+      }
+    }
+  }
+
+  return {
+    role: resolvedRole,
+    contractorId: resolvedContractorId,
+    directRole,
+    directContractorId,
+    jwtSub,
+    jwtRole,
+    jwtEmail,
+    persistedUserRole,
+    persistedAccountRole,
+    source,
+  };
+}
+
+function logContractorAccess(event: string, access: Awaited<ReturnType<typeof resolveContractorAccess>>, extra?: Record<string, unknown>) {
+  console.info(`[maintenance-v2] contractor-access:${event}`, {
+    directRole: access.directRole || null,
+    directContractorId: access.directContractorId || null,
+    jwtSub: access.jwtSub || null,
+    jwtRole: access.jwtRole || null,
+    jwtEmail: access.jwtEmail || null,
+    persistedUserRole: access.persistedUserRole || null,
+    persistedAccountRole: access.persistedAccountRole || null,
+    resolvedRole: access.role || null,
+    resolvedContractorId: access.contractorId || null,
+    source: access.source,
+    ...extra,
+  });
+}
+
 function normalizeWorkflowStatus(raw: any): (typeof WORKFLOW_STATUSES)[number] | null {
   const value = String(raw || "").trim();
   if (!value) return null;
@@ -69,6 +220,25 @@ function normalizeWorkflowStatus(raw: any): (typeof WORKFLOW_STATUSES)[number] |
 function ensureStatusHistory(item: any) {
   const history = Array.isArray(item?.statusHistory) ? item.statusHistory : [];
   return history;
+}
+
+function canTransitionWorkflowStatus(
+  currentStatus: (typeof WORKFLOW_STATUSES)[number],
+  nextStatus: (typeof WORKFLOW_STATUSES)[number]
+) {
+  if (currentStatus === nextStatus) return true;
+  return WORKFLOW_TRANSITIONS[currentStatus]?.includes(nextStatus) || false;
+}
+
+function formatTenantName(tenant: any, fallback?: string | null) {
+  const direct = String(tenant?.name || "").trim();
+  if (direct) return direct;
+  const combined = [tenant?.firstName, tenant?.lastName]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .join(" ");
+  if (combined) return combined;
+  return String(fallback || "").trim() || null;
 }
 
 async function appendStatusHistory(
@@ -339,6 +509,7 @@ router.post("/tenant/maintenance", async (req: any, res) => {
     const category = String(req.body?.category || "GENERAL").trim().toUpperCase().slice(0, 80);
     const priorityRaw = String(req.body?.priority || "normal").trim().toLowerCase();
     const priority = ["low", "normal", "urgent"].includes(priorityRaw) ? priorityRaw : "normal";
+    const notes = String(req.body?.notes || req.body?.optionalNotes || "").trim().slice(0, 2000) || null;
 
     if (!title || !description) {
       return res.status(400).json({ ok: false, error: "TITLE_AND_DESCRIPTION_REQUIRED" });
@@ -349,6 +520,9 @@ router.post("/tenant/maintenance", async (req: any, res) => {
     const landlordId = String(tenant?.landlordId || req.user?.landlordId || "").trim() || null;
     const propertyId = String(tenant?.propertyId || tenant?.property || "").trim() || null;
     const unitId = String(tenant?.unitId || tenant?.unit || "").trim() || null;
+    const tenantName = formatTenantName(tenant, req.user?.name || req.user?.email || null);
+    const propertyLabel = String(tenant?.propertyName || tenant?.propertyLabel || propertyId || "").trim() || null;
+    const unitLabel = String(tenant?.unitLabel || unitId || "").trim() || null;
     const now = Date.now();
     const ref = db.collection("maintenanceRequests").doc();
     const data = {
@@ -357,8 +531,12 @@ router.post("/tenant/maintenance", async (req: any, res) => {
       landlordId,
       propertyId,
       unitId,
+      tenantName,
+      propertyLabel,
+      unitLabel,
       title,
       description,
+      notes,
       category,
       priority,
       status: "submitted",
@@ -394,7 +572,7 @@ router.post("/tenant/maintenance", async (req: any, res) => {
       });
     }
 
-    return res.status(201).json({ ok: true, requestId: ref.id, data });
+    return res.status(201).json({ ok: true, requestId: ref.id, status: "submitted", data });
   } catch (err: any) {
     console.error("[maintenance-v2] tenant create failed", {
       tenantId: req.user?.tenantId || null,
@@ -491,7 +669,20 @@ router.patch("/landlord/maintenance/:id", async (req: any, res) => {
       return res.status(403).json({ ok: false, error: "FORBIDDEN" });
     }
 
-    const nextStatus = normalizeWorkflowStatus(req.body?.status);
+    const currentStatus = normalizeWorkflowStatus(current.status) || "submitted";
+    const nextStatus = req.body?.status === undefined ? null : normalizeWorkflowStatus(req.body?.status);
+    if (req.body?.status !== undefined && !nextStatus) {
+      return res.status(400).json({ ok: false, error: "INVALID_STATUS" });
+    }
+    if (nextStatus && !canTransitionWorkflowStatus(currentStatus, nextStatus)) {
+      return res.status(400).json({
+        ok: false,
+        error: "INVALID_STATUS_TRANSITION",
+        currentStatus,
+        nextStatus,
+      });
+    }
+
     const update: any = {
       updatedAt: Date.now(),
       lastUpdatedBy: "LANDLORD",
@@ -505,7 +696,7 @@ router.patch("/landlord/maintenance/:id", async (req: any, res) => {
       update.landlordNote = req.body.landlordNote === null ? null : String(req.body.landlordNote || "").trim().slice(0, 5000);
     }
     await ref.set(update, { merge: true });
-    if (nextStatus) {
+    if (nextStatus && nextStatus !== currentStatus) {
       await appendStatusHistory(id, {
         status: nextStatus,
         actorRole: role === "admin" ? "admin" : "landlord",
@@ -520,7 +711,7 @@ router.patch("/landlord/maintenance/:id", async (req: any, res) => {
       ["tenants", String(refreshed.tenantId || "")],
       ["users", String(refreshed.tenantId || "")],
     ]);
-    if (nextStatus) {
+    if (nextStatus && nextStatus !== currentStatus) {
       await sendMaintenanceStatusEmail({
         to: tenantEmail,
         subject: `Maintenance request updated: ${String(refreshed.title || "Request")}`,
@@ -533,6 +724,42 @@ router.patch("/landlord/maintenance/:id", async (req: any, res) => {
   } catch (err: any) {
     console.error("[maintenance-v2] landlord patch failed", { message: err?.message || "failed" });
     return res.status(500).json({ ok: false, error: "LANDLORD_MAINTENANCE_PATCH_FAILED" });
+  }
+});
+
+router.get("/landlord/maintenance/contractors", async (req: any, res) => {
+  try {
+    const role = roleOf(req);
+    if (role !== "landlord" && role !== "admin") {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+    const landlordId = landlordIdOf(req);
+    if (!landlordId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+
+    const snap = await db
+      .collection("contractorProfiles")
+      .where("invitedByLandlordIds", "array-contains", landlordId)
+      .limit(200)
+      .get();
+    const items = snap.docs
+      .map((doc) => ({ id: doc.id, ...(doc.data() as any) }))
+      .filter((item) => item.isActive !== false)
+      .sort((a, b) =>
+        String(a.businessName || a.contactName || a.email || "").localeCompare(
+          String(b.businessName || b.contactName || b.email || "")
+        )
+      )
+      .map((item) => ({
+        id: item.id,
+        businessName: String(item.businessName || "").trim() || null,
+        contactName: String(item.contactName || "").trim() || null,
+        email: String(item.email || "").trim() || null,
+      }));
+
+    return res.json({ ok: true, items, data: items });
+  } catch (err: any) {
+    console.error("[maintenance-v2] landlord contractor list failed", { message: err?.message || "failed" });
+    return res.status(500).json({ ok: false, error: "LANDLORD_MAINTENANCE_CONTRACTOR_LIST_FAILED" });
   }
 });
 
@@ -553,6 +780,16 @@ router.post("/landlord/maintenance/:id/assign", async (req: any, res) => {
     if (!snap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
     const current = { id: snap.id, ...(snap.data() as any) };
     if (String(current.landlordId || "") !== landlordId) return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+
+    const currentStatus = normalizeWorkflowStatus(current.status) || "submitted";
+    if (!["reviewed", "assigned"].includes(currentStatus)) {
+      return res.status(400).json({
+        ok: false,
+        error: "INVALID_STATUS_TRANSITION",
+        currentStatus,
+        nextStatus: "assigned",
+      });
+    }
 
     const contractorProfileSnap = await db.collection("contractorProfiles").doc(contractorId).get();
     const contractorProfile = contractorProfileSnap.exists ? (contractorProfileSnap.data() as any) : {};
@@ -613,10 +850,16 @@ router.post("/landlord/maintenance/:id/assign", async (req: any, res) => {
 
 router.get("/contractor/jobs", async (req: any, res) => {
   try {
-    const role = roleOf(req);
-    if (role !== "contractor" && role !== "admin") return res.status(403).json({ ok: false, error: "FORBIDDEN" });
-    const contractorId = contractorIdOf(req);
-    if (!contractorId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    const access = await resolveContractorAccess(req);
+    if (access.role !== "contractor" && access.role !== "admin") {
+      logContractorAccess("forbidden_role", access, { authorization: fingerprint(getBearerToken(req)) });
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+    const contractorId = access.contractorId;
+    if (!contractorId) {
+      logContractorAccess("missing_contractor_id", access, { authorization: fingerprint(getBearerToken(req)) });
+      return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    }
 
     const statusFilter = normalizeWorkflowStatus(req.query?.status);
     const snap = await db
@@ -629,6 +872,7 @@ router.get("/contractor/jobs", async (req: any, res) => {
       items = items.filter((item) => normalizeWorkflowStatus(item.status) === statusFilter);
     }
     items.sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0));
+    logContractorAccess("allowed", access, { authorization: fingerprint(getBearerToken(req)), matchedJobs: items.length });
     return res.json({ ok: true, items, data: items });
   } catch (err: any) {
     console.error("[maintenance-v2] contractor jobs failed", { message: err?.message || "failed" });
@@ -638,16 +882,22 @@ router.get("/contractor/jobs", async (req: any, res) => {
 
 router.patch("/contractor/jobs/:id/status", async (req: any, res) => {
   try {
-    const role = roleOf(req);
-    if (role !== "contractor" && role !== "admin") return res.status(403).json({ ok: false, error: "FORBIDDEN" });
-    const contractorId = contractorIdOf(req);
+    const access = await resolveContractorAccess(req);
+    if (access.role !== "contractor" && access.role !== "admin") {
+      logContractorAccess("status_forbidden_role", access, { authorization: fingerprint(getBearerToken(req)), requestId: String(req.params?.id || "").trim() || null });
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+    const contractorId = access.contractorId;
     const actorId = String(req.user?.id || "").trim() || contractorId;
     const id = String(req.params?.id || "").trim();
-    if (!contractorId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    if (!contractorId) {
+      logContractorAccess("status_missing_contractor_id", access, { authorization: fingerprint(getBearerToken(req)), requestId: id || null });
+      return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    }
     if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
 
     const nextStatus = normalizeWorkflowStatus(req.body?.status);
-    if (!nextStatus || !["scheduled", "in_progress", "completed"].includes(nextStatus)) {
+    if (!nextStatus || !["assigned", "scheduled", "in_progress", "completed"].includes(nextStatus)) {
       return res.status(400).json({ ok: false, error: "INVALID_STATUS" });
     }
 
@@ -656,7 +906,19 @@ router.patch("/contractor/jobs/:id/status", async (req: any, res) => {
     if (!snap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
     const item = { id: snap.id, ...(snap.data() as any) };
     if (String(item.assignedContractorId || "") !== contractorId) {
+      logContractorAccess("status_assignee_mismatch", access, { authorization: fingerprint(getBearerToken(req)), requestId: id, assignedContractorId: String(item.assignedContractorId || "") || null });
       return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const currentStatus = normalizeWorkflowStatus(item.status) || "assigned";
+    const isAcknowledgement = nextStatus === "assigned" && currentStatus === "assigned";
+    if (!isAcknowledgement && !canTransitionWorkflowStatus(currentStatus, nextStatus)) {
+      return res.status(400).json({
+        ok: false,
+        error: "INVALID_STATUS_TRANSITION",
+        currentStatus,
+        nextStatus,
+      });
     }
 
     const note = String(req.body?.message || "").trim().slice(0, 500);
@@ -672,39 +934,43 @@ router.patch("/contractor/jobs/:id/status", async (req: any, res) => {
     );
     await appendStatusHistory(id, {
       status: nextStatus,
-      actorRole: role === "admin" ? "admin" : "contractor",
+      actorRole: access.role === "admin" ? "admin" : "contractor",
       actorId,
-      message: note || `Contractor updated status to ${nextStatus}`,
+      message:
+        note ||
+        (isAcknowledgement ? "Contractor accepted the assigned job" : `Contractor updated status to ${nextStatus}`),
     });
 
     const refreshedSnap = await ref.get();
     const refreshed = { id: refreshedSnap.id, ...(refreshedSnap.data() as any) };
 
-    const [tenantEmail, landlordEmail] = await Promise.all([
-      lookupEmailFromDoc([
-        ["tenants", String(refreshed.tenantId || "")],
-        ["users", String(refreshed.tenantId || "")],
-      ]),
-      lookupEmailFromDoc([
-        ["users", String(refreshed.landlordId || "")],
-        ["landlords", String(refreshed.landlordId || "")],
-      ]),
-    ]);
+    if (!isAcknowledgement) {
+      const [tenantEmail, landlordEmail] = await Promise.all([
+        lookupEmailFromDoc([
+          ["tenants", String(refreshed.tenantId || "")],
+          ["users", String(refreshed.tenantId || "")],
+        ]),
+        lookupEmailFromDoc([
+          ["users", String(refreshed.landlordId || "")],
+          ["landlords", String(refreshed.landlordId || "")],
+        ]),
+      ]);
 
-    await Promise.all([
-      sendMaintenanceStatusEmail({
-        to: tenantEmail,
-        subject: `Maintenance update: ${String(refreshed.title || "Request")}`,
-        intro: `Your maintenance request is now ${nextStatus}.`,
-        requestId: id,
-      }),
-      sendMaintenanceStatusEmail({
-        to: landlordEmail,
-        subject: `Contractor update: ${String(refreshed.title || "Request")}`,
-        intro: `Contractor marked request as ${nextStatus}.`,
-        requestId: id,
-      }),
-    ]);
+      await Promise.all([
+        sendMaintenanceStatusEmail({
+          to: tenantEmail,
+          subject: `Maintenance update: ${String(refreshed.title || "Request")}`,
+          intro: `Your maintenance request is now ${nextStatus}.`,
+          requestId: id,
+        }),
+        sendMaintenanceStatusEmail({
+          to: landlordEmail,
+          subject: `Contractor update: ${String(refreshed.title || "Request")}`,
+          intro: `Contractor marked request as ${nextStatus}.`,
+          requestId: id,
+        }),
+      ]);
+    }
 
     return res.json({ ok: true, item: refreshed, data: refreshed });
   } catch (err: any) {

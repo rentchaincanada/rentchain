@@ -7,7 +7,8 @@ export type MaintenanceWorkflowStatus =
   | "assigned"
   | "scheduled"
   | "in_progress"
-  | "completed";
+  | "completed"
+  | "cancelled";
 
 export type MaintenanceWorkflowItem = {
   id: string;
@@ -15,8 +16,12 @@ export type MaintenanceWorkflowItem = {
   landlordId: string;
   propertyId: string | null;
   unitId: string | null;
+  tenantName?: string | null;
+  propertyLabel?: string | null;
+  unitLabel?: string | null;
   title: string;
   description: string;
+  notes?: string | null;
   category: string;
   priority: "low" | "normal" | "urgent";
   status: MaintenanceWorkflowStatus;
@@ -24,6 +29,7 @@ export type MaintenanceWorkflowItem = {
   assignedContractorName?: string | null;
   contractorStatus?: string | null;
   contractorLastUpdate?: string | null;
+  landlordNote?: string | null;
   createdAt: number;
   updatedAt: number;
   statusHistory?: Array<{
@@ -35,17 +41,28 @@ export type MaintenanceWorkflowItem = {
   }>;
 };
 
+export type LandlordMaintenanceContractor = {
+  id: string;
+  businessName?: string | null;
+  contactName?: string | null;
+  email?: string | null;
+};
+
 export async function createTenantMaintenance(payload: {
   title: string;
   description: string;
   category: string;
   priority: "low" | "normal" | "urgent";
+  notes?: string;
   photoUploadPending?: boolean;
 }) {
-  return tenantApiFetch<{ ok: boolean; requestId: string; data: MaintenanceWorkflowItem }>("/tenant/maintenance", {
-    method: "POST",
-    body: payload,
-  });
+  return tenantApiFetch<{ ok: boolean; requestId: string; status: MaintenanceWorkflowStatus; data: MaintenanceWorkflowItem }>(
+    "/tenant/maintenance",
+    {
+      method: "POST",
+      body: payload,
+    }
+  );
 }
 
 export async function listTenantMaintenance() {
@@ -64,6 +81,12 @@ export async function listLandlordMaintenance(status?: string) {
   const query = status ? `?status=${encodeURIComponent(status)}` : "";
   return apiFetch<{ ok: boolean; items: MaintenanceWorkflowItem[]; data?: MaintenanceWorkflowItem[] }>(
     `/landlord/maintenance${query}`
+  );
+}
+
+export async function listLandlordMaintenanceContractors() {
+  return apiFetch<{ ok: boolean; items: LandlordMaintenanceContractor[]; data?: LandlordMaintenanceContractor[] }>(
+    "/landlord/maintenance/contractors"
   );
 }
 
@@ -104,7 +127,7 @@ export async function listContractorMaintenanceJobs(status?: string) {
 
 export async function patchContractorMaintenanceJobStatus(
   id: string,
-  payload: { status: "scheduled" | "in_progress" | "completed"; message?: string }
+  payload: { status: "assigned" | "scheduled" | "in_progress" | "completed"; message?: string }
 ) {
   return apiFetch<{ ok: boolean; item: MaintenanceWorkflowItem; data?: MaintenanceWorkflowItem }>(
     `/contractor/jobs/${encodeURIComponent(id)}/status`,

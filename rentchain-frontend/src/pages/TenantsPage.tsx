@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useToast } from "../components/ui/ToastProvider";
+import { useAuth } from "../context/useAuth";
 import { TenantDetailPanel } from "../components/tenants/TenantDetailPanel";
 import { TenantLeasePanel } from "../components/tenants/TenantLeasePanel";
 import { TenantPaymentsPanel } from "../components/tenants/TenantPaymentsPanel";
@@ -184,6 +185,7 @@ class TenantsErrorBoundary extends React.Component<
 
 export const TenantsPage: React.FC = () => {
   const navigate = useNavigate();
+  const { user, ready, isLoading: authLoading, authStatus } = useAuth();
   const [searchParams] = useSearchParams();
   const { showToast } = useToast();
 
@@ -200,6 +202,9 @@ export const TenantsPage: React.FC = () => {
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(selectedTenantIdFromUrl);
   const { features } = useCapabilities();
   const inviteEnabled = features?.tenant_invites !== false;
+
+  const role = String(user?.actorRole || user?.role || "").trim().toLowerCase();
+  const canViewTenants = role === "landlord" || role === "admin";
 
   const handleInviteAction = useCallback(() => {
     if (!inviteEnabled) {
@@ -221,6 +226,13 @@ export const TenantsPage: React.FC = () => {
   }, []);
 
   const loadTenants = useCallback(async () => {
+    if (!ready || authLoading || authStatus === "restoring") return;
+    if (!canViewTenants) {
+      setTenants([]);
+      setError("This page is only available to landlords.");
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       setError(null);
@@ -250,7 +262,7 @@ export const TenantsPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [showToast]);
+  }, [authLoading, authStatus, canViewTenants, ready, showToast]);
 
   useEffect(() => {
     void loadTenants();
@@ -375,6 +387,19 @@ export const TenantsPage: React.FC = () => {
   useEffect(() => {
     void hydrateTenantSummariesBatch(visibleTenantIds);
   }, [visibleTenantIds]);
+
+  if (ready && !authLoading && authStatus !== "restoring" && !canViewTenants) {
+    return (
+      <Card elevated>
+        <div style={{ display: "grid", gap: 8 }}>
+          <div style={{ fontWeight: 700, color: text.primary }}>Access restricted</div>
+          <div style={{ color: text.muted, fontSize: 14 }}>
+            The tenants workspace is only available to landlord and admin accounts.
+          </div>
+        </div>
+      </Card>
+    );
+  }
 
   return (
     <TenantsErrorBoundary>

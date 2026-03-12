@@ -586,6 +586,18 @@ function App() {
           }
         />
         <Route
+          path="/contractor/jobs/:id"
+          element={
+            <RequireAuth>
+              <RequireRole allowed={["contractor", "admin"]} fallbackTo="/dashboard">
+                <ContractorNav>
+                  <ContractorJobsPage />
+                </ContractorNav>
+              </RequireRole>
+            </RequireAuth>
+          }
+        />
+        <Route
           path="/contractor/profile"
           element={
             <RequireAuth>
@@ -635,6 +647,16 @@ function App() {
         />
         <Route
           path="/maintenance"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <MaintenanceRequestsPage />
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/maintenance/:id"
           element={
             <RequireAuth>
               <LandlordNav>

@@ -123,27 +123,34 @@ export async function buildCanonicalSessionUserFromClaims(
     );
   }
 
-  const snap = await db.collection("users").doc(baseUser.id).get();
-  if (!snap.exists) {
+  const [userSnap, accountSnap] = await Promise.all([
+    db.collection("users").doc(baseUser.id).get(),
+    db.collection("accounts").doc(baseUser.id).get(),
+  ]);
+  if (!userSnap.exists && !accountSnap.exists) {
     throw new Error("UNAUTHENTICATED");
   }
 
-  const userDoc = snap.data() as any;
-  if (userDoc?.disabled === true) {
+  const userDoc = userSnap.exists ? (userSnap.data() as any) : {};
+  const accountDoc = accountSnap.exists ? (accountSnap.data() as any) : {};
+  const mergedDoc = { ...accountDoc, ...userDoc } as any;
+  if (mergedDoc?.disabled === true) {
     throw new Error("ACCOUNT_DISABLED");
   }
 
-  if (userDoc?.landlordId && baseUser.landlordId && userDoc.landlordId !== baseUser.landlordId) {
+  if (mergedDoc?.landlordId && baseUser.landlordId && mergedDoc.landlordId !== baseUser.landlordId) {
     throw new Error("LANDLORD_SCOPE_MISMATCH");
   }
 
-  if (userDoc?.tenantId && baseUser.tenantId && userDoc.tenantId !== baseUser.tenantId) {
+  if (mergedDoc?.tenantId && baseUser.tenantId && mergedDoc.tenantId !== baseUser.tenantId) {
     throw new Error("TENANT_SCOPE_MISMATCH");
   }
 
   let approved =
-    baseUser.role === "admin" || baseUser.role === "tenant" ? true : userDoc?.approved === true;
-  const hasApprovedField = Object.prototype.hasOwnProperty.call(userDoc || {}, "approved");
+    baseUser.role === "admin" || baseUser.role === "tenant" ? true : mergedDoc?.approved === true;
+  const hasApprovedField =
+    Object.prototype.hasOwnProperty.call(userDoc || {}, "approved") ||
+    Object.prototype.hasOwnProperty.call(accountDoc || {}, "approved");
 
   if (baseUser.role === "landlord" && !approved && baseUser.email) {
     try {
@@ -209,20 +216,20 @@ export async function buildCanonicalSessionUserFromClaims(
   return applyEntitlements(
     {
       id: baseUser.id,
-      email: userDoc.email ?? baseUser.email,
-      role: (userDoc.role ?? baseUser.role) as Role,
+      email: mergedDoc.email ?? baseUser.email,
+      role: (mergedDoc.role ?? baseUser.role) as Role,
       landlordId:
-        (userDoc.landlordId ?? baseUser.landlordId) ||
-        (userDoc.role === "landlord" ||
-        userDoc.role === "admin" ||
+        (mergedDoc.landlordId ?? baseUser.landlordId) ||
+        (mergedDoc.role === "landlord" ||
+        mergedDoc.role === "admin" ||
         baseUser.role === "landlord" ||
         baseUser.role === "admin"
           ? baseUser.id
           : undefined),
-      tenantId: userDoc.tenantId ?? baseUser.tenantId,
-      permissions: Array.isArray(userDoc.permissions) ? userDoc.permissions : baseUser.permissions,
-      revokedPermissions: Array.isArray(userDoc.revokedPermissions)
-        ? userDoc.revokedPermissions
+      tenantId: mergedDoc.tenantId ?? baseUser.tenantId,
+      permissions: Array.isArray(mergedDoc.permissions) ? mergedDoc.permissions : baseUser.permissions,
+      revokedPermissions: Array.isArray(mergedDoc.revokedPermissions)
+        ? mergedDoc.revokedPermissions
         : baseUser.revokedPermissions,
     },
     approved,
