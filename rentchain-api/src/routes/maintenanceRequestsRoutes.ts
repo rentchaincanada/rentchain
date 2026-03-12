@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db, FieldValue } from "../config/firebase";
 import { authenticateJwt } from "../middleware/authMiddleware";
+import { verifyAuthToken } from "../auth/jwt";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 import { sendEmail } from "../services/emailService";
 
@@ -65,41 +66,144 @@ function contractorIdOf(req: any): string | null {
   return String(req.user?.contractorId || req.user?.id || "").trim() || null;
 }
 
+function getBearerToken(req: any): string | null {
+  const raw = req?.headers?.authorization || req?.headers?.Authorization;
+  if (!raw || typeof raw !== "string") return null;
+  const m = raw.match(/^Bearer\s+(.+)$/i);
+  return m?.[1] ?? null;
+}
+
+function fingerprint(value: string | null | undefined): string {
+  const token = String(value || "").trim();
+  if (!token) return "none";
+  return `${token.slice(0, 6)}...${token.slice(-4)}`;
+}
+
 async function resolveContractorAccess(req: any): Promise<{
   role: string;
   contractorId: string | null;
+  directRole: string;
+  directContractorId: string | null;
+  jwtSub: string | null;
+  jwtRole: string | null;
+  jwtEmail: string | null;
+  persistedUserRole: string | null;
+  persistedAccountRole: string | null;
+  source: string;
 }> {
   const directRole = roleOf(req);
   const directContractorId = contractorIdOf(req);
+  const rawToken = getBearerToken(req);
+  let jwtSub: string | null = null;
+  let jwtRole: string | null = null;
+  let jwtEmail: string | null = null;
+
+  try {
+    if (rawToken) {
+      const claims = verifyAuthToken(rawToken) as any;
+      jwtSub = String(claims?.sub || "").trim() || null;
+      jwtRole = String(claims?.role || "").trim().toLowerCase() || null;
+      jwtEmail = String(claims?.email || "").trim().toLowerCase() || null;
+    }
+  } catch {
+    // auth middleware already handles invalid bearer tokens
+  }
+
   if (directRole === "contractor" || directRole === "admin") {
-    return { role: directRole, contractorId: directContractorId };
+    return {
+      role: directRole,
+      contractorId: directContractorId,
+      directRole,
+      directContractorId,
+      jwtSub,
+      jwtRole,
+      jwtEmail,
+      persistedUserRole: null,
+      persistedAccountRole: null,
+      source: "direct_request_user",
+    };
   }
 
-  const userId = String(req.user?.id || "").trim();
-  if (!userId) {
-    return { role: directRole, contractorId: directContractorId };
+  const userId = String(req.user?.id || jwtSub || "").trim();
+  let userData: any = null;
+  let accountData: any = null;
+
+  if (userId) {
+    const [userSnap, accountSnap] = await Promise.all([
+      db.collection("users").doc(userId).get(),
+      db.collection("accounts").doc(userId).get(),
+    ]);
+    userData = userSnap.exists ? (userSnap.data() as any) : null;
+    accountData = accountSnap.exists ? (accountSnap.data() as any) : null;
   }
 
-  const [userSnap, accountSnap] = await Promise.all([
-    db.collection("users").doc(userId).get(),
-    db.collection("accounts").doc(userId).get(),
-  ]);
-  const userData = userSnap.exists ? (userSnap.data() as any) : null;
-  const accountData = accountSnap.exists ? (accountSnap.data() as any) : null;
-  const persistedRole = String(
-    userData?.actorRole || userData?.role || accountData?.actorRole || accountData?.role || directRole || ""
-  )
-    .trim()
-    .toLowerCase();
-  const persistedContractorId =
-    String(
-      userData?.contractorId || accountData?.contractorId || directContractorId || userId || ""
-    ).trim() || null;
+  let persistedUserRole = String(userData?.actorRole || userData?.role || "").trim().toLowerCase() || null;
+  let persistedAccountRole = String(accountData?.actorRole || accountData?.role || "").trim().toLowerCase() || null;
+  let resolvedRole = persistedUserRole || persistedAccountRole || directRole || jwtRole || "";
+  let resolvedContractorId =
+    String(userData?.contractorId || accountData?.contractorId || directContractorId || userId || "").trim() || null;
+  let source = userId ? "persisted_by_user_id" : "no_identity";
+
+  if (resolvedRole !== "contractor" && resolvedRole !== "admin") {
+    const lookupEmail = String(req.user?.email || jwtEmail || "").trim().toLowerCase();
+    if (lookupEmail) {
+      const [userByEmailSnap, accountByEmailSnap, contractorProfileSnap] = await Promise.all([
+        db.collection("users").where("email", "==", lookupEmail).limit(1).get(),
+        db.collection("accounts").where("email", "==", lookupEmail).limit(1).get(),
+        db.collection("contractorProfiles").where("email", "==", lookupEmail).limit(1).get(),
+      ]);
+      const userByEmail = !userByEmailSnap.empty ? (userByEmailSnap.docs[0].data() as any) : null;
+      const accountByEmail = !accountByEmailSnap.empty ? (accountByEmailSnap.docs[0].data() as any) : null;
+      const contractorProfile = !contractorProfileSnap.empty ? (contractorProfileSnap.docs[0].data() as any) : null;
+      const emailUserRole = String(userByEmail?.actorRole || userByEmail?.role || "").trim().toLowerCase();
+      const emailAccountRole = String(accountByEmail?.actorRole || accountByEmail?.role || "").trim().toLowerCase();
+      const emailResolvedRole = emailUserRole || emailAccountRole || (contractorProfile ? "contractor" : "");
+      const emailResolvedContractorId =
+        String(
+          userByEmail?.contractorId ||
+            accountByEmail?.contractorId ||
+            contractorProfile?.userId ||
+            contractorProfileSnap.docs[0]?.id ||
+            ""
+        ).trim() || null;
+      if (emailResolvedRole === "contractor" || emailResolvedRole === "admin") {
+        resolvedRole = emailResolvedRole;
+        resolvedContractorId = emailResolvedContractorId || resolvedContractorId;
+        persistedUserRole = persistedUserRole || emailUserRole || null;
+        persistedAccountRole = persistedAccountRole || emailAccountRole || null;
+        source = "persisted_by_email";
+      }
+    }
+  }
 
   return {
-    role: persistedRole,
-    contractorId: persistedContractorId,
+    role: resolvedRole,
+    contractorId: resolvedContractorId,
+    directRole,
+    directContractorId,
+    jwtSub,
+    jwtRole,
+    jwtEmail,
+    persistedUserRole,
+    persistedAccountRole,
+    source,
   };
+}
+
+function logContractorAccess(event: string, access: Awaited<ReturnType<typeof resolveContractorAccess>>, extra?: Record<string, unknown>) {
+  console.info(`[maintenance-v2] contractor-access:${event}`, {
+    directRole: access.directRole || null,
+    directContractorId: access.directContractorId || null,
+    jwtSub: access.jwtSub || null,
+    jwtRole: access.jwtRole || null,
+    jwtEmail: access.jwtEmail || null,
+    persistedUserRole: access.persistedUserRole || null,
+    persistedAccountRole: access.persistedAccountRole || null,
+    resolvedRole: access.role || null,
+    resolvedContractorId: access.contractorId || null,
+    source: access.source,
+    ...extra,
+  });
 }
 
 function normalizeWorkflowStatus(raw: any): (typeof WORKFLOW_STATUSES)[number] | null {
@@ -748,10 +852,14 @@ router.get("/contractor/jobs", async (req: any, res) => {
   try {
     const access = await resolveContractorAccess(req);
     if (access.role !== "contractor" && access.role !== "admin") {
+      logContractorAccess("forbidden_role", access, { authorization: fingerprint(getBearerToken(req)) });
       return res.status(403).json({ ok: false, error: "FORBIDDEN" });
     }
     const contractorId = access.contractorId;
-    if (!contractorId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    if (!contractorId) {
+      logContractorAccess("missing_contractor_id", access, { authorization: fingerprint(getBearerToken(req)) });
+      return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    }
 
     const statusFilter = normalizeWorkflowStatus(req.query?.status);
     const snap = await db
@@ -764,6 +872,7 @@ router.get("/contractor/jobs", async (req: any, res) => {
       items = items.filter((item) => normalizeWorkflowStatus(item.status) === statusFilter);
     }
     items.sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0));
+    logContractorAccess("allowed", access, { authorization: fingerprint(getBearerToken(req)), matchedJobs: items.length });
     return res.json({ ok: true, items, data: items });
   } catch (err: any) {
     console.error("[maintenance-v2] contractor jobs failed", { message: err?.message || "failed" });
@@ -775,12 +884,16 @@ router.patch("/contractor/jobs/:id/status", async (req: any, res) => {
   try {
     const access = await resolveContractorAccess(req);
     if (access.role !== "contractor" && access.role !== "admin") {
+      logContractorAccess("status_forbidden_role", access, { authorization: fingerprint(getBearerToken(req)), requestId: String(req.params?.id || "").trim() || null });
       return res.status(403).json({ ok: false, error: "FORBIDDEN" });
     }
     const contractorId = access.contractorId;
     const actorId = String(req.user?.id || "").trim() || contractorId;
     const id = String(req.params?.id || "").trim();
-    if (!contractorId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    if (!contractorId) {
+      logContractorAccess("status_missing_contractor_id", access, { authorization: fingerprint(getBearerToken(req)), requestId: id || null });
+      return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    }
     if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
 
     const nextStatus = normalizeWorkflowStatus(req.body?.status);
@@ -793,6 +906,7 @@ router.patch("/contractor/jobs/:id/status", async (req: any, res) => {
     if (!snap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
     const item = { id: snap.id, ...(snap.data() as any) };
     if (String(item.assignedContractorId || "") !== contractorId) {
+      logContractorAccess("status_assignee_mismatch", access, { authorization: fingerprint(getBearerToken(req)), requestId: id, assignedContractorId: String(item.assignedContractorId || "") || null });
       return res.status(403).json({ ok: false, error: "FORBIDDEN" });
     }
 
