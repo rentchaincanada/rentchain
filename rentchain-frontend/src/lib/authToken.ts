@@ -12,12 +12,12 @@ function normalizeToken(raw: string | null | undefined) {
   return t;
 }
 
-function readStorage(key: string, preferLocal: boolean) {
+function readStorage(key: string, preferSession: boolean) {
   if (typeof window === "undefined") return null;
   try {
     const local = window.localStorage.getItem(key);
     const session = window.sessionStorage.getItem(key);
-    return normalizeToken(preferLocal ? local || session : session || local);
+    return normalizeToken(preferSession ? session || local : local || session);
   } catch {
     return null;
   }
@@ -27,11 +27,18 @@ function writeStorage(key: string, value: string | null) {
   if (typeof window === "undefined") return;
   try {
     if (value) {
-      window.localStorage.setItem(key, value);
       window.sessionStorage.setItem(key, value);
     } else {
-      window.localStorage.removeItem(key);
       window.sessionStorage.removeItem(key);
+    }
+  } catch {
+    // ignore storage errors
+  }
+  try {
+    if (value) {
+      window.localStorage.setItem(key, value);
+    } else {
+      window.localStorage.removeItem(key);
     }
   } catch {
     // ignore storage errors
