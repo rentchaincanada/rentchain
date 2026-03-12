@@ -599,17 +599,17 @@ function App() {
         />
         {import.meta.env.DEV ? (
           <Route
-          path="/ledger"
-          element={
-            <RequireAuth>
-              <LandlordNav>
-                <Suspense fallback={null}>
-                  <LedgerPage />
-                </Suspense>
-              </LandlordNav>
-            </RequireAuth>
-          }
-        />
+            path="/ledger"
+            element={
+              <RequireAuth>
+                <LandlordNav>
+                  <Suspense fallback={null}>
+                    <LedgerPage />
+                  </Suspense>
+                </LandlordNav>
+              </RequireAuth>
+            }
+          />
         ) : null}
         <Route
           path="/ledger-v2"
@@ -677,17 +677,17 @@ function App() {
         />
         {import.meta.env.DEV ? (
           <Route
-          path="/blockchain"
-          element={
-            <RequireAuth>
-              <LandlordNav>
-                <Suspense fallback={null}>
-                  <BlockchainPage />
-                </Suspense>
-              </LandlordNav>
-            </RequireAuth>
-          }
-        />
+            path="/blockchain"
+            element={
+              <RequireAuth>
+                <LandlordNav>
+                  <Suspense fallback={null}>
+                    <BlockchainPage />
+                  </Suspense>
+                </LandlordNav>
+              </RequireAuth>
+            }
+          />
         ) : null}
         <Route
           path="/account"
@@ -808,4 +808,3 @@ function App() {
 }
 
 export default App;
-
