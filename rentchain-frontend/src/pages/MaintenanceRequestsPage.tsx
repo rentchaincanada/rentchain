@@ -6,12 +6,12 @@ import { ResponsiveMasterDetail } from "../components/layout/ResponsiveMasterDet
 import {
   assignLandlordMaintenance,
   listLandlordMaintenance,
-  listLandlordMaintenanceContractors,
   patchLandlordMaintenance,
   type LandlordMaintenanceContractor,
   type MaintenanceWorkflowItem,
   type MaintenanceWorkflowStatus,
 } from "../api/maintenanceWorkflowApi";
+import { getContractorProfileById, listContractorInvites } from "../api/workOrdersApi";
 import { colors, radius, spacing, text } from "../styles/tokens";
 
 const FILTERS: Array<{ value: "all" | MaintenanceWorkflowStatus; label: string }> = [
@@ -73,20 +73,44 @@ export default function MaintenanceRequestsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [requestsRes, contractorRes] = await Promise.all([
+      const [requestsRes, invites] = await Promise.all([
         listLandlordMaintenance(filter === "all" ? undefined : filter),
-        listLandlordMaintenanceContractors(),
+        listContractorInvites(),
       ]);
       const nextItems = Array.isArray(requestsRes?.items)
         ? requestsRes.items
         : Array.isArray((requestsRes as any)?.data)
         ? (requestsRes as any).data
         : [];
-      const nextContractors = Array.isArray(contractorRes?.items)
-        ? contractorRes.items
-        : Array.isArray((contractorRes as any)?.data)
-        ? (contractorRes as any).data
+      const acceptedInvites = Array.isArray(invites)
+        ? invites.filter((invite) => invite.status === "accepted" && invite.acceptedByUserId)
         : [];
+      const contractorProfiles = await Promise.all(
+        acceptedInvites.map(async (invite) => {
+          const contractorId = String(invite.acceptedByUserId || "").trim();
+          if (!contractorId) return null;
+          try {
+            const profile = await getContractorProfileById(contractorId);
+            return {
+              id: contractorId,
+              businessName: String(profile?.businessName || "").trim() || null,
+              contactName: String(profile?.contactName || "").trim() || null,
+              email: String(profile?.email || invite.email || "").trim() || null,
+            } as LandlordMaintenanceContractor;
+          } catch {
+            return {
+              id: contractorId,
+              businessName: null,
+              contactName: null,
+              email: String(invite.email || "").trim() || null,
+            } as LandlordMaintenanceContractor;
+          }
+        })
+      );
+      const nextContractors = contractorProfiles.filter(
+        (item, index, list): item is LandlordMaintenanceContractor =>
+          Boolean(item?.id) && list.findIndex((entry) => entry?.id === item?.id) === index
+      );
       setItems(nextItems);
       setContractors(nextContractors);
     } catch (err: any) {

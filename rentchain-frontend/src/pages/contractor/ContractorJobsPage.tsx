@@ -23,13 +23,50 @@ function findScheduledDate(item: MaintenanceWorkflowItem) {
   return scheduledEntry?.createdAt || null;
 }
 
-function statusLabel(status: MaintenanceWorkflowStatus) {
+function statusLabel(status?: MaintenanceWorkflowStatus | string | null) {
   switch (status) {
     case "in_progress":
       return "in progress";
-    default:
+    case "submitted":
+    case "reviewed":
+    case "assigned":
+    case "scheduled":
+    case "completed":
+    case "cancelled":
       return status;
+    default:
+      return "assigned";
   }
+}
+
+function normalizeJob(item: any): MaintenanceWorkflowItem | null {
+  const id = String(item?.id || "").trim();
+  const title = String(item?.title || "").trim();
+  const description = String(item?.description || "").trim();
+  if (!id || !title || !description) return null;
+  const status = statusLabel(item?.status) as MaintenanceWorkflowStatus;
+  return {
+    ...item,
+    id,
+    title,
+    description,
+    status,
+    priority: item?.priority === "low" || item?.priority === "urgent" ? item.priority : "normal",
+    tenantId: String(item?.tenantId || "").trim(),
+    landlordId: String(item?.landlordId || "").trim(),
+    propertyId: item?.propertyId ? String(item.propertyId) : null,
+    unitId: item?.unitId ? String(item.unitId) : null,
+    tenantName: item?.tenantName ? String(item.tenantName) : null,
+    propertyLabel: item?.propertyLabel ? String(item.propertyLabel) : null,
+    unitLabel: item?.unitLabel ? String(item.unitLabel) : null,
+    notes: item?.notes ? String(item.notes) : null,
+    landlordNote: item?.landlordNote ? String(item.landlordNote) : null,
+    contractorStatus: item?.contractorStatus ? String(item.contractorStatus) : null,
+    contractorLastUpdate: item?.contractorLastUpdate ? String(item.contractorLastUpdate) : null,
+    createdAt: Number(item?.createdAt || 0),
+    updatedAt: Number(item?.updatedAt || 0),
+    statusHistory: Array.isArray(item?.statusHistory) ? item.statusHistory : [],
+  };
 }
 
 export default function ContractorJobsPage() {
@@ -48,11 +85,13 @@ export default function ContractorJobsPage() {
     setError(null);
     try {
       const res = await listContractorMaintenanceJobs();
-      const nextItems = Array.isArray(res?.items)
+      const nextItems = (Array.isArray(res?.items)
         ? res.items
         : Array.isArray((res as any)?.data)
         ? (res as any).data
-        : [];
+        : [])
+        .map((item) => normalizeJob(item))
+        .filter((item): item is MaintenanceWorkflowItem => Boolean(item));
       setItems(nextItems);
     } catch (err: any) {
       setError(String(err?.message || "Failed to load jobs"));
@@ -253,7 +292,7 @@ export default function ContractorJobsPage() {
                         {selected.unitLabel ? ` • ${selected.unitLabel}` : ""}
                       </div>
                     </div>
-                    <div style={{ color: text.primary, fontWeight: 700 }}>{statusLabel(selected.status)}</div>
+                    <div style={{ color: text.primary, fontWeight: 700 }}>{statusLabel(selected?.status)}</div>
                   </div>
 
                   <div style={{ display: "grid", gap: spacing.sm, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>

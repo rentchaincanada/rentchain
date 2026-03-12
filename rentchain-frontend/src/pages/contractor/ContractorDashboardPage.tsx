@@ -20,12 +20,14 @@ export default function ContractorDashboardPage() {
       setError(null);
       try {
         const res = await listContractorMaintenanceJobs();
-        const items = Array.isArray(res?.items) ? res.items : Array.isArray((res as any)?.data) ? (res as any).data : [];
+        const items = (Array.isArray(res?.items) ? res.items : Array.isArray((res as any)?.data) ? (res as any).data : []).filter(
+          (item: any) => item && typeof item === "object"
+        );
         setCounts({
-          assigned: items.filter((item) => item.status === "assigned").length,
-          scheduled: items.filter((item) => item.status === "scheduled").length,
-          inProgress: items.filter((item) => item.status === "in_progress").length,
-          completed: items.filter((item) => item.status === "completed").length,
+          assigned: items.filter((item: any) => item.status === "assigned").length,
+          scheduled: items.filter((item: any) => item.status === "scheduled").length,
+          inProgress: items.filter((item: any) => item.status === "in_progress").length,
+          completed: items.filter((item: any) => item.status === "completed").length,
         });
       } catch (err: any) {
         setError(String(err?.message || "Failed to load contractor dashboard"));
