@@ -287,17 +287,49 @@ async function sendMaintenanceStatusEmail(params: {
   subject: string;
   intro: string;
   requestId: string;
+  workOrderId?: string | null;
+  event: string;
 }) {
   const to = String(params.to || "").trim();
-  if (!to || !emailRegex.test(to)) return false;
-  const apiKey = process.env.SENDGRID_API_KEY;
+  const provider = String(process.env.EMAIL_PROVIDER || "mailgun").trim().toLowerCase() || "mailgun";
   const from =
-    process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM || process.env.FROM_EMAIL;
+    process.env.EMAIL_FROM ||
+    process.env.FROM_EMAIL ||
+    process.env.SENDGRID_FROM_EMAIL ||
+    process.env.SENDGRID_FROM;
   const replyTo = process.env.SENDGRID_REPLY_TO || process.env.SENDGRID_REPLYTO_EMAIL;
-  if (!apiKey || !from) return false;
+  if (!to || !emailRegex.test(to)) {
+    console.warn("[maintenance-v2] notification skipped", {
+      event: params.event,
+      maintenanceRequestId: params.requestId,
+      workOrderId: params.workOrderId || null,
+      to: to || null,
+      provider,
+      reason: "INVALID_RECIPIENT",
+    });
+    return { ok: false, attempted: false, provider, to, reason: "INVALID_RECIPIENT" } as const;
+  }
+  if (!from) {
+    console.error("[maintenance-v2] notification failed", {
+      event: params.event,
+      maintenanceRequestId: params.requestId,
+      workOrderId: params.workOrderId || null,
+      to,
+      provider,
+      reason: "EMAIL_FROM_MISSING",
+    });
+    return { ok: false, attempted: false, provider, to, reason: "EMAIL_FROM_MISSING" } as const;
+  }
   const baseUrl =
     (process.env.PUBLIC_APP_URL || process.env.VITE_PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
   const requestLink = `${baseUrl}/tenant/maintenance/${params.requestId}`;
+  console.info("[maintenance-v2] notification attempt", {
+    event: params.event,
+    maintenanceRequestId: params.requestId,
+    workOrderId: params.workOrderId || null,
+    to,
+    provider,
+  });
   try {
     await sendEmail({
       to,
@@ -316,15 +348,117 @@ async function sendMaintenanceStatusEmail(params: {
         ctaUrl: requestLink,
       }),
     });
-    return true;
-  } catch (err: any) {
-    console.error("[maintenance-v2] notification send failed", {
+    console.info("[maintenance-v2] notification sent", {
+      event: params.event,
+      maintenanceRequestId: params.requestId,
+      workOrderId: params.workOrderId || null,
       to,
-      requestId: params.requestId,
+      provider,
+      ok: true,
+    });
+    return { ok: true, attempted: true, provider, to } as const;
+  } catch (err: any) {
+    console.error("[maintenance-v2] notification failed", {
+      event: params.event,
+      to,
+      maintenanceRequestId: params.requestId,
+      workOrderId: params.workOrderId || null,
+      provider,
       message: err?.message || "send_failed",
     });
-    return false;
+    return { ok: false, attempted: true, provider, to, reason: err?.message || "send_failed" } as const;
   }
+}
+
+async function upsertMaintenanceWorkOrder(input: {
+  maintenanceRequestId: string;
+  landlordId: string | null;
+  propertyId: string | null;
+  unitId: string | null;
+  tenantId: string | null;
+  assignedContractorId: string | null;
+  assignedContractorName: string | null;
+  title: string | null;
+  description: string | null;
+  category: string | null;
+  priority: string | null;
+  status: string | null;
+}) {
+  const workOrderId = `maintenance_${input.maintenanceRequestId}`;
+  const ref = db.collection("workOrders").doc(workOrderId);
+  const existing = await ref.get();
+  const existingData = existing.exists ? ((existing.data() as any) || {}) : {};
+  const createdAtMs = Number(existingData.createdAtMs || existingData.createdAt || Date.now()) || Date.now();
+  const now = Date.now();
+  const payload = {
+    id: workOrderId,
+    maintenanceRequestId: input.maintenanceRequestId,
+    landlordId: input.landlordId || null,
+    propertyId: input.propertyId || null,
+    unitId: input.unitId || null,
+    tenantId: input.tenantId || null,
+    assignedContractorId: input.assignedContractorId || null,
+    assignedContractorName: input.assignedContractorName || null,
+    title: String(input.title || "").trim() || "Maintenance request",
+    description: String(input.description || "").trim() || "",
+    category: String(input.category || "").trim() || "GENERAL",
+    priority: String(input.priority || "").trim() || "normal",
+    status: String(input.status || "assigned").trim() || "assigned",
+    visibility: "private",
+    createdAt: createdAtMs,
+    updatedAt: now,
+    createdAtMs,
+    updatedAtMs: now,
+  };
+  await ref.set(payload, { merge: true });
+  console.info("[maintenance-v2] work-order upserted", {
+    maintenanceRequestId: input.maintenanceRequestId,
+    workOrderId,
+    assignedContractorId: input.assignedContractorId || null,
+    status: payload.status,
+    created: !existing.exists,
+  });
+  return { workOrderId, payload };
+}
+
+function shapeContractorJobFromSources(workOrder: any, maintenance: any) {
+  const maintenanceId =
+    String(workOrder?.maintenanceRequestId || maintenance?.id || "").trim() || String(workOrder?.id || "").trim();
+  const status = normalizeWorkflowStatus(workOrder?.status || maintenance?.status) || "assigned";
+  return {
+    ...(maintenance || {}),
+    ...(workOrder || {}),
+    id: maintenanceId,
+    workOrderId: String(workOrder?.id || "").trim() || null,
+    maintenanceRequestId: maintenanceId,
+    landlordId: String(workOrder?.landlordId || maintenance?.landlordId || "").trim() || null,
+    tenantId: String(workOrder?.tenantId || maintenance?.tenantId || "").trim() || null,
+    propertyId: String(workOrder?.propertyId || maintenance?.propertyId || "").trim() || null,
+    unitId: String(workOrder?.unitId || maintenance?.unitId || "").trim() || null,
+    assignedContractorId:
+      String(workOrder?.assignedContractorId || maintenance?.assignedContractorId || "").trim() || null,
+    assignedContractorName:
+      String(workOrder?.assignedContractorName || maintenance?.assignedContractorName || "").trim() || null,
+    title: String(workOrder?.title || maintenance?.title || "").trim() || "Maintenance request",
+    description: String(workOrder?.description || maintenance?.description || "").trim() || "",
+    category: String(workOrder?.category || maintenance?.category || "").trim() || "GENERAL",
+    priority: String(workOrder?.priority || maintenance?.priority || "").trim() || "normal",
+    status,
+    contractorStatus:
+      String(maintenance?.contractorStatus || workOrder?.contractorStatus || status).trim() || status,
+    contractorLastUpdate:
+      String(maintenance?.contractorLastUpdate || workOrder?.contractorLastUpdate || "").trim() || null,
+    tenantName: String(maintenance?.tenantName || "").trim() || null,
+    propertyLabel: String(maintenance?.propertyLabel || "").trim() || null,
+    unitLabel: String(maintenance?.unitLabel || "").trim() || null,
+    notes: String(maintenance?.notes || "").trim() || null,
+    landlordNote: String(maintenance?.landlordNote || "").trim() || null,
+    createdAt:
+      Number(maintenance?.createdAt || workOrder?.createdAt || workOrder?.createdAtMs || Date.now()) || Date.now(),
+    updatedAt:
+      Number(maintenance?.updatedAt || workOrder?.updatedAt || workOrder?.updatedAtMs || Date.now()) || Date.now(),
+    statusHistory: Array.isArray(maintenance?.statusHistory) ? maintenance.statusHistory : [],
+  };
 }
 
 router.get("/maintenance-requests", async (req: any, res) => {
@@ -569,6 +703,7 @@ router.post("/tenant/maintenance", async (req: any, res) => {
         subject: `New maintenance request: ${title}`,
         intro: `A tenant submitted a new maintenance request.\nCategory: ${category}\nPriority: ${priority}\nStatus: submitted`,
         requestId: ref.id,
+        event: "tenant_maintenance_created_notify_landlord",
       });
     }
 
@@ -707,20 +842,41 @@ router.patch("/landlord/maintenance/:id", async (req: any, res) => {
 
     const refreshedSnap = await ref.get();
     const refreshed = { id: refreshedSnap.id, ...(refreshedSnap.data() as any) };
+    let workOrderId: string | null = null;
+    if (String(refreshed.assignedContractorId || "").trim()) {
+      const workOrder = await upsertMaintenanceWorkOrder({
+        maintenanceRequestId: id,
+        landlordId: String(refreshed.landlordId || landlordId || "").trim() || null,
+        propertyId: String(refreshed.propertyId || "").trim() || null,
+        unitId: String(refreshed.unitId || "").trim() || null,
+        tenantId: String(refreshed.tenantId || "").trim() || null,
+        assignedContractorId: String(refreshed.assignedContractorId || "").trim() || null,
+        assignedContractorName: String(refreshed.assignedContractorName || "").trim() || null,
+        title: String(refreshed.title || "").trim() || null,
+        description: String(refreshed.description || "").trim() || null,
+        category: String(refreshed.category || "").trim() || null,
+        priority: String(refreshed.priority || "").trim() || null,
+        status: String(refreshed.status || nextStatus || currentStatus).trim() || currentStatus,
+      });
+      workOrderId = workOrder.workOrderId;
+    }
     const tenantEmail = await lookupEmailFromDoc([
       ["tenants", String(refreshed.tenantId || "")],
       ["users", String(refreshed.tenantId || "")],
     ]);
+    let tenantNotification = null;
     if (nextStatus && nextStatus !== currentStatus) {
-      await sendMaintenanceStatusEmail({
+      tenantNotification = await sendMaintenanceStatusEmail({
         to: tenantEmail,
         subject: `Maintenance request updated: ${String(refreshed.title || "Request")}`,
         intro: `Your maintenance request status changed to ${nextStatus}.`,
         requestId: id,
+        workOrderId,
+        event: "landlord_maintenance_status_notify_tenant",
       });
     }
 
-    return res.json({ ok: true, item: refreshed, data: refreshed });
+    return res.json({ ok: true, item: refreshed, data: refreshed, workOrderId, notifications: { tenant: tenantNotification } });
   } catch (err: any) {
     console.error("[maintenance-v2] landlord patch failed", { message: err?.message || "failed" });
     return res.status(500).json({ ok: false, error: "LANDLORD_MAINTENANCE_PATCH_FAILED" });
@@ -815,6 +971,20 @@ router.post("/landlord/maintenance/:id/assign", async (req: any, res) => {
 
     const refreshedSnap = await ref.get();
     const refreshed = { id: refreshedSnap.id, ...(refreshedSnap.data() as any) };
+    const workOrder = await upsertMaintenanceWorkOrder({
+      maintenanceRequestId: id,
+      landlordId: String(refreshed.landlordId || landlordId || "").trim() || null,
+      propertyId: String(refreshed.propertyId || "").trim() || null,
+      unitId: String(refreshed.unitId || "").trim() || null,
+      tenantId: String(refreshed.tenantId || "").trim() || null,
+      assignedContractorId: contractorId,
+      assignedContractorName: contractorName,
+      title: String(refreshed.title || "").trim() || null,
+      description: String(refreshed.description || "").trim() || null,
+      category: String(refreshed.category || "").trim() || null,
+      priority: String(refreshed.priority || "").trim() || null,
+      status: "assigned",
+    });
     const [tenantEmail, contractorEmail] = await Promise.all([
       lookupEmailFromDoc([
         ["tenants", String(refreshed.tenantId || "")],
@@ -826,22 +996,35 @@ router.post("/landlord/maintenance/:id/assign", async (req: any, res) => {
       ]),
     ]);
 
-    await Promise.all([
+    const [tenantNotification, contractorNotification] = await Promise.all([
       sendMaintenanceStatusEmail({
         to: tenantEmail,
         subject: `Contractor assigned: ${String(refreshed.title || "Maintenance request")}`,
         intro: "A contractor has been assigned to your maintenance request.",
         requestId: id,
+        workOrderId: workOrder.workOrderId,
+        event: "landlord_assignment_notify_tenant",
       }),
       sendMaintenanceStatusEmail({
         to: contractorEmail,
         subject: `New maintenance job assigned: ${String(refreshed.title || "Maintenance request")}`,
         intro: "You have been assigned a maintenance job in RentChain.",
         requestId: id,
+        workOrderId: workOrder.workOrderId,
+        event: "landlord_assignment_notify_contractor",
       }),
     ]);
 
-    return res.json({ ok: true, item: refreshed, data: refreshed });
+    return res.json({
+      ok: true,
+      item: refreshed,
+      data: refreshed,
+      workOrderId: workOrder.workOrderId,
+      notifications: {
+        tenant: tenantNotification,
+        contractor: contractorNotification,
+      },
+    });
   } catch (err: any) {
     console.error("[maintenance-v2] landlord assign failed", { message: err?.message || "failed" });
     return res.status(500).json({ ok: false, error: "LANDLORD_MAINTENANCE_ASSIGN_FAILED" });
@@ -862,17 +1045,44 @@ router.get("/contractor/jobs", async (req: any, res) => {
     }
 
     const statusFilter = normalizeWorkflowStatus(req.query?.status);
-    const snap = await db
-      .collection("maintenanceRequests")
+    const workOrderSnap = await db
+      .collection("workOrders")
       .where("assignedContractorId", "==", contractorId)
       .limit(300)
       .get();
-    let items = snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as any) }));
+    const workOrders = workOrderSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as any) }));
+    const maintenanceIds = Array.from(
+      new Set(
+        workOrders
+          .map((item) => String(item.maintenanceRequestId || "").trim())
+          .filter(Boolean)
+      )
+    );
+    const maintenanceDocs = await Promise.all(
+      maintenanceIds.map(async (maintenanceId) => {
+        const maintenanceSnap = await db.collection("maintenanceRequests").doc(maintenanceId).get();
+        return maintenanceSnap.exists ? { id: maintenanceSnap.id, ...(maintenanceSnap.data() as any) } : null;
+      })
+    );
+    const maintenanceMap = new Map(
+      maintenanceDocs.filter((item): item is any => Boolean(item)).map((item) => [String(item.id), item])
+    );
+
+    let items = workOrders
+      .map((workOrder) => shapeContractorJobFromSources(workOrder, maintenanceMap.get(String(workOrder.maintenanceRequestId || "").trim()) || null))
+      .filter((item) => Boolean(item?.id) && Boolean(item?.title) && Boolean(item?.description));
     if (statusFilter) {
       items = items.filter((item) => normalizeWorkflowStatus(item.status) === statusFilter);
     }
     items.sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0));
-    logContractorAccess("allowed", access, { authorization: fingerprint(getBearerToken(req)), matchedJobs: items.length });
+    console.info("[maintenance-v2] contractor-jobs result", {
+      contractorId,
+      workOrderCount: workOrders.length,
+      jobCount: items.length,
+      statusFilter: statusFilter || null,
+      source: "workOrders",
+    });
+    logContractorAccess("allowed", access, { authorization: fingerprint(getBearerToken(req)), matchedJobs: items.length, source: "workOrders" });
     return res.json({ ok: true, items, data: items });
   } catch (err: any) {
     console.error("[maintenance-v2] contractor jobs failed", { message: err?.message || "failed" });
@@ -940,10 +1150,25 @@ router.patch("/contractor/jobs/:id/status", async (req: any, res) => {
         note ||
         (isAcknowledgement ? "Contractor accepted the assigned job" : `Contractor updated status to ${nextStatus}`),
     });
+    const workOrder = await upsertMaintenanceWorkOrder({
+      maintenanceRequestId: id,
+      landlordId: String(item.landlordId || "").trim() || null,
+      propertyId: String(item.propertyId || "").trim() || null,
+      unitId: String(item.unitId || "").trim() || null,
+      tenantId: String(item.tenantId || "").trim() || null,
+      assignedContractorId: contractorId,
+      assignedContractorName: String(item.assignedContractorName || "").trim() || null,
+      title: String(item.title || "").trim() || null,
+      description: String(item.description || "").trim() || null,
+      category: String(item.category || "").trim() || null,
+      priority: String(item.priority || "").trim() || null,
+      status: nextStatus,
+    });
 
     const refreshedSnap = await ref.get();
     const refreshed = { id: refreshedSnap.id, ...(refreshedSnap.data() as any) };
 
+    let notifications = null;
     if (!isAcknowledgement) {
       const [tenantEmail, landlordEmail] = await Promise.all([
         lookupEmailFromDoc([
@@ -956,23 +1181,31 @@ router.patch("/contractor/jobs/:id/status", async (req: any, res) => {
         ]),
       ]);
 
-      await Promise.all([
+      const [tenantNotification, landlordNotification] = await Promise.all([
         sendMaintenanceStatusEmail({
           to: tenantEmail,
           subject: `Maintenance update: ${String(refreshed.title || "Request")}`,
           intro: `Your maintenance request is now ${nextStatus}.`,
           requestId: id,
+          workOrderId: workOrder.workOrderId,
+          event: "contractor_status_notify_tenant",
         }),
         sendMaintenanceStatusEmail({
           to: landlordEmail,
           subject: `Contractor update: ${String(refreshed.title || "Request")}`,
           intro: `Contractor marked request as ${nextStatus}.`,
           requestId: id,
+          workOrderId: workOrder.workOrderId,
+          event: "contractor_status_notify_landlord",
         }),
       ]);
+      notifications = {
+        tenant: tenantNotification,
+        landlord: landlordNotification,
+      };
     }
 
-    return res.json({ ok: true, item: refreshed, data: refreshed });
+    return res.json({ ok: true, item: refreshed, data: refreshed, workOrderId: workOrder.workOrderId, notifications });
   } catch (err: any) {
     console.error("[maintenance-v2] contractor status patch failed", {
       message: err?.message || "failed",
