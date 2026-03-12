@@ -1242,12 +1242,69 @@ router.post("/login", rateLimitAuth, async (req, res) => {
       return loginError(res, 401, "INVALID_CREDENTIALS");
     }
 
+    step = "load_account_context";
+    const [userSnap, accountSnap] = await Promise.all([
+      db.collection("users").doc(fbUser.id).get(),
+      db.collection("accounts").doc(fbUser.id).get(),
+    ]);
+    const persistedUser = userSnap.exists ? (userSnap.data() as any) : {};
+    const persistedAccount = accountSnap.exists ? (accountSnap.data() as any) : {};
+    const persistedRole = String(
+      persistedUser?.actorRole ||
+        persistedUser?.role ||
+        persistedAccount?.actorRole ||
+        persistedAccount?.role ||
+        ""
+    )
+      .trim()
+      .toLowerCase();
+
+    let claims: any;
+    let sessionUser: any;
+    let user: any;
+
+    if (persistedRole === "contractor") {
+      step = "contractor_jwt_sign";
+      const contractorId =
+        String(persistedUser?.contractorId || persistedAccount?.contractorId || fbUser.id).trim() || fbUser.id;
+      claims = {
+        sub: fbUser.id,
+        email: fbUser.email,
+        role: "contractor",
+        permissions: Array.isArray(persistedUser?.permissions)
+          ? persistedUser.permissions
+          : Array.isArray(persistedAccount?.permissions)
+          ? persistedAccount.permissions
+          : [],
+        revokedPermissions: Array.isArray(persistedUser?.revokedPermissions)
+          ? persistedUser.revokedPermissions
+          : Array.isArray(persistedAccount?.revokedPermissions)
+          ? persistedAccount.revokedPermissions
+          : [],
+        contractorId,
+      } as const;
+      const token = signAuthToken(claims, { expiresIn: "7d" });
+      sessionUser = await buildCanonicalSessionUserFromClaims({ ...claims, ver: 1 } as any, {
+        requestCache: {},
+      });
+      return res.status(200).json({
+        ok: true,
+        token,
+        user: {
+          ...sessionUser,
+          role: "contractor",
+          actorRole: "contractor",
+          contractorId,
+        },
+      });
+    }
+
     step = "ensure_profile";
     const profile = await getOrCreateLandlordProfile({ uid: fbUser.id, email: fbUser.email });
     const account = await getOrCreateAccount(profile.landlordId || fbUser.id);
     const plan = resolvePlan(String(profile.plan || account.plan || "screening"));
 
-    const user = ensureLandlordEntry({
+    user = ensureLandlordEntry({
       id: profile.id || fbUser.id,
       email: profile.email || fbUser.email,
       role: profile.role || "landlord",
@@ -1259,7 +1316,7 @@ router.post("/login", rateLimitAuth, async (req, res) => {
 
     step = "jwt_sign";
     const claimsUser = user as any;
-    const claims = {
+    claims = {
       sub: user.id,
       email: user.email,
       role: claimsUser.role || "landlord",
@@ -1281,7 +1338,7 @@ router.post("/login", rateLimitAuth, async (req, res) => {
     }
 
     step = "session_user";
-    const sessionUser = await buildCanonicalSessionUserFromClaims({ ...claims, ver: 1 }, {
+    sessionUser = await buildCanonicalSessionUserFromClaims({ ...claims, ver: 1 }, {
       requestCache: {},
     });
 
@@ -1755,3 +1812,4 @@ router.get("/demo", (_req, res) => {
 });
 
 export default router;
+
