@@ -31,7 +31,17 @@ const WORKFLOW_STATUSES = [
   "scheduled",
   "in_progress",
   "completed",
+  "cancelled",
 ] as const;
+const WORKFLOW_TRANSITIONS: Record<(typeof WORKFLOW_STATUSES)[number], Array<(typeof WORKFLOW_STATUSES)[number]>> = {
+  submitted: ["reviewed", "cancelled"],
+  reviewed: ["assigned", "cancelled"],
+  assigned: ["scheduled", "cancelled"],
+  scheduled: ["in_progress", "cancelled"],
+  in_progress: ["completed", "cancelled"],
+  completed: [],
+  cancelled: [],
+};
 const LEGACY_TO_WORKFLOW_STATUS: Record<string, (typeof WORKFLOW_STATUSES)[number]> = {
   NEW: "submitted",
   IN_PROGRESS: "in_progress",
@@ -69,6 +79,25 @@ function normalizeWorkflowStatus(raw: any): (typeof WORKFLOW_STATUSES)[number] |
 function ensureStatusHistory(item: any) {
   const history = Array.isArray(item?.statusHistory) ? item.statusHistory : [];
   return history;
+}
+
+function canTransitionWorkflowStatus(
+  currentStatus: (typeof WORKFLOW_STATUSES)[number],
+  nextStatus: (typeof WORKFLOW_STATUSES)[number]
+) {
+  if (currentStatus === nextStatus) return true;
+  return WORKFLOW_TRANSITIONS[currentStatus]?.includes(nextStatus) || false;
+}
+
+function formatTenantName(tenant: any, fallback?: string | null) {
+  const direct = String(tenant?.name || "").trim();
+  if (direct) return direct;
+  const combined = [tenant?.firstName, tenant?.lastName]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .join(" ");
+  if (combined) return combined;
+  return String(fallback || "").trim() || null;
 }
 
 async function appendStatusHistory(
@@ -339,6 +368,7 @@ router.post("/tenant/maintenance", async (req: any, res) => {
     const category = String(req.body?.category || "GENERAL").trim().toUpperCase().slice(0, 80);
     const priorityRaw = String(req.body?.priority || "normal").trim().toLowerCase();
     const priority = ["low", "normal", "urgent"].includes(priorityRaw) ? priorityRaw : "normal";
+    const notes = String(req.body?.notes || req.body?.optionalNotes || "").trim().slice(0, 2000) || null;
 
     if (!title || !description) {
       return res.status(400).json({ ok: false, error: "TITLE_AND_DESCRIPTION_REQUIRED" });
@@ -349,6 +379,9 @@ router.post("/tenant/maintenance", async (req: any, res) => {
     const landlordId = String(tenant?.landlordId || req.user?.landlordId || "").trim() || null;
     const propertyId = String(tenant?.propertyId || tenant?.property || "").trim() || null;
     const unitId = String(tenant?.unitId || tenant?.unit || "").trim() || null;
+    const tenantName = formatTenantName(tenant, req.user?.name || req.user?.email || null);
+    const propertyLabel = String(tenant?.propertyName || tenant?.propertyLabel || propertyId || "").trim() || null;
+    const unitLabel = String(tenant?.unitLabel || unitId || "").trim() || null;
     const now = Date.now();
     const ref = db.collection("maintenanceRequests").doc();
     const data = {
@@ -357,8 +390,12 @@ router.post("/tenant/maintenance", async (req: any, res) => {
       landlordId,
       propertyId,
       unitId,
+      tenantName,
+      propertyLabel,
+      unitLabel,
       title,
       description,
+      notes,
       category,
       priority,
       status: "submitted",
@@ -394,7 +431,7 @@ router.post("/tenant/maintenance", async (req: any, res) => {
       });
     }
 
-    return res.status(201).json({ ok: true, requestId: ref.id, data });
+    return res.status(201).json({ ok: true, requestId: ref.id, status: "submitted", data });
   } catch (err: any) {
     console.error("[maintenance-v2] tenant create failed", {
       tenantId: req.user?.tenantId || null,
@@ -491,7 +528,20 @@ router.patch("/landlord/maintenance/:id", async (req: any, res) => {
       return res.status(403).json({ ok: false, error: "FORBIDDEN" });
     }
 
-    const nextStatus = normalizeWorkflowStatus(req.body?.status);
+    const currentStatus = normalizeWorkflowStatus(current.status) || "submitted";
+    const nextStatus = req.body?.status === undefined ? null : normalizeWorkflowStatus(req.body?.status);
+    if (req.body?.status !== undefined && !nextStatus) {
+      return res.status(400).json({ ok: false, error: "INVALID_STATUS" });
+    }
+    if (nextStatus && !canTransitionWorkflowStatus(currentStatus, nextStatus)) {
+      return res.status(400).json({
+        ok: false,
+        error: "INVALID_STATUS_TRANSITION",
+        currentStatus,
+        nextStatus,
+      });
+    }
+
     const update: any = {
       updatedAt: Date.now(),
       lastUpdatedBy: "LANDLORD",
@@ -505,7 +555,7 @@ router.patch("/landlord/maintenance/:id", async (req: any, res) => {
       update.landlordNote = req.body.landlordNote === null ? null : String(req.body.landlordNote || "").trim().slice(0, 5000);
     }
     await ref.set(update, { merge: true });
-    if (nextStatus) {
+    if (nextStatus && nextStatus !== currentStatus) {
       await appendStatusHistory(id, {
         status: nextStatus,
         actorRole: role === "admin" ? "admin" : "landlord",
@@ -520,7 +570,7 @@ router.patch("/landlord/maintenance/:id", async (req: any, res) => {
       ["tenants", String(refreshed.tenantId || "")],
       ["users", String(refreshed.tenantId || "")],
     ]);
-    if (nextStatus) {
+    if (nextStatus && nextStatus !== currentStatus) {
       await sendMaintenanceStatusEmail({
         to: tenantEmail,
         subject: `Maintenance request updated: ${String(refreshed.title || "Request")}`,
@@ -533,6 +583,42 @@ router.patch("/landlord/maintenance/:id", async (req: any, res) => {
   } catch (err: any) {
     console.error("[maintenance-v2] landlord patch failed", { message: err?.message || "failed" });
     return res.status(500).json({ ok: false, error: "LANDLORD_MAINTENANCE_PATCH_FAILED" });
+  }
+});
+
+router.get("/landlord/maintenance/contractors", async (req: any, res) => {
+  try {
+    const role = roleOf(req);
+    if (role !== "landlord" && role !== "admin") {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+    const landlordId = landlordIdOf(req);
+    if (!landlordId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+
+    const snap = await db
+      .collection("contractorProfiles")
+      .where("invitedByLandlordIds", "array-contains", landlordId)
+      .limit(200)
+      .get();
+    const items = snap.docs
+      .map((doc) => ({ id: doc.id, ...(doc.data() as any) }))
+      .filter((item) => item.isActive !== false)
+      .sort((a, b) =>
+        String(a.businessName || a.contactName || a.email || "").localeCompare(
+          String(b.businessName || b.contactName || b.email || "")
+        )
+      )
+      .map((item) => ({
+        id: item.id,
+        businessName: String(item.businessName || "").trim() || null,
+        contactName: String(item.contactName || "").trim() || null,
+        email: String(item.email || "").trim() || null,
+      }));
+
+    return res.json({ ok: true, items, data: items });
+  } catch (err: any) {
+    console.error("[maintenance-v2] landlord contractor list failed", { message: err?.message || "failed" });
+    return res.status(500).json({ ok: false, error: "LANDLORD_MAINTENANCE_CONTRACTOR_LIST_FAILED" });
   }
 });
 
@@ -553,6 +639,16 @@ router.post("/landlord/maintenance/:id/assign", async (req: any, res) => {
     if (!snap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
     const current = { id: snap.id, ...(snap.data() as any) };
     if (String(current.landlordId || "") !== landlordId) return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+
+    const currentStatus = normalizeWorkflowStatus(current.status) || "submitted";
+    if (!["reviewed", "assigned"].includes(currentStatus)) {
+      return res.status(400).json({
+        ok: false,
+        error: "INVALID_STATUS_TRANSITION",
+        currentStatus,
+        nextStatus: "assigned",
+      });
+    }
 
     const contractorProfileSnap = await db.collection("contractorProfiles").doc(contractorId).get();
     const contractorProfile = contractorProfileSnap.exists ? (contractorProfileSnap.data() as any) : {};
@@ -647,7 +743,7 @@ router.patch("/contractor/jobs/:id/status", async (req: any, res) => {
     if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
 
     const nextStatus = normalizeWorkflowStatus(req.body?.status);
-    if (!nextStatus || !["scheduled", "in_progress", "completed"].includes(nextStatus)) {
+    if (!nextStatus || !["assigned", "scheduled", "in_progress", "completed"].includes(nextStatus)) {
       return res.status(400).json({ ok: false, error: "INVALID_STATUS" });
     }
 
@@ -657,6 +753,17 @@ router.patch("/contractor/jobs/:id/status", async (req: any, res) => {
     const item = { id: snap.id, ...(snap.data() as any) };
     if (String(item.assignedContractorId || "") !== contractorId) {
       return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const currentStatus = normalizeWorkflowStatus(item.status) || "assigned";
+    const isAcknowledgement = nextStatus === "assigned" && currentStatus === "assigned";
+    if (!isAcknowledgement && !canTransitionWorkflowStatus(currentStatus, nextStatus)) {
+      return res.status(400).json({
+        ok: false,
+        error: "INVALID_STATUS_TRANSITION",
+        currentStatus,
+        nextStatus,
+      });
     }
 
     const note = String(req.body?.message || "").trim().slice(0, 500);
@@ -674,37 +781,41 @@ router.patch("/contractor/jobs/:id/status", async (req: any, res) => {
       status: nextStatus,
       actorRole: role === "admin" ? "admin" : "contractor",
       actorId,
-      message: note || `Contractor updated status to ${nextStatus}`,
+      message:
+        note ||
+        (isAcknowledgement ? "Contractor accepted the assigned job" : `Contractor updated status to ${nextStatus}`),
     });
 
     const refreshedSnap = await ref.get();
     const refreshed = { id: refreshedSnap.id, ...(refreshedSnap.data() as any) };
 
-    const [tenantEmail, landlordEmail] = await Promise.all([
-      lookupEmailFromDoc([
-        ["tenants", String(refreshed.tenantId || "")],
-        ["users", String(refreshed.tenantId || "")],
-      ]),
-      lookupEmailFromDoc([
-        ["users", String(refreshed.landlordId || "")],
-        ["landlords", String(refreshed.landlordId || "")],
-      ]),
-    ]);
+    if (!isAcknowledgement) {
+      const [tenantEmail, landlordEmail] = await Promise.all([
+        lookupEmailFromDoc([
+          ["tenants", String(refreshed.tenantId || "")],
+          ["users", String(refreshed.tenantId || "")],
+        ]),
+        lookupEmailFromDoc([
+          ["users", String(refreshed.landlordId || "")],
+          ["landlords", String(refreshed.landlordId || "")],
+        ]),
+      ]);
 
-    await Promise.all([
-      sendMaintenanceStatusEmail({
-        to: tenantEmail,
-        subject: `Maintenance update: ${String(refreshed.title || "Request")}`,
-        intro: `Your maintenance request is now ${nextStatus}.`,
-        requestId: id,
-      }),
-      sendMaintenanceStatusEmail({
-        to: landlordEmail,
-        subject: `Contractor update: ${String(refreshed.title || "Request")}`,
-        intro: `Contractor marked request as ${nextStatus}.`,
-        requestId: id,
-      }),
-    ]);
+      await Promise.all([
+        sendMaintenanceStatusEmail({
+          to: tenantEmail,
+          subject: `Maintenance update: ${String(refreshed.title || "Request")}`,
+          intro: `Your maintenance request is now ${nextStatus}.`,
+          requestId: id,
+        }),
+        sendMaintenanceStatusEmail({
+          to: landlordEmail,
+          subject: `Contractor update: ${String(refreshed.title || "Request")}`,
+          intro: `Contractor marked request as ${nextStatus}.`,
+          requestId: id,
+        }),
+      ]);
+    }
 
     return res.json({ ok: true, item: refreshed, data: refreshed });
   } catch (err: any) {

@@ -10,7 +10,7 @@ export default function TenantMaintenanceRequestNewPage() {
   const [description, setDescription] = React.useState("");
   const [category, setCategory] = React.useState("GENERAL");
   const [priority, setPriority] = React.useState<"low" | "normal" | "urgent">("normal");
-  const [photoUploadPending, setPhotoUploadPending] = React.useState(false);
+  const [notes, setNotes] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -27,7 +27,7 @@ export default function TenantMaintenanceRequestNewPage() {
         description: description.trim(),
         category,
         priority,
-        photoUploadPending,
+        notes: notes.trim(),
       });
       const requestId = String(res?.requestId || "").trim();
       if (requestId) {
@@ -113,7 +113,7 @@ export default function TenantMaintenanceRequestNewPage() {
           <span style={{ color: textTokens.muted }}>Priority</span>
           <select
             value={priority}
-            onChange={(e) => setPriority(e.target.value as any)}
+            onChange={(e) => setPriority(e.target.value as "low" | "normal" | "urgent")}
             style={{
               padding: "9px 10px",
               borderRadius: radius.md,
@@ -127,6 +127,24 @@ export default function TenantMaintenanceRequestNewPage() {
           </select>
         </label>
       </div>
+
+      <label style={{ display: "grid", gap: 6 }}>
+        <span style={{ color: textTokens.muted }}>Optional notes</span>
+        <textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          rows={3}
+          placeholder="Access instructions, best contact times, or anything else that helps."
+          style={{
+            padding: "10px",
+            borderRadius: radius.md,
+            border: `1px solid ${colors.border}`,
+            background: colors.panel,
+            color: textTokens.primary,
+            resize: "vertical",
+          }}
+        />
+      </label>
 
       <label style={{ display: "grid", gap: 6 }}>
         <span style={{ color: textTokens.muted }}>Attachments</span>
