@@ -65,6 +65,43 @@ function contractorIdOf(req: any): string | null {
   return String(req.user?.contractorId || req.user?.id || "").trim() || null;
 }
 
+async function resolveContractorAccess(req: any): Promise<{
+  role: string;
+  contractorId: string | null;
+}> {
+  const directRole = roleOf(req);
+  const directContractorId = contractorIdOf(req);
+  if (directRole === "contractor" || directRole === "admin") {
+    return { role: directRole, contractorId: directContractorId };
+  }
+
+  const userId = String(req.user?.id || "").trim();
+  if (!userId) {
+    return { role: directRole, contractorId: directContractorId };
+  }
+
+  const [userSnap, accountSnap] = await Promise.all([
+    db.collection("users").doc(userId).get(),
+    db.collection("accounts").doc(userId).get(),
+  ]);
+  const userData = userSnap.exists ? (userSnap.data() as any) : null;
+  const accountData = accountSnap.exists ? (accountSnap.data() as any) : null;
+  const persistedRole = String(
+    userData?.actorRole || userData?.role || accountData?.actorRole || accountData?.role || directRole || ""
+  )
+    .trim()
+    .toLowerCase();
+  const persistedContractorId =
+    String(
+      userData?.contractorId || accountData?.contractorId || directContractorId || userId || ""
+    ).trim() || null;
+
+  return {
+    role: persistedRole,
+    contractorId: persistedContractorId,
+  };
+}
+
 function normalizeWorkflowStatus(raw: any): (typeof WORKFLOW_STATUSES)[number] | null {
   const value = String(raw || "").trim();
   if (!value) return null;
@@ -709,9 +746,11 @@ router.post("/landlord/maintenance/:id/assign", async (req: any, res) => {
 
 router.get("/contractor/jobs", async (req: any, res) => {
   try {
-    const role = roleOf(req);
-    if (role !== "contractor" && role !== "admin") return res.status(403).json({ ok: false, error: "FORBIDDEN" });
-    const contractorId = contractorIdOf(req);
+    const access = await resolveContractorAccess(req);
+    if (access.role !== "contractor" && access.role !== "admin") {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+    const contractorId = access.contractorId;
     if (!contractorId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
 
     const statusFilter = normalizeWorkflowStatus(req.query?.status);
@@ -734,9 +773,11 @@ router.get("/contractor/jobs", async (req: any, res) => {
 
 router.patch("/contractor/jobs/:id/status", async (req: any, res) => {
   try {
-    const role = roleOf(req);
-    if (role !== "contractor" && role !== "admin") return res.status(403).json({ ok: false, error: "FORBIDDEN" });
-    const contractorId = contractorIdOf(req);
+    const access = await resolveContractorAccess(req);
+    if (access.role !== "contractor" && access.role !== "admin") {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+    const contractorId = access.contractorId;
     const actorId = String(req.user?.id || "").trim() || contractorId;
     const id = String(req.params?.id || "").trim();
     if (!contractorId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
@@ -779,7 +820,7 @@ router.patch("/contractor/jobs/:id/status", async (req: any, res) => {
     );
     await appendStatusHistory(id, {
       status: nextStatus,
-      actorRole: role === "admin" ? "admin" : "contractor",
+      actorRole: access.role === "admin" ? "admin" : "contractor",
       actorId,
       message:
         note ||
