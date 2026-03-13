@@ -35,7 +35,7 @@ const WORKFLOW_STATUSES = [
   "cancelled",
 ] as const;
 const WORKFLOW_TRANSITIONS: Record<(typeof WORKFLOW_STATUSES)[number], Array<(typeof WORKFLOW_STATUSES)[number]>> = {
-  submitted: ["reviewed", "cancelled"],
+  submitted: ["reviewed", "assigned", "cancelled"],
   reviewed: ["assigned", "cancelled"],
   assigned: ["scheduled", "cancelled"],
   scheduled: ["in_progress", "cancelled"],
@@ -946,15 +946,49 @@ router.post("/landlord/maintenance/:id/assign", async (req: any, res) => {
     let resolvedContractorId = rawContractorId;
     let inviteData: any = null;
     if (!resolvedContractorId && inviteId) {
-      const inviteSnap = await db.collection("contractorInvites").doc(inviteId).get();
-      if (!inviteSnap.exists) {
+      let inviteSnap = await db.collection("contractorInvites").doc(inviteId).get();
+      if (inviteSnap.exists) {
+        inviteData = inviteSnap.data() as any;
+      } else {
+        const inviteByTokenSnap = await db
+          .collection("contractorInvites")
+          .where("token", "==", inviteId)
+          .limit(1)
+          .get();
+        if (!inviteByTokenSnap.empty) {
+          inviteData = inviteByTokenSnap.docs[0].data() as any;
+        }
+      }
+      if (!inviteData) {
         return res.status(404).json({ ok: false, error: "CONTRACTOR_INVITE_NOT_FOUND" });
       }
-      inviteData = inviteSnap.data() as any;
       if (String(inviteData?.landlordId || "").trim() !== landlordId) {
         return res.status(403).json({ ok: false, error: "FORBIDDEN" });
       }
       resolvedContractorId = String(inviteData?.acceptedByUserId || "").trim();
+      if (!resolvedContractorId) {
+        const inviteEmail = String(inviteData?.email || "").trim().toLowerCase();
+        if (inviteEmail) {
+          const [userByEmailSnap, accountByEmailSnap, contractorProfileByEmailSnap] = await Promise.all([
+            db.collection("users").where("email", "==", inviteEmail).limit(1).get(),
+            db.collection("accounts").where("email", "==", inviteEmail).limit(1).get(),
+            db.collection("contractorProfiles").where("email", "==", inviteEmail).limit(1).get(),
+          ]);
+          const userDoc = !userByEmailSnap.empty ? userByEmailSnap.docs[0] : null;
+          const accountDoc = !accountByEmailSnap.empty ? accountByEmailSnap.docs[0] : null;
+          const profileDoc = !contractorProfileByEmailSnap.empty ? contractorProfileByEmailSnap.docs[0] : null;
+          resolvedContractorId = String(
+            userDoc?.id ||
+              accountDoc?.id ||
+              (profileDoc?.data() as any)?.userId ||
+              profileDoc?.id ||
+              ""
+          ).trim();
+        }
+      }
+      if (!resolvedContractorId) {
+        return res.status(400).json({ ok: false, error: "CONTRACTOR_ID_REQUIRED" });
+      }
     }
     if (!resolvedContractorId) {
       return res.status(400).json({ ok: false, error: "CONTRACTOR_ID_REQUIRED" });
@@ -967,7 +1001,7 @@ router.post("/landlord/maintenance/:id/assign", async (req: any, res) => {
     if (String(current.landlordId || "") !== landlordId) return res.status(403).json({ ok: false, error: "FORBIDDEN" });
 
     const currentStatus = normalizeWorkflowStatus(current.status) || "submitted";
-    if (!["reviewed", "assigned"].includes(currentStatus)) {
+    if (!["submitted", "reviewed", "assigned"].includes(currentStatus)) {
       return res.status(400).json({
         ok: false,
         error: "INVALID_STATUS_TRANSITION",
