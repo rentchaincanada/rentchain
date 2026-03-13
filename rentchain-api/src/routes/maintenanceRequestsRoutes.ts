@@ -35,7 +35,7 @@ const WORKFLOW_STATUSES = [
   "cancelled",
 ] as const;
 const WORKFLOW_TRANSITIONS: Record<(typeof WORKFLOW_STATUSES)[number], Array<(typeof WORKFLOW_STATUSES)[number]>> = {
-  submitted: ["reviewed", "cancelled"],
+  submitted: ["reviewed", "assigned", "cancelled"],
   reviewed: ["assigned", "cancelled"],
   assigned: ["scheduled", "cancelled"],
   scheduled: ["in_progress", "cancelled"],
@@ -287,17 +287,49 @@ async function sendMaintenanceStatusEmail(params: {
   subject: string;
   intro: string;
   requestId: string;
+  workOrderId?: string | null;
+  event: string;
 }) {
   const to = String(params.to || "").trim();
-  if (!to || !emailRegex.test(to)) return false;
-  const apiKey = process.env.SENDGRID_API_KEY;
+  const provider = String(process.env.EMAIL_PROVIDER || "mailgun").trim().toLowerCase() || "mailgun";
   const from =
-    process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM || process.env.FROM_EMAIL;
+    process.env.EMAIL_FROM ||
+    process.env.FROM_EMAIL ||
+    process.env.SENDGRID_FROM_EMAIL ||
+    process.env.SENDGRID_FROM;
   const replyTo = process.env.SENDGRID_REPLY_TO || process.env.SENDGRID_REPLYTO_EMAIL;
-  if (!apiKey || !from) return false;
+  if (!to || !emailRegex.test(to)) {
+    console.warn("[maintenance-v2] notification skipped", {
+      event: params.event,
+      maintenanceRequestId: params.requestId,
+      workOrderId: params.workOrderId || null,
+      to: to || null,
+      provider,
+      reason: "INVALID_RECIPIENT",
+    });
+    return { ok: false, attempted: false, provider, to, reason: "INVALID_RECIPIENT" } as const;
+  }
+  if (!from) {
+    console.error("[maintenance-v2] notification failed", {
+      event: params.event,
+      maintenanceRequestId: params.requestId,
+      workOrderId: params.workOrderId || null,
+      to,
+      provider,
+      reason: "EMAIL_FROM_MISSING",
+    });
+    return { ok: false, attempted: false, provider, to, reason: "EMAIL_FROM_MISSING" } as const;
+  }
   const baseUrl =
     (process.env.PUBLIC_APP_URL || process.env.VITE_PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
   const requestLink = `${baseUrl}/tenant/maintenance/${params.requestId}`;
+  console.info("[maintenance-v2] notification attempt", {
+    event: params.event,
+    maintenanceRequestId: params.requestId,
+    workOrderId: params.workOrderId || null,
+    to,
+    provider,
+  });
   try {
     await sendEmail({
       to,
@@ -316,15 +348,117 @@ async function sendMaintenanceStatusEmail(params: {
         ctaUrl: requestLink,
       }),
     });
-    return true;
-  } catch (err: any) {
-    console.error("[maintenance-v2] notification send failed", {
+    console.info("[maintenance-v2] notification sent", {
+      event: params.event,
+      maintenanceRequestId: params.requestId,
+      workOrderId: params.workOrderId || null,
       to,
-      requestId: params.requestId,
+      provider,
+      ok: true,
+    });
+    return { ok: true, attempted: true, provider, to } as const;
+  } catch (err: any) {
+    console.error("[maintenance-v2] notification failed", {
+      event: params.event,
+      to,
+      maintenanceRequestId: params.requestId,
+      workOrderId: params.workOrderId || null,
+      provider,
       message: err?.message || "send_failed",
     });
-    return false;
+    return { ok: false, attempted: true, provider, to, reason: err?.message || "send_failed" } as const;
   }
+}
+
+async function upsertMaintenanceWorkOrder(input: {
+  maintenanceRequestId: string;
+  landlordId: string | null;
+  propertyId: string | null;
+  unitId: string | null;
+  tenantId: string | null;
+  assignedContractorId: string | null;
+  assignedContractorName: string | null;
+  title: string | null;
+  description: string | null;
+  category: string | null;
+  priority: string | null;
+  status: string | null;
+}) {
+  const workOrderId = `maintenance_${input.maintenanceRequestId}`;
+  const ref = db.collection("workOrders").doc(workOrderId);
+  const existing = await ref.get();
+  const existingData = existing.exists ? ((existing.data() as any) || {}) : {};
+  const createdAtMs = Number(existingData.createdAtMs || existingData.createdAt || Date.now()) || Date.now();
+  const now = Date.now();
+  const payload = {
+    id: workOrderId,
+    maintenanceRequestId: input.maintenanceRequestId,
+    landlordId: input.landlordId || null,
+    propertyId: input.propertyId || null,
+    unitId: input.unitId || null,
+    tenantId: input.tenantId || null,
+    assignedContractorId: input.assignedContractorId || null,
+    assignedContractorName: input.assignedContractorName || null,
+    title: String(input.title || "").trim() || "Maintenance request",
+    description: String(input.description || "").trim() || "",
+    category: String(input.category || "").trim() || "GENERAL",
+    priority: String(input.priority || "").trim() || "normal",
+    status: String(input.status || "assigned").trim() || "assigned",
+    visibility: "private",
+    createdAt: createdAtMs,
+    updatedAt: now,
+    createdAtMs,
+    updatedAtMs: now,
+  };
+  await ref.set(payload, { merge: true });
+  console.info("[maintenance-v2] work-order upserted", {
+    maintenanceRequestId: input.maintenanceRequestId,
+    workOrderId,
+    assignedContractorId: input.assignedContractorId || null,
+    status: payload.status,
+    created: !existing.exists,
+  });
+  return { workOrderId, payload };
+}
+
+function shapeContractorJobFromSources(workOrder: any, maintenance: any) {
+  const maintenanceId =
+    String(workOrder?.maintenanceRequestId || maintenance?.id || "").trim() || String(workOrder?.id || "").trim();
+  const status = normalizeWorkflowStatus(workOrder?.status || maintenance?.status) || "assigned";
+  return {
+    ...(maintenance || {}),
+    ...(workOrder || {}),
+    id: maintenanceId,
+    workOrderId: String(workOrder?.id || "").trim() || null,
+    maintenanceRequestId: maintenanceId,
+    landlordId: String(workOrder?.landlordId || maintenance?.landlordId || "").trim() || null,
+    tenantId: String(workOrder?.tenantId || maintenance?.tenantId || "").trim() || null,
+    propertyId: String(workOrder?.propertyId || maintenance?.propertyId || "").trim() || null,
+    unitId: String(workOrder?.unitId || maintenance?.unitId || "").trim() || null,
+    assignedContractorId:
+      String(workOrder?.assignedContractorId || maintenance?.assignedContractorId || "").trim() || null,
+    assignedContractorName:
+      String(workOrder?.assignedContractorName || maintenance?.assignedContractorName || "").trim() || null,
+    title: String(workOrder?.title || maintenance?.title || "").trim() || "Maintenance request",
+    description: String(workOrder?.description || maintenance?.description || "").trim() || "",
+    category: String(workOrder?.category || maintenance?.category || "").trim() || "GENERAL",
+    priority: String(workOrder?.priority || maintenance?.priority || "").trim() || "normal",
+    status,
+    contractorStatus:
+      String(maintenance?.contractorStatus || workOrder?.contractorStatus || status).trim() || status,
+    contractorLastUpdate:
+      String(maintenance?.contractorLastUpdate || workOrder?.contractorLastUpdate || "").trim() || null,
+    tenantName: String(maintenance?.tenantName || "").trim() || null,
+    propertyLabel: String(maintenance?.propertyLabel || "").trim() || null,
+    unitLabel: String(maintenance?.unitLabel || "").trim() || null,
+    notes: String(maintenance?.notes || "").trim() || null,
+    landlordNote: String(maintenance?.landlordNote || "").trim() || null,
+    createdAt:
+      Number(maintenance?.createdAt || workOrder?.createdAt || workOrder?.createdAtMs || Date.now()) || Date.now(),
+    updatedAt:
+      Number(maintenance?.updatedAt || workOrder?.updatedAt || workOrder?.updatedAtMs || Date.now()) || Date.now(),
+    statusHistory: Array.isArray(maintenance?.statusHistory) ? maintenance.statusHistory : [],
+  };
 }
 
 router.get("/maintenance-requests", async (req: any, res) => {
@@ -569,6 +703,7 @@ router.post("/tenant/maintenance", async (req: any, res) => {
         subject: `New maintenance request: ${title}`,
         intro: `A tenant submitted a new maintenance request.\nCategory: ${category}\nPriority: ${priority}\nStatus: submitted`,
         requestId: ref.id,
+        event: "tenant_maintenance_created_notify_landlord",
       });
     }
 
@@ -707,20 +842,41 @@ router.patch("/landlord/maintenance/:id", async (req: any, res) => {
 
     const refreshedSnap = await ref.get();
     const refreshed = { id: refreshedSnap.id, ...(refreshedSnap.data() as any) };
+    let workOrderId: string | null = null;
+    if (String(refreshed.assignedContractorId || "").trim()) {
+      const workOrder = await upsertMaintenanceWorkOrder({
+        maintenanceRequestId: id,
+        landlordId: String(refreshed.landlordId || landlordId || "").trim() || null,
+        propertyId: String(refreshed.propertyId || "").trim() || null,
+        unitId: String(refreshed.unitId || "").trim() || null,
+        tenantId: String(refreshed.tenantId || "").trim() || null,
+        assignedContractorId: String(refreshed.assignedContractorId || "").trim() || null,
+        assignedContractorName: String(refreshed.assignedContractorName || "").trim() || null,
+        title: String(refreshed.title || "").trim() || null,
+        description: String(refreshed.description || "").trim() || null,
+        category: String(refreshed.category || "").trim() || null,
+        priority: String(refreshed.priority || "").trim() || null,
+        status: String(refreshed.status || nextStatus || currentStatus).trim() || currentStatus,
+      });
+      workOrderId = workOrder.workOrderId;
+    }
     const tenantEmail = await lookupEmailFromDoc([
       ["tenants", String(refreshed.tenantId || "")],
       ["users", String(refreshed.tenantId || "")],
     ]);
+    let tenantNotification = null;
     if (nextStatus && nextStatus !== currentStatus) {
-      await sendMaintenanceStatusEmail({
+      tenantNotification = await sendMaintenanceStatusEmail({
         to: tenantEmail,
         subject: `Maintenance request updated: ${String(refreshed.title || "Request")}`,
         intro: `Your maintenance request status changed to ${nextStatus}.`,
         requestId: id,
+        workOrderId,
+        event: "landlord_maintenance_status_notify_tenant",
       });
     }
 
-    return res.json({ ok: true, item: refreshed, data: refreshed });
+    return res.json({ ok: true, item: refreshed, data: refreshed, workOrderId, notifications: { tenant: tenantNotification } });
   } catch (err: any) {
     console.error("[maintenance-v2] landlord patch failed", { message: err?.message || "failed" });
     return res.status(500).json({ ok: false, error: "LANDLORD_MAINTENANCE_PATCH_FAILED" });
@@ -770,10 +926,73 @@ router.post("/landlord/maintenance/:id/assign", async (req: any, res) => {
     const landlordId = landlordIdOf(req);
     const actorId = String(req.user?.id || "").trim() || landlordId;
     const id = String(req.params?.id || "").trim();
-    const contractorId = String(req.body?.contractorId || "").trim();
+    const rawContractorId =
+      String(req.body?.contractorId || req.body?.contractorUserId || req.body?.acceptedByUserId || "").trim();
+    const inviteId = String(req.body?.inviteId || "").trim() || null;
     if (!landlordId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
     if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
-    if (!contractorId) return res.status(400).json({ ok: false, error: "CONTRACTOR_ID_REQUIRED" });
+
+    console.info("[maintenance-v2] assignment request", {
+      maintenanceRequestId: id,
+      landlordId,
+      payload: {
+        contractorId: req.body?.contractorId ?? null,
+        contractorUserId: req.body?.contractorUserId ?? null,
+        acceptedByUserId: req.body?.acceptedByUserId ?? null,
+        inviteId,
+      },
+    });
+
+    let resolvedContractorId = rawContractorId;
+    let inviteData: any = null;
+    if (!resolvedContractorId && inviteId) {
+      let inviteSnap = await db.collection("contractorInvites").doc(inviteId).get();
+      if (inviteSnap.exists) {
+        inviteData = inviteSnap.data() as any;
+      } else {
+        const inviteByTokenSnap = await db
+          .collection("contractorInvites")
+          .where("token", "==", inviteId)
+          .limit(1)
+          .get();
+        if (!inviteByTokenSnap.empty) {
+          inviteData = inviteByTokenSnap.docs[0].data() as any;
+        }
+      }
+      if (!inviteData) {
+        return res.status(404).json({ ok: false, error: "CONTRACTOR_INVITE_NOT_FOUND" });
+      }
+      if (String(inviteData?.landlordId || "").trim() !== landlordId) {
+        return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+      }
+      resolvedContractorId = String(inviteData?.acceptedByUserId || "").trim();
+      if (!resolvedContractorId) {
+        const inviteEmail = String(inviteData?.email || "").trim().toLowerCase();
+        if (inviteEmail) {
+          const [userByEmailSnap, accountByEmailSnap, contractorProfileByEmailSnap] = await Promise.all([
+            db.collection("users").where("email", "==", inviteEmail).limit(1).get(),
+            db.collection("accounts").where("email", "==", inviteEmail).limit(1).get(),
+            db.collection("contractorProfiles").where("email", "==", inviteEmail).limit(1).get(),
+          ]);
+          const userDoc = !userByEmailSnap.empty ? userByEmailSnap.docs[0] : null;
+          const accountDoc = !accountByEmailSnap.empty ? accountByEmailSnap.docs[0] : null;
+          const profileDoc = !contractorProfileByEmailSnap.empty ? contractorProfileByEmailSnap.docs[0] : null;
+          resolvedContractorId = String(
+            userDoc?.id ||
+              accountDoc?.id ||
+              (profileDoc?.data() as any)?.userId ||
+              profileDoc?.id ||
+              ""
+          ).trim();
+        }
+      }
+      if (!resolvedContractorId) {
+        return res.status(400).json({ ok: false, error: "CONTRACTOR_ID_REQUIRED" });
+      }
+    }
+    if (!resolvedContractorId) {
+      return res.status(400).json({ ok: false, error: "CONTRACTOR_ID_REQUIRED" });
+    }
 
     const ref = db.collection("maintenanceRequests").doc(id);
     const snap = await ref.get();
@@ -782,7 +1001,7 @@ router.post("/landlord/maintenance/:id/assign", async (req: any, res) => {
     if (String(current.landlordId || "") !== landlordId) return res.status(403).json({ ok: false, error: "FORBIDDEN" });
 
     const currentStatus = normalizeWorkflowStatus(current.status) || "submitted";
-    if (!["reviewed", "assigned"].includes(currentStatus)) {
+    if (!["submitted", "reviewed", "assigned"].includes(currentStatus)) {
       return res.status(400).json({
         ok: false,
         error: "INVALID_STATUS_TRANSITION",
@@ -791,57 +1010,181 @@ router.post("/landlord/maintenance/:id/assign", async (req: any, res) => {
       });
     }
 
-    const contractorProfileSnap = await db.collection("contractorProfiles").doc(contractorId).get();
-    const contractorProfile = contractorProfileSnap.exists ? (contractorProfileSnap.data() as any) : {};
-    const contractorName =
-      String(contractorProfile?.businessName || contractorProfile?.contactName || "").trim() || null;
+    let profileSnap = await db.collection("contractorProfiles").doc(resolvedContractorId).get();
+    let userSnap = await db.collection("users").doc(resolvedContractorId).get();
+    let accountSnap = await db.collection("accounts").doc(resolvedContractorId).get();
+    let contractorProfile = profileSnap.exists ? (profileSnap.data() as any) : null;
+    let userData = userSnap.exists ? (userSnap.data() as any) : null;
+    let accountData = accountSnap.exists ? (accountSnap.data() as any) : null;
 
-    await ref.set(
+    const profileUserId = String(contractorProfile?.userId || "").trim() || null;
+    if ((!userData && !accountData) && profileUserId) {
+      resolvedContractorId = profileUserId;
+      userSnap = await db.collection("users").doc(resolvedContractorId).get();
+      accountSnap = await db.collection("accounts").doc(resolvedContractorId).get();
+      profileSnap = await db.collection("contractorProfiles").doc(resolvedContractorId).get();
+      contractorProfile = profileSnap.exists ? (profileSnap.data() as any) : contractorProfile;
+      userData = userSnap.exists ? (userSnap.data() as any) : null;
+      accountData = accountSnap.exists ? (accountSnap.data() as any) : null;
+    }
+
+    const persistedRole = String(
+      userData?.actorRole || userData?.role || accountData?.actorRole || accountData?.role || ""
+    ).trim().toLowerCase();
+    if (!profileSnap.exists && persistedRole !== "contractor" && role !== "admin") {
+      console.error("[maintenance-v2] assignment resolution failed", {
+        maintenanceRequestId: id,
+        landlordId,
+        rawContractorId,
+        resolvedContractorId,
+        inviteId,
+        persistedRole: persistedRole || null,
+        hasProfile: profileSnap.exists,
+      });
+      return res.status(400).json({ ok: false, error: "INVALID_CONTRACTOR_ID" });
+    }
+
+    const contractorName =
+      String(
+        contractorProfile?.businessName ||
+          contractorProfile?.contactName ||
+          userData?.fullName ||
+          userData?.name ||
+          accountData?.fullName ||
+          accountData?.name ||
+          accountData?.businessName ||
+          ""
+      ).trim() || null;
+    const contractorEmail =
+      String(contractorProfile?.email || userData?.email || accountData?.email || inviteData?.email || "").trim() || null;
+
+    console.info("[maintenance-v2] assignment resolved", {
+      maintenanceRequestId: id,
+      landlordId,
+      rawContractorId: rawContractorId || null,
+      resolvedContractorId,
+      inviteId,
+      contractorName,
+      contractorEmail,
+      persistedRole: persistedRole || null,
+      hasProfile: profileSnap.exists,
+    });
+
+    const now = Date.now();
+    const workOrderId = `maintenance_${id}`;
+    const batch = db.batch();
+    batch.set(
+      ref,
       {
-        assignedContractorId: contractorId,
+        assignedContractorId: resolvedContractorId,
         assignedContractorName: contractorName,
         status: "assigned",
-        updatedAt: Date.now(),
+        updatedAt: now,
         lastUpdatedBy: "LANDLORD",
+        statusHistory: FieldValue.arrayUnion({
+          status: "assigned",
+          actorRole: role === "admin" ? "admin" : "landlord",
+          actorId,
+          message: contractorName ? `Assigned contractor: ${contractorName}` : `Assigned contractor: ${resolvedContractorId}`,
+          createdAt: now,
+        }),
       },
       { merge: true }
     );
-    await appendStatusHistory(id, {
-      status: "assigned",
-      actorRole: role === "admin" ? "admin" : "landlord",
-      actorId,
-      message: contractorName ? `Assigned contractor: ${contractorName}` : "Assigned contractor",
+    batch.set(
+      db.collection("workOrders").doc(workOrderId),
+      {
+        id: workOrderId,
+        maintenanceRequestId: id,
+        landlordId: String(current.landlordId || landlordId || "").trim() || null,
+        propertyId: String(current.propertyId || "").trim() || null,
+        unitId: String(current.unitId || "").trim() || null,
+        tenantId: String(current.tenantId || "").trim() || null,
+        assignedContractorId: resolvedContractorId,
+        assignedContractorName: contractorName,
+        title: String(current.title || "").trim() || "Maintenance request",
+        description: String(current.description || "").trim() || "",
+        category: String(current.category || "").trim() || "GENERAL",
+        priority: String(current.priority || "").trim() || "normal",
+        status: "assigned",
+        visibility: "private",
+        createdAt: Number(current.createdAt || now) || now,
+        updatedAt: now,
+        createdAtMs: Number(current.createdAt || now) || now,
+        updatedAtMs: now,
+      },
+      { merge: true }
+    );
+    await batch.commit();
+
+    const [refreshedSnap, workOrderSnap] = await Promise.all([
+      ref.get(),
+      db.collection("workOrders").doc(workOrderId).get(),
+    ]);
+    const refreshed = { id: refreshedSnap.id, ...(refreshedSnap.data() as any) };
+    const workOrder = workOrderSnap.exists ? { id: workOrderSnap.id, ...(workOrderSnap.data() as any) } : null;
+    const maintenanceAssignedContractorId = String(refreshed.assignedContractorId || "").trim() || null;
+    const workOrderAssignedContractorId = String(workOrder?.assignedContractorId || "").trim() || null;
+
+    console.info("[maintenance-v2] assignment persisted", {
+      maintenanceRequestId: id,
+      workOrderId,
+      resolvedContractorId,
+      maintenanceAssignedContractorId,
+      workOrderAssignedContractorId,
+      assignedContractorName: String(refreshed.assignedContractorName || workOrder?.assignedContractorName || "").trim() || null,
     });
 
-    const refreshedSnap = await ref.get();
-    const refreshed = { id: refreshedSnap.id, ...(refreshedSnap.data() as any) };
-    const [tenantEmail, contractorEmail] = await Promise.all([
-      lookupEmailFromDoc([
-        ["tenants", String(refreshed.tenantId || "")],
-        ["users", String(refreshed.tenantId || "")],
-      ]),
-      lookupEmailFromDoc([
-        ["contractorProfiles", contractorId],
-        ["users", contractorId],
-      ]),
-    ]);
+    if (maintenanceAssignedContractorId !== resolvedContractorId || workOrderAssignedContractorId !== resolvedContractorId) {
+      console.error("[maintenance-v2] assignment persistence mismatch", {
+        maintenanceRequestId: id,
+        workOrderId,
+        resolvedContractorId,
+        maintenanceAssignedContractorId,
+        workOrderAssignedContractorId,
+      });
+      return res.status(500).json({
+        ok: false,
+        error: "ASSIGNMENT_PERSIST_FAILED",
+        maintenanceAssignedContractorId,
+        workOrderAssignedContractorId,
+      });
+    }
 
-    await Promise.all([
+    const tenantEmail = await lookupEmailFromDoc([
+      ["tenants", String(refreshed.tenantId || "")],
+      ["users", String(refreshed.tenantId || "")],
+    ]);
+    const [tenantNotification, contractorNotification] = await Promise.all([
       sendMaintenanceStatusEmail({
         to: tenantEmail,
         subject: `Contractor assigned: ${String(refreshed.title || "Maintenance request")}`,
         intro: "A contractor has been assigned to your maintenance request.",
         requestId: id,
+        workOrderId,
+        event: "landlord_assignment_notify_tenant",
       }),
       sendMaintenanceStatusEmail({
         to: contractorEmail,
         subject: `New maintenance job assigned: ${String(refreshed.title || "Maintenance request")}`,
         intro: "You have been assigned a maintenance job in RentChain.",
         requestId: id,
+        workOrderId,
+        event: "landlord_assignment_notify_contractor",
       }),
     ]);
 
-    return res.json({ ok: true, item: refreshed, data: refreshed });
+    return res.json({
+      ok: true,
+      item: refreshed,
+      data: refreshed,
+      workOrderId,
+      resolvedContractorId,
+      notifications: {
+        tenant: tenantNotification,
+        contractor: contractorNotification,
+      },
+    });
   } catch (err: any) {
     console.error("[maintenance-v2] landlord assign failed", { message: err?.message || "failed" });
     return res.status(500).json({ ok: false, error: "LANDLORD_MAINTENANCE_ASSIGN_FAILED" });
@@ -862,17 +1205,44 @@ router.get("/contractor/jobs", async (req: any, res) => {
     }
 
     const statusFilter = normalizeWorkflowStatus(req.query?.status);
-    const snap = await db
-      .collection("maintenanceRequests")
+    const workOrderSnap = await db
+      .collection("workOrders")
       .where("assignedContractorId", "==", contractorId)
       .limit(300)
       .get();
-    let items = snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as any) }));
+    const workOrders = workOrderSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as any) }));
+    const maintenanceIds = Array.from(
+      new Set(
+        workOrders
+          .map((item) => String(item.maintenanceRequestId || "").trim())
+          .filter(Boolean)
+      )
+    );
+    const maintenanceDocs = await Promise.all(
+      maintenanceIds.map(async (maintenanceId) => {
+        const maintenanceSnap = await db.collection("maintenanceRequests").doc(maintenanceId).get();
+        return maintenanceSnap.exists ? { id: maintenanceSnap.id, ...(maintenanceSnap.data() as any) } : null;
+      })
+    );
+    const maintenanceMap = new Map(
+      maintenanceDocs.filter((item): item is any => Boolean(item)).map((item) => [String(item.id), item])
+    );
+
+    let items = workOrders
+      .map((workOrder) => shapeContractorJobFromSources(workOrder, maintenanceMap.get(String(workOrder.maintenanceRequestId || "").trim()) || null))
+      .filter((item) => Boolean(item?.id) && Boolean(item?.title) && Boolean(item?.description));
     if (statusFilter) {
       items = items.filter((item) => normalizeWorkflowStatus(item.status) === statusFilter);
     }
     items.sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0));
-    logContractorAccess("allowed", access, { authorization: fingerprint(getBearerToken(req)), matchedJobs: items.length });
+    console.info("[maintenance-v2] contractor-jobs result", {
+      contractorId,
+      workOrderCount: workOrders.length,
+      jobCount: items.length,
+      statusFilter: statusFilter || null,
+      source: "workOrders",
+    });
+    logContractorAccess("allowed", access, { authorization: fingerprint(getBearerToken(req)), matchedJobs: items.length, source: "workOrders" });
     return res.json({ ok: true, items, data: items });
   } catch (err: any) {
     console.error("[maintenance-v2] contractor jobs failed", { message: err?.message || "failed" });
@@ -940,10 +1310,25 @@ router.patch("/contractor/jobs/:id/status", async (req: any, res) => {
         note ||
         (isAcknowledgement ? "Contractor accepted the assigned job" : `Contractor updated status to ${nextStatus}`),
     });
+    const workOrder = await upsertMaintenanceWorkOrder({
+      maintenanceRequestId: id,
+      landlordId: String(item.landlordId || "").trim() || null,
+      propertyId: String(item.propertyId || "").trim() || null,
+      unitId: String(item.unitId || "").trim() || null,
+      tenantId: String(item.tenantId || "").trim() || null,
+      assignedContractorId: contractorId,
+      assignedContractorName: String(item.assignedContractorName || "").trim() || null,
+      title: String(item.title || "").trim() || null,
+      description: String(item.description || "").trim() || null,
+      category: String(item.category || "").trim() || null,
+      priority: String(item.priority || "").trim() || null,
+      status: nextStatus,
+    });
 
     const refreshedSnap = await ref.get();
     const refreshed = { id: refreshedSnap.id, ...(refreshedSnap.data() as any) };
 
+    let notifications = null;
     if (!isAcknowledgement) {
       const [tenantEmail, landlordEmail] = await Promise.all([
         lookupEmailFromDoc([
@@ -956,23 +1341,31 @@ router.patch("/contractor/jobs/:id/status", async (req: any, res) => {
         ]),
       ]);
 
-      await Promise.all([
+      const [tenantNotification, landlordNotification] = await Promise.all([
         sendMaintenanceStatusEmail({
           to: tenantEmail,
           subject: `Maintenance update: ${String(refreshed.title || "Request")}`,
           intro: `Your maintenance request is now ${nextStatus}.`,
           requestId: id,
+          workOrderId: workOrder.workOrderId,
+          event: "contractor_status_notify_tenant",
         }),
         sendMaintenanceStatusEmail({
           to: landlordEmail,
           subject: `Contractor update: ${String(refreshed.title || "Request")}`,
           intro: `Contractor marked request as ${nextStatus}.`,
           requestId: id,
+          workOrderId: workOrder.workOrderId,
+          event: "contractor_status_notify_landlord",
         }),
       ]);
+      notifications = {
+        tenant: tenantNotification,
+        landlord: landlordNotification,
+      };
     }
 
-    return res.json({ ok: true, item: refreshed, data: refreshed });
+    return res.json({ ok: true, item: refreshed, data: refreshed, workOrderId: workOrder.workOrderId, notifications });
   } catch (err: any) {
     console.error("[maintenance-v2] contractor status patch failed", {
       message: err?.message || "failed",
