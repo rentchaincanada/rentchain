@@ -74,6 +74,8 @@ import PublicApplyPage from "./pages/PublicApplyPage";
 import MessagesPage from "./pages/MessagesPage";
 import TenantMessagesCenterPage from "./pages/tenant/TenantMessagesCenterPage";
 import TenantNoticeDetailPage from "./pages/tenant/TenantNoticeDetailPage";
+import TenantLeaseNoticesPage from "./pages/tenant/TenantLeaseNoticesPage";
+import TenantLeaseNoticeDetailPage from "./pages/tenant/TenantLeaseNoticeDetailPage";
 import MaintenanceRequestsPage from "./pages/MaintenanceRequestsPage";
 import PdfSamplePage from "./pages/PdfSamplePage";
 import LeaseLedgerPage from "./pages/LeaseLedgerPage";
@@ -795,6 +797,14 @@ function App() {
           element={
             TENANT_PORTAL_ENABLED ? <TenantNoticeDetailPage /> : <TenantPortalComingSoon />
           }
+        />
+        <Route
+          path="/tenant/lease-notices"
+          element={renderTenantShell(<TenantLeaseNoticesPage />)}
+        />
+        <Route
+          path="/tenant/lease-notices/:id"
+          element={renderTenantShell(<TenantLeaseNoticeDetailPage />)}
         />
         <Route
           path="/tenant/messages"
