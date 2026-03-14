@@ -131,6 +131,16 @@ router.post("/:id/respond", async (req: any, res) => {
 
     const leaseId = String(notice.leaseId || "").trim();
     const leaseRef = db.collection("leases").doc(leaseId);
+    const leaseSnap = await leaseRef.get();
+    const leaseData = leaseSnap.exists ? (leaseSnap.data() as any) : null;
+    const leaseEndDate =
+      String(
+        leaseData?.leaseEndDate ||
+          leaseData?.endDate ||
+          leaseData?.leaseEnd ||
+          leaseData?.end_date ||
+          ""
+      ).trim() || null;
     const now = Date.now();
     const batch = db.batch();
     batch.set(
@@ -147,7 +157,7 @@ router.post("/:id/respond", async (req: any, res) => {
       {
         latestRenewalIntent: decision,
         latestRenewalIntentAt: now,
-        moveOutDate: decision === "quit" ? String(notice.newTermStartDate || notice.newTermEndDate || "").trim() || null : null,
+        moveOutDate: decision === "quit" ? leaseEndDate : null,
         status: decision === "renew" ? "renewal_accepted" : "move_out_pending",
         updatedAt: now,
       },
