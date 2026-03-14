@@ -39,7 +39,7 @@ function appBaseUrl() {
   return String(process.env.PUBLIC_APP_URL || process.env.VITE_PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
 }
 
-router.get("/landlord/leases/expiring", async (req: any, res) => {
+router.get("/expiring", async (req: any, res) => {
   try {
     const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
     const withinDays = Math.max(1, Number(req.query?.withinDays || 120));
@@ -65,7 +65,7 @@ router.get("/landlord/leases/expiring", async (req: any, res) => {
   }
 });
 
-router.post("/landlord/leases/:id/notice-preview", async (req: any, res) => {
+router.post("/:id/notice-preview", async (req: any, res) => {
   try {
     const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
     const leaseId = String(req.params?.id || "").trim();
@@ -123,7 +123,7 @@ router.post("/landlord/leases/:id/notice-preview", async (req: any, res) => {
   }
 });
 
-router.post("/landlord/leases/:id/send-notice", async (req: any, res) => {
+router.post("/:id/send-notice", async (req: any, res) => {
   try {
     const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
     const actorId = String(req.user?.id || landlordId || "").trim() || null;
@@ -341,7 +341,7 @@ router.post("/landlord/leases/:id/send-notice", async (req: any, res) => {
   }
 });
 
-router.get("/landlord/leases/:id/renewal-status", async (req: any, res) => {
+router.get("/:id/renewal-status", async (req: any, res) => {
   try {
     const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
     const leaseId = String(req.params?.id || "").trim();

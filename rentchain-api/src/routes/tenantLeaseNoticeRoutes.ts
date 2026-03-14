@@ -40,7 +40,7 @@ function appBaseUrl() {
   return String(process.env.PUBLIC_APP_URL || process.env.VITE_PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
 }
 
-router.get("/tenant/lease-notices", async (req: any, res) => {
+router.get("/", async (req: any, res) => {
   try {
     const tenantId = getCanonicalTenantId(req);
     const snap = await db.collection("leaseNotices").where("tenantId", "==", tenantId).limit(50).get();
@@ -54,7 +54,7 @@ router.get("/tenant/lease-notices", async (req: any, res) => {
   }
 });
 
-router.get("/tenant/lease-notices/:id", async (req: any, res) => {
+router.get("/:id", async (req: any, res) => {
   try {
     const tenantId = getCanonicalTenantId(req);
     const noticeId = String(req.params?.id || "").trim();
@@ -110,7 +110,7 @@ router.get("/tenant/lease-notices/:id", async (req: any, res) => {
   }
 });
 
-router.post("/tenant/lease-notices/:id/respond", async (req: any, res) => {
+router.post("/:id/respond", async (req: any, res) => {
   try {
     const tenantId = getCanonicalTenantId(req);
     const actorId = String(req.user?.id || tenantId || "").trim() || tenantId;
