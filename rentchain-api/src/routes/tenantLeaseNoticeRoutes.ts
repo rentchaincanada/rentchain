@@ -21,9 +21,13 @@ function requireLeaseNoticeFeature(req: any, res: any, next: any) {
   return next();
 }
 
+function getCanonicalTenantId(req: any) {
+  return String(req.user?.tenantId || "").trim();
+}
+
 function requireTenant(req: any, res: any, next: any) {
   const role = String(req.user?.role || "").trim().toLowerCase();
-  const tenantId = String(req.user?.tenantId || req.user?.id || "").trim();
+  const tenantId = getCanonicalTenantId(req);
   if (role !== "tenant" || !tenantId) {
     return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
   }
@@ -38,7 +42,7 @@ function appBaseUrl() {
 
 router.get("/tenant/lease-notices", async (req: any, res) => {
   try {
-    const tenantId = String(req.user?.tenantId || req.user?.id || "").trim();
+    const tenantId = getCanonicalTenantId(req);
     const snap = await db.collection("leaseNotices").where("tenantId", "==", tenantId).limit(50).get();
     const items = snap.docs
       .map((doc) => ({ id: doc.id, ...(doc.data() as any) }))
@@ -52,7 +56,7 @@ router.get("/tenant/lease-notices", async (req: any, res) => {
 
 router.get("/tenant/lease-notices/:id", async (req: any, res) => {
   try {
-    const tenantId = String(req.user?.tenantId || req.user?.id || "").trim();
+    const tenantId = getCanonicalTenantId(req);
     const noticeId = String(req.params?.id || "").trim();
     const noticeResult = await getLeaseForTenantWorkflow(noticeId, tenantId);
     if (!noticeResult.ok) {
@@ -108,7 +112,7 @@ router.get("/tenant/lease-notices/:id", async (req: any, res) => {
 
 router.post("/tenant/lease-notices/:id/respond", async (req: any, res) => {
   try {
-    const tenantId = String(req.user?.tenantId || req.user?.id || "").trim();
+    const tenantId = getCanonicalTenantId(req);
     const actorId = String(req.user?.id || tenantId || "").trim() || tenantId;
     const noticeId = String(req.params?.id || "").trim();
     const decision = String(req.body?.decision || "").trim().toLowerCase();

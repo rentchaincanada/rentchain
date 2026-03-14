@@ -180,8 +180,40 @@ export async function getLeaseForTenantWorkflow(noticeId: string, tenantId: stri
   const snap = await db.collection("leaseNotices").doc(noticeId).get();
   if (!snap.exists) return { ok: false as const, status: 404, error: "NOT_FOUND" };
   const notice = { id: snap.id, ...(snap.data() as any) };
-  if (String(notice.tenantId || "").trim() !== tenantId) {
+  const canonicalTenantId = String(tenantId || "").trim();
+  const noticeTenantId = String(notice.tenantId || "").trim();
+  let leaseTenantId = "";
+  const leaseId = String(notice.leaseId || "").trim();
+
+  if (leaseId) {
+    try {
+      const leaseSnap = await db.collection("leases").doc(leaseId).get();
+      if (leaseSnap.exists) {
+        leaseTenantId = normalizeLeaseRecord(leaseSnap.id, leaseSnap.data() as any).tenantId;
+      }
+    } catch (err: any) {
+      console.warn("[lease-notice] tenant-access lease lookup failed", {
+        noticeId,
+        leaseId,
+        message: err?.message || "failed",
+      });
+    }
+  }
+
+  const authorized = [noticeTenantId, leaseTenantId].filter(Boolean).includes(canonicalTenantId);
+  if (!authorized) {
+    console.warn("[lease-notice] tenant-access forbidden", {
+      noticeId,
+      leaseId: leaseId || null,
+      requestTenantId: canonicalTenantId || null,
+      noticeTenantId: noticeTenantId || null,
+      leaseTenantId: leaseTenantId || null,
+    });
     return { ok: false as const, status: 403, error: "FORBIDDEN" };
+  }
+
+  if (!noticeTenantId && leaseTenantId) {
+    notice.tenantId = leaseTenantId;
   }
   return { ok: true as const, notice };
 }
