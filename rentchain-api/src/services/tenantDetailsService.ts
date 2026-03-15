@@ -3,8 +3,14 @@ import { db } from "../config/firebase";
 import {
   computeNoResponseState,
   getLeaseNoticeByLeaseId,
-  normalizeLeaseRecord,
 } from "./leaseNoticeWorkflowService";
+import {
+  loadUnitsForProperty,
+  pickLeaseWinner,
+  resolveUnitReference,
+  toCanonicalLeaseRecord,
+  isCurrentLeaseStatus,
+} from "./leaseCanonicalizationService";
 
 export interface TenantRecord {
   id: string;
@@ -16,6 +22,7 @@ export interface TenantRecord {
   unitId?: string | null;
   propertyName?: string;
   unit?: string;
+  currentLeaseId?: string | null;
   leaseStart?: string | null;
   leaseEnd?: string | null;
   monthlyRent?: number | null;
@@ -167,6 +174,7 @@ function mapTenant(docId: string, data: any): TenantRecord {
     unitId: data.unitId ?? data.unit ?? null,
     propertyName: data.propertyName ?? data.property ?? null,
     unit: data.unit ?? data.unitLabel ?? null,
+    currentLeaseId: data.currentLeaseId ?? null,
     leaseStart: data.leaseStart ?? null,
     leaseEnd: data.leaseEnd ?? null,
     monthlyRent: data.monthlyRent ?? null,
@@ -175,35 +183,6 @@ function mapTenant(docId: string, data: any): TenantRecord {
     riskLevel: data.riskLevel ?? "Low",
     createdAt: createdAtIso ?? createdAt ?? null,
   };
-}
-
-function isCurrentLeaseStatus(status: string | null | undefined): boolean {
-  const normalized = String(status || "").trim().toLowerCase();
-  return [
-    "active",
-    "notice_pending",
-    "renewal_pending",
-    "renewal_accepted",
-    "move_out_pending",
-  ].includes(normalized);
-}
-
-function rankLeaseStatus(status: string | null | undefined): number {
-  const normalized = String(status || "").trim().toLowerCase();
-  switch (normalized) {
-    case "move_out_pending":
-      return 5;
-    case "renewal_accepted":
-      return 4;
-    case "renewal_pending":
-      return 3;
-    case "notice_pending":
-      return 2;
-    case "active":
-      return 1;
-    default:
-      return 0;
-  }
 }
 
 async function loadTenantRecord(tenantId: string, landlordId?: string | null): Promise<TenantRecord | null> {
@@ -222,28 +201,55 @@ async function loadTenantRecord(tenantId: string, landlordId?: string | null): P
   return null;
 }
 
-async function loadCurrentLeaseSnapshot(tenantId: string, landlordId?: string | null) {
+async function loadCurrentLeaseSnapshot(tenant: TenantRecord | null, landlordId?: string | null) {
+  const tenantId = String(tenant?.id || "").trim();
+  if (!tenantId) return null;
   try {
     const leasesRef = db.collection("leases");
-    const [directSnap, arraySnap] = await Promise.all([
+    const hintedLeaseId = String(tenant?.currentLeaseId || "").trim();
+    const hintedLeasePromise = hintedLeaseId
+      ? leasesRef.doc(hintedLeaseId).get().catch(() => null)
+      : Promise.resolve(null);
+    const [hintedSnap, directSnap, arraySnap] = await Promise.all([
+      hintedLeasePromise,
       leasesRef.where("tenantId", "==", tenantId).get().catch(() => ({ docs: [] } as any)),
       leasesRef.where("tenantIds", "array-contains", tenantId).get().catch(() => ({ docs: [] } as any)),
     ]);
-    const byId = new Map<string, any>();
+
+    const candidates = new Map<string, Record<string, unknown>>();
+    if (hintedSnap?.exists) {
+      candidates.set(hintedSnap.id, hintedSnap.data() as Record<string, unknown>);
+    }
     for (const doc of [...(directSnap.docs || []), ...(arraySnap.docs || [])]) {
       if (!doc?.id) continue;
-      const lease = normalizeLeaseRecord(doc.id, doc.data() as any);
-      if (landlordId && lease.landlordId && String(lease.landlordId) !== String(landlordId)) continue;
-      byId.set(doc.id, lease);
+      candidates.set(doc.id, (doc.data() || {}) as Record<string, unknown>);
     }
-    const current = Array.from(byId.values())
-      .filter((lease) => isCurrentLeaseStatus(lease.status))
-      .sort((a, b) => {
-        const rankDiff = rankLeaseStatus(b.status) - rankLeaseStatus(a.status);
-        if (rankDiff !== 0) return rankDiff;
-        return Number(b.updatedAt || 0) - Number(a.updatedAt || 0);
-      });
-    return current[0] || null;
+
+    const currentEntries = Array.from(candidates.entries()).filter(([, raw]) => {
+      const landlordMatch = !landlordId || String((raw as any)?.landlordId || "").trim() === String(landlordId);
+      return landlordMatch && isCurrentLeaseStatus((raw as any)?.status);
+    });
+    if (!currentEntries.length) return null;
+
+    const propertyIds = Array.from(
+      new Set(
+        currentEntries
+          .map(([, raw]) => String((raw as any)?.propertyId || tenant?.propertyId || "").trim())
+          .filter(Boolean)
+      )
+    );
+    const unitsByProperty = new Map<string, Awaited<ReturnType<typeof loadUnitsForProperty>>>();
+    await Promise.all(
+      propertyIds.map(async (propertyId) => {
+        unitsByProperty.set(propertyId, await loadUnitsForProperty(db as any, propertyId, landlordId));
+      })
+    );
+
+    const canonicalLeases = currentEntries.map(([id, raw]) => {
+      const propertyId = String((raw as any)?.propertyId || tenant?.propertyId || "").trim();
+      return toCanonicalLeaseRecord(id, raw, unitsByProperty.get(propertyId) || []);
+    });
+    return pickLeaseWinner(canonicalLeases)?.winner || null;
   } catch (err) {
     console.error("[tenantDetailsService] loadCurrentLeaseSnapshot error", err);
     return null;
@@ -272,31 +278,18 @@ async function loadPropertyRecord(propertyId: string | null | undefined) {
   }
 }
 
-async function loadUnitRecord(propertyId: string | null | undefined, unitId: string | null | undefined) {
+async function loadUnitRecord(propertyId: string | null | undefined, unitId: string | null | undefined, unitLabel?: string | null) {
   const propertyKey = String(propertyId || "").trim();
-  const unitKey = String(unitId || "").trim();
-  if (!propertyKey || !unitKey) return null;
+  if (!propertyKey) return null;
   try {
-    const direct = await db.collection("units").doc(unitKey).get();
-    if (direct.exists) {
-      const data = direct.data() as any;
-      if (!data?.propertyId || String(data.propertyId) === propertyKey) {
-        return { id: direct.id, ...(data || {}) };
-      }
-    }
-    const snap = await db
-      .collection("units")
-      .where("propertyId", "==", propertyKey)
-      .limit(100)
-      .get();
-    const normalizedUnitKey = unitKey.toLowerCase();
-    const match = snap.docs.find((doc) => {
-      const data = doc.data() as any;
-      const docId = String(doc.id || "").trim().toLowerCase();
-      const unitNumber = String(data?.unitNumber || data?.unit || data?.label || "").trim().toLowerCase();
-      return docId === normalizedUnitKey || unitNumber === normalizedUnitKey;
-    });
-    return match ? { id: match.id, ...(match.data() as any) } : null;
+    const units = await loadUnitsForProperty(db as any, propertyKey);
+    const candidates = [
+      resolveUnitReference(units, unitId),
+      resolveUnitReference(units, unitLabel),
+      resolveUnitReference(units, String(unitId || unitLabel || "").trim()),
+    ];
+    const resolution = candidates.find((candidate) => candidate.unit) || null;
+    return resolution?.unit ? { id: resolution.unit.id, ...(resolution.unit.raw as any) } : null;
   } catch (err) {
     console.error("[tenantDetailsService] loadUnitRecord error", err);
     return null;
@@ -376,11 +369,12 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
       FALLBACK_TENANTS[0];
   }
 
-  const currentLeaseRecord = await loadCurrentLeaseSnapshot(tenantId, landlordId);
+  const currentLeaseRecord = await loadCurrentLeaseSnapshot(tenant, landlordId);
   const property = await loadPropertyRecord(currentLeaseRecord?.propertyId || tenant?.propertyId || null);
   const unit = await loadUnitRecord(
     currentLeaseRecord?.propertyId || tenant?.propertyId || null,
-    currentLeaseRecord?.unitId || tenant?.unitId || tenant?.unit || null
+    currentLeaseRecord?.unitId || tenant?.unitId || tenant?.unit || null,
+    currentLeaseRecord?.unitLabel || tenant?.unit || null
   );
   const latestLeaseNoticeSummary = await loadLatestLeaseNoticeSummary(currentLeaseRecord?.id || null, currentLeaseRecord?.status || null);
 
@@ -475,3 +469,6 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
     ledgerSummary,
   };
 }
+
+
+
