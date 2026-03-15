@@ -348,6 +348,13 @@ const DashboardPage: React.FC = () => {
     return items;
   }, [canManualScreen, derivedPropertiesCount, kpis.screeningsCount, tenantCount]);
   const actions = Array.isArray(data?.actions) && data.actions.length > 0 ? data.actions : fallbackActions;
+  const leaseNoticeSummary = data?.leaseNoticeSummary || {
+    expiringSoon: 0,
+    pendingResponse: 0,
+    renewed: 0,
+    quitting: 0,
+    noResponse: 0,
+  };
 
   const dataReady =
     !loading && !propsLoading && !applicationsLoading && !tenantsLoading && !invitesLoading && !error;
@@ -508,6 +515,44 @@ const DashboardPage: React.FC = () => {
         ) : null}
 
         {dataReady ? <KpiStrip kpis={kpis} loading={loading} /> : null}
+        {dataReady &&
+        (leaseNoticeSummary.expiringSoon > 0 ||
+          leaseNoticeSummary.pendingResponse > 0 ||
+          leaseNoticeSummary.renewed > 0 ||
+          leaseNoticeSummary.quitting > 0 ||
+          leaseNoticeSummary.noResponse > 0) ? (
+          <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
+            <div style={{ fontWeight: 700, marginBottom: spacing.sm }}>Lease notice status</div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+                gap: spacing.sm,
+              }}
+            >
+              {[
+                { label: "Expiring soon", value: leaseNoticeSummary.expiringSoon },
+                { label: "Pending response", value: leaseNoticeSummary.pendingResponse },
+                { label: "Renewed", value: leaseNoticeSummary.renewed },
+                { label: "Quitting", value: leaseNoticeSummary.quitting },
+                { label: "No response", value: leaseNoticeSummary.noResponse },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  style={{
+                    padding: spacing.sm,
+                    borderRadius: 12,
+                    border: `1px solid ${colors.border}`,
+                    background: colors.panel,
+                  }}
+                >
+                  <div style={{ color: text.muted, fontSize: 12, marginBottom: 6 }}>{item.label}</div>
+                  <div style={{ fontSize: 24, fontWeight: 800 }}>{item.value}</div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        ) : null}
         {dataReady && showTimelineNudge ? (
           <UpgradeNudgeInlineCard
             type="GENERIC_UPGRADE"

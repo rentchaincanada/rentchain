@@ -1,5 +1,10 @@
 // rentchain-api/src/services/tenantDetailsService.ts
 import { db } from "../config/firebase";
+import {
+  computeNoResponseState,
+  getLeaseNoticeByLeaseId,
+  normalizeLeaseRecord,
+} from "./leaseNoticeWorkflowService";
 
 export interface TenantRecord {
   id: string;
@@ -11,9 +16,9 @@ export interface TenantRecord {
   unitId?: string | null;
   propertyName?: string;
   unit?: string;
-  leaseStart?: string;
+  leaseStart?: string | null;
   leaseEnd?: string | null;
-  monthlyRent?: number;
+  monthlyRent?: number | null;
   status?: string;
   balance?: number;
   riskLevel?: string;
@@ -21,12 +26,17 @@ export interface TenantRecord {
 }
 
 export interface TenantLease {
+  id?: string;
   tenantId: string;
+  propertyId?: string | null;
   propertyName: string;
+  propertyAddress?: string | null;
+  unitId?: string | null;
   unit: string;
-  leaseStart: string;
+  leaseStart: string | null;
   leaseEnd: string | null;
   monthlyRent: number;
+  status?: string | null;
 }
 
 export interface TenantPaymentDto {
@@ -49,7 +59,6 @@ export interface TenantLedgerEventDto {
   notes?: string | null;
 }
 
-// Backend fallback tenants (used if Firestore has no `tenants` collection yet)
 const FALLBACK_TENANTS: TenantRecord[] = [
   {
     id: "t1",
@@ -113,6 +122,31 @@ function toMillis(value: any): number | null {
   return null;
 }
 
+function toDateOnly(value: any): string | null {
+  if (!value) return null;
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const ts = toMillis(value);
+  if (!ts) {
+    const parsed = Date.parse(String(value));
+    if (!Number.isFinite(parsed)) return null;
+    return new Date(parsed).toISOString().slice(0, 10);
+  }
+  return new Date(ts).toISOString().slice(0, 10);
+}
+
+function asNumber(value: any): number | null {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function pickString(...values: any[]): string | null {
+  for (const value of values) {
+    const next = String(value || "").trim();
+    if (next) return next;
+  }
+  return null;
+}
+
 function mapTenant(docId: string, data: any): TenantRecord {
   const createdAt = data.createdAt ?? data.created_at ?? null;
   const createdAtMs = toMillis(createdAt);
@@ -143,17 +177,161 @@ function mapTenant(docId: string, data: any): TenantRecord {
   };
 }
 
+function isCurrentLeaseStatus(status: string | null | undefined): boolean {
+  const normalized = String(status || "").trim().toLowerCase();
+  return [
+    "active",
+    "notice_pending",
+    "renewal_pending",
+    "renewal_accepted",
+    "move_out_pending",
+  ].includes(normalized);
+}
+
+function rankLeaseStatus(status: string | null | undefined): number {
+  const normalized = String(status || "").trim().toLowerCase();
+  switch (normalized) {
+    case "move_out_pending":
+      return 5;
+    case "renewal_accepted":
+      return 4;
+    case "renewal_pending":
+      return 3;
+    case "notice_pending":
+      return 2;
+    case "active":
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+async function loadTenantRecord(tenantId: string, landlordId?: string | null): Promise<TenantRecord | null> {
+  try {
+    const doc = await db.collection("tenants").doc(tenantId).get();
+    if (doc.exists) {
+      const data = doc.data() as any;
+      if (landlordId && data?.landlordId && String(data.landlordId) !== String(landlordId)) {
+        return null;
+      }
+      return mapTenant(doc.id, data);
+    }
+  } catch (err) {
+    console.error("[tenantDetailsService] loadTenantRecord error", err);
+  }
+  return null;
+}
+
+async function loadCurrentLeaseSnapshot(tenantId: string, landlordId?: string | null) {
+  try {
+    const leasesRef = db.collection("leases");
+    const [directSnap, arraySnap] = await Promise.all([
+      leasesRef.where("tenantId", "==", tenantId).get().catch(() => ({ docs: [] } as any)),
+      leasesRef.where("tenantIds", "array-contains", tenantId).get().catch(() => ({ docs: [] } as any)),
+    ]);
+    const byId = new Map<string, any>();
+    for (const doc of [...(directSnap.docs || []), ...(arraySnap.docs || [])]) {
+      if (!doc?.id) continue;
+      const lease = normalizeLeaseRecord(doc.id, doc.data() as any);
+      if (landlordId && lease.landlordId && String(lease.landlordId) !== String(landlordId)) continue;
+      byId.set(doc.id, lease);
+    }
+    const current = Array.from(byId.values())
+      .filter((lease) => isCurrentLeaseStatus(lease.status))
+      .sort((a, b) => {
+        const rankDiff = rankLeaseStatus(b.status) - rankLeaseStatus(a.status);
+        if (rankDiff !== 0) return rankDiff;
+        return Number(b.updatedAt || 0) - Number(a.updatedAt || 0);
+      });
+    return current[0] || null;
+  } catch (err) {
+    console.error("[tenantDetailsService] loadCurrentLeaseSnapshot error", err);
+    return null;
+  }
+}
+
+async function loadPropertyRecord(propertyId: string | null | undefined) {
+  const target = String(propertyId || "").trim();
+  if (!target) return null;
+  try {
+    const snap = await db.collection("properties").doc(target).get();
+    if (!snap.exists) return null;
+    const data = snap.data() as any;
+    return {
+      id: snap.id,
+      name: pickString(data?.name, data?.nickname, data?.addressLine1, data?.address) || "Property",
+      addressLine1: pickString(data?.addressLine1, data?.address),
+      addressLine2: pickString(data?.addressLine2),
+      city: pickString(data?.city),
+      province: pickString(data?.province),
+      postalCode: pickString(data?.postalCode),
+    };
+  } catch (err) {
+    console.error("[tenantDetailsService] loadPropertyRecord error", err);
+    return null;
+  }
+}
+
+async function loadUnitRecord(propertyId: string | null | undefined, unitId: string | null | undefined) {
+  const propertyKey = String(propertyId || "").trim();
+  const unitKey = String(unitId || "").trim();
+  if (!propertyKey || !unitKey) return null;
+  try {
+    const direct = await db.collection("units").doc(unitKey).get();
+    if (direct.exists) {
+      const data = direct.data() as any;
+      if (!data?.propertyId || String(data.propertyId) === propertyKey) {
+        return { id: direct.id, ...(data || {}) };
+      }
+    }
+    const snap = await db
+      .collection("units")
+      .where("propertyId", "==", propertyKey)
+      .limit(100)
+      .get();
+    const normalizedUnitKey = unitKey.toLowerCase();
+    const match = snap.docs.find((doc) => {
+      const data = doc.data() as any;
+      const docId = String(doc.id || "").trim().toLowerCase();
+      const unitNumber = String(data?.unitNumber || data?.unit || data?.label || "").trim().toLowerCase();
+      return docId === normalizedUnitKey || unitNumber === normalizedUnitKey;
+    });
+    return match ? { id: match.id, ...(match.data() as any) } : null;
+  } catch (err) {
+    console.error("[tenantDetailsService] loadUnitRecord error", err);
+    return null;
+  }
+}
+
+async function loadLatestLeaseNoticeSummary(leaseId: string | null | undefined, leaseStatus: string | null | undefined) {
+  const target = String(leaseId || "").trim();
+  if (!target) return null;
+  try {
+    const notices = await getLeaseNoticeByLeaseId(target);
+    const latest = notices[0] || null;
+    if (!latest) return null;
+    return {
+      noticeId: latest.id,
+      noticeType: latest.noticeType || null,
+      sentAt: latest.sentAt || null,
+      tenantViewedAt: latest.tenantViewedAt || null,
+      tenantResponse: latest.tenantResponse || "pending",
+      responseDeadlineAt: latest.responseDeadlineAt || null,
+      deliveryStatus: latest.deliveryStatus || null,
+      leaseStatusAfterResponse: String(leaseStatus || "").trim().toLowerCase() || null,
+      noResponse: computeNoResponseState(latest),
+    };
+  } catch (err) {
+    console.error("[tenantDetailsService] loadLatestLeaseNoticeSummary error", err);
+    return null;
+  }
+}
+
 export function addConvertedTenant(tenant: TenantRecord): void {
   CONVERTED_TENANTS.push(tenant);
 }
 
-/**
- * List tenants for the sidebar.
- * Tries Firestore `tenants` collection, falls back to in-memory list.
- */
-export async function getTenantsList(
-  opts: TenantQueryOptions = {}
-): Promise<TenantRecord[]> {
+export async function getTenantsList(opts: TenantQueryOptions = {}): Promise<TenantRecord[]> {
   const landlordId = opts.landlordId?.trim?.() ? String(opts.landlordId).trim() : null;
 
   try {
@@ -175,9 +353,7 @@ export async function getTenantsList(
     });
 
     if (out.length === 0 && !landlordId) {
-      console.warn(
-        "[tenantDetailsService] No tenants collection, using FALLBACK_TENANTS"
-      );
+      console.warn("[tenantDetailsService] No tenants collection, using FALLBACK_TENANTS");
       return [...FALLBACK_TENANTS, ...CONVERTED_TENANTS];
     }
 
@@ -189,34 +365,10 @@ export async function getTenantsList(
   }
 }
 
-/**
- * Full detail bundle for one tenant.
- * Returns: { tenant, lease, payments, ledger, insights }
- */
-export async function getTenantDetailBundle(
-  tenantId: string,
-  opts: TenantQueryOptions = {}
-) {
+export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryOptions = {}) {
   const landlordId = opts.landlordId?.trim?.() ? String(opts.landlordId).trim() : null;
-  // 1) tenant core info
-  let tenant: TenantRecord | null = null;
 
-  try {
-    const doc = await db.collection("tenants").doc(tenantId).get();
-    if (doc.exists) {
-      const data = doc.data() as any;
-      if (landlordId && data?.landlordId && data.landlordId !== landlordId) {
-        return { tenant: null, lease: null, payments: [], ledger: [], insights: [], ledgerSummary: null };
-      }
-      tenant = mapTenant(doc.id, data);
-    }
-  } catch (err) {
-    console.error(
-      "[tenantDetailsService] getTenantDetailBundle tenant error",
-      err
-    );
-  }
-
+  let tenant = await loadTenantRecord(tenantId, landlordId);
   if (!tenant && !landlordId) {
     tenant =
       CONVERTED_TENANTS.find((t) => t.id === tenantId) ??
@@ -224,20 +376,54 @@ export async function getTenantDetailBundle(
       FALLBACK_TENANTS[0];
   }
 
-  // 2) lease model (derived from tenant for now)
-  let lease: TenantLease | null = null;
-  if (tenant) {
-    lease = {
-      tenantId: tenant.id,
-      propertyName: tenant.propertyName ?? "Unknown Property",
-      unit: tenant.unit ?? "N/A",
-      leaseStart: tenant.leaseStart ?? "2024-01-01",
-      leaseEnd: tenant.leaseEnd ?? null,
-      monthlyRent: tenant.monthlyRent ?? 0,
-    };
+  const currentLeaseRecord = await loadCurrentLeaseSnapshot(tenantId, landlordId);
+  const property = await loadPropertyRecord(currentLeaseRecord?.propertyId || tenant?.propertyId || null);
+  const unit = await loadUnitRecord(
+    currentLeaseRecord?.propertyId || tenant?.propertyId || null,
+    currentLeaseRecord?.unitId || tenant?.unitId || tenant?.unit || null
+  );
+  const latestLeaseNoticeSummary = await loadLatestLeaseNoticeSummary(currentLeaseRecord?.id || null, currentLeaseRecord?.status || null);
+
+  const lease: TenantLease | null = currentLeaseRecord
+    ? {
+        id: currentLeaseRecord.id,
+        tenantId,
+        propertyId: currentLeaseRecord.propertyId,
+        propertyName:
+          property?.name || currentLeaseRecord.propertyLabel || tenant?.propertyName || "Unknown Property",
+        propertyAddress: [property?.addressLine1, property?.city, property?.province].filter(Boolean).join(", ") || null,
+        unitId: currentLeaseRecord.unitId,
+        unit:
+          pickString(unit?.unitNumber, unit?.label, currentLeaseRecord.unitLabel, currentLeaseRecord.unitId, tenant?.unit) || "N/A",
+        leaseStart: currentLeaseRecord.leaseStartDate,
+        leaseEnd: currentLeaseRecord.leaseEndDate,
+        monthlyRent: Number(currentLeaseRecord.currentRent || 0),
+        status: currentLeaseRecord.status,
+      }
+    : tenant
+    ? {
+        tenantId: tenant.id,
+        propertyId: tenant.propertyId || null,
+        propertyName: tenant.propertyName ?? "Unknown Property",
+        unitId: tenant.unitId || null,
+        unit: tenant.unit ?? "N/A",
+        leaseStart: tenant.leaseStart ?? null,
+        leaseEnd: tenant.leaseEnd ?? null,
+        monthlyRent: Number(tenant.monthlyRent ?? 0),
+        status: tenant.status ?? null,
+      }
+    : null;
+
+  if (tenant && lease) {
+    tenant.propertyId = lease.propertyId || tenant.propertyId || null;
+    tenant.unitId = lease.unitId || tenant.unitId || null;
+    tenant.propertyName = lease.propertyName || tenant.propertyName || "Unknown Property";
+    tenant.unit = lease.unit || tenant.unit || "N/A";
+    tenant.leaseStart = lease.leaseStart || tenant.leaseStart || null;
+    tenant.leaseEnd = lease.leaseEnd || tenant.leaseEnd || null;
+    tenant.monthlyRent = asNumber(lease.monthlyRent) ?? tenant.monthlyRent ?? null;
   }
 
-  // 3) payments
   let payments: TenantPaymentDto[] = [];
   try {
     const snap = await db
@@ -256,25 +442,33 @@ export async function getTenantDetailBundle(
         paidAt: d.paidAt ?? "",
         method: d.method ?? null,
         notes: d.notes ?? null,
-        status: "Recorded", // later: compute on-time/late etc. based on schedule
+        status: "Recorded",
       };
     });
   } catch (err) {
     console.error("[tenantDetailsService] payments query error", err);
   }
 
-  // 4) ledger events
   const { listEventsForTenant, toLedgerEntries, getLedgerSummaryForTenant } =
     await import("./ledgerEventsService");
   const ledger = toLedgerEntries(listEventsForTenant(tenantId));
   const ledgerSummary = getLedgerSummaryForTenant(tenantId);
-
-  // 5) placeholder AI insights (wired later)
   const insights: any[] = [];
 
   return {
     tenant,
     lease,
+    currentLease: lease,
+    property,
+    unit: unit
+      ? {
+          id: unit.id,
+          unitNumber: pickString(unit.unitNumber, unit.label, lease?.unit) || null,
+          status: pickString(unit.status) || null,
+          rent: asNumber(unit.rent ?? unit.marketRent ?? unit.monthlyRent),
+        }
+      : null,
+    latestLeaseNoticeSummary,
     payments,
     ledger,
     insights,

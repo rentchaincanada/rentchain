@@ -33,6 +33,32 @@ const riskBorderMap: Record<string, string> = {
   HIGH: "1px solid rgba(239,68,68,0.55)",
 };
 
+function formatDateLabel(value?: string | number | null) {
+  if (!value) return "--";
+  const parsed = new Date(typeof value === "number" ? value : String(value));
+  if (Number.isNaN(parsed.getTime())) return String(value);
+  return parsed.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function formatLeaseStatus(value?: string | null) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) return "--";
+  return normalized.replace(/_/g, " ").replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
+function formatNoticeResponse(value?: string | null, noResponse?: boolean) {
+  if (noResponse) return "No Response";
+  const normalized = String(value || "pending").trim().toLowerCase();
+  if (normalized === "renew") return "Renewed";
+  if (normalized === "quit") return "Quitting";
+  if (normalized === "pending") return "Pending";
+  return normalized.replace(/_/g, " ").replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
 export const TenantDetailPanel: React.FC<TenantDetailPanelProps> = ({ tenantId }) => {
   const { bundle, loading, error } = useTenantDetail(tenantId ?? null);
 
@@ -86,7 +112,10 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
   const ledgerEnabled = features?.ledger !== false;
 
   const tenant = bundle.tenant || bundle;
-  const lease = bundle.lease;
+  const lease = bundle.currentLease || bundle.lease;
+  const property = bundle.property || null;
+  const unit = bundle.unit || null;
+  const latestLeaseNoticeSummary = bundle.latestLeaseNoticeSummary || null;
 
   const [ledgerItems, setLedgerItems] = useState<any[]>([]);
   const [ledgerLoading, setLedgerLoading] = useState(false);
@@ -194,6 +223,9 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
   };
 
   const monthlyRent = lease?.monthlyRent ?? tenant?.monthlyRent ?? null;
+  const propertyLabel = property?.name || tenant.propertyName || lease?.propertyName || "Unknown Property";
+  const propertyAddress = [property?.addressLine1, property?.city, property?.province].filter(Boolean).join(", ");
+  const unitLabel = unit?.unitNumber || tenant.unit || lease?.unit || "N/A";
 
   return (
     <div
@@ -241,8 +273,9 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
             ) : null}
           </div>
           <div style={{ fontSize: "0.9rem", color: text.muted }}>
-            {(tenant.propertyName || lease?.propertyName || "Property")} • Unit {tenant.unit || lease?.unit || "—"}
+            {propertyLabel} • Unit {unitLabel}
           </div>
+          {propertyAddress ? <div style={{ fontSize: "0.82rem", color: text.muted }}>{propertyAddress}</div> : null}
         </div>
 
         <div
@@ -366,26 +399,77 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
           fontSize: "0.85rem",
         }}
       >
-        <DetailField label="Email" value={tenant.email ?? "—"} />
-        <DetailField label="Phone" value={tenant.phone ?? "—"} />
-        <DetailField label="Lease Start" value={tenant.leaseStart ?? lease?.leaseStart ?? "—"} />
-        <DetailField label="Lease End" value={tenant.leaseEnd ?? lease?.leaseEnd ?? "—"} />
+        <DetailField label="Email" value={tenant.email ?? "--"} />
+        <DetailField label="Phone" value={tenant.phone ?? "--"} />
+        <DetailField label="Property" value={propertyLabel} />
+        <DetailField label="Unit" value={unitLabel} />
+        <DetailField label="Lease Start" value={formatDateLabel(tenant.leaseStart ?? lease?.leaseStart)} />
+        <DetailField label="Lease End" value={formatDateLabel(tenant.leaseEnd ?? lease?.leaseEnd)} />
         <DetailField
           label="Monthly Rent"
           value={
-            monthlyRent
+            monthlyRent || monthlyRent === 0
               ? `$${Number(monthlyRent).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
-              : "—"
+              : "--"
           }
         />
+        <DetailField label="Lease Status" value={formatLeaseStatus(lease?.status)} />
         <DetailField
           label="Current Balance"
           value={
             tenant.balance != null ? `$${Number(tenant.balance).toLocaleString()}` : "$0"
           }
         />
-        <DetailField label="Status" value={tenant.status ?? "—"} />
+        <DetailField label="Tenant Status" value={tenant.status ?? "--"} />
       </div>
+
+      {latestLeaseNoticeSummary ? (
+        <div
+          style={{
+            padding: spacing.md,
+            borderRadius: radius.md,
+            border: `1px solid ${colors.border}`,
+            background: colors.panel,
+            display: "grid",
+            gap: 10,
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>Lease Notice Status</div>
+              <div style={{ color: text.muted, fontSize: "0.85rem" }}>
+                {formatLeaseStatus(latestLeaseNoticeSummary.noticeType)}
+              </div>
+            </div>
+            <div
+              style={{
+                padding: "4px 10px",
+                borderRadius: radius.pill,
+                border: `1px solid ${colors.border}`,
+                background: colors.card,
+                fontSize: "0.8rem",
+                fontWeight: 700,
+              }}
+            >
+              {formatNoticeResponse(latestLeaseNoticeSummary.tenantResponse, latestLeaseNoticeSummary.noResponse)}
+            </div>
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              gap: `${spacing.xs} ${spacing.lg}`,
+              fontSize: "0.85rem",
+            }}
+          >
+            <DetailField label="Sent" value={formatDateLabel(latestLeaseNoticeSummary.sentAt)} />
+            <DetailField label="Viewed" value={formatDateLabel(latestLeaseNoticeSummary.tenantViewedAt)} />
+            <DetailField label="Response Deadline" value={formatDateLabel(latestLeaseNoticeSummary.responseDeadlineAt)} />
+            <DetailField label="Response" value={formatNoticeResponse(latestLeaseNoticeSummary.tenantResponse, latestLeaseNoticeSummary.noResponse)} />
+            <DetailField label="Lease Outcome" value={formatLeaseStatus(latestLeaseNoticeSummary.leaseStatusAfterResponse || lease?.status)} />
+          </div>
+        </div>
+      ) : null}
 
       {!capsLoading && !ledgerEnabled ? (
         <div

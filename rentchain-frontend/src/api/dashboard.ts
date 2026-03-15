@@ -16,12 +16,21 @@ export type DashboardRent = {
   delinquentCents: number;
 };
 
+export type DashboardLeaseNoticeSummary = {
+  expiringSoon: number;
+  pendingResponse: number;
+  renewed: number;
+  quitting: number;
+  noResponse: number;
+};
+
 export type DashboardSummaryData = {
   kpis: DashboardKpis;
   rent: DashboardRent;
   actions: any[];
   properties: any[];
   events: any[];
+  leaseNoticeSummary?: DashboardLeaseNoticeSummary;
 };
 
 export type DashboardSummaryResponse = { ok: true; data: DashboardSummaryData };
