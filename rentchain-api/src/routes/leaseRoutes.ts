@@ -20,6 +20,7 @@ import {
   getLeaseAutomationTasks,
   regenerateLeaseAutomationTasks,
 } from "../services/automationScheduler/leaseAutomationTaskStore";
+import { loadCanonicalPropertyLeases } from "../services/leaseCanonicalizationService";
 
 const router = Router();
 const LEDGER_COLLECTION = "ledgerEntries";
@@ -525,15 +526,35 @@ router.get("/property/:propertyId", requireLandlord, async (req: any, res: Respo
       return res.status(200).json({ leases: memoryLeases });
     }
     const snap = await collectionRef.where("propertyId", "==", propertyId).get();
-    const firestoreLeases = (snap.docs || [])
+    const firestoreLeaseRows = (snap.docs || [])
       .map((doc: any) => {
         const raw = doc.data() as any;
         const lease = normalizeLeaseRow(doc.id, raw);
-        return { ...lease, landlordId: String(raw?.landlordId || "").trim() };
+        return { raw, lease: { ...lease, landlordId: String(raw?.landlordId || "").trim() } };
       })
-      .filter((lease: any) => !landlordId || lease.landlordId === landlordId)
-      .map(({ landlordId: _landlordId, ...lease }: any) => lease);
-    return res.status(200).json({ leases: mergeLeaseRows([...memoryLeases, ...firestoreLeases]) });
+      .filter((entry: any) => !landlordId || entry.lease.landlordId === landlordId);
+
+    const combinedRows = [
+      ...memoryLeases,
+      ...firestoreLeaseRows.map((entry: any) => {
+        const { landlordId: _landlordId, ...lease } = entry.lease;
+        return lease;
+      }),
+    ];
+
+    // Prevent dirty duplicate current leases from inflating downstream occupancy and rent-roll math.
+    const canonical = await loadCanonicalPropertyLeases(
+      db as any,
+      [
+        ...memoryLeases.map((lease) => ({ id: lease.id, raw: lease as any })),
+        ...firestoreLeaseRows.map((entry: any) => ({ id: entry.lease.id, raw: entry.raw })),
+      ],
+      propertyId,
+      landlordId
+    );
+    const winnerIds = new Set(canonical.winners.map((lease) => lease.id));
+
+    return res.status(200).json({ leases: mergeLeaseRows(combinedRows.filter((lease) => winnerIds.has(lease.id))) });
   } catch (err) {
     console.warn("[GET /api/leases/property/:propertyId] firestore fallback", err);
     return res.status(200).json({ leases: memoryLeases });
@@ -832,3 +853,4 @@ router.get("/:leaseId/ledger/export.csv", async (req: any, res: Response) => {
 });
 
 export default router;
+
