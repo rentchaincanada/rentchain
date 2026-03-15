@@ -6,19 +6,53 @@ export interface TenantDetailTenant extends TenantApiModel {
   fullName?: string;
   email?: string;
   phone?: string;
-  leaseStart?: string;
-  leaseEnd?: string;
-  monthlyRent?: string | number;
+  leaseStart?: string | null;
+  leaseEnd?: string | null;
+  monthlyRent?: string | number | null;
   riskLevel?: string;
 }
 
 export interface TenantLeaseSummary {
+  id?: string;
   tenantId: string;
+  propertyId?: string | null;
   propertyName: string;
+  propertyAddress?: string | null;
+  unitId?: string | null;
   unit: string;
-  leaseStart: string;
-  leaseEnd: string;
+  leaseStart: string | null;
+  leaseEnd: string | null;
   monthlyRent: string | number;
+  status?: string | null;
+}
+
+export interface TenantPropertySummary {
+  id: string;
+  name: string;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  city?: string | null;
+  province?: string | null;
+  postalCode?: string | null;
+}
+
+export interface TenantUnitSummary {
+  id: string;
+  unitNumber?: string | null;
+  status?: string | null;
+  rent?: number | null;
+}
+
+export interface TenantLeaseNoticeSummary {
+  noticeId: string;
+  noticeType?: string | null;
+  sentAt?: number | null;
+  tenantViewedAt?: number | null;
+  tenantResponse?: string | null;
+  responseDeadlineAt?: number | null;
+  deliveryStatus?: string | null;
+  leaseStatusAfterResponse?: string | null;
+  noResponse?: boolean;
 }
 
 export interface TenantPayment {
@@ -45,13 +79,16 @@ export interface TenantLedgerEntry {
 }
 
 export interface TenantInsight {
-  // currently empty array in your JSON, but we keep this for future AI work
   [key: string]: any;
 }
 
 export interface TenantDetailBundle {
   tenant: TenantDetailTenant | null;
   lease?: TenantLeaseSummary | null;
+  currentLease?: TenantLeaseSummary | null;
+  property?: TenantPropertySummary | null;
+  unit?: TenantUnitSummary | null;
+  latestLeaseNoticeSummary?: TenantLeaseNoticeSummary | null;
   payments?: TenantPayment[];
   ledger?: TenantLedgerEntry[];
   ledgerSummary?: {
@@ -62,18 +99,11 @@ export interface TenantDetailBundle {
   insights?: TenantInsight[];
 }
 
-/**
- * GET /api/tenants/:tenantId
- */
-export async function fetchTenantDetail(
-  tenantId: string
-): Promise<TenantDetailBundle> {
+export async function fetchTenantDetail(tenantId: string): Promise<TenantDetailBundle> {
   if (!tenantId) {
     throw new Error("tenantId is required");
   }
 
-  const res = await apiFetch<TenantDetailBundle>(
-    `/tenants/${encodeURIComponent(tenantId)}`
-  );
+  const res = await apiFetch<TenantDetailBundle>(`/tenants/${encodeURIComponent(tenantId)}`);
   return res;
 }

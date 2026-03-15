@@ -61,6 +61,60 @@ async function getLeaseForLandlord(leaseId: string, landlordId: string) {
   return { ok: true as const, lease };
 }
 
+function toMillis(value: any): number {
+  if (!value) return 0;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value?.toMillis === "function") {
+    try {
+      return Number(value.toMillis()) || 0;
+    } catch {
+      return 0;
+    }
+  }
+  const parsed = Date.parse(String(value));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function normalizeLeaseRow(id: string, raw: any) {
+  return {
+    id,
+    landlordId: String(raw?.landlordId || "").trim() || null,
+    tenantId: String(raw?.tenantId || raw?.tenantIds?.[0] || "").trim(),
+    propertyId: String(raw?.propertyId || "").trim(),
+    unitId: String(raw?.unitId || "").trim() || null,
+    unitNumber: String(raw?.unitNumber || raw?.unitId || raw?.unit || "").trim(),
+    monthlyRent:
+      typeof raw?.monthlyRent === "number"
+        ? raw.monthlyRent
+        : typeof raw?.currentRent === "number"
+        ? raw.currentRent
+        : typeof raw?.rent === "number"
+        ? raw.rent
+        : 0,
+    startDate: String(raw?.startDate || raw?.leaseStartDate || raw?.leaseStart || "").trim(),
+    endDate:
+      raw?.endDate == null && raw?.leaseEndDate == null && raw?.leaseEnd == null
+        ? null
+        : String(raw?.endDate || raw?.leaseEndDate || raw?.leaseEnd || "").trim() || null,
+    status: String(raw?.status || "active").trim().toLowerCase() || "active",
+    createdAt: raw?.createdAt || null,
+    updatedAt: raw?.updatedAt || null,
+  };
+}
+
+function mergeLeaseRows(rows: any[]) {
+  const byId = new Map<string, any>();
+  for (const row of rows) {
+    if (!row?.id) continue;
+    byId.set(String(row.id), row);
+  }
+  return Array.from(byId.values()).sort((a, b) => {
+    const updatedDiff = toMillis(b?.updatedAt) - toMillis(a?.updatedAt);
+    if (updatedDiff !== 0) return updatedDiff;
+    return toMillis(b?.createdAt) - toMillis(a?.createdAt);
+  });
+}
+
 async function loadLedgerEntries(leaseId: string, landlordId: string, from?: string | null, to?: string | null) {
   let query: FirebaseFirestore.Query = db
     .collection(LEDGER_COLLECTION)
@@ -428,23 +482,27 @@ router.get("/:id", (req: Request, res: Response) => {
   res.json({ lease });
 });
 
-router.get("/tenant/:tenantId", requireLandlord, async (req: Request, res: Response) => {
+router.get("/tenant/:tenantId", requireLandlord, async (req: any, res: Response) => {
   const { tenantId } = req.params;
   if (!tenantId) {
     return res.status(400).json({ ok: false, error: "tenantId is required" });
   }
-  const memoryLeases = leaseService.getByTenantId(tenantId);
+  const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+  const memoryLeases = leaseService.getByTenantId(tenantId).map((lease) => normalizeLeaseRow(String(lease.id), lease));
   try {
     const collectionRef: any = (db as any).collection("leases");
     if (!collectionRef || typeof collectionRef.where !== "function") {
       return res.status(200).json({ ok: true, leases: memoryLeases });
     }
-    const snap = await collectionRef.where("tenantIds", "array-contains", tenantId).get();
-    const firestoreLeases = snap.docs.map((doc: any) => ({ id: doc.id, ...(doc.data() as any) }));
-    const byId = new Map<string, any>();
-    for (const lease of memoryLeases) byId.set(String(lease.id), lease);
-    for (const lease of firestoreLeases) byId.set(String(lease.id), lease);
-    return res.status(200).json({ ok: true, leases: Array.from(byId.values()) });
+    const [directSnap, arraySnap] = await Promise.all([
+      collectionRef.where("tenantId", "==", tenantId).get().catch(() => ({ docs: [] })),
+      collectionRef.where("tenantIds", "array-contains", tenantId).get().catch(() => ({ docs: [] })),
+    ]);
+    const firestoreLeases = [...(directSnap.docs || []), ...(arraySnap.docs || [])]
+      .map((doc: any) => normalizeLeaseRow(doc.id, doc.data() as any))
+      .filter((lease: any) => !landlordId || String(lease.landlordId || "").trim() === landlordId)
+      .map(({ landlordId: _landlordId, ...lease }: any) => lease);
+    return res.status(200).json({ ok: true, leases: mergeLeaseRows([...memoryLeases, ...firestoreLeases]) });
   } catch {
     return res.status(200).json({ ok: true, leases: memoryLeases });
   }
@@ -454,13 +512,32 @@ router.options("/tenant/:tenantId", (_req: Request, res: Response) => {
   return res.sendStatus(204);
 });
 
-router.get("/property/:propertyId", (req: Request, res: Response) => {
+router.get("/property/:propertyId", requireLandlord, async (req: any, res: Response) => {
   const { propertyId } = req.params;
   if (!propertyId) {
     return res.status(400).json({ error: "propertyId is required" });
   }
-  const leases = leaseService.getByPropertyId(propertyId);
-  res.json({ leases });
+  const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+  const memoryLeases = leaseService.getByPropertyId(propertyId).map((lease) => normalizeLeaseRow(String(lease.id), lease));
+  try {
+    const collectionRef: any = (db as any).collection("leases");
+    if (!collectionRef || typeof collectionRef.where !== "function") {
+      return res.status(200).json({ leases: memoryLeases });
+    }
+    const snap = await collectionRef.where("propertyId", "==", propertyId).get();
+    const firestoreLeases = (snap.docs || [])
+      .map((doc: any) => {
+        const raw = doc.data() as any;
+        const lease = normalizeLeaseRow(doc.id, raw);
+        return { ...lease, landlordId: String(raw?.landlordId || "").trim() };
+      })
+      .filter((lease: any) => !landlordId || lease.landlordId === landlordId)
+      .map(({ landlordId: _landlordId, ...lease }: any) => lease);
+    return res.status(200).json({ leases: mergeLeaseRows([...memoryLeases, ...firestoreLeases]) });
+  } catch (err) {
+    console.warn("[GET /api/leases/property/:propertyId] firestore fallback", err);
+    return res.status(200).json({ leases: memoryLeases });
+  }
 });
 
 router.post("/", async (req: Request, res: Response) => {

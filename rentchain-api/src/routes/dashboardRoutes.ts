@@ -3,6 +3,7 @@ import { authenticateJwt } from "../middleware/authMiddleware";
 import { requireAuth } from "../middleware/requireAuth";
 import { db } from "../config/firebase";
 import { resolveLandlordAndTier } from "../lib/landlordResolver";
+import { computeNoResponseState, normalizeLeaseRecord } from "../services/leaseNoticeWorkflowService";
 
 const router = express.Router();
 
@@ -128,6 +129,8 @@ router.get("/summary", requireAuth, async (req: any, res) => {
     referralsSnap,
     screeningSnap,
     ledgerEventsSnap,
+    leasesSnap,
+    leaseNoticesSnap,
   ] = await Promise.all([
     db.collection("properties").where("landlordId", "==", landlordId).limit(200).get(),
     db.collection("tenants").where("landlordId", "==", landlordId).limit(200).get(),
@@ -135,6 +138,8 @@ router.get("/summary", requireAuth, async (req: any, res) => {
     db.collection("referrals").where("referrerLandlordId", "==", landlordId).limit(20).get(),
     db.collection("screeningOrders").where("landlordId", "==", landlordId).limit(30).get(),
     db.collection("ledgerEvents").where("landlordId", "==", landlordId).limit(20).get(),
+    db.collection("leases").where("landlordId", "==", landlordId).limit(400).get(),
+    db.collection("leaseNotices").where("landlordId", "==", landlordId).limit(400).get(),
   ]);
 
   const properties = propertiesSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as any) }));
@@ -208,6 +213,55 @@ router.get("/summary", requireAuth, async (req: any, res) => {
     }
   });
 
+  const currentLeaseStatuses = new Set([
+    "active",
+    "notice_pending",
+    "renewal_pending",
+    "renewal_accepted",
+    "move_out_pending",
+  ]);
+  const leases = leasesSnap.docs
+    .map((doc) => normalizeLeaseRecord(doc.id, doc.data() as any))
+    .filter((lease) => currentLeaseStatuses.has(String(lease.status || "").toLowerCase()));
+  const leaseNotices = leaseNoticesSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as any) }));
+  const latestNoticeByLeaseId = new Map<string, any>();
+  for (const notice of leaseNotices.sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0))) {
+    const leaseId = String(notice.leaseId || "").trim();
+    if (!leaseId || latestNoticeByLeaseId.has(leaseId)) continue;
+    latestNoticeByLeaseId.set(leaseId, notice);
+  }
+  const soonWindowMs = 120 * 24 * 60 * 60 * 1000;
+  const leaseNoticeSummary = {
+    expiringSoon: leases.filter((lease) => {
+      const dueAt = Number(lease.nextNoticeDueAt || 0);
+      return dueAt > 0 && dueAt <= now + soonWindowMs;
+    }).length,
+    pendingResponse: 0,
+    renewed: 0,
+    quitting: 0,
+    noResponse: 0,
+  };
+  latestNoticeByLeaseId.forEach((notice, leaseId) => {
+    const response = String(notice?.tenantResponse || "pending").trim().toLowerCase();
+    const lease = leases.find((row) => row.id === leaseId) || null;
+    const noResponse = computeNoResponseState(notice);
+    if (noResponse) {
+      leaseNoticeSummary.noResponse += 1;
+      return;
+    }
+    if (response === "pending") {
+      leaseNoticeSummary.pendingResponse += 1;
+      return;
+    }
+    if (response === "renew" || String(lease?.status || "") === "renewal_accepted") {
+      leaseNoticeSummary.renewed += 1;
+      return;
+    }
+    if (response === "quit" || String(lease?.status || "") === "move_out_pending") {
+      leaseNoticeSummary.quitting += 1;
+    }
+  });
+
   recentActivityRaw.sort((a, b) => b.occurredAt - a.occurredAt);
   const events = recentActivityRaw.slice(0, 5).map(formatActivity);
 
@@ -268,6 +322,7 @@ router.get("/summary", requireAuth, async (req: any, res) => {
     actions,
     properties: [] as any[],
     events,
+    leaseNoticeSummary,
   };
 
   return res.json({ ok: true, data });

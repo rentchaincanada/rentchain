@@ -1,6 +1,6 @@
 import { apiJson } from "@/api/http";
 
-export type LeaseStatus = "active" | "ended";
+export type LeaseStatus = "active" | "notice_pending" | "renewal_pending" | "renewal_accepted" | "move_out_pending" | "ended" | "archived";
 export type LeaseRenewalStatus = "unknown" | "offered" | "accepted" | "declined";
 
 export interface LeaseAutomationTask {

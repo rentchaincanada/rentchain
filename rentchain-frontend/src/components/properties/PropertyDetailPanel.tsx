@@ -395,7 +395,12 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   }, [units, unitCount]);
 
   const activeLeases = useMemo(
-    () => leases.filter((l) => l.status === "active"),
+    () =>
+      leases.filter((l) =>
+        ["active", "notice_pending", "renewal_pending", "renewal_accepted", "move_out_pending"].includes(
+          String(l.status || "").toLowerCase()
+        )
+      ),
     [leases]
   );
   const leasedUnits = activeLeases.length;
