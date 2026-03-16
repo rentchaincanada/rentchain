@@ -6,11 +6,15 @@ import {
 } from "./leaseNoticeWorkflowService";
 import {
   loadUnitsForProperty,
-  pickLeaseWinner,
   resolveUnitReference,
   toCanonicalLeaseRecord,
   isCurrentLeaseStatus,
 } from "./leaseCanonicalizationService";
+import {
+  groupLeaseAgreementCandidates,
+  pickAgreementWinner,
+  pickTenantWinningAgreement,
+} from "./leasePartyConsolidationService";
 
 export interface TenantRecord {
   id: string;
@@ -245,11 +249,25 @@ async function loadCurrentLeaseSnapshot(tenant: TenantRecord | null, landlordId?
       })
     );
 
-    const canonicalLeases = currentEntries.map(([id, raw]) => {
+    const agreementCandidates = currentEntries.map(([id, raw]) => {
       const propertyId = String((raw as any)?.propertyId || tenant?.propertyId || "").trim();
-      return toCanonicalLeaseRecord(id, raw, unitsByProperty.get(propertyId) || []);
+      return {
+        lease: toCanonicalLeaseRecord(id, raw, unitsByProperty.get(propertyId) || []),
+        raw,
+      };
     });
-    return pickLeaseWinner(canonicalLeases)?.winner || null;
+    const grouped = groupLeaseAgreementCandidates(agreementCandidates);
+    const tenantGroup = pickTenantWinningAgreement([...grouped.mergeGroups, ...grouped.ambiguousGroups], tenantId);
+    if (tenantGroup) {
+      return pickAgreementWinner(tenantGroup.candidates).lease;
+    }
+
+    const directMatch = agreementCandidates.find((candidate) =>
+      Array.isArray((candidate.raw as any)?.tenantIds)
+        ? (candidate.raw as any).tenantIds.map((value: any) => String(value || "").trim()).includes(tenantId)
+        : String((candidate.raw as any)?.tenantId || "").trim() === tenantId
+    );
+    return directMatch?.lease || pickAgreementWinner(agreementCandidates).lease;
   } catch (err) {
     console.error("[tenantDetailsService] loadCurrentLeaseSnapshot error", err);
     return null;
@@ -469,6 +487,8 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
     ledgerSummary,
   };
 }
+
+
 
 
 

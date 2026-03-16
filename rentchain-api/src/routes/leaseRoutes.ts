@@ -20,7 +20,8 @@ import {
   getLeaseAutomationTasks,
   regenerateLeaseAutomationTasks,
 } from "../services/automationScheduler/leaseAutomationTaskStore";
-import { loadCanonicalPropertyLeases } from "../services/leaseCanonicalizationService";
+import { loadCanonicalPropertyLeases, loadUnitsForProperty, toCanonicalLeaseRecord } from "../services/leaseCanonicalizationService";
+import { groupLeaseAgreementCandidates, pickAgreementWinner } from "../services/leasePartyConsolidationService";
 
 const router = Router();
 const LEDGER_COLLECTION = "ledgerEntries";
@@ -80,7 +81,13 @@ function normalizeLeaseRow(id: string, raw: any) {
   return {
     id,
     landlordId: String(raw?.landlordId || "").trim() || null,
-    tenantId: String(raw?.tenantId || raw?.tenantIds?.[0] || "").trim(),
+    tenantId: String(raw?.tenantId || raw?.primaryTenantId || raw?.tenantIds?.[0] || "").trim(),
+    tenantIds: Array.isArray(raw?.tenantIds)
+      ? raw.tenantIds.map((value: any) => String(value || "").trim()).filter(Boolean)
+      : String(raw?.tenantId || raw?.primaryTenantId || "").trim()
+      ? [String(raw?.tenantId || raw?.primaryTenantId || "").trim()]
+      : [],
+    primaryTenantId: String(raw?.primaryTenantId || raw?.tenantId || raw?.tenantIds?.[0] || "").trim() || null,
     propertyId: String(raw?.propertyId || "").trim(),
     unitId: String(raw?.unitId || "").trim() || null,
     unitNumber: String(raw?.unitNumber || raw?.unitId || raw?.unit || "").trim(),
@@ -370,6 +377,7 @@ router.post("/drafts/:draftId/activate", requireLandlord, async (req: any, res: 
       landlordId,
       tenantId,
       tenantIds,
+      primaryTenantId: tenantId,
       propertyId,
       unitId,
       unitNumber: unitId,
@@ -542,18 +550,18 @@ router.get("/property/:propertyId", requireLandlord, async (req: any, res: Respo
       }),
     ];
 
-    // Prevent dirty duplicate current leases from inflating downstream occupancy and rent-roll math.
-    const canonical = await loadCanonicalPropertyLeases(
-      db as any,
-      [
-        ...memoryLeases.map((lease) => ({ id: lease.id, raw: lease as any })),
-        ...firestoreLeaseRows.map((entry: any) => ({ id: entry.lease.id, raw: entry.raw })),
-      ],
-      propertyId,
-      landlordId
-    );
-    const winnerIds = new Set(canonical.winners.map((lease) => lease.id));
+    const units = await loadUnitsForProperty(db as any, propertyId, landlordId);
+    const agreementCandidates = [
+      ...memoryLeases.map((lease) => ({ lease: toCanonicalLeaseRecord(lease.id, lease as any, units), raw: lease as any })),
+      ...firestoreLeaseRows.map((entry: any) => ({ lease: toCanonicalLeaseRecord(entry.lease.id, entry.raw, units), raw: entry.raw })),
+    ].filter((entry) => entry.lease.status);
+    const grouped = groupLeaseAgreementCandidates(agreementCandidates);
+    const winnerIds = new Set<string>();
+    grouped.mergeGroups.forEach((group) => winnerIds.add(pickAgreementWinner(group.candidates).lease.id));
+    grouped.ambiguousGroups.forEach((group) => winnerIds.add(pickAgreementWinner(group.candidates).lease.id));
+    grouped.singles.forEach((candidate) => winnerIds.add(candidate.lease.id));
 
+    // Occupancy and rent roll consumers must operate on lease agreements, not per-tenant rows.
     return res.status(200).json({ leases: mergeLeaseRows(combinedRows.filter((lease) => winnerIds.has(lease.id))) });
   } catch (err) {
     console.warn("[GET /api/leases/property/:propertyId] firestore fallback", err);
@@ -853,4 +861,5 @@ router.get("/:leaseId/ledger/export.csv", async (req: any, res: Response) => {
 });
 
 export default router;
+
 
