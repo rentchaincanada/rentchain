@@ -487,8 +487,3 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
     ledgerSummary,
   };
 }
-
-
-
-
-

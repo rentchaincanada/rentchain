@@ -5,6 +5,7 @@ import { db, FieldValue } from "../../../src/config/firebase";
 import {
   CURRENT_LEASE_STATUSES,
   loadUnitsForProperty,
+  pickLeaseWinner,
   resolveUnitReference,
   toCanonicalLeaseRecord,
   toMillisSafe,
@@ -123,12 +124,13 @@ export async function loadFilteredCurrentLeases(flags: ScriptFlags) {
 }
 
 export async function loadCanonicalLeasesByProperty(entries: Array<{ id: string; raw: Record<string, unknown> }>) {
-  const propertyKeys = Array.from(new Set(entries.map((entry) => String(entry.raw?.propertyId || "").trim()).filter(Boolean)));
+  const propertyKeys = Array.from(
+    new Set(entries.map((entry) => String(entry.raw?.propertyId || "").trim()).filter(Boolean))
+  );
   const unitsByProperty = new Map<string, CanonicalUnitRecord[]>();
   await Promise.all(
     propertyKeys.map(async (propertyId) => {
-      const landlordId =
-        String(entries.find((entry) => String(entry.raw?.propertyId || "").trim() === propertyId)?.raw?.landlordId || "").trim() || null;
+      const landlordId = String(entries.find((entry) => String(entry.raw?.propertyId || "").trim() === propertyId)?.raw?.landlordId || "").trim() || null;
       unitsByProperty.set(propertyId, await loadUnitsForProperty(db as any, propertyId, landlordId));
     })
   );
@@ -144,12 +146,13 @@ export async function loadCanonicalLeasesByProperty(entries: Array<{ id: string;
 export function buildDuplicateGroupKey(lease: CanonicalLeaseRecord) {
   return [
     String(lease.landlordId || "").trim(),
+    String(lease.tenantId || "").trim(),
     String(lease.propertyId || "").trim(),
     String(lease.logicalUnitKey || lease.resolvedUnitId || lease.unitId || lease.unitLabel || lease.id).trim(),
   ].join("::");
 }
 
-export function summarizeLease(lease: CanonicalLeaseRecord, raw?: Record<string, unknown>) {
+export function summarizeLease(lease: CanonicalLeaseRecord) {
   return {
     id: lease.id,
     landlordId: lease.landlordId,
@@ -183,27 +186,22 @@ export async function getTenantCurrentLeaseDecision(tenantId: string, propertyId
     .filter(([, raw]) => CURRENT_LEASE_STATUSES.has(String((raw as any)?.status || "").trim().toLowerCase()))
     .filter(([, raw]) => !propertyId || String((raw as any)?.propertyId || "").trim() === String(propertyId).trim())
     .map(([id, raw]) => ({ id, raw }));
-  const canonicalEntries = await loadCanonicalLeasesByProperty(filtered);
-  const grouped = groupLeaseAgreementCandidates(
-    canonicalEntries.map((entry) => ({ lease: entry.lease, raw: entry.raw }))
-  );
-  const selectedGroup = pickTenantWinningAgreement([...grouped.mergeGroups, ...grouped.ambiguousGroups], tenantId);
-  if (selectedGroup) {
-    const winner = pickAgreementWinner(selectedGroup.candidates);
-    return { winner: winner.lease, ambiguity: selectedGroup.ambiguous ? "ambiguous_group" : null, leases: selectedGroup.candidates.map((candidate) => candidate.lease) };
-  }
-  if (!canonicalEntries.length) {
+  const canonical = await loadCanonicalLeasesByProperty(filtered);
+  const byLogicalKey = new Map<string, CanonicalLeaseRecord[]>();
+  canonical.forEach(({ lease }) => {
+    const key = String(lease.logicalUnitKey || lease.id);
+    const bucket = byLogicalKey.get(key) || [];
+    bucket.push(lease);
+    byLogicalKey.set(key, bucket);
+  });
+  if (!canonical.length) {
     return { winner: null, ambiguity: "no_current_lease", leases: [] as CanonicalLeaseRecord[] };
   }
-  const fallback = canonicalEntries.find((entry) => getLeasePartyIds(entry.raw, entry.lease).includes(tenantId));
-  if (fallback) {
-    return { winner: fallback.lease, ambiguity: null, leases: [fallback.lease] };
+  if (byLogicalKey.size > 1) {
+    return { winner: null, ambiguity: "multiple_current_logical_leases", leases: canonical.map((entry) => entry.lease) };
   }
-  return { winner: null, ambiguity: "multiple_current_logical_leases", leases: canonicalEntries.map((entry) => entry.lease) };
-}
-
-export function toAgreementCandidates(entries: Array<{ lease: CanonicalLeaseRecord; raw: Record<string, unknown> }>): LeaseAgreementCandidate[] {
-  return entries.map((entry) => ({ lease: entry.lease, raw: entry.raw }));
+  const decision = pickLeaseWinner(canonical.map((entry) => entry.lease));
+  return { winner: decision?.winner || null, ambiguity: null, leases: canonical.map((entry) => entry.lease) };
 }
 
 
