@@ -152,7 +152,7 @@ export function buildDuplicateGroupKey(lease: CanonicalLeaseRecord) {
   ].join("::");
 }
 
-export function summarizeLease(lease: CanonicalLeaseRecord) {
+export function summarizeLease(lease: CanonicalLeaseRecord, raw?: Record<string, unknown>) {
   return {
     id: lease.id,
     landlordId: lease.landlordId,
@@ -204,4 +204,10 @@ export async function getTenantCurrentLeaseDecision(tenantId: string, propertyId
   return { winner: decision?.winner || null, ambiguity: null, leases: canonical.map((entry) => entry.lease) };
 }
 
+
+
+
+export function toAgreementCandidates(entries: Array<{ lease: CanonicalLeaseRecord; raw: Record<string, unknown> }>) {
+  return entries.map((entry) => ({ lease: entry.lease, raw: entry.raw }));
+}
 
