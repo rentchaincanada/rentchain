@@ -37,6 +37,11 @@ async function main() {
         }
         continue;
       }
+      if (decision.ambiguity) {
+        report.ambiguousTenants += 1;
+        report.details.push({ tenantId, action: "ambiguous", ambiguity: decision.ambiguity, winnerLeaseId: decision.winner.id });
+        continue;
+      }
 
       const currentLeaseId = String(tenant.currentLeaseId || "").trim() || null;
       if (currentLeaseId === decision.winner.id) {
@@ -73,4 +78,3 @@ main().catch((error) => {
   console.error("[backfillTenantCurrentLeaseId] fatal", error);
   process.exitCode = 1;
 });
-

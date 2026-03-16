@@ -16,3 +16,5 @@ nvm/
 .pr_body_phase3b.txt
 /.gcloud/
 /pr_body_tenant_invites.md
+
+scripts/migrations/output/

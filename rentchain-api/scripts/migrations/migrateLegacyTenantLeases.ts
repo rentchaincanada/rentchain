@@ -1,5 +1,16 @@
 import { FieldPath } from "firebase-admin/firestore";
-import { db, loadCanonicalLeasesByProperty, loadUnitsForProperty, parseCommonFlags, resolveUnitReference, toNumberSafe, writeReport } from "./lib/leaseMigrationSupport";
+import {
+  db,
+  getLeasePartyIds,
+  groupLeaseAgreementCandidates,
+  loadCanonicalLeasesByProperty,
+  loadUnitsForProperty,
+  parseCommonFlags,
+  resolveUnitReference,
+  toNumberSafe,
+  writeReport,
+} from "./lib/leaseMigrationSupport";
+import { buildAgreementRepresentativeKey } from "../../src/services/leasePartyConsolidationService";
 
 async function main() {
   const flags = parseCommonFlags(process.argv.slice(2));
@@ -51,20 +62,33 @@ async function main() {
         continue;
       }
 
-      const existingLeasesSnap = await db.collection("leases").where("tenantId", "==", tenantId).where("propertyId", "==", propertyId).get();
+      const existingLeasesSnap = await db.collection("leases").where("propertyId", "==", propertyId).get();
       const canonicalExisting = await loadCanonicalLeasesByProperty(
         existingLeasesSnap.docs.map((doc) => ({ id: doc.id, raw: (doc.data() || {}) as Record<string, unknown> }))
       );
-      const exactExisting = canonicalExisting.find((entry) => entry.lease.unitId === unitResolution.unit?.id && entry.lease.status === "active");
+      const agreementCandidates = canonicalExisting.map((entry) => ({ lease: entry.lease, raw: entry.raw }));
+      const grouped = groupLeaseAgreementCandidates(agreementCandidates);
+      const exactExisting = agreementCandidates.find((candidate) => getLeasePartyIds(candidate.raw, candidate.lease).includes(tenantId));
       if (exactExisting) {
         report.counts.already_exists += 1;
         report.rows.push({ tenantId, propertyId, leaseId: exactExisting.lease.id, action: "already_exists" });
         continue;
       }
-      const equivalentCurrent = canonicalExisting.find((entry) => entry.lease.logicalUnitKey === `unit:${unitResolution.unit?.id}`);
+
+      const equivalentCurrent = agreementCandidates.find((candidate) => {
+        const sameUnit = candidate.lease.resolvedUnitId === unitResolution.unit?.id || candidate.lease.logicalUnitKey === `unit:${unitResolution.unit?.id}`;
+        const sameLandlord = String(candidate.lease.landlordId || "") === landlordId;
+        return sameUnit && sameLandlord && ["active", "notice_pending", "renewal_pending", "renewal_accepted", "move_out_pending"].includes(String(candidate.lease.status || ""));
+      });
       if (equivalentCurrent) {
         report.counts.skipped_equivalent_current_lease += 1;
-        report.rows.push({ tenantId, propertyId, leaseId: equivalentCurrent.lease.id, action: "skipped_equivalent_current_lease" });
+        report.rows.push({
+          tenantId,
+          propertyId,
+          leaseId: equivalentCurrent.lease.id,
+          agreementKey: buildAgreementRepresentativeKey(equivalentCurrent.lease),
+          action: "skipped_equivalent_current_lease",
+        });
         continue;
       }
 
@@ -72,6 +96,7 @@ async function main() {
         landlordId: landlordId || null,
         tenantId,
         tenantIds: [tenantId],
+        primaryTenantId: tenantId,
         propertyId,
         unitId: unitResolution.unit.id,
         unitNumber: unitResolution.unit.unitNumber || unitResolution.unit.label || unitReference,
@@ -106,4 +131,3 @@ main().catch((error) => {
   console.error("[migrateLegacyTenantLeases] fatal", error);
   process.exitCode = 1;
 });
-
