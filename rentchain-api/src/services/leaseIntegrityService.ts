@@ -244,12 +244,35 @@ export async function resolveTenantCurrentLeasePointer(
     winners: canonicalWinnerSet(grouped),
   };
   const group = pickTenantWinningAgreement([...selection.mergeGroups, ...selection.ambiguousGroups], tenantId);
-  if (!group) return { leaseId: null, stale: false, ambiguous: grouped.ambiguousGroups.length > 0 };
-  return {
-    leaseId: pickAgreementWinner(group.candidates).lease.id,
-    stale: false,
-    ambiguous: group.ambiguous,
-  };
+  if (group) {
+    return {
+      leaseId: pickAgreementWinner(group.candidates).lease.id,
+      stale: false,
+      ambiguous: group.ambiguous,
+    };
+  }
+
+  const targetTenantId = String(tenantId || "").trim();
+  const tenantWinnerMatches = selection.winners.filter((winner) => getLeasePartyIds(winner.raw, winner.lease).includes(targetTenantId));
+  if (tenantWinnerMatches.length === 1) {
+    return {
+      leaseId: tenantWinnerMatches[0].lease.id,
+      stale: false,
+      ambiguous: false,
+    };
+  }
+  if (tenantWinnerMatches.length > 1) {
+    return { leaseId: null, stale: false, ambiguous: true };
+  }
+
+  const tenantHasAmbiguousGroup = selection.ambiguousGroups.some((candidateGroup) =>
+    candidateGroup.candidates.some((candidate) => getLeasePartyIds(candidate.raw, candidate.lease).includes(targetTenantId))
+  );
+  if (tenantHasAmbiguousGroup) {
+    return { leaseId: null, stale: false, ambiguous: true };
+  }
+
+  return { leaseId: null, stale: false, ambiguous: false };
 }
 
 export async function reportTenantPointerIssues(
@@ -316,5 +339,6 @@ export async function buildDesiredUnitOccupancy(
     winnerLeaseIds: leaseIdsByUnit.get(unit.id) || [],
   }));
 }
+
 
 
