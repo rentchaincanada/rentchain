@@ -10,6 +10,7 @@ const {
   renderJsonMock,
   sendEmailMock,
   uploadBufferToGcsMock,
+  recomputeLeaseRiskMock,
 } = vi.hoisted(() => ({
   getMetricsMock: vi.fn(async () => ({
     ok: true,
@@ -33,6 +34,15 @@ const {
   renderJsonMock: vi.fn(() => "{}"),
   sendEmailMock: vi.fn(async () => undefined),
   uploadBufferToGcsMock: vi.fn(async ({ path }: any) => ({ bucket: "b", path })),
+  recomputeLeaseRiskMock: vi.fn(async (leaseId: string) => ({
+    leaseId,
+    updated: true,
+    skipped: false,
+    previousRiskScore: 62,
+    nextRiskScore: 79,
+    previousRiskGrade: "C",
+    nextRiskGrade: "B",
+  })),
 }));
 
 vi.mock("../../services/metrics/tuReferralReport", () => ({
@@ -47,8 +57,16 @@ vi.mock("../../services/emailService", () => ({
   sendEmail: sendEmailMock,
 }));
 
+vi.mock("../../services/statusHealthSync", () => ({
+  runStatusHealthSync: vi.fn(async () => ({ ok: true })),
+}));
+
 vi.mock("../../lib/gcs", () => ({
   uploadBufferToGcs: uploadBufferToGcsMock,
+}));
+
+vi.mock("../../services/risk/recomputeLeaseRisk", () => ({
+  recomputeLeaseRisk: recomputeLeaseRiskMock,
 }));
 
 async function createApp() {
@@ -81,6 +99,26 @@ describe("internalReportsRoutes", () => {
       .set("X-Internal-Job-Token", "wrong")
       .send({});
     expect(res.status).toBe(401);
+  });
+
+  it("rejects lease recompute without a token", async () => {
+    const app = await createApp();
+    const res = await request(app).post("/api/internal/leases/lease-1/recompute-risk").send({});
+    expect(res.status).toBe(401);
+  });
+
+  it("recomputes lease risk through the protected internal route", async () => {
+    const app = await createApp();
+    const res = await request(app)
+      .post("/api/internal/leases/lease-1/recompute-risk")
+      .set("X-Internal-Job-Token", "secret-token")
+      .send({});
+
+    expect(res.status).toBe(200);
+    expect(res.body?.ok).toBe(true);
+    expect(res.body?.leaseId).toBe("lease-1");
+    expect(res.body?.nextRiskScore).toBe(79);
+    expect(recomputeLeaseRiskMock).toHaveBeenCalledWith("lease-1");
   });
 
   it("returns ok for valid token", async () => {

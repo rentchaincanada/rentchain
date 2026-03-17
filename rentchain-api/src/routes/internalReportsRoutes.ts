@@ -2,6 +2,7 @@ import { Router } from "express";
 import { uploadBufferToGcs } from "../lib/gcs";
 import { sendEmail } from "../services/emailService";
 import { runStatusHealthSync } from "../services/statusHealthSync";
+import { recomputeLeaseRisk } from "../services/risk/recomputeLeaseRisk";
 import {
   getTuReferralMetricsForMonth,
   renderTuReferralCsv,
@@ -117,6 +118,21 @@ router.post("/reports/tu-referrals", requireInternalJobToken, async (req: any, r
       durationMs: Date.now() - startedAt,
     });
     return res.status(500).json({ ok: false, error: "report_generation_failed" });
+  }
+});
+
+router.post("/leases/:leaseId/recompute-risk", requireInternalJobToken, async (req: any, res) => {
+  try {
+    const leaseId = String(req.params?.leaseId || "").trim();
+    if (!leaseId) {
+      return res.status(400).json({ ok: false, error: "lease_id_required" });
+    }
+
+    const result = await recomputeLeaseRisk(leaseId);
+    return res.json({ ok: true, ...result });
+  } catch (err: any) {
+    console.error("[internal lease risk recompute] failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "lease_risk_recompute_failed" });
   }
 });
 
