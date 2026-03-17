@@ -1,4 +1,5 @@
 import { apiJson } from "@/api/http";
+import type { Lease } from "@/api/leasesApi";
 
 export type LeaseTermType = "fixed" | "month-to-month" | "year-to-year";
 
@@ -82,7 +83,7 @@ export async function getLeaseSnapshot(snapshotId: string) {
 }
 
 export async function activateLeaseDraft(draftId: string) {
-  return apiJson<{ ok: true; leaseId: string; lease: any }>(
+  return apiJson<{ ok: true; leaseId: string; lease: Lease }>(
     `/leases/drafts/${encodeURIComponent(draftId)}/activate`,
     {
       method: "POST",

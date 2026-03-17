@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import type { RiskAssessment } from "./risk/riskTypes";
 
 export type LeaseStatus = "active" | "ended";
 export type LeaseRenewalStatus = "unknown" | "offered" | "accepted" | "declined";
@@ -6,6 +7,8 @@ export type LeaseRenewalStatus = "unknown" | "offered" | "accepted" | "declined"
 export interface Lease {
   id: string;
   tenantId: string;
+  tenantIds?: string[];
+  primaryTenantId?: string | null;
   propertyId: string;
   unitNumber: string;
   monthlyRent: number;
@@ -14,12 +17,18 @@ export interface Lease {
   automationEnabled: boolean;
   renewalStatus: LeaseRenewalStatus;
   status: LeaseStatus;
+  risk?: RiskAssessment | null;
+  riskScore?: number | null;
+  riskGrade?: string | null;
+  riskConfidence?: number | null;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface CreateLeasePayload {
   tenantId: string;
+  tenantIds?: string[];
+  primaryTenantId?: string | null;
   propertyId: string;
   unitNumber: string;
   monthlyRent: number;
@@ -27,6 +36,7 @@ export interface CreateLeasePayload {
   endDate?: string | null;
   automationEnabled?: boolean;
   renewalStatus?: LeaseRenewalStatus;
+  risk?: RiskAssessment | null;
 }
 
 export interface UpdateLeasePayload {
@@ -50,7 +60,7 @@ export const leaseService = {
   },
 
   getByTenantId(tenantId: string): Lease[] {
-    return leases.filter((l) => l.tenantId === tenantId);
+    return leases.filter((l) => l.tenantId === tenantId || Array.isArray(l.tenantIds) && l.tenantIds.includes(tenantId));
   },
 
   getByPropertyId(propertyId: string): Lease[] {
@@ -58,7 +68,7 @@ export const leaseService = {
   },
 
   getActiveByTenantId(tenantId: string): Lease | undefined {
-    return leases.find((l) => l.tenantId === tenantId && l.status === "active");
+    return leases.find((l) => (l.tenantId === tenantId || Array.isArray(l.tenantIds) && l.tenantIds.includes(tenantId)) && l.status === "active");
   },
 
   getActiveByPropertyAndUnit(
@@ -75,9 +85,15 @@ export const leaseService = {
 
   create(payload: CreateLeasePayload): Lease {
     const now = new Date().toISOString();
+    const tenantIds = Array.isArray(payload.tenantIds)
+      ? payload.tenantIds.map((value) => String(value || "").trim()).filter(Boolean)
+      : [String(payload.tenantId || "").trim()].filter(Boolean);
+    const primaryTenantId = String(payload.primaryTenantId || payload.tenantId || tenantIds[0] || "").trim() || null;
     const lease: Lease = {
       id: crypto.randomUUID(),
-      tenantId: payload.tenantId,
+      tenantId: primaryTenantId || payload.tenantId,
+      tenantIds,
+      primaryTenantId,
       propertyId: payload.propertyId,
       unitNumber: payload.unitNumber,
       monthlyRent: payload.monthlyRent,
@@ -86,6 +102,10 @@ export const leaseService = {
       automationEnabled: payload.automationEnabled ?? true,
       renewalStatus: payload.renewalStatus ?? "unknown",
       status: "active",
+      risk: payload.risk ?? null,
+      riskScore: payload.risk?.score ?? null,
+      riskGrade: payload.risk?.grade ?? null,
+      riskConfidence: payload.risk?.confidence ?? null,
       createdAt: now,
       updatedAt: now,
     };

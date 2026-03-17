@@ -11,6 +11,7 @@ import {
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { useUpgrade } from "@/context/UpgradeContext";
 import { upgradeStarterButtonStyle } from "@/lib/upgradeButtonStyles";
+import { LeaseRiskCard } from "@/components/leases/LeaseRiskCard";
 
 function isNotFound(err: any): boolean {
   return (
@@ -270,6 +271,9 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
             <div style={{ color: "#9ca3af", fontSize: 12, marginTop: 4 }}>
               {formatDate(activeLease.startDate)} →{" "}
               {activeLease.endDate ? formatDate(activeLease.endDate) : "Ongoing"}
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <LeaseRiskCard risk={activeLease.risk ?? null} compact />
             </div>
             <div
               style={{
