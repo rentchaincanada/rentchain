@@ -23,8 +23,7 @@ import {
 import { CURRENT_LEASE_STATUSES, loadCanonicalPropertyLeases, loadUnitsForProperty, toCanonicalLeaseRecord } from "../services/leaseCanonicalizationService";
 import { evaluateSameLeaseAgreement, groupLeaseAgreementCandidates, pickAgreementWinner } from "../services/leasePartyConsolidationService";
 import { loadPropertyLeaseIntegrityDiagnostics } from "../services/leaseIntegrityService";
-import { buildLeaseRiskInput } from "../services/risk/buildLeaseRiskInput";
-import { safeAssessLeaseRisk } from "../services/risk/riskEngine";
+import { computeLeaseRiskSnapshot } from "../services/risk/recomputeLeaseRisk";
 
 const router = Router();
 const LEDGER_COLLECTION = "ledgerEntries";
@@ -121,31 +120,6 @@ function normalizeLeaseRow(id: string, raw: any) {
     createdAt: raw?.createdAt || null,
     updatedAt: raw?.updatedAt || null,
   };
-}
-
-async function computeLeaseRiskSnapshot(input: {
-  landlordId: string;
-  propertyId: string;
-  unitId?: string | null;
-  tenantIds: string[];
-  monthlyRent?: number | null;
-}) {
-  try {
-    const riskInput = await buildLeaseRiskInput(input);
-    const risk = await safeAssessLeaseRisk(riskInput);
-    if (!risk) {
-      return { risk: null, riskScore: null, riskGrade: null, riskConfidence: null };
-    }
-    return {
-      risk,
-      riskScore: risk.score,
-      riskGrade: risk.grade,
-      riskConfidence: risk.confidence,
-    };
-  } catch (error) {
-    console.warn("[lease-risk] failed to generate risk snapshot", error);
-    return { risk: null, riskScore: null, riskGrade: null, riskConfidence: null };
-  }
 }
 
 function mergeLeaseRows(rows: any[]) {
@@ -1031,6 +1005,7 @@ router.get("/:leaseId/ledger/export.csv", async (req: any, res: Response) => {
 });
 
 export default router;
+
 
 
 

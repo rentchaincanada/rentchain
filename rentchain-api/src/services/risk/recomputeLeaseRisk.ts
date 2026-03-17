@@ -1,0 +1,266 @@
+import type { Firestore } from "firebase-admin/firestore";
+import { db as defaultDb } from "../../config/firebase";
+import { buildLeaseRiskInput } from "./buildLeaseRiskInput";
+import { safeAssessLeaseRisk } from "./riskEngine";
+import type { RiskAssessment } from "./riskTypes";
+
+export type LeaseRiskSnapshotFields = {
+  risk: RiskAssessment | null;
+  riskScore: number | null;
+  riskGrade: string | null;
+  riskConfidence: number | null;
+};
+
+export type LeaseRiskRecomputeResult = {
+  leaseId: string;
+  updated: boolean;
+  skipped: boolean;
+  wouldUpdate?: boolean;
+  reason?: string;
+  previousRiskScore?: number | null;
+  nextRiskScore?: number | null;
+  previousRiskGrade?: string | null;
+  nextRiskGrade?: string | null;
+  generatedAt?: string;
+};
+
+type LeaseRiskContext = {
+  landlordId: string;
+  propertyId: string;
+  unitId?: string | null;
+  tenantIds: string[];
+  monthlyRent?: number | null;
+};
+
+type RecomputeLeaseRiskOptions = {
+  firestore?: Pick<Firestore, "collection">;
+  dryRun?: boolean;
+};
+
+function asTrimmedString(value: unknown): string {
+  return String(value || "").trim();
+}
+
+function asTrimmedStringOrNull(value: unknown): string | null {
+  const next = asTrimmedString(value);
+  return next || null;
+}
+
+function numberOrNull(...values: unknown[]): number | null {
+  for (const value of values) {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) return numeric;
+  }
+  return null;
+}
+
+function toTenantIds(raw: Record<string, unknown>): string[] {
+  const tenantIds = Array.isArray(raw?.tenantIds)
+    ? raw.tenantIds.map((value) => asTrimmedString(value)).filter(Boolean)
+    : [];
+  if (tenantIds.length) return tenantIds;
+  const fallback = asTrimmedString(raw?.tenantId || raw?.primaryTenantId);
+  return fallback ? [fallback] : [];
+}
+
+function monthlyRentFromLease(raw: Record<string, unknown>): number | null {
+  const fromDollars = numberOrNull(raw?.monthlyRent, raw?.currentRent, raw?.rent);
+  if (fromDollars != null) return fromDollars;
+  const baseRentCents = numberOrNull(raw?.baseRentCents);
+  return baseRentCents != null ? Math.round(baseRentCents / 100) : null;
+}
+
+export function computeLeaseRiskContext(raw: Record<string, unknown>): LeaseRiskContext | null {
+  const landlordId = asTrimmedString(raw?.landlordId);
+  const propertyId = asTrimmedString(raw?.propertyId);
+  const tenantIds = toTenantIds(raw);
+  if (!landlordId || !propertyId || !tenantIds.length) {
+    return null;
+  }
+  return {
+    landlordId,
+    propertyId,
+    unitId: asTrimmedStringOrNull(raw?.unitId || raw?.unitNumber || raw?.unit),
+    tenantIds,
+    monthlyRent: monthlyRentFromLease(raw),
+  };
+}
+
+export async function computeLeaseRiskSnapshot(
+  input: LeaseRiskContext
+): Promise<LeaseRiskSnapshotFields> {
+  try {
+    const riskInput = await buildLeaseRiskInput(input);
+    const risk = await safeAssessLeaseRisk(riskInput);
+    if (!risk) {
+      return { risk: null, riskScore: null, riskGrade: null, riskConfidence: null };
+    }
+    return {
+      risk,
+      riskScore: risk.score,
+      riskGrade: risk.grade,
+      riskConfidence: risk.confidence,
+    };
+  } catch (error) {
+    console.warn("[lease-risk] failed to generate risk snapshot", error);
+    return { risk: null, riskScore: null, riskGrade: null, riskConfidence: null };
+  }
+}
+
+function comparableSnapshot(snapshot: LeaseRiskSnapshotFields) {
+  if (!snapshot.risk) {
+    return {
+      risk: null,
+      riskScore: snapshot.riskScore ?? null,
+      riskGrade: snapshot.riskGrade ?? null,
+      riskConfidence: snapshot.riskConfidence ?? null,
+    };
+  }
+  const { generatedAt: _generatedAt, ...restRisk } = snapshot.risk;
+  return {
+    risk: restRisk,
+    riskScore: snapshot.riskScore ?? null,
+    riskGrade: snapshot.riskGrade ?? null,
+    riskConfidence: snapshot.riskConfidence ?? null,
+  };
+}
+
+function currentSnapshot(raw: Record<string, unknown>): LeaseRiskSnapshotFields {
+  const risk = raw?.risk && typeof raw.risk === "object" ? (raw.risk as RiskAssessment) : null;
+  return {
+    risk,
+    riskScore: typeof raw?.riskScore === "number" ? raw.riskScore : typeof risk?.score === "number" ? risk.score : null,
+    riskGrade: asTrimmedString(raw?.riskGrade || risk?.grade) || null,
+    riskConfidence:
+      typeof raw?.riskConfidence === "number"
+        ? raw.riskConfidence
+        : typeof risk?.confidence === "number"
+        ? risk.confidence
+        : null,
+  };
+}
+
+function snapshotsEqual(previous: LeaseRiskSnapshotFields, next: LeaseRiskSnapshotFields): boolean {
+  return JSON.stringify(comparableSnapshot(previous)) === JSON.stringify(comparableSnapshot(next));
+}
+
+function isRiskFieldPersisted(raw: Record<string, unknown>, field: "risk" | "riskScore" | "riskGrade" | "riskConfidence"): boolean {
+  if (field === "risk") {
+    return Boolean(raw?.risk && typeof raw.risk === "object");
+  }
+  if (field === "riskScore") {
+    return typeof raw?.riskScore === "number";
+  }
+  if (field === "riskGrade") {
+    return Boolean(asTrimmedString(raw?.riskGrade));
+  }
+  return typeof raw?.riskConfidence === "number";
+}
+
+function needsRiskPersistenceRepair(raw: Record<string, unknown>): boolean {
+  return (
+    !isRiskFieldPersisted(raw, "risk") ||
+    !isRiskFieldPersisted(raw, "riskScore") ||
+    !isRiskFieldPersisted(raw, "riskGrade") ||
+    !isRiskFieldPersisted(raw, "riskConfidence")
+  );
+}
+
+export async function persistLeaseRiskSnapshot(
+  leaseId: string,
+  snapshot: LeaseRiskSnapshotFields,
+  firestore: Pick<Firestore, "collection"> = defaultDb as Pick<Firestore, "collection">
+) {
+  await firestore.collection("leases").doc(leaseId).set(
+    {
+      risk: snapshot.risk ?? null,
+      riskScore: snapshot.riskScore ?? null,
+      riskGrade: snapshot.riskGrade ?? null,
+      riskConfidence: snapshot.riskConfidence ?? null,
+      updatedAt: new Date().toISOString(),
+    },
+    { merge: true }
+  );
+}
+
+export async function recomputeLeaseRisk(
+  leaseId: string,
+  options: RecomputeLeaseRiskOptions = {}
+): Promise<LeaseRiskRecomputeResult> {
+  const firestore = options.firestore || (defaultDb as Pick<Firestore, "collection">);
+  const leaseSnap = await firestore.collection("leases").doc(leaseId).get();
+  if (!leaseSnap.exists) {
+    return {
+      leaseId,
+      updated: false,
+      skipped: true,
+      reason: "lease_not_found",
+      previousRiskScore: null,
+      nextRiskScore: null,
+      previousRiskGrade: null,
+      nextRiskGrade: null,
+    };
+  }
+
+  const raw = ((leaseSnap.data() || {}) as Record<string, unknown>);
+  const previous = currentSnapshot(raw);
+  const context = computeLeaseRiskContext(raw);
+  if (!context) {
+    return {
+      leaseId,
+      updated: false,
+      skipped: true,
+      reason: "lease_missing_required_context",
+      previousRiskScore: previous.riskScore,
+      nextRiskScore: previous.riskScore,
+      previousRiskGrade: previous.riskGrade,
+      nextRiskGrade: previous.riskGrade,
+    };
+  }
+
+  const next = await computeLeaseRiskSnapshot(context);
+  if (!next.risk) {
+    return {
+      leaseId,
+      updated: false,
+      skipped: true,
+      reason: "risk_assessment_unavailable",
+      previousRiskScore: previous.riskScore,
+      nextRiskScore: null,
+      previousRiskGrade: previous.riskGrade,
+      nextRiskGrade: null,
+    };
+  }
+
+  if (!needsRiskPersistenceRepair(raw) && snapshotsEqual(previous, next)) {
+    return {
+      leaseId,
+      updated: false,
+      skipped: true,
+      wouldUpdate: false,
+      reason: "risk_snapshot_unchanged",
+      previousRiskScore: previous.riskScore,
+      nextRiskScore: next.riskScore,
+      previousRiskGrade: previous.riskGrade,
+      nextRiskGrade: next.riskGrade,
+      generatedAt: next.risk.generatedAt,
+    };
+  }
+
+  if (!options.dryRun) {
+    await persistLeaseRiskSnapshot(leaseId, next, firestore);
+  }
+
+  return {
+    leaseId,
+    updated: !options.dryRun,
+    skipped: false,
+    wouldUpdate: true,
+    previousRiskScore: previous.riskScore,
+    nextRiskScore: next.riskScore,
+    previousRiskGrade: previous.riskGrade,
+    nextRiskGrade: next.riskGrade,
+    generatedAt: next.risk.generatedAt,
+  };
+}
+
