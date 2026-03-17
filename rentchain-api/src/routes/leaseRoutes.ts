@@ -20,8 +20,9 @@ import {
   getLeaseAutomationTasks,
   regenerateLeaseAutomationTasks,
 } from "../services/automationScheduler/leaseAutomationTaskStore";
-import { loadCanonicalPropertyLeases, loadUnitsForProperty, toCanonicalLeaseRecord } from "../services/leaseCanonicalizationService";
-import { groupLeaseAgreementCandidates, pickAgreementWinner } from "../services/leasePartyConsolidationService";
+import { CURRENT_LEASE_STATUSES, loadCanonicalPropertyLeases, loadUnitsForProperty, toCanonicalLeaseRecord } from "../services/leaseCanonicalizationService";
+import { evaluateSameLeaseAgreement, groupLeaseAgreementCandidates, pickAgreementWinner } from "../services/leasePartyConsolidationService";
+import { loadPropertyLeaseIntegrityDiagnostics } from "../services/leaseIntegrityService";
 
 const router = Router();
 const LEDGER_COLLECTION = "ledgerEntries";
@@ -120,6 +121,51 @@ function mergeLeaseRows(rows: any[]) {
     const updatedDiff = toMillis(b?.updatedAt) - toMillis(a?.updatedAt);
     if (updatedDiff !== 0) return updatedDiff;
     return toMillis(b?.createdAt) - toMillis(a?.createdAt);
+  });
+}
+
+
+async function assertNoConflictingActiveAgreement(input: {
+  leaseId?: string | null;
+  landlordId: string;
+  propertyId: string;
+  unitId: string;
+  tenantIds: string[];
+  startDate?: string | null;
+  endDate?: string | null;
+  monthlyRent?: number | null;
+}) {
+  const units = await loadUnitsForProperty(db as any, input.propertyId, input.landlordId);
+  const candidateRaw = {
+    landlordId: input.landlordId,
+    propertyId: input.propertyId,
+    unitId: input.unitId,
+    tenantId: input.tenantIds[0] || null,
+    tenantIds: input.tenantIds,
+    primaryTenantId: input.tenantIds[0] || null,
+    status: "active",
+    startDate: input.startDate || null,
+    endDate: input.endDate || null,
+    monthlyRent: input.monthlyRent || null,
+    currentRent: input.monthlyRent || null,
+  };
+  const candidate = {
+    lease: toCanonicalLeaseRecord(input.leaseId || "__candidate__", candidateRaw as any, units),
+    raw: candidateRaw as any,
+  };
+  const snap = await db
+    .collection("leases")
+    .where("landlordId", "==", input.landlordId)
+    .where("propertyId", "==", input.propertyId)
+    .get();
+  const existing = snap.docs
+    .filter((doc) => String(doc.id || "") !== String(input.leaseId || ""))
+    .map((doc) => ({ raw: doc.data() as any, lease: toCanonicalLeaseRecord(doc.id, doc.data() as any, units) }))
+    .filter((entry) => CURRENT_LEASE_STATUSES.has(String(entry.lease.status || "").trim().toLowerCase()));
+
+  return existing.filter((entry) => {
+    const result = evaluateSameLeaseAgreement(candidate as any, entry as any);
+    return result.decision === "merge" || result.decision === "ambiguous";
   });
 }
 
@@ -358,6 +404,19 @@ router.post("/drafts/:draftId/activate", requireLandlord, async (req: any, res: 
       return res.status(400).json({ ok: false, error: "payment_method_required" });
     }
 
+    const conflicts = await assertNoConflictingActiveAgreement({
+      landlordId,
+      propertyId,
+      unitId,
+      tenantIds,
+      startDate,
+      endDate,
+      monthlyRent: Math.round(baseRentCents / 100),
+    });
+    if (conflicts.length) {
+      return res.status(409).json({ ok: false, error: "conflicting_active_lease_agreement", conflictLeaseIds: conflicts.map((entry) => entry.lease.id) });
+    }
+
     if (String(draft?.leaseId || "").trim()) {
       const existingLeaseId = String(draft.leaseId).trim();
       const existingLeaseSnap = await db.collection("leases").doc(existingLeaseId).get();
@@ -562,7 +621,12 @@ router.get("/property/:propertyId", requireLandlord, async (req: any, res: Respo
     grouped.singles.forEach((candidate) => winnerIds.add(candidate.lease.id));
 
     // Occupancy and rent roll consumers must operate on lease agreements, not per-tenant rows.
-    return res.status(200).json({ leases: mergeLeaseRows(combinedRows.filter((lease) => winnerIds.has(lease.id))) });
+    const response: any = { leases: mergeLeaseRows(combinedRows.filter((lease) => winnerIds.has(lease.id))) };
+    if (String(req.query?.debug || "") === "1") {
+      const integrity = await loadPropertyLeaseIntegrityDiagnostics(propertyId, landlordId, db as any);
+      response.diagnostics = integrity.diagnostics;
+    }
+    return res.status(200).json(response);
   } catch (err) {
     console.warn("[GET /api/leases/property/:propertyId] firestore fallback", err);
     return res.status(200).json({ leases: memoryLeases });
@@ -588,13 +652,22 @@ router.post("/", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "startDate is required" });
     }
 
-    const existingActive = leaseService.getActiveByPropertyAndUnit(
-      body.propertyId,
-      body.unitNumber
-    );
-    if (existingActive) {
-      return res.status(400).json({
-        error: "An active lease already exists for this property and unit",
+    const conflicts = await assertNoConflictingActiveAgreement({
+      landlordId: String((req as any)?.user?.landlordId || (req as any)?.user?.id || "").trim(),
+      propertyId: body.propertyId,
+      unitId: body.unitNumber,
+      tenantIds: Array.isArray((body as any)?.tenantIds)
+        ? (body as any).tenantIds.map((value: any) => String(value || "").trim()).filter(Boolean)
+        : [String(body.tenantId || "").trim()].filter(Boolean),
+      startDate: body.startDate,
+      endDate: body.endDate,
+      monthlyRent: Number(body.monthlyRent),
+    });
+    if (conflicts.length) {
+      return res.status(409).json({
+        error: "conflicting_active_lease_agreement",
+        message: "A conflicting active lease agreement already exists for this unit and term",
+        conflictLeaseIds: conflicts.map((entry: any) => entry.lease.id),
       });
     }
 
@@ -861,3 +934,7 @@ router.get("/:leaseId/ledger/export.csv", async (req: any, res: Response) => {
 });
 
 export default router;
+
+
+
+
