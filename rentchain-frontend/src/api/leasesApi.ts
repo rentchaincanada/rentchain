@@ -1,4 +1,5 @@
 import { apiJson } from "@/api/http";
+import type { LeaseRiskSnapshot } from "@/types/leaseRisk";
 
 export type LeaseStatus = "active" | "notice_pending" | "renewal_pending" | "renewal_accepted" | "move_out_pending" | "ended" | "archived";
 export type LeaseRenewalStatus = "unknown" | "offered" | "accepted" | "declined";
@@ -23,7 +24,10 @@ export interface LeaseAutomationTask {
 export interface Lease {
   id: string;
   tenantId: string;
+  tenantIds?: string[];
+  primaryTenantId?: string | null;
   propertyId: string;
+  unitId?: string | null;
   unitNumber: string;
   monthlyRent: number;
   startDate: string;
@@ -31,12 +35,17 @@ export interface Lease {
   automationEnabled?: boolean;
   renewalStatus?: LeaseRenewalStatus;
   status: LeaseStatus;
+  risk?: LeaseRiskSnapshot | null;
+  riskScore?: number | null;
+  riskGrade?: string | null;
+  riskConfidence?: number | null;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface CreateLeasePayload {
   tenantId: string;
+  tenantIds?: string[];
   propertyId: string;
   unitNumber: string;
   monthlyRent: number;
@@ -65,8 +74,8 @@ export async function getLeasesForTenant(
 
 export async function getLeasesForProperty(
   propertyId: string
-): Promise<{ leases: Lease[] }> {
-  return apiJson<{ leases: Lease[] }>(
+): Promise<{ leases: Lease[]; diagnostics?: any }> {
+  return apiJson<{ leases: Lease[]; diagnostics?: any }>(
     `/leases/property/${encodeURIComponent(propertyId)}`
   );
 }

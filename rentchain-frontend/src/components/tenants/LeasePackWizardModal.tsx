@@ -9,9 +9,11 @@ import {
   LeaseTermType,
   updateLeaseDraft,
 } from "@/api/leasePacksApi";
+import type { Lease } from "@/api/leasesApi";
 import { useToast } from "../ui/ToastProvider";
 import { apiJson } from "@/api/http";
 import { normalizeProvinceCode, provinceLabelFromCode, type ProvinceCode } from "@/lib/provinces";
+import { LeaseRiskCard } from "@/components/leases/LeaseRiskCard";
 
 interface Props {
   open: boolean;
@@ -64,6 +66,7 @@ export const LeasePackWizardModal: React.FC<Props> = ({
   const [generating, setGenerating] = React.useState(false);
   const [activating, setActivating] = React.useState(false);
   const [activatedLeaseId, setActivatedLeaseId] = React.useState<string>("");
+  const [activatedLease, setActivatedLease] = React.useState<Lease | null>(null);
   const [provinceCode, setProvinceCode] = React.useState<ProvinceCode | null>(null);
   const [provinceLoading, setProvinceLoading] = React.useState(false);
   const [state, setState] = React.useState<FormState>({
@@ -160,6 +163,7 @@ export const LeasePackWizardModal: React.FC<Props> = ({
       setSnapshotId("");
       setDownloadUrl("");
       setActivatedLeaseId("");
+      setActivatedLease(null);
       setError("");
       hasInitializedRef.current = false;
       return;
@@ -271,6 +275,7 @@ export const LeasePackWizardModal: React.FC<Props> = ({
     try {
       const result = await activateLeaseDraft(draftId);
       setActivatedLeaseId(result.leaseId);
+      setActivatedLease(result.lease);
       showToast({
         message: "Lease activated",
         description: "Lifecycle automation is now enabled for this tenant lease.",
@@ -536,6 +541,10 @@ export const LeasePackWizardModal: React.FC<Props> = ({
           <div style={{ color: "#4b5563", fontSize: 12 }}>
             Activating creates the official lease record and enables lifecycle automation.
           </div>
+        ) : null}
+
+        {activatedLeaseId ? (
+          <LeaseRiskCard risk={activatedLease?.risk ?? null} />
         ) : null}
       </div>
     </div>

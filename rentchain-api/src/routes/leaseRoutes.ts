@@ -23,6 +23,8 @@ import {
 import { CURRENT_LEASE_STATUSES, loadCanonicalPropertyLeases, loadUnitsForProperty, toCanonicalLeaseRecord } from "../services/leaseCanonicalizationService";
 import { evaluateSameLeaseAgreement, groupLeaseAgreementCandidates, pickAgreementWinner } from "../services/leasePartyConsolidationService";
 import { loadPropertyLeaseIntegrityDiagnostics } from "../services/leaseIntegrityService";
+import { buildLeaseRiskInput } from "../services/risk/buildLeaseRiskInput";
+import { safeAssessLeaseRisk } from "../services/risk/riskEngine";
 
 const router = Router();
 const LEDGER_COLLECTION = "ledgerEntries";
@@ -79,6 +81,7 @@ function toMillis(value: any): number {
 }
 
 function normalizeLeaseRow(id: string, raw: any) {
+  const risk = raw?.risk && typeof raw?.risk === "object" ? raw.risk : null;
   return {
     id,
     landlordId: String(raw?.landlordId || "").trim() || null,
@@ -106,9 +109,43 @@ function normalizeLeaseRow(id: string, raw: any) {
         ? null
         : String(raw?.endDate || raw?.leaseEndDate || raw?.leaseEnd || "").trim() || null,
     status: String(raw?.status || "active").trim().toLowerCase() || "active",
+    risk,
+    riskScore: typeof raw?.riskScore === "number" ? raw.riskScore : typeof risk?.score === "number" ? risk.score : null,
+    riskGrade: String(raw?.riskGrade || risk?.grade || "").trim() || null,
+    riskConfidence:
+      typeof raw?.riskConfidence === "number"
+        ? raw.riskConfidence
+        : typeof risk?.confidence === "number"
+        ? risk.confidence
+        : null,
     createdAt: raw?.createdAt || null,
     updatedAt: raw?.updatedAt || null,
   };
+}
+
+async function computeLeaseRiskSnapshot(input: {
+  landlordId: string;
+  propertyId: string;
+  unitId?: string | null;
+  tenantIds: string[];
+  monthlyRent?: number | null;
+}) {
+  try {
+    const riskInput = await buildLeaseRiskInput(input);
+    const risk = await safeAssessLeaseRisk(riskInput);
+    if (!risk) {
+      return { risk: null, riskScore: null, riskGrade: null, riskConfidence: null };
+    }
+    return {
+      risk,
+      riskScore: risk.score,
+      riskGrade: risk.grade,
+      riskConfidence: risk.confidence,
+    };
+  } catch (error) {
+    console.warn("[lease-risk] failed to generate risk snapshot", error);
+    return { risk: null, riskScore: null, riskGrade: null, riskConfidence: null };
+  }
 }
 
 function mergeLeaseRows(rows: any[]) {
@@ -135,7 +172,7 @@ async function assertNoConflictingActiveAgreement(input: {
   endDate?: string | null;
   monthlyRent?: number | null;
 }) {
-  const units = await loadUnitsForProperty(db as any, input.propertyId, input.landlordId);
+  const units = await loadUnitsForProperty(db as any, input.propertyId, input.landlordId).catch(() => []);
   const candidateRaw = {
     landlordId: input.landlordId,
     propertyId: input.propertyId,
@@ -153,17 +190,20 @@ async function assertNoConflictingActiveAgreement(input: {
     lease: toCanonicalLeaseRecord(input.leaseId || "__candidate__", candidateRaw as any, units),
     raw: candidateRaw as any,
   };
-  const snap = await db
-    .collection("leases")
+  const collectionRef: any = (db as any).collection("leases");
+  if (!collectionRef || typeof collectionRef.where !== "function") {
+    return [];
+  }
+  const snap = await collectionRef
     .where("landlordId", "==", input.landlordId)
     .where("propertyId", "==", input.propertyId)
     .get();
   const existing = snap.docs
-    .filter((doc) => String(doc.id || "") !== String(input.leaseId || ""))
-    .map((doc) => ({ raw: doc.data() as any, lease: toCanonicalLeaseRecord(doc.id, doc.data() as any, units) }))
-    .filter((entry) => CURRENT_LEASE_STATUSES.has(String(entry.lease.status || "").trim().toLowerCase()));
+    .filter((doc: any) => String(doc.id || "") !== String(input.leaseId || ""))
+    .map((doc: any) => ({ raw: doc.data() as any, lease: toCanonicalLeaseRecord(doc.id, doc.data() as any, units) }))
+    .filter((entry: any) => CURRENT_LEASE_STATUSES.has(String(entry.lease.status || "").trim().toLowerCase()));
 
-  return existing.filter((entry) => {
+  return existing.filter((entry: any) => {
     const result = evaluateSameLeaseAgreement(candidate as any, entry as any);
     return result.decision === "merge" || result.decision === "ambiguous";
   });
@@ -414,7 +454,7 @@ router.post("/drafts/:draftId/activate", requireLandlord, async (req: any, res: 
       monthlyRent: Math.round(baseRentCents / 100),
     });
     if (conflicts.length) {
-      return res.status(409).json({ ok: false, error: "conflicting_active_lease_agreement", conflictLeaseIds: conflicts.map((entry) => entry.lease.id) });
+      return res.status(409).json({ ok: false, error: "conflicting_active_lease_agreement", conflictLeaseIds: conflicts.map((entry: any) => entry.lease.id) });
     }
 
     if (String(draft?.leaseId || "").trim()) {
@@ -432,6 +472,13 @@ router.post("/drafts/:draftId/activate", requireLandlord, async (req: any, res: 
     const now = Date.now();
     const tenantId = tenantIds[0];
     const leaseRef = db.collection("leases").doc();
+    const riskSnapshot = await computeLeaseRiskSnapshot({
+      landlordId,
+      propertyId,
+      unitId,
+      tenantIds,
+      monthlyRent: Math.round(baseRentCents / 100),
+    });
     const leaseRecord: any = {
       landlordId,
       tenantId,
@@ -453,6 +500,10 @@ router.post("/drafts/:draftId/activate", requireLandlord, async (req: any, res: 
       utilitiesIncluded: Array.isArray(draft?.utilitiesIncluded) ? draft.utilitiesIncluded : [],
       depositCents: draft?.depositCents ?? null,
       additionalClauses: String(draft?.additionalClauses || ""),
+      risk: riskSnapshot.risk,
+      riskScore: riskSnapshot.riskScore,
+      riskGrade: riskSnapshot.riskGrade,
+      riskConfidence: riskSnapshot.riskConfidence,
       automationEnabled: true,
       renewalStatus: "unknown",
       status: "active",
@@ -466,6 +517,8 @@ router.post("/drafts/:draftId/activate", requireLandlord, async (req: any, res: 
     leaseService.getAll().push({
       id: leaseRef.id,
       tenantId,
+      tenantIds,
+      primaryTenantId: tenantId,
       propertyId,
       unitNumber: unitId,
       monthlyRent: Math.round(baseRentCents / 100),
@@ -474,6 +527,10 @@ router.post("/drafts/:draftId/activate", requireLandlord, async (req: any, res: 
       automationEnabled: true,
       renewalStatus: "unknown",
       status: "active",
+      risk: riskSnapshot.risk,
+      riskScore: riskSnapshot.riskScore,
+      riskGrade: riskSnapshot.riskGrade,
+      riskConfidence: riskSnapshot.riskConfidence,
       createdAt: new Date(now).toISOString(),
       updatedAt: new Date(now).toISOString(),
     });
@@ -652,13 +709,16 @@ router.post("/", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "startDate is required" });
     }
 
+    const landlordId = String((req as any)?.user?.landlordId || (req as any)?.user?.id || "").trim();
+    const tenantIds = Array.isArray((body as any)?.tenantIds)
+      ? (body as any).tenantIds.map((value: any) => String(value || "").trim()).filter(Boolean)
+      : [String(body.tenantId || "").trim()].filter(Boolean);
+
     const conflicts = await assertNoConflictingActiveAgreement({
-      landlordId: String((req as any)?.user?.landlordId || (req as any)?.user?.id || "").trim(),
+      landlordId,
       propertyId: body.propertyId,
       unitId: body.unitNumber,
-      tenantIds: Array.isArray((body as any)?.tenantIds)
-        ? (body as any).tenantIds.map((value: any) => String(value || "").trim()).filter(Boolean)
-        : [String(body.tenantId || "").trim()].filter(Boolean),
+      tenantIds,
       startDate: body.startDate,
       endDate: body.endDate,
       monthlyRent: Number(body.monthlyRent),
@@ -671,16 +731,53 @@ router.post("/", async (req: Request, res: Response) => {
       });
     }
 
+    const riskSnapshot = await computeLeaseRiskSnapshot({
+      landlordId,
+      propertyId: body.propertyId,
+      unitId: body.unitNumber,
+      tenantIds,
+      monthlyRent: Number(body.monthlyRent),
+    });
+
     const payload: CreateLeasePayload = {
       tenantId: body.tenantId,
+      tenantIds,
+      primaryTenantId: tenantIds[0] || body.tenantId,
       propertyId: body.propertyId,
       unitNumber: body.unitNumber,
       monthlyRent: Number(body.monthlyRent),
       startDate: body.startDate,
       endDate: body.endDate,
+      risk: riskSnapshot.risk,
     };
 
     const lease = leaseService.create(payload);
+    if (landlordId) {
+      const firestoreLeaseRecord = {
+        landlordId,
+        tenantId: lease.tenantId,
+        tenantIds,
+        primaryTenantId: tenantIds[0] || body.tenantId,
+        propertyId: lease.propertyId,
+        unitId: body.unitNumber,
+        unitNumber: lease.unitNumber,
+        monthlyRent: lease.monthlyRent,
+        startDate: lease.startDate,
+        endDate: lease.endDate ?? null,
+        automationEnabled: lease.automationEnabled ?? true,
+        renewalStatus: lease.renewalStatus ?? "unknown",
+        status: lease.status,
+        risk: lease.risk ?? null,
+        riskScore: lease.riskScore ?? lease.risk?.score ?? null,
+        riskGrade: lease.riskGrade ?? lease.risk?.grade ?? null,
+        riskConfidence: lease.riskConfidence ?? lease.risk?.confidence ?? null,
+        createdAt: lease.createdAt,
+        updatedAt: lease.updatedAt,
+      };
+      await db.collection("leases").doc(lease.id).set(firestoreLeaseRecord, { merge: false }).catch((error: any) => {
+        console.warn("[POST /api/leases] firestore lease write failed", error);
+      });
+    }
     res.status(201).json({ lease });
   } catch (err) {
     console.error("[POST /api/leases] error", err);
