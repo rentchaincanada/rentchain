@@ -1,0 +1,64 @@
+version: "1"
+policy_id: risk-agent-safe
+description: Scoped policy for lease risk integration and related landlord-facing UX.
+default_mode: deny
+filesystem:
+  allow:
+    - rentchain-api/src/routes/leaseRoutes.ts
+    - rentchain-api/src/routes/dashboardRoutes.ts
+    - rentchain-api/src/services/risk/**
+    - rentchain-api/src/services/leaseService.ts
+    - rentchain-api/src/services/**
+    - rentchain-api/src/types/**
+    - rentchain-api/src/models/**
+    - rentchain-api/src/lib/**
+    - rentchain-api/src/routes/__tests__/**
+    - rentchain-api/src/services/__tests__/**
+    - rentchain-frontend/src/api/**
+    - rentchain-frontend/src/components/**
+    - rentchain-frontend/src/pages/**
+    - rentchain-frontend/src/features/**
+    - rentchain-frontend/src/types/**
+    - rentchain-frontend/src/lib/**
+    - rentchain-frontend/src/utils/**
+  deny:
+    - .env*
+    - infra/**
+    - terraform/**
+    - .github/**
+    - billing/**
+commands:
+  allow:
+    - git status
+    - git checkout
+    - git diff
+    - npm run build
+    - vitest run
+  deny:
+    - git push --force
+    - rm -rf
+    - firebase deploy
+network_policy:
+  mode: disabled
+  allowed_domains: []
+secrets_policy:
+  read: allow-listed-only
+  write: deny
+  exfiltration: deny
+git_permissions:
+  branch_create: true
+  commit: true
+  push: true
+  merge: false
+  force_push: false
+deployment_permissions:
+  allowed: false
+  notes: Risk work must stop at tested PR output.
+limits:
+  max_files_changed: 60
+  max_commands: 80
+  requires_pr: true
+requirements:
+  - Risk fields must remain additive and backwards compatible.
+  - AUTHORIZATION OVERRIDE block required if task exceeds standing repo scope.
+  - No billing, auth, or infra changes.

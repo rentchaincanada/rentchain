@@ -1,0 +1,44 @@
+version: "1"
+policy_id: docs-safe
+description: Safe documentation-only policy for governance, runbooks, and internal references.
+default_mode: deny
+filesystem:
+  allow:
+    - docs/**
+    - governance/**
+    - README.md
+    - AGENTS.md
+  deny:
+    - .env*
+    - infra/**
+    - terraform/**
+commands:
+  allow:
+    - git status
+    - git checkout
+    - git diff
+  deny:
+    - git push --force
+    - rm -rf
+network_policy:
+  mode: disabled
+  allowed_domains: []
+secrets_policy:
+  read: allow-listed-only
+  write: deny
+  exfiltration: deny
+git_permissions:
+  branch_create: true
+  commit: true
+  push: true
+  merge: false
+  force_push: false
+deployment_permissions:
+  allowed: false
+  notes: Documentation changes never deploy directly.
+limits:
+  max_files_changed: 30
+  max_commands: 40
+  requires_pr: true
+requirements:
+  - AGENTS.md changes must be minimal and clarifying only.

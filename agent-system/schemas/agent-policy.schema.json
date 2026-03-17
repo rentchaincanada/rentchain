@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rentchain.local/agent-system/schemas/agent-policy.schema.json",
+  "title": "Agent Policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "policy_id",
+    "description",
+    "default_mode",
+    "filesystem",
+    "commands",
+    "network_policy",
+    "secrets_policy",
+    "git_permissions",
+    "deployment_permissions",
+    "limits",
+    "requirements"
+  ],
+  "properties": {
+    "version": { "type": "string", "minLength": 1 },
+    "policy_id": { "type": "string", "minLength": 1 },
+    "description": { "type": "string", "minLength": 1 },
+    "default_mode": { "type": "string", "enum": ["deny"] },
+    "filesystem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allow", "deny"],
+      "properties": {
+        "allow": { "type": "array", "items": { "type": "string" } },
+        "deny": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "commands": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allow", "deny"],
+      "properties": {
+        "allow": { "type": "array", "items": { "type": "string" } },
+        "deny": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "network_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "allowed_domains"],
+      "properties": {
+        "mode": { "type": "string", "enum": ["disabled", "restricted"] },
+        "allowed_domains": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "secrets_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["read", "write", "exfiltration"],
+      "properties": {
+        "read": { "type": "string", "enum": ["deny", "allow-listed-only"] },
+        "write": { "type": "string", "enum": ["deny", "allow-listed-only"] },
+        "exfiltration": { "type": "string", "enum": ["deny"] }
+      }
+    },
+    "git_permissions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["branch_create", "commit", "push", "merge", "force_push"],
+      "properties": {
+        "branch_create": { "type": "boolean" },
+        "commit": { "type": "boolean" },
+        "push": { "type": "boolean" },
+        "merge": { "type": "boolean" },
+        "force_push": { "type": "boolean" }
+      }
+    },
+    "deployment_permissions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allowed", "notes"],
+      "properties": {
+        "allowed": { "type": "boolean" },
+        "notes": { "type": "string" }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_files_changed", "max_commands", "requires_pr"],
+      "properties": {
+        "max_files_changed": { "type": "integer", "minimum": 1 },
+        "max_commands": { "type": "integer", "minimum": 1 },
+        "requires_pr": { "type": "boolean" }
+      }
+    },
+    "requirements": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

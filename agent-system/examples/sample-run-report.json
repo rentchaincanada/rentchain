@@ -1,0 +1,29 @@
+{
+  "task_id": "task-lease-risk-followup-001",
+  "policy_id": "risk-agent-safe",
+  "branch": "feat/lease-risk-followup",
+  "files_changed": [
+    "rentchain-api/src/routes/leaseRoutes.ts",
+    "rentchain-api/src/services/risk/riskEngine.ts",
+    "rentchain-frontend/src/components/leases/LeaseRiskCard.tsx"
+  ],
+  "commands_run": [
+    "cd rentchain-api && npm run build",
+    "cd rentchain-frontend && npm run build",
+    "cd rentchain-api && vitest run src/services/__tests__/riskEngine.test.ts"
+  ],
+  "tests_run": [
+    "rentchain-api riskEngine.test.ts",
+    "rentchain-api leaseRiskRoutes.test.ts"
+  ],
+  "results": {
+    "status": "pass",
+    "summary": "Risk integration updated without breaking lease creation or lease detail views."
+  },
+  "commit_hash": "abcdef1234567890abcdef1234567890abcdef12",
+  "pr_link": "https://github.com/rentchaincanada/rentchain/pull/123",
+  "risks": [
+    "Historical leases may still need a later risk backfill if dashboard sorting depends on denormalized fields."
+  ],
+  "rollback_note": "Revert the PR with a follow-up branch and restore the previous lease route behavior."
+}
