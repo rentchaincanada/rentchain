@@ -53,12 +53,91 @@ export type PropertyIntegrityDiagnostics = {
   ambiguousAgreementLeaseIds: string[];
 };
 
+export type UnitOccupancyStatus = "occupied" | "vacant";
+
+export type UnitOccupancyReconciliationItem = {
+  unitId: string;
+  nextStatus: UnitOccupancyStatus;
+  currentStatus: string | null;
+  currentOccupancyStatus: UnitOccupancyStatus | null;
+  currentStatusSource: "occupancyStatus" | "status" | null;
+  winnerLeaseIds: string[];
+  fieldsToUpdate: Array<"occupancyStatus" | "status">;
+  skipped: boolean;
+  reviewReason: string | null;
+};
+
+const RECOGNIZED_OCCUPANCY_STATUSES = new Set<UnitOccupancyStatus>(["occupied", "vacant"]);
+
 function normalizeStatus(value: unknown): string {
   return String(value || "").trim().toLowerCase();
 }
 
+function toRecognizedOccupancyStatus(value: unknown): UnitOccupancyStatus | null {
+  const normalized = normalizeStatus(value);
+  return RECOGNIZED_OCCUPANCY_STATUSES.has(normalized as UnitOccupancyStatus)
+    ? (normalized as UnitOccupancyStatus)
+    : null;
+}
+
 function toUnitStatus(unit: Record<string, unknown>): string {
   return normalizeStatus(unit?.occupancyStatus || unit?.status);
+}
+
+function assessUnitOccupancyReconciliation(
+  unit: Record<string, unknown>,
+  nextStatus: UnitOccupancyStatus,
+  winnerLeaseIds: string[]
+): UnitOccupancyReconciliationItem {
+  const rawOccupancyStatus = normalizeStatus(unit?.occupancyStatus) || null;
+  const rawStatus = normalizeStatus(unit?.status) || null;
+  const recognizedOccupancyStatus = toRecognizedOccupancyStatus(rawOccupancyStatus);
+  const recognizedStatus = toRecognizedOccupancyStatus(rawStatus);
+
+  if (recognizedOccupancyStatus) {
+    return {
+      unitId: String(unit?.id || "").trim(),
+      nextStatus,
+      currentStatus: recognizedOccupancyStatus,
+      currentOccupancyStatus: recognizedOccupancyStatus,
+      currentStatusSource: "occupancyStatus",
+      winnerLeaseIds,
+      fieldsToUpdate:
+        recognizedOccupancyStatus === nextStatus
+          ? []
+          : recognizedStatus
+          ? ["occupancyStatus", "status"]
+          : ["occupancyStatus"],
+      skipped: false,
+      reviewReason: null,
+    };
+  }
+
+  if (recognizedStatus) {
+    return {
+      unitId: String(unit?.id || "").trim(),
+      nextStatus,
+      currentStatus: recognizedStatus,
+      currentOccupancyStatus: recognizedStatus,
+      currentStatusSource: "status",
+      winnerLeaseIds,
+      fieldsToUpdate: recognizedStatus === nextStatus ? [] : ["status", "occupancyStatus"],
+      skipped: false,
+      reviewReason: null,
+    };
+  }
+
+  return {
+    unitId: String(unit?.id || "").trim(),
+    nextStatus,
+    currentStatus: rawOccupancyStatus || rawStatus || null,
+    currentOccupancyStatus: null,
+    currentStatusSource: rawOccupancyStatus ? "occupancyStatus" : rawStatus ? "status" : null,
+    winnerLeaseIds,
+    fieldsToUpdate: [],
+    skipped: true,
+    reviewReason: rawOccupancyStatus || rawStatus ? "non_occupancy_status_requires_review" : "missing_occupancy_status_requires_review",
+  };
 }
 
 function canonicalWinnerSet(selection: Pick<LeaseAgreementSelection, "mergeGroups" | "ambiguousGroups" | "singles">): LeaseAgreementCandidate[] {
@@ -321,7 +400,7 @@ export async function buildDesiredUnitOccupancy(
   propertyId: string,
   landlordId?: string | null,
   firestoreDb: Firestore = db as any
-): Promise<Array<{ unitId: string; nextStatus: "occupied" | "vacant"; currentStatus: string | null; winnerLeaseIds: string[] }>> {
+): Promise<UnitOccupancyReconciliationItem[]> {
   const { units, selection } = await loadPropertyLeaseIntegrityDiagnostics(propertyId, landlordId, firestoreDb);
   const winners = canonicalWinnerSet(selection);
   const leaseIdsByUnit = new Map<string, string[]>();
@@ -332,13 +411,13 @@ export async function buildDesiredUnitOccupancy(
     bucket.push(winner.lease.id);
     leaseIdsByUnit.set(unitId, bucket);
   });
-  return units.map((unit) => ({
-    unitId: unit.id,
-    nextStatus: leaseIdsByUnit.has(unit.id) ? "occupied" : "vacant",
-    currentStatus: toUnitStatus(unit.raw) || null,
-    winnerLeaseIds: leaseIdsByUnit.get(unit.id) || [],
-  }));
+  return units.map((unit) => {
+    const winnerLeaseIds = leaseIdsByUnit.get(unit.id) || [];
+    const nextStatus: UnitOccupancyStatus = winnerLeaseIds.length ? "occupied" : "vacant";
+    return assessUnitOccupancyReconciliation({ id: unit.id, ...unit.raw }, nextStatus, winnerLeaseIds);
+  });
 }
+
 
 
 

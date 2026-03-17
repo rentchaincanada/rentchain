@@ -12,6 +12,7 @@ async function main() {
     generatedAt: new Date().toISOString(),
     flags,
     changedUnits: [] as any[],
+    skippedUnits: [] as any[],
     propertyCount: properties.length,
   };
 
@@ -20,22 +21,31 @@ async function main() {
     const landlordId = String(property.landlordId || "").trim() || null;
     const desired = await buildDesiredUnitOccupancy(propertyDoc.id, landlordId, db as any);
     for (const item of desired) {
-      if ((item.currentStatus || "") === item.nextStatus) continue;
+      if (item.skipped) {
+        report.skippedUnits.push({ propertyId: propertyDoc.id, ...item });
+        continue;
+      }
+      if ((item.currentOccupancyStatus || "") === item.nextStatus) continue;
       report.changedUnits.push({ propertyId: propertyDoc.id, ...item });
       if (flags.dryRun) continue;
-      await db.collection("units").doc(item.unitId).set(
-        {
-          status: item.nextStatus,
-          occupancyStatus: item.nextStatus,
-          updatedAt: Date.now(),
-        },
-        { merge: true }
-      );
+
+      const updates: Record<string, unknown> = {
+        updatedAt: Date.now(),
+      };
+      if (item.fieldsToUpdate.includes("occupancyStatus")) {
+        updates.occupancyStatus = item.nextStatus;
+      }
+      if (item.fieldsToUpdate.includes("status")) {
+        updates.status = item.nextStatus;
+      }
+      if (Object.keys(updates).length <= 1) continue;
+
+      await db.collection("units").doc(item.unitId).set(updates, { merge: true });
     }
   }
 
   const reportPath = writeReport("reconcileUnitOccupancyFromLeases.report.json", report);
-  console.log(JSON.stringify({ changedUnits: report.changedUnits.length, reportPath }, null, 2));
+  console.log(JSON.stringify({ changedUnits: report.changedUnits.length, skippedUnits: report.skippedUnits.length, reportPath }, null, 2));
 }
 
 main().catch((error) => {
