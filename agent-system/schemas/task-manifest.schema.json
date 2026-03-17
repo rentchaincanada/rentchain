@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rentchain.local/agent-system/schemas/task-manifest.schema.json",
+  "title": "Task Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "task_id",
+    "title",
+    "task_type",
+    "policy_id",
+    "branch_name",
+    "authorization_override_required",
+    "scope",
+    "success_criteria",
+    "required_outputs"
+  ],
+  "properties": {
+    "task_id": { "type": "string", "minLength": 1 },
+    "title": { "type": "string", "minLength": 1 },
+    "task_type": { "type": "string", "enum": ["feature", "hotfix", "refactor", "docs"] },
+    "policy_id": { "type": "string", "minLength": 1 },
+    "branch_name": { "type": "string", "minLength": 1 },
+    "authorization_override_required": { "type": "boolean" },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allowed_paths", "forbidden_paths"],
+      "properties": {
+        "allowed_paths": { "type": "array", "items": { "type": "string" } },
+        "forbidden_paths": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "success_criteria": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "required_outputs": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "notes": { "type": "array", "items": { "type": "string" } }
+  }
+}

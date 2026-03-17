@@ -1,0 +1,49 @@
+version: "1"
+policy_id: backend-safe
+description: Safe backend policy for additive application logic outside restricted systems.
+default_mode: deny
+filesystem:
+  allow:
+    - rentchain-api/src/routes/**
+    - rentchain-api/src/services/**
+    - rentchain-api/src/types/**
+    - rentchain-api/src/models/**
+  deny:
+    - .env*
+    - infra/**
+    - terraform/**
+    - .github/**
+commands:
+  allow:
+    - git status
+    - git checkout
+    - git diff
+    - npm run build
+    - vitest run
+  deny:
+    - git push --force
+    - rm -rf
+    - firebase deploy
+network_policy:
+  mode: disabled
+  allowed_domains: []
+secrets_policy:
+  read: allow-listed-only
+  write: deny
+  exfiltration: deny
+git_permissions:
+  branch_create: true
+  commit: true
+  push: true
+  merge: false
+  force_push: false
+deployment_permissions:
+  allowed: false
+  notes: Runtime changes require PR review and separate deployment approval.
+limits:
+  max_files_changed: 50
+  max_commands: 70
+  requires_pr: true
+requirements:
+  - Data migrations require yellow or red approval review.
+  - Auth, billing, and secrets are out of scope unless explicitly approved.

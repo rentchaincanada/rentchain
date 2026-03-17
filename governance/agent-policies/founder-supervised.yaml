@@ -1,0 +1,51 @@
+version: "1"
+policy_id: founder-supervised
+description: Founder-supervised policy for broader implementation work that still requires explicit review before merge.
+default_mode: deny
+filesystem:
+  allow:
+    - docs/**
+    - governance/**
+    - rentchain-api/src/**
+    - rentchain-frontend/src/**
+  deny:
+    - .env*
+    - infra/**
+    - terraform/**
+    - .github/**
+    - vercel.json
+commands:
+  allow:
+    - git status
+    - git checkout
+    - git diff
+    - npm run build
+    - vitest run
+  deny:
+    - git push --force
+    - rm -rf
+    - terraform apply
+network_policy:
+  mode: restricted
+  allowed_domains: []
+secrets_policy:
+  read: allow-listed-only
+  write: deny
+  exfiltration: deny
+git_permissions:
+  branch_create: true
+  commit: true
+  push: true
+  merge: false
+  force_push: false
+deployment_permissions:
+  allowed: false
+  notes: Deployment remains a separate human-controlled workflow.
+limits:
+  max_files_changed: 80
+  max_commands: 80
+  requires_pr: true
+requirements:
+  - Branch and PR are required.
+  - Founder or delegate reviews before merge.
+  - AUTHORIZATION OVERRIDE block required when working outside standing scope.

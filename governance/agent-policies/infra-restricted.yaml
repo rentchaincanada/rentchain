@@ -1,0 +1,49 @@
+version: "1"
+policy_id: infra-restricted
+description: High-restriction policy for infrastructure-related tasks that require explicit human approval before implementation.
+default_mode: deny
+filesystem:
+  allow:
+    - docs/governance/**
+    - governance/**
+  deny:
+    - infra/**
+    - terraform/**
+    - .github/**
+    - Dockerfile
+    - Dockerfiles/**
+    - cloudbuild/**
+    - .env*
+commands:
+  allow:
+    - git status
+    - git diff
+  deny:
+    - terraform apply
+    - kubectl apply
+    - firebase deploy
+    - git push --force
+    - rm -rf
+network_policy:
+  mode: disabled
+  allowed_domains: []
+secrets_policy:
+  read: deny
+  write: deny
+  exfiltration: deny
+git_permissions:
+  branch_create: false
+  commit: false
+  push: false
+  merge: false
+  force_push: false
+deployment_permissions:
+  allowed: false
+  notes: Infra changes require explicit approval before implementation begins.
+limits:
+  max_files_changed: 10
+  max_commands: 20
+  requires_pr: true
+requirements:
+  - Treat infra as red-category work.
+  - Stop and request explicit approval before touching protected infrastructure paths.

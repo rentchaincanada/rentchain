@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rentchain.local/agent-system/schemas/run-report.schema.json",
+  "title": "Run Report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "task_id",
+    "policy_id",
+    "branch",
+    "files_changed",
+    "commands_run",
+    "tests_run",
+    "results",
+    "commit_hash",
+    "pr_link",
+    "risks",
+    "rollback_note"
+  ],
+  "properties": {
+    "task_id": { "type": "string", "minLength": 1 },
+    "policy_id": { "type": "string", "minLength": 1 },
+    "branch": { "type": "string", "minLength": 1 },
+    "files_changed": { "type": "array", "items": { "type": "string" } },
+    "commands_run": { "type": "array", "items": { "type": "string" } },
+    "tests_run": { "type": "array", "items": { "type": "string" } },
+    "results": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "summary"],
+      "properties": {
+        "status": { "type": "string", "enum": ["pass", "pass_with_issues", "fail"] },
+        "summary": { "type": "string", "minLength": 1 }
+      }
+    },
+    "commit_hash": { "type": "string", "minLength": 1 },
+    "pr_link": { "type": "string", "minLength": 1 },
+    "risks": { "type": "array", "items": { "type": "string" } },
+    "rollback_note": { "type": "string", "minLength": 1 }
+  }
+}

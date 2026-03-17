@@ -1,0 +1,47 @@
+version: "1"
+policy_id: frontend-safe
+description: Safe frontend policy for additive UI work outside protected areas.
+default_mode: deny
+filesystem:
+  allow:
+    - rentchain-frontend/src/components/**
+    - rentchain-frontend/src/pages/**
+    - rentchain-frontend/src/api/**
+    - rentchain-frontend/src/types/**
+  deny:
+    - rentchain-frontend/.env*
+    - infra/**
+    - .github/**
+commands:
+  allow:
+    - git status
+    - git checkout
+    - git diff
+    - npm run build
+    - vitest run
+  deny:
+    - git push --force
+    - rm -rf
+network_policy:
+  mode: disabled
+  allowed_domains: []
+secrets_policy:
+  read: allow-listed-only
+  write: deny
+  exfiltration: deny
+git_permissions:
+  branch_create: true
+  commit: true
+  push: true
+  merge: false
+  force_push: false
+deployment_permissions:
+  allowed: false
+  notes: Frontend changes stop at PR.
+limits:
+  max_files_changed: 40
+  max_commands: 60
+  requires_pr: true
+requirements:
+  - Keep changes additive and backwards compatible.
+  - No auth, billing, or deployment changes.

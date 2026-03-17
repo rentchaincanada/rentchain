@@ -1,0 +1,36 @@
+{
+  "task_id": "task-lease-risk-followup-001",
+  "title": "Lease risk follow-up improvements",
+  "task_type": "feature",
+  "policy_id": "risk-agent-safe",
+  "branch_name": "feat/lease-risk-followup",
+  "authorization_override_required": true,
+  "scope": {
+    "allowed_paths": [
+      "rentchain-api/src/routes/leaseRoutes.ts",
+      "rentchain-api/src/services/risk/**",
+      "rentchain-frontend/src/components/**"
+    ],
+    "forbidden_paths": [
+      "infra/**",
+      ".env*",
+      ".github/**"
+    ]
+  },
+  "success_criteria": [
+    "Risk data remains additive and backwards compatible.",
+    "Backend and frontend builds pass.",
+    "Lease creation and lease detail surfaces continue working without risk data."
+  ],
+  "required_outputs": [
+    "branch name",
+    "files changed",
+    "validation summary",
+    "commit hash",
+    "PR link"
+  ],
+  "notes": [
+    "AUTHORIZATION OVERRIDE block must appear at the top of the task.",
+    "No deployment changes are permitted."
+  ]
+}
