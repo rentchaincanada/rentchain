@@ -27,6 +27,7 @@ import { useCapabilities } from "@/hooks/useCapabilities";
 import { useUpgrade } from "@/context/UpgradeContext";
 import { upgradeStarterButtonStyle } from "../../lib/upgradeButtonStyles";
 import { dispatchUpgradePrompt } from "@/lib/upgradePrompt";
+import { RiskScoreBadge } from "@/components/leases/RiskScoreBadge";
 
 interface PropertyDetailPanelProps {
   property: Property | null;
@@ -868,6 +869,53 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
           }}
         >
           {importMessage}
+        </div>
+      )}
+
+      {activeLeases.length > 0 && (
+        <div
+          style={{
+            borderRadius: 12,
+            border: "1px solid rgba(148,163,184,0.16)",
+            background: "rgba(255,255,255,0.03)",
+            padding: 12,
+            display: "grid",
+            gap: 10,
+          }}
+        >
+          <div style={{ display: "grid", gap: 4 }}>
+            <div style={{ color: "#0f172a", fontWeight: 700 }}>Lease risk overview</div>
+            <div style={{ color: "#4b5563", fontSize: "0.82rem" }}>
+              This score helps identify payment and stability risk using available lease data.
+            </div>
+          </div>
+          <div style={{ display: "grid", gap: 8 }}>
+            {activeLeases.slice(0, 4).map((lease) => (
+              <div
+                key={lease.id}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 10,
+                  flexWrap: "wrap",
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  border: "1px solid rgba(148,163,184,0.14)",
+                  background: "rgba(248,250,252,0.9)",
+                }}
+              >
+                <div style={{ display: "grid", gap: 2 }}>
+                  <div style={{ color: "#0f172a", fontWeight: 700 }}>Unit {lease.unitNumber || lease.unitId || "--"}</div>
+                  <div style={{ color: "#475569", fontSize: 12 }}>
+                    {formatCurrency(lease.monthlyRent)} / month
+                    {lease.riskConfidence != null ? " • " + Math.round(lease.riskConfidence * 100) + "% confidence" : ""}
+                  </div>
+                </div>
+                <RiskScoreBadge grade={(lease.riskGrade as any) || lease.risk?.grade || null} score={lease.riskScore ?? lease.risk?.score ?? null} compact />
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
