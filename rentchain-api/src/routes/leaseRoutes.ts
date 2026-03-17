@@ -665,7 +665,8 @@ router.post("/", async (req: Request, res: Response) => {
     });
     if (conflicts.length) {
       return res.status(409).json({
-        error: "A conflicting active lease agreement already exists for this unit and term",
+        error: "conflicting_active_lease_agreement",
+        message: "A conflicting active lease agreement already exists for this unit and term",
         conflictLeaseIds: conflicts.map((entry: any) => entry.lease.id),
       });
     }
@@ -933,5 +934,7 @@ router.get("/:leaseId/ledger/export.csv", async (req: any, res: Response) => {
 });
 
 export default router;
+
+
 
 
