@@ -158,3 +158,98 @@ describe("leaseIntegrityService tenant currentLeaseId diagnostics", () => {
     });
   });
 });
+
+describe("leaseIntegrityService occupancy reconciliation safety", () => {
+  beforeEach(() => {
+    resetFakeDb();
+  });
+
+  function seedUnit(id: string, data: Record<string, unknown>) {
+    seedDoc("units", id, {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitNumber: id,
+      ...data,
+    });
+  }
+
+  function seedLease(id: string, data: Record<string, unknown>) {
+    seedDoc("leases", id, {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: "unit-occupied",
+      unitNumber: "unit-occupied",
+      status: "active",
+      monthlyRent: 1800,
+      currentRent: 1800,
+      startDate: "2026-01-01",
+      endDate: "2026-12-31",
+      createdAt: 1,
+      updatedAt: 1,
+      ...data,
+    });
+  }
+
+  it("reconciles recognized occupied and vacant statuses normally", async () => {
+    seedUnit("unit-occupied", { status: "occupied" });
+    seedUnit("unit-vacant", { status: "vacant" });
+    seedLease("lease-1", { unitId: "unit-occupied", unitNumber: "unit-occupied", tenantId: "tenant-1", tenantIds: ["tenant-1"] });
+
+    const mod = await import("../leaseIntegrityService");
+    const items = await mod.buildDesiredUnitOccupancy("prop-1", "landlord-1", fakeDb as any);
+    const occupied = items.find((item: any) => item.unitId === "unit-occupied");
+    const vacant = items.find((item: any) => item.unitId === "unit-vacant");
+
+    expect(occupied).toEqual(
+      expect.objectContaining({
+        nextStatus: "occupied",
+        currentOccupancyStatus: "occupied",
+        skipped: false,
+        fieldsToUpdate: [],
+      })
+    );
+    expect(vacant).toEqual(
+      expect.objectContaining({
+        nextStatus: "vacant",
+        currentOccupancyStatus: "vacant",
+        skipped: false,
+        fieldsToUpdate: [],
+      })
+    );
+  });
+
+  it("skips non-occupancy status values for operator review", async () => {
+    seedUnit("unit-late", { status: "late" });
+    seedUnit("unit-paid", { status: "paid" });
+    seedUnit("unit-on-time", { status: "on time" });
+
+    const mod = await import("../leaseIntegrityService");
+    const items = await mod.buildDesiredUnitOccupancy("prop-1", "landlord-1", fakeDb as any);
+
+    expect(items.filter((item: any) => item.skipped).map((item: any) => ({ unitId: item.unitId, reviewReason: item.reviewReason }))).toEqual(
+      expect.arrayContaining([
+        { unitId: "unit-late", reviewReason: "non_occupancy_status_requires_review" },
+        { unitId: "unit-paid", reviewReason: "non_occupancy_status_requires_review" },
+        { unitId: "unit-on-time", reviewReason: "non_occupancy_status_requires_review" },
+      ])
+    );
+  });
+
+  it("does not overwrite non-occupancy status when occupancyStatus carries the true occupancy state", async () => {
+    seedUnit("unit-mixed", { status: "paid", occupancyStatus: "occupied" });
+
+    const mod = await import("../leaseIntegrityService");
+    const items = await mod.buildDesiredUnitOccupancy("prop-1", "landlord-1", fakeDb as any);
+    const mixed = items.find((item: any) => item.unitId === "unit-mixed");
+
+    expect(mixed).toEqual(
+      expect.objectContaining({
+        nextStatus: "vacant",
+        currentOccupancyStatus: "occupied",
+        currentStatusSource: "occupancyStatus",
+        skipped: false,
+        fieldsToUpdate: ["occupancyStatus"],
+      })
+    );
+  });
+});
