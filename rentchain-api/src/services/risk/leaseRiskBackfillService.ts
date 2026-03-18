@@ -134,6 +134,8 @@ export async function runLeaseRiskBackfill(
       const result: LeaseRiskRecomputeResult = await recompute(doc.id, {
         firestore,
         dryRun: normalized.dryRun,
+        trigger: "backfill",
+        source: "lease_risk_backfill",
       });
       if (result.updated || result.wouldUpdate) {
         summary.updated += 1;
@@ -156,3 +158,4 @@ export async function runLeaseRiskBackfill(
 
   return summary;
 }
+

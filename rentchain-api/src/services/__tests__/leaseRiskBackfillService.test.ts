@@ -119,6 +119,7 @@ describe("leaseRiskBackfillService", () => {
 
     expect(summary.skippedLeaseIds).toEqual([{ leaseId: "legacy-skip-1", reason: "missing_tenant_linkage" }]);
   });
+
   it("targets complete leases only when recompute-all is explicitly enabled", async () => {
     const { firestore } = createFirestoreLike({
       leases: [
@@ -151,13 +152,13 @@ describe("leaseRiskBackfillService", () => {
     expect(recompute).toHaveBeenCalledTimes(1);
   });
 
-  it("includes valid legacy application-conversion leases in property-targeted dry runs", async () => {
+  it("appends a backfill timeline entry when a historical lease receives first-time risk", async () => {
     buildLeaseRiskInput.mockReset();
     buildLeaseRiskInput.mockResolvedValue({ monthlyRent: 2100, monthlyIncome: 5000 });
     safeAssessLeaseRisk.mockReset();
     safeAssessLeaseRisk.mockResolvedValue(sampleRisk);
 
-    const { firestore } = createFirestoreLike({
+    const { firestore, getDoc } = createFirestoreLike({
       properties: [
         { id: "p-downtown", data: { landlordId: "landlord-legacy" } },
       ],
@@ -181,13 +182,12 @@ describe("leaseRiskBackfillService", () => {
     const { runLeaseRiskBackfill } = await import("../risk/leaseRiskBackfillService");
 
     const summary = await runLeaseRiskBackfill(
-      { dryRun: true, propertyId: "p-downtown", limit: 25 },
+      { propertyId: "p-downtown", limit: 25 },
       { firestore: firestore as any, todayIso: "2026-03-17" }
     );
 
     expect(summary.processedLeaseIds).toContain("legacy-lease-1");
-    expect(summary.errors).toBe(0);
-    expect(summary.skippedLeaseIds).toHaveLength(0);
+    expect(getDoc("leases", "legacy-lease-1")?.riskTimeline).toHaveLength(1);
+    expect(getDoc("leases", "legacy-lease-1")?.riskTimeline?.[0]?.trigger).toBe("backfill");
   });
 });
-

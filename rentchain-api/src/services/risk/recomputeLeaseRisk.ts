@@ -2,13 +2,21 @@ import type { Firestore } from "firebase-admin/firestore";
 import { db as defaultDb } from "../../config/firebase";
 import { buildLeaseRiskInput } from "./buildLeaseRiskInput";
 import { safeAssessLeaseRisk } from "./riskEngine";
-import type { RiskAssessment } from "./riskTypes";
+import type {
+  LeaseRiskTimelineEntry,
+  LeaseRiskTimelineTrigger,
+  RiskAssessment,
+} from "./riskTypes";
 
 export type LeaseRiskSnapshotFields = {
   risk: RiskAssessment | null;
   riskScore: number | null;
   riskGrade: string | null;
   riskConfidence: number | null;
+};
+
+export type LeaseRiskPersistenceFields = LeaseRiskSnapshotFields & {
+  riskTimeline: LeaseRiskTimelineEntry[];
 };
 
 export type LeaseRiskSkipReason =
@@ -41,9 +49,19 @@ type LeaseRiskContext = {
   monthlyRent?: number | null;
 };
 
+type PersistLeaseRiskSnapshotOptions = {
+  firestore?: Pick<Firestore, "collection">;
+  existingRaw?: Record<string, unknown>;
+  trigger?: LeaseRiskTimelineTrigger;
+  source?: string | null;
+  updatedAt?: unknown;
+};
+
 type RecomputeLeaseRiskOptions = {
   firestore?: Pick<Firestore, "collection">;
   dryRun?: boolean;
+  trigger?: LeaseRiskTimelineTrigger;
+  source?: string | null;
 };
 
 type LegacyNormalizationMeta = {
@@ -265,21 +283,102 @@ function needsRiskPersistenceRepair(raw: Record<string, unknown>): boolean {
   );
 }
 
+function toTimelineArray(value: unknown): LeaseRiskTimelineEntry[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((entry) => entry && typeof entry === "object")
+    .map((entry: any) => ({
+      generatedAt: asTrimmedString(entry.generatedAt),
+      version: asTrimmedString(entry.version),
+      score: Number(entry.score),
+      grade: asTrimmedString(entry.grade) as LeaseRiskTimelineEntry["grade"],
+      confidence: Number(entry.confidence),
+      trigger: (asTrimmedString(entry.trigger) || "unknown") as LeaseRiskTimelineTrigger,
+      source: asTrimmedString(entry.source) || null,
+      flags: Array.isArray(entry.flags) ? entry.flags.map((flag: any) => String(flag)).filter(Boolean) : [],
+      recommendations: Array.isArray(entry.recommendations)
+        ? entry.recommendations.map((value: any) => String(value)).filter(Boolean)
+        : [],
+    }))
+    .filter((entry) => entry.generatedAt && entry.version && Number.isFinite(entry.score) && entry.grade && Number.isFinite(entry.confidence));
+}
+
+function compareTimelineMeaning(a: LeaseRiskTimelineEntry | null | undefined, b: LeaseRiskTimelineEntry): boolean {
+  if (!a) return false;
+  return JSON.stringify({
+    version: a.version,
+    score: a.score,
+    grade: a.grade,
+    confidence: a.confidence,
+    flags: a.flags || [],
+    recommendations: a.recommendations || [],
+  }) === JSON.stringify({
+    version: b.version,
+    score: b.score,
+    grade: b.grade,
+    confidence: b.confidence,
+    flags: b.flags || [],
+    recommendations: b.recommendations || [],
+  });
+}
+
+export function buildRiskTimelineEntry(
+  snapshot: LeaseRiskSnapshotFields,
+  options?: { trigger?: LeaseRiskTimelineTrigger; source?: string | null }
+): LeaseRiskTimelineEntry | null {
+  if (!snapshot.risk) return null;
+  return {
+    generatedAt: snapshot.risk.generatedAt,
+    version: snapshot.risk.version,
+    score: snapshot.risk.score,
+    grade: snapshot.risk.grade,
+    confidence: snapshot.risk.confidence,
+    trigger: options?.trigger || "unknown",
+    source: options?.source ?? null,
+    flags: snapshot.risk.flags || [],
+    recommendations: snapshot.risk.recommendations || [],
+  };
+}
+
+export function buildLeaseRiskPersistenceFields(
+  existingRaw: Record<string, unknown>,
+  snapshot: LeaseRiskSnapshotFields,
+  options?: { trigger?: LeaseRiskTimelineTrigger; source?: string | null }
+): LeaseRiskPersistenceFields {
+  const existingTimeline = toTimelineArray(existingRaw?.riskTimeline);
+  const nextEntry = buildRiskTimelineEntry(snapshot, options);
+  const riskTimeline = nextEntry && !compareTimelineMeaning(existingTimeline[existingTimeline.length - 1], nextEntry)
+    ? [...existingTimeline, nextEntry]
+    : existingTimeline;
+
+  return {
+    risk: snapshot.risk ?? null,
+    riskScore: snapshot.riskScore ?? null,
+    riskGrade: snapshot.riskGrade ?? null,
+    riskConfidence: snapshot.riskConfidence ?? null,
+    riskTimeline,
+  };
+}
+
 export async function persistLeaseRiskSnapshot(
   leaseId: string,
   snapshot: LeaseRiskSnapshotFields,
-  firestore: Pick<Firestore, "collection"> = defaultDb as Pick<Firestore, "collection">
+  options: PersistLeaseRiskSnapshotOptions = {}
 ) {
+  const firestore = options.firestore || (defaultDb as Pick<Firestore, "collection">);
+  const existingRaw = options.existingRaw || ((await firestore.collection("leases").doc(leaseId).get()).data() as Record<string, unknown>) || {};
+  const nextFields = buildLeaseRiskPersistenceFields(existingRaw, snapshot, {
+    trigger: options.trigger || "recompute",
+    source: options.source ?? null,
+  });
   await firestore.collection("leases").doc(leaseId).set(
     {
-      risk: snapshot.risk ?? null,
-      riskScore: snapshot.riskScore ?? null,
-      riskGrade: snapshot.riskGrade ?? null,
-      riskConfidence: snapshot.riskConfidence ?? null,
-      updatedAt: new Date().toISOString(),
+      ...nextFields,
+      updatedAt: options.updatedAt ?? new Date().toISOString(),
     },
     { merge: true }
   );
+  return nextFields;
 }
 
 export async function recomputeLeaseRisk(
@@ -332,7 +431,13 @@ export async function recomputeLeaseRisk(
     };
   }
 
-  if (!needsRiskPersistenceRepair(normalizedRecord.raw) && snapshotsEqual(previous, next)) {
+  const nextFields = buildLeaseRiskPersistenceFields(normalizedRecord.raw, next, {
+    trigger: options.trigger || "recompute",
+    source: options.source ?? null,
+  });
+  const timelineChanged = JSON.stringify(toTimelineArray(raw?.riskTimeline)) !== JSON.stringify(nextFields.riskTimeline);
+
+  if (!needsRiskPersistenceRepair(raw) && snapshotsEqual(previous, next) && !timelineChanged) {
     return {
       leaseId,
       updated: false,
@@ -348,7 +453,12 @@ export async function recomputeLeaseRisk(
   }
 
   if (!options.dryRun) {
-    await persistLeaseRiskSnapshot(leaseId, next, firestore);
+    await persistLeaseRiskSnapshot(leaseId, next, {
+      firestore,
+      existingRaw: raw,
+      trigger: options.trigger || "recompute",
+      source: options.source ?? null,
+    });
   }
 
   return {

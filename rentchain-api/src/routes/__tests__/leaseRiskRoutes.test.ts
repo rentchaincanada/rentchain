@@ -156,7 +156,7 @@ describe("lease route risk integration", () => {
     return app;
   }
 
-  it("returns a stored risk snapshot on direct lease create", async () => {
+  it("returns and stores a first risk timeline entry on direct lease create", async () => {
     const app = await makeApp();
 
     const res = await request(app).post("/").send({
@@ -170,10 +170,12 @@ describe("lease route risk integration", () => {
     expect(res.status).toBe(201);
     expect(res.body.lease.risk.grade).toBe("B");
     expect(res.body.lease.riskScore).toBe(78);
+    expect(res.body.lease.riskTimeline).toHaveLength(1);
+    expect(res.body.lease.riskTimeline[0].trigger).toBe("lease_create");
     expect(buildLeaseRiskInput).toHaveBeenCalled();
   });
 
-  it("stores and returns a risk snapshot when activating a draft lease", async () => {
+  it("stores and returns a first risk timeline entry when activating a draft lease", async () => {
     seedDoc("leaseDrafts", "draft-1", {
       landlordId: "landlord-1",
       propertyId: "prop-1",
@@ -194,9 +196,12 @@ describe("lease route risk integration", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.lease.risk.grade).toBe("B");
+    expect(res.body.lease.riskTimeline).toHaveLength(1);
+    expect(res.body.lease.riskTimeline[0].trigger).toBe("draft_activate");
     const leaseDoc = store.get("leases")?.get(String(res.body.leaseId));
     expect(leaseDoc?.data?.riskScore).toBe(78);
     expect(leaseDoc?.data?.risk?.version).toBe("risk-v1");
+    expect(leaseDoc?.data?.riskTimeline?.[0]?.trigger).toBe("draft_activate");
   });
 
   it("keeps lease creation fail-open when risk input building throws", async () => {
@@ -213,5 +218,6 @@ describe("lease route risk integration", () => {
 
     expect(res.status).toBe(201);
     expect(res.body.lease.risk ?? null).toBeNull();
+    expect(res.body.lease.riskTimeline).toEqual([]);
   });
 });

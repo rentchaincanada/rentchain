@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import type { RiskAssessment } from "./risk/riskTypes";
+import type { LeaseRiskTimelineEntry, RiskAssessment } from "./risk/riskTypes";
 
 export type LeaseStatus = "active" | "ended";
 export type LeaseRenewalStatus = "unknown" | "offered" | "accepted" | "declined";
@@ -21,6 +21,7 @@ export interface Lease {
   riskScore?: number | null;
   riskGrade?: string | null;
   riskConfidence?: number | null;
+  riskTimeline?: LeaseRiskTimelineEntry[];
   createdAt: string;
   updatedAt: string;
 }
@@ -37,6 +38,7 @@ export interface CreateLeasePayload {
   automationEnabled?: boolean;
   renewalStatus?: LeaseRenewalStatus;
   risk?: RiskAssessment | null;
+  riskTimeline?: LeaseRiskTimelineEntry[];
 }
 
 export interface UpdateLeasePayload {
@@ -106,6 +108,7 @@ export const leaseService = {
       riskScore: payload.risk?.score ?? null,
       riskGrade: payload.risk?.grade ?? null,
       riskConfidence: payload.risk?.confidence ?? null,
+      riskTimeline: Array.isArray(payload.riskTimeline) ? payload.riskTimeline : [],
       createdAt: now,
       updatedAt: now,
     };
