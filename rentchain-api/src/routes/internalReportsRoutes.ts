@@ -3,6 +3,7 @@ import { uploadBufferToGcs } from "../lib/gcs";
 import { sendEmail } from "../services/emailService";
 import { runStatusHealthSync } from "../services/statusHealthSync";
 import { recomputeLeaseRisk } from "../services/risk/recomputeLeaseRisk";
+import { recomputeTenantScore } from "../services/risk/recomputeTenantScore";
 import {
   getTuReferralMetricsForMonth,
   renderTuReferralCsv,
@@ -133,6 +134,21 @@ router.post("/leases/:leaseId/recompute-risk", requireInternalJobToken, async (r
   } catch (err: any) {
     console.error("[internal lease risk recompute] failed", err?.message || err);
     return res.status(500).json({ ok: false, error: "lease_risk_recompute_failed" });
+  }
+});
+
+router.post("/tenants/:tenantId/recompute-score", requireInternalJobToken, async (req: any, res) => {
+  try {
+    const tenantId = String(req.params?.tenantId || "").trim();
+    if (!tenantId) {
+      return res.status(400).json({ ok: false, error: "tenant_id_required" });
+    }
+
+    const result = await recomputeTenantScore(tenantId);
+    return res.json({ ok: true, ...result });
+  } catch (err: any) {
+    console.error("[internal tenant score recompute] failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "tenant_score_recompute_failed" });
   }
 });
 

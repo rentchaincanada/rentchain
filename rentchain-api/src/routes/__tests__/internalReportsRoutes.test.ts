@@ -11,6 +11,7 @@ const {
   sendEmailMock,
   uploadBufferToGcsMock,
   recomputeLeaseRiskMock,
+  recomputeTenantScoreMock,
 } = vi.hoisted(() => ({
   getMetricsMock: vi.fn(async () => ({
     ok: true,
@@ -43,6 +44,15 @@ const {
     previousRiskGrade: "C",
     nextRiskGrade: "B",
   })),
+  recomputeTenantScoreMock: vi.fn(async (tenantId: string) => ({
+    tenantId,
+    updated: true,
+    skipped: false,
+    previousScore: 66,
+    nextScore: 82,
+    previousGrade: "C",
+    nextGrade: "B",
+  })),
 }));
 
 vi.mock("../../services/metrics/tuReferralReport", () => ({
@@ -67,6 +77,10 @@ vi.mock("../../lib/gcs", () => ({
 
 vi.mock("../../services/risk/recomputeLeaseRisk", () => ({
   recomputeLeaseRisk: recomputeLeaseRiskMock,
+}));
+
+vi.mock("../../services/risk/recomputeTenantScore", () => ({
+  recomputeTenantScore: recomputeTenantScoreMock,
 }));
 
 async function createApp() {
@@ -119,6 +133,26 @@ describe("internalReportsRoutes", () => {
     expect(res.body?.leaseId).toBe("lease-1");
     expect(res.body?.nextRiskScore).toBe(79);
     expect(recomputeLeaseRiskMock).toHaveBeenCalledWith("lease-1");
+  });
+
+  it("rejects tenant score recompute without a token", async () => {
+    const app = await createApp();
+    const res = await request(app).post("/api/internal/tenants/tenant-1/recompute-score").send({});
+    expect(res.status).toBe(401);
+  });
+
+  it("recomputes tenant score through the protected internal route", async () => {
+    const app = await createApp();
+    const res = await request(app)
+      .post("/api/internal/tenants/tenant-1/recompute-score")
+      .set("X-Internal-Job-Token", "secret-token")
+      .send({});
+
+    expect(res.status).toBe(200);
+    expect(res.body?.ok).toBe(true);
+    expect(res.body?.tenantId).toBe("tenant-1");
+    expect(res.body?.nextScore).toBe(82);
+    expect(recomputeTenantScoreMock).toHaveBeenCalledWith("tenant-1");
   });
 
   it("returns ok for valid token", async () => {
