@@ -11,12 +11,21 @@ export type LeaseRiskSnapshotFields = {
   riskConfidence: number | null;
 };
 
+export type LeaseRiskSkipReason =
+  | "lease_not_found"
+  | "missing_tenant_linkage"
+  | "missing_property_context"
+  | "missing_landlord_context"
+  | "property_lookup_failed"
+  | "risk_assessment_unavailable"
+  | "risk_snapshot_unchanged";
+
 export type LeaseRiskRecomputeResult = {
   leaseId: string;
   updated: boolean;
   skipped: boolean;
   wouldUpdate?: boolean;
-  reason?: string;
+  reason?: LeaseRiskSkipReason;
   previousRiskScore?: number | null;
   nextRiskScore?: number | null;
   previousRiskGrade?: string | null;
@@ -36,6 +45,20 @@ type RecomputeLeaseRiskOptions = {
   firestore?: Pick<Firestore, "collection">;
   dryRun?: boolean;
 };
+
+type LegacyNormalizationMeta = {
+  attemptedPropertyLookup: boolean;
+  propertyLookupFailed: boolean;
+};
+
+type NormalizedLeaseRiskRecord = {
+  raw: Record<string, unknown>;
+  meta: LegacyNormalizationMeta;
+};
+
+type LeaseRiskContextResolution =
+  | { ok: true; context: LeaseRiskContext }
+  | { ok: false; reason: LeaseRiskSkipReason };
 
 function asTrimmedString(value: unknown): string {
   return String(value || "").trim();
@@ -70,20 +93,96 @@ function monthlyRentFromLease(raw: Record<string, unknown>): number | null {
   return baseRentCents != null ? Math.round(baseRentCents / 100) : null;
 }
 
-export function computeLeaseRiskContext(raw: Record<string, unknown>): LeaseRiskContext | null {
-  const landlordId = asTrimmedString(raw?.landlordId);
-  const propertyId = asTrimmedString(raw?.propertyId);
-  const tenantIds = toTenantIds(raw);
-  if (!landlordId || !propertyId || !tenantIds.length) {
-    return null;
-  }
-  return {
-    landlordId,
-    propertyId,
-    unitId: asTrimmedStringOrNull(raw?.unitId || raw?.unitNumber || raw?.unit),
-    tenantIds,
-    monthlyRent: monthlyRentFromLease(raw),
+async function normalizeLegacyLeaseRiskRecord(
+  raw: Record<string, unknown>,
+  firestore: Pick<Firestore, "collection">
+): Promise<NormalizedLeaseRiskRecord> {
+  const normalized: Record<string, unknown> = { ...raw };
+  const meta: LegacyNormalizationMeta = {
+    attemptedPropertyLookup: false,
+    propertyLookupFailed: false,
   };
+
+  const existingTenantIds = Array.isArray(normalized.tenantIds)
+    ? normalized.tenantIds.map((value) => asTrimmedString(value)).filter(Boolean)
+    : [];
+  if (!existingTenantIds.length) {
+    const fallbackTenantId = asTrimmedString(normalized.tenantId || normalized.primaryTenantId);
+    if (fallbackTenantId) {
+      normalized.tenantIds = [fallbackTenantId];
+    }
+  }
+  if (!asTrimmedString(normalized.startDate) && asTrimmedString(normalized.leaseStartDate)) {
+    normalized.startDate = asTrimmedString(normalized.leaseStartDate);
+  }
+  if (normalized.endDate == null && (normalized.leaseEndDate != null || normalized.leaseEnd != null)) {
+    normalized.endDate = asTrimmedString(normalized.leaseEndDate || normalized.leaseEnd) || null;
+  }
+
+  const source = asTrimmedString(normalized.source).toLowerCase();
+  if (asTrimmedString(normalized.landlordId) || source !== "application-conversion") {
+    return { raw: normalized, meta };
+  }
+  const propertyId = asTrimmedString(normalized.propertyId);
+  if (!propertyId) {
+    return { raw: normalized, meta };
+  }
+
+  meta.attemptedPropertyLookup = true;
+  try {
+    const propertySnap = await firestore.collection("properties").doc(propertyId).get();
+    if (!propertySnap.exists) {
+      return { raw: normalized, meta };
+    }
+    const property = (propertySnap.data() || {}) as Record<string, unknown>;
+    const landlordId = asTrimmedString(property.landlordId || property.ownerId || property.userId);
+    if (landlordId) {
+      normalized.landlordId = landlordId;
+    }
+  } catch {
+    meta.propertyLookupFailed = true;
+  }
+
+  return { raw: normalized, meta };
+}
+
+export function resolveLeaseRiskContext(
+  raw: Record<string, unknown>,
+  meta: LegacyNormalizationMeta = { attemptedPropertyLookup: false, propertyLookupFailed: false }
+): LeaseRiskContextResolution {
+  const tenantIds = toTenantIds(raw);
+  if (!tenantIds.length) {
+    return { ok: false, reason: "missing_tenant_linkage" };
+  }
+
+  const propertyId = asTrimmedString(raw?.propertyId);
+  if (!propertyId) {
+    return { ok: false, reason: "missing_property_context" };
+  }
+
+  const landlordId = asTrimmedString(raw?.landlordId);
+  if (!landlordId) {
+    if (meta.propertyLookupFailed) {
+      return { ok: false, reason: "property_lookup_failed" };
+    }
+    return { ok: false, reason: "missing_landlord_context" };
+  }
+
+  return {
+    ok: true,
+    context: {
+      landlordId,
+      propertyId,
+      unitId: asTrimmedStringOrNull(raw?.unitId || raw?.unitNumber || raw?.unit),
+      tenantIds,
+      monthlyRent: monthlyRentFromLease(raw),
+    },
+  };
+}
+
+export function computeLeaseRiskContext(raw: Record<string, unknown>): LeaseRiskContext | null {
+  const resolved = resolveLeaseRiskContext(raw);
+  return resolved.ok ? resolved.context : null;
 }
 
 export async function computeLeaseRiskSnapshot(
@@ -204,13 +303,14 @@ export async function recomputeLeaseRisk(
 
   const raw = ((leaseSnap.data() || {}) as Record<string, unknown>);
   const previous = currentSnapshot(raw);
-  const context = computeLeaseRiskContext(raw);
-  if (!context) {
+  const normalizedRecord = await normalizeLegacyLeaseRiskRecord(raw, firestore);
+  const resolvedContext = resolveLeaseRiskContext(normalizedRecord.raw, normalizedRecord.meta);
+  if (!resolvedContext.ok) {
     return {
       leaseId,
       updated: false,
       skipped: true,
-      reason: "lease_missing_required_context",
+      reason: resolvedContext.reason,
       previousRiskScore: previous.riskScore,
       nextRiskScore: previous.riskScore,
       previousRiskGrade: previous.riskGrade,
@@ -218,7 +318,7 @@ export async function recomputeLeaseRisk(
     };
   }
 
-  const next = await computeLeaseRiskSnapshot(context);
+  const next = await computeLeaseRiskSnapshot(resolvedContext.context);
   if (!next.risk) {
     return {
       leaseId,
@@ -232,7 +332,7 @@ export async function recomputeLeaseRisk(
     };
   }
 
-  if (!needsRiskPersistenceRepair(raw) && snapshotsEqual(previous, next)) {
+  if (!needsRiskPersistenceRepair(normalizedRecord.raw) && snapshotsEqual(previous, next)) {
     return {
       leaseId,
       updated: false,
@@ -263,4 +363,3 @@ export async function recomputeLeaseRisk(
     generatedAt: next.risk.generatedAt,
   };
 }
-

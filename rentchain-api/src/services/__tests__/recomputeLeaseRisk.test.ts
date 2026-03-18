@@ -21,7 +21,7 @@ const sampleRisk = {
   generatedAt: "2026-03-17T00:00:00.000Z",
 } as const;
 
-const { fakeDb, resetStore, seedLease, getLeaseData } = vi.hoisted(() => {
+const { fakeDb, resetStore, seedLease, seedDoc, getLeaseData } = vi.hoisted(() => {
   const store = new Map<string, Map<string, any>>();
   function ensureCollection(name: string) {
     if (!store.has(name)) store.set(name, new Map());
@@ -30,6 +30,7 @@ const { fakeDb, resetStore, seedLease, getLeaseData } = vi.hoisted(() => {
   return {
     resetStore: () => store.clear(),
     seedLease: (id: string, data: any) => ensureCollection("leases").set(id, data),
+    seedDoc: (collectionName: string, id: string, data: any) => ensureCollection(collectionName).set(id, data),
     getLeaseData: (id: string) => ensureCollection("leases").get(id),
     fakeDb: {
       collection: (name: string) => ({
@@ -83,6 +84,33 @@ describe("recomputeLeaseRisk", () => {
     expect(getLeaseData("lease-1")?.risk?.version).toBe("risk-v1");
   });
 
+  it("recomputes legacy application-conversion leases using safe field fallbacks", async () => {
+    seedDoc("properties", "p-downtown", { landlordId: "landlord-legacy" });
+    seedLease("legacy-lease-1", {
+      source: "application-conversion",
+      propertyId: "p-downtown",
+      tenantId: "tenant-legacy-1",
+      leaseStartDate: "2025-01-01",
+      leaseEndDate: "2025-12-31",
+      monthlyRent: 2100,
+      unitId: "unit-101",
+      status: "active",
+    });
+    const { recomputeLeaseRisk } = await import("../risk/recomputeLeaseRisk");
+
+    const result = await recomputeLeaseRisk("legacy-lease-1");
+
+    expect(result.updated).toBe(true);
+    expect(buildLeaseRiskInput).toHaveBeenCalledWith(
+      expect.objectContaining({
+        landlordId: "landlord-legacy",
+        propertyId: "p-downtown",
+        tenantIds: ["tenant-legacy-1"],
+        unitId: "unit-101",
+        monthlyRent: 2100,
+      })
+    );
+  });
   it("repairs missing denormalized risk fields when a risk snapshot already exists", async () => {
     seedLease("lease-denorm", {
       landlordId: "landlord-1",
@@ -101,6 +129,60 @@ describe("recomputeLeaseRisk", () => {
     expect(getLeaseData("lease-denorm")?.riskGrade).toBe("B");
     expect(getLeaseData("lease-denorm")?.riskConfidence).toBe(0.84);
   });
+  it("emits missing_landlord_context when legacy landlord data cannot be resolved", async () => {
+    seedLease("legacy-missing-landlord", {
+      source: "application-conversion",
+      propertyId: "p-downtown",
+      tenantId: "tenant-legacy-2",
+      leaseStartDate: "2025-01-01",
+      monthlyRent: 2100,
+      unitId: "unit-102",
+      status: "active",
+    });
+    const { recomputeLeaseRisk } = await import("../risk/recomputeLeaseRisk");
+
+    const result = await recomputeLeaseRisk("legacy-missing-landlord");
+
+    expect(result.skipped).toBe(true);
+    expect(result.reason).toBe("missing_landlord_context");
+  });
+
+  it("emits property_lookup_failed when the legacy property lookup throws", async () => {
+    const failingFirestore = {
+      collection: (name: string) => ({
+        doc: (id: string) => ({
+          get: async () => {
+            if (name === "leases") {
+              if (id === "legacy-property-failure") {
+                return {
+                  id,
+                  exists: true,
+                  data: () => ({
+                    source: "application-conversion",
+                    propertyId: "p-downtown",
+                    tenantId: "tenant-legacy-3",
+                    leaseStartDate: "2025-01-01",
+                    monthlyRent: 2100,
+                    unitId: "unit-103",
+                    status: "active",
+                  }),
+                };
+              }
+              return { id, exists: false, data: () => undefined };
+            }
+            throw new Error("property read failed");
+          },
+          set: async () => undefined,
+        }),
+      }),
+    };
+    const { recomputeLeaseRisk } = await import("../risk/recomputeLeaseRisk");
+
+    const result = await recomputeLeaseRisk("legacy-property-failure", { firestore: failingFirestore as any });
+
+    expect(result.skipped).toBe(true);
+    expect(result.reason).toBe("property_lookup_failed");
+  });
   it("skips safely when the lease is not found", async () => {
     const { recomputeLeaseRisk } = await import("../risk/recomputeLeaseRisk");
 
@@ -112,7 +194,10 @@ describe("recomputeLeaseRisk", () => {
 
   it("skips safely when the lease is missing required context", async () => {
     seedLease("lease-2", {
+      source: "application-conversion",
       propertyId: "property-1",
+      tenantId: "",
+      leaseStartDate: "2025-01-01",
       monthlyRent: 1850,
       status: "active",
     });
@@ -121,7 +206,9 @@ describe("recomputeLeaseRisk", () => {
     const result = await recomputeLeaseRisk("lease-2");
 
     expect(result.skipped).toBe(true);
-    expect(result.reason).toBe("lease_missing_required_context");
+    expect(result.reason).toBe("missing_tenant_linkage");
   });
 });
+
+
 
