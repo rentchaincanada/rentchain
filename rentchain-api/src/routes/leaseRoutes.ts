@@ -23,7 +23,7 @@ import {
 import { CURRENT_LEASE_STATUSES, loadCanonicalPropertyLeases, loadUnitsForProperty, toCanonicalLeaseRecord } from "../services/leaseCanonicalizationService";
 import { evaluateSameLeaseAgreement, groupLeaseAgreementCandidates, pickAgreementWinner } from "../services/leasePartyConsolidationService";
 import { loadPropertyLeaseIntegrityDiagnostics } from "../services/leaseIntegrityService";
-import { computeLeaseRiskSnapshot } from "../services/risk/recomputeLeaseRisk";
+import { buildLeaseRiskPersistenceFields, computeLeaseRiskSnapshot } from "../services/risk/recomputeLeaseRisk";
 
 const router = Router();
 const LEDGER_COLLECTION = "ledgerEntries";
@@ -117,6 +117,7 @@ function normalizeLeaseRow(id: string, raw: any) {
         : typeof risk?.confidence === "number"
         ? risk.confidence
         : null,
+    riskTimeline: Array.isArray(raw?.riskTimeline) ? raw.riskTimeline : [],
     createdAt: raw?.createdAt || null,
     updatedAt: raw?.updatedAt || null,
   };
@@ -453,6 +454,10 @@ router.post("/drafts/:draftId/activate", requireLandlord, async (req: any, res: 
       tenantIds,
       monthlyRent: Math.round(baseRentCents / 100),
     });
+    const riskFields = buildLeaseRiskPersistenceFields({}, riskSnapshot, {
+      trigger: "draft_activate",
+      source: "lease_draft_activation",
+    });
     const leaseRecord: any = {
       landlordId,
       tenantId,
@@ -474,10 +479,11 @@ router.post("/drafts/:draftId/activate", requireLandlord, async (req: any, res: 
       utilitiesIncluded: Array.isArray(draft?.utilitiesIncluded) ? draft.utilitiesIncluded : [],
       depositCents: draft?.depositCents ?? null,
       additionalClauses: String(draft?.additionalClauses || ""),
-      risk: riskSnapshot.risk,
-      riskScore: riskSnapshot.riskScore,
-      riskGrade: riskSnapshot.riskGrade,
-      riskConfidence: riskSnapshot.riskConfidence,
+      risk: riskFields.risk,
+      riskScore: riskFields.riskScore,
+      riskGrade: riskFields.riskGrade,
+      riskConfidence: riskFields.riskConfidence,
+      riskTimeline: riskFields.riskTimeline,
       automationEnabled: true,
       renewalStatus: "unknown",
       status: "active",
@@ -501,10 +507,11 @@ router.post("/drafts/:draftId/activate", requireLandlord, async (req: any, res: 
       automationEnabled: true,
       renewalStatus: "unknown",
       status: "active",
-      risk: riskSnapshot.risk,
-      riskScore: riskSnapshot.riskScore,
-      riskGrade: riskSnapshot.riskGrade,
-      riskConfidence: riskSnapshot.riskConfidence,
+      risk: riskFields.risk,
+      riskScore: riskFields.riskScore,
+      riskGrade: riskFields.riskGrade,
+      riskConfidence: riskFields.riskConfidence,
+      riskTimeline: riskFields.riskTimeline,
       createdAt: new Date(now).toISOString(),
       updatedAt: new Date(now).toISOString(),
     });
@@ -712,6 +719,10 @@ router.post("/", async (req: Request, res: Response) => {
       tenantIds,
       monthlyRent: Number(body.monthlyRent),
     });
+    const riskFields = buildLeaseRiskPersistenceFields({}, riskSnapshot, {
+      trigger: "lease_create",
+      source: "lease_create_route",
+    });
 
     const payload: CreateLeasePayload = {
       tenantId: body.tenantId,
@@ -722,7 +733,8 @@ router.post("/", async (req: Request, res: Response) => {
       monthlyRent: Number(body.monthlyRent),
       startDate: body.startDate,
       endDate: body.endDate,
-      risk: riskSnapshot.risk,
+      risk: riskFields.risk,
+      riskTimeline: riskFields.riskTimeline,
     };
 
     const lease = leaseService.create(payload);
@@ -745,6 +757,7 @@ router.post("/", async (req: Request, res: Response) => {
         riskScore: lease.riskScore ?? lease.risk?.score ?? null,
         riskGrade: lease.riskGrade ?? lease.risk?.grade ?? null,
         riskConfidence: lease.riskConfidence ?? lease.risk?.confidence ?? null,
+        riskTimeline: Array.isArray((lease as any).riskTimeline) ? (lease as any).riskTimeline : [],
         createdAt: lease.createdAt,
         updatedAt: lease.updatedAt,
       };

@@ -1,5 +1,24 @@
 export type RiskGrade = "A" | "B" | "C" | "D" | "E";
 
+export type LeaseRiskTimelineTrigger =
+  | "lease_create"
+  | "draft_activate"
+  | "recompute"
+  | "backfill"
+  | "unknown";
+
+export type LeaseRiskTimelineEntry = {
+  generatedAt: string;
+  version: string;
+  score: number;
+  grade: RiskGrade;
+  confidence: number;
+  trigger: LeaseRiskTimelineTrigger;
+  source?: string | null;
+  flags?: string[];
+  recommendations?: string[];
+};
+
 export type RiskInput = {
   creditScore?: number | null;
   monthlyIncome?: number | null;

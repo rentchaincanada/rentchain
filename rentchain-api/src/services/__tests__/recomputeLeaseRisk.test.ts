@@ -21,6 +21,14 @@ const sampleRisk = {
   generatedAt: "2026-03-17T00:00:00.000Z",
 } as const;
 
+const changedRisk = {
+  ...sampleRisk,
+  score: 68,
+  grade: "C",
+  confidence: 0.79,
+  generatedAt: "2026-03-18T00:00:00.000Z",
+} as const;
+
 const { fakeDb, resetStore, seedLease, seedDoc, getLeaseData } = vi.hoisted(() => {
   const store = new Map<string, Map<string, any>>();
   function ensureCollection(name: string) {
@@ -65,7 +73,7 @@ describe("recomputeLeaseRisk", () => {
     safeAssessLeaseRisk.mockResolvedValue(sampleRisk);
   });
 
-  it("updates a lease with fresh risk fields", async () => {
+  it("updates a lease with fresh risk fields and appends a recompute timeline entry", async () => {
     seedLease("lease-1", {
       landlordId: "landlord-1",
       propertyId: "property-1",
@@ -82,6 +90,8 @@ describe("recomputeLeaseRisk", () => {
     expect(result.nextRiskScore).toBe(81);
     expect(getLeaseData("lease-1")?.riskScore).toBe(81);
     expect(getLeaseData("lease-1")?.risk?.version).toBe("risk-v1");
+    expect(getLeaseData("lease-1")?.riskTimeline).toHaveLength(1);
+    expect(getLeaseData("lease-1")?.riskTimeline?.[0]?.trigger).toBe("recompute");
   });
 
   it("recomputes legacy application-conversion leases using safe field fallbacks", async () => {
@@ -110,8 +120,10 @@ describe("recomputeLeaseRisk", () => {
         monthlyRent: 2100,
       })
     );
+    expect(getLeaseData("legacy-lease-1")?.riskTimeline?.[0]?.trigger).toBe("recompute");
   });
-  it("repairs missing denormalized risk fields when a risk snapshot already exists", async () => {
+
+  it("repairs missing denormalized risk fields and appends a first timeline entry when absent", async () => {
     seedLease("lease-denorm", {
       landlordId: "landlord-1",
       propertyId: "property-1",
@@ -128,7 +140,79 @@ describe("recomputeLeaseRisk", () => {
     expect(getLeaseData("lease-denorm")?.riskScore).toBe(81);
     expect(getLeaseData("lease-denorm")?.riskGrade).toBe("B");
     expect(getLeaseData("lease-denorm")?.riskConfidence).toBe(0.84);
+    expect(getLeaseData("lease-denorm")?.riskTimeline).toHaveLength(1);
   });
+
+  it("appends a new timeline entry when recompute meaningfully changes the score", async () => {
+    seedLease("lease-changed", {
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      tenantId: "tenant-1",
+      monthlyRent: 1850,
+      status: "active",
+      risk: sampleRisk,
+      riskScore: sampleRisk.score,
+      riskGrade: sampleRisk.grade,
+      riskConfidence: sampleRisk.confidence,
+      riskTimeline: [
+        {
+          generatedAt: sampleRisk.generatedAt,
+          version: sampleRisk.version,
+          score: sampleRisk.score,
+          grade: sampleRisk.grade,
+          confidence: sampleRisk.confidence,
+          trigger: "lease_create",
+          source: "lease_create_route",
+          flags: sampleRisk.flags,
+          recommendations: sampleRisk.recommendations,
+        },
+      ],
+    });
+    safeAssessLeaseRisk.mockResolvedValueOnce(changedRisk as any);
+    const { recomputeLeaseRisk } = await import("../risk/recomputeLeaseRisk");
+
+    const result = await recomputeLeaseRisk("lease-changed");
+
+    expect(result.updated).toBe(true);
+    expect(getLeaseData("lease-changed")?.riskTimeline).toHaveLength(2);
+    expect(getLeaseData("lease-changed")?.riskTimeline?.[1]?.trigger).toBe("recompute");
+    expect(getLeaseData("lease-changed")?.riskTimeline?.[1]?.score).toBe(68);
+  });
+
+  it("does not append a duplicate timeline entry when recompute is unchanged", async () => {
+    seedLease("lease-unchanged", {
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      tenantId: "tenant-1",
+      monthlyRent: 1850,
+      status: "active",
+      risk: sampleRisk,
+      riskScore: sampleRisk.score,
+      riskGrade: sampleRisk.grade,
+      riskConfidence: sampleRisk.confidence,
+      riskTimeline: [
+        {
+          generatedAt: sampleRisk.generatedAt,
+          version: sampleRisk.version,
+          score: sampleRisk.score,
+          grade: sampleRisk.grade,
+          confidence: sampleRisk.confidence,
+          trigger: "lease_create",
+          source: "lease_create_route",
+          flags: sampleRisk.flags,
+          recommendations: sampleRisk.recommendations,
+        },
+      ],
+    });
+    const { recomputeLeaseRisk } = await import("../risk/recomputeLeaseRisk");
+
+    const result = await recomputeLeaseRisk("lease-unchanged");
+
+    expect(result.skipped).toBe(true);
+    expect(result.reason).toBe("risk_snapshot_unchanged");
+    expect(getLeaseData("lease-unchanged")?.riskTimeline).toHaveLength(1);
+  });
+
   it("emits missing_landlord_context when legacy landlord data cannot be resolved", async () => {
     seedLease("legacy-missing-landlord", {
       source: "application-conversion",
@@ -183,6 +267,7 @@ describe("recomputeLeaseRisk", () => {
     expect(result.skipped).toBe(true);
     expect(result.reason).toBe("property_lookup_failed");
   });
+
   it("skips safely when the lease is not found", async () => {
     const { recomputeLeaseRisk } = await import("../risk/recomputeLeaseRisk");
 
@@ -209,6 +294,3 @@ describe("recomputeLeaseRisk", () => {
     expect(result.reason).toBe("missing_tenant_linkage");
   });
 });
-
-
-
