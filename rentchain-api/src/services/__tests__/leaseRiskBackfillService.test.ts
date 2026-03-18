@@ -101,6 +101,24 @@ describe("leaseRiskBackfillService", () => {
     expect(getDoc("leases", "lease-1")?.riskScore).toBeUndefined();
   });
 
+  it("surfaces specific skip reasons from recompute results", async () => {
+    const { firestore } = createFirestoreLike({
+      leases: [
+        { id: "legacy-skip-1", data: { landlordId: "l1", propertyId: "p1", tenantId: "", status: "active" } },
+      ],
+    });
+    const recompute = vi.fn(async (leaseId: string) => ({
+      leaseId,
+      updated: false,
+      skipped: true,
+      reason: "missing_tenant_linkage",
+    }));
+    const { runLeaseRiskBackfill } = await import("../risk/leaseRiskBackfillService");
+
+    const summary = await runLeaseRiskBackfill({ dryRun: true }, { firestore: firestore as any, recompute, todayIso: "2026-03-17" });
+
+    expect(summary.skippedLeaseIds).toEqual([{ leaseId: "legacy-skip-1", reason: "missing_tenant_linkage" }]);
+  });
   it("targets complete leases only when recompute-all is explicitly enabled", async () => {
     const { firestore } = createFirestoreLike({
       leases: [
@@ -172,3 +190,4 @@ describe("leaseRiskBackfillService", () => {
     expect(summary.skippedLeaseIds).toHaveLength(0);
   });
 });
+

@@ -129,6 +129,60 @@ describe("recomputeLeaseRisk", () => {
     expect(getLeaseData("lease-denorm")?.riskGrade).toBe("B");
     expect(getLeaseData("lease-denorm")?.riskConfidence).toBe(0.84);
   });
+  it("emits missing_landlord_context when legacy landlord data cannot be resolved", async () => {
+    seedLease("legacy-missing-landlord", {
+      source: "application-conversion",
+      propertyId: "p-downtown",
+      tenantId: "tenant-legacy-2",
+      leaseStartDate: "2025-01-01",
+      monthlyRent: 2100,
+      unitId: "unit-102",
+      status: "active",
+    });
+    const { recomputeLeaseRisk } = await import("../risk/recomputeLeaseRisk");
+
+    const result = await recomputeLeaseRisk("legacy-missing-landlord");
+
+    expect(result.skipped).toBe(true);
+    expect(result.reason).toBe("missing_landlord_context");
+  });
+
+  it("emits property_lookup_failed when the legacy property lookup throws", async () => {
+    const failingFirestore = {
+      collection: (name: string) => ({
+        doc: (id: string) => ({
+          get: async () => {
+            if (name === "leases") {
+              if (id === "legacy-property-failure") {
+                return {
+                  id,
+                  exists: true,
+                  data: () => ({
+                    source: "application-conversion",
+                    propertyId: "p-downtown",
+                    tenantId: "tenant-legacy-3",
+                    leaseStartDate: "2025-01-01",
+                    monthlyRent: 2100,
+                    unitId: "unit-103",
+                    status: "active",
+                  }),
+                };
+              }
+              return { id, exists: false, data: () => undefined };
+            }
+            throw new Error("property read failed");
+          },
+          set: async () => undefined,
+        }),
+      }),
+    };
+    const { recomputeLeaseRisk } = await import("../risk/recomputeLeaseRisk");
+
+    const result = await recomputeLeaseRisk("legacy-property-failure", { firestore: failingFirestore as any });
+
+    expect(result.skipped).toBe(true);
+    expect(result.reason).toBe("property_lookup_failed");
+  });
   it("skips safely when the lease is not found", async () => {
     const { recomputeLeaseRisk } = await import("../risk/recomputeLeaseRisk");
 
@@ -152,8 +206,9 @@ describe("recomputeLeaseRisk", () => {
     const result = await recomputeLeaseRisk("lease-2");
 
     expect(result.skipped).toBe(true);
-    expect(result.reason).toBe("lease_missing_required_context");
+    expect(result.reason).toBe("missing_tenant_linkage");
   });
 });
+
 
 
