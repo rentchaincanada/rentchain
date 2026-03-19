@@ -59,10 +59,21 @@ const { fakeDb, resetStore, seedLease, seedDoc, getLeaseData } = vi.hoisted(() =
 
 const buildLeaseRiskInput = vi.fn(async () => ({ monthlyRent: 1850, monthlyIncome: 5200 }));
 const safeAssessLeaseRisk = vi.fn(async () => sampleRisk);
+const recomputeTenantScore = vi.fn(async (tenantId: string) => ({
+  tenantId,
+  updated: true,
+  skipped: false,
+  previousScore: 66,
+  nextScore: 82,
+  previousGrade: "C",
+  nextGrade: "B",
+  generatedAt: "2026-03-18T00:00:00.000Z",
+}));
 
 vi.mock("../../config/firebase", () => ({ db: fakeDb }));
 vi.mock("../risk/buildLeaseRiskInput", () => ({ buildLeaseRiskInput }));
 vi.mock("../risk/riskEngine", () => ({ safeAssessLeaseRisk }));
+vi.mock("../risk/recomputeTenantScore", () => ({ recomputeTenantScore }));
 
 describe("recomputeLeaseRisk", () => {
   beforeEach(() => {
@@ -71,6 +82,17 @@ describe("recomputeLeaseRisk", () => {
     buildLeaseRiskInput.mockResolvedValue({ monthlyRent: 1850, monthlyIncome: 5200 });
     safeAssessLeaseRisk.mockReset();
     safeAssessLeaseRisk.mockResolvedValue(sampleRisk);
+    recomputeTenantScore.mockReset();
+    recomputeTenantScore.mockImplementation(async (tenantId: string) => ({
+      tenantId,
+      updated: true,
+      skipped: false,
+      previousScore: 66,
+      nextScore: 82,
+      previousGrade: "C",
+      nextGrade: "B",
+      generatedAt: "2026-03-18T00:00:00.000Z",
+    }));
   });
 
   it("updates a lease with fresh risk fields and appends a recompute timeline entry", async () => {
@@ -88,10 +110,113 @@ describe("recomputeLeaseRisk", () => {
     expect(result.updated).toBe(true);
     expect(result.skipped).toBe(false);
     expect(result.nextRiskScore).toBe(81);
+    expect(result.linkedTenantScoreAttempted).toBe(false);
+    expect(result.linkedTenantResults).toEqual([]);
+    expect(recomputeTenantScore).not.toHaveBeenCalled();
     expect(getLeaseData("lease-1")?.riskScore).toBe(81);
     expect(getLeaseData("lease-1")?.risk?.version).toBe("risk-v1");
     expect(getLeaseData("lease-1")?.riskTimeline).toHaveLength(1);
     expect(getLeaseData("lease-1")?.riskTimeline?.[0]?.trigger).toBe("recompute");
+  });
+
+  it("recomputes linked tenant scores only once per deduplicated tenant id when explicitly enabled", async () => {
+    seedLease("lease-linked", {
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      tenantId: "tenant-2",
+      tenantIds: ["tenant-1", "tenant-2", "", "tenant-1", "  tenant-3  "],
+      monthlyRent: 1850,
+      status: "active",
+    });
+    const { recomputeLeaseRisk } = await import("../risk/recomputeLeaseRisk");
+
+    const result = await recomputeLeaseRisk("lease-linked", { recomputeLinkedTenantScores: true });
+
+    expect(result.updated).toBe(true);
+    expect(result.linkedTenantScoreAttempted).toBe(true);
+    expect(result.linkedTenantScoreReason).toBeUndefined();
+    expect(result.linkedTenantResults?.map((entry) => entry.tenantId)).toEqual([
+      "tenant-1",
+      "tenant-2",
+      "tenant-3",
+    ]);
+    expect(recomputeTenantScore).toHaveBeenCalledTimes(3);
+    expect(recomputeTenantScore).toHaveBeenNthCalledWith(
+      1,
+      "tenant-1",
+      expect.objectContaining({ trigger: "lease_recompute", source: "lease_risk_recompute" })
+    );
+    expect(recomputeTenantScore).toHaveBeenNthCalledWith(
+      2,
+      "tenant-2",
+      expect.objectContaining({ trigger: "lease_recompute", source: "lease_risk_recompute" })
+    );
+    expect(recomputeTenantScore).toHaveBeenNthCalledWith(
+      3,
+      "tenant-3",
+      expect.objectContaining({ trigger: "lease_recompute", source: "lease_risk_recompute" })
+    );
+  });
+
+  it("returns no_linked_tenants when opt-in is enabled but the lease has no valid tenant ids", async () => {
+    seedLease("lease-no-tenants", {
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      tenantId: "   ",
+      tenantIds: ["", "   "],
+      monthlyRent: 1850,
+      status: "active",
+    });
+    const { recomputeLeaseRisk } = await import("../risk/recomputeLeaseRisk");
+
+    const result = await recomputeLeaseRisk("lease-no-tenants", { recomputeLinkedTenantScores: true });
+
+    expect(result.skipped).toBe(true);
+    expect(result.reason).toBe("missing_tenant_linkage");
+    expect(recomputeTenantScore).not.toHaveBeenCalled();
+  });
+
+  it("isolates linked tenant recompute failures from the main lease recompute", async () => {
+    seedLease("lease-failure", {
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      tenantIds: ["tenant-1", "tenant-2"],
+      monthlyRent: 1850,
+      status: "active",
+    });
+    recomputeTenantScore.mockImplementation(async (tenantId: string) => {
+      if (tenantId === "tenant-2") {
+        throw new Error("tenant recompute exploded");
+      }
+      return {
+        tenantId,
+        updated: true,
+        skipped: false,
+        previousScore: 66,
+        nextScore: 82,
+        previousGrade: "C",
+        nextGrade: "B",
+        generatedAt: "2026-03-18T00:00:00.000Z",
+      };
+    });
+    const { recomputeLeaseRisk } = await import("../risk/recomputeLeaseRisk");
+
+    const result = await recomputeLeaseRisk("lease-failure", { recomputeLinkedTenantScores: true });
+
+    expect(result.updated).toBe(true);
+    expect(result.skipped).toBe(false);
+    expect(result.linkedTenantScoreAttempted).toBe(true);
+    expect(result.linkedTenantResults).toEqual([
+      expect.objectContaining({ tenantId: "tenant-1", updated: true, skipped: false }),
+      expect.objectContaining({
+        tenantId: "tenant-2",
+        updated: false,
+        skipped: true,
+        reason: "linked_tenant_recompute_failed",
+        error: "tenant recompute exploded",
+      }),
+    ]);
+    expect(getLeaseData("lease-failure")?.riskScore).toBe(81);
   });
 
   it("recomputes legacy application-conversion leases using safe field fallbacks", async () => {
@@ -211,6 +336,7 @@ describe("recomputeLeaseRisk", () => {
     expect(result.skipped).toBe(true);
     expect(result.reason).toBe("risk_snapshot_unchanged");
     expect(getLeaseData("lease-unchanged")?.riskTimeline).toHaveLength(1);
+    expect(recomputeTenantScore).not.toHaveBeenCalled();
   });
 
   it("emits missing_landlord_context when legacy landlord data cannot be resolved", async () => {

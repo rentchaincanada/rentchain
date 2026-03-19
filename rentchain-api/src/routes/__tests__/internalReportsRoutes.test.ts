@@ -35,7 +35,7 @@ const {
   renderJsonMock: vi.fn(() => "{}"),
   sendEmailMock: vi.fn(async () => undefined),
   uploadBufferToGcsMock: vi.fn(async ({ path }: any) => ({ bucket: "b", path })),
-  recomputeLeaseRiskMock: vi.fn(async (leaseId: string) => ({
+  recomputeLeaseRiskMock: vi.fn(async (leaseId: string, options?: any) => ({
     leaseId,
     updated: true,
     skipped: false,
@@ -43,6 +43,10 @@ const {
     nextRiskScore: 79,
     previousRiskGrade: "C",
     nextRiskGrade: "B",
+    linkedTenantScoreAttempted: Boolean(options?.recomputeLinkedTenantScores),
+    linkedTenantResults: options?.recomputeLinkedTenantScores
+      ? [{ tenantId: "tenant-1", updated: true, skipped: false, previousScore: 60, nextScore: 77 }]
+      : [],
   })),
   recomputeTenantScoreMock: vi.fn(async (tenantId: string) => ({
     tenantId,
@@ -132,7 +136,31 @@ describe("internalReportsRoutes", () => {
     expect(res.body?.ok).toBe(true);
     expect(res.body?.leaseId).toBe("lease-1");
     expect(res.body?.nextRiskScore).toBe(79);
-    expect(recomputeLeaseRiskMock).toHaveBeenCalledWith("lease-1");
+    expect(recomputeLeaseRiskMock).toHaveBeenCalledWith("lease-1", {
+      recomputeLinkedTenantScores: false,
+      tenantScoreTrigger: "lease_recompute",
+      tenantScoreSource: "internal_lease_risk_recompute",
+    });
+  });
+
+  it("can opt in to linked tenant score recompute through the protected internal route", async () => {
+    const app = await createApp();
+    const res = await request(app)
+      .post("/api/internal/leases/lease-1/recompute-risk?recomputeLinkedTenantScores=true")
+      .set("X-Internal-Job-Token", "secret-token")
+      .send({});
+
+    expect(res.status).toBe(200);
+    expect(res.body?.ok).toBe(true);
+    expect(res.body?.linkedTenantScoreAttempted).toBe(true);
+    expect(res.body?.linkedTenantResults).toEqual([
+      expect.objectContaining({ tenantId: "tenant-1", updated: true, skipped: false }),
+    ]);
+    expect(recomputeLeaseRiskMock).toHaveBeenCalledWith("lease-1", {
+      recomputeLinkedTenantScores: true,
+      tenantScoreTrigger: "lease_recompute",
+      tenantScoreSource: "internal_lease_risk_recompute",
+    });
   });
 
   it("rejects tenant score recompute without a token", async () => {

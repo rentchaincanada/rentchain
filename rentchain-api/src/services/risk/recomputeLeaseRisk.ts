@@ -2,6 +2,8 @@ import type { Firestore } from "firebase-admin/firestore";
 import { db as defaultDb } from "../../config/firebase";
 import { buildLeaseRiskInput } from "./buildLeaseRiskInput";
 import { safeAssessLeaseRisk } from "./riskEngine";
+import { recomputeTenantScore, type TenantScoreRecomputeResult } from "./recomputeTenantScore";
+import type { TenantScoreTimelineTrigger } from "./tenantScoreTypes";
 import type {
   LeaseRiskTimelineEntry,
   LeaseRiskTimelineTrigger,
@@ -28,6 +30,11 @@ export type LeaseRiskSkipReason =
   | "risk_assessment_unavailable"
   | "risk_snapshot_unchanged";
 
+export type LinkedTenantScoreRecomputeResult = Omit<TenantScoreRecomputeResult, "reason"> & {
+  reason?: TenantScoreRecomputeResult["reason"] | "linked_tenant_recompute_failed";
+  error?: string | null;
+};
+
 export type LeaseRiskRecomputeResult = {
   leaseId: string;
   updated: boolean;
@@ -39,6 +46,9 @@ export type LeaseRiskRecomputeResult = {
   previousRiskGrade?: string | null;
   nextRiskGrade?: string | null;
   generatedAt?: string;
+  linkedTenantScoreAttempted?: boolean;
+  linkedTenantScoreReason?: "not_requested" | "no_linked_tenants";
+  linkedTenantResults?: LinkedTenantScoreRecomputeResult[];
 };
 
 type LeaseRiskContext = {
@@ -62,6 +72,9 @@ type RecomputeLeaseRiskOptions = {
   dryRun?: boolean;
   trigger?: LeaseRiskTimelineTrigger;
   source?: string | null;
+  recomputeLinkedTenantScores?: boolean;
+  tenantScoreTrigger?: TenantScoreTimelineTrigger;
+  tenantScoreSource?: string | null;
 };
 
 type LegacyNormalizationMeta = {
@@ -109,6 +122,54 @@ function monthlyRentFromLease(raw: Record<string, unknown>): number | null {
   if (fromDollars != null) return fromDollars;
   const baseRentCents = numberOrNull(raw?.baseRentCents);
   return baseRentCents != null ? Math.round(baseRentCents / 100) : null;
+}
+
+function extractLinkedTenantIds(raw: Record<string, unknown>): string[] {
+  const tenantIds = Array.isArray(raw?.tenantIds)
+    ? raw.tenantIds.map((value) => asTrimmedString(value)).filter(Boolean)
+    : [];
+  const legacyIds = [raw?.tenantId, raw?.primaryTenantId]
+    .map((value) => asTrimmedString(value))
+    .filter(Boolean);
+  return Array.from(new Set([...tenantIds, ...legacyIds]));
+}
+
+async function recomputeLinkedTenantScoresForLease(
+  raw: Record<string, unknown>,
+  firestore: Pick<Firestore, "collection">,
+  options: RecomputeLeaseRiskOptions
+): Promise<{ attempted: boolean; reason?: "no_linked_tenants"; results: LinkedTenantScoreRecomputeResult[] }> {
+  if (!options.recomputeLinkedTenantScores) {
+    return { attempted: false, results: [] };
+  }
+
+  const tenantIds = extractLinkedTenantIds(raw);
+  if (!tenantIds.length) {
+    return { attempted: true, reason: "no_linked_tenants", results: [] };
+  }
+
+  const results: LinkedTenantScoreRecomputeResult[] = [];
+  for (const tenantId of tenantIds) {
+    try {
+      const result = await recomputeTenantScore(tenantId, {
+        firestore,
+        dryRun: options.dryRun,
+        trigger: options.tenantScoreTrigger || "lease_recompute",
+        source: options.tenantScoreSource ?? options.source ?? "lease_risk_recompute",
+      });
+      results.push(result);
+    } catch (error: any) {
+      results.push({
+        tenantId,
+        updated: false,
+        skipped: true,
+        reason: "linked_tenant_recompute_failed",
+        error: error?.message || String(error),
+      });
+    }
+  }
+
+  return { attempted: true, results };
 }
 
 async function normalizeLegacyLeaseRiskRecord(
@@ -461,6 +522,8 @@ export async function recomputeLeaseRisk(
     });
   }
 
+  const linkedTenantOutcome = await recomputeLinkedTenantScoresForLease(normalizedRecord.raw, firestore, options);
+
   return {
     leaseId,
     updated: !options.dryRun,
@@ -471,5 +534,8 @@ export async function recomputeLeaseRisk(
     previousRiskGrade: previous.riskGrade,
     nextRiskGrade: next.riskGrade,
     generatedAt: next.risk.generatedAt,
+    linkedTenantScoreAttempted: linkedTenantOutcome.attempted,
+    linkedTenantScoreReason: linkedTenantOutcome.reason,
+    linkedTenantResults: linkedTenantOutcome.results,
   };
 }
