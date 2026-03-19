@@ -16,6 +16,8 @@ import {
   pickTenantWinningAgreement,
 } from "./leasePartyConsolidationService";
 import { buildCredibilityInsights, type CredibilityInsights } from "./risk/credibilityInsights";
+import { buildMoveInReadiness, type MoveInReadiness } from "./moveInReadiness";
+import { buildDerivedTenancyFromTenant, listTenanciesByTenantId } from "./tenanciesService";
 import type { TenantScore, TenantScoreTimelineEntry } from "./risk/tenantScoreTypes";
 import type { RiskGrade } from "./risk/riskTypes";
 
@@ -79,6 +81,8 @@ export interface TenantLedgerEventDto {
 }
 
 export interface TenantCredibilityInsights extends CredibilityInsights {}
+
+export interface TenantMoveInReadiness extends MoveInReadiness {}
 
 const FALLBACK_TENANTS: TenantRecord[] = [
   {
@@ -366,6 +370,41 @@ async function loadLeaseRawById(leaseId: string | null | undefined) {
   }
 }
 
+async function loadLatestTenantInviteState(tenant: TenantRecord | null, landlordId?: string | null) {
+  const tenantId = String(tenant?.id || "").trim();
+  const tenantEmail = String(tenant?.email || "").trim().toLowerCase();
+  if (!tenantId && !tenantEmail) return null;
+  try {
+    const query = landlordId
+      ? db.collection("tenantInvites").where("landlordId", "==", landlordId).limit(50)
+      : db.collection("tenantInvites").limit(50);
+    const snap = await query.get();
+    const matches = snap.docs
+      .map((doc) => ({ id: doc.id, ...(doc.data() as any) }))
+      .filter((invite) => {
+        const inviteTenantId = String(invite.tenantId || "").trim();
+        const inviteEmail = String(invite.tenantEmail || invite.email || "").trim().toLowerCase();
+        return (tenantId && inviteTenantId === tenantId) || (tenantEmail && inviteEmail === tenantEmail);
+      });
+    matches.sort((a, b) => {
+      const aTs = toMillis(a.redeemedAt) ?? toMillis(a.sentAt) ?? toMillis(a.createdAt) ?? 0;
+      const bTs = toMillis(b.redeemedAt) ?? toMillis(b.sentAt) ?? toMillis(b.createdAt) ?? 0;
+      return bTs - aTs;
+    });
+    if (!matches.length) return null;
+    const latest = matches[0] as any;
+    return {
+      createdAt: latest.createdAt ?? null,
+      sentAt: latest.sentAt ?? latest.createdAt ?? null,
+      redeemedAt: latest.redeemedAt ?? null,
+      status: latest.status ?? null,
+    };
+  } catch (err) {
+    console.error("[tenantDetailsService] loadLatestTenantInviteState error", err);
+    return null;
+  }
+}
+
 export function addConvertedTenant(tenant: TenantRecord): void {
   CONVERTED_TENANTS.push(tenant);
 }
@@ -417,6 +456,14 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
 
   const currentLeaseRecord = await loadCurrentLeaseSnapshot(tenant, landlordId);
   const currentLeaseRaw = await loadLeaseRawById(currentLeaseRecord?.id || null);
+  const [tenantInviteState, tenantTenancies] = await Promise.all([
+    loadLatestTenantInviteState(tenant, landlordId),
+    tenant ? listTenanciesByTenantId(tenant.id, { landlordId }).catch((err) => {
+      console.error("[tenantDetailsService] listTenanciesByTenantId error", err);
+      return [];
+    }) : Promise.resolve([]),
+  ]);
+  const currentTenancy = tenantTenancies[0] || buildDerivedTenancyFromTenant(tenant);
   const property = await loadPropertyRecord(currentLeaseRecord?.propertyId || tenant?.propertyId || null);
   const unit = await loadUnitRecord(
     currentLeaseRecord?.propertyId || tenant?.propertyId || null,
@@ -496,6 +543,15 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
   const ledgerSummary = getLedgerSummaryForTenant(tenantId);
   const insights: any[] = [];
   const credibilityInsights = buildCredibilityInsights({ tenant, leaseRaw: currentLeaseRaw });
+  const moveInReadiness = buildMoveInReadiness({
+    lease,
+    leaseRaw: currentLeaseRaw,
+    tenant,
+    tenancy: currentTenancy,
+    invite: tenantInviteState,
+    payments,
+    ledger,
+  });
 
   return {
     tenant,
@@ -515,6 +571,7 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
     ledger,
     insights,
     credibilityInsights,
+    moveInReadiness,
     ledgerSummary,
   };
 }

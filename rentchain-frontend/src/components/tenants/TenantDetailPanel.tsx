@@ -17,6 +17,7 @@ import { useUpgrade } from "@/context/UpgradeContext";
 import { upgradeStarterButtonStyle } from "../../lib/upgradeButtonStyles";
 import { useAuth } from "@/context/useAuth";
 import { CredibilityInsightsCard } from "./CredibilityInsightsCard";
+import { MoveInReadinessCard } from "./MoveInReadinessCard";
 
 interface TenantDetailPanelProps {
   tenantId: string | null;
@@ -118,6 +119,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
   const unit = bundle.unit || null;
   const latestLeaseNoticeSummary = bundle.latestLeaseNoticeSummary || null;
   const credibilityInsights = bundle.credibilityInsights || null;
+  const moveInReadiness = bundle.moveInReadiness || null;
 
   const [ledgerItems, setLedgerItems] = useState<any[]>([]);
   const [ledgerLoading, setLedgerLoading] = useState(false);
@@ -426,6 +428,8 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
       </div>
 
       <CredibilityInsightsCard insights={credibilityInsights} />
+
+      <MoveInReadinessCard readiness={moveInReadiness} />
 
       {latestLeaseNoticeSummary ? (
         <div
