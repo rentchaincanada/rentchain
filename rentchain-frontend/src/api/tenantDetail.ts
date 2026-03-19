@@ -1,5 +1,6 @@
 // rentchain-frontend/src/api/tenantDetail.ts
 import type { TenantApiModel } from "./tenants";
+import type { CredibilityInsights } from "@/types/credibilityInsights";
 import { apiFetch } from "./http";
 
 export interface TenantDetailTenant extends TenantApiModel {
@@ -97,6 +98,7 @@ export interface TenantDetailBundle {
     entryCount: number;
   };
   insights?: TenantInsight[];
+  credibilityInsights?: CredibilityInsights | null;
 }
 
 export async function fetchTenantDetail(tenantId: string): Promise<TenantDetailBundle> {

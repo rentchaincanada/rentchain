@@ -15,6 +15,9 @@ import {
   pickAgreementWinner,
   pickTenantWinningAgreement,
 } from "./leasePartyConsolidationService";
+import { buildCredibilityInsights, type CredibilityInsights } from "./risk/credibilityInsights";
+import type { TenantScore, TenantScoreTimelineEntry } from "./risk/tenantScoreTypes";
+import type { RiskGrade } from "./risk/riskTypes";
 
 export interface TenantRecord {
   id: string;
@@ -33,6 +36,11 @@ export interface TenantRecord {
   status?: string;
   balance?: number;
   riskLevel?: string;
+  tenantScore?: TenantScore | null;
+  tenantScoreValue?: number | null;
+  tenantScoreGrade?: RiskGrade | null;
+  tenantScoreConfidence?: number | null;
+  tenantScoreTimeline?: TenantScoreTimelineEntry[];
   createdAt?: string | number | null;
 }
 
@@ -69,6 +77,8 @@ export interface TenantLedgerEventDto {
   method?: string | null;
   notes?: string | null;
 }
+
+export interface TenantCredibilityInsights extends CredibilityInsights {}
 
 const FALLBACK_TENANTS: TenantRecord[] = [
   {
@@ -185,6 +195,11 @@ function mapTenant(docId: string, data: any): TenantRecord {
     status: data.status ?? "Current",
     balance: data.balance ?? 0,
     riskLevel: data.riskLevel ?? "Low",
+    tenantScore: data.tenantScore ?? null,
+    tenantScoreValue: data.tenantScoreValue ?? data.tenantScore?.score ?? null,
+    tenantScoreGrade: data.tenantScoreGrade ?? data.tenantScore?.grade ?? null,
+    tenantScoreConfidence: data.tenantScoreConfidence ?? data.tenantScore?.confidence ?? null,
+    tenantScoreTimeline: Array.isArray(data.tenantScoreTimeline) ? data.tenantScoreTimeline : [],
     createdAt: createdAtIso ?? createdAt ?? null,
   };
 }
@@ -338,6 +353,19 @@ async function loadLatestLeaseNoticeSummary(leaseId: string | null | undefined, 
   }
 }
 
+async function loadLeaseRawById(leaseId: string | null | undefined) {
+  const target = String(leaseId || "").trim();
+  if (!target) return null;
+  try {
+    const snap = await db.collection("leases").doc(target).get();
+    if (!snap.exists) return null;
+    return (snap.data() || {}) as Record<string, unknown>;
+  } catch (err) {
+    console.error("[tenantDetailsService] loadLeaseRawById error", err);
+    return null;
+  }
+}
+
 export function addConvertedTenant(tenant: TenantRecord): void {
   CONVERTED_TENANTS.push(tenant);
 }
@@ -388,6 +416,7 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
   }
 
   const currentLeaseRecord = await loadCurrentLeaseSnapshot(tenant, landlordId);
+  const currentLeaseRaw = await loadLeaseRawById(currentLeaseRecord?.id || null);
   const property = await loadPropertyRecord(currentLeaseRecord?.propertyId || tenant?.propertyId || null);
   const unit = await loadUnitRecord(
     currentLeaseRecord?.propertyId || tenant?.propertyId || null,
@@ -466,6 +495,7 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
   const ledger = toLedgerEntries(listEventsForTenant(tenantId));
   const ledgerSummary = getLedgerSummaryForTenant(tenantId);
   const insights: any[] = [];
+  const credibilityInsights = buildCredibilityInsights({ tenant, leaseRaw: currentLeaseRaw });
 
   return {
     tenant,
@@ -484,6 +514,7 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
     payments,
     ledger,
     insights,
+    credibilityInsights,
     ledgerSummary,
   };
 }
