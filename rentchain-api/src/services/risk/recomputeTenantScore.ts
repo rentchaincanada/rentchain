@@ -16,7 +16,7 @@ import type {
 export type TenantScoreSkipReason =
   | "tenant_not_found"
   | "missing_landlord_context"
-  | "no_linked_leases"
+  | "missing_linked_leases"
   | "tenant_score_unchanged";
 
 export type TenantScoreRecomputeResult = {
@@ -260,7 +260,7 @@ async function resolveTenantScoreContext(firestore: FirestoreLike, tenantId: str
   const tenantRaw = (tenantSnap.data() || {}) as Record<string, unknown>;
   const leases = await loadTenantLeases(firestore, tenantId);
   if (!leases.length) {
-    return { reason: "no_linked_leases" };
+    return { reason: "missing_linked_leases" };
   }
 
   const landlordId =
