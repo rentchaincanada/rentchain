@@ -121,7 +121,7 @@ describe("recomputeTenantScore", () => {
     const result = await recomputeTenantScore("tenant-2");
 
     expect(result.skipped).toBe(true);
-    expect(result.reason).toBe("no_linked_leases");
+    expect(result.reason).toBe("missing_linked_leases");
   });
 
   it("does not append duplicate timeline entries when the score is unchanged", async () => {
