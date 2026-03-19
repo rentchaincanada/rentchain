@@ -83,6 +83,28 @@ export interface TenantInsight {
   [key: string]: any;
 }
 
+export type MoveInReadinessStatus = "not-started" | "in-progress" | "ready" | "completed" | "unknown";
+
+export interface MoveInReadiness {
+  status: MoveInReadinessStatus;
+  readinessPercent?: number | null;
+  leaseSigned?: boolean | null;
+  portalInviteSent?: boolean | null;
+  portalActivated?: boolean | null;
+  depositRequired?: boolean | null;
+  depositReceived?: boolean | null;
+  insuranceRequired?: boolean | null;
+  insuranceReceived?: boolean | null;
+  utilitySetupRequired?: boolean | null;
+  utilitySetupReceived?: boolean | null;
+  inspectionScheduled?: boolean | null;
+  inspectionCompleted?: boolean | null;
+  keysReleaseReady?: boolean | null;
+  outstandingItems?: string[];
+  completedItems?: string[];
+  lastUpdatedAt?: string | null;
+}
+
 export interface TenantDetailBundle {
   tenant: TenantDetailTenant | null;
   lease?: TenantLeaseSummary | null;
@@ -99,6 +121,7 @@ export interface TenantDetailBundle {
   };
   insights?: TenantInsight[];
   credibilityInsights?: CredibilityInsights | null;
+  moveInReadiness?: MoveInReadiness | null;
 }
 
 export async function fetchTenantDetail(tenantId: string): Promise<TenantDetailBundle> {
