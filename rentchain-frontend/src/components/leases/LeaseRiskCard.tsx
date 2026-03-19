@@ -20,6 +20,18 @@ interface LeaseRiskCardProps {
   compact?: boolean;
 }
 
+const cardSurface: React.CSSProperties = {
+  borderRadius: 16,
+  border: "1px solid rgba(148,163,184,0.28)",
+  background: "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.96))",
+  boxShadow: "0 14px 32px rgba(15,23,42,0.06)",
+};
+
+const titleColor = "#0f172a";
+const bodyColor = "#334155";
+const metaColor = "#475569";
+const subtleColor = "#64748b";
+
 export const LeaseRiskCard: React.FC<LeaseRiskCardProps> = ({
   risk,
   title = "Lease Risk Snapshot",
@@ -29,16 +41,14 @@ export const LeaseRiskCard: React.FC<LeaseRiskCardProps> = ({
     return (
       <div
         style={{
-          borderRadius: 14,
-          border: "1px solid rgba(148,163,184,0.2)",
-          background: "rgba(255,255,255,0.03)",
-          padding: compact ? 12 : 14,
+          ...cardSurface,
+          padding: compact ? 12 : 16,
           display: "grid",
           gap: 8,
         }}
       >
-        <div style={{ fontWeight: 700, color: "#e5e7eb" }}>{title}</div>
-        <div style={{ color: "#94a3b8", fontSize: 13 }}>
+        <div style={{ fontWeight: 800, color: titleColor, fontSize: compact ? 15 : 16 }}>{title}</div>
+        <div style={{ color: metaColor, fontSize: 13, lineHeight: 1.5 }}>
           Risk insights will appear when enough lease or applicant data is available.
         </div>
       </div>
@@ -53,9 +63,7 @@ export const LeaseRiskCard: React.FC<LeaseRiskCardProps> = ({
   return (
     <div
       style={{
-        borderRadius: 16,
-        border: "1px solid rgba(96,165,250,0.18)",
-        background: "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(15,23,42,0.06))",
+        ...cardSurface,
         padding: compact ? 12 : 16,
         display: "grid",
         gap: compact ? 10 : 12,
@@ -63,8 +71,8 @@ export const LeaseRiskCard: React.FC<LeaseRiskCardProps> = ({
     >
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
         <div style={{ display: "grid", gap: 4 }}>
-          <div style={{ fontWeight: 800, color: "#e5e7eb", fontSize: compact ? 15 : 16 }}>{title}</div>
-          <div style={{ color: "#94a3b8", fontSize: 13 }}>
+          <div style={{ fontWeight: 800, color: titleColor, fontSize: compact ? 15 : 16 }}>{title}</div>
+          <div style={{ color: metaColor, fontSize: 13, lineHeight: 1.5 }}>
             RentChain reviewed the available lease and tenant data to surface potential risk signals.
           </div>
         </div>
@@ -78,7 +86,7 @@ export const LeaseRiskCard: React.FC<LeaseRiskCardProps> = ({
         {generatedAt ? <Metric label="Generated" value={generatedAt} /> : null}
       </div>
 
-      <div style={{ color: "#cbd5e1", fontSize: 13 }}>
+      <div style={{ color: bodyColor, fontSize: 13, lineHeight: 1.55 }}>
         This score helps identify payment and stability risk using available lease data. It is decision support, not an approval or denial outcome.
       </div>
 
@@ -90,7 +98,7 @@ export const LeaseRiskCard: React.FC<LeaseRiskCardProps> = ({
 
       {visibleRecommendations.length > 0 ? (
         <Section title="Suggested Actions">
-          <ul style={{ margin: 0, paddingLeft: 18, color: "#e2e8f0", fontSize: 13, display: "grid", gap: 4 }}>
+          <ul style={{ margin: 0, paddingLeft: 18, color: bodyColor, fontSize: 13, lineHeight: 1.5, display: "grid", gap: 4 }}>
             {visibleRecommendations.map((item) => (
               <li key={item}>{item}</li>
             ))}
@@ -105,19 +113,19 @@ const Metric: React.FC<{ label: string; value: string }> = ({ label, value }) =>
   <div
     style={{
       borderRadius: 12,
-      border: "1px solid rgba(148,163,184,0.16)",
+      border: "1px solid rgba(148,163,184,0.22)",
       padding: "10px 12px",
-      background: "rgba(15,23,42,0.18)",
+      background: "rgba(248,250,252,0.92)",
     }}
   >
-    <div style={{ color: "#94a3b8", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6 }}>{label}</div>
-    <div style={{ color: "#f8fafc", fontSize: 14, fontWeight: 700, marginTop: 3 }}>{value}</div>
+    <div style={{ color: subtleColor, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, fontWeight: 700 }}>{label}</div>
+    <div style={{ color: titleColor, fontSize: 14, fontWeight: 800, marginTop: 4, lineHeight: 1.4 }}>{value}</div>
   </div>
 );
 
 const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
   <div style={{ display: "grid", gap: 8 }}>
-    <div style={{ color: "#cbd5e1", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8 }}>{title}</div>
+    <div style={{ color: subtleColor, fontSize: 12, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.8 }}>{title}</div>
     {children}
   </div>
 );
@@ -129,10 +137,11 @@ const ChipList: React.FC<{ items: string[] }> = ({ items }) => (
         key={item}
         style={{
           borderRadius: 999,
-          border: "1px solid rgba(148,163,184,0.22)",
-          background: "rgba(255,255,255,0.04)",
-          color: "#e2e8f0",
+          border: "1px solid rgba(148,163,184,0.24)",
+          background: "rgba(248,250,252,0.96)",
+          color: bodyColor,
           fontSize: 12,
+          fontWeight: 600,
           padding: "6px 10px",
         }}
       >

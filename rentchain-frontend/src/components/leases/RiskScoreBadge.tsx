@@ -4,16 +4,16 @@ import type { RiskGrade } from "@/types/leaseRisk";
 function toneFromGrade(grade: RiskGrade | null | undefined) {
   switch (grade) {
     case "A":
-      return { bg: "rgba(22,163,74,0.12)", border: "rgba(22,163,74,0.3)", text: "#166534" };
+      return { bg: "rgba(220,252,231,0.95)", border: "rgba(34,197,94,0.35)", text: "#166534" };
     case "B":
-      return { bg: "rgba(14,165,233,0.12)", border: "rgba(14,165,233,0.3)", text: "#075985" };
+      return { bg: "rgba(219,234,254,0.96)", border: "rgba(59,130,246,0.35)", text: "#1d4ed8" };
     case "C":
-      return { bg: "rgba(245,158,11,0.14)", border: "rgba(245,158,11,0.3)", text: "#92400e" };
+      return { bg: "rgba(254,249,195,0.96)", border: "rgba(234,179,8,0.38)", text: "#a16207" };
     case "D":
     case "E":
-      return { bg: "rgba(239,68,68,0.12)", border: "rgba(239,68,68,0.3)", text: "#b91c1c" };
+      return { bg: "rgba(254,226,226,0.96)", border: "rgba(239,68,68,0.34)", text: "#b91c1c" };
     default:
-      return { bg: "rgba(148,163,184,0.14)", border: "rgba(148,163,184,0.3)", text: "#475569" };
+      return { bg: "rgba(241,245,249,0.96)", border: "rgba(148,163,184,0.35)", text: "#475569" };
   }
 }
 
@@ -32,16 +32,17 @@ export const RiskScoreBadge: React.FC<RiskScoreBadgeProps> = ({ grade, score, co
         alignItems: "center",
         gap: compact ? 6 : 8,
         borderRadius: 999,
-        padding: compact ? "4px 8px" : "6px 12px",
+        padding: compact ? "5px 9px" : "7px 12px",
         background: tone.bg,
         border: `1px solid ${tone.border}`,
         color: tone.text,
-        fontWeight: 700,
+        fontWeight: 800,
         fontSize: compact ? 12 : 13,
+        lineHeight: 1,
       }}
     >
       <span>{grade || "--"}</span>
-      {typeof score === "number" ? <span style={{ opacity: 0.82 }}>{score}</span> : null}
+      {typeof score === "number" ? <span style={{ color: tone.text }}>{score}</span> : null}
     </span>
   );
 };
