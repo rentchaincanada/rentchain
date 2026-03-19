@@ -6,6 +6,7 @@ import { fetchProperties } from "../api/propertiesApi";
 import {
   fetchRentalApplications,
   fetchRentalApplication,
+  fetchApplicationDecisionSummary,
   updateRentalApplicationStatus,
   fetchScreeningQuote,
   createScreeningCheckout,
@@ -27,6 +28,7 @@ import {
   type ScreeningEvent,
   type ScreeningReceipt,
 } from "@/api/rentalApplicationsApi";
+import type { ApplicationDecisionSummary } from "@/types/applicationDecisionSummary";
 import { useToast } from "../components/ui/ToastProvider";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { track } from "@/lib/analytics";
@@ -51,7 +53,7 @@ import {
   screeningComingSoonLabel,
   screeningUnavailableMessage,
 } from "../config/screening";
-
+import { ApplicationDecisionSummaryCard } from "@/components/applications/ApplicationDecisionSummaryCard";
 const statusOptions: RentalApplicationStatus[] = [
   "SUBMITTED",
   "IN_REVIEW",
@@ -138,6 +140,7 @@ const ApplicationsPage: React.FC = () => {
   const [applications, setApplications] = useState<RentalApplicationSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<RentalApplication | null>(null);
+  const [decisionSummary, setDecisionSummary] = useState<ApplicationDecisionSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -331,12 +334,19 @@ const ApplicationsPage: React.FC = () => {
   const refreshSelectedApplication = async (applicationId?: string | null) => {
     const id = String(applicationId || "").trim();
     if (!id) return;
+    setDecisionSummary(null);
     setExportShareUrl(null);
     setExportExpiresAt(null);
     setLoadingDetail(true);
     try {
       const app = await fetchRentalApplication(id);
       setDetail(app);
+      try {
+        const nextDecisionSummary = await fetchApplicationDecisionSummary(id);
+        setDecisionSummary(nextDecisionSummary);
+      } catch {
+        setDecisionSummary(null);
+      }
       await loadScreeningStatus(id);
       await loadScreeningEvents(id);
       await loadScreeningReceipt(id);
@@ -1168,6 +1178,7 @@ const ApplicationsPage: React.FC = () => {
                 </div>
               </div>
 
+              <ApplicationDecisionSummaryCard summary={decisionSummary} />
               <div ref={screeningSectionRef}>
                 <Card>
                   <div className="rc-applications-card-header" style={{ marginBottom: 8 }}>
@@ -2069,3 +2080,9 @@ const ApplicationsPage: React.FC = () => {
 };
 
 export default ApplicationsPage;
+
+
+
+
+
+

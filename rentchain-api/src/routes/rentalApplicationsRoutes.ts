@@ -29,6 +29,7 @@ import {
 import { enqueueScreeningJob } from "../services/screeningJobs";
 import { createSignedUrl, putPdfObject } from "../storage/pdfStore";
 import { buildReviewSummary, buildReviewSummaryPdf } from "../lib/reviewSummary";
+import { buildApplicationDecisionSummary } from "../services/risk/applicationDecisionSummary";
 import { rateLimitScreeningIp, rateLimitScreeningUser } from "../middleware/rateLimit";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 import { sendEmail } from "../services/emailService";
@@ -3013,13 +3014,18 @@ router.get("/rental-applications/:id/review-summary", async (req: any, res) => {
       });
     }
     const summary = buildReviewSummary(id, access.data);
-    return res.json({ ok: true, summary });
+    const decisionSummary = buildApplicationDecisionSummary({
+      applicationId: id,
+      application: access.data,
+      reviewSummary: summary,
+    });
+    return res.json({ ok: true, summary, decisionSummary });
   } catch (err: any) {
     console.error("[review_summary] failed", err?.message || err);
     return res.status(500).json({
       ok: false,
       status: 500,
-      error: "REVIEW_SUMMARY_FAILED",
+      error: "review_summary_failed",
     });
   }
 });
@@ -3258,4 +3264,8 @@ export const __testing = {
 };
 
 export default router;
+
+
+
+
 

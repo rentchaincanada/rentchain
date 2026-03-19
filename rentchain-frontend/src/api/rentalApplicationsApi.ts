@@ -1,9 +1,12 @@
+import type { ApplicationDecisionSummary } from "@/types/applicationDecisionSummary";
 import { apiFetch } from "./apiFetch";
 import { getBureauAdapter } from "@/bureau";
 import { comparePrimaryVsShadow } from "@/bureau/shadow/compare";
 import { runShadowTask } from "@/bureau/shadow/runShadow";
 import { getShadowTimeoutMs } from "@/bureau/shadow/shadowMode";
 import { logShadowEvent } from "@/bureau/shadow/shadowLogger";
+
+export type { ApplicationDecisionSummary };
 
 export type RentalApplicationStatus =
   | "DRAFT"
@@ -345,6 +348,11 @@ export async function fetchRentalApplications(params?: {
   if (params?.status) query.set("status", params.status);
   const res: any = await apiFetch(`/rental-applications?${query.toString()}`);
   return (res?.data || []) as RentalApplicationSummary[];
+}
+
+export async function fetchApplicationDecisionSummary(id: string): Promise<ApplicationDecisionSummary | null> {
+  const res: any = await apiFetch(`/rental-applications/${encodeURIComponent(id)}/review-summary`);
+  return (res?.decisionSummary || null) as ApplicationDecisionSummary | null;
 }
 
 export async function fetchRentalApplication(id: string): Promise<RentalApplication> {
@@ -715,3 +723,6 @@ export async function exportScreeningReport(
   });
   return res as { ok: boolean; exportId?: string; shareUrl?: string; expiresAt?: number; error?: string };
 }
+
+
+
