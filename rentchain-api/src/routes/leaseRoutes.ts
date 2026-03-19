@@ -24,6 +24,7 @@ import { CURRENT_LEASE_STATUSES, loadCanonicalPropertyLeases, loadUnitsForProper
 import { evaluateSameLeaseAgreement, groupLeaseAgreementCandidates, pickAgreementWinner } from "../services/leasePartyConsolidationService";
 import { loadPropertyLeaseIntegrityDiagnostics } from "../services/leaseIntegrityService";
 import { buildLeaseRiskPersistenceFields, computeLeaseRiskSnapshot } from "../services/risk/recomputeLeaseRisk";
+import { loadPropertyCredibilitySummary } from "../services/risk/propertyCredibilitySummary";
 
 const router = Router();
 const LEDGER_COLLECTION = "ledgerEntries";
@@ -659,7 +660,14 @@ router.get("/property/:propertyId", requireLandlord, async (req: any, res: Respo
     grouped.singles.forEach((candidate) => winnerIds.add(candidate.lease.id));
 
     // Occupancy and rent roll consumers must operate on lease agreements, not per-tenant rows.
-    const response: any = { leases: mergeLeaseRows(combinedRows.filter((lease) => winnerIds.has(lease.id))) };
+    const summaryLeases = mergeLeaseRows(combinedRows.filter((lease) => winnerIds.has(lease.id)));
+    const response: any = { leases: summaryLeases };
+    response.credibilitySummary = await loadPropertyCredibilitySummary({
+      firestore: db as any,
+      propertyId,
+      landlordId,
+      leases: summaryLeases,
+    });
     if (String(req.query?.debug || "") === "1") {
       const integrity = await loadPropertyLeaseIntegrityDiagnostics(propertyId, landlordId, db as any);
       response.diagnostics = integrity.diagnostics;
