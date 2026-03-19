@@ -28,6 +28,8 @@ import { useUpgrade } from "@/context/UpgradeContext";
 import { upgradeStarterButtonStyle } from "../../lib/upgradeButtonStyles";
 import { dispatchUpgradePrompt } from "@/lib/upgradePrompt";
 import { RiskScoreBadge } from "@/components/leases/RiskScoreBadge";
+import { PropertyCredibilitySummaryCard } from "@/components/properties/PropertyCredibilitySummaryCard";
+import type { PropertyCredibilitySummary } from "@/types/credibilitySummary";
 
 interface PropertyDetailPanelProps {
   property: Property | null;
@@ -69,6 +71,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   const unitsEnabled = features?.unitsTable !== false;
   const applicationsEnabled = features?.applications !== false;
   const [leases, setLeases] = useState<Lease[]>([]);
+  const [credibilitySummary, setCredibilitySummary] = useState<PropertyCredibilitySummary | null>(null);
   const [isLeasesLoading, setIsLeasesLoading] = useState(false);
   const [leasesError, setLeasesError] = useState<string | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -280,6 +283,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
     const currentId = propertyId;
     if (!property) {
       setLeases([]);
+      setCredibilitySummary(null);
       setLeasesLoadingStates(false, null);
       setPayments([]);
       setTotalCollectedThisMonth(0);
@@ -295,6 +299,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
         if (!cancelled) {
           if (currentId === propertyId) {
             setLeases(data.leases);
+            setCredibilitySummary(data.credibilitySummary ?? null);
             setLeasesError(null);
           }
         }
@@ -302,6 +307,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
         console.error("[PropertyDetailPanel] Failed to load leases", err);
         if (!cancelled) {
           setLeases([]);
+          setCredibilitySummary(null);
           setLeasesError("Leases could not be loaded");
         }
       } finally {
@@ -871,6 +877,8 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
           {importMessage}
         </div>
       )}
+
+      <PropertyCredibilitySummaryCard summary={credibilitySummary} />
 
       {activeLeases.length > 0 && (
         <div

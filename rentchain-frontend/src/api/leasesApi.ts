@@ -1,5 +1,6 @@
 import { apiJson } from "@/api/http";
 import type { LeaseRiskSnapshot } from "@/types/leaseRisk";
+import type { PropertyCredibilitySummary } from "@/types/credibilitySummary";
 
 export type LeaseStatus = "active" | "notice_pending" | "renewal_pending" | "renewal_accepted" | "move_out_pending" | "ended" | "archived";
 export type LeaseRenewalStatus = "unknown" | "offered" | "accepted" | "declined";
@@ -74,8 +75,8 @@ export async function getLeasesForTenant(
 
 export async function getLeasesForProperty(
   propertyId: string
-): Promise<{ leases: Lease[]; diagnostics?: any }> {
-  return apiJson<{ leases: Lease[]; diagnostics?: any }>(
+): Promise<{ leases: Lease[]; diagnostics?: any; credibilitySummary?: PropertyCredibilitySummary | null }> {
+  return apiJson<{ leases: Lease[]; diagnostics?: any; credibilitySummary?: PropertyCredibilitySummary | null }>(
     `/leases/property/${encodeURIComponent(propertyId)}`
   );
 }
