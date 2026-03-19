@@ -129,7 +129,16 @@ router.post("/leases/:leaseId/recompute-risk", requireInternalJobToken, async (r
       return res.status(400).json({ ok: false, error: "lease_id_required" });
     }
 
-    const result = await recomputeLeaseRisk(leaseId);
+    const recomputeLinkedTenantScores =
+      req.body?.recomputeLinkedTenantScores === true ||
+      String(req.query?.recomputeLinkedTenantScores || "").trim().toLowerCase() === "true" ||
+      String(req.query?.recomputeLinkedTenantScores || "").trim() === "1";
+
+    const result = await recomputeLeaseRisk(leaseId, {
+      recomputeLinkedTenantScores,
+      tenantScoreTrigger: "lease_recompute",
+      tenantScoreSource: "internal_lease_risk_recompute",
+    });
     return res.json({ ok: true, ...result });
   } catch (err: any) {
     console.error("[internal lease risk recompute] failed", err?.message || err);
