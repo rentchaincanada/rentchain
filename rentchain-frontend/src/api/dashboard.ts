@@ -1,4 +1,5 @@
 import { apiFetch } from "./apiFetch";
+import type { PortfolioCredibilitySummary } from "@/types/portfolioCredibilitySummary";
 
 export type DashboardKpis = {
   propertiesCount: number;
@@ -31,6 +32,7 @@ export type DashboardSummaryData = {
   properties: any[];
   events: any[];
   leaseNoticeSummary?: DashboardLeaseNoticeSummary;
+  portfolioCredibilitySummary?: PortfolioCredibilitySummary | null;
 };
 
 export type DashboardSummaryResponse = { ok: true; data: DashboardSummaryData };

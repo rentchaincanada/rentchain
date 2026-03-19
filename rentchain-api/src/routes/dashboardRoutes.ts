@@ -4,6 +4,7 @@ import { requireAuth } from "../middleware/requireAuth";
 import { db } from "../config/firebase";
 import { resolveLandlordAndTier } from "../lib/landlordResolver";
 import { computeNoResponseState, normalizeLeaseRecord } from "../services/leaseNoticeWorkflowService";
+import { computePortfolioCredibilitySummary } from "../services/risk/portfolioCredibilitySummary";
 
 const router = express.Router();
 
@@ -150,6 +151,24 @@ router.get("/summary", requireAuth, async (req: any, res) => {
 
   const screeningOrders = screeningSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as any) }));
   const screeningsCount = screeningOrders.length;
+  const tenantCredibilityRecords = tenantsSnap.docs.map((doc) => {
+    const raw = doc.data() as any;
+    return {
+      id: doc.id,
+      tenantScoreValue:
+        typeof raw?.tenantScoreValue === "number"
+          ? raw.tenantScoreValue
+          : typeof raw?.tenantScore?.score === "number"
+          ? raw.tenantScore.score
+          : null,
+      tenantScoreConfidence:
+        typeof raw?.tenantScoreConfidence === "number"
+          ? raw.tenantScoreConfidence
+          : typeof raw?.tenantScore?.confidence === "number"
+          ? raw.tenantScore.confidence
+          : null,
+    };
+  });
 
   const recentActivityRaw: Array<{
     id: string;
@@ -231,6 +250,29 @@ router.get("/summary", requireAuth, async (req: any, res) => {
     latestNoticeByLeaseId.set(leaseId, notice);
   }
   const soonWindowMs = 120 * 24 * 60 * 60 * 1000;
+  const portfolioCredibilitySummary = computePortfolioCredibilitySummary({
+    leases: leases.map((lease) => ({
+      id: lease.id,
+      propertyId: lease.propertyId,
+      status: lease.status,
+      tenantId: lease.tenantId,
+      tenantIds: Array.isArray((lease as any).tenantIds) ? (lease as any).tenantIds : undefined,
+      riskScore:
+        typeof (lease as any).riskScore === "number"
+          ? (lease as any).riskScore
+          : typeof (lease as any).risk?.score === "number"
+          ? (lease as any).risk.score
+          : null,
+      riskConfidence:
+        typeof (lease as any).riskConfidence === "number"
+          ? (lease as any).riskConfidence
+          : typeof (lease as any).risk?.confidence === "number"
+          ? (lease as any).risk.confidence
+          : null,
+    })),
+    tenants: tenantCredibilityRecords,
+  });
+
   const leaseNoticeSummary = {
     expiringSoon: leases.filter((lease) => {
       const dueAt = Number(lease.nextNoticeDueAt || 0);
@@ -323,6 +365,7 @@ router.get("/summary", requireAuth, async (req: any, res) => {
     properties: [] as any[],
     events,
     leaseNoticeSummary,
+    portfolioCredibilitySummary,
   };
 
   return res.json({ ok: true, data });
