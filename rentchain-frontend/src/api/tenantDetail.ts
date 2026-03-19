@@ -83,6 +83,38 @@ export interface TenantInsight {
   [key: string]: any;
 }
 
+export type MoveInRequirementsStatus = "not-started" | "in-progress" | "complete" | "unknown";
+export type MoveInRequirementState = "complete" | "pending" | "not-required" | "unknown";
+export type MoveInRequirementKey =
+  | "lease_signed"
+  | "portal_invited"
+  | "portal_activated"
+  | "deposit_received"
+  | "insurance_received"
+  | "utility_setup_received"
+  | "inspection_scheduled"
+  | "inspection_completed"
+  | "keys_release_ready";
+
+export interface MoveInRequirementsItem {
+  key: MoveInRequirementKey;
+  label: string;
+  required: boolean;
+  state: MoveInRequirementState;
+  source?: string | null;
+  updatedAt?: string | null;
+  note?: string | null;
+}
+
+export interface MoveInRequirements {
+  status: MoveInRequirementsStatus;
+  items: MoveInRequirementsItem[];
+  completedCount: number;
+  requiredCount: number;
+  progressPercent?: number | null;
+  lastUpdatedAt?: string | null;
+}
+
 export type MoveInReadinessStatus = "not-started" | "in-progress" | "ready" | "completed" | "unknown";
 
 export interface MoveInReadiness {
@@ -121,6 +153,7 @@ export interface TenantDetailBundle {
   };
   insights?: TenantInsight[];
   credibilityInsights?: CredibilityInsights | null;
+  moveInRequirements?: MoveInRequirements | null;
   moveInReadiness?: MoveInReadiness | null;
 }
 

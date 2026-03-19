@@ -17,6 +17,7 @@ import {
 } from "./leasePartyConsolidationService";
 import { buildCredibilityInsights, type CredibilityInsights } from "./risk/credibilityInsights";
 import { buildMoveInReadiness, type MoveInReadiness } from "./moveInReadiness";
+import { buildMoveInRequirements, type MoveInRequirements } from "./moveInRequirements";
 import { buildDerivedTenancyFromTenant, listTenanciesByTenantId } from "./tenanciesService";
 import type { TenantScore, TenantScoreTimelineEntry } from "./risk/tenantScoreTypes";
 import type { RiskGrade } from "./risk/riskTypes";
@@ -83,6 +84,7 @@ export interface TenantLedgerEventDto {
 export interface TenantCredibilityInsights extends CredibilityInsights {}
 
 export interface TenantMoveInReadiness extends MoveInReadiness {}
+export interface TenantMoveInRequirements extends MoveInRequirements {}
 
 const FALLBACK_TENANTS: TenantRecord[] = [
   {
@@ -543,6 +545,15 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
   const ledgerSummary = getLedgerSummaryForTenant(tenantId);
   const insights: any[] = [];
   const credibilityInsights = buildCredibilityInsights({ tenant, leaseRaw: currentLeaseRaw });
+  const moveInRequirements = buildMoveInRequirements({
+    lease,
+    leaseRaw: currentLeaseRaw,
+    tenant,
+    tenancy: currentTenancy,
+    invite: tenantInviteState,
+    payments,
+    ledger,
+  });
   const moveInReadiness = buildMoveInReadiness({
     lease,
     leaseRaw: currentLeaseRaw,
@@ -571,6 +582,7 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
     ledger,
     insights,
     credibilityInsights,
+    moveInRequirements,
     moveInReadiness,
     ledgerSummary,
   };
