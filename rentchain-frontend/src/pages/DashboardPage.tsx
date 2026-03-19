@@ -6,6 +6,7 @@ import { spacing, text, colors } from "../styles/tokens";
 import { KpiStrip } from "../components/dashboard/KpiStrip";
 import { ActionRequiredPanel } from "../components/dashboard/ActionRequiredPanel";
 import { RecentEventsCard } from "../components/dashboard/RecentEventsCard";
+import { PortfolioCredibilitySummaryCard } from "../components/dashboard/PortfolioCredibilitySummaryCard";
 import { debugApiBase } from "@/api/baseUrl";
 import { fetchDashboardSummary } from "../api/dashboard";
 import { fetchProperties } from "../api/propertiesApi";
@@ -515,6 +516,9 @@ const DashboardPage: React.FC = () => {
         ) : null}
 
         {dataReady ? <KpiStrip kpis={kpis} loading={loading} /> : null}
+        {dataReady ? (
+          <PortfolioCredibilitySummaryCard summary={data?.portfolioCredibilitySummary ?? null} />
+        ) : null}
         {dataReady &&
         (leaseNoticeSummary.expiringSoon > 0 ||
           leaseNoticeSummary.pendingResponse > 0 ||
