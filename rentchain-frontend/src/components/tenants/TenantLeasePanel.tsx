@@ -25,6 +25,86 @@ interface TenantLeasePanelProps {
   tenantId: string | null;
 }
 
+type TaskErrorState =
+  | "tasks_unavailable"
+  | "tasks_load_failed"
+  | "tasks_refresh_failed"
+  | "automation_update_failed";
+
+const panelSurface: React.CSSProperties = {
+  borderRadius: 16,
+  border: "1px solid rgba(148,163,184,0.28)",
+  background: "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.96))",
+  boxShadow: "0 12px 28px rgba(15,23,42,0.06)",
+};
+
+const insetPanelSurface: React.CSSProperties = {
+  borderRadius: 14,
+  border: "1px solid rgba(148,163,184,0.22)",
+  background: "rgba(248,250,252,0.9)",
+};
+
+const automationTitleStyle: React.CSSProperties = {
+  color: "#0f172a",
+  fontSize: 14,
+  fontWeight: 700,
+};
+
+const automationMetaStyle: React.CSSProperties = {
+  color: "#475569",
+  fontSize: 12,
+  lineHeight: 1.5,
+};
+
+function getAutomationErrorCopy(error: TaskErrorState) {
+  switch (error) {
+    case "tasks_unavailable":
+      return {
+        title: "Automation tasks unavailable",
+        body: "We couldn’t load upcoming automation tasks right now.",
+        hint: "This may be temporary. Please refresh or try again shortly.",
+      };
+    case "tasks_refresh_failed":
+      return {
+        title: "Unable to refresh automation tasks",
+        body: "We couldn’t refresh the upcoming automation schedule right now.",
+        hint: "Please try again in a moment.",
+      };
+    case "automation_update_failed":
+      return {
+        title: "Automation update unavailable",
+        body: "We couldn’t update lifecycle automation right now.",
+        hint: "Your current settings were left unchanged.",
+      };
+    default:
+      return {
+        title: "Automation tasks unavailable",
+        body: "We couldn’t load upcoming automation tasks right now.",
+        hint: "Please refresh or try again shortly.",
+      };
+  }
+}
+
+const AutomationMessageCard: React.FC<{
+  title: string;
+  description: string;
+  hint?: string | null;
+}> = ({ title, description, hint = null }) => (
+  <div
+    style={{
+      ...insetPanelSurface,
+      padding: 12,
+      display: "grid",
+      gap: 4,
+      marginTop: 10,
+    }}
+  >
+    <div style={{ color: "#0f172a", fontSize: 13, fontWeight: 700 }}>{title}</div>
+    <div style={{ color: "#475569", fontSize: 12, lineHeight: 1.5 }}>{description}</div>
+    {hint ? <div style={{ color: "#64748b", fontSize: 12 }}>{hint}</div> : null}
+  </div>
+);
+
 export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) => {
   const [leases, setLeases] = useState<Lease[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -32,7 +112,7 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
   const [endingLeaseId, setEndingLeaseId] = useState<string | null>(null);
   const [automationSaving, setAutomationSaving] = useState(false);
   const [tasksLoading, setTasksLoading] = useState(false);
-  const [taskError, setTaskError] = useState<string | null>(null);
+  const [taskError, setTaskError] = useState<TaskErrorState | null>(null);
   const [upcomingTasks, setUpcomingTasks] = useState<LeaseAutomationTask[]>([]);
   const { features, loading: capsLoading } = useCapabilities();
   const { openUpgrade } = useUpgrade();
@@ -106,9 +186,9 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
         const msg = String(err?.message || "");
         if (msg.includes("404")) {
           setUpcomingTasks([]);
-          setTaskError("Automation tasks endpoint is unavailable.");
+          setTaskError("tasks_unavailable");
         } else {
-          setTaskError("Failed to load automation tasks.");
+          setTaskError("tasks_load_failed");
         }
       } finally {
         if (!cancelled) setTasksLoading(false);
@@ -169,7 +249,7 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
           lease.id === leaseId ? { ...lease, automationEnabled: !nextEnabled } : lease
         )
       );
-      setTaskError("Unable to update automation right now.");
+      setTaskError("automation_update_failed");
     } finally {
       setAutomationSaving(false);
     }
@@ -183,7 +263,7 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
       const regenerated = await regenerateLeaseAutomationTasks(activeLease.id);
       setUpcomingTasks(Array.isArray(regenerated.tasks) ? regenerated.tasks : []);
     } catch (_err) {
-      setTaskError("Failed to regenerate automation tasks.");
+      setTaskError("tasks_refresh_failed");
     } finally {
       setTasksLoading(false);
     }
@@ -253,22 +333,20 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
         {activeLease && (
           <div
             style={{
-              borderRadius: 12,
-              border: "1px solid rgba(148,163,184,0.25)",
-              padding: 12,
-              background: "rgba(255,255,255,0.02)",
+              ...panelSurface,
+              padding: 14,
             }}
           >
-            <div style={{ color: "#9ca3af", fontSize: 12, marginBottom: 4 }}>
+            <div style={{ color: "#64748b", fontSize: 12, marginBottom: 4, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6 }}>
               Current Lease
             </div>
-            <div style={{ color: "#e5e7eb", fontWeight: 600 }}>
+            <div style={{ color: "#0f172a", fontWeight: 700 }}>
               Property: {activeLease.propertyId} - Unit {activeLease.unitNumber}
             </div>
-            <div style={{ color: "#cbd5f5", fontSize: 13, marginTop: 4 }}>
+            <div style={{ color: "#334155", fontSize: 13, marginTop: 4, fontWeight: 600 }}>
               Rent: {formatCurrency(activeLease.monthlyRent)} / month
             </div>
-            <div style={{ color: "#9ca3af", fontSize: 12, marginTop: 4 }}>
+            <div style={{ color: "#64748b", fontSize: 12, marginTop: 4 }}>
               {formatDate(activeLease.startDate)} →{" "}
               {activeLease.endDate ? formatDate(activeLease.endDate) : "Ongoing"}
             </div>
@@ -277,24 +355,24 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
             </div>
             <div
               style={{
-                marginTop: 10,
-                paddingTop: 10,
-                borderTop: "1px solid rgba(148,163,184,0.2)",
+                ...insetPanelSurface,
+                marginTop: 12,
+                padding: 12,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
-                gap: 10,
+                gap: 12,
               }}
             >
-              <div style={{ display: "grid", gap: 2 }}>
-                <div style={{ color: "#e5e7eb", fontSize: 13, fontWeight: 600 }}>
+              <div style={{ display: "grid", gap: 3 }}>
+                <div style={automationTitleStyle}>
                   Lifecycle automation
                 </div>
-                <div style={{ color: "#9ca3af", fontSize: 12 }}>
+                <div style={automationMetaStyle}>
                   Drafts and reminders only. Legal notices are not auto-sent.
                 </div>
               </div>
-              <label style={{ display: "flex", alignItems: "center", gap: 8, color: "#e5e7eb", fontSize: 12 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, color: "#334155", fontSize: 12, fontWeight: 600 }}>
                 <input
                   type="checkbox"
                   checked={activeLease.automationEnabled !== false}
@@ -307,11 +385,9 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
 
             <div
               style={{
-                marginTop: 10,
-                borderRadius: 10,
-                border: "1px solid rgba(148,163,184,0.2)",
-                padding: 10,
-                background: "rgba(255,255,255,0.01)",
+                ...insetPanelSurface,
+                marginTop: 12,
+                padding: 12,
               }}
             >
               <div
@@ -322,7 +398,7 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
                   gap: 8,
                 }}
               >
-                <div style={{ color: "#e5e7eb", fontSize: 13, fontWeight: 600 }}>
+                <div style={automationTitleStyle}>
                   Upcoming automation tasks
                 </div>
                 <button
@@ -333,7 +409,7 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
                     borderRadius: 8,
                     border: "1px solid rgba(148,163,184,0.35)",
                     background: "transparent",
-                    color: "#e5e7eb",
+                    color: "#334155",
                     padding: "4px 8px",
                     fontSize: 12,
                     cursor: tasksLoading ? "default" : "pointer",
@@ -344,12 +420,17 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
                 </button>
               </div>
               {taskError ? (
-                <div style={{ color: "#f59e0b", fontSize: 12, marginTop: 8 }}>{taskError}</div>
+                <AutomationMessageCard
+                  title={getAutomationErrorCopy(taskError).title}
+                  description={getAutomationErrorCopy(taskError).body}
+                  hint={getAutomationErrorCopy(taskError).hint}
+                />
               ) : null}
               {!taskError && upcomingTasks.length === 0 ? (
-                <div style={{ color: "#9ca3af", fontSize: 12, marginTop: 8 }}>
-                  No upcoming tasks yet.
-                </div>
+                <AutomationMessageCard
+                  title="No upcoming automation tasks"
+                  description="Scheduled tasks will appear here."
+                />
               ) : null}
               {upcomingTasks.length > 0 ? (
                 <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
@@ -357,18 +438,19 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
                     <div
                       key={task.id}
                       style={{
-                        borderRadius: 8,
-                        border: "1px solid rgba(148,163,184,0.15)",
-                        padding: "6px 8px",
+                        borderRadius: 10,
+                        border: "1px solid rgba(148,163,184,0.18)",
+                        background: "rgba(255,255,255,0.72)",
+                        padding: "8px 10px",
                         fontSize: 12,
-                        color: "#e5e7eb",
+                        color: "#1f2937",
                         display: "flex",
                         justifyContent: "space-between",
                         gap: 8,
                       }}
                     >
                       <span>{task.reason}</span>
-                      <span style={{ color: "#9ca3af" }}>{formatDate(task.dueDate)}</span>
+                      <span style={{ color: "#64748b", fontWeight: 600 }}>{formatDate(task.dueDate)}</span>
                     </div>
                   ))}
                 </div>
