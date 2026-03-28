@@ -67,6 +67,18 @@ import { TransUnionConnectionCard } from "@/components/integrations/TransUnionCo
 import { GetTransUnionAccessModal } from "@/components/integrations/GetTransUnionAccessModal";
 import { ConnectTransUnionModal } from "@/components/integrations/ConnectTransUnionModal";
 import { UpdateTransUnionCredentialsModal } from "@/components/integrations/UpdateTransUnionCredentialsModal";
+import {
+  cancelViewing,
+  completeViewing,
+  fetchViewingRequest,
+  fetchViewingRequests,
+  proposeViewingSlots,
+  selectViewingSlot,
+  type ProposedViewingSlotPayload,
+  type ViewingRequest,
+} from "@/api/viewingsApi";
+import { ViewingRequestList } from "@/components/viewings/ViewingRequestList";
+import { ViewingRequestDetail } from "@/components/viewings/ViewingRequestDetail";
 const statusOptions: RentalApplicationStatus[] = [
   "SUBMITTED",
   "IN_REVIEW",
@@ -223,6 +235,11 @@ const ApplicationsPage: React.FC = () => {
   const [transUnionAccessOpen, setTransUnionAccessOpen] = useState(false);
   const [transUnionConnectOpen, setTransUnionConnectOpen] = useState(false);
   const [transUnionUpdateOpen, setTransUnionUpdateOpen] = useState(false);
+  const [viewingRequests, setViewingRequests] = useState<ViewingRequest[]>([]);
+  const [viewingLoading, setViewingLoading] = useState(false);
+  const [viewingActionLoading, setViewingActionLoading] = useState(false);
+  const [viewingError, setViewingError] = useState<string | null>(null);
+  const [selectedViewingId, setSelectedViewingId] = useState<string | null>(null);
   const screeningSectionRef = React.useRef<HTMLDivElement | null>(null);
   const uiLocale = getUiLocale();
   const screeningComingSoonText = screeningComingSoonLabel(uiLocale);
@@ -308,6 +325,10 @@ const ApplicationsPage: React.FC = () => {
     : "Application";
   const screeningOrderId = detail?.screening?.orderId || null;
   const isTransUnionConnected = transUnionIntegration.status === "connected";
+  const selectedViewingRequest = useMemo(
+    () => viewingRequests.find((request) => request.id === selectedViewingId) || null,
+    [viewingRequests, selectedViewingId]
+  );
 
   const loadTransUnionIntegration = useCallback(async () => {
     setTransUnionLoading(true);
@@ -338,6 +359,38 @@ const ApplicationsPage: React.FC = () => {
       setScreeningStatusLoading(false);
     }
   };
+
+  const loadViewingRequests = useCallback(async () => {
+    setViewingLoading(true);
+    setViewingError(null);
+    try {
+      const data = await fetchViewingRequests();
+      setViewingRequests(data || []);
+      setSelectedViewingId((current) => {
+        if (current && data.some((item) => item.id === current)) return current;
+        return data[0]?.id || null;
+      });
+    } catch (err: any) {
+      setViewingError(err?.message || "Unable to load viewing requests.");
+    } finally {
+      setViewingLoading(false);
+    }
+  }, []);
+
+  const refreshViewingRequest = useCallback(
+    async (viewingRequestId: string) => {
+      const refreshed = await fetchViewingRequest(viewingRequestId);
+      setViewingRequests((prev) => {
+        const next = prev.some((item) => item.id === refreshed.id)
+          ? prev.map((item) => (item.id === refreshed.id ? refreshed : item))
+          : [refreshed, ...prev];
+        return next.sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+      });
+      setSelectedViewingId(refreshed.id);
+      return refreshed;
+    },
+    []
+  );
 
   const loadScreeningEvents = async (applicationId: string) => {
     setScreeningEventsLoading(true);
@@ -455,6 +508,18 @@ const ApplicationsPage: React.FC = () => {
   useEffect(() => {
     void loadTransUnionIntegration();
   }, [loadTransUnionIntegration]);
+
+  useEffect(() => {
+    void loadViewingRequests();
+  }, [loadViewingRequests]);
+
+  useEffect(() => {
+    if (!detail?.id) return;
+    const matching = viewingRequests.find((request) => request.applicationId === detail.id);
+    if (matching) {
+      setSelectedViewingId(matching.id);
+    }
+  }, [detail?.id, viewingRequests]);
 
   const retryProperties = useCallback(async () => {
     try {
@@ -1149,6 +1214,89 @@ const ApplicationsPage: React.FC = () => {
             : () => showToast({ message: "Select an application to start screening.", variant: "warning" })
         }
       />
+
+      <Card elevated style={{ display: "grid", gap: spacing.md }}>
+        <div style={{ display: "grid", gap: 4 }}>
+          <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>Viewing requests</div>
+          <div style={{ color: text.muted, fontSize: "0.94rem" }}>
+            Review incoming viewing requests, propose times, and manage scheduling without leaving Applications.
+          </div>
+        </div>
+        {viewingError ? (
+          <div style={{ color: "#b91c1c", fontSize: 13 }}>{viewingError}</div>
+        ) : null}
+        <div
+          style={{
+            display: "grid",
+            gap: spacing.md,
+            gridTemplateColumns: "minmax(260px, 320px) minmax(0, 1fr)",
+          }}
+        >
+          <div>
+            {viewingLoading ? (
+              <div style={{ color: text.muted }}>Loading viewing requests...</div>
+            ) : (
+              <ViewingRequestList
+                requests={viewingRequests}
+                selectedId={selectedViewingId}
+                onSelect={setSelectedViewingId}
+              />
+            )}
+          </div>
+          <ViewingRequestDetail
+            request={selectedViewingRequest}
+            actionLoading={viewingActionLoading}
+            onProposeSlots={async (proposedSlots: ProposedViewingSlotPayload[]) => {
+              if (!selectedViewingRequest) return;
+              setViewingActionLoading(true);
+              try {
+                await proposeViewingSlots(selectedViewingRequest.id, { proposedSlots });
+                await refreshViewingRequest(selectedViewingRequest.id);
+              } catch (err: any) {
+                showToast({ message: err?.message || "Unable to save proposed slots.", variant: "error" });
+              } finally {
+                setViewingActionLoading(false);
+              }
+            }}
+            onSelectSlot={async (slotId: string) => {
+              if (!selectedViewingRequest) return;
+              setViewingActionLoading(true);
+              try {
+                await selectViewingSlot(selectedViewingRequest.id, { slotId });
+                await refreshViewingRequest(selectedViewingRequest.id);
+              } catch (err: any) {
+                showToast({ message: err?.message || "Unable to select viewing slot.", variant: "error" });
+              } finally {
+                setViewingActionLoading(false);
+              }
+            }}
+            onComplete={async () => {
+              if (!selectedViewingRequest) return;
+              setViewingActionLoading(true);
+              try {
+                await completeViewing(selectedViewingRequest.id);
+                await refreshViewingRequest(selectedViewingRequest.id);
+              } catch (err: any) {
+                showToast({ message: err?.message || "Unable to mark viewing complete.", variant: "error" });
+              } finally {
+                setViewingActionLoading(false);
+              }
+            }}
+            onCancel={async (cancelledReason: string | null) => {
+              if (!selectedViewingRequest) return;
+              setViewingActionLoading(true);
+              try {
+                await cancelViewing(selectedViewingRequest.id, { cancelledReason });
+                await refreshViewingRequest(selectedViewingRequest.id);
+              } catch (err: any) {
+                showToast({ message: err?.message || "Unable to cancel viewing.", variant: "error" });
+              } finally {
+                setViewingActionLoading(false);
+              }
+            }}
+          />
+        </div>
+      </Card>
 
       <Card elevated className="rc-applications-grid">
         <ResponsiveMasterDetail

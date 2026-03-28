@@ -88,6 +88,7 @@ import statusRoutes from "./routes/statusRoutes";
 import expensesRoutes from "./routes/expensesRoutes";
 import workOrdersRoutes from "./routes/workOrdersRoutes";
 import transunionRoutes from "./services/integrations/transunion/transunionRoutes";
+import viewingRoutes from "./routes/viewingRoutes";
 
 process.on("unhandledRejection", (reason) => {
   console.error("[FATAL] unhandledRejection", reason);
@@ -179,6 +180,7 @@ app.use("/api/public", routeSource("landlordInvitesPublicRoutes.ts"), landlordIn
 app.use("/api/public", routeSource("landlordInquiryRoutes.ts"), landlordInquiryPublicRoutes);
 app.use("/api/public", tenantHistorySharePublicRouter);
 app.use("/api/public", routeSource("publicApplicationLinksRoutes.ts"), publicApplicationLinksRoutes);
+app.use("/api", routeSource("viewingRoutes.ts"), viewingRoutes);
 app.use("/api/auth", routeSource("authRoutes.ts"), authRoutes);
 app.use("/api/invites", routeSource("invitesRoutes.ts"), invitesRoutes);
 app.use("/api/access", routeSource("accessRoutes.ts"), accessRoutes);
