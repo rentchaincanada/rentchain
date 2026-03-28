@@ -54,6 +54,19 @@ import {
   screeningUnavailableMessage,
 } from "../config/screening";
 import { ApplicationDecisionSummaryCard } from "@/components/applications/ApplicationDecisionSummaryCard";
+import {
+  connectTransUnion,
+  disconnectTransUnion,
+  getTransUnionIntegration,
+  requestTransUnionOnboarding,
+  updateTransUnionCredentials,
+  type TransUnionCredentialsPayload,
+  type TransUnionIntegration,
+} from "@/api/integrationsApi";
+import { TransUnionConnectionCard } from "@/components/integrations/TransUnionConnectionCard";
+import { GetTransUnionAccessModal } from "@/components/integrations/GetTransUnionAccessModal";
+import { ConnectTransUnionModal } from "@/components/integrations/ConnectTransUnionModal";
+import { UpdateTransUnionCredentialsModal } from "@/components/integrations/UpdateTransUnionCredentialsModal";
 const statusOptions: RentalApplicationStatus[] = [
   "SUBMITTED",
   "IN_REVIEW",
@@ -200,6 +213,16 @@ const ApplicationsPage: React.FC = () => {
   const [modalUnitId, setModalUnitId] = useState<string | null>(null);
   const [propertyGateOpen, setPropertyGateOpen] = useState(false);
   const [screeningInviteOpen, setScreeningInviteOpen] = useState(false);
+  const [transUnionIntegration, setTransUnionIntegration] = useState<TransUnionIntegration>({
+    provider: "transunion",
+    status: "not_connected",
+    version: 1,
+  });
+  const [transUnionLoading, setTransUnionLoading] = useState(true);
+  const [transUnionSubmitting, setTransUnionSubmitting] = useState(false);
+  const [transUnionAccessOpen, setTransUnionAccessOpen] = useState(false);
+  const [transUnionConnectOpen, setTransUnionConnectOpen] = useState(false);
+  const [transUnionUpdateOpen, setTransUnionUpdateOpen] = useState(false);
   const screeningSectionRef = React.useRef<HTMLDivElement | null>(null);
   const uiLocale = getUiLocale();
   const screeningComingSoonText = screeningComingSoonLabel(uiLocale);
@@ -284,6 +307,23 @@ const ApplicationsPage: React.FC = () => {
     ? `${detail.applicant.firstName} ${detail.applicant.lastName}`.trim()
     : "Application";
   const screeningOrderId = detail?.screening?.orderId || null;
+  const isTransUnionConnected = transUnionIntegration.status === "connected";
+
+  const loadTransUnionIntegration = useCallback(async () => {
+    setTransUnionLoading(true);
+    try {
+      const data = await getTransUnionIntegration();
+      setTransUnionIntegration(data);
+    } catch (err: any) {
+      showToast({
+        message: "Unable to load TransUnion connection",
+        description: err?.message || "",
+        variant: "error",
+      });
+    } finally {
+      setTransUnionLoading(false);
+    }
+  }, [showToast]);
 
   const loadScreeningStatus = async (applicationId: string) => {
     setScreeningStatusLoading(true);
@@ -412,6 +452,10 @@ const ApplicationsPage: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    void loadTransUnionIntegration();
+  }, [loadTransUnionIntegration]);
+
   const retryProperties = useCallback(async () => {
     try {
       setPropertiesLoading(true);
@@ -491,6 +535,16 @@ const ApplicationsPage: React.FC = () => {
     if (params.get("exportPreview") === "1") {
       setExportPreviewSource("onboarding");
       setExportPreviewOpen(true);
+    }
+  }, [location.search]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("openTransUnionAccess") === "1") {
+      setTransUnionAccessOpen(true);
+    }
+    if (params.get("openTransUnionConnect") === "1") {
+      setTransUnionConnectOpen(true);
     }
   }, [location.search]);
 
@@ -787,6 +841,80 @@ const ApplicationsPage: React.FC = () => {
     }, 150);
   };
 
+  const submitTransUnionOnboardingRequest = useCallback(async () => {
+    setTransUnionSubmitting(true);
+    try {
+      const data = await requestTransUnionOnboarding({
+        businessName: transUnionIntegration.businessName,
+        contactName: transUnionIntegration.contactName,
+        contactEmail: transUnionIntegration.contactEmail,
+      });
+      setTransUnionIntegration(data);
+      setTransUnionAccessOpen(false);
+      showToast({ message: "TransUnion onboarding marked in progress.", variant: "success" });
+    } catch (err: any) {
+      showToast({
+        message: "Unable to update TransUnion onboarding",
+        description: err?.message || "",
+        variant: "error",
+      });
+    } finally {
+      setTransUnionSubmitting(false);
+    }
+  }, [
+    showToast,
+    transUnionIntegration.businessName,
+    transUnionIntegration.contactEmail,
+    transUnionIntegration.contactName,
+  ]);
+
+  const submitTransUnionConnect = useCallback(
+    async (payload: TransUnionCredentialsPayload) => {
+      setTransUnionSubmitting(true);
+      try {
+        const data = await connectTransUnion(payload);
+        setTransUnionIntegration(data);
+        setTransUnionConnectOpen(false);
+        showToast({ message: "TransUnion membership connected.", variant: "success" });
+      } finally {
+        setTransUnionSubmitting(false);
+      }
+    },
+    [showToast]
+  );
+
+  const submitTransUnionUpdate = useCallback(
+    async (payload: TransUnionCredentialsPayload) => {
+      setTransUnionSubmitting(true);
+      try {
+        const data = await updateTransUnionCredentials(payload);
+        setTransUnionIntegration(data);
+        setTransUnionUpdateOpen(false);
+        showToast({ message: "TransUnion credentials updated.", variant: "success" });
+      } finally {
+        setTransUnionSubmitting(false);
+      }
+    },
+    [showToast]
+  );
+
+  const handleTransUnionDisconnect = useCallback(async () => {
+    setTransUnionSubmitting(true);
+    try {
+      const data = await disconnectTransUnion();
+      setTransUnionIntegration(data);
+      showToast({ message: "TransUnion disconnected.", variant: "success" });
+    } catch (err: any) {
+      showToast({
+        message: "Unable to disconnect TransUnion",
+        description: err?.message || "",
+        variant: "error",
+      });
+    } finally {
+      setTransUnionSubmitting(false);
+    }
+  }, [showToast]);
+
   const openProUpgrade = (featureName: "screening" | "exports") => {
     track("gating_blocked", { featureName, requiredTier: "pro", userTier });
     openUpgrade({
@@ -1005,6 +1133,22 @@ const ApplicationsPage: React.FC = () => {
           </Button>
         </div>
       </Card>
+
+      <TransUnionConnectionCard
+        integration={transUnionIntegration}
+        loading={transUnionLoading}
+        onGetAccess={() => setTransUnionAccessOpen(true)}
+        onConnectExisting={() => setTransUnionConnectOpen(true)}
+        onEnterDetails={() => setTransUnionConnectOpen(true)}
+        onViewInstructions={() => setTransUnionAccessOpen(true)}
+        onUpdateCredentials={() => setTransUnionUpdateOpen(true)}
+        onDisconnect={() => void handleTransUnionDisconnect()}
+        onStartScreening={
+          detail
+            ? () => handleRowScreen(detail.id)
+            : () => showToast({ message: "Select an application to start screening.", variant: "warning" })
+        }
+      />
 
       <Card elevated className="rc-applications-grid">
         <ResponsiveMasterDetail
@@ -1335,6 +1479,33 @@ const ApplicationsPage: React.FC = () => {
                   <div style={{ color: text.muted }}>
                     Screening is unavailable on your current plan.
                   </div>
+                ) : transUnionLoading ? (
+                  <div style={{ color: text.muted }}>Loading TransUnion connection…</div>
+                ) : !isTransUnionConnected ? (
+                  <Card
+                    style={{
+                      border: `1px solid ${colors.borderStrong}`,
+                      background: colors.bg,
+                      display: "grid",
+                      gap: spacing.sm,
+                    }}
+                  >
+                    <div style={{ fontWeight: 700, fontSize: "1rem" }}>
+                      Connect TransUnion to start screening
+                    </div>
+                    <div style={{ color: text.muted, lineHeight: 1.6 }}>
+                      Before you can screen a tenant in RentChain, connect your TransUnion
+                      membership credentials.
+                    </div>
+                    <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
+                      <Button type="button" onClick={() => setTransUnionConnectOpen(true)}>
+                        Connect TransUnion
+                      </Button>
+                      <Button type="button" variant="secondary" onClick={() => setTransUnionAccessOpen(true)}>
+                        Get Access
+                      </Button>
+                    </div>
+                  </Card>
                 ) : (
                   <div style={{ display: "grid", gap: 10 }}>
                     <div style={{ fontSize: 13, color: text.muted }}>
@@ -2075,6 +2246,36 @@ const ApplicationsPage: React.FC = () => {
         </Card>
       </div>
       )}
+      <GetTransUnionAccessModal
+        open={transUnionAccessOpen}
+        submitting={transUnionSubmitting}
+        onClose={() => {
+          setTransUnionAccessOpen(false);
+          if (location.search.includes("openTransUnionAccess=1")) {
+            navigate("/applications", { replace: true });
+          }
+        }}
+        onMarkInProgress={submitTransUnionOnboardingRequest}
+      />
+      <ConnectTransUnionModal
+        open={transUnionConnectOpen}
+        submitting={transUnionSubmitting}
+        integration={transUnionIntegration}
+        onClose={() => {
+          setTransUnionConnectOpen(false);
+          if (location.search.includes("openTransUnionConnect=1")) {
+            navigate("/applications", { replace: true });
+          }
+        }}
+        onSubmit={submitTransUnionConnect}
+      />
+      <UpdateTransUnionCredentialsModal
+        open={transUnionUpdateOpen}
+        submitting={transUnionSubmitting}
+        integration={transUnionIntegration}
+        onClose={() => setTransUnionUpdateOpen(false)}
+        onSubmit={submitTransUnionUpdate}
+      />
     </>
   );
 };

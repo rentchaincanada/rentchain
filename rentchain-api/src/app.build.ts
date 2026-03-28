@@ -87,6 +87,7 @@ import internalReportsRoutes from "./routes/internalReportsRoutes";
 import statusRoutes from "./routes/statusRoutes";
 import expensesRoutes from "./routes/expensesRoutes";
 import workOrdersRoutes from "./routes/workOrdersRoutes";
+import transunionRoutes from "./services/integrations/transunion/transunionRoutes";
 
 process.on("unhandledRejection", (reason) => {
   console.error("[FATAL] unhandledRejection", reason);
@@ -240,6 +241,7 @@ app.use("/api/tenant/lease-notices", routeSource("tenantLeaseNoticeRoutes.ts"), 
 app.use("/api", routeSource("maintenanceRequestsRoutes"), maintenanceRequestsRoutes);
 app.use("/api", routeSource("usageBreakdownRoutes.ts"), usageBreakdownRoutes);
 app.use("/api/properties", propertiesRoutes);
+app.use("/api/integrations", routeSource("transunionRoutes.ts"), transunionRoutes);
 app.use("/api", routeSource("rentalApplicationsRoutes.ts"), rentalApplicationsRoutes);
 if (process.env.NODE_ENV !== "production") {
   console.log("[boot] mounted rentalApplicationsRoutes at /api (review-summary endpoints enabled)");

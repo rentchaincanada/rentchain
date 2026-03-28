@@ -63,6 +63,9 @@ const mapErrorMessage = (code?: string | null) => {
   if (normalized === "invalid_request") {
     return "This application isn't ready for screening yet.";
   }
+  if (normalized === "transunion_not_connected") {
+    return "Connect your TransUnion membership before starting screening.";
+  }
   return "Unable to start screening checkout. Please try again.";
 };
 
@@ -70,6 +73,9 @@ const mapErrorTitle = (code?: string | null) => {
   const normalized = String(code || "").toLowerCase();
   if (normalized === "screening_already_paid") {
     return "Screening already paid";
+  }
+  if (normalized === "transunion_not_connected") {
+    return "Connect TransUnion to start screening";
   }
   return "Unable to start screening checkout";
 };
@@ -116,7 +122,7 @@ const ScreeningStartPage: React.FC = () => {
           {
             method: "POST",
             body: { successPath, cancelPath, returnTo },
-            allowStatuses: [400, 401, 403, 404, 500],
+            allowStatuses: [400, 401, 403, 404, 409, 500],
           }
         );
 
@@ -204,6 +210,41 @@ const ScreeningStartPage: React.FC = () => {
             <div style={{ color: text.muted, fontSize: "0.95rem" }}>
               {error || "Something went wrong. Please try again."}
             </div>
+            {errorCode === "transunion_not_connected" ? (
+              <div
+                style={{
+                  border: `1px solid rgba(15,23,42,0.12)`,
+                  borderRadius: 16,
+                  padding: spacing.md,
+                  background: "rgba(15,23,42,0.02)",
+                  display: "grid",
+                  gap: spacing.sm,
+                }}
+              >
+                <div style={{ fontWeight: 700, fontSize: "1rem" }}>
+                  Connect TransUnion to start screening
+                </div>
+                <div style={{ color: text.muted, fontSize: "0.95rem" }}>
+                  Before you can screen a tenant in RentChain, connect your TransUnion membership
+                  credentials.
+                </div>
+                <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
+                  <Button
+                    type="button"
+                    onClick={() => navigate("/applications?openTransUnionConnect=1")}
+                  >
+                    Connect TransUnion
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => navigate("/applications?openTransUnionAccess=1")}
+                  >
+                    Get Access
+                  </Button>
+                </div>
+              </div>
+            ) : null}
             {reason ? (
               <div style={{ color: text.subtle, fontSize: "0.9rem" }}>Reason: {reason}</div>
             ) : null}

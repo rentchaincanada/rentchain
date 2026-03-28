@@ -13,6 +13,7 @@ import { writeScreeningEvent } from "../services/screening/screeningEvents";
 import { buildScreeningPdf } from "../services/screening/reportPdf";
 import { buildShareUrl, createReportExport } from "../services/screening/reportExportService";
 import { getScreeningProviderHealth } from "../services/screening/providerHealth";
+import { assertTransUnionConnectedForScreening } from "../services/integrations/transunion/transunionService";
 import { getBureauProvider } from "../services/screening/providers/bureauProvider";
 import { compareQuoteResponses } from "../services/screening/cutoverCompare";
 import { getPrimaryTimeoutMs, hashSeedKey, isAllowlistedSeed, parseAllowlist } from "../services/screening/cutoverConfig";
@@ -1144,6 +1145,25 @@ router.post(
         allowMockOverride
       ) {
         logMockProviderCheckout({ name: "checkout", seedKey: id });
+      }
+      if (
+        process.env.NODE_ENV === "production" &&
+        !referralMode &&
+        providerHealth.configured &&
+        providerHealth.preflightOk &&
+        !allowMockOverride
+      ) {
+        try {
+          await assertTransUnionConnectedForScreening(String(data?.landlordId || landlordId));
+        } catch (error: any) {
+          if (error?.statusCode === 409 && error?.code === "transunion_not_connected") {
+            return res.status(409).json({
+              error: "transunion_not_connected",
+              message: "Connect your TransUnion membership before starting screening.",
+            });
+          }
+          throw error;
+        }
       }
 
       const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
