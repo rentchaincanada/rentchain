@@ -99,7 +99,7 @@ router.get("/:tenantId/ledger", async (req: any, res) => {
     const bundle = await getTenantDetailBundle(tenantId, { landlordId: landlordId || undefined });
     if (!bundle?.tenant) return res.status(404).json({ ok: false, error: "Tenant not found" });
 
-    const ledger = await getTenantLedger(tenantId);
+    const ledger = Array.isArray((bundle as any).ledger) ? (bundle as any).ledger : await getTenantLedger(tenantId);
     return res.status(200).json(ledger);
   } catch (err: any) {
     console.error("[GET /api/tenants/:tenantId/ledger] error:", err);

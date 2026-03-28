@@ -607,7 +607,7 @@ router.patch("/maintenance-requests/:id", async (req: any, res) => {
                 tenantId,
                 tenantEmail,
                 errMessage: err?.message,
-                errBody: err?.response?.body,
+                errStatus: err?.response?.statusCode || err?.code || null,
               });
             }
           }
