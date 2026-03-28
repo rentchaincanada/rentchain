@@ -45,6 +45,7 @@ import { buildCreatePropertyUrl, buildReturnTo } from "../lib/propertyGate";
 import "./ApplicationsPage.css";
 import { SendScreeningInviteModal } from "../components/screening/SendScreeningInviteModal";
 import { ScreeningStatusBadge } from "../components/screening/ScreeningStatusBadge";
+import { ScreeningStatusCard } from "@/components/screening/ScreeningStatusCard";
 import { SamplePdfModal } from "../components/billing/SamplePdfModal";
 import { hasTier, normalizeTier } from "@/billing/requireTier";
 import {
@@ -79,6 +80,11 @@ import {
 } from "@/api/viewingsApi";
 import { ViewingRequestList } from "@/components/viewings/ViewingRequestList";
 import { ViewingRequestDetail } from "@/components/viewings/ViewingRequestDetail";
+import {
+  getScreeningStatus as getManualScreeningStatus,
+  requestManualScreening,
+  type ScreeningStatusView,
+} from "@/api/screeningOpsApi";
 const statusOptions: RentalApplicationStatus[] = [
   "SUBMITTED",
   "IN_REVIEW",
@@ -235,6 +241,9 @@ const ApplicationsPage: React.FC = () => {
   const [transUnionAccessOpen, setTransUnionAccessOpen] = useState(false);
   const [transUnionConnectOpen, setTransUnionConnectOpen] = useState(false);
   const [transUnionUpdateOpen, setTransUnionUpdateOpen] = useState(false);
+  const [manualScreeningStatus, setManualScreeningStatus] = useState<ScreeningStatusView | null>(null);
+  const [manualScreeningLoading, setManualScreeningLoading] = useState(false);
+  const [manualScreeningSubmitting, setManualScreeningSubmitting] = useState(false);
   const [viewingRequests, setViewingRequests] = useState<ViewingRequest[]>([]);
   const [viewingLoading, setViewingLoading] = useState(false);
   const [viewingActionLoading, setViewingActionLoading] = useState(false);
@@ -360,6 +369,18 @@ const ApplicationsPage: React.FC = () => {
     }
   };
 
+  const loadManualScreeningStatus = async (applicationId: string) => {
+    setManualScreeningLoading(true);
+    try {
+      const res = await getManualScreeningStatus(applicationId);
+      setManualScreeningStatus(res);
+    } catch {
+      setManualScreeningStatus(null);
+    } finally {
+      setManualScreeningLoading(false);
+    }
+  };
+
   const loadViewingRequests = useCallback(async () => {
     setViewingLoading(true);
     setViewingError(null);
@@ -441,6 +462,7 @@ const ApplicationsPage: React.FC = () => {
         setDecisionSummary(null);
       }
       await loadScreeningStatus(id);
+      await loadManualScreeningStatus(id);
       await loadScreeningEvents(id);
       await loadScreeningReceipt(id);
       setScreeningEventsRefreshedAt(Date.now());
@@ -668,6 +690,7 @@ const ApplicationsPage: React.FC = () => {
       setDetail(null);
       setScreeningQuote(null);
       setScreeningQuoteDetail(null);
+      setManualScreeningStatus(null);
       return;
     }
     setScreeningRedirecting(false);
@@ -683,6 +706,7 @@ const ApplicationsPage: React.FC = () => {
   useEffect(() => {
     if (!detail?.id) {
       setScreeningStatus(null);
+      setManualScreeningStatus(null);
       setScreeningEvents([]);
       setScreeningReceipt(null);
       return;
@@ -697,7 +721,9 @@ const ApplicationsPage: React.FC = () => {
       summary: detail.screeningResultSummary ?? null,
       resultId: detail.screeningResultId ?? null,
     });
+    setManualScreeningStatus(null);
     void loadScreeningStatus(detail.id);
+    void loadManualScreeningStatus(detail.id);
     void loadScreeningEvents(detail.id);
     void loadScreeningReceipt(detail.id);
   }, [detail?.id]);
@@ -1145,6 +1171,46 @@ const ApplicationsPage: React.FC = () => {
     }
   };
 
+  const handleManualScreeningPrimaryAction = async () => {
+    if (!detail || !manualScreeningStatus) return;
+    if (manualScreeningStatus.status === "blocked_transunion_not_connected") {
+      navigate(manualScreeningStatus.actionPath);
+      return;
+    }
+    if (manualScreeningStatus.status === "completed") {
+      navigate(manualScreeningStatus.actionPath);
+      return;
+    }
+    if (manualScreeningStatus.status === "requested" || manualScreeningStatus.status === "in_progress") {
+      await refreshSelectedApplication(detail.id);
+      return;
+    }
+
+    setManualScreeningSubmitting(true);
+    try {
+      await requestManualScreening(detail.id);
+      showToast({ message: "Screening requested", variant: "success" });
+      await refreshSelectedApplication(detail.id);
+    } catch (err: any) {
+      if (String(err?.message || "").includes("transunion_not_connected")) {
+        showToast({
+          message: "Connect TransUnion",
+          description: "Connect your TransUnion membership before starting screening.",
+          variant: "warning",
+        });
+        setTransUnionConnectOpen(true);
+      } else {
+        showToast({
+          message: "Unable to request screening",
+          description: err?.message || "",
+          variant: "error",
+        });
+      }
+    } finally {
+      setManualScreeningSubmitting(false);
+    }
+  };
+
   return (
     <>
       <div className="rc-applications-page" style={{ display: "grid", gap: spacing.lg }}>
@@ -1500,6 +1566,14 @@ const ApplicationsPage: React.FC = () => {
                         Refresh
                       </Button>
                     </div>
+                  </div>
+                  <div style={{ marginBottom: 12 }}>
+                    <ScreeningStatusCard
+                      status={manualScreeningStatus}
+                      loading={manualScreeningLoading}
+                      actionLoading={manualScreeningSubmitting}
+                      onPrimaryAction={() => void handleManualScreeningPrimaryAction()}
+                    />
                   </div>
                   <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
                     {!SCREENING_ENABLED ? (

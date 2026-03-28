@@ -14,23 +14,27 @@ import { getProviderStatus, setFeatureFlag, ProviderStatus } from "../api/provid
 import { colors, spacing, text, radius } from "../styles/tokens";
 import AdminMicroLiveCard from "../components/admin/AdminMicroLiveCard";
 import AdminWave0Card from "../components/admin/AdminWave0Card";
+import {
+  ScreeningOperation,
+  completeAdminScreeningOp,
+  cancelAdminScreeningOp,
+  getAdminScreeningOp,
+  getAdminScreeningOps,
+  startAdminScreeningOp,
+} from "../api/screeningOpsApi";
+import { ScreeningOpsList } from "../components/admin/screeningOps/ScreeningOpsList";
+import { ScreeningOpDetail } from "../components/admin/screeningOps/ScreeningOpDetail";
 
 const AdminScreeningsPage: React.FC = () => {
-  if (import.meta.env.PROD) {
-    return (
-      <MacShell title="Admin · Screenings">
-        <Section>
-          <Card elevated>
-            <div style={{ color: text.muted, fontSize: 14 }}>Not available.</div>
-          </Card>
-        </Section>
-      </MacShell>
-    );
-  }
-
   const { showToast } = useToast();
   const [screenings, setScreenings] = useState<AdminScreening[]>([]);
+  const [operations, setOperations] = useState<ScreeningOperation[]>([]);
+  const [selectedOperationId, setSelectedOperationId] = useState<string | null>(null);
+  const [selectedOperation, setSelectedOperation] = useState<ScreeningOperation | null>(null);
+  const [operationsStatusFilter, setOperationsStatusFilter] = useState("");
   const [loading, setLoading] = useState(false);
+  const [operationsLoading, setOperationsLoading] = useState(false);
+  const [operationActionLoading, setOperationActionLoading] = useState(false);
   const [actionId, setActionId] = useState<string | null>(null);
   const [purgeCount, setPurgeCount] = useState<number | null>(null);
   const [providerStatus, setProviderStatus] = useState<ProviderStatus | null>(null);
@@ -39,10 +43,12 @@ const AdminScreeningsPage: React.FC = () => {
   const load = async () => {
     try {
       setLoading(true);
-      const data = await listAdminScreenings();
-      setScreenings(data);
-      const status = await getProviderStatus();
-      setProviderStatus(status);
+      if (!import.meta.env.PROD) {
+        const data = await listAdminScreenings();
+        setScreenings(data);
+        const status = await getProviderStatus();
+        setProviderStatus(status);
+      }
     } catch (err: any) {
       showToast({
         message: "Failed to load screenings",
@@ -54,8 +60,34 @@ const AdminScreeningsPage: React.FC = () => {
     }
   };
 
+  const loadOperations = async (nextSelectedId?: string | null, nextStatusFilter?: string) => {
+    try {
+      setOperationsLoading(true);
+      const res = await getAdminScreeningOps({ status: nextStatusFilter || operationsStatusFilter || undefined });
+      const items = res.operations || [];
+      setOperations(items);
+      const selectedId = nextSelectedId ?? selectedOperationId ?? items[0]?.id ?? null;
+      setSelectedOperationId(selectedId);
+      if (selectedId) {
+        const detail = await getAdminScreeningOp(selectedId);
+        setSelectedOperation(detail.operation);
+      } else {
+        setSelectedOperation(null);
+      }
+    } catch (err: any) {
+      showToast({
+        message: "Failed to load screening operations",
+        description: err?.message,
+        variant: "error",
+      });
+    } finally {
+      setOperationsLoading(false);
+    }
+  };
+
   useEffect(() => {
     void load();
+    void loadOperations();
   }, []);
 
   const handleRetry = async (id: string) => {
@@ -134,23 +166,131 @@ const AdminScreeningsPage: React.FC = () => {
     }
   };
 
+  const reloadOperations = async (nextSelectedId?: string | null, nextStatusFilter?: string) => {
+    await loadOperations(nextSelectedId, nextStatusFilter);
+  };
+
+  const handleSelectOperation = async (id: string) => {
+    setSelectedOperationId(id);
+    try {
+      setOperationsLoading(true);
+      const detail = await getAdminScreeningOp(id);
+      setSelectedOperation(detail.operation);
+    } catch (err: any) {
+      showToast({
+        message: "Failed to load screening operation",
+        description: err?.message,
+        variant: "error",
+      });
+    } finally {
+      setOperationsLoading(false);
+    }
+  };
+
+  const handleStartOperation = async () => {
+    if (!selectedOperationId) return;
+    try {
+      setOperationActionLoading(true);
+      await startAdminScreeningOp(selectedOperationId);
+      await reloadOperations(selectedOperationId);
+      showToast({ message: "Screening marked in progress", variant: "success" });
+    } catch (err: any) {
+      showToast({
+        message: "Unable to update screening",
+        description: err?.message,
+        variant: "error",
+      });
+    } finally {
+      setOperationActionLoading(false);
+    }
+  };
+
+  const handleCompleteOperation = async (payload: any) => {
+    if (!selectedOperationId) return;
+    try {
+      setOperationActionLoading(true);
+      await completeAdminScreeningOp(selectedOperationId, payload);
+      await reloadOperations(selectedOperationId);
+      showToast({ message: "Screening marked completed", variant: "success" });
+    } catch (err: any) {
+      showToast({
+        message: "Unable to complete screening",
+        description: err?.message,
+        variant: "error",
+      });
+    } finally {
+      setOperationActionLoading(false);
+    }
+  };
+
+  const handleCancelOperation = async (payload: any) => {
+    if (!selectedOperationId) return;
+    try {
+      setOperationActionLoading(true);
+      await cancelAdminScreeningOp(selectedOperationId, payload);
+      await reloadOperations(selectedOperationId);
+      showToast({ message: "Screening cancelled", variant: "success" });
+    } catch (err: any) {
+      showToast({
+        message: "Unable to cancel screening",
+        description: err?.message,
+        variant: "error",
+      });
+    } finally {
+      setOperationActionLoading(false);
+    }
+  };
+
   return (
     <MacShell title="Admin · Screenings">
       <Section style={{ display: "flex", flexDirection: "column", gap: spacing.md }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h1 style={{ margin: 0, fontSize: "1.3rem" }}>Admin · Screenings</h1>
           <div style={{ display: "flex", gap: spacing.sm }}>
-            <Button type="button" variant="secondary" onClick={handlePurge} disabled={loading}>
-              Purge expired
-            </Button>
-            <Button type="button" onClick={load} disabled={loading}>
-              Refresh
+            {!import.meta.env.PROD ? (
+              <Button type="button" variant="secondary" onClick={handlePurge} disabled={loading}>
+                Purge expired
+              </Button>
+            ) : null}
+            {!import.meta.env.PROD ? (
+              <Button type="button" onClick={load} disabled={loading}>
+                Refresh
+              </Button>
+            ) : null}
+            <Button type="button" variant="secondary" onClick={() => void loadOperations()} disabled={operationsLoading}>
+              Refresh Ops
             </Button>
           </div>
         </div>
-        <AdminMicroLiveCard />
-        <AdminWave0Card />
-        {providerStatus && (
+        <div
+          style={{
+            display: "grid",
+            gap: spacing.md,
+            gridTemplateColumns: "minmax(280px, 360px) minmax(0, 1fr)",
+          }}
+        >
+          <ScreeningOpsList
+            operations={operations}
+            loading={operationsLoading}
+            selectedId={selectedOperationId}
+            statusFilter={operationsStatusFilter}
+            onStatusFilterChange={(value) => {
+              setOperationsStatusFilter(value);
+              void reloadOperations(null, value);
+            }}
+            onSelect={(id) => void handleSelectOperation(id)}
+          />
+          <ScreeningOpDetail
+            operation={selectedOperation}
+            actionLoading={operationActionLoading}
+            onStart={() => void handleStartOperation()}
+            onComplete={(payload) => void handleCompleteOperation(payload)}
+            onCancel={(payload) => void handleCancelOperation(payload)}
+          />
+        </div>
+        {!import.meta.env.PROD ? <AdminMicroLiveCard /> : null}
+        {!import.meta.env.PROD ? <AdminWave0Card /> : null}
+        {!import.meta.env.PROD && providerStatus && (
           <Card elevated>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing.sm }}>
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -189,11 +329,12 @@ const AdminScreeningsPage: React.FC = () => {
             </div>
           </Card>
         )}
-        {purgeCount !== null && (
+        {!import.meta.env.PROD && purgeCount !== null && (
           <div style={{ fontSize: 12, color: text.muted }}>
             Last purge removed {purgeCount} screening(s).
           </div>
         )}
+        {!import.meta.env.PROD ? (
         <Card elevated>
           {loading ? (
             <div style={{ color: text.muted }}>Loading…</div>
@@ -297,6 +438,7 @@ const AdminScreeningsPage: React.FC = () => {
             </div>
           )}
         </Card>
+        ) : null}
       </Section>
     </MacShell>
   );
