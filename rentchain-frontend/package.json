@@ -1,134 +1,60 @@
-import { defineConfig
-} from "vitest/config";
-import react from "@vitejs/plugin-react-swc";
-import { VitePWA
-} from "vite-plugin-pwa";
-import path from "path";
-
-export default defineConfig(({ mode
-}) => {
-  const isTdzDebug = mode === "tdzdebug";
-
-  return {
-    plugins: [
-      react(),
-      VitePWA({
-        registerType: isTdzDebug ? "prompt": "autoUpdate",
-        cleanupOutdatedCaches: true,
-        clientsClaim: true,
-        skipWaiting: true,
-        manifestFilename: "manifest.webmanifest",
-        includeAssets: [
-          "icons/icon-192-light.png",
-          "icons/icon-512-light.png",
-        ],
-        manifest: {
-          name: "RentChain",
-          short_name: "RentChain",
-          start_url: "/",
-          display: "standalone",
-          background_color: "#ffffff",
-          theme_color: "#0b1220",
-          icons: [
-            {
-              src: "/icons/icon-192-light.png",
-              sizes: "192x192",
-              type: "image/png",
-            },
-            {
-              src: "/icons/icon-512-light.png",
-              sizes: "512x512",
-              type: "image/png",
-            },
-          ],
-        },
-        workbox: {
-          navigateFallbackDenylist: [/^\/templates\ //, /^\/sample\//],
-          runtimeCaching: [
-              {
-              urlPattern: /\/templates\/.*\.(pdf|docx|csv)(\?.*)?$/,
-              handler: "NetworkOnly",
-              options: { cacheName: "templates"
-                },
-              },
-              {
-              urlPattern: /\/sample\/.*\.pdf(\?.*)?$/,
-              handler: "NetworkOnly",
-              options: { cacheName: "samples"
-                },
-              },
-            ],
-          },
-        }),
-      ],
-
-    resolve: {
-      dedupe: [
-          "react",
-          "react-dom"
-        ],
-      alias: {
-          "@": path.resolve(__dirname,
-          "src"),
-        react: path.resolve(__dirname,
-          "node_modules/react"),
-          "react-dom": path.resolve(__dirname,
-          "node_modules/react-dom"),
-        },
-      },
-
-    server: {
-      host: "0.0.0.0",
-      port: 5173,
-      allowedHosts: true,
-      proxy: {
-          "/api": {
-          target: "http://localhost:3000",
-          changeOrigin: true,
-          secure: false,
-          },
-        },
-      },
-
-    build: {
-      sourcemap: isTdzDebug, // only enable in debug mode
-      chunkSizeWarningLimit: 700,
-      rollupOptions: {
-        output: {
-          manualChunks(id) {
-            if (!id.includes("node_modules")) return;
-
-            // Core React stack
-            if (
-              id.includes("react") ||
-              id.includes("react-dom") ||
-              id.includes("react-router-dom")
-            ) {
-              return "react_vendor";
-              }
-              // Everything else
-            return "vendor";
-            },
-          },
-        },
-      },
-
-    test: {
-      environment: "jsdom",
-      setupFiles: "./src/test/setup.ts",
-      include: [
-          "src/**/*.{test,spec}.{ts,tsx}"
-        ],
-      exclude: [
-          "tests/**",
-          "node_modules/**",
-          "dist/**"
-        ],
-        // 🔥 Memory optimization
-      pool: "threads",
-      minWorkers: 1,
-      maxWorkers: 2,
-      watch: false,
-      },
-    };
-  });
+{
+  "name": "rentchain-frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20 <21"
+  },
+  "engineStrict": true,
+  "scripts": {
+    "preflight": "node ./scripts/check-node.js",
+    "check-react-pin": "node ./scripts/check-react-pin.js",
+    "dev": "npm run preflight && vite --host",
+    "build": "npm run preflight && npm run check-react-pin && node scripts/build.mjs",
+    "build:tdzdebug": "vite build --mode tdzdebug",
+    "build:app": "npm run check-react-pin && vite build",
+    "lint": "eslint --config eslint.hooks-guard.config.js --max-warnings=0 src/pages/DashboardPage.tsx \"src/features/automation/timeline/**/*.{ts,tsx}\"",
+    "lint:full": "eslint .",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:light": "vitest run --maxWorkers=2",
+    "test:single": "vitest run --maxWorkers=1",
+    "test:e2e": "npm run preflight && playwright test"
+  },
+  "dependencies": {
+    "axios": "^1.13.2",
+    "firebase": "^12.6.0",
+    "lucide-react": "^0.562.0",
+    "qrcode.react": "^4.2.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-router-dom": "^7.9.6",
+    "recharts": "^3.5.0",
+    "zustand": "^5.0.9"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@playwright/test": "^1.50.1",
+    "@types/node": "^24.10.1",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react-swc": "^4.2.2",
+    "eslint": "^9.39.1",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.4.24",
+    "globals": "^16.5.0",
+    "jsdom": "^27.2.0",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.46.4",
+    "vite": "^7.2.4",
+    "vitest": "^4.0.7",
+    "vite-plugin-pwa": "^1.2.0"
+  },
+  "overrides": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  }
+}
