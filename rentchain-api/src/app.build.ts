@@ -20,6 +20,7 @@ import dashboardRoutes from "./routes/dashboardRoutes";
 import healthRoutes from "./routes/healthRoutes";
 import ledgerV2Routes from "./routes/ledgerV2Routes";
 import landlordMicroLiveRoutes from "./routes/landlordMicroLiveRoutes";
+import landlordActivationRoutes from "./routes/landlordActivationRoutes";
 import capabilitiesRoutes from "./routes/capabilitiesRoutes";
 import tenantHistoryShareRoutes, {
   publicRouter as tenantHistorySharePublicRouter,
@@ -224,6 +225,7 @@ app.use("/api", compatRoutes);
 app.use("/api", routeSource("unitsRoutes.ts"), unitsRoutes);
 app.use("/api/ledger", ledgerRoutes);
 app.use("/api/dashboard", routeSource("dashboardRoutes.ts"), dashboardRoutes);
+app.use("/api/landlord", routeSource("landlordActivationRoutes.ts"), landlordActivationRoutes);
 app.use("/api/application-links", routeSource("landlordApplicationLinksRoutes.ts"), landlordApplicationLinksRoutes);
 app.use("/api", routeSource("referralsRoutes.ts"), referralsRoutes);
 app.use(

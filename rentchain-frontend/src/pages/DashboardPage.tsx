@@ -33,6 +33,8 @@ import { SCREENING_ENABLED, getUiLocale, screeningComingSoonLabel } from "../con
 import { openUpgradeFlow } from "@/billing/openUpgradeFlow";
 import { UpgradeNudgeInlineCard } from "@/features/upgradeNudges/UpgradeNudgeInlineCard";
 import { canUseTimeline, normalizeTimelinePlan } from "@/features/automation/timeline/timelineEntitlements";
+import { getLandlordActivation, type LandlordActivationSummary } from "@/api/activationApi";
+import { LandlordActivationFlowCard } from "@/components/activation/LandlordActivationFlowCard";
 
 const StarterOnboardingPanel = React.lazy(
   () => import("../components/dashboard/StarterOnboardingPanel")
@@ -140,6 +142,9 @@ const DashboardPage: React.FC = () => {
   const [modalUnitId, setModalUnitId] = React.useState<string | null>(null);
   const [onboardingChunkError, setOnboardingChunkError] = React.useState(false);
   const [referralsCount, setReferralsCount] = React.useState(0);
+  const [activationSummary, setActivationSummary] = React.useState<LandlordActivationSummary | null>(null);
+  const [activationLoading, setActivationLoading] = React.useState(false);
+  const [activationError, setActivationError] = React.useState<string | null>(null);
   const onboarding = useOnboardingState();
   const prevDerivedRef = React.useRef({
     propertyAdded: false,
@@ -212,6 +217,25 @@ const DashboardPage: React.FC = () => {
       active = false;
     };
   }, [meLoaded, canUseReferrals]);
+
+  const loadActivation = React.useCallback(async () => {
+    if (!isLandlord) return;
+    try {
+      setActivationLoading(true);
+      setActivationError(null);
+      const next = await getLandlordActivation();
+      setActivationSummary(next);
+    } catch (err: any) {
+      setActivationError(err?.message || "Failed to load activation steps.");
+    } finally {
+      setActivationLoading(false);
+    }
+  }, [isLandlord]);
+
+  React.useEffect(() => {
+    if (!meLoaded || !isLandlord) return;
+    void loadActivation();
+  }, [isLandlord, loadActivation, meLoaded]);
 
   React.useEffect(() => {
     let alive = true;
@@ -669,6 +693,17 @@ const DashboardPage: React.FC = () => {
               </div>
             </Card>
           </div>
+        ) : null}
+
+        {isLandlord ? (
+          <LandlordActivationFlowCard
+            summary={activationSummary}
+            loading={activationLoading}
+            error={activationError}
+            onRetry={() => {
+              void loadActivation();
+            }}
+          />
         ) : null}
 
         {showStarterOnboarding && !isAdmin ? (
