@@ -18,6 +18,8 @@
     "lint:full": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:light": "vitest run --maxWorkers=2",
+    "test:single": "vitest run --maxWorkers=1",
     "test:e2e": "npm run preflight && playwright test"
   },
   "dependencies": {

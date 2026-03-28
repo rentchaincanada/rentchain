@@ -85,6 +85,10 @@ export default defineConfig(({ mode }) => {
     setupFiles: "./src/test/setup.ts",
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
     exclude: ["tests/**", "node_modules/**", "dist/**"],
+    pool: "threads",
+    minWorkers: 1,
+    maxWorkers: 2,
+    watch: false,
   },
   };
 });
