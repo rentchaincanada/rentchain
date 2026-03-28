@@ -1875,6 +1875,46 @@ const ApplicationsPage: React.FC = () => {
               </Card>
 
               <Card>
+                <div style={{ fontWeight: 700, marginBottom: 8, fontSize: 16 }}>Current housing & lease status</div>
+                {detail.currentLeaseStatus ? (
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <div style={{ fontSize: 14 }}>
+                      Active lease: {detail.currentLeaseStatus.hasActiveLease ? "Yes" : "No"}
+                    </div>
+                    {detail.currentLeaseStatus.hasActiveLease ? (
+                      <>
+                        <div style={{ fontSize: 14 }}>
+                          Lease end date: {detail.currentLeaseStatus.leaseEndDate || "-"}
+                        </div>
+                        <div style={{ fontSize: 14 }}>
+                          Landlord aware: {detail.currentLeaseStatus.landlordAware ? detail.currentLeaseStatus.landlordAware.replace(/_/g, " ") : "-"}
+                        </div>
+                      </>
+                    ) : null}
+                    {detail.currentLeaseStatus.reasonForMoving ? (
+                      <div style={{ fontSize: 14 }}>Reason for moving: {detail.currentLeaseStatus.reasonForMoving}</div>
+                    ) : null}
+                    {decisionSummary?.riskInsights?.signals?.includes("Active lease conflict risk") ? (
+                      <div
+                        style={{
+                          border: "1px solid #f59e0b",
+                          background: "rgba(255,247,237,0.92)",
+                          borderRadius: radius.md,
+                          padding: 12,
+                          fontSize: 13,
+                          color: text.secondary,
+                        }}
+                      >
+                        Applicant is currently under lease with significant time remaining and landlord is not aware.
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div style={{ color: text.muted }}>No current lease status provided.</div>
+                )}
+              </Card>
+
+              <Card>
                 <div style={{ fontWeight: 700, marginBottom: 8, fontSize: 16 }}>Residential history</div>
                 <div style={{ display: "grid", gap: 8 }}>
                   {detail.residentialHistory?.length ? detail.residentialHistory.map((h, idx) => (

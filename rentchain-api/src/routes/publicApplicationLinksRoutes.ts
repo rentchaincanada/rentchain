@@ -13,6 +13,25 @@ async function findLinkByToken(token: string) {
   return { id: doc.id, ...(doc.data() as any) };
 }
 
+function normalizeCurrentLeaseStatus(input: any) {
+  if (!input || typeof input !== "object") return null;
+  const hasActiveLease = input?.hasActiveLease === true;
+  const leaseEndDateRaw = String(input?.leaseEndDate || "").trim();
+  const landlordAwareRaw = String(input?.landlordAware || "").trim();
+  const reasonForMovingRaw = String(input?.reasonForMoving || "").trim();
+  const landlordAware =
+    landlordAwareRaw === "yes" || landlordAwareRaw === "no" || landlordAwareRaw === "prefer_not_to_say"
+      ? landlordAwareRaw
+      : null;
+
+  return {
+    hasActiveLease,
+    leaseEndDate: leaseEndDateRaw || null,
+    landlordAware: hasActiveLease ? landlordAware : null,
+    reasonForMoving: reasonForMovingRaw || null,
+  };
+}
+
 router.get("/application-links/:token", async (req: any, res) => {
   res.setHeader("x-route-source", "publicApplicationLinksRoutes");
   try {
@@ -106,6 +125,7 @@ router.post("/rental-applications", rateLimitPublicApply, async (req: any, res) 
     const consent = body?.consent || {};
     const applicantProfile = body?.applicantProfile || null;
     const applicationConsent = body?.applicationConsent || null;
+    const currentLeaseStatus = normalizeCurrentLeaseStatus(body?.currentLeaseStatus);
     const creditConsent = consent?.creditConsent === true;
     const referenceConsent = consent?.referenceConsent === true;
     const acceptedAt =
@@ -128,6 +148,14 @@ router.post("/rental-applications", rateLimitPublicApply, async (req: any, res) 
         ok: false,
         error: "INVALID_REQUEST",
         detail: "Credit and reference consent are required.",
+      });
+    }
+    if (currentLeaseStatus?.hasActiveLease && !currentLeaseStatus.leaseEndDate) {
+      return res.status(400).json({
+        ok: false,
+        error: "validation_failed",
+        detail: "Lease end date is required when an active lease is disclosed.",
+        fields: ["currentLeaseStatus.leaseEndDate"],
       });
     }
 
@@ -221,6 +249,7 @@ router.post("/rental-applications", rateLimitPublicApply, async (req: any, res) 
           }
         : null,
       otherResidents: Array.isArray(body?.otherResidents) ? body.otherResidents : [],
+      currentLeaseStatus,
       residentialHistory,
       employment: body?.employment ?? { applicant: {}, coApplicant: null },
       references: body?.references ?? null,

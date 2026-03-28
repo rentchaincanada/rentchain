@@ -30,6 +30,12 @@ export async function fetchPublicApplicationLink(token: string): Promise<{
 
 export type RentalApplicationPayload = {
   token: string;
+  currentLeaseStatus?: {
+    hasActiveLease: boolean;
+    leaseEndDate: string | null;
+    landlordAware: "yes" | "no" | "prefer_not_to_say" | null;
+    reasonForMoving: string | null;
+  } | null;
   applicant: {
     firstName: string;
     middleInitial?: string | null;

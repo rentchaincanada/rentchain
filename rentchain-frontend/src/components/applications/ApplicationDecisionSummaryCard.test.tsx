@@ -79,6 +79,47 @@ describe("ApplicationDecisionSummaryCard", () => {
     expect(screen.getByText("Reference prompts will appear as application details become available.")).toBeInTheDocument();
   });
 
+  it("renders the lease conflict warning when present in risk insights", () => {
+    render(
+      <ApplicationDecisionSummaryCard
+        summary={{
+          applicationId: "app-lease",
+          status: "IN_REVIEW",
+          riskInsights: {
+            score: 52,
+            grade: "D",
+            confidence: 0.76,
+            signals: ["Active lease conflict risk"],
+            recommendations: [
+              "Applicant is currently under lease with significant time remaining and landlord is not aware.",
+            ],
+          },
+          referenceQuestions: [],
+          screeningRecommendation: {
+            recommended: true,
+            reason: "Screening can improve confidence before approval.",
+            priority: "high",
+          },
+          screeningSummary: {
+            available: false,
+            provider: null,
+            completedAt: null,
+            highlights: [],
+          },
+          decisionSupport: {
+            summaryLine: "Follow up on the active lease before deciding.",
+            nextBestAction: "Clarify move timing with the applicant and confirm landlord awareness.",
+          },
+        }}
+      />
+    );
+
+    expect(screen.getByText("Active lease conflict risk")).toBeInTheDocument();
+    expect(
+      screen.getByText("Applicant is currently under lease with significant time remaining and landlord is not aware.")
+    ).toBeInTheDocument();
+  });
+
   it("renders the empty state when no decision inputs are available", () => {
     render(<ApplicationDecisionSummaryCard summary={null} />);
 

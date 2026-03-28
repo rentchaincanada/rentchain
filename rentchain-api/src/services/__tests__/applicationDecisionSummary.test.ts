@@ -142,5 +142,51 @@ describe("buildApplicationDecisionSummary", () => {
     expect(result.screeningRecommendation?.recommended).toBe(false);
     expect(result.decisionSupport?.summaryLine).toContain("Screening is available");
   });
+
+  it("adds an active lease conflict risk when lease end date is more than two months away and landlord is not aware", () => {
+    const futureDate = new Date();
+    futureDate.setMonth(futureDate.getMonth() + 4);
+
+    const baselineApplication = buildApplication();
+    const baselineSummary = buildApplicationDecisionSummary({
+      applicationId: "baseline-app",
+      application: baselineApplication,
+      reviewSummary: buildReviewSummary("baseline-app", baselineApplication),
+    });
+
+    const application = buildApplication({
+      currentLeaseStatus: {
+        hasActiveLease: true,
+        leaseEndDate: futureDate.toISOString().slice(0, 10),
+        landlordAware: "no",
+        reasonForMoving: "Relocating for work",
+      },
+    });
+
+    const result = buildApplicationDecisionSummary({
+      applicationId: "app-4",
+      application,
+      reviewSummary: buildReviewSummary("app-4", application),
+    });
+
+    expect(result.riskInsights?.signals).toContain("Active lease conflict risk");
+    expect(result.riskInsights?.recommendations).toContain(
+      "Applicant is currently under lease with significant time remaining and landlord is not aware."
+    );
+    expect((result.riskInsights?.score ?? 0)).toBeLessThan(baselineSummary.riskInsights?.score ?? 0);
+  });
+
+  it("remains backward compatible when currentLeaseStatus is missing", () => {
+    const application = buildApplication();
+    delete (application as any).currentLeaseStatus;
+
+    const result = buildApplicationDecisionSummary({
+      applicationId: "app-5",
+      application,
+      reviewSummary: buildReviewSummary("app-5", application),
+    });
+
+    expect(result.riskInsights?.signals).not.toContain("Active lease conflict risk");
+  });
 });
 
