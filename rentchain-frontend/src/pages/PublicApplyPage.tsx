@@ -5,6 +5,7 @@ import {
   submitPublicApplication,
   type RentalApplicationPayload,
 } from "@/api/publicApplications";
+import { ViewingRequestForm } from "@/components/viewings/ViewingRequestForm";
 
 type ApplyParams = {
   token?: string;
@@ -582,6 +583,7 @@ export default function PublicApplyPage() {
     <div style={{ maxWidth: 760, margin: "40px auto", padding: "0 16px" }}>
       {header}
       {expiryNote ? <div style={{ fontSize: "0.85rem", opacity: 0.7 }}>{expiryNote}</div> : null}
+      <ViewingRequestForm propertyId={linkData.propertyId || null} unitId={linkData.unitId || null} />
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
         {steps.map((label, idx) => (
           <div
