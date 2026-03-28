@@ -35,7 +35,8 @@ export const RequireTenant: React.FC<{ children: React.ReactNode }> = ({ childre
     return <Navigate to={loginPath} state={{ from: location }} replace />;
   }
 
-  if (user && user.role !== "tenant") {
+  const resolvedRole = String(user?.actorRole || user?.role || "").trim().toLowerCase();
+  if (resolvedRole && resolvedRole !== "tenant" && !token) {
     return <Navigate to={loginPath} state={{ from: location }} replace />;
   }
 
