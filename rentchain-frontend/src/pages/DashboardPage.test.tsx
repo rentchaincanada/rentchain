@@ -1,0 +1,159 @@
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
+import { ToastProvider } from "../components/ui/ToastProvider";
+import DashboardPage from "./DashboardPage";
+
+const mocks = vi.hoisted(() => ({
+  useAuthMock: vi.fn(),
+  useCapabilitiesMock: vi.fn(),
+  fetchDashboardSummaryMock: vi.fn(),
+  useApplicationsMock: vi.fn(),
+  useTenantsMock: vi.fn(),
+  fetchPropertiesMock: vi.fn(),
+  listTenantInvitesMock: vi.fn(),
+  listReferralsMock: vi.fn(),
+  getLandlordActivationMock: vi.fn(),
+  useOnboardingStateMock: vi.fn(),
+  useUpgradeMock: vi.fn(),
+}));
+
+vi.mock("../context/useAuth", () => ({
+  useAuth: mocks.useAuthMock,
+}));
+
+vi.mock("@/hooks/useCapabilities", () => ({
+  useCapabilities: mocks.useCapabilitiesMock,
+}));
+
+vi.mock("../api/dashboard", () => ({
+  fetchDashboardSummary: mocks.fetchDashboardSummaryMock,
+}));
+
+vi.mock("../hooks/useApplications", () => ({
+  useApplications: mocks.useApplicationsMock,
+}));
+
+vi.mock("../hooks/useTenants", () => ({
+  useTenants: mocks.useTenantsMock,
+}));
+
+vi.mock("../api/propertiesApi", () => ({
+  fetchProperties: mocks.fetchPropertiesMock,
+}));
+
+vi.mock("../api/tenantInvites", () => ({
+  listTenantInvites: mocks.listTenantInvitesMock,
+}));
+
+vi.mock("../api/referralsApi", () => ({
+  listReferrals: mocks.listReferralsMock,
+}));
+
+vi.mock("@/api/activationApi", () => ({
+  getLandlordActivation: mocks.getLandlordActivationMock,
+}));
+
+vi.mock("../hooks/useOnboardingState", () => ({
+  useOnboardingState: mocks.useOnboardingStateMock,
+}));
+
+vi.mock("../context/UpgradeContext", () => ({
+  useUpgrade: mocks.useUpgradeMock,
+}));
+
+afterEach(() => {
+  cleanup();
+});
+
+describe("DashboardPage", () => {
+  beforeEach(() => {
+    Object.defineProperty(window, "matchMedia", {
+      writable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
+    mocks.useAuthMock.mockReturnValue({
+      user: { id: "landlord-1", role: "", actorRole: "landlord", plan: "elite" },
+      ready: true,
+      isLoading: false,
+      authStatus: "authed",
+    });
+    mocks.useCapabilitiesMock.mockReturnValue({
+      caps: { plan: "elite" },
+      features: {},
+      loading: false,
+    });
+    mocks.fetchDashboardSummaryMock.mockResolvedValue({});
+    mocks.useApplicationsMock.mockReturnValue({
+      applications: [],
+      loading: false,
+    });
+    mocks.useTenantsMock.mockReturnValue({
+      tenants: [],
+      loading: false,
+    });
+    mocks.fetchPropertiesMock.mockResolvedValue({ properties: [] });
+    mocks.listTenantInvitesMock.mockResolvedValue({ items: [] });
+    mocks.listReferralsMock.mockResolvedValue([]);
+    mocks.getLandlordActivationMock.mockResolvedValue({
+      completedCount: 0,
+      totalCount: 7,
+      nextStepKey: "property",
+      steps: [
+        {
+          key: "property",
+          title: "Add Property",
+          status: "in_progress",
+          description: "Add your first rental property to begin onboarding applicants.",
+          actionLabel: "Add Property",
+          actionPath: "/properties",
+        },
+      ],
+    });
+    mocks.useOnboardingStateMock.mockReturnValue({
+      loading: false,
+      dismissed: false,
+      steps: {
+        propertyAdded: false,
+        unitAdded: false,
+        tenantInvited: false,
+        applicationCreated: false,
+        exportPreviewed: false,
+      },
+      lastSeenAt: null,
+      allComplete: false,
+      refresh: vi.fn(),
+      markStepComplete: vi.fn(),
+      dismissOnboarding: vi.fn(),
+      showOnboarding: vi.fn(),
+    });
+    mocks.useUpgradeMock.mockReturnValue({
+      openUpgrade: vi.fn(),
+    });
+  });
+
+  it("loads landlord activation when actorRole is landlord even if role is blank", async () => {
+    render(
+      <ToastProvider>
+        <MemoryRouter>
+          <DashboardPage />
+        </MemoryRouter>
+      </ToastProvider>
+    );
+
+    await waitFor(() => {
+      expect(mocks.getLandlordActivationMock).toHaveBeenCalled();
+    });
+
+    expect(screen.getByText("Get your first tenant screened")).toBeInTheDocument();
+  });
+});

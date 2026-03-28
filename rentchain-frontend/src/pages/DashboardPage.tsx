@@ -118,7 +118,7 @@ const DashboardPage: React.FC = () => {
   const isMobile =
     typeof window !== "undefined" ? window.matchMedia("(max-width: 768px)").matches : false;
   const meLoaded = authReady && !authLoading && Boolean(user?.id);
-  const roleLower = String(user?.role || "").toLowerCase();
+  const roleLower = String(user?.actorRole || user?.role || "").toLowerCase();
   const isAdmin = roleLower === "admin";
   const isLandlord = roleLower === "landlord";
   const timelineEnabled = canUseTimeline(user?.plan || "");
