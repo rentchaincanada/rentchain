@@ -11,6 +11,10 @@ type ApplyParams = {
 };
 
 type HistoryEntry = RentalApplicationPayload["residentialHistory"][number];
+type CurrentLeaseStatus = NonNullable<RentalApplicationPayload["currentLeaseStatus"]>;
+type CurrentLeaseStatusFormState = Omit<CurrentLeaseStatus, "hasActiveLease"> & {
+  hasActiveLease: boolean | null;
+};
 type ResidentEntry = { name: string; relationship: string; age: number | null };
 type LoanEntry = NonNullable<RentalApplicationPayload["loans"]>[number];
 type VehicleEntry = NonNullable<RentalApplicationPayload["vehicles"]>[number];
@@ -68,6 +72,10 @@ function isValidDob(value: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
+function isValidLeaseDate(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
 export default function PublicApplyPage() {
   const { token } = useParams<ApplyParams>();
   const [step, setStep] = useState(0);
@@ -115,6 +123,12 @@ export default function PublicApplyPage() {
   });
   const [timeAtAddressMonths, setTimeAtAddressMonths] = useState("");
   const [currentRentAmount, setCurrentRentAmount] = useState("");
+  const [currentLeaseStatus, setCurrentLeaseStatus] = useState<CurrentLeaseStatusFormState>({
+    hasActiveLease: null,
+    leaseEndDate: null,
+    landlordAware: null,
+    reasonForMoving: null,
+  });
   const [employment, setEmployment] = useState<RentalApplicationPayload["employment"]>({
     applicant: {
       status: null,
@@ -280,7 +294,9 @@ export default function PublicApplyPage() {
         profileAddress.provinceState.trim() &&
         profileAddress.postalCode.trim() &&
         timeAtAddressMonths.trim() &&
-        currentRentAmount.trim()
+        currentRentAmount.trim() &&
+        (currentLeaseStatus.hasActiveLease !== true ||
+          (Boolean(currentLeaseStatus.leaseEndDate?.trim()) && isValidLeaseDate(currentLeaseStatus.leaseEndDate || "")))
       );
     }
     if (step === 2) {
@@ -320,6 +336,16 @@ export default function PublicApplyPage() {
     }
     if (!timeAtAddressMonths.trim() || !currentRentAmount.trim()) {
       setError("Time at current address and current rent are required.");
+      setStep(1);
+      return;
+    }
+    if (currentLeaseStatus.hasActiveLease === true && !(currentLeaseStatus.leaseEndDate || "").trim()) {
+      setError("Lease end date is required when you are currently under a lease.");
+      setStep(1);
+      return;
+    }
+    if (currentLeaseStatus.hasActiveLease === true && !isValidLeaseDate(currentLeaseStatus.leaseEndDate || "")) {
+      setError("Lease end date must be a valid date.");
       setStep(1);
       return;
     }
@@ -438,6 +464,13 @@ export default function PublicApplyPage() {
       });
       const payload: RentalApplicationPayload = {
         token,
+        currentLeaseStatus: {
+          hasActiveLease: currentLeaseStatus.hasActiveLease === true,
+          leaseEndDate: currentLeaseStatus.hasActiveLease === true ? currentLeaseStatus.leaseEndDate || null : null,
+          landlordAware: currentLeaseStatus.hasActiveLease === true ? currentLeaseStatus.landlordAware : null,
+          reasonForMoving:
+            currentLeaseStatus.hasActiveLease === true ? (currentLeaseStatus.reasonForMoving || "").trim() || null : null,
+        },
         applicant: normalizedApplicant,
         coApplicant: normalizedCoApplicant,
         otherResidents: otherResidents.filter((r) => r.name.trim()),
@@ -742,6 +775,118 @@ export default function PublicApplyPage() {
                   />
                 </label>
               </div>
+            </div>
+            <div style={{ border: "1px solid #e5e7eb", borderRadius: 10, padding: 10, display: "grid", gap: 10 }}>
+              <div style={{ fontWeight: 600 }}>Current Housing & Lease Status</div>
+              <div style={{ display: "grid", gap: 8 }}>
+                <div style={{ fontWeight: 600 }}>{req("Are you currently under a lease?")}</div>
+                <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <input
+                    type="radio"
+                    name="hasActiveLease"
+                    checked={currentLeaseStatus.hasActiveLease === true}
+                    onChange={() =>
+                      setCurrentLeaseStatus((prev) => ({
+                        ...prev,
+                        hasActiveLease: true,
+                      }))
+                    }
+                  />
+                  Yes
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <input
+                    type="radio"
+                    name="hasActiveLease"
+                    checked={currentLeaseStatus.hasActiveLease === false}
+                    onChange={() =>
+                      setCurrentLeaseStatus({
+                        hasActiveLease: false,
+                        leaseEndDate: null,
+                        landlordAware: null,
+                        reasonForMoving: null,
+                      })
+                    }
+                  />
+                  No
+                </label>
+              </div>
+
+              {currentLeaseStatus.hasActiveLease === true ? (
+                <>
+                  <label style={labelStyle}>
+                    {req("Lease end date")}
+                    <input
+                      type="date"
+                      value={currentLeaseStatus.leaseEndDate || ""}
+                      onChange={(e) =>
+                        setCurrentLeaseStatus((prev) => ({
+                          ...prev,
+                          leaseEndDate: e.target.value || null,
+                        }))
+                      }
+                    />
+                  </label>
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <div style={{ fontWeight: 600 }}>{req("Is your current landlord aware you are applying for a new rental?")}</div>
+                    <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <input
+                        type="radio"
+                        name="landlordAware"
+                        checked={currentLeaseStatus.landlordAware === "yes"}
+                        onChange={() =>
+                          setCurrentLeaseStatus((prev) => ({
+                            ...prev,
+                            landlordAware: "yes",
+                          }))
+                        }
+                      />
+                      Yes
+                    </label>
+                    <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <input
+                        type="radio"
+                        name="landlordAware"
+                        checked={currentLeaseStatus.landlordAware === "no"}
+                        onChange={() =>
+                          setCurrentLeaseStatus((prev) => ({
+                            ...prev,
+                            landlordAware: "no",
+                          }))
+                        }
+                      />
+                      No
+                    </label>
+                    <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <input
+                        type="radio"
+                        name="landlordAware"
+                        checked={currentLeaseStatus.landlordAware === "prefer_not_to_say"}
+                        onChange={() =>
+                          setCurrentLeaseStatus((prev) => ({
+                            ...prev,
+                            landlordAware: "prefer_not_to_say",
+                          }))
+                        }
+                      />
+                      Prefer not to say
+                    </label>
+                  </div>
+                  <label style={labelStyle}>
+                    Reason for moving
+                    <textarea
+                      value={currentLeaseStatus.reasonForMoving || ""}
+                      onChange={(e) =>
+                        setCurrentLeaseStatus((prev) => ({
+                          ...prev,
+                          reasonForMoving: e.target.value || null,
+                        }))
+                      }
+                      style={{ minHeight: 80 }}
+                    />
+                  </label>
+                </>
+              ) : null}
             </div>
             {residentialHistory.map((entry, idx) => (
               <div key={idx} style={{ border: "1px solid #e5e7eb", borderRadius: 10, padding: 10, display: "grid", gap: 8 }}>

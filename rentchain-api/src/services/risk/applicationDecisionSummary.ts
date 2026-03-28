@@ -84,6 +84,46 @@ function uniqueCompact(items: Array<string | null | undefined>, limit: number) {
   return output;
 }
 
+function isLeaseConflictRisk(application: any) {
+  const leaseStatus = application?.currentLeaseStatus;
+  if (!leaseStatus || leaseStatus?.hasActiveLease !== true) return false;
+  if (String(leaseStatus?.landlordAware || "").trim().toLowerCase() !== "no") return false;
+  const leaseEndDate = String(leaseStatus?.leaseEndDate || "").trim();
+  if (!leaseEndDate) return false;
+
+  const parsedEndDate = new Date(leaseEndDate);
+  if (Number.isNaN(parsedEndDate.getTime())) return false;
+
+  const threshold = new Date();
+  threshold.setMonth(threshold.getMonth() + 2);
+  return parsedEndDate.getTime() > threshold.getTime();
+}
+
+function applyLeaseConflictRisk(
+  insights: NonNullable<ApplicationDecisionRiskInsights> | null,
+  application: any
+): NonNullable<ApplicationDecisionRiskInsights> | null {
+  if (!insights) return insights;
+  if (!isLeaseConflictRisk(application)) return insights;
+
+  const nextScore =
+    typeof insights.score === "number" && Number.isFinite(insights.score) ? clamp(Math.round(insights.score - 12), 38, 90) : insights.score ?? null;
+
+  return {
+    ...insights,
+    score: nextScore,
+    grade: gradeFromScore(nextScore),
+    signals: uniqueCompact([...(insights.signals || []), "Active lease conflict risk"], 4),
+    recommendations: uniqueCompact(
+      [
+        ...(insights.recommendations || []),
+        "Applicant is currently under lease with significant time remaining and landlord is not aware.",
+      ],
+      4
+    ),
+  };
+}
+
 function buildDerivedRiskInsights(reviewSummary: ReviewSummary) {
   const completenessScore = Number(reviewSummary?.derived?.completeness?.score || 0);
   const ratio = reviewSummary?.derived?.incomeToRentRatio ?? null;
@@ -291,7 +331,9 @@ export function buildApplicationDecisionSummary(params: {
   reviewSummary: ReviewSummary;
 }): ApplicationDecisionSummary {
   const { applicationId, application, reviewSummary } = params;
-  const riskInsights = buildAiRiskInsights(application) || buildDerivedRiskInsights(reviewSummary);
+  const riskInsights =
+    applyLeaseConflictRisk(buildAiRiskInsights(application) || buildDerivedRiskInsights(reviewSummary), application) ||
+    buildDerivedRiskInsights(reviewSummary);
   const referenceQuestions = buildReferenceQuestions(reviewSummary, riskInsights);
   const screeningRecommendation = buildScreeningRecommendation(application, reviewSummary, riskInsights);
   const screeningSummary = buildScreeningSummary(application);

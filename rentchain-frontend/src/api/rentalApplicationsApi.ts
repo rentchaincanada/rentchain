@@ -192,6 +192,12 @@ export type RentalApplication = {
     maritalStatus?: "SINGLE" | "MARRIED" | "DIVORCED" | "COMMON_LAW" | null;
   } | null;
   otherResidents?: Array<{ name: string; relationship: string; age: number | null }>;
+  currentLeaseStatus?: {
+    hasActiveLease: boolean;
+    leaseEndDate: string | null;
+    landlordAware: "yes" | "no" | "prefer_not_to_say" | null;
+    reasonForMoving: string | null;
+  } | null;
   residentialHistory: Array<{
     address: string;
     durationMonths?: number | null;
