@@ -247,6 +247,7 @@ export async function getLandlordActivationSummary(
     applicationsSnap,
     viewingSnap,
     screeningOrdersSnap,
+    screeningOperationsSnap,
     transunionIntegration,
   ] = await Promise.all([
     db.collection("properties").where("landlordId", "==", landlordId).limit(3).get(),
@@ -254,6 +255,7 @@ export async function getLandlordActivationSummary(
     db.collection("rentalApplications").where("landlordId", "==", landlordId).limit(12).get(),
     db.collection("viewingRequests").where("landlordId", "==", landlordId).limit(12).get(),
     db.collection("screeningOrders").where("landlordId", "==", landlordId).limit(5).get(),
+    db.collection("screeningOperations").where("landlordId", "==", landlordId).limit(5).get(),
     getTransUnionIntegrationPublic(landlordId).catch(() => ({
       provider: "transunion" as const,
       status: "not_connected",
@@ -273,7 +275,9 @@ export async function getLandlordActivationSummary(
     viewingCount: viewingSnap.size,
     transunionStatus: String(transunionIntegration?.status || "").trim().toLowerCase() || null,
     hasScreening:
-      screeningOrdersSnap.size > 0 || applications.some((application) => hasScreeningStarted(application)),
+      screeningOrdersSnap.size > 0 ||
+      screeningOperationsSnap.size > 0 ||
+      applications.some((application) => hasScreeningStarted(application)),
     hasDecisionReview: applications.some((application) => hasDecisionReady(application)),
     primaryApplicationId: primaryApplication?.id || null,
     reviewApplicationId: reviewApplication?.id || null,
