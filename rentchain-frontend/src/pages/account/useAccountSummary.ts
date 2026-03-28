@@ -1,10 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchBillingHistory, fetchSubscriptionStatus } from "@/api/billingApi";
-import { fetchMe } from "@/api/meApi";
-import { normalizeTimelinePlan } from "@/features/automation/timeline/timelineEntitlements";
 
 type AccountSummary = {
-  planNormalized: string | null;
   status: string | null;
   nextRenewalAt: string | null;
   lastInvoiceAt: string | null;
@@ -22,7 +19,6 @@ export function useAccountSummary() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<AccountSummary>({
-    planNormalized: null,
     status: null,
     nextRenewalAt: null,
     lastInvoiceAt: null,
@@ -36,15 +32,13 @@ export function useAccountSummary() {
       setLoading(true);
       setError(null);
       try {
-        const [me, subscription, history] = await Promise.all([
-          fetchMe().catch(() => null),
+        const [subscription, history] = await Promise.all([
           fetchSubscriptionStatus().catch(() => null),
           fetchBillingHistory().catch(() => []),
         ]);
 
         if (!active) return;
 
-        const normalizedPlan = normalizeTimelinePlan((me as any)?.plan || "");
         const records = Array.isArray(history) ? history : [];
         const sortedRecords = [...records].sort((a, b) => {
           const aMs = new Date(String(a?.createdAt || 0)).getTime();
@@ -60,7 +54,6 @@ export function useAccountSummary() {
         );
 
         setSummary({
-          planNormalized: normalizedPlan,
           status: String((subscription as any)?.status || "").trim() || null,
           nextRenewalAt: renewal,
           lastInvoiceAt: toIsoOrNull(latest?.createdAt),

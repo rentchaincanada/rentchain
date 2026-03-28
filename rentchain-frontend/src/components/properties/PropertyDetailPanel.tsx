@@ -30,6 +30,7 @@ import { dispatchUpgradePrompt } from "@/lib/upgradePrompt";
 import { RiskScoreBadge } from "@/components/leases/RiskScoreBadge";
 import { PropertyCredibilitySummaryCard } from "@/components/properties/PropertyCredibilitySummaryCard";
 import type { PropertyCredibilitySummary } from "@/types/credibilitySummary";
+import { calculateConfiguredUnitRentTotal, resolveConfiguredUnitRent } from "@/lib/propertyRentSummary";
 
 interface PropertyDetailPanelProps {
   property: Property | null;
@@ -385,11 +386,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   const publishDisabled = unitCount < 1 || isPublishingProperty;
   const screeningRequiredBeforeApproval =
     (property as any)?.screeningRequiredBeforeApproval !== false;
-  const totalRentConfigured = units.reduce(
-    (sum, u) =>
-      sum + (typeof (u as any).rent === "number" ? (u as any).rent : 0),
-    0
-  );
+  const totalRentConfigured = useMemo(() => calculateConfiguredUnitRentTotal(units), [units]);
   const displayedUnits = useMemo(() => {
     if (Array.isArray(units) && units.length > 0) return units;
     if (unitCount > 0) {
@@ -751,7 +748,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
         className="rc-kpi-grid"
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
           gap: 12,
         }}
       >
@@ -818,13 +815,33 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
           }}
         >
           <div className="rc-kpi-label" style={{ color: "#111827", fontSize: "0.8rem" }}>
-            Lease rent roll
+            Configured unit rent total
+          </div>
+          <div className="rc-kpi-value" style={{ color: "#0b1220", fontWeight: 700, fontSize: "1.05rem" }}>
+            {formatCurrency(totalRentConfigured)}
+          </div>
+          <div className="rc-kpi-subtext" style={{ color: "#4b5563", fontSize: "0.75rem", marginTop: 2 }}>
+            Based on the configured rents shown in the unit table.
+          </div>
+        </div>
+
+        <div
+          className="rc-kpi-card"
+          style={{
+            padding: 12,
+            borderRadius: 12,
+            background: "rgba(255,255,255,0.02)",
+            border: "1px solid rgba(148,163,184,0.15)",
+          }}
+        >
+          <div className="rc-kpi-label" style={{ color: "#111827", fontSize: "0.8rem" }}>
+            Active lease rent total
           </div>
           <div className="rc-kpi-value" style={{ color: "#0b1220", fontWeight: 700, fontSize: "1.05rem" }}>
             {formatCurrency(leaseRentRoll)}
           </div>
           <div className="rc-kpi-subtext" style={{ color: "#4b5563", fontSize: "0.75rem", marginTop: 2 }}>
-            Configured rent roll: {formatCurrency(totalRentConfigured)}
+            Based on signed active leases for this property.
           </div>
         </div>
 
@@ -968,6 +985,9 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
         </div>
       ) : (
         <>
+          <div style={{ color: "#4b5563", fontSize: "0.82rem", marginBottom: 8 }}>
+            The unit table shows configured unit rents. Active lease rent totals are shown separately above.
+          </div>
           <div
             style={{
               borderRadius: 12,
@@ -989,7 +1009,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             <thead>
               <tr style={{ background: "rgba(255,255,255,0.03)", color: "#9ca3af" }}>
                 <th className="rc-units-col-unit" style={{ textAlign: "left", padding: "10px 12px", whiteSpace: "nowrap" }}>Unit</th>
-                <th className="rc-units-col-rent" style={{ textAlign: "right", padding: "10px 12px", whiteSpace: "nowrap" }}>Rent</th>
+                <th className="rc-units-col-rent" style={{ textAlign: "right", padding: "10px 12px", whiteSpace: "nowrap" }}>Configured rent</th>
                 <th className="rc-units-col-beds" style={{ textAlign: "center", padding: "10px 12px", whiteSpace: "nowrap" }}>Beds</th>
                 <th className="rc-units-col-baths" style={{ textAlign: "center", padding: "10px 12px", whiteSpace: "nowrap" }}>Baths</th>
                 <th className="rc-units-col-sqft" style={{ textAlign: "center", padding: "10px 12px", whiteSpace: "nowrap" }}>Sqft</th>
@@ -1040,12 +1060,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                     (u as any).beds ?? (u as any).bedrooms ?? (u as any).bedroomsCount ?? null;
                   const bathsVal =
                     (u as any).baths ?? (u as any).bathrooms ?? (u as any).bathroomsCount ?? null;
-                  const rentVal =
-                    (u as any).rent ??
-                    (u as any).marketRent ??
-                    (u as any).askingRent ??
-                    (u as any).monthlyRent ??
-                    null;
+                  const rentVal = resolveConfiguredUnitRent(u);
                   const sqftVal = (u as any).sqft ?? null;
                   const statusVal = (u as any).status || (leasedUnitNumbers.has(unitNum) ? "occupied" : "vacant");
                   const isLeased = String(statusVal || "").toLowerCase() === "occupied";
@@ -1185,12 +1200,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
               (u as any).beds ?? (u as any).bedrooms ?? (u as any).bedroomsCount ?? null;
             const bathsVal =
               (u as any).baths ?? (u as any).bathrooms ?? (u as any).bathroomsCount ?? null;
-            const rentVal =
-              (u as any).rent ??
-              (u as any).marketRent ??
-              (u as any).askingRent ??
-              (u as any).monthlyRent ??
-              null;
+            const rentVal = resolveConfiguredUnitRent(u);
             const sqftVal = (u as any).sqft ?? null;
             const statusVal = (u as any).status || (leasedUnitNumbers.has(unitNum) ? "occupied" : "vacant");
             const isLeased = String(statusVal || "").toLowerCase() === "occupied";
@@ -1236,7 +1246,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                 </div>
                 <div className="rc-unit-card-row rc-unit-card-specs" style={{ marginTop: 8 }}>
                   <div>
-                    <div className="rc-unit-label">Rent</div>
+                    <div className="rc-unit-label">Configured rent</div>
                     <div className={`rc-unit-value ${rentVal !== null && rentVal !== undefined ? "" : "rc-unit-placeholder"}`}>
                       {rentDisplay}
                     </div>
