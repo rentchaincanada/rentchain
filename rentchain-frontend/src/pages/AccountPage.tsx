@@ -67,8 +67,9 @@ const AccountPage: React.FC = () => {
           >
             <div>
               <div style={{ color: text.muted, fontSize: 12 }}>Plan</div>
-              <div style={{ fontWeight: 700 }}>
-                {summary.planNormalized ? summary.planNormalized.replace("_", " ") : planLabel}
+              <div style={{ fontWeight: 700 }}>{planLabel}</div>
+              <div style={{ color: text.muted, fontSize: 12 }}>
+                Uses your current workspace access level.
               </div>
             </div>
             <div>
