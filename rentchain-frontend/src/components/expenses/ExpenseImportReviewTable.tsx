@@ -24,6 +24,28 @@ function formatConfidence(value: number | null | undefined) {
   return `${Math.round(value * 100)}%`;
 }
 
+function duplicateBadgeStyle(status: ExpenseImportPreviewRow["duplicateStatus"]): React.CSSProperties {
+  if (status === "likely_duplicate") {
+    return {
+      background: "rgba(239,68,68,0.12)",
+      color: "#991b1b",
+      border: `1px solid rgba(239,68,68,0.24)`,
+    };
+  }
+  if (status === "possible_duplicate") {
+    return {
+      background: "rgba(245,158,11,0.12)",
+      color: "#92400e",
+      border: `1px solid rgba(245,158,11,0.24)`,
+    };
+  }
+  return {
+    background: "rgba(22,163,74,0.12)",
+    color: "#166534",
+    border: `1px solid rgba(22,163,74,0.24)`,
+  };
+}
+
 type Props = {
   rows: ExpenseImportPreviewRow[];
   properties: Array<{ id: string; name: string; archived?: boolean }>;
@@ -48,7 +70,13 @@ export function ExpenseImportReviewTable({ rows, properties, onChangeRow, isMobi
             style={{
               display: "grid",
               gap: spacing.sm,
-              border: `1px solid ${(row.warnings || []).length ? colors.borderStrong : colors.border}`,
+              border: `1px solid ${
+                row.duplicateStatus === "likely_duplicate"
+                  ? "rgba(239,68,68,0.24)"
+                  : row.lowConfidence || (row.warnings || []).length
+                  ? colors.borderStrong
+                  : colors.border
+              }`,
             }}
           >
             <label style={{ display: "flex", gap: 8, alignItems: "center", fontWeight: 600 }}>
@@ -59,7 +87,27 @@ export function ExpenseImportReviewTable({ rows, properties, onChangeRow, isMobi
               />
               Include row
             </label>
-            <div style={{ color: text.muted, fontSize: 12 }}>{row.sourceFileName}</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <div style={{ color: text.muted, fontSize: 12 }}>{row.sourceFileName}</div>
+              <span
+                style={{
+                  ...duplicateBadgeStyle(row.duplicateStatus),
+                  borderRadius: 999,
+                  padding: "4px 8px",
+                  fontSize: 11,
+                  fontWeight: 700,
+                }}
+              >
+                {row.duplicateStatus === "likely_duplicate"
+                  ? "Likely duplicate"
+                  : row.duplicateStatus === "possible_duplicate"
+                  ? "Possible duplicate"
+                  : "No duplicate flag"}
+              </span>
+              <span style={{ color: row.lowConfidence ? "#92400e" : text.muted, fontSize: 12, fontWeight: 600 }}>
+                Confidence {formatConfidence(row.confidence)}
+              </span>
+            </div>
             <Input
               aria-label={`Date ${row.rowId}`}
               type="date"
@@ -129,7 +177,7 @@ export function ExpenseImportReviewTable({ rows, properties, onChangeRow, isMobi
               }
             />
             <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-              <div style={{ fontSize: 12, color: text.muted }}>Confidence: {formatConfidence(row.confidence)}</div>
+              <div style={{ fontSize: 12, color: text.muted }}>{row.duplicateReason || "No duplicate reason"}</div>
               <div style={{ fontSize: 12, color: text.muted }}>{(row.warnings || []).join(" • ") || "Ready to review"}</div>
             </div>
           </Card>
@@ -151,6 +199,7 @@ export function ExpenseImportReviewTable({ rows, properties, onChangeRow, isMobi
             <th style={{ padding: "8px 6px" }}>Vendor</th>
             <th style={{ padding: "8px 6px" }}>Description</th>
             <th style={{ padding: "8px 6px" }}>Amount</th>
+            <th style={{ padding: "8px 6px" }}>Duplicate</th>
             <th style={{ padding: "8px 6px" }}>Confidence</th>
             <th style={{ padding: "8px 6px" }}>Warnings</th>
           </tr>
@@ -247,8 +296,30 @@ export function ExpenseImportReviewTable({ rows, properties, onChangeRow, isMobi
                   }
                 />
               </td>
+              <td style={{ padding: "10px 6px", verticalAlign: "top", fontSize: 12 }}>
+                <div
+                  style={{
+                    ...duplicateBadgeStyle(row.duplicateStatus),
+                    borderRadius: 999,
+                    padding: "4px 8px",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    fontWeight: 700,
+                    marginBottom: 6,
+                  }}
+                >
+                  {row.duplicateStatus === "likely_duplicate"
+                    ? "Likely duplicate"
+                    : row.duplicateStatus === "possible_duplicate"
+                    ? "Possible duplicate"
+                    : "No duplicate flag"}
+                </div>
+                <div style={{ color: text.muted }}>{row.duplicateReason || "No duplicate reason"}</div>
+              </td>
               <td style={{ padding: "10px 6px", verticalAlign: "top", fontSize: 13 }}>
-                {formatConfidence(row.confidence)}
+                <div style={{ fontWeight: 700, color: row.lowConfidence ? "#92400e" : text.primary }}>
+                  {row.lowConfidence ? "Low" : "Ready"} {formatConfidence(row.confidence)}
+                </div>
               </td>
               <td style={{ padding: "10px 6px", verticalAlign: "top", fontSize: 12, color: text.muted }}>
                 {(row.warnings || []).join(" • ") || "Ready to review"}

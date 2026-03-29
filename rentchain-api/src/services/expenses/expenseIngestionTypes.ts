@@ -1,3 +1,26 @@
+export type ExpenseImportWarningCode =
+  | "missing_date"
+  | "missing_amount"
+  | "missing_category"
+  | "unresolved_property"
+  | "unresolved_unit"
+  | "weak_vendor_match"
+  | "weak_description"
+  | "possible_duplicate"
+  | "likely_duplicate"
+  | "ai_review_required"
+  | "no_text_extracted";
+
+export type ExpenseImportDuplicateMatch = {
+  expenseId?: string | null;
+  source: "existing" | "batch";
+  date?: string | null;
+  vendor?: string | null;
+  description?: string | null;
+  amount?: number | null;
+  property?: string | null;
+};
+
 export type ExpenseImportPreviewRow = {
   rowId: string;
   date: string | null;
@@ -14,6 +37,12 @@ export type ExpenseImportPreviewRow = {
   sourceFileName: string;
   confidence: number | null;
   warnings: string[];
+  warningCodes: ExpenseImportWarningCode[];
+  duplicateStatus: "none" | "possible_duplicate" | "likely_duplicate";
+  duplicateReason?: string | null;
+  duplicateMatches?: ExpenseImportDuplicateMatch[];
+  lowConfidence?: boolean;
+  include?: boolean;
 };
 
 export type ExpenseImportPreviewSummary = {
@@ -21,6 +50,8 @@ export type ExpenseImportPreviewSummary = {
   lowConfidence: number;
   unresolvedProperty: number;
   unresolvedUnit: number;
+  duplicateCount: number;
+  likelyDuplicateCount: number;
 };
 
 export type ExpenseImportPreviewResult = {
@@ -33,8 +64,16 @@ export type ExpenseImportPreviewResult = {
   summary: ExpenseImportPreviewSummary;
 };
 
-export type ExpenseImportConfirmRow = ExpenseImportPreviewRow & {
-  include?: boolean;
+export type ExpenseImportConfirmRow = ExpenseImportPreviewRow;
+
+export type ExpenseExistingLookupRow = {
+  expenseId?: string | null;
+  date?: string | null;
+  amount?: number | null;
+  vendor?: string | null;
+  description?: string | null;
+  property?: string | null;
+  propertyId?: string | null;
 };
 
 export type ExpensePropertyOption = {

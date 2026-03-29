@@ -38,6 +38,61 @@ function formatDate(ms: number): string {
   }
 }
 
+function normalizePreviewRowForReview(row: ExpenseImportPreviewRow): ExpenseImportPreviewRow {
+  const warningCodes = new Set<string>(row.warningCodes || []);
+  const warnings = new Set<string>((row.warnings || []).filter(Boolean));
+
+  if (!row.propertyId) {
+    warningCodes.add("unresolved_property");
+    warnings.add("Missing property match");
+  }
+  if (row.unit && !row.unitId) {
+    warningCodes.add("unresolved_unit");
+    warnings.add("Missing unit match");
+  }
+  if (!row.category) {
+    warningCodes.add("missing_category");
+    warnings.add("Missing category");
+  }
+  if (row.amount == null || Number.isNaN(Number(row.amount))) {
+    warningCodes.add("missing_amount");
+    warnings.add("Missing amount");
+  }
+  if (!row.date) {
+    warningCodes.add("missing_date");
+    warnings.add("Missing date");
+  }
+  if (!String(row.vendor || "").trim()) {
+    warningCodes.add("weak_vendor_match");
+    warnings.add("Vendor needs review");
+  }
+  if (!String(row.description || "").trim()) {
+    warningCodes.add("weak_description");
+    warnings.add("Description needs review");
+  }
+  if (row.duplicateStatus === "likely_duplicate") {
+    warningCodes.add("likely_duplicate");
+    if (row.duplicateReason) warnings.add(row.duplicateReason);
+  } else if (row.duplicateStatus === "possible_duplicate") {
+    warningCodes.add("possible_duplicate");
+    if (row.duplicateReason) warnings.add(row.duplicateReason);
+  }
+
+  const lowConfidence =
+    (row.confidence ?? 0) < 0.75 ||
+    warningCodes.has("unresolved_property") ||
+    warningCodes.has("missing_category") ||
+    warningCodes.has("missing_amount") ||
+    warningCodes.has("missing_date");
+
+  return {
+    ...row,
+    warnings: Array.from(warnings),
+    warningCodes: Array.from(warningCodes),
+    lowConfidence,
+  };
+}
+
 const ExpensesPage: React.FC = () => {
   const { caps, features, loading: capsLoading } = useCapabilities();
   const [loading, setLoading] = React.useState(true);
@@ -58,10 +113,13 @@ const ExpensesPage: React.FC = () => {
     lowConfidence: number;
     unresolvedProperty: number;
     unresolvedUnit: number;
+    duplicateCount: number;
+    likelyDuplicateCount: number;
   }>(null);
   const [importSummary, setImportSummary] = React.useState<null | {
     rowsImported: number;
     rowsSkipped: number;
+    duplicateImported: number;
     errors: string[];
   }>(null);
   const [isMobile, setIsMobile] = React.useState(false);
@@ -169,7 +227,7 @@ const ExpensesPage: React.FC = () => {
         files: importFiles,
         defaultPropertyId: propertyFilter || undefined,
       });
-      setPreviewRows((result.rows || []).map((row) => ({ ...row, include: row.include !== false })));
+      setPreviewRows((result.rows || []).map((row) => normalizePreviewRowForReview({ ...row, include: row.include !== false })));
       setPreviewSummary(result.summary || null);
     } catch (err: any) {
       setError(String(err?.message || "Failed to review imported expenses."));
@@ -187,6 +245,7 @@ const ExpensesPage: React.FC = () => {
       setImportSummary({
         rowsImported: result.imported,
         rowsSkipped: result.skipped,
+        duplicateImported: result.duplicateImported,
         errors: Array.isArray(result.errors) ? result.errors : [],
       });
       setImportFiles([]);
@@ -204,20 +263,7 @@ const ExpensesPage: React.FC = () => {
     setPreviewRows((current) =>
       current.map((row) => {
         if (row.rowId !== rowId) return row;
-        const next = { ...row, ...patch };
-        const warnings = new Set<string>();
-        for (const warning of next.warnings || []) {
-          if (!/needs review/i.test(warning)) warnings.add(warning);
-        }
-        if (!next.propertyId) warnings.add("Property needs review");
-        if (next.unit && !next.unitId) warnings.add("Unit needs review");
-        if (!next.category) warnings.add("Category needs review");
-        if (next.amount == null || Number.isNaN(Number(next.amount))) warnings.add("Amount needs review");
-        if (!next.date) warnings.add("Date needs review");
-        return {
-          ...next,
-          warnings: Array.from(warnings),
-        };
+        return normalizePreviewRowForReview({ ...row, ...patch });
       })
     );
   }, []);
@@ -226,9 +272,11 @@ const ExpensesPage: React.FC = () => {
     if (!previewRows.length) return;
     setPreviewSummary({
       parsed: previewRows.length,
-      lowConfidence: previewRows.filter((row) => (row.confidence ?? 0) < 0.75).length,
+      lowConfidence: previewRows.filter((row) => row.lowConfidence || (row.confidence ?? 0) < 0.75).length,
       unresolvedProperty: previewRows.filter((row) => !row.propertyId).length,
       unresolvedUnit: previewRows.filter((row) => Boolean(row.unit) && !row.unitId).length,
+      duplicateCount: previewRows.filter((row) => row.duplicateStatus !== "none").length,
+      likelyDuplicateCount: previewRows.filter((row) => row.duplicateStatus === "likely_duplicate").length,
     });
   }, [previewRows]);
 
@@ -347,6 +395,10 @@ const ExpensesPage: React.FC = () => {
           lowConfidence={previewSummary.lowConfidence}
           unresolvedProperty={previewSummary.unresolvedProperty}
           unresolvedUnit={previewSummary.unresolvedUnit}
+          duplicateCount={previewSummary.duplicateCount}
+          likelyDuplicateCount={previewSummary.likelyDuplicateCount}
+          selectedCount={previewRows.filter((row) => row.include !== false).length}
+          skippedCount={previewRows.filter((row) => row.include === false).length}
         />
       ) : null}
 
@@ -391,6 +443,7 @@ const ExpensesPage: React.FC = () => {
         <ExpenseImportSummaryCard
           rowsImported={importSummary.rowsImported}
           rowsSkipped={importSummary.rowsSkipped}
+          duplicateImported={importSummary.duplicateImported}
           errors={importSummary.errors}
         />
       ) : null}
