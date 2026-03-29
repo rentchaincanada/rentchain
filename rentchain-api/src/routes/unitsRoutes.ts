@@ -366,6 +366,8 @@ router.patch("/units/:unitId", authenticateJwt, requireLandlord, async (req: any
     baths,
     notes,
     status,
+    occupantName,
+    leaseEndDate,
   } = req.body || {};
   const updates: any = {};
 
@@ -404,6 +406,14 @@ router.patch("/units/:unitId", authenticateJwt, requireLandlord, async (req: any
       return res.status(400).json({ ok: false, error: "Invalid status" });
     }
     updates.status = String(status);
+  }
+  if (occupantName !== undefined) {
+    const value = String(occupantName || "").trim();
+    updates.occupantName = value || null;
+  }
+  if (leaseEndDate !== undefined) {
+    const value = String(leaseEndDate || "").trim();
+    updates.leaseEndDate = value || null;
   }
 
   updates.updatedAt = new Date();

@@ -69,7 +69,7 @@ const AccountPage: React.FC = () => {
               <div style={{ color: text.muted, fontSize: 12 }}>Plan</div>
               <div style={{ fontWeight: 700 }}>{planLabel}</div>
               <div style={{ color: text.muted, fontSize: 12 }}>
-                Uses your current workspace access level.
+                Uses the same billing access level shown in your workspace and checkout flow.
               </div>
             </div>
             <div>
@@ -115,13 +115,13 @@ const AccountPage: React.FC = () => {
           </Button>
         </HubCard>
 
-        <HubCard title="Security" description="Two-factor authentication and account security settings.">
-          <Button type="button" onClick={() => navigate("/account/security")}>
-            Account security
+        <HubCard title="Security" description="Additional sign-in security controls will appear here when they are ready for landlord use.">
+          <Button type="button" variant="secondary" disabled>
+            Security controls coming soon
           </Button>
         </HubCard>
 
-        <HubCard title="Billing & Plans" description="View your plan, receipts, and manage upgrades.">
+        <HubCard title="Billing & Plans" description="View your plan, receipts, and manage paid upgrades with pricing that matches checkout.">
           <Button type="button" onClick={() => navigate("/billing")}>
             Billing
           </Button>
@@ -135,7 +135,7 @@ const AccountPage: React.FC = () => {
               void openUpgradeFlow({ navigate, fallbackPath: "/pricing" });
             }}
           >
-            Manage plan
+            Manage paid plan
           </Button>
         </HubCard>
 

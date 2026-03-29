@@ -21,7 +21,7 @@ function formatDate(value?: string | null) {
 function getBadge(status: ScreeningStatusView["status"]) {
   switch (status) {
     case "blocked_transunion_not_connected":
-      return { label: "Connect TransUnion first", tone: "danger" as const };
+      return { label: "Next step required", tone: "danger" as const };
     case "requested":
       return { label: "Screening requested", tone: "info" as const };
     case "in_progress":
@@ -38,17 +38,17 @@ function getBadge(status: ScreeningStatusView["status"]) {
 function getDescription(status: ScreeningStatusView["status"]) {
   switch (status) {
     case "blocked_transunion_not_connected":
-      return "Connect your TransUnion membership before starting screening.";
+      return "Connect TransUnion to continue. We'll help you complete screening step by step once your membership is linked.";
     case "requested":
-      return "Your screening request has been queued for internal review.";
+      return "Your screening request is in the queue. We’ll guide it through the remaining internal review steps.";
     case "in_progress":
-      return "Internal screening review is underway.";
+      return "Screening is underway. We’ll update this status as each step is completed.";
     case "completed":
       return "The screening result is ready to review.";
     case "cancelled":
       return "This screening request was cancelled.";
     default:
-      return "Start a manual screening request for this applicant.";
+      return "Start screening when you're ready. We’ll help you complete each step from request to review.";
   }
 }
 
@@ -105,6 +105,11 @@ export function ScreeningStatusCard({
         {status.resultFlags?.length ? (
           <div style={{ color: text.primary }}>
             <strong>Flags:</strong> {status.resultFlags.join(", ")}
+          </div>
+        ) : null}
+        {status.status === "blocked_transunion_not_connected" ? (
+          <div style={{ color: text.primary }}>
+            <strong>Step-by-step:</strong> Connect TransUnion, request screening, then review the completed result here.
           </div>
         ) : null}
         {status.reportAvailable ? (

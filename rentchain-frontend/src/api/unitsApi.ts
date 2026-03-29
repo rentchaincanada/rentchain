@@ -6,6 +6,9 @@ export type UnitInput = {
   baths?: number;
   sqft?: number;
   marketRent?: number;
+  status?: "vacant" | "occupied";
+  occupantName?: string | null;
+  leaseEndDate?: string | null;
 };
 
 export async function fetchUnitsForProperty(propertyId: string) {

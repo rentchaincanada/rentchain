@@ -25,6 +25,9 @@ export function LandlordActivationFlowCard({
         <div style={{ color: text.muted }}>
           Follow these steps to complete setup and review your first applicant.
         </div>
+        <div style={{ color: text.subtle, fontSize: 13 }}>
+          Core setup stays available on every plan. Paid upgrades are labeled separately when they unlock extra workflow or reporting.
+        </div>
       </div>
 
       {loading ? (

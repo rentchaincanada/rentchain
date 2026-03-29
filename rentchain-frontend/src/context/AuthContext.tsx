@@ -18,6 +18,8 @@ import { DEBUG_AUTH_KEY, JUST_LOGGED_IN_KEY, TENANT_TOKEN_KEY } from "../lib/aut
 import { clearAuthToken, setAuthToken, TOKEN_KEY } from "../lib/authToken";
 import { isPublicRoutePath } from "../lib/publicRoute";
 
+const LANDLORD_WELCOME_PENDING_KEY = "rentchain.landlordWelcome.pending";
+
 export interface AuthUser {
   id: string;
   email: string;
@@ -410,6 +412,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           role: String(hydrated?.actorRole || hydrated?.role || "").toLowerCase() || null,
           email: safeEmail,
         });
+      }
+      if (typeof window !== "undefined") {
+        const resolvedRole = String(hydrated?.actorRole || hydrated?.role || "").trim().toLowerCase();
+        if (resolvedRole === "landlord" && hydrated?.id) {
+          window.localStorage.setItem(`${LANDLORD_WELCOME_PENDING_KEY}.${hydrated.id}`, "1");
+        }
       }
       setTwoFactorPendingToken(null);
       setTwoFactorMethods([]);

@@ -22,12 +22,30 @@ const itemsOrder = [
 ] as const;
 
 export function KpiStrip({ kpis, loading }: Props) {
+  const [isMobile, setIsMobile] = React.useState(false);
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const media = window.matchMedia("(max-width: 767px)");
+    const update = () => setIsMobile(media.matches);
+    update();
+    if (typeof media.addEventListener === "function") {
+      media.addEventListener("change", update);
+      return () => media.removeEventListener("change", update);
+    }
+    media.addListener?.(update);
+    return () => media.removeListener?.(update);
+  }, []);
+
   return (
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+        gridTemplateColumns: isMobile
+          ? "repeat(2, minmax(0, 1fr))"
+          : "repeat(auto-fit, minmax(140px, 1fr))",
         gap: spacing.sm,
+        alignItems: "stretch",
       }}
     >
       {itemsOrder.map((item) => {
@@ -36,9 +54,10 @@ export function KpiStrip({ kpis, loading }: Props) {
           <Card
             key={item.key}
             style={{
-              padding: spacing.md,
+              padding: isMobile ? spacing.sm : spacing.md,
               border: `1px solid ${colors.border}`,
-              minHeight: 80,
+              minHeight: isMobile ? 0 : 80,
+              height: "100%",
             }}
           >
             {loading ? (
@@ -52,9 +71,13 @@ export function KpiStrip({ kpis, loading }: Props) {
                 }}
               />
             ) : (
-              <div style={{ fontSize: 20, fontWeight: 800 }}>{Number(value).toLocaleString()}</div>
+              <div style={{ fontSize: isMobile ? 18 : 20, fontWeight: 800 }}>
+                {Number(value).toLocaleString()}
+              </div>
             )}
-            <div style={{ color: text.muted, fontSize: 12 }}>{item.label}</div>
+            <div style={{ color: text.muted, fontSize: isMobile ? 11 : 12, lineHeight: 1.35 }}>
+              {item.label}
+            </div>
           </Card>
         );
       })}

@@ -30,6 +30,7 @@ export default function WorkOrdersPage() {
   const [properties, setProperties] = React.useState<Array<{ id: string; name: string }>>([]);
   const [convertTarget, setConvertTarget] = React.useState<WorkOrderRecord | null>(null);
   const [convertVendor, setConvertVendor] = React.useState("");
+  const [isMobile, setIsMobile] = React.useState(false);
 
   const normalizeCategory = React.useCallback((input: string): ExpenseCategory => {
     const raw = String(input || "").trim().toLowerCase();
@@ -66,6 +67,19 @@ export default function WorkOrdersPage() {
   React.useEffect(() => {
     void load();
   }, [load]);
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const media = window.matchMedia("(max-width: 767px)");
+    const update = () => setIsMobile(media.matches);
+    update();
+    if (typeof media.addEventListener === "function") {
+      media.addEventListener("change", update);
+      return () => media.removeEventListener("change", update);
+    }
+    media.addListener?.(update);
+    return () => media.removeListener?.(update);
+  }, []);
 
   React.useEffect(() => {
     const run = async () => {
@@ -113,11 +127,99 @@ export default function WorkOrdersPage() {
       ) : null}
 
       <div style={{ display: "grid", gap: 12, gridTemplateColumns: "minmax(0,1fr)", alignItems: "start" }}>
-        <Card style={{ overflowX: "auto" }}>
+        <Card>
           {loading ? (
             <div>Loading work orders...</div>
           ) : items.length === 0 ? (
             <div style={{ color: "#64748b" }}>No work orders yet.</div>
+          ) : isMobile ? (
+            <div style={{ display: "grid", gap: 12 }}>
+              {items.map((item) => (
+                <div
+                  key={item.id}
+                  style={{
+                    border: "1px solid #e2e8f0",
+                    borderRadius: 12,
+                    padding: 12,
+                    display: "grid",
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ display: "grid", gap: 4 }}>
+                    <div style={{ fontWeight: 700 }}>{item.title}</div>
+                    <div style={{ color: "#64748b", fontSize: 13 }}>
+                      {item.category || "Uncategorized"} · {item.priority} priority
+                    </div>
+                  </div>
+                  <div style={{ display: "grid", gap: 6, fontSize: 13 }}>
+                    <div>
+                      <strong>Status:</strong> {item.status}
+                    </div>
+                    <div>
+                      <strong>Assigned:</strong> {item.assignedContractorId || "-"}
+                    </div>
+                    <div>
+                      <strong>Updated:</strong> {formatDate(item.updatedAtMs)}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        setSelected(item);
+                        void loadUpdates(item.id);
+                      }}
+                    >
+                      Timeline
+                    </Button>
+                    {item.status !== "completed" ? (
+                      <Button
+                        variant="ghost"
+                        onClick={async () => {
+                          await patchWorkOrder(item.id, { status: "completed" });
+                          await load();
+                          if (selected?.id === item.id) {
+                            setSelected((prev) => (prev ? { ...prev, status: "completed" } : prev));
+                            await loadUpdates(item.id);
+                          }
+                        }}
+                      >
+                        Mark Completed
+                      </Button>
+                    ) : null}
+                    {item.status === "completed" && !item.linkedExpenseId ? (
+                      <Button
+                        onClick={async () => {
+                          setConvertTarget(item);
+                          const contractorId = String(item.assignedContractorId || "").trim();
+                          if (!contractorId) {
+                            setConvertVendor("");
+                            return;
+                          }
+                          try {
+                            const contractor = await getContractorProfileById(contractorId);
+                            const vendor =
+                              String(contractor?.businessName || "").trim() ||
+                              String(contractor?.contactName || "").trim() ||
+                              "";
+                            setConvertVendor(vendor);
+                          } catch {
+                            setConvertVendor("");
+                          }
+                        }}
+                      >
+                        Convert to Expense
+                      </Button>
+                    ) : null}
+                    {item.linkedExpenseId ? (
+                      <span style={{ fontSize: 12, color: "#16a34a", padding: "6px 2px" }}>
+                        Expense linked
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : (
             <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 880 }}>
               <thead>

@@ -16,6 +16,8 @@ export function UnitEditModal({ open, unit, onClose, onSaved }: Props) {
   const [baths, setBaths] = useState<string>("");
   const [notes, setNotes] = useState("");
   const [status, setStatus] = useState("vacant");
+  const [occupantName, setOccupantName] = useState("");
+  const [leaseEndDate, setLeaseEndDate] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,6 +47,8 @@ export function UnitEditModal({ open, unit, onClose, onSaved }: Props) {
     );
     setNotes(unit.notes || "");
     setStatus(unit.status || "vacant");
+    setOccupantName(String(unit.occupantName || ""));
+    setLeaseEndDate(String(unit.leaseEndDate || ""));
     setError(null);
   }, [unit]);
 
@@ -65,6 +69,8 @@ export function UnitEditModal({ open, unit, onClose, onSaved }: Props) {
       payload.baths = baths === "" ? null : Number(baths);
       payload.notes = notes;
       payload.status = (status || "vacant").toLowerCase();
+      payload.occupantName = payload.status === "occupied" ? occupantName.trim() || null : null;
+      payload.leaseEndDate = payload.status === "occupied" ? leaseEndDate || null : null;
       const resp: any = await updateUnit(String(unit.id), payload);
       const updated = resp?.unit || { ...unit, ...payload };
       onSaved(updated);
@@ -120,7 +126,7 @@ export function UnitEditModal({ open, unit, onClose, onSaved }: Props) {
         </label>
 
         <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-          Rent
+          Monthly rent
           <input
             value={rent}
             onChange={(e) => setRent(e.target.value)}
@@ -170,6 +176,51 @@ export function UnitEditModal({ open, unit, onClose, onSaved }: Props) {
             <option value="occupied">Occupied</option>
           </select>
         </label>
+
+        {status === "occupied" ? (
+          <>
+            <div
+              style={{
+                display: "grid",
+                gap: 6,
+                padding: "10px 12px",
+                borderRadius: 10,
+                border: "1px solid rgba(37,99,235,0.18)",
+                background: "rgba(37,99,235,0.06)",
+                fontSize: 13,
+                color: "#334155",
+              }}
+            >
+              <div style={{ fontWeight: 700, color: "#0f172a" }}>Current occupancy setup</div>
+              <div>
+                Add the current occupant details so occupancy and rent roll views reflect reality now.
+              </div>
+              <div>
+                Upgrade to create full lease records, tenant history, and verified reporting when you&apos;re ready.
+              </div>
+            </div>
+
+            <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
+              Current tenant name
+              <input
+                value={occupantName}
+                onChange={(e) => setOccupantName(e.target.value)}
+                placeholder="Jane Doe"
+                style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #d1d5db" }}
+              />
+            </label>
+
+            <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
+              Lease end date (optional)
+              <input
+                value={leaseEndDate}
+                onChange={(e) => setLeaseEndDate(e.target.value)}
+                type="date"
+                style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #d1d5db" }}
+              />
+            </label>
+          </>
+        ) : null}
 
         <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
           Notes

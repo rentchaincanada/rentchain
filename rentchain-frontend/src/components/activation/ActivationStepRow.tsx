@@ -11,9 +11,9 @@ type Props = {
 
 const STATUS_COPY: Record<LandlordActivationStep["status"], string> = {
   not_started: "Not started",
-  in_progress: "Next step",
+  in_progress: "Let's finish setup",
   completed: "Completed",
-  blocked: "Blocked",
+  blocked: "Next step required",
 };
 
 function statusTone(status: LandlordActivationStep["status"]): React.CSSProperties {
@@ -31,6 +31,12 @@ function statusTone(status: LandlordActivationStep["status"]): React.CSSProperti
 
 export function ActivationStepRow({ step, isNextStep = false }: Props) {
   const navigate = useNavigate();
+  const helperText =
+    step.status === "blocked"
+      ? "Complete this step to continue."
+      : isNextStep
+      ? "Let's finish setup and keep your first review moving."
+      : null;
 
   return (
     <div
@@ -52,6 +58,17 @@ export function ActivationStepRow({ step, isNextStep = false }: Props) {
           <Pill style={statusTone(step.status)}>{STATUS_COPY[step.status]}</Pill>
         </div>
         <div style={{ color: text.muted, lineHeight: 1.5 }}>{step.description}</div>
+        {helperText ? (
+          <div
+            style={{
+              color: step.status === "blocked" ? "#92400e" : text.subtle,
+              fontSize: 12,
+              fontWeight: 600,
+            }}
+          >
+            {helperText}
+          </div>
+        ) : null}
       </div>
       <Button
         type="button"

@@ -94,6 +94,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   const [sendAppUnit, setSendAppUnit] = useState<any | null>(null);
   const sendApplicationOpenedRef = useRef(false);
   const [highlightedUnitKey, setHighlightedUnitKey] = useState<string | null>(null);
+  const [occupancyPromptDismissed, setOccupancyPromptDismissed] = useState(false);
   const unitRowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
   const unitCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
@@ -420,6 +421,34 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
     () => new Set(activeLeases.map((lease) => lease.unitNumber)),
     [activeLeases]
   );
+  const hasCurrentOccupancyData = useMemo(
+    () =>
+      displayedUnits.some((unit: any) => {
+        const statusVal = String(unit?.status || "").toLowerCase();
+        return (
+          statusVal === "occupied" ||
+          Boolean(String(unit?.occupantName || "").trim()) ||
+          Boolean(String(unit?.leaseEndDate || "").trim())
+        );
+      }) || activeLeases.length > 0,
+    [activeLeases.length, displayedUnits]
+  );
+  const showOccupancyPrompt =
+    displayedUnits.length > 0 && !hasCurrentOccupancyData && !occupancyPromptDismissed;
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !propertyId) return;
+    const dismissed =
+      window.localStorage.getItem(`rentchain.occupancyPrompt.dismissed.${propertyId}`) === "1";
+    setOccupancyPromptDismissed(dismissed);
+  }, [propertyId]);
+
+  const dismissOccupancyPrompt = useCallback(() => {
+    if (typeof window !== "undefined" && propertyId) {
+      window.localStorage.setItem(`rentchain.occupancyPrompt.dismissed.${propertyId}`, "1");
+    }
+    setOccupancyPromptDismissed(true);
+  }, [propertyId]);
 
   const displayName = property?.name || property?.addressLine1 || "Property";
   const showEmpty = !property;
@@ -988,6 +1017,76 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
           <div style={{ color: "#4b5563", fontSize: "0.82rem", marginBottom: 8 }}>
             The unit table shows configured unit rents. Active lease rent totals are shown separately above.
           </div>
+          {showOccupancyPrompt ? (
+            <div
+              style={{
+                marginBottom: 12,
+                padding: "14px 16px",
+                borderRadius: 14,
+                border: "1px solid rgba(37,99,235,0.18)",
+                background: "rgba(37,99,235,0.06)",
+                display: "grid",
+                gap: 8,
+              }}
+            >
+              <div style={{ fontWeight: 700, color: "#0f172a" }}>
+                Do any of these units already have active tenants?
+              </div>
+              <div style={{ color: "#475569", fontSize: "0.92rem", lineHeight: 1.6 }}>
+                Set current occupancy now to keep your occupancy and rent views accurate. You can still upgrade later to create full lease records, tenant history, and verified reporting.
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingUnit(displayedUnits[0] || null);
+                    dismissOccupancyPrompt();
+                  }}
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: 10,
+                    border: "1px solid #2563eb",
+                    background: "#2563eb",
+                    color: "#fff",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  Set up current occupancy
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate("/pricing")}
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: 10,
+                    border: "1px solid rgba(15,23,42,0.12)",
+                    background: "#fff",
+                    color: "#0f172a",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  Upgrade for full lease setup
+                </button>
+                <button
+                  type="button"
+                  onClick={dismissOccupancyPrompt}
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: 10,
+                    border: "none",
+                    background: "transparent",
+                    color: "#475569",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  Not now
+                </button>
+              </div>
+            </div>
+          ) : null}
           <div
             style={{
               borderRadius: 12,
@@ -1117,31 +1216,41 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                         </span>
                       </td>
                       <td className="rc-units-col-status" style={{ padding: "10px 12px" }}>
-                        <span
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: 6,
-                            padding: "4px 10px",
-                            borderRadius: 999,
-                            border: "1px solid rgba(148,163,184,0.35)",
-                            background: isLeased
-                              ? "rgba(34,197,94,0.1)"
-                              : "rgba(248,113,113,0.08)",
-                            color: isLeased ? "#166534" : "#f87171",
-                            fontSize: "0.8rem",
-                          }}
-                        >
+                        <div style={{ display: "grid", gap: 6 }}>
                           <span
                             style={{
-                              width: 8,
-                              height: 8,
-                              borderRadius: "999px",
-                              backgroundColor: isLeased ? "#22c55e" : "#f87171",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 6,
+                              padding: "4px 10px",
+                              borderRadius: 999,
+                              border: "1px solid rgba(148,163,184,0.35)",
+                              background: isLeased
+                                ? "rgba(34,197,94,0.1)"
+                                : "rgba(248,113,113,0.08)",
+                              color: isLeased ? "#166534" : "#f87171",
+                              fontSize: "0.8rem",
                             }}
-                          />
-                          {isLeased ? "Occupied" : "Vacant"}
-                        </span>
+                          >
+                            <span
+                              style={{
+                                width: 8,
+                                height: 8,
+                                borderRadius: "999px",
+                                backgroundColor: isLeased ? "#22c55e" : "#f87171",
+                              }}
+                            />
+                            {isLeased ? "Occupied" : "Vacant"}
+                          </span>
+                          {(u as any).occupantName ? (
+                            <div style={{ fontSize: "0.8rem", color: "#475569" }}>
+                              {String((u as any).occupantName)}
+                              {(u as any).leaseEndDate
+                                ? ` · Ends ${formatDate(String((u as any).leaseEndDate))}`
+                                : ""}
+                            </div>
+                          ) : null}
+                        </div>
                       </td>
                       <td className="rc-units-col-actions" style={{ padding: "10px 12px" }}>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -1242,6 +1351,14 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                   <div>
                     <div className="rc-unit-label">Status</div>
                     <div className="rc-unit-value">{isLeased ? "Occupied" : "Vacant"}</div>
+                    {(u as any).occupantName ? (
+                      <div style={{ fontSize: "0.8rem", color: "#475569", marginTop: 4 }}>
+                        {String((u as any).occupantName)}
+                        {(u as any).leaseEndDate
+                          ? ` · Ends ${formatDate(String((u as any).leaseEndDate))}`
+                          : ""}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
                 <div className="rc-unit-card-row rc-unit-card-specs" style={{ marginTop: 8 }}>

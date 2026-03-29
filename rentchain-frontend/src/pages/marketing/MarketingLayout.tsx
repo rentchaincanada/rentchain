@@ -116,11 +116,11 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
         style={{
           position: "sticky",
           top: 0,
-          zIndex: 10,
-          backdropFilter: "blur(12px)",
-          background: "rgba(247,249,252,0.9)",
+          zIndex: 1200,
+          background: colors.bg,
           borderBottom: `1px solid ${colors.border}`,
           paddingTop: "env(safe-area-inset-top)",
+          boxShadow: shadows.sm,
         }}
       >
         <div
@@ -136,6 +136,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
             minWidth: 0,
             boxSizing: "border-box",
             flexWrap: isMobile ? "wrap" : "nowrap",
+            minHeight: isMobile ? 76 : 88,
           }}
         >
           <div style={{ flex: "1 1 0", display: "flex", alignItems: "center" }}>

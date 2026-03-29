@@ -27,7 +27,7 @@ import { db } from "../config/firebase";
 import { rateLimitAuth, rateLimitSimple } from "../middleware/rateLimit";
 import { requireAuth } from "../middleware/requireAuth";
 import { buildCanonicalSessionUserFromClaims } from "../services/sessionUserService";
-import { sendEmail } from "../services/emailService";
+import { sendEmail, sendLandlordWelcomeEmail } from "../services/emailService";
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
@@ -731,6 +731,11 @@ router.post("/signup", rateLimitAuth, async (req, res) => {
       issuedRole: "landlord",
       email: maskEmail(email),
       userId: uid,
+    });
+    void sendLandlordWelcomeEmail({ to: email, name: fullName || null }).then((result) => {
+      if (!result.ok) {
+        console.warn("[auth/signup] welcome email skipped", { userId: uid, error: result.error });
+      }
     });
     return res.status(201).json({
       ok: true,

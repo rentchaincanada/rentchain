@@ -66,6 +66,9 @@ describe("AccountPage", () => {
     expect(screen.getByText(/Signed in as owner@example.com · Plan: Elite/)).toBeInTheDocument();
     expect(screen.getAllByText("Elite").length).toBeGreaterThan(0);
     expect(screen.queryByText("free")).not.toBeInTheDocument();
-    expect(screen.getByText("Uses your current workspace access level.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Uses the same billing access level shown in your workspace and checkout flow.")
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Security controls coming soon" })).toBeDisabled();
   });
 });

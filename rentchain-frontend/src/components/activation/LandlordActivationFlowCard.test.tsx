@@ -83,7 +83,7 @@ describe("LandlordActivationFlowCard", () => {
     expect(screen.getAllByRole("button", { name: "Add Applicant" }).length).toBeGreaterThan(0);
   });
 
-  it("renders completed and blocked badges", () => {
+  it("renders completed and dependency-aware badges", () => {
     render(
       <MemoryRouter>
         <LandlordActivationFlowCard summary={buildSummary()} />
@@ -91,8 +91,8 @@ describe("LandlordActivationFlowCard", () => {
     );
 
     expect(screen.getAllByText("Completed").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Blocked").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Next step").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Next step required").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Let's finish setup").length).toBeGreaterThan(0);
   });
 
   it("shows the transunion action label on the screening blocker", () => {

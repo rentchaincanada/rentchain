@@ -142,6 +142,63 @@ export async function sendWaitlistConfirmation(params: {
   }
 }
 
+export async function sendLandlordWelcomeEmail(params: {
+  to: string;
+  name?: string | null;
+}): Promise<SendResult> {
+  const from = safeStr(process.env.EMAIL_FROM || process.env.FROM_EMAIL);
+  const replyTo = safeStr(process.env.WELCOME_REPLYTO_EMAIL || from);
+
+  if (!from) return { ok: false, error: "EMAIL_FROM missing" };
+
+  try {
+    const to = safeStr(params.to);
+    const name = safeStr(params.name || "");
+    const greet = name ? `Hi ${name},` : "Hi,";
+    const baseUrl = (process.env.PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
+    const ctaUrl = `${baseUrl}/dashboard`;
+
+    await sendEmail({
+      to,
+      from,
+      replyTo,
+      subject: "Welcome to RentChain",
+      text: buildEmailText({
+        intro:
+          `${greet}\n\nWelcome to RentChain. Start by adding your first property and unit, then move into applicants, viewings, and your first screening review.`,
+        bullets: [
+          "Add your first property and unit",
+          "Use the activation flow on your dashboard to follow each next step",
+          "If you already have occupied units, set current occupancy first so your dashboard reflects reality",
+          "Upgrades unlock deeper workflow, lease history, and verified reporting when you need them",
+        ],
+        ctaText: "Open dashboard",
+        ctaUrl,
+        footerNote: "You're receiving this because a RentChain landlord account was created with this email.",
+      }),
+      html: buildEmailHtml({
+        title: "Welcome to RentChain",
+        intro:
+          `${greet} Welcome to RentChain. Start by adding your first property and unit, then move into applicants, viewings, and your first screening review.`,
+        bullets: [
+          "Add your first property and unit",
+          "Use the activation flow on your dashboard to follow each next step",
+          "If you already have occupied units, set current occupancy first so your dashboard reflects reality",
+          "Upgrades unlock deeper workflow, lease history, and verified reporting when you need them",
+        ],
+        ctaText: "Open dashboard",
+        ctaUrl,
+        footerNote: "You're receiving this because a RentChain landlord account was created with this email.",
+        preheader: "Start your first RentChain setup and screening workflow.",
+      }),
+    });
+
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || "email_send_failed" };
+  }
+}
+
 export async function sendEmail(message: EmailMessage) {
   const provider = safeStr(process.env.EMAIL_PROVIDER || "mailgun").toLowerCase();
   if (provider !== "mailgun") {

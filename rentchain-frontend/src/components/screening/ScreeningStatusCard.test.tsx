@@ -38,7 +38,8 @@ describe("ScreeningStatusCard", () => {
       />
     );
 
-    expect(screen.getByText("Connect TransUnion first")).toBeInTheDocument();
+    expect(screen.getByText("Next step required")).toBeInTheDocument();
+    expect(screen.getByText(/We'll help you complete screening step by step/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Connect TransUnion" })).toBeInTheDocument();
   });
 

@@ -26,6 +26,8 @@ export interface PropertyInput {
 export interface PropertyUnit extends UnitInput {
   id: string;
   status?: "vacant" | "occupied";
+  occupantName?: string | null;
+  leaseEndDate?: string | null;
 }
 
 export interface Property extends PropertyInput {
