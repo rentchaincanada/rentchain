@@ -1,5 +1,10 @@
 import type { CanonicalUnitRecord } from "../leaseCanonicalizationService";
-import { normalizeUnitAlias, normalizeUnitToken } from "../leaseCanonicalizationService";
+import {
+  normalizeUnitAlias,
+  normalizeUnitToken,
+  rankLeaseStatus,
+  toMillisSafe,
+} from "../leaseCanonicalizationService";
 
 type PropertyScopedLeaseLike = {
   id: string;
@@ -8,6 +13,17 @@ type PropertyScopedLeaseLike = {
   unitId?: string | null;
   unitNumber?: string | null;
   unitLabel?: string | null;
+};
+
+type UnitScopedLeaseLike = PropertyScopedLeaseLike & {
+  resolvedUnitId?: string | null;
+  logicalUnitKey?: string | null;
+  status?: string | null;
+  riskScore?: number | null;
+  riskGrade?: string | null;
+  riskConfidence?: number | null;
+  updatedAt?: unknown;
+  createdAt?: unknown;
 };
 
 type IsolationLogger = (message: string, detail: Record<string, unknown>) => void;
@@ -31,6 +47,43 @@ function buildUnitTokens(value: unknown): string[] {
   const token = normalizeUnitToken(raw);
   const alias = normalizeUnitAlias(raw);
   return Array.from(new Set([raw, raw.toUpperCase(), token, alias].filter(Boolean)));
+}
+
+function toUnitScopeKey(lease: UnitScopedLeaseLike): string {
+  const direct = asTrimmedString(lease.resolvedUnitId);
+  if (direct) return `resolved:${direct}`;
+  const logical = asTrimmedString(lease.logicalUnitKey);
+  if (logical) return `logical:${logical}`;
+  const unitId = asTrimmedString(lease.unitId);
+  if (unitId) return `unit:${unitId}`;
+  const unitNumber = asTrimmedString(lease.unitNumber);
+  if (unitNumber) return `number:${normalizeUnitAlias(unitNumber) || normalizeUnitToken(unitNumber) || unitNumber}`;
+  const unitLabel = asTrimmedString(lease.unitLabel);
+  if (unitLabel) return `label:${normalizeUnitAlias(unitLabel) || normalizeUnitToken(unitLabel) || unitLabel}`;
+  return `lease:${asTrimmedString(lease.id)}`;
+}
+
+function hasRiskContext(lease: UnitScopedLeaseLike): boolean {
+  return lease.riskScore != null || Boolean(asTrimmedString(lease.riskGrade)) || lease.riskConfidence != null;
+}
+
+function compareUnitLeasePriority(a: UnitScopedLeaseLike, b: UnitScopedLeaseLike): number {
+  const statusDiff = rankLeaseStatus(b.status) - rankLeaseStatus(a.status);
+  if (statusDiff !== 0) return statusDiff;
+
+  const riskDiff = Number(hasRiskContext(b)) - Number(hasRiskContext(a));
+  if (riskDiff !== 0) return riskDiff;
+
+  const confidenceDiff = Number(b.riskConfidence ?? -1) - Number(a.riskConfidence ?? -1);
+  if (confidenceDiff !== 0) return confidenceDiff;
+
+  const updatedDiff = toMillisSafe(b.updatedAt) - toMillisSafe(a.updatedAt);
+  if (updatedDiff !== 0) return updatedDiff;
+
+  const createdDiff = toMillisSafe(b.createdAt) - toMillisSafe(a.createdAt);
+  if (createdDiff !== 0) return createdDiff;
+
+  return String(a.id || "").localeCompare(String(b.id || ""));
 }
 
 function matchesRequestedUnit(units: CanonicalUnitRecord[], lease: PropertyScopedLeaseLike): boolean {
@@ -105,4 +158,18 @@ export function filterPropertyScopedLeases<T extends PropertyScopedLeaseLike>(in
   }
 
   return { included, excluded };
+}
+
+export function dedupePropertyScopedLeasesByUnit<T extends UnitScopedLeaseLike>(leases: T[]): T[] {
+  const byUnit = new Map<string, T[]>();
+  for (const lease of leases) {
+    const key = toUnitScopeKey(lease);
+    const bucket = byUnit.get(key) || [];
+    bucket.push(lease);
+    byUnit.set(key, bucket);
+  }
+
+  return Array.from(byUnit.values())
+    .map((bucket) => [...bucket].sort(compareUnitLeasePriority)[0])
+    .sort((a, b) => compareUnitLeasePriority(a, b));
 }

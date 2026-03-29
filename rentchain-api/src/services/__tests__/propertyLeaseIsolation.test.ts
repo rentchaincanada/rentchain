@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { CanonicalUnitRecord } from "../leaseCanonicalizationService";
-import { filterPropertyScopedLeases } from "../risk/propertyLeaseIsolation";
+import { dedupePropertyScopedLeasesByUnit, filterPropertyScopedLeases } from "../risk/propertyLeaseIsolation";
 import { loadPropertyCredibilitySummary } from "../risk/propertyCredibilitySummary";
 
 function makeUnit(input: Partial<CanonicalUnitRecord> & { id: string }): CanonicalUnitRecord {
@@ -119,6 +119,64 @@ describe("propertyLeaseIsolation", () => {
 
     expect(result.included).toHaveLength(0);
     expect(result.excluded[0]?.reason).toBe("unit_not_in_requested_property");
+  });
+
+  it("dedupes same-unit current leases down to one winner", () => {
+    const result = dedupePropertyScopedLeasesByUnit([
+      {
+        id: "lease-older",
+        landlordId: "landlord-1",
+        propertyId: "prop-1",
+        resolvedUnitId: "unit-1",
+        unitId: "unit-1",
+        unitNumber: "1A",
+        status: "active",
+        updatedAt: 10,
+        createdAt: 10,
+        riskScore: null,
+        riskConfidence: null,
+      },
+      {
+        id: "lease-newer",
+        landlordId: "landlord-1",
+        propertyId: "prop-1",
+        resolvedUnitId: "unit-1",
+        unitId: "unit-1",
+        unitNumber: "1A",
+        status: "renewal_pending",
+        updatedAt: 20,
+        createdAt: 20,
+        riskScore: 81,
+        riskConfidence: 0.86,
+      },
+    ]);
+
+    expect(result.map((lease) => lease.id)).toEqual(["lease-newer"]);
+  });
+
+  it("keeps distinct units as separate rows after dedupe", () => {
+    const result = dedupePropertyScopedLeasesByUnit([
+      {
+        id: "lease-1",
+        landlordId: "landlord-1",
+        propertyId: "prop-1",
+        resolvedUnitId: "unit-1",
+        unitId: "unit-1",
+        unitNumber: "1A",
+        status: "active",
+      },
+      {
+        id: "lease-2",
+        landlordId: "landlord-1",
+        propertyId: "prop-1",
+        resolvedUnitId: "unit-2",
+        unitId: "unit-2",
+        unitNumber: "2A",
+        status: "active",
+      },
+    ]);
+
+    expect(result.map((lease) => lease.id)).toEqual(["lease-1", "lease-2"]);
   });
 });
 
