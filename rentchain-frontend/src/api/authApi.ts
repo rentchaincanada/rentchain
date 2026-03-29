@@ -17,6 +17,7 @@ export interface AuthUser {
 export interface LoginResponse {
   token?: string;
   user?: AuthUser;
+  showLandlordWelcome?: boolean;
   requires2fa?: boolean;
   pendingToken?: string;
   methods?: string[];

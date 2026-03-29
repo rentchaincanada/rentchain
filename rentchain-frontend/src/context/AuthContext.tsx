@@ -414,9 +414,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         });
       }
       if (typeof window !== "undefined") {
-        const resolvedRole = String(hydrated?.actorRole || hydrated?.role || "").trim().toLowerCase();
-        if (resolvedRole === "landlord" && hydrated?.id) {
-          window.localStorage.setItem(`${LANDLORD_WELCOME_PENDING_KEY}.${hydrated.id}`, "1");
+        const resolvedRole = String(
+          hydrated?.actorRole ||
+            hydrated?.role ||
+            response.user?.role ||
+            ""
+        )
+          .trim()
+          .toLowerCase();
+        const welcomeUserId = String(hydrated?.id || response.user?.id || "").trim();
+        if ((response.showLandlordWelcome || resolvedRole === "landlord") && welcomeUserId) {
+          window.localStorage.setItem(`${LANDLORD_WELCOME_PENDING_KEY}.${welcomeUserId}`, "1");
         }
       }
       setTwoFactorPendingToken(null);

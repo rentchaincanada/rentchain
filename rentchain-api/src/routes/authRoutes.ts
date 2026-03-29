@@ -732,14 +732,23 @@ router.post("/signup", rateLimitAuth, async (req, res) => {
       email: maskEmail(email),
       userId: uid,
     });
-    void sendLandlordWelcomeEmail({ to: email, name: fullName || null }).then((result) => {
-      if (!result.ok) {
-        console.warn("[auth/signup] welcome email skipped", { userId: uid, error: result.error });
-      }
-    });
+    const welcomeEmailResult = await sendLandlordWelcomeEmail({
+      to: email,
+      name: fullName || null,
+    }).catch((error: any) => ({
+      ok: false as const,
+      error: error?.message || "email_send_failed",
+    }));
+    if (!welcomeEmailResult.ok) {
+      console.warn("[auth/signup] welcome email skipped", {
+        userId: uid,
+        error: welcomeEmailResult.error,
+      });
+    }
     return res.status(201).json({
       ok: true,
       token,
+      showLandlordWelcome: true,
       user: {
         id: uid,
         email,

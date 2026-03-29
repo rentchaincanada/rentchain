@@ -532,7 +532,10 @@ const DashboardPage: React.FC = () => {
           display: "flex",
           flexDirection: "column",
           gap: spacing.lg,
-          padding: `${spacing.md}px ${spacing.lg}px`,
+          padding: isMobile
+            ? `${spacing.sm}px 0 ${spacing.md}px`
+            : `${spacing.md}px ${spacing.lg}px`,
+          minWidth: 0,
         }}
       >
         {error ? (
