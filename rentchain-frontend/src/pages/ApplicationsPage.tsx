@@ -46,6 +46,12 @@ import "./ApplicationsPage.css";
 import { SendScreeningInviteModal } from "../components/screening/SendScreeningInviteModal";
 import { ScreeningStatusBadge } from "../components/screening/ScreeningStatusBadge";
 import { ScreeningStatusCard } from "@/components/screening/ScreeningStatusCard";
+import {
+  ScreeningReportView,
+  type ScreeningReportAction,
+  type ScreeningReportFinding,
+  type ScreeningReportFlag,
+} from "@/components/screening/ScreeningReportView";
 import { SamplePdfModal } from "../components/billing/SamplePdfModal";
 import { hasTier, normalizeTier } from "@/billing/requireTier";
 import {
@@ -104,6 +110,22 @@ const AI_FLAG_LABELS: Record<string, string> = {
   IDENTITY_MISMATCH_HINT: "Identity mismatch hint",
 };
 
+const SCREENING_FLAG_EXPLANATIONS: Record<string, string> = {
+  "Thin file": "Limited bureau history was available, so identity and rental records matter more.",
+  "Thin credit file": "Limited bureau history was available, so identity and rental records matter more.",
+  "Address gap": "Address history may need confirmation before you decide.",
+  ADDRESS_GAP: "Address history may need confirmation before you decide.",
+  "Income stress": "Reported income may be tight relative to the expected rent.",
+  INCOME_STRESS: "Reported income may be tight relative to the expected rent.",
+  "Short employment tenure": "Recent employment changes can warrant a quick verification follow-up.",
+  EMPLOYMENT_SHORT_TENURE: "Recent employment changes can warrant a quick verification follow-up.",
+  "Weak references": "Reference quality or completeness may need an extra check.",
+  REFERENCE_WEAK: "Reference quality or completeness may need an extra check.",
+  "Identity mismatch hint": "Core identity fields did not line up cleanly across sources.",
+  IDENTITY_MISMATCH_HINT: "Core identity fields did not line up cleanly across sources.",
+  "Active lease conflict risk": "The applicant may still be committed to another lease and should clarify move timing.",
+};
+
 const SCREENING_REASON_LABELS: Record<string, string> = {
   ELIGIBLE: "Eligible for screening.",
   MISSING_TENANT_PROFILE: "Tenant profile details are incomplete.",
@@ -116,6 +138,12 @@ const SCREENING_REASON_LABELS: Record<string, string> = {
 const formatScreeningStatus = (value?: string | null) => {
   if (!value) return "unknown";
   return value.replace(/_/g, " ");
+};
+
+const formatUnitLabel = (value?: string | null) => {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  return /^unit\b/i.test(raw) ? raw : `Unit ${raw}`;
 };
 
 const isRawScreeningStatusKey = (value?: string | null) => {
@@ -163,6 +191,41 @@ const formatScreeningEventLabel = (value: ScreeningEvent["type"]) => {
       return value.replace(/_/g, " ");
   }
 };
+
+const mapRecommendation = (
+  overall?: string | null,
+  priority?: string | null
+): "Proceed" | "Caution" | "High risk" | "Pending" => {
+  const normalized = String(overall || "").toLowerCase();
+  if (normalized === "pass") return "Proceed";
+  if (normalized === "review") return "Caution";
+  if (normalized === "fail") return "High risk";
+  if (normalized === "low") return "Proceed";
+  if (normalized === "moderate" || normalized === "medium") return "Caution";
+  if (normalized === "high") return "High risk";
+  if (priority === "low") return "Proceed";
+  if (priority === "medium") return "Caution";
+  if (priority === "high") return "High risk";
+  return "Pending";
+};
+
+const formatConfidenceLabel = (value?: number | null, rawScore?: number | null) => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const ratio = value > 1 ? value / 100 : value;
+    return `${Math.round(ratio * 100)}%`;
+  }
+  if (typeof rawScore === "number" && Number.isFinite(rawScore)) {
+    return `${Math.round(rawScore)}%`;
+  }
+  return null;
+};
+
+const buildScreeningFlags = (flags: string[]): ScreeningReportFlag[] =>
+  flags.map((flag) => ({
+    key: flag,
+    label: AI_FLAG_LABELS[flag] || flag,
+    description: SCREENING_FLAG_EXPLANATIONS[flag] || SCREENING_FLAG_EXPLANATIONS[AI_FLAG_LABELS[flag] || ""] || null,
+  }));
 
 const ApplicationsPage: React.FC = () => {
   const location = useLocation();
@@ -1211,6 +1274,181 @@ const ApplicationsPage: React.FC = () => {
     }
   };
 
+  const screeningReportViewModel = useMemo(() => {
+    if (!detail) return null;
+
+    const legacyFlags = resultData?.summary?.flags || [];
+    const manualFlags = manualScreeningStatus?.resultFlags || [];
+    const aiFlags = detail.screening?.ai?.flags || [];
+    const riskSignals = decisionSummary?.riskInsights?.signals || [];
+    const combinedFlags = Array.from(new Set([...manualFlags, ...legacyFlags, ...aiFlags, ...riskSignals])).filter(Boolean);
+
+    const recommendation = mapRecommendation(
+      resultData?.summary?.overall || detail.screeningResultSummary?.overall || detail.screening?.ai?.riskAssessment || null,
+      decisionSummary?.screeningRecommendation?.priority || null
+    );
+
+    const confidence = formatConfidenceLabel(
+      decisionSummary?.riskInsights?.confidence ?? null,
+      detail.screening?.ai?.confidenceScore ?? null
+    );
+
+    const completedAt =
+      manualScreeningStatus?.completedAt ||
+      (detail.screeningCompletedAt ? new Date(detail.screeningCompletedAt).toISOString() : null) ||
+      (detail.screening?.completedAt ? new Date(detail.screening.completedAt).toISOString() : null);
+
+    const propertyLabel =
+      properties.find((property) => property.id === detail.propertyId)?.name ||
+      propertyRecords.find((property: any) => String(property.id || property.propertyId || "") === detail.propertyId)?.name ||
+      "Property";
+
+    const monthlyIncomeCents =
+      detail.applicantProfile?.employment?.incomeAmountCents ??
+      detail.employment?.applicant?.monthlyIncomeCents ??
+      null;
+
+    const employmentValue = detail.applicantProfile?.employment?.employerName
+      ? `${detail.applicantProfile.employment.employerName}${detail.applicantProfile.employment.jobTitle ? ` · ${detail.applicantProfile.employment.jobTitle}` : ""}`
+      : detail.employment?.applicant?.employer
+      ? `${detail.employment.applicant.employer}${detail.employment.applicant.jobTitle ? ` · ${detail.employment.applicant.jobTitle}` : ""}`
+      : "Needs review";
+
+    const completenessSignals = [
+      detail.consent.creditConsent,
+      detail.consent.referenceConsent,
+      detail.consent.dataSharingConsent,
+      Boolean(detail.applicantProfile?.currentAddress?.line1 || detail.residentialHistory?.length),
+      Boolean(detail.applicant.email),
+    ].filter(Boolean).length;
+
+    const findings: ScreeningReportFinding[] = [
+      {
+        key: "credit",
+        title: "Credit summary",
+        value:
+          resultData?.summary?.overall === "pass"
+            ? "Low risk signal"
+            : resultData?.summary?.overall === "review"
+            ? "Manual review recommended"
+            : resultData?.summary?.overall === "fail"
+            ? "High risk signal"
+            : manualScreeningStatus?.resultSummary || "Awaiting completed report details",
+        helper:
+          resultData?.summary?.scoreBand
+            ? `Score band ${resultData.summary.scoreBand}`
+            : decisionSummary?.screeningRecommendation?.reason || "Uses the current screening and manual review summary.",
+      },
+      {
+        key: "lease_conflict",
+        title: "Lease conflict",
+        value: riskSignals.includes("Active lease conflict risk") ? "Potential overlap found" : "No active conflict flagged",
+        helper: riskSignals.includes("Active lease conflict risk")
+          ? "Confirm current move-out timing before approval."
+          : "No overlapping active lease signal was surfaced in decision support.",
+      },
+      {
+        key: "income",
+        title: "Income / employment",
+        value: employmentValue,
+        helper:
+          typeof monthlyIncomeCents === "number"
+            ? `Reported income $${(monthlyIncomeCents / 100).toFixed(0)} / month`
+            : "Employment and income should be confirmed during final review.",
+      },
+      {
+        key: "completeness",
+        title: "Completeness",
+        value: completenessSignals >= 4 ? "Complete" : completenessSignals >= 2 ? "Mostly complete" : "Needs follow-up",
+        helper:
+          completenessSignals >= 4
+            ? "Consent and core application details are present."
+            : "Some application details are still limited or need confirmation.",
+      },
+    ];
+
+    const recommendedActions = Array.from(
+      new Set(
+        [
+          ...(decisionSummary?.riskInsights?.recommendations || []),
+          decisionSummary?.decisionSupport?.nextBestAction || null,
+          recommendation === "High risk" ? "Review every flagged item before making a decision." : null,
+          recommendation === "Caution" ? "Verify employment and address history before approval." : null,
+          combinedFlags.length === 0 ? "Document your final decision in the review summary." : null,
+        ].filter(Boolean) as string[]
+      )
+    );
+
+    const hasRenderableData =
+      manualScreeningStatus?.status === "completed" ||
+      screeningStatus?.status === "complete" ||
+      Boolean(resultData?.summary || resultData?.reportText || manualScreeningStatus?.resultSummary || combinedFlags.length);
+
+    if (!hasRenderableData) return null;
+
+    const actions: ScreeningReportAction[] = [];
+    if (resultData?.reportUrl) {
+      actions.push({ key: "view", label: "View Report", href: resultData.reportUrl });
+    } else if (manualScreeningStatus?.reportUrl) {
+      actions.push({ key: "view", label: "View Report", href: manualScreeningStatus.reportUrl });
+    } else if (screeningOrderId && orderReportReady) {
+      actions.push({ key: "view", label: orderReportLoading ? "Opening..." : "View Report", onClick: () => void handleViewOrderReport(), disabled: orderReportLoading });
+    }
+    actions.push({
+      key: "download",
+      label: exportingReport ? "Preparing..." : "Download",
+      onClick: () => void handleExportReport(false),
+      disabled: exportingReport,
+    });
+
+    return {
+      applicantName: `${detail.applicant.firstName} ${detail.applicant.lastName}`.trim(),
+      propertyLabel,
+      unitLabel: formatUnitLabel(detail.unitId),
+      status:
+        manualScreeningStatus?.status ||
+        screeningStatus?.status ||
+        detail.screening?.status ||
+        "pending",
+      provider:
+        manualScreeningStatus?.provider ||
+        screeningStatus?.provider ||
+        detail.screening?.provider ||
+        "transunion_manual",
+      completedAt,
+      recommendation,
+      riskGrade:
+        resultData?.summary?.scoreBand ||
+        decisionSummary?.riskInsights?.grade ||
+        detail.screening?.result?.riskBand ||
+        null,
+      confidence,
+      findings,
+      flags: buildScreeningFlags(combinedFlags),
+      recommendedActions,
+      actions,
+      details:
+        resultData?.reportText ||
+        manualScreeningStatus?.resultSummary ||
+        detail.screening?.result?.notes ||
+        null,
+    };
+  }, [
+    decisionSummary,
+    detail,
+    exportingReport,
+    handleExportReport,
+    handleViewOrderReport,
+    manualScreeningStatus,
+    orderReportLoading,
+    orderReportReady,
+    properties,
+    propertyRecords,
+    resultData,
+    screeningOrderId,
+    screeningStatus,
+  ]);
+
   return (
     <>
       <div className="rc-applications-page" style={{ display: "grid", gap: spacing.lg }}>
@@ -1575,6 +1813,11 @@ const ApplicationsPage: React.FC = () => {
                       onPrimaryAction={() => void handleManualScreeningPrimaryAction()}
                     />
                   </div>
+                  {screeningReportViewModel ? (
+                    <div style={{ marginBottom: 12 }}>
+                      <ScreeningReportView {...screeningReportViewModel} />
+                    </div>
+                  ) : null}
                   <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
                     {!SCREENING_ENABLED ? (
                       <div style={{ fontSize: 13, color: text.muted }}>
@@ -2201,32 +2444,12 @@ const ApplicationsPage: React.FC = () => {
             </div>
           ) : resultData ? (
             <div style={{ display: "grid", gap: spacing.sm }}>
-              {resultData.summary ? (
-                <div
-                  style={{
-                    border: `1px solid ${colors.border}`,
-                    borderRadius: radius.md,
-                    padding: spacing.sm,
-                    background: colors.panel,
-                    display: "grid",
-                    gap: 4,
-                  }}
-                >
-                  <div>Overall: {resultData.summary.overall}</div>
-                  {resultData.summary.scoreBand ? (
-                    <div>Score band: {resultData.summary.scoreBand}</div>
-                  ) : null}
-                  {resultData.summary.flags?.length ? (
-                    <div>Flags: {resultData.summary.flags.join(", ")}</div>
-                  ) : null}
-                </div>
+              {screeningReportViewModel ? (
+                <ScreeningReportView {...screeningReportViewModel} />
               ) : (
                 <div style={{ color: text.muted }}>No summary provided.</div>
               )}
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <Button variant="primary" onClick={() => void handleExportReport(false)} disabled={exportingReport}>
-                  {exportingReport ? "Preparing..." : "Download PDF"}
-                </Button>
                 <Button variant="secondary" onClick={() => void handleExportReport(true)} disabled={exportingReport}>
                   Copy share link
                 </Button>
@@ -2237,26 +2460,6 @@ const ApplicationsPage: React.FC = () => {
                   {exportExpiresAt ? ` · Expires ${new Date(exportExpiresAt).toLocaleString()}` : ""}
                 </div>
               ) : null}
-              {resultData.reportUrl ? (
-                <a href={resultData.reportUrl} target="_blank" rel="noreferrer">
-                  View report
-                </a>
-              ) : null}
-              {resultData.reportText ? (
-                <div
-                  style={{
-                    border: `1px solid ${colors.border}`,
-                    borderRadius: radius.md,
-                    padding: spacing.sm,
-                    whiteSpace: "pre-wrap",
-                    fontSize: 13,
-                  }}
-                >
-                  {resultData.reportText}
-                </div>
-              ) : (
-                <div style={{ color: text.muted, fontSize: 12 }}>No report text available.</div>
-              )}
             </div>
           ) : null}
         </Card>
