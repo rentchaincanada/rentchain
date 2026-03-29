@@ -35,6 +35,7 @@ import { resolveReturnToParam } from "../lib/propertyGate";
 
 const PropertiesPage: React.FC = () => {
   const [properties, setProperties] = useState<Property[]>([]);
+  const [propertyView, setPropertyView] = useState<"active" | "archived">("active");
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(
     null
   );
@@ -64,6 +65,10 @@ const PropertiesPage: React.FC = () => {
   const [leasePackInitialPropertyId, setLeasePackInitialPropertyId] = useState<string | null>(null);
   const { showToast } = useToast();
   const currentProperties = properties?.length ?? 0;
+  const archiveHelpCopy =
+    propertyView === "archived"
+      ? "Archived properties are hidden from active portfolio views but preserved for records and history."
+      : "Archive sold or paused properties to keep your active portfolio clean without deleting history.";
   const unitsUsed = useMemo(
     () => (properties || []).reduce((sum, p) => sum + unitsForProperty(p), 0),
     [properties]
@@ -146,7 +151,7 @@ const PropertiesPage: React.FC = () => {
   const loadProperties = useCallback(async () => {
     try {
       setIsLoadingProperties(true);
-      const res = await fetchProperties();
+      const res = await fetchProperties({ status: propertyView });
       const raw = res ?? null;
       const normalized = arr(raw?.items ?? raw?.properties ?? (raw as any)).filter(
         (p) => p && p.id
@@ -158,7 +163,7 @@ const PropertiesPage: React.FC = () => {
     } finally {
       setIsLoadingProperties(false);
     }
-  }, []);
+  }, [propertyView]);
 
   useEffect(() => {
     void loadProperties();
@@ -441,6 +446,7 @@ const PropertiesPage: React.FC = () => {
             </span>
             </div>
           </div>
+          <div style={{ color: text.muted, fontSize: 13 }}>{archiveHelpCopy}</div>
 
           <div className="rc-properties-header-actions" style={{ display: "flex", gap: 8 }}>
             {selectedPropertyId ? (
@@ -619,6 +625,21 @@ const PropertiesPage: React.FC = () => {
             gap: spacing.lg,
           }}
         >
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Button
+              variant={propertyView === "active" ? "primary" : "ghost"}
+              onClick={() => setPropertyView("active")}
+            >
+              Active properties
+            </Button>
+            <Button
+              variant={propertyView === "archived" ? "primary" : "ghost"}
+              onClick={() => setPropertyView("archived")}
+            >
+              Archived properties
+            </Button>
+          </div>
+
           <PropertySelector
             properties={safeProperties}
             selectedId={selectedPropertyId}
@@ -633,20 +654,24 @@ const PropertiesPage: React.FC = () => {
           {!isLoadingProperties && properties.length === 0 ? (
             <div style={{ display: "grid", gap: 8 }}>
               <div style={{ color: text.primary, fontSize: 14, fontWeight: 700 }}>
-                No properties yet
+                {propertyView === "archived" ? "No archived properties yet" : "No properties yet"}
               </div>
               <div style={{ color: text.muted, fontSize: 13 }}>
-                Properties are the foundation for units, tenants, and applications.
+                {propertyView === "archived"
+                  ? "Archive a property from the active view to keep historical records without cluttering your portfolio."
+                  : "Properties are the foundation for units, tenants, and applications."}
               </div>
-              <Button
-                onClick={() => {
-                  track("empty_state_cta_clicked", { pageKey: "properties", ctaKey: "add_property" });
-                  addPropertyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-                }}
-                style={{ width: "fit-content" }}
-              >
-                Add first property
-              </Button>
+              {propertyView === "active" ? (
+                <Button
+                  onClick={() => {
+                    track("empty_state_cta_clicked", { pageKey: "properties", ctaKey: "add_property" });
+                    addPropertyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }}
+                  style={{ width: "fit-content" }}
+                >
+                  Add first property
+                </Button>
+              ) : null}
             </div>
           ) : null}
 
@@ -728,6 +753,15 @@ const PropertiesPage: React.FC = () => {
               <PropertyDetailPanel
                 property={selectedProperty}
                 onRefresh={loadProperties}
+                onArchiveStateChanged={(nextProperty) => {
+                  if (!nextProperty?.id) return;
+                  setProperties((prev) =>
+                    prev.filter((item) => String(item.id) !== String(nextProperty.id))
+                  );
+                  setSelectedPropertyId((prev) =>
+                    prev === nextProperty.id ? null : prev
+                  );
+                }}
                 onOpenLeasePack={() => {
                   setLeasePackInitialPropertyId(selectedProperty?.id || null);
                   setLeasePackOpen(true);
@@ -1290,13 +1324,3 @@ const UnitsModal = ({
 };
 
 export default PropertiesPage;
-
-
-
-
-
-
-
-
-
-

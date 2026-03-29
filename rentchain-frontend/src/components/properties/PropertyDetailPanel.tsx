@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  archiveProperty,
   publishProperty,
+  unarchiveProperty,
   updateProperty,
   type Property,
 } from "../../api/propertiesApi";
@@ -35,6 +37,7 @@ import { calculateConfiguredUnitRentTotal, resolveConfiguredUnitRent } from "@/l
 interface PropertyDetailPanelProps {
   property: Property | null;
   onRefresh?: () => Promise<void> | void;
+  onArchiveStateChanged?: (property: Property) => Promise<void> | void;
   openSendApplication?: boolean;
   onSendApplicationOpened?: () => void;
   highlightUnitId?: string | null;
@@ -58,6 +61,7 @@ const formatDate = (iso: string): string => {
 export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   property,
   onRefresh,
+  onArchiveStateChanged,
   openSendApplication = false,
   onSendApplicationOpened,
   highlightUnitId = null,
@@ -90,6 +94,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   const [unitsLoading, setUnitsLoading] = useState(false);
   const [editingUnit, setEditingUnit] = useState<any | null>(null);
   const [isPublishingProperty, setIsPublishingProperty] = useState(false);
+  const [isUpdatingArchiveState, setIsUpdatingArchiveState] = useState(false);
   const [isSavingScreeningToggle, setIsSavingScreeningToggle] = useState(false);
   const [sendAppUnit, setSendAppUnit] = useState<any | null>(null);
   const sendApplicationOpenedRef = useRef(false);
@@ -384,6 +389,8 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
       ? units.length
       : Number((property as any)?.unitsCount ?? (property as any)?.unitCount ?? 0) || 0;
   const propertyStatus = String((property as any)?.status || "DRAFT").toUpperCase();
+  const portfolioStatus = String((property as any)?.portfolioStatus || "active").toLowerCase();
+  const isArchived = portfolioStatus === "archived";
   const publishDisabled = unitCount < 1 || isPublishingProperty;
   const screeningRequiredBeforeApproval =
     (property as any)?.screeningRequiredBeforeApproval !== false;
@@ -497,6 +504,37 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
     }
   }, [onRefresh, property?.id, screeningRequiredBeforeApproval, showToast]);
 
+  const handleArchiveToggle = useCallback(async () => {
+    if (!property?.id) return;
+    const confirmed = window.confirm(
+      isArchived
+        ? "Restore this property to your active portfolio?"
+        : "Archive this property? It will be hidden from active portfolio views but preserved for records and history."
+    );
+    if (!confirmed) return;
+
+    try {
+      setIsUpdatingArchiveState(true);
+      const result = isArchived
+        ? await unarchiveProperty(String(property.id))
+        : await archiveProperty(String(property.id));
+      showToast({
+        message: isArchived ? "Property restored" : "Property archived",
+        variant: "success",
+      });
+      await onArchiveStateChanged?.(result.property);
+      await onRefresh?.();
+    } catch (e: any) {
+      showToast({
+        message: isArchived ? "Could not restore property" : "Could not archive property",
+        description: String(e?.message || "Please try again."),
+        variant: "error",
+      });
+    } finally {
+      setIsUpdatingArchiveState(false);
+    }
+  }, [isArchived, onArchiveStateChanged, onRefresh, property?.id, showToast]);
+
   const getUnitKey = useCallback((u: any, idx: number) => {
     return String(u?.id || u?.unitId || u?.uid || u?.unitNumber || `unit-${idx}`);
   }, []);
@@ -574,6 +612,19 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
               >
                 {propertyStatus}
               </span>
+              <span
+                style={{
+                  padding: "2px 8px",
+                  borderRadius: 999,
+                  fontSize: "0.72rem",
+                  fontWeight: 700,
+                  border: "1px solid rgba(148,163,184,0.35)",
+                  color: isArchived ? "#92400e" : "#166534",
+                  background: isArchived ? "rgba(245,158,11,0.12)" : "rgba(34,197,94,0.1)",
+                }}
+              >
+                {isArchived ? "ARCHIVED" : "ACTIVE PORTFOLIO"}
+              </span>
             </div>
             <div className="rc-property-meta" style={{ color: "#6b7280", fontSize: "0.8rem" }}>
               Added {formatDate(property.createdAt)}
@@ -591,6 +642,30 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             </label>
           </div>
           <div className="rc-units-actions" style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={() => {
+                void handleArchiveToggle();
+              }}
+              disabled={isUpdatingArchiveState}
+              className="rc-units-action"
+              style={{
+                padding: "6px 10px",
+                borderRadius: 10,
+                border: "1px solid rgba(15,23,42,0.12)",
+                background: isArchived ? "rgba(34,197,94,0.1)" : "rgba(245,158,11,0.12)",
+                color: isArchived ? "#166534" : "#92400e",
+                cursor: isUpdatingArchiveState ? "not-allowed" : "pointer",
+              }}
+            >
+              {isUpdatingArchiveState
+                ? isArchived
+                  ? "Restoring..."
+                  : "Archiving..."
+                : isArchived
+                ? "Restore to Active"
+                : "Archive Property"}
+            </button>
             {propertyStatus === "DRAFT" ? (
               <button
                 type="button"

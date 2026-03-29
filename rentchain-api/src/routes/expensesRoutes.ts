@@ -4,7 +4,10 @@ import { requireAuth } from "../middleware/requireAuth";
 import { uploadBufferToGcs } from "../lib/gcs";
 import multer from "multer";
 import path from "path";
+import Papa from "papaparse";
+import PDFDocument from "pdfkit";
 import { runAIAgent } from "../ai/agent";
+import { getUserEntitlements } from "../services/entitlementsService";
 
 const router = Router();
 
@@ -95,6 +98,32 @@ function normalizeExtractedFields(value: unknown): Record<string, any> | null {
 
 function landlordIdFromReq(req: any): string {
   return String(req.user?.landlordId || req.user?.id || "").trim();
+}
+
+async function getExpenseEntitlements(req: any) {
+  const userId = String(req.user?.id || "").trim();
+  return getUserEntitlements(userId, {
+    claimsRole: req.user?.actorRole || req.user?.role || null,
+    claimsPlan: req.user?.plan || null,
+    landlordIdHint: landlordIdFromReq(req),
+    emailHint: req.user?.email || null,
+  });
+}
+
+async function requireProExpenseAccess(req: any, res: any) {
+  const entitlements = await getExpenseEntitlements(req);
+  if (entitlements.role !== "admin" && !["pro", "elite"].includes(String(entitlements.plan || ""))) {
+    res.status(403).json({
+      ok: false,
+      error: "UPGRADE_REQUIRED",
+      featureKey: "expenses.export",
+      requiredPlan: "pro",
+      currentPlan: entitlements.plan,
+      message: "Upgrade to Pro for CSV import and accountant-ready exports.",
+    });
+    return null;
+  }
+  return entitlements;
 }
 
 function parseNumber(value: unknown): number | null {
@@ -312,6 +341,219 @@ async function getPropertyForWrite(req: any, propertyId: string) {
     return { ok: false as const, code: "FORBIDDEN" as const };
   }
   return { ok: true as const, propertyLandlordId, property };
+}
+
+async function getPropertyForRead(req: any, propertyId: string) {
+  const propertyRef = db.collection("properties").doc(propertyId);
+  const propertySnap = await propertyRef.get();
+  if (!propertySnap.exists) return null;
+  const property = propertySnap.data() as any;
+  const propertyLandlordId = String(property?.landlordId || property?.ownerId || property?.owner || "").trim();
+  if (!propertyLandlordId) return null;
+  const role = normalizeRole(req);
+  if (role !== "admin" && propertyLandlordId !== landlordIdFromReq(req)) {
+    return null;
+  }
+  return { id: propertySnap.id, ...property };
+}
+
+function toIsoDateFromMs(value: number | null | undefined): string {
+  if (!value || !Number.isFinite(value)) return "";
+  return new Date(value).toISOString().slice(0, 10);
+}
+
+function parseAmountToCents(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.round(value * 100);
+  }
+  const raw = String(value || "").trim().replace(/[$,\s]/g, "");
+  if (!raw) return null;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return Math.round(parsed * 100);
+}
+
+function csvEscape(value: unknown): string {
+  const str = String(value ?? "");
+  return `"${str.replace(/"/g, '""')}"`;
+}
+
+type ExpenseQueryOptions = {
+  propertyId?: string | null;
+  unitId?: string | null;
+  category?: string | null;
+  dateFrom?: number | null;
+  dateTo?: number | null;
+  includeArchivedProperties?: boolean;
+  limit?: number;
+};
+
+async function listExpensesForRequest(req: any, options: ExpenseQueryOptions = {}) {
+  const role = normalizeRole(req);
+  if (role !== "landlord" && role !== "admin") {
+    return { ok: false as const, status: 403, error: "FORBIDDEN", items: [] as any[] };
+  }
+
+  const landlordScope = role === "admin" ? String(req.query?.landlordId || "").trim() : landlordIdFromReq(req);
+  if (role !== "admin" && !landlordScope) {
+    return { ok: false as const, status: 401, error: "UNAUTHORIZED", items: [] as any[] };
+  }
+
+  const propertyId = options.propertyId ?? (String(req.query?.propertyId || "").trim() || null);
+  const unitId = options.unitId ?? (String(req.query?.unitId || "").trim() || null);
+  const category = options.category ?? normalizeCategory(req.query?.category);
+  const dateFrom = options.dateFrom ?? parseDateInputToMs(req.query?.dateFrom);
+  const dateTo = options.dateTo ?? parseDateInputToMs(req.query?.dateTo);
+  const includeArchivedProperties =
+    options.includeArchivedProperties ??
+    (String(req.query?.includeArchivedProperties || "").trim() === "1" ||
+      String(req.query?.includeArchivedProperties || "").trim().toLowerCase() === "true");
+  const limitRaw = options.limit ?? parseNumber(req.query?.limit);
+  const limit = Math.min(1000, Math.max(1, Math.round(limitRaw || 200)));
+
+  let query = db.collection("expenses") as FirebaseFirestore.Query;
+  if (landlordScope) {
+    query = query.where("landlordId", "==", landlordScope);
+  }
+
+  const snap = await query.limit(limit).get();
+  let items = snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as any) }));
+
+  if (propertyId) items = items.filter((row) => String((row as any).propertyId || "") === propertyId);
+  if (unitId) items = items.filter((row) => String((row as any).unitId || "") === unitId);
+  if (category) items = items.filter((row) => normalizeCategory((row as any).category) === category);
+  if (dateFrom != null) items = items.filter((row) => Number((row as any).incurredAtMs || 0) >= dateFrom);
+  if (dateTo != null) items = items.filter((row) => Number((row as any).incurredAtMs || 0) <= dateTo);
+
+  if (!includeArchivedProperties) {
+    const propertyIds = Array.from(new Set(items.map((item: any) => String(item.propertyId || "").trim()).filter(Boolean)));
+    const propertySnaps = await Promise.all(propertyIds.map((id) => db.collection("properties").doc(id).get()));
+    const archivedIds = new Set(
+      propertySnaps
+        .filter((snap) => snap.exists && String((snap.data() as any)?.portfolioStatus || "").trim().toLowerCase() === "archived")
+        .map((snap) => snap.id)
+    );
+    if (archivedIds.size > 0) {
+      items = items.filter((row: any) => !archivedIds.has(String(row.propertyId || "")));
+    }
+  }
+
+  items.sort((a: any, b: any) => Number(b.incurredAtMs || 0) - Number(a.incurredAtMs || 0));
+  return { ok: true as const, items };
+}
+
+function buildExpenseExportRows(items: any[], propertyNames: Map<string, string>) {
+  return items.map((item: any) => ({
+    date: toIsoDateFromMs(Number(item.incurredAtMs || 0)),
+    property: propertyNames.get(String(item.propertyId || "")) || String(item.propertyId || ""),
+    unit: String(item.unitId || ""),
+    category: String(item.category || ""),
+    vendor: String(item.vendorName || ""),
+    description: String(item.notes || ""),
+    amount: (Number(item.amountCents || 0) / 100).toFixed(2),
+    status: String(item.status || ""),
+    source: String(item.source || ""),
+  }));
+}
+
+function renderExpenseSpreadsheetXml(rows: Array<Record<string, string>>, totalAmountCents: number) {
+  const headers = ["Date", "Property", "Unit", "Category", "Vendor", "Description", "Amount", "Status", "Source"];
+  const xmlEscape = (value: unknown) =>
+    String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+
+  const rowXml = rows
+    .map((row) => {
+      const cells = [
+        row.date,
+        row.property,
+        row.unit,
+        row.category,
+        row.vendor,
+        row.description,
+        row.amount,
+        row.status,
+        row.source,
+      ]
+        .map(
+          (value) =>
+            `<Cell><Data ss:Type="String">${xmlEscape(value)}</Data></Cell>`
+        )
+        .join("");
+      return `<Row>${cells}</Row>`;
+    })
+    .join("");
+
+  return `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+  <Worksheet ss:Name="Expenses">
+    <Table>
+      <Row>${headers.map((header) => `<Cell><Data ss:Type="String">${xmlEscape(header)}</Data></Cell>`).join("")}</Row>
+      ${rowXml}
+      <Row>
+        <Cell><Data ss:Type="String">Total</Data></Cell>
+        <Cell/><Cell/><Cell/><Cell/><Cell/>
+        <Cell><Data ss:Type="String">${(totalAmountCents / 100).toFixed(2)}</Data></Cell>
+        <Cell/><Cell/>
+      </Row>
+    </Table>
+  </Worksheet>
+</Workbook>`;
+}
+
+async function renderExpensePdf(params: {
+  rows: Array<Record<string, string>>;
+  title: string;
+  subtitle: string;
+  totalAmountCents: number;
+}) {
+  const doc = new PDFDocument({ size: "LETTER", margin: 42 });
+  const chunks: Buffer[] = [];
+  doc.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+  const done = new Promise<Buffer>((resolve, reject) => {
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+  });
+
+  doc.fontSize(18).font("Helvetica-Bold").text(params.title);
+  doc.moveDown(0.25);
+  doc.fontSize(10).font("Helvetica").fillColor("#475569").text(params.subtitle);
+  doc.moveDown(0.75);
+
+  const headers = ["Date", "Property", "Category", "Vendor", "Amount"];
+  const colX = [42, 110, 250, 360, 500];
+  doc.fontSize(9).fillColor("#0f172a").font("Helvetica-Bold");
+  headers.forEach((header, idx) => {
+    doc.text(header, colX[idx], doc.y, { width: idx === headers.length - 1 ? 60 : colX[idx + 1] - colX[idx] - 8 });
+  });
+  doc.moveDown(0.4);
+  doc.strokeColor("#cbd5e1").moveTo(42, doc.y).lineTo(570, doc.y).stroke();
+  doc.moveDown(0.35);
+
+  doc.font("Helvetica").fontSize(8).fillColor("#0f172a");
+  params.rows.forEach((row) => {
+    const rowY = doc.y;
+    const values = [row.date, row.property, row.category, row.vendor, `$${row.amount}`];
+    values.forEach((value, idx) => {
+      doc.text(value || "-", colX[idx], rowY, {
+        width: idx === values.length - 1 ? 60 : colX[idx + 1] - colX[idx] - 8,
+        ellipsis: true,
+      });
+    });
+    doc.moveDown(0.5);
+    if (doc.y > 720) doc.addPage();
+  });
+
+  doc.moveDown(0.75);
+  doc.font("Helvetica-Bold").fontSize(10).text(`Total: $${(params.totalAmountCents / 100).toFixed(2)}`);
+  doc.end();
+  return done;
 }
 
 async function validateUnitForExpense(req: any, opts: { unitId: string; propertyId: string }) {
@@ -634,45 +876,259 @@ router.post("/expenses", requireAuth, async (req: any, res) => {
 
 router.get("/expenses", requireAuth, async (req: any, res) => {
   try {
+    const result = await listExpensesForRequest(req);
+    if (!result.ok) {
+      return res.status(result.status).json({ ok: false, error: result.error });
+    }
+    return res.json({ ok: true, items: result.items });
+  } catch (err: any) {
+    console.error("[expenses] list failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "EXPENSE_LIST_FAILED" });
+  }
+});
+
+router.delete("/expenses/:expenseId", requireAuth, async (req: any, res) => {
+  try {
     const role = normalizeRole(req);
     if (role !== "landlord" && role !== "admin") {
       return res.status(403).json({ ok: false, error: "FORBIDDEN" });
     }
 
-    const landlordScope = role === "admin" ? String(req.query?.landlordId || "").trim() : landlordIdFromReq(req);
-    if (role !== "admin" && !landlordScope) {
-      return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    const expenseId = String(req.params?.expenseId || "").trim();
+    if (!expenseId) return res.status(400).json({ ok: false, error: "MISSING_EXPENSE_ID" });
+
+    const ref = db.collection("expenses").doc(expenseId);
+    const snap = await ref.get();
+    if (!snap.exists) return res.status(404).json({ ok: false, error: "EXPENSE_NOT_FOUND" });
+
+    const current = snap.data() as any;
+    const currentLandlordId = String(current?.landlordId || "").trim();
+    if (role !== "admin" && currentLandlordId !== landlordIdFromReq(req)) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
     }
 
-    const propertyId = String(req.query?.propertyId || "").trim() || null;
-    const unitId = String(req.query?.unitId || "").trim() || null;
-    const category = normalizeCategory(req.query?.category);
-    const dateFrom = parseDateInputToMs(req.query?.dateFrom);
-    const dateTo = parseDateInputToMs(req.query?.dateTo);
-    const limitRaw = parseNumber(req.query?.limit);
-    const limit = Math.min(500, Math.max(1, Math.round(limitRaw || 200)));
-
-    let query = db.collection("expenses") as FirebaseFirestore.Query;
-    if (landlordScope) {
-      query = query.where("landlordId", "==", landlordScope);
-    }
-
-    const snap = await query.limit(limit).get();
-    let items = snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as any) }));
-
-    if (propertyId) items = items.filter((row) => String((row as any).propertyId || "") === propertyId);
-    if (unitId) items = items.filter((row) => String((row as any).unitId || "") === unitId);
-    if (category) {
-      items = items.filter((row) => normalizeCategory((row as any).category) === category);
-    }
-    if (dateFrom != null) items = items.filter((row) => Number((row as any).incurredAtMs || 0) >= dateFrom);
-    if (dateTo != null) items = items.filter((row) => Number((row as any).incurredAtMs || 0) <= dateTo);
-
-    items.sort((a: any, b: any) => Number(b.incurredAtMs || 0) - Number(a.incurredAtMs || 0));
-    return res.json({ ok: true, items });
+    await ref.delete();
+    return res.json({ ok: true });
   } catch (err: any) {
-    console.error("[expenses] list failed", err?.message || err);
-    return res.status(500).json({ ok: false, error: "EXPENSE_LIST_FAILED" });
+    console.error("[expenses] delete failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "EXPENSE_DELETE_FAILED" });
+  }
+});
+
+router.post("/expenses/import/csv", requireAuth, async (req: any, res) => {
+  try {
+    const role = normalizeRole(req);
+    if (role !== "landlord" && role !== "admin") {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const entitlements = await requireProExpenseAccess(req, res);
+    if (!entitlements) return;
+
+    const csvText = String(req.body?.csvText || "").trim();
+    const defaultPropertyId = String(req.body?.defaultPropertyId || "").trim() || null;
+    if (!csvText) {
+      return res.status(400).json({ ok: false, error: "CSV_REQUIRED" });
+    }
+
+    const parsed = Papa.parse<Record<string, string>>(csvText, {
+      header: true,
+      skipEmptyLines: true,
+    });
+
+    const landlordId = entitlements.landlordId || landlordIdFromReq(req);
+    const errors: string[] = [];
+    let imported = 0;
+    let skipped = 0;
+
+    for (let index = 0; index < (parsed.data || []).length; index += 1) {
+      const row = parsed.data[index] || {};
+      const propertyId = String(row.propertyId || defaultPropertyId || "").trim();
+      const unitId = String(row.unitId || "").trim() || null;
+      const category = normalizeCategory(row.category);
+      const amountCents = parseAmountToCents(row.amount);
+      const incurredAtMs = parseDateInputToMs(row.date || row.incurredAt || row.incurredAtMs);
+      const vendorName = String(row.vendor || row.vendorName || "").trim().slice(0, 180);
+      const notes = String(row.notes || row.description || "").trim().slice(0, 5000);
+
+      if (!propertyId || !category || amountCents == null || amountCents < 0 || !incurredAtMs) {
+        skipped += 1;
+        errors.push(`Row ${index + 2}: missing propertyId, category, amount, or date.`);
+        continue;
+      }
+
+      const property = await getPropertyForRead(req, propertyId);
+      if (!property) {
+        skipped += 1;
+        errors.push(`Row ${index + 2}: property not found or not accessible.`);
+        continue;
+      }
+
+      if (unitId) {
+        const unitCheck = await validateUnitForExpense(req, { unitId, propertyId });
+        if (!unitCheck.ok) {
+          skipped += 1;
+          errors.push(`Row ${index + 2}: unit is invalid for the selected property.`);
+          continue;
+        }
+      }
+
+      const createdAtMs = nowMs();
+      const payload = {
+        landlordId,
+        propertyId,
+        unitId,
+        category,
+        vendorName,
+        amountCents,
+        incurredAtMs,
+        notes,
+        status: "recorded",
+        source: "imported" as const,
+        linkedWorkOrderId: null,
+        receiptFileUrl: null,
+        sourceDocumentUrl: null,
+        sourceDocumentName: null,
+        sourceDocumentMimeType: "text/csv",
+        aiSummary: null,
+        aiExtractedFields: null,
+        aiProcessedAtMs: null,
+        createdAtMs,
+        updatedAtMs: createdAtMs,
+      };
+
+      await db.collection("expenses").add(payload);
+      imported += 1;
+    }
+
+    return res.json({
+      ok: true,
+      rowsImported: imported,
+      rowsSkipped: skipped,
+      errors: errors.slice(0, 50),
+    });
+  } catch (err: any) {
+    console.error("[expenses] csv import failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "EXPENSE_IMPORT_FAILED" });
+  }
+});
+
+router.get("/expenses/export.csv", requireAuth, async (req: any, res) => {
+  try {
+    const role = normalizeRole(req);
+    if (role !== "landlord" && role !== "admin") {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+    const entitlements = await requireProExpenseAccess(req, res);
+    if (!entitlements) return;
+
+    const result = await listExpensesForRequest(req, { includeArchivedProperties: true, limit: 1000 });
+    if (!result.ok) return res.status(result.status).json({ ok: false, error: result.error });
+
+    const propertyIds = Array.from(new Set(result.items.map((item: any) => String(item.propertyId || "").trim()).filter(Boolean)));
+    const propertySnaps = await Promise.all(propertyIds.map((id) => db.collection("properties").doc(id).get()));
+    const propertyNames = new Map<string, string>();
+    propertySnaps.forEach((snap) => {
+      if (!snap.exists) return;
+      const data = snap.data() as any;
+      propertyNames.set(snap.id, String(data?.name || data?.addressLine1 || data?.address || snap.id));
+    });
+    const rows = buildExpenseExportRows(result.items, propertyNames);
+    const csv = [
+      ["date", "property", "unit", "category", "vendor", "description", "amount", "status", "source"].join(","),
+      ...rows.map((row) =>
+        [row.date, row.property, row.unit, row.category, row.vendor, row.description, row.amount, row.status, row.source]
+          .map(csvEscape)
+          .join(",")
+      ),
+    ].join("\n");
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="rentchain-expenses-${new Date().toISOString().slice(0, 10)}.csv"`);
+    return res.status(200).send(csv);
+  } catch (err: any) {
+    console.error("[expenses] csv export failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "EXPENSE_EXPORT_FAILED" });
+  }
+});
+
+router.get("/expenses/export.xlsx", requireAuth, async (req: any, res) => {
+  try {
+    const role = normalizeRole(req);
+    if (role !== "landlord" && role !== "admin") {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+    const entitlements = await requireProExpenseAccess(req, res);
+    if (!entitlements) return;
+
+    const result = await listExpensesForRequest(req, { includeArchivedProperties: true, limit: 1000 });
+    if (!result.ok) return res.status(result.status).json({ ok: false, error: result.error });
+
+    const propertyIds = Array.from(new Set(result.items.map((item: any) => String(item.propertyId || "").trim()).filter(Boolean)));
+    const propertySnaps = await Promise.all(propertyIds.map((id) => db.collection("properties").doc(id).get()));
+    const propertyNames = new Map<string, string>();
+    propertySnaps.forEach((snap) => {
+      if (!snap.exists) return;
+      const data = snap.data() as any;
+      propertyNames.set(snap.id, String(data?.name || data?.addressLine1 || data?.address || snap.id));
+    });
+    const rows = buildExpenseExportRows(result.items, propertyNames);
+    const totalAmountCents = result.items.reduce((sum: number, item: any) => sum + Number(item.amountCents || 0), 0);
+    const xml = renderExpenseSpreadsheetXml(rows, totalAmountCents);
+
+    res.setHeader("Content-Type", "application/vnd.ms-excel; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="rentchain-expenses-${new Date().toISOString().slice(0, 10)}.xlsx"`);
+    return res.status(200).send(xml);
+  } catch (err: any) {
+    console.error("[expenses] xlsx export failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "EXPENSE_EXPORT_FAILED" });
+  }
+});
+
+router.get("/expenses/export.pdf", requireAuth, async (req: any, res) => {
+  try {
+    const role = normalizeRole(req);
+    if (role !== "landlord" && role !== "admin") {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+    const entitlements = await requireProExpenseAccess(req, res);
+    if (!entitlements) return;
+
+    const result = await listExpensesForRequest(req, { includeArchivedProperties: true, limit: 1000 });
+    if (!result.ok) return res.status(result.status).json({ ok: false, error: result.error });
+
+    const propertyIds = Array.from(new Set(result.items.map((item: any) => String(item.propertyId || "").trim()).filter(Boolean)));
+    const propertySnaps = await Promise.all(propertyIds.map((id) => db.collection("properties").doc(id).get()));
+    const propertyNames = new Map<string, string>();
+    propertySnaps.forEach((snap) => {
+      if (!snap.exists) return;
+      const data = snap.data() as any;
+      propertyNames.set(snap.id, String(data?.name || data?.addressLine1 || data?.address || snap.id));
+    });
+    const rows = buildExpenseExportRows(result.items, propertyNames);
+    const totalAmountCents = result.items.reduce((sum: number, item: any) => sum + Number(item.amountCents || 0), 0);
+    const propertyLabel = String(req.query?.propertyId || "").trim();
+    const subtitle = [
+      propertyLabel ? `Property filter: ${propertyNames.get(propertyLabel) || propertyLabel}` : "All properties",
+      req.query?.dateFrom ? `From ${String(req.query.dateFrom)}` : null,
+      req.query?.dateTo ? `To ${String(req.query.dateTo)}` : null,
+      `Rows: ${rows.length}`,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    const pdf = await renderExpensePdf({
+      rows,
+      title: "RentChain Expense Export",
+      subtitle,
+      totalAmountCents,
+    });
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="rentchain-expenses-${new Date().toISOString().slice(0, 10)}.pdf"`);
+    return res.status(200).send(pdf);
+  } catch (err: any) {
+    console.error("[expenses] pdf export failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "EXPENSE_EXPORT_FAILED" });
   }
 });
 

@@ -35,6 +35,9 @@ export interface Property extends PropertyInput {
   createdAt: string;
   landlordId?: string;
   status?: "DRAFT" | "PUBLISHED" | "draft" | "published" | "active";
+  portfolioStatus?: "active" | "archived";
+  archivedAt?: string | null;
+  archivedByUserId?: string | null;
   publishedAt?: number | null;
   screeningRequiredBeforeApproval?: boolean;
   units: PropertyUnit[];
@@ -52,8 +55,17 @@ export async function createProperty(
   return { property } as { property: Property };
 }
 
-export async function fetchProperties(): Promise<{ properties: Property[] }> {
-  const res = await api.get("/properties");
+export async function fetchProperties(filters?: {
+  status?: "active" | "archived";
+  includeArchived?: boolean;
+  landlordId?: string;
+}): Promise<{ properties: Property[]; items?: Property[] }> {
+  const params = new URLSearchParams();
+  if (filters?.status) params.set("status", filters.status);
+  if (filters?.includeArchived) params.set("includeArchived", "1");
+  if (filters?.landlordId) params.set("landlordId", filters.landlordId);
+  const path = params.toString() ? `/properties?${params.toString()}` : "/properties";
+  const res = await api.get(path);
   return res.data;
 }
 
@@ -78,6 +90,24 @@ export async function publishProperty(
   propertyId: string
 ): Promise<{ property: Property }> {
   const res = await api.post(`/properties/${encodeURIComponent(propertyId)}/publish`, {});
+  const data = res.data;
+  const property = (data as any)?.property ?? (data as any);
+  return { property } as { property: Property };
+}
+
+export async function archiveProperty(
+  propertyId: string
+): Promise<{ property: Property }> {
+  const res = await api.post(`/properties/${encodeURIComponent(propertyId)}/archive`, {});
+  const data = res.data;
+  const property = (data as any)?.property ?? (data as any);
+  return { property } as { property: Property };
+}
+
+export async function unarchiveProperty(
+  propertyId: string
+): Promise<{ property: Property }> {
+  const res = await api.post(`/properties/${encodeURIComponent(propertyId)}/unarchive`, {});
   const data = res.data;
   const property = (data as any)?.property ?? (data as any);
   return { property } as { property: Property };

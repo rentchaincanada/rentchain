@@ -71,6 +71,10 @@ function parseScreeningRequiredBeforeApproval(input: any, fallback = true): bool
   return fallback;
 }
 
+function normalizePortfolioStatus(input: any): "active" | "archived" {
+  return String(input || "").trim().toLowerCase() === "archived" ? "archived" : "active";
+}
+
 function isAdminRole(req: any): boolean {
   return String(req.user?.role || "").toLowerCase() === "admin";
 }
@@ -87,6 +91,11 @@ router.get("/", async (req: any, res) => {
   const isAdmin = role === "admin";
   const landlordId = req.user?.landlordId || req.user?.id;
   const landlordFilter = String(req.query?.landlordId || "").trim() || null;
+  const statusFilter = String(req.query?.status || "").trim().toLowerCase();
+  const includeArchived =
+    String(req.query?.includeArchived || "")
+      .trim()
+      .toLowerCase() === "true" || String(req.query?.includeArchived || "").trim() === "1";
   if (!isAdmin && !landlordId) return res.status(401).json({ error: "Unauthorized" });
 
   res.setHeader("x-route-source", "propertiesRoutes");
@@ -113,7 +122,15 @@ router.get("/", async (req: any, res) => {
       ...(doc.data() as any),
     })) as any[];
 
-    return res.json({ items: mineItems, nextCursor: null });
+    const filteredItems = mineItems.filter((item) => {
+      const portfolioStatus = normalizePortfolioStatus(item?.portfolioStatus);
+      if (statusFilter === "archived") return portfolioStatus === "archived";
+      if (statusFilter === "active") return portfolioStatus === "active";
+      if (includeArchived) return true;
+      return portfolioStatus === "active";
+    });
+
+    return res.json({ items: filteredItems, nextCursor: null });
   } catch (err: any) {
     console.error("[GET /api/properties] query failed", err);
     return res.status(500).json({
@@ -259,6 +276,9 @@ router.post(
         (req.body ?? {})?.screeningRequiredBeforeApproval,
         true
       ),
+      portfolioStatus: "active",
+      archivedAt: null,
+      archivedByUserId: null,
       publishedAt: null,
       createdAt,
       updatedAt: createdAt,
@@ -499,6 +519,99 @@ router.post("/:propertyId/publish", async (req: any, res) => {
       ok: false,
       error: "db_failed",
       message: err?.message || "Failed to publish property",
+    });
+  }
+});
+
+function ensurePropertyOwnership(params: {
+  req: any;
+  property: any;
+  landlordId: string;
+  roleAdmin: boolean;
+}) {
+  const ownerLandlordId = String(params.property?.landlordId || "").trim();
+  if (!params.roleAdmin && ownerLandlordId !== params.landlordId) {
+    return { ok: false as const, ownerLandlordId };
+  }
+  return { ok: true as const, ownerLandlordId };
+}
+
+router.post("/:propertyId/archive", async (req: any, res) => {
+  const roleAdmin = isAdminRole(req);
+  const landlordId = resolveLandlordId(req);
+  const propertyId = String(req.params?.propertyId || "").trim();
+
+  if (!propertyId) return res.status(400).json({ ok: false, error: "property_id_required" });
+  if (!roleAdmin && !landlordId) return res.status(401).json({ ok: false, error: "unauthorized" });
+
+  try {
+    const propertyRef = db.collection("properties").doc(propertyId);
+    const propertySnap = await propertyRef.get();
+    if (!propertySnap.exists) return res.status(404).json({ ok: false, error: "not_found" });
+
+    const property = (propertySnap.data() || {}) as any;
+    const ownership = ensurePropertyOwnership({ req, property, landlordId, roleAdmin });
+    if (!ownership.ok) {
+      return res.status(403).json({ ok: false, error: "forbidden" });
+    }
+
+    const nowIso = new Date().toISOString();
+    const updates = {
+      portfolioStatus: "archived" as const,
+      archivedAt: nowIso,
+      archivedByUserId: String(req.user?.id || "").trim() || null,
+      updatedAt: nowIso,
+      updatedAtServer: FieldValue.serverTimestamp(),
+    };
+
+    await propertyRef.set(updates, { merge: true });
+    return res.json({ ok: true, property: { id: propertyId, ...property, ...updates } });
+  } catch (err: any) {
+    console.error("[POST /api/properties/:propertyId/archive] failed", err);
+    return res.status(500).json({
+      ok: false,
+      error: "db_failed",
+      message: err?.message || "Failed to archive property",
+    });
+  }
+});
+
+router.post("/:propertyId/unarchive", async (req: any, res) => {
+  const roleAdmin = isAdminRole(req);
+  const landlordId = resolveLandlordId(req);
+  const propertyId = String(req.params?.propertyId || "").trim();
+
+  if (!propertyId) return res.status(400).json({ ok: false, error: "property_id_required" });
+  if (!roleAdmin && !landlordId) return res.status(401).json({ ok: false, error: "unauthorized" });
+
+  try {
+    const propertyRef = db.collection("properties").doc(propertyId);
+    const propertySnap = await propertyRef.get();
+    if (!propertySnap.exists) return res.status(404).json({ ok: false, error: "not_found" });
+
+    const property = (propertySnap.data() || {}) as any;
+    const ownership = ensurePropertyOwnership({ req, property, landlordId, roleAdmin });
+    if (!ownership.ok) {
+      return res.status(403).json({ ok: false, error: "forbidden" });
+    }
+
+    const nowIso = new Date().toISOString();
+    const updates = {
+      portfolioStatus: "active" as const,
+      archivedAt: null,
+      archivedByUserId: null,
+      updatedAt: nowIso,
+      updatedAtServer: FieldValue.serverTimestamp(),
+    };
+
+    await propertyRef.set(updates, { merge: true });
+    return res.json({ ok: true, property: { id: propertyId, ...property, ...updates } });
+  } catch (err: any) {
+    console.error("[POST /api/properties/:propertyId/unarchive] failed", err);
+    return res.status(500).json({
+      ok: false,
+      error: "db_failed",
+      message: err?.message || "Failed to unarchive property",
     });
   }
 });
