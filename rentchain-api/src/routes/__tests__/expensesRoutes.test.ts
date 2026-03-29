@@ -178,6 +178,36 @@ describe("expenses routes", () => {
     expect(res.body.error).toBe("UPGRADE_REQUIRED");
   });
 
+  it("imports a RentChain-exported csv shape and skips unknown property rows with reasons", async () => {
+    setPlan("pro");
+    seedDoc("units", "unit-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitNumber: "12A",
+    });
+
+    const app = await createApp();
+    const res = await request(app).post("/api/expenses/import/csv").send({
+      csvText: [
+        "date,property,unit,category,vendor,description,amount,status,source",
+        "2026-03-01,Alpha Property,12A,Repairs,FixIt,Pipe repair,125.00,recorded,manual",
+        "2026-03-02,Missing Property,,Repairs,FixIt,Unknown property,10.00,recorded,manual",
+      ].join("\n"),
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.rowsImported).toBe(1);
+    expect(res.body.rowsSkipped).toBe(1);
+    expect(res.body.errors).toContain('Row 3: property "Missing Property" was not found in your portfolio.');
+
+    const listRes = await request(app).get("/api/expenses");
+    expect(listRes.status).toBe(200);
+    expect(listRes.body.items).toHaveLength(1);
+    expect(listRes.body.items[0]?.propertyId).toBe("prop-1");
+    expect(listRes.body.items[0]?.unitId).toBe("unit-1");
+    expect(listRes.body.items[0]?.amountCents).toBe(12500);
+  });
+
   it("exports csv for Pro plans", async () => {
     setPlan("pro");
     seedDoc("expenses", "expense-1", {

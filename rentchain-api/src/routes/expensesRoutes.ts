@@ -362,6 +362,29 @@ function toIsoDateFromMs(value: number | null | undefined): string {
   return new Date(value).toISOString().slice(0, 10);
 }
 
+function normalizeCsvHeader(value: unknown): string {
+  return String(value || "")
+    .replace(/^\uFEFF/, "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function normalizeLookupKey(value: unknown): string {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function getCsvValue(row: Record<string, unknown>, ...keys: string[]): string {
+  for (const key of keys) {
+    const direct = row[key];
+    if (direct != null && String(direct).trim()) return String(direct).trim();
+  }
+  return "";
+}
+
 function parseAmountToCents(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) {
     return Math.round(value * 100);
@@ -371,6 +394,83 @@ function parseAmountToCents(value: unknown): number | null {
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed < 0) return null;
   return Math.round(parsed * 100);
+}
+
+async function findPropertyForImport(req: any, landlordId: string, rawPropertyId: string, rawPropertyName: string) {
+  const directId = String(rawPropertyId || "").trim();
+  if (directId) {
+    const direct = await getPropertyForRead(req, directId);
+    if (direct) return direct;
+  }
+
+  const nameKey = normalizeLookupKey(rawPropertyName);
+  if (!nameKey) return null;
+
+  const role = normalizeRole(req);
+  let query: FirebaseFirestore.Query = db.collection("properties");
+  if (role !== "admin") {
+    query = query.where("landlordId", "==", landlordId);
+  }
+
+  const snap = await query.limit(300).get();
+  const match = snap.docs.find((doc) => {
+    const property = doc.data() as any;
+    const candidates = [
+      property?.name,
+      property?.addressLine1,
+      property?.address,
+      property?.label,
+    ]
+      .map((value) => normalizeLookupKey(value))
+      .filter(Boolean);
+    return candidates.includes(nameKey);
+  });
+
+  if (!match) return null;
+  const property = match.data() as any;
+  return { id: match.id, ...property };
+}
+
+async function findUnitForImport(
+  req: any,
+  landlordId: string,
+  propertyId: string,
+  rawUnitId: string,
+  rawUnitLabel: string
+) {
+  const directId = String(rawUnitId || "").trim();
+  if (directId) {
+    const direct = await validateUnitForExpense(req, { unitId: directId, propertyId });
+    if (direct.ok) return { id: directId };
+  }
+
+  const unitKey = normalizeLookupKey(rawUnitLabel);
+  if (!unitKey) return null;
+
+  const role = normalizeRole(req);
+  let query: FirebaseFirestore.Query = db.collection("units").where("propertyId", "==", propertyId);
+  if (role !== "admin") {
+    query = query.where("landlordId", "==", landlordId);
+  }
+
+  const snap = await query.limit(300).get();
+  const match = snap.docs.find((doc) => {
+    const unit = doc.data() as any;
+    const candidates = [
+      doc.id,
+      unit?.unitNumber,
+      unit?.label,
+      unit?.name,
+      unit?.unitLabel,
+      unit?.unitName,
+      unit?.displayName,
+    ]
+      .map((value) => normalizeLookupKey(value))
+      .filter(Boolean);
+    return candidates.includes(unitKey);
+  });
+
+  return match ? { id: match.id, ...(match.data() as any) } : null;
 }
 
 function csvEscape(value: unknown): string {
@@ -934,6 +1034,7 @@ router.post("/expenses/import/csv", requireAuth, async (req: any, res) => {
     const parsed = Papa.parse<Record<string, string>>(csvText, {
       header: true,
       skipEmptyLines: true,
+      transformHeader: (header) => normalizeCsvHeader(header),
     });
 
     const landlordId = entitlements.landlordId || landlordIdFromReq(req);
@@ -943,40 +1044,50 @@ router.post("/expenses/import/csv", requireAuth, async (req: any, res) => {
 
     for (let index = 0; index < (parsed.data || []).length; index += 1) {
       const row = parsed.data[index] || {};
-      const propertyId = String(row.propertyId || defaultPropertyId || "").trim();
-      const unitId = String(row.unitId || "").trim() || null;
-      const category = normalizeCategory(row.category);
-      const amountCents = parseAmountToCents(row.amount);
-      const incurredAtMs = parseDateInputToMs(row.date || row.incurredAt || row.incurredAtMs);
-      const vendorName = String(row.vendor || row.vendorName || "").trim().slice(0, 180);
-      const notes = String(row.notes || row.description || "").trim().slice(0, 5000);
+      const propertyRef = getCsvValue(row, "propertyid") || String(defaultPropertyId || "").trim();
+      const propertyName = getCsvValue(row, "property");
+      const unitRef = getCsvValue(row, "unitid");
+      const unitLabel = getCsvValue(row, "unit");
+      const category = normalizeCategory(getCsvValue(row, "category"));
+      const amountCents = parseAmountToCents(getCsvValue(row, "amount"));
+      const incurredAtMs = parseDateInputToMs(
+        getCsvValue(row, "date", "incurredat", "incurredatms")
+      );
+      const vendorName = getCsvValue(row, "vendor", "vendorname").slice(0, 180);
+      const notes = getCsvValue(row, "notes", "description").slice(0, 5000);
 
-      if (!propertyId || !category || amountCents == null || amountCents < 0 || !incurredAtMs) {
+      if ((!propertyRef && !propertyName) || !category || amountCents == null || amountCents < 0 || !incurredAtMs) {
         skipped += 1;
-        errors.push(`Row ${index + 2}: missing propertyId, category, amount, or date.`);
+        errors.push(`Row ${index + 2}: missing property, category, amount, or date.`);
         continue;
       }
 
-      const property = await getPropertyForRead(req, propertyId);
+      const property = await findPropertyForImport(req, landlordId, propertyRef, propertyName);
       if (!property) {
         skipped += 1;
-        errors.push(`Row ${index + 2}: property not found or not accessible.`);
+        errors.push(
+          `Row ${index + 2}: property "${propertyName || propertyRef}" was not found in your portfolio.`
+        );
         continue;
       }
 
-      if (unitId) {
-        const unitCheck = await validateUnitForExpense(req, { unitId, propertyId });
-        if (!unitCheck.ok) {
+      let unitId: string | null = null;
+      if (unitRef || unitLabel) {
+        const unit = await findUnitForImport(req, landlordId, property.id, unitRef, unitLabel);
+        if (!unit) {
           skipped += 1;
-          errors.push(`Row ${index + 2}: unit is invalid for the selected property.`);
+          errors.push(
+            `Row ${index + 2}: unit "${unitLabel || unitRef}" was not found for property "${propertyName || property.id}".`
+          );
           continue;
         }
+        unitId = unit.id;
       }
 
       const createdAtMs = nowMs();
       const payload = {
         landlordId,
-        propertyId,
+        propertyId: property.id,
         unitId,
         category,
         vendorName,

@@ -132,7 +132,9 @@ export async function importExpensesCsv(input: {
     method: "POST",
     body: input,
   });
-  if (!res?.ok) throw new Error("Failed to import expenses");
+  if (!res?.ok) {
+    throw new Error(String((res as any)?.message || (res as any)?.error || "Failed to import expenses"));
+  }
   return res;
 }
 

@@ -11,6 +11,7 @@ import {
 } from "../api/expensesApi";
 import { fetchProperties } from "../api/propertiesApi";
 import { AddExpenseModal } from "../components/expenses/AddExpenseModal";
+import { ExpenseImportSummaryCard } from "../components/expenses/ExpenseImportSummaryCard";
 import { useCapabilities } from "../hooks/useCapabilities";
 
 function formatCents(cents: number): string {
@@ -47,6 +48,11 @@ const ExpensesPage: React.FC = () => {
   const [importing, setImporting] = React.useState(false);
   const [exporting, setExporting] = React.useState<null | "csv" | "xlsx" | "pdf">(null);
   const [csvFile, setCsvFile] = React.useState<File | null>(null);
+  const [importSummary, setImportSummary] = React.useState<null | {
+    rowsImported: number;
+    rowsSkipped: number;
+    errors: string[];
+  }>(null);
   const [isMobile, setIsMobile] = React.useState(false);
   const proExpensesEnabled = features?.["expenses.import"] !== false && ["pro", "elite"].includes(String(caps?.plan || ""));
 
@@ -147,6 +153,7 @@ const ExpensesPage: React.FC = () => {
     try {
       setImporting(true);
       setError(null);
+      setImportSummary(null);
       const csvText = await csvFile.text();
       const result = await importExpensesCsv({
         csvText,
@@ -154,9 +161,11 @@ const ExpensesPage: React.FC = () => {
       });
       setCsvFile(null);
       await load();
-      if (result.rowsSkipped > 0) {
-        setError(`Imported ${result.rowsImported} rows. Skipped ${result.rowsSkipped} row(s).`);
-      }
+      setImportSummary({
+        rowsImported: result.rowsImported,
+        rowsSkipped: result.rowsSkipped,
+        errors: Array.isArray(result.errors) ? result.errors : [],
+      });
     } catch (err: any) {
       setError(String(err?.message || "Failed to import expenses."));
     } finally {
@@ -273,9 +282,17 @@ const ExpensesPage: React.FC = () => {
         )}
       </Card>
 
+      {importSummary ? (
+        <ExpenseImportSummaryCard
+          rowsImported={importSummary.rowsImported}
+          rowsSkipped={importSummary.rowsSkipped}
+          errors={importSummary.errors}
+        />
+      ) : null}
+
       {error ? (
         <Card style={{ border: `1px solid ${colors.danger}` }}>
-          <div style={{ fontWeight: 700, color: colors.danger, marginBottom: 8 }}>Could not load expenses</div>
+          <div style={{ fontWeight: 700, color: colors.danger, marginBottom: 8 }}>Expenses issue</div>
           <div style={{ marginBottom: 12 }}>{error}</div>
           <Button variant="secondary" onClick={() => void load()}>
             Retry

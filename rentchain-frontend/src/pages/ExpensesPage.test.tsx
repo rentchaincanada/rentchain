@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   listExpensesMock: vi.fn(),
   fetchPropertiesMock: vi.fn(),
   useCapabilitiesMock: vi.fn(),
+  importExpensesCsvMock: vi.fn(),
 }));
 
 vi.mock("../api/expensesApi", async () => {
@@ -14,7 +15,7 @@ vi.mock("../api/expensesApi", async () => {
     ...actual,
     listExpenses: mocks.listExpensesMock,
     exportExpenses: vi.fn(),
-    importExpensesCsv: vi.fn(),
+    importExpensesCsv: mocks.importExpensesCsvMock,
   };
 });
 
@@ -47,6 +48,7 @@ describe("ExpensesPage", () => {
     mocks.fetchPropertiesMock.mockResolvedValue({
       items: [{ id: "prop-1", name: "Alpha Property", portfolioStatus: "active" }],
     });
+    mocks.importExpensesCsvMock.mockReset();
   });
 
   it("shows the Pro upgrade prompt for import/export on free plans", async () => {
@@ -77,4 +79,5 @@ describe("ExpensesPage", () => {
     expect(screen.getByRole("button", { name: "Export Spreadsheet" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Export PDF" })).toBeInTheDocument();
   });
+
 });
