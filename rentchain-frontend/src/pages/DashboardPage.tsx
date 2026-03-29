@@ -578,7 +578,9 @@ const DashboardPage: React.FC = () => {
 
         {dataReady ? <KpiStrip kpis={kpis} loading={loading} /> : null}
         {dataReady ? (
-          <PortfolioCredibilitySummaryCard summary={data?.portfolioCredibilitySummary ?? null} />
+          <div style={{ marginTop: spacing.md }}>
+            <PortfolioCredibilitySummaryCard summary={data?.portfolioCredibilitySummary ?? null} />
+          </div>
         ) : null}
         {dataReady &&
         (leaseNoticeSummary.expiringSoon > 0 ||

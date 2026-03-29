@@ -157,15 +157,6 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
 
       <button
         type="button"
-        className="rc-landlord-account-badge"
-        onClick={() => nav("/account")}
-        aria-label="Open My Account"
-      >
-        My Account
-      </button>
-
-      <button
-        type="button"
         className="rc-landlord-hamburger"
         aria-label="Open menu"
         aria-expanded={drawerOpen}
