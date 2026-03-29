@@ -3,15 +3,19 @@ import { Card, Button } from "../components/ui/Ui";
 import { spacing, text, colors } from "../styles/tokens";
 import {
   EXPENSE_CATEGORIES,
+  confirmExpenseImportRows,
   exportExpenses,
-  importExpensesCsv,
   listExpenses,
+  previewExpenseImport,
   type ExpenseCategory,
+  type ExpenseImportPreviewRow,
   type ExpenseRecord,
 } from "../api/expensesApi";
 import { fetchProperties } from "../api/propertiesApi";
 import { AddExpenseModal } from "../components/expenses/AddExpenseModal";
+import { ExpenseImportReviewTable } from "../components/expenses/ExpenseImportReviewTable";
 import { ExpenseImportSummaryCard } from "../components/expenses/ExpenseImportSummaryCard";
+import { ExpenseImportUploadCard } from "../components/expenses/ExpenseImportUploadCard";
 import { useCapabilities } from "../hooks/useCapabilities";
 
 function formatCents(cents: number): string {
@@ -47,7 +51,14 @@ const ExpensesPage: React.FC = () => {
   const [dateTo, setDateTo] = React.useState("");
   const [importing, setImporting] = React.useState(false);
   const [exporting, setExporting] = React.useState<null | "csv" | "xlsx" | "pdf">(null);
-  const [csvFile, setCsvFile] = React.useState<File | null>(null);
+  const [importFiles, setImportFiles] = React.useState<File[]>([]);
+  const [previewRows, setPreviewRows] = React.useState<ExpenseImportPreviewRow[]>([]);
+  const [previewSummary, setPreviewSummary] = React.useState<null | {
+    parsed: number;
+    lowConfidence: number;
+    unresolvedProperty: number;
+    unresolvedUnit: number;
+  }>(null);
   const [importSummary, setImportSummary] = React.useState<null | {
     rowsImported: number;
     rowsSkipped: number;
@@ -148,30 +159,78 @@ const ExpensesPage: React.FC = () => {
     }
   };
 
-  const handleImportCsv = async () => {
-    if (!csvFile) return;
+  const handlePreviewImport = async () => {
+    if (!importFiles.length) return;
     try {
       setImporting(true);
       setError(null);
       setImportSummary(null);
-      const csvText = await csvFile.text();
-      const result = await importExpensesCsv({
-        csvText,
+      const result = await previewExpenseImport({
+        files: importFiles,
         defaultPropertyId: propertyFilter || undefined,
       });
-      setCsvFile(null);
-      await load();
-      setImportSummary({
-        rowsImported: result.rowsImported,
-        rowsSkipped: result.rowsSkipped,
-        errors: Array.isArray(result.errors) ? result.errors : [],
-      });
+      setPreviewRows((result.rows || []).map((row) => ({ ...row, include: row.include !== false })));
+      setPreviewSummary(result.summary || null);
     } catch (err: any) {
-      setError(String(err?.message || "Failed to import expenses."));
+      setError(String(err?.message || "Failed to review imported expenses."));
     } finally {
       setImporting(false);
     }
   };
+
+  const handleConfirmImport = async () => {
+    if (!previewRows.length) return;
+    try {
+      setImporting(true);
+      setError(null);
+      const result = await confirmExpenseImportRows({ rows: previewRows });
+      setImportSummary({
+        rowsImported: result.imported,
+        rowsSkipped: result.skipped,
+        errors: Array.isArray(result.errors) ? result.errors : [],
+      });
+      setImportFiles([]);
+      setPreviewRows([]);
+      setPreviewSummary(null);
+      await load();
+    } catch (err: any) {
+      setError(String(err?.message || "Failed to confirm imported expenses."));
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleChangePreviewRow = React.useCallback((rowId: string, patch: Partial<ExpenseImportPreviewRow>) => {
+    setPreviewRows((current) =>
+      current.map((row) => {
+        if (row.rowId !== rowId) return row;
+        const next = { ...row, ...patch };
+        const warnings = new Set<string>();
+        for (const warning of next.warnings || []) {
+          if (!/needs review/i.test(warning)) warnings.add(warning);
+        }
+        if (!next.propertyId) warnings.add("Property needs review");
+        if (next.unit && !next.unitId) warnings.add("Unit needs review");
+        if (!next.category) warnings.add("Category needs review");
+        if (next.amount == null || Number.isNaN(Number(next.amount))) warnings.add("Amount needs review");
+        if (!next.date) warnings.add("Date needs review");
+        return {
+          ...next,
+          warnings: Array.from(warnings),
+        };
+      })
+    );
+  }, []);
+
+  React.useEffect(() => {
+    if (!previewRows.length) return;
+    setPreviewSummary({
+      parsed: previewRows.length,
+      lowConfidence: previewRows.filter((row) => (row.confidence ?? 0) < 0.75).length,
+      unresolvedProperty: previewRows.filter((row) => !row.propertyId).length,
+      unresolvedUnit: previewRows.filter((row) => Boolean(row.unit) && !row.unitId).length,
+    });
+  }, [previewRows]);
 
   return (
     <div style={{ display: "grid", gap: spacing.md }}>
@@ -236,27 +295,27 @@ const ExpensesPage: React.FC = () => {
         </div>
       </Card>
 
-      <Card style={{ display: "grid", gap: spacing.md }}>
-        <div style={{ fontWeight: 700 }}>Import expenses from CSV</div>
-        <div style={{ color: text.muted, fontSize: 13 }}>
-          Upload a CSV to add multiple expenses at once.
-        </div>
-        {capsLoading ? null : proExpensesEnabled ? (
-          <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap", alignItems: "center" }}>
-            <input type="file" accept=".csv,text/csv" onChange={(e) => setCsvFile(e.target.files?.[0] || null)} />
-            <Button onClick={() => void handleImportCsv()} disabled={!csvFile || importing}>
-              {importing ? "Importing..." : "Import CSV"}
-            </Button>
-          </div>
-        ) : (
+      {capsLoading ? null : proExpensesEnabled ? (
+        <ExpenseImportUploadCard
+          files={importFiles}
+          loading={importing}
+          onFilesChange={(files) => {
+            setImportFiles(files);
+            setImportSummary(null);
+          }}
+          onPreview={() => void handlePreviewImport()}
+        />
+      ) : (
+        <Card style={{ display: "grid", gap: spacing.md }}>
+          <div style={{ fontWeight: 700 }}>Import expenses</div>
           <div style={{ display: "grid", gap: 6 }}>
             <div style={{ color: text.primary, fontSize: 14 }}>Manual expense tracking is available now.</div>
             <div style={{ color: text.muted, fontSize: 13 }}>
-              Upgrade to Pro for CSV import and accountant-ready exports.
+              Upgrade to Pro to import receipts, PDFs, CSVs, and spreadsheets with AI-assisted review.
             </div>
           </div>
-        )}
-      </Card>
+        </Card>
+      )}
 
       <Card style={{ display: "grid", gap: spacing.md }}>
         <div style={{ fontWeight: 700 }}>Export expenses</div>
@@ -281,6 +340,52 @@ const ExpensesPage: React.FC = () => {
           </div>
         )}
       </Card>
+
+      {previewSummary ? (
+        <ExpenseImportSummaryCard
+          parsed={previewSummary.parsed}
+          lowConfidence={previewSummary.lowConfidence}
+          unresolvedProperty={previewSummary.unresolvedProperty}
+          unresolvedUnit={previewSummary.unresolvedUnit}
+        />
+      ) : null}
+
+      {previewRows.length ? (
+        <Card style={{ display: "grid", gap: spacing.md }}>
+          <div style={{ display: "grid", gap: 6 }}>
+            <div style={{ fontWeight: 700 }}>Review extracted rows</div>
+            <div style={{ color: text.muted, fontSize: 13 }}>
+              Check each row before import. Low-confidence rows stay editable so you can correct values safely.
+            </div>
+          </div>
+          <ExpenseImportReviewTable
+            rows={previewRows}
+            properties={properties}
+            onChangeRow={handleChangePreviewRow}
+            isMobile={isMobile}
+          />
+          <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ color: text.muted, fontSize: 13 }}>
+              {previewRows.filter((row) => row.include !== false).length} row(s) selected for import
+            </div>
+            <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setPreviewRows([]);
+                  setPreviewSummary(null);
+                  setImportFiles([]);
+                }}
+              >
+                Clear review
+              </Button>
+              <Button onClick={() => void handleConfirmImport()} disabled={importing}>
+                {importing ? "Importing..." : "Confirm import"}
+              </Button>
+            </div>
+          </div>
+        </Card>
+      ) : null}
 
       {importSummary ? (
         <ExpenseImportSummaryCard
