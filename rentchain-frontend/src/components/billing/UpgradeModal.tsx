@@ -139,32 +139,32 @@ export function UpgradeModal({
 
   const reasonCopy: Record<UpgradeReason, { title: string; body: string }> = {
     propertiesMax: {
-      title: "Upgrade required",
-      body: "Starter plan allows only 1 property. Upgrade to add more.",
+      title: "Upgrade when you’re ready to manage more properties",
+      body: "You can keep working with your current setup now. Upgrade when you need more portfolio capacity in one workspace.",
     },
     unitsMax: {
-      title: "Upgrade required",
-      body: "Starter plan allows up to 10 units total. Upgrade to add more.",
+      title: "Upgrade when you’re ready to manage more units",
+      body: "Keep setup moving now, then upgrade when your portfolio needs more unit capacity and workflow support.",
     },
     screening: {
-      title: "Upgrade to manage your rentals",
-      body: "RentChain Screening is free. Rental management starts on Starter.",
+      title: "Upgrade for richer rental workflow tools",
+      body: "Free keeps guided setup usable today. Upgrade when you want more operational workflow, reporting, and screening support around that setup.",
     },
     exports: {
-      title: "Upgrade required",
-      body: "Advanced exports are available on higher plans.",
+      title: "Upgrade to unlock accountant-ready exports",
+      body: "Manual tracking stays available now. Upgrade when you want cleaner exports and reporting for stakeholders or your accountant.",
     },
     automation: {
-      title: "Upgrade required",
-      body: "Automated workflows unlock in Core and above.",
+      title: "Upgrade for stronger workflow automation",
+      body: "Keep using the core workflow now, then upgrade when you want more automation and premium operations support.",
     },
   };
 
   const rawCopy = propCopy ?? reasonCopy[safeReason];
 
   const copy = {
-    title: rawCopy?.title ?? "Upgrade required",
-    body: rawCopy?.body ?? "You’ve reached your plan limit. Upgrade to continue.",
+    title: rawCopy?.title ?? "Upgrade when you’re ready for more workflow tools",
+    body: rawCopy?.body ?? "Keep using the core workflow now, then upgrade when you need more operational depth.",
   };
 
   if (!open) return null;
@@ -196,10 +196,10 @@ export function UpgradeModal({
       >
         <div style={{ padding: 24 }}>
           <div style={{ fontWeight: 900, fontSize: 18 }}>
-            {copy?.title ?? "Upgrade required"}
+            {copy?.title ?? "Upgrade when you’re ready for more workflow tools"}
           </div>
           <div style={{ marginTop: 8, fontSize: 14, opacity: 0.85 }}>
-            {copy?.body ?? "You’ve reached your plan limit. Upgrade to continue."}
+            {copy?.body ?? "Keep using the core workflow now, then upgrade when you need more operational depth."}
           </div>
 
           <div style={{ marginTop: 20, display: "grid", gap: 10 }}>

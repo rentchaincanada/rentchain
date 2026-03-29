@@ -31,9 +31,9 @@ function normalizePlan(input?: string | null): PlanKey {
 }
 
 function ctaLabel(plan: Exclude<PlanKey, "free">) {
-  if (plan === "pro") return "Unlock Timeline with Pro";
-  if (plan === "elite") return "Advanced compliance & reporting";
-  return "Upgrade";
+  if (plan === "pro") return "Upgrade to Pro";
+  if (plan === "elite") return "Explore Elite";
+  return "Upgrade to Starter";
 }
 
 const PricingPage: React.FC = () => {
@@ -121,16 +121,13 @@ const PricingPage: React.FC = () => {
         <Card elevated>
           <h1 style={{ margin: 0, fontSize: "1.5rem", fontWeight: 800 }}>Pricing</h1>
           <p style={{ marginTop: spacing.sm, color: text.muted }}>
-            Free includes unlimited properties and units. Upgrades unlock more workflow and intelligence.
+            Free keeps guided onboarding, basic applicant workflow, manual expenses, and property archiving usable today. Upgrades add richer workflow tools, cleaner exports, and stronger reporting.
           </p>
           <p style={{ marginTop: spacing.xs, color: text.muted }}>
-            Pay per screening - no credits, no bundles. Only pay when you screen.
+            Screening follows a guided request, status, and review workflow. Paid plans add more decision support and reporting depth without overpromising unsupported automation.
           </p>
           <p style={{ marginTop: spacing.xs, color: text.muted }}>
             Published plan prices mirror the current checkout pricing when billing is available.
-          </p>
-          <p style={{ marginTop: spacing.xs, color: text.muted }}>
-            Example: Consumer report $19.55 + optional score add-on $1. If no file returned, we&apos;ll apply the reduced/no-result price policy.
           </p>
         </Card>
 
@@ -183,7 +180,7 @@ const PricingPage: React.FC = () => {
               </ul>
               {plan === "starter" ? (
                 <div style={{ color: text.muted, fontSize: 13 }}>
-                  Activation setup stays available on Free. Paid upgrades unlock workflow extras like messaging, timeline, and reporting.
+                  Free stays usable for setup, manual tracking, and archive support. Starter adds richer applicant and day-to-day workflow tools.
                 </div>
               ) : null}
               {plan === "pro" ? (
@@ -197,12 +194,12 @@ const PricingPage: React.FC = () => {
                     gap: 6,
                   }}
                 >
-                  <div style={{ fontWeight: 800 }}>Includes Automation Timeline</div>
+                  <div style={{ fontWeight: 800 }}>Built for stronger reporting</div>
                   <ul style={{ margin: 0, paddingLeft: "1rem", color: text.muted, fontSize: 13, lineHeight: 1.6 }}>
-                    <li>Unified Event Ledger</li>
-                    <li>Integrity Verified</li>
-                    <li>Insights & Filters</li>
-                    <li>Export for audit</li>
+                    <li>CSV expense import</li>
+                    <li>CSV, spreadsheet, and PDF exports</li>
+                    <li>Screening workflow with decision support</li>
+                    <li>Cleaner month-end and accountant handoff</li>
                   </ul>
                 </div>
               ) : null}
@@ -227,7 +224,9 @@ const PricingPage: React.FC = () => {
             <summary style={{ cursor: "pointer", fontWeight: 700 }}>
               Do I need a subscription to screen tenants?
             </summary>
-            <p style={{ margin: `${spacing.sm} 0 0`, color: text.muted }}>No. Screening is pay-per-use.</p>
+            <p style={{ margin: `${spacing.sm} 0 0`, color: text.muted }}>
+              No. RentChain supports a guided screening request and review workflow, while paid plans add stronger workflow tools and reporting around that process.
+            </p>
           </details>
         </Card>
       </Section>

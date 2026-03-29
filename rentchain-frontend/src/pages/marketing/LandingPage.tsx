@@ -19,9 +19,24 @@ const LandingPage: React.FC = () => {
 
   return (
     <MarketingLayout>
-      <div style={{ display: "flex", flexDirection: "column", gap: spacing.lg }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: spacing.sm }}>
-          <h1 style={{ margin: 0, fontSize: "2.2rem" }}>RentChain</h1>
+      <div style={{ display: "grid", gap: spacing.lg }}>
+        <div style={{ display: "grid", gap: spacing.sm }}>
+          <div
+            style={{
+              display: "inline-flex",
+              width: "fit-content",
+              padding: "6px 12px",
+              borderRadius: 999,
+              background: "rgba(15,23,42,0.06)",
+              color: text.secondary,
+              fontSize: 12,
+              fontWeight: 700,
+              letterSpacing: "0.04em",
+              textTransform: "uppercase",
+            }}
+          >
+            {copy.home.eyebrow}
+          </div>
           <p style={{ margin: 0, color: text.secondary, fontSize: "1.1rem", fontWeight: 600 }}>
             {copy.home.heroTitle}
           </p>
@@ -62,6 +77,43 @@ const LandingPage: React.FC = () => {
               <li key={bullet}>{bullet}</li>
             ))}
           </ul>
+        </Card>
+
+        <div style={{ display: "grid", gap: spacing.md, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+          {copy.home.pillars.map((pillar) => (
+            <Card key={pillar.title}>
+              <div style={{ display: "grid", gap: 8 }}>
+                <div style={{ fontWeight: 800, fontSize: "1rem" }}>{pillar.title}</div>
+                <div style={{ color: text.muted, lineHeight: 1.6 }}>{pillar.body}</div>
+              </div>
+            </Card>
+          ))}
+        </div>
+
+        <Card>
+          <div style={{ display: "grid", gap: spacing.sm }}>
+            <h2 style={{ margin: 0 }}>{copy.home.workflowTitle}</h2>
+            <ol style={{ margin: 0, paddingLeft: "1.1rem", color: text.muted, lineHeight: 1.7 }}>
+              {copy.home.workflowSteps.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ol>
+          </div>
+        </Card>
+
+        <Card>
+          <div style={{ display: "grid", gap: spacing.sm }}>
+            <h2 style={{ margin: 0 }}>{copy.home.closingTitle}</h2>
+            <p style={{ margin: 0, color: text.muted, lineHeight: 1.7 }}>{copy.home.closingBody}</p>
+            <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
+              <Button type="button" onClick={() => (user?.id ? navigate("/dashboard") : navigate("/signup"))}>
+                {user?.id ? copy.home.authedPrimaryCta : copy.home.primaryCta}
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => navigate("/site/pricing")}>
+                {copy.home.pricingCta}
+              </Button>
+            </div>
+          </div>
         </Card>
       </div>
     </MarketingLayout>

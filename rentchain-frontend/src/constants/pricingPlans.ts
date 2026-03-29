@@ -16,9 +16,11 @@ export const DEFAULT_PLANS: PricingPlan[] = [
     monthlyPrice: "$0",
     yearlyPrice: "$0",
     features: [
-      "Unlimited properties and units",
-      "Manual tenant and application entry",
-      "Pay-per-screening access",
+      "Guided property and unit setup",
+      "Basic applicant and viewing workflow",
+      "Manual expense tracking",
+      "Archive properties and keep history",
+      "Guided screening setup path",
     ],
   },
   {
@@ -27,10 +29,10 @@ export const DEFAULT_PLANS: PricingPlan[] = [
     monthlyPrice: "$29",
     yearlyPrice: "$290",
     features: [
-      "Tenant invites",
-      "Applications",
-      "Messaging",
-      "Basic ledger",
+      "Tenant invites and linked applications",
+      "Viewing coordination and workflow tools",
+      "Messaging and day-to-day landlord operations",
+      "Basic ledger and billing workspace",
     ],
   },
   {
@@ -39,11 +41,11 @@ export const DEFAULT_PLANS: PricingPlan[] = [
     monthlyPrice: "$79",
     yearlyPrice: "$790",
     features: [
-      "Verified ledger",
-      "Basic exports",
-      "Compliance reports",
-      "Portfolio dashboard",
-      "Team tools",
+      "CSV expense import",
+      "Accountant-ready CSV, spreadsheet, and PDF exports",
+      "Screening workflow with decision support",
+      "Portfolio dashboard and stronger reporting",
+      "Team workflow tools",
     ],
   },
   {
@@ -52,10 +54,10 @@ export const DEFAULT_PLANS: PricingPlan[] = [
     monthlyPrice: "$149",
     yearlyPrice: "$1490",
     features: [
-      "AI summaries",
-      "Advanced exports",
-      "Audit logs",
-      "Portfolio analytics",
+      "Premium workflow controls",
+      "Advanced exports and audit visibility",
+      "Portfolio analytics and AI summaries",
+      "Priority access to premium operations features",
     ],
   },
 ];

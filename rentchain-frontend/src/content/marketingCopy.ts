@@ -3,9 +3,15 @@ export type Locale = "en" | "fr";
 type TierKey = "free" | "starter" | "pro" | "elite";
 
 type HomeCopy = {
+  eyebrow: string;
   heroTitle: string;
   heroSubtitle: string;
   bullets: string[];
+  pillars: Array<{ title: string; body: string }>;
+  workflowTitle: string;
+  workflowSteps: string[];
+  closingTitle: string;
+  closingBody: string;
   primaryCta: string;
   secondaryCta: string;
   pricingCta: string;
@@ -93,13 +99,44 @@ export type MarketingCopy = {
 export const marketingCopy: Record<Locale, MarketingCopy> = {
   en: {
     home: {
-      heroTitle: "Modern landlord command center",
-      heroSubtitle: "Built for Canadian rental operations with clear records and faster decisions.",
+      eyebrow: "Guided landlord operations",
+      heroTitle: "Guide your first applicant from setup to screening review",
+      heroSubtitle:
+        "RentChain helps landlords move from property setup to viewings, screening requests, and decision support without juggling separate tools.",
       bullets: [
-        "Track properties, units, tenants, and notices in one place.",
-        "Keep an organized ledger and export-ready records.",
-        "Run a consistent workflow from first contact to renewal.",
+        "Set up properties, units, applicants, and viewings with a guided activation flow.",
+        "Connect TransUnion, request screening, and review results through a clear status workflow.",
+        "Track expenses, archive sold properties, and export cleaner records when your portfolio grows.",
       ],
+      pillars: [
+        {
+          title: "Guided onboarding",
+          body: "New landlords get a clear activation path from first login to first applicant review.",
+        },
+        {
+          title: "Screening workflow + decision support",
+          body: "Use a guided TransUnion connection flow, request screening, follow status updates, and review clearer risk insights.",
+        },
+        {
+          title: "Property operations",
+          body: "Manage properties, units, applicants, viewings, and archived portfolio history in one place.",
+        },
+        {
+          title: "Expenses and accountant-ready reporting",
+          body: "Track expenses now on Free, then upgrade for CSV import and cleaner exports for your accountant.",
+        },
+      ],
+      workflowTitle: "How landlords get to a first decision",
+      workflowSteps: [
+        "Add your first property and unit",
+        "Invite or add an applicant",
+        "Coordinate a viewing and confirm readiness",
+        "Connect TransUnion and request screening",
+        "Review a high-trust screening result and make your decision",
+      ],
+      closingTitle: "Built for real rental operations, not vague promises",
+      closingBody:
+        "RentChain is strongest when you want a guided workflow, clear records, and honest upgrade paths. Premium automation is positioned carefully, while today’s operational tools stay grounded in what the platform already delivers.",
       primaryCta: "Sign up (Free)",
       secondaryCta: "Sign in",
       pricingCta: "See pricing",
@@ -107,8 +144,9 @@ export const marketingCopy: Record<Locale, MarketingCopy> = {
       authedPrimaryCta: "Go to dashboard",
     },
     pricing: {
-      headline: "Straightforward plans for Canadian landlords",
-      subheadline: "Start free, upgrade when your portfolio needs deeper workflow and reporting.",
+      headline: "Pricing that matches how RentChain works today",
+      subheadline:
+        "Start on Free with guided setup, then upgrade for richer workflow tools, accountant-ready exports, and stronger reporting.",
       intervalLabels: {
         monthly: "Monthly",
         yearly: "Annual",
@@ -120,10 +158,10 @@ export const marketingCopy: Record<Locale, MarketingCopy> = {
         elite: "Elite",
       },
       tierTaglines: {
-        free: "Best for trying the core workflow",
-        starter: "Best for active landlords managing day-to-day operations",
-        pro: "Best for growing portfolios that need stronger controls",
-        elite: "Best for teams that need audit-ready visibility",
+        free: "Best for guided setup, basic workflow, and manual tracking",
+        starter: "Best for active landlords coordinating applicants and day-to-day operations",
+        pro: "Best for growing portfolios that need screening support, imports, and exports",
+        elite: "Best for premium operations visibility and advanced workflow controls",
       },
       tierBadges: {
         pro: "Most Popular",
@@ -131,85 +169,86 @@ export const marketingCopy: Record<Locale, MarketingCopy> = {
       ctaStartFree: "Start Free",
       ctaUpgrade: "Upgrade",
       ctaByTier: {
-        starter: "Upgrade",
-        pro: "Unlock Timeline with Pro",
-        elite: "Advanced compliance & reporting",
+        starter: "Upgrade to Starter",
+        pro: "Upgrade to Pro",
+        elite: "Explore Elite",
       },
       comparisonTitle: "Plan comparison",
       capabilityTitle: "Capability",
       featureGroups: [
         {
-          title: "Core",
+          title: "Portfolio setup",
           items: {
-            free: "Properties and units",
-            starter: "Properties and units",
-            pro: "Properties and units",
-            elite: "Properties and units",
+            free: "Properties, units, archive support",
+            starter: "Properties, units, archive support",
+            pro: "Properties, units, archive support",
+            elite: "Properties, units, archive support",
           },
         },
         {
-          title: "Tenant workflow",
+          title: "Guided onboarding",
           items: {
-            free: "Manual entry",
-            starter: "Invites and messaging",
-            pro: "Invites and messaging",
-            elite: "Invites and messaging",
+            free: "Activation flow",
+            starter: "Activation flow",
+            pro: "Activation flow",
+            elite: "Activation flow",
           },
         },
         {
-          title: "Ledger and exports",
+          title: "Applicant workflow",
           items: {
-            free: "Basic records",
-            starter: "Basic ledger",
-            pro: "Verified ledger and exports",
-            elite: "Advanced exports and audit logs",
+            free: "Basic applicants + viewings",
+            starter: "Invites, viewings, messaging",
+            pro: "Invites, viewings, messaging",
+            elite: "Invites, viewings, messaging",
           },
         },
         {
-          title: "Insights",
+          title: "Expenses",
           items: {
-            free: "Basic view",
-            starter: "Basic view",
-            pro: "Portfolio dashboard",
-            elite: "Portfolio analytics",
+            free: "Manual tracking",
+            starter: "Manual tracking",
+            pro: "CSV import + reporting exports",
+            elite: "Advanced reporting workflows",
           },
         },
         {
-          title: "Automation Timeline",
+          title: "Reporting and insights",
           items: {
-            free: "X",
-            starter: "X",
-            pro: "check",
-            elite: "check",
+            free: "Basic dashboard",
+            starter: "Workflow reporting",
+            pro: "Decision support + exports",
+            elite: "Advanced analytics",
           },
         },
       ],
       timelineSection: {
-        title: "Automation Timeline (Event Ledger)",
+        title: "Operations visibility",
         description:
-          "See every key event across applications, screening, leases, payments, messages, and maintenance in one unified timeline.",
+          "Paid plans expand visibility with stronger workflow reporting, cleaner exports, and a more complete operational record.",
         bullets: [
-          "Unified event ledger",
-          "Integrity Verified (tamper-evident hash chain)",
-          "Insights (activity, payments 30d, event mix)",
-          "Property / unit / tenant filters",
-          "JSON export",
+          "Workflow and screening progress visibility",
+          "Cleaner records for reviews and reporting",
+          "Property and applicant context in one place",
+          "Export paths for stakeholders and accountants",
+          "More operational leverage as your portfolio grows",
         ],
-        proofLine: "Designed for compliance-grade traceability without crypto complexity.",
+        proofLine: "Designed to add clarity without overpromising unsupported automation.",
       },
       screeningRow: {
-        label: "Credit Screening",
-        subtext: "Coming soon",
+        label: "Screening workflow",
+        subtext: "Guided and operationally assisted today",
         values: {
-          free: "Coming soon",
-          starter: "Coming soon",
-          pro: "Coming soon",
-          elite: "Coming soon",
+          free: "Guided setup path",
+          starter: "Request + status workflow",
+          pro: "Decision support + reporting",
+          elite: "Advanced ops visibility",
         },
       },
       faqTitle: "FAQ",
       faqQuestion: "Do I need a subscription to screen tenants?",
-      faqAnswer: "No. Screening will be available as pay-per-use when released.",
+      faqAnswer:
+        "No. Screening follows a guided request and review workflow, with paid plans adding stronger reporting and workflow depth.",
     },
     about: {
       headline: "Built for clarity in Canadian renting",
@@ -274,14 +313,44 @@ export const marketingCopy: Record<Locale, MarketingCopy> = {
   },
   fr: {
     home: {
-      heroTitle: "Centre de commande moderne pour proprietaires",
+      eyebrow: "Operations guidees pour proprietaires",
+      heroTitle: "Passez de l'installation au premier examen d'un candidat",
       heroSubtitle:
-        "Concu pour les operations locatives canadiennes avec des dossiers clairs et des decisions plus rapides.",
+        "RentChain aide les proprietaires a passer de la configuration des proprietes aux visites, aux demandes de verification et a l'aide a la decision sans multiplier les outils.",
       bullets: [
-        "Suivez proprietes, unites, locataires et avis au meme endroit.",
-        "Conservez un registre organise et des exports prets a l'usage.",
-        "Appliquez un flux constant du premier contact au renouvellement.",
+        "Configurez proprietes, unites, candidats et visites avec un parcours guide.",
+        "Connectez TransUnion, lancez une demande de verification et suivez le statut jusqu'au resultat.",
+        "Suivez les depenses, archivez les proprietes vendues et exportez des dossiers plus propres quand le portefeuille grandit.",
       ],
+      pillars: [
+        {
+          title: "Integration guidee",
+          body: "Les nouveaux proprietaires obtiennent un parcours clair du premier acces jusqu'au premier examen de dossier.",
+        },
+        {
+          title: "Verification et aide a la decision",
+          body: "Utilisez un parcours guide de connexion TransUnion, suivez les demandes de verification et consultez des signaux de risque plus clairs.",
+        },
+        {
+          title: "Operations immobilieres",
+          body: "Gerez proprietes, unites, candidats, visites et historique archive au meme endroit.",
+        },
+        {
+          title: "Depenses et rapports pour comptable",
+          body: "Suivez les depenses maintenant sur Gratuit, puis passez a Pro pour l'import CSV et les exports plus propres.",
+        },
+      ],
+      workflowTitle: "Comment un proprietaire arrive a une premiere decision",
+      workflowSteps: [
+        "Ajoutez votre premiere propriete et unite",
+        "Invitez ou ajoutez un candidat",
+        "Coordonnez une visite et confirmez l'etat de preparation",
+        "Connectez TransUnion et lancez la verification",
+        "Consultez un resultat de verification clair et prenez votre decision",
+      ],
+      closingTitle: "Concu pour de vraies operations locatives",
+      closingBody:
+        "RentChain est plus fort lorsqu'il offre un flux guide, des dossiers clairs et des mises a niveau honnetes. L'automatisation premium reste presentee avec prudence, tandis que les outils d'aujourd'hui restent fondes sur ce qui existe vraiment.",
       primaryCta: "Inscription (Gratuit)",
       secondaryCta: "Connexion",
       pricingCta: "Voir les tarifs",
@@ -289,9 +358,9 @@ export const marketingCopy: Record<Locale, MarketingCopy> = {
       authedPrimaryCta: "Aller au tableau de bord",
     },
     pricing: {
-      headline: "Forfaits clairs pour proprietaires canadiens",
+      headline: "Une tarification alignee sur le produit actuel",
       subheadline:
-        "Commencez gratuitement, puis passez a un forfait superieur lorsque votre portefeuille demande plus d'outils.",
+        "Commencez sur Gratuit avec une configuration guidee, puis passez a un forfait superieur pour plus d'outils, d'exports et de rapports.",
       intervalLabels: {
         monthly: "Mensuel",
         yearly: "Annuel",
@@ -303,10 +372,10 @@ export const marketingCopy: Record<Locale, MarketingCopy> = {
         elite: "Elite",
       },
       tierTaglines: {
-        free: "Ideal pour essayer le flux principal",
-        starter: "Ideal pour les proprietaires actifs au quotidien",
-        pro: "Ideal pour les portefeuilles en croissance",
-        elite: "Ideal pour les equipes qui veulent une vue complete",
+        free: "Ideal pour la configuration guidee et le suivi manuel",
+        starter: "Ideal pour les proprietaires actifs qui coordonnent les candidats",
+        pro: "Ideal pour les portefeuilles qui veulent imports, exports et plus de rapports",
+        elite: "Ideal pour une visibilite premium et des controles avances",
       },
       tierBadges: {
         pro: "Le plus choisi",
@@ -314,85 +383,86 @@ export const marketingCopy: Record<Locale, MarketingCopy> = {
       ctaStartFree: "Commencer gratuitement",
       ctaUpgrade: "Mettre a niveau",
       ctaByTier: {
-        starter: "Mettre a niveau",
-        pro: "Debloquer Timeline avec Pro",
-        elite: "Conformite et rapports avances",
+        starter: "Passer a Starter",
+        pro: "Passer a Pro",
+        elite: "Explorer Elite",
       },
       comparisonTitle: "Comparaison des forfaits",
       capabilityTitle: "Capacite",
       featureGroups: [
         {
-          title: "Base",
+          title: "Configuration du portefeuille",
           items: {
-            free: "Proprietes et unites",
-            starter: "Proprietes et unites",
-            pro: "Proprietes et unites",
-            elite: "Proprietes et unites",
+            free: "Proprietes, unites, archivage",
+            starter: "Proprietes, unites, archivage",
+            pro: "Proprietes, unites, archivage",
+            elite: "Proprietes, unites, archivage",
           },
         },
         {
-          title: "Flux locataire",
+          title: "Integration guidee",
           items: {
-            free: "Saisie manuelle",
-            starter: "Invitations et messagerie",
-            pro: "Invitations et messagerie",
-            elite: "Invitations et messagerie",
+            free: "Parcours d'activation",
+            starter: "Parcours d'activation",
+            pro: "Parcours d'activation",
+            elite: "Parcours d'activation",
           },
         },
         {
-          title: "Registre et exports",
+          title: "Flux candidat",
           items: {
-            free: "Dossiers de base",
-            starter: "Registre de base",
-            pro: "Registre verifie et exports",
-            elite: "Exports avances et journaux d'audit",
+            free: "Candidats + visites de base",
+            starter: "Invitations, visites, messagerie",
+            pro: "Invitations, visites, messagerie",
+            elite: "Invitations, visites, messagerie",
           },
         },
         {
-          title: "Analytique",
+          title: "Depenses",
           items: {
-            free: "Vue de base",
-            starter: "Vue de base",
-            pro: "Tableau de bord portefeuille",
-            elite: "Analytique portefeuille",
+            free: "Suivi manuel",
+            starter: "Suivi manuel",
+            pro: "Import CSV + exports",
+            elite: "Flux de rapports avances",
           },
         },
         {
-          title: "Timeline d'automatisation",
+          title: "Rapports et insights",
           items: {
-            free: "X",
-            starter: "X",
-            pro: "check",
-            elite: "check",
+            free: "Tableau de bord de base",
+            starter: "Rapports operationnels",
+            pro: "Aide a la decision + exports",
+            elite: "Analytique avancee",
           },
         },
       ],
       timelineSection: {
-        title: "Timeline d'automatisation (registre d'evenements)",
+        title: "Visibilite operationnelle",
         description:
-          "Voyez tous les evenements cles des candidatures, verifications, baux, paiements, messages et maintenance dans une seule timeline.",
+          "Les forfaits payants ajoutent plus de visibilite, des exports plus propres et un dossier operationnel plus complet.",
         bullets: [
-          "Registre d'evenements unifie",
-          "Integrity Verified (chaine de hachage evidente)",
-          "Insights (activite, paiements 30 j, mix des evenements)",
-          "Filtres par propriete / unite / locataire",
-          "Export JSON",
+          "Visibilite sur les flux et la verification",
+          "Dossiers plus propres pour examens et rapports",
+          "Contexte propriete et candidat au meme endroit",
+          "Exports pour parties prenantes et comptables",
+          "Plus de levier operationnel quand le portefeuille grandit",
         ],
-        proofLine: "Concu pour une tracabilite de conformite sans complexite crypto.",
+        proofLine: "Concu pour ajouter de la clarte sans promettre une automatisation non prise en charge.",
       },
       screeningRow: {
-        label: "Verification de credit",
-        subtext: "Bientot disponible",
+        label: "Flux de verification",
+        subtext: "Guide et assiste aujourd'hui",
         values: {
-          free: "Bientot disponible",
-          starter: "Bientot disponible",
-          pro: "Bientot disponible",
-          elite: "Bientot disponible",
+          free: "Parcours guide",
+          starter: "Demande + suivi du statut",
+          pro: "Aide a la decision + rapports",
+          elite: "Visibilite operationnelle avancee",
         },
       },
       faqTitle: "FAQ",
       faqQuestion: "Ai-je besoin d'un abonnement pour verifier des locataires?",
-      faqAnswer: "Non. La verification sera offerte a l'usage lors du lancement.",
+      faqAnswer:
+        "Non. La verification suit deja un flux guide de demande et d'examen, et les forfaits payants ajoutent plus d'outils et de rapports.",
     },
     about: {
       headline: "Concu pour la clarte dans la location au Canada",
