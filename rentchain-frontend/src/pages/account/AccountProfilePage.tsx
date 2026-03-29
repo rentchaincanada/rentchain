@@ -60,8 +60,8 @@ const AccountProfilePage: React.FC = () => {
           <Button type="button" variant="secondary" onClick={() => navigate("/account")}>
             Back to My Account
           </Button>
-          <Button type="button" onClick={() => navigate("/account/security")}>
-            Account security
+          <Button type="button" variant="secondary" disabled>
+            Security controls coming soon
           </Button>
         </div>
       </Card>

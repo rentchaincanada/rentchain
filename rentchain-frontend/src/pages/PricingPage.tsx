@@ -6,7 +6,7 @@ import { spacing, text } from "../styles/tokens";
 import { useAuth } from "../context/useAuth";
 import { useCapabilities } from "../hooks/useCapabilities";
 import { startCheckout } from "../billing/startCheckout";
-import { createBillingPortalSession } from "../api/billingApi";
+import { createBillingPortalSession, fetchBillingPricing, type BillingPlanPricing } from "../api/billingApi";
 import { DEFAULT_PLANS, type PricingInterval, type PricingPlanKey } from "../constants/pricingPlans";
 import { track } from "@/lib/analytics";
 
@@ -16,6 +16,11 @@ const PLAN_ORDER: PlanKey[] = ["free", "starter", "pro", "elite"];
 const PLAN_FEATURES: Record<PlanKey, string[]> = Object.fromEntries(
   DEFAULT_PLANS.map((plan) => [plan.key, plan.features])
 ) as Record<PlanKey, string[]>;
+const BILLING_PLAN_KEY_BY_UI_PLAN: Record<Exclude<PlanKey, "free">, BillingPlanPricing["key"]> = {
+  starter: "starter",
+  pro: "pro",
+  elite: "business",
+};
 
 function normalizePlan(input?: string | null): PlanKey {
   const raw = String(input || "").trim().toLowerCase();
@@ -37,6 +42,7 @@ const PricingPage: React.FC = () => {
   const { caps } = useCapabilities();
   const currentPlan = normalizePlan((caps?.plan as string) || user?.plan || null);
   const [interval, setInterval] = React.useState<PricingInterval>("monthly");
+  const [pricingByPlan, setPricingByPlan] = React.useState<Partial<Record<BillingPlanPricing["key"], BillingPlanPricing>>>({});
   const safeTrack = (eventName: string, props: Record<string, unknown>) => {
     try {
       track(eventName, props);
@@ -45,11 +51,40 @@ const PricingPage: React.FC = () => {
     }
   };
 
+  React.useEffect(() => {
+    let active = true;
+    fetchBillingPricing()
+      .then((res) => {
+        if (!active || !res?.plans?.length) return;
+        setPricingByPlan(
+          Object.fromEntries(res.plans.map((plan) => [plan.key, plan])) as Partial<
+            Record<BillingPlanPricing["key"], BillingPlanPricing>
+          >
+        );
+      })
+      .catch(() => {
+        if (active) setPricingByPlan({});
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const renderPrice = (planKey: PlanKey) => {
     const plan = DEFAULT_PLANS.find((item) => item.key === planKey);
     if (!plan) return "Price unavailable";
+    if (planKey === "free") {
+      const value = interval === "yearly" ? plan.yearlyPrice : plan.monthlyPrice;
+      return value;
+    }
+    const billingPlan = pricingByPlan[BILLING_PLAN_KEY_BY_UI_PLAN[planKey]];
+    if (billingPlan) {
+      const amountCents =
+        interval === "yearly" ? billingPlan.yearlyAmountCents : billingPlan.monthlyAmountCents;
+      const value = `$${(amountCents / 100).toFixed(0)}`;
+      return interval === "yearly" ? `${value} / year` : `${value} / month`;
+    }
     const value = interval === "yearly" ? plan.yearlyPrice : plan.monthlyPrice;
-    if (planKey === "free") return value;
     return interval === "yearly" ? `${value} / year` : `${value} / month`;
   };
 
@@ -90,6 +125,9 @@ const PricingPage: React.FC = () => {
           </p>
           <p style={{ marginTop: spacing.xs, color: text.muted }}>
             Pay per screening - no credits, no bundles. Only pay when you screen.
+          </p>
+          <p style={{ marginTop: spacing.xs, color: text.muted }}>
+            Published plan prices mirror the current checkout pricing when billing is available.
           </p>
           <p style={{ marginTop: spacing.xs, color: text.muted }}>
             Example: Consumer report $19.55 + optional score add-on $1. If no file returned, we&apos;ll apply the reduced/no-result price policy.
@@ -145,7 +183,7 @@ const PricingPage: React.FC = () => {
               </ul>
               {plan === "starter" ? (
                 <div style={{ color: text.muted, fontSize: 13 }}>
-                  Does not include Automation Timeline or advanced reporting.
+                  Activation setup stays available on Free. Paid upgrades unlock workflow extras like messaging, timeline, and reporting.
                 </div>
               ) : null}
               {plan === "pro" ? (

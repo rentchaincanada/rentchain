@@ -29,6 +29,7 @@ import { useUnitsForProperty } from "../hooks/useUnitsForProperty";
 import { listReferrals } from "../api/referralsApi";
 import { markDashboardVisit } from "@/features/upgradeNudges/nudgeStore";
 import { GettingStartedCard } from "../components/onboarding/GettingStartedCard";
+import { LandlordWelcomeModal } from "../components/onboarding/LandlordWelcomeModal";
 import { SCREENING_ENABLED, getUiLocale, screeningComingSoonLabel } from "../config/screening";
 import { openUpgradeFlow } from "@/billing/openUpgradeFlow";
 import { UpgradeNudgeInlineCard } from "@/features/upgradeNudges/UpgradeNudgeInlineCard";
@@ -41,6 +42,8 @@ const StarterOnboardingPanel = React.lazy(
 );
 const TIMELINE_NUDGE_DISMISSED_AT_KEY = "nudge.timeline.dismissedAt";
 const TIMELINE_NUDGE_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+const LANDLORD_WELCOME_PENDING_KEY = "rentchain.landlordWelcome.pending";
+const LANDLORD_WELCOME_SEEN_KEY = "rentchain.landlordWelcome.seen";
 
 class OnboardingErrorBoundary extends React.Component<
   { onError: () => void; children: React.ReactNode },
@@ -145,6 +148,7 @@ const DashboardPage: React.FC = () => {
   const [activationSummary, setActivationSummary] = React.useState<LandlordActivationSummary | null>(null);
   const [activationLoading, setActivationLoading] = React.useState(false);
   const [activationError, setActivationError] = React.useState<string | null>(null);
+  const [showWelcomeModal, setShowWelcomeModal] = React.useState(false);
   const onboarding = useOnboardingState();
   const prevDerivedRef = React.useRef({
     propertyAdded: false,
@@ -170,6 +174,24 @@ const DashboardPage: React.FC = () => {
   const refetch = React.useCallback(() => {
     void loadDashboard();
   }, [loadDashboard]);
+
+  const dismissWelcomeModal = React.useCallback(() => {
+    if (typeof window !== "undefined" && user?.id) {
+      window.localStorage.setItem(`${LANDLORD_WELCOME_SEEN_KEY}.${user.id}`, "1");
+      window.localStorage.removeItem(`${LANDLORD_WELCOME_PENDING_KEY}.${user.id}`);
+    }
+    setShowWelcomeModal(false);
+  }, [user?.id]);
+
+  const handleStartSetupWelcome = React.useCallback(() => {
+    dismissWelcomeModal();
+    window.setTimeout(() => {
+      const target = document.querySelector('[data-testid="landlord-activation-card"]');
+      if (target instanceof HTMLElement) {
+        target.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 0);
+  }, [dismissWelcomeModal]);
 
   React.useEffect(() => {
     void loadDashboard();
@@ -236,6 +258,13 @@ const DashboardPage: React.FC = () => {
     if (!meLoaded || !isLandlord) return;
     void loadActivation();
   }, [isLandlord, loadActivation, meLoaded]);
+
+  React.useEffect(() => {
+    if (typeof window === "undefined" || !meLoaded || !isLandlord || !user?.id) return;
+    const pending = window.localStorage.getItem(`${LANDLORD_WELCOME_PENDING_KEY}.${user.id}`) === "1";
+    const seen = window.localStorage.getItem(`${LANDLORD_WELCOME_SEEN_KEY}.${user.id}`) === "1";
+    setShowWelcomeModal(pending && !seen);
+  }, [isLandlord, meLoaded, user?.id]);
 
   React.useEffect(() => {
     let alive = true;
@@ -493,6 +522,11 @@ const DashboardPage: React.FC = () => {
 
   return (
     <MacShell title="RentChain · Dashboard" showTopNav={false}>
+      <LandlordWelcomeModal
+        open={showWelcomeModal}
+        onStartSetup={handleStartSetupWelcome}
+        onExploreDashboard={dismissWelcomeModal}
+      />
       <div
         style={{
           display: "flex",

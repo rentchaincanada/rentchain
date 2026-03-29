@@ -10,6 +10,7 @@ import { DEFAULT_PLANS, type PricingInterval, type PricingPlanKey } from "../../
 import { useLanguage } from "../../context/LanguageContext";
 import { marketingCopy } from "../../content/marketingCopy";
 import { track } from "../../lib/analytics";
+import { fetchBillingPricing, type BillingPlanPricing } from "../../api/billingApi";
 
 type PlanKey = PricingPlanKey;
 
@@ -17,6 +18,11 @@ const PLAN_ORDER: PlanKey[] = ["free", "starter", "pro", "elite"];
 const TIMELINE_MARKERS: Record<string, string> = {
   X: "❌",
   check: "✅",
+};
+const BILLING_PLAN_KEY_BY_UI_PLAN: Record<Exclude<PlanKey, "free">, BillingPlanPricing["key"]> = {
+  starter: "starter",
+  pro: "pro",
+  elite: "business",
 };
 
 function normalizePlan(input?: string | null): PlanKey {
@@ -45,6 +51,7 @@ const PricingPage: React.FC = () => {
   const isAuthed = Boolean(user?.id);
   const [interval, setInterval] = React.useState<PricingInterval>("monthly");
   const [isMobile, setIsMobile] = React.useState(false);
+  const [pricingByPlan, setPricingByPlan] = React.useState<Partial<Record<BillingPlanPricing["key"], BillingPlanPricing>>>({});
   const safeTrack = (eventName: string, props: Record<string, unknown>) => {
     try {
       track(eventName, props);
@@ -80,11 +87,46 @@ const PricingPage: React.FC = () => {
     }
   }, []);
 
+  React.useEffect(() => {
+    let active = true;
+    fetchBillingPricing()
+      .then((res) => {
+        if (!active || !res?.plans?.length) return;
+        setPricingByPlan(
+          Object.fromEntries(res.plans.map((plan) => [plan.key, plan])) as Partial<
+            Record<BillingPlanPricing["key"], BillingPlanPricing>
+          >
+        );
+      })
+      .catch(() => {
+        if (active) setPricingByPlan({});
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const renderPrice = (planKey: PlanKey) => {
     const plan = DEFAULT_PLANS.find((item) => item.key === planKey);
     if (!plan) return "-";
+    if (planKey === "free") {
+      const value = interval === "yearly" ? plan.yearlyPrice : plan.monthlyPrice;
+      return value;
+    }
+    const billingPlan = pricingByPlan[BILLING_PLAN_KEY_BY_UI_PLAN[planKey]];
+    if (billingPlan) {
+      const amountCents =
+        interval === "yearly" ? billingPlan.yearlyAmountCents : billingPlan.monthlyAmountCents;
+      const value = `$${(amountCents / 100).toFixed(0)}`;
+      return interval === "yearly"
+        ? locale === "fr"
+          ? `${value} / an`
+          : `${value} / year`
+        : locale === "fr"
+        ? `${value} / mois`
+        : `${value} / month`;
+    }
     const value = interval === "yearly" ? plan.yearlyPrice : plan.monthlyPrice;
-    if (planKey === "free") return value;
     return interval === "yearly"
       ? locale === "fr"
         ? `${value} / an`
@@ -136,6 +178,9 @@ const PricingPage: React.FC = () => {
             }}
           >
             {copy.pricing.subheadline}
+          </p>
+          <p style={{ margin: `${spacing.xs} 0 0`, color: text.muted, fontSize: "0.92rem" }}>
+            Published plan prices follow the current checkout pricing when billing is available. Activation setup stays available on Free, while paid plans unlock extra workflow and reporting.
           </p>
         </div>
 

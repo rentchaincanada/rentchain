@@ -30,6 +30,20 @@ export function buildOnboardingSteps({
   unitsCount = 0,
 }: BuildArgs): OnboardingStep[] {
   const prereq = getApplicationPrereqState({ propertiesCount, unitsCount });
+  const routeToInviteTenant = () => {
+    if (prereq.missingProperty) {
+      track("onboarding_step_clicked", { stepKey: "tenantInvited", blockedBy: "no_property" });
+      navigate("/properties?focus=addProperty");
+      return;
+    }
+    if (prereq.missingUnit) {
+      track("onboarding_step_clicked", { stepKey: "tenantInvited", blockedBy: "no_units" });
+      navigate("/properties?openAddUnit=1");
+      return;
+    }
+    track("onboarding_step_clicked", { stepKey: "tenantInvited" });
+    navigate("/tenants?invite=1");
+  };
   const routeToCreateApplication = () => {
     if (prereq.missingProperty) {
       track("onboarding_step_clicked", { stepKey: "applicationCreated", blockedBy: "no_property" });
@@ -71,13 +85,18 @@ export function buildOnboardingSteps({
     {
       key: "tenantInvited",
       title: "Invite a tenant",
-      description: "Send your first tenant invite.",
+      description: prereq.missingProperty
+        ? "Add your first property to unlock tenant invites."
+        : prereq.missingUnit
+        ? "Add a unit before inviting tenants so each invite is tied to the right rental."
+        : "Send your first tenant invite.",
       isComplete: !!onboarding.steps.tenantInvited,
-      actionLabel: "Invite tenant",
-      onAction: () => {
-        track("onboarding_step_clicked", { stepKey: "tenantInvited" });
-        navigate("/tenants?invite=1");
-      },
+      actionLabel: prereq.missingProperty
+        ? "Add property"
+        : prereq.missingUnit
+        ? "Add unit"
+        : "Invite tenant",
+      onAction: routeToInviteTenant,
     },
     {
       key: "applicationCreated",

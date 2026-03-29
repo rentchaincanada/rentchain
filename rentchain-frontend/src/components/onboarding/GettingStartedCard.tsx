@@ -59,6 +59,7 @@ export const GettingStartedCard: React.FC<GettingStartedCardProps> = ({
   const propertyDone = propertiesCount > 0;
   const unitDone = unitsCount > 0;
   const tenantDone = tenantsCount > 0;
+  const canInviteTenant = propertyDone && unitDone && Boolean(inviteTenantHref);
 
   return (
     <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
@@ -92,9 +93,15 @@ export const GettingStartedCard: React.FC<GettingStartedCardProps> = ({
         <StepRow
           done={tenantDone}
           title="3. Invite first tenant"
-          description="Invite a tenant to start collecting applications and screening consent."
+          description={
+            !propertyDone
+              ? "Add a property first so tenant records have a home."
+              : !unitDone
+              ? "Add at least one unit before inviting a tenant."
+              : "Invite a tenant to start collecting applications and screening consent."
+          }
           action={
-            inviteTenantHref ? (
+            canInviteTenant ? (
               <Link
                 to={inviteTenantHref}
                 style={{
@@ -107,7 +114,9 @@ export const GettingStartedCard: React.FC<GettingStartedCardProps> = ({
                 Invite first tenant
               </Link>
             ) : (
-              <span style={{ color: text.muted, fontSize: 13 }}>Invite route not available.</span>
+              <span style={{ color: text.muted, fontSize: 13 }}>
+                Complete this step to continue.
+              </span>
             )
           }
         />
@@ -115,4 +124,3 @@ export const GettingStartedCard: React.FC<GettingStartedCardProps> = ({
     </Card>
   );
 };
-
