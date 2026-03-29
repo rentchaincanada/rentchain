@@ -4,6 +4,7 @@ import { sendEmail } from "../services/emailService";
 import { runStatusHealthSync } from "../services/statusHealthSync";
 import { recomputeLeaseRisk } from "../services/risk/recomputeLeaseRisk";
 import { recomputeTenantScore } from "../services/risk/recomputeTenantScore";
+import { generateLeaseOverlapAuditReport } from "../services/leaseAudit/leaseOverlapAuditService";
 import {
   getTuReferralMetricsForMonth,
   renderTuReferralCsv,
@@ -168,6 +169,21 @@ router.post("/status/health-sync", requireInternalJobToken, async (_req: any, re
   } catch (err: any) {
     console.error("[status_health_sync] failed", err?.message || err);
     return res.status(500).json({ ok: false, error: "status_health_sync_failed" });
+  }
+});
+
+router.get("/reports/lease-overlaps", requireInternalJobToken, async (req: any, res) => {
+  try {
+    const landlordId = String(req.query?.landlordId || "").trim() || null;
+    const propertyId = String(req.query?.propertyId || "").trim() || null;
+    const report = await generateLeaseOverlapAuditReport({
+      landlordId,
+      propertyId,
+    });
+    return res.json({ ok: true, report });
+  } catch (err: any) {
+    console.error("[lease_overlap_audit] failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "lease_overlap_audit_failed" });
   }
 });
 
