@@ -10,6 +10,11 @@ export function ExpenseImportSummaryCard({
   lowConfidence,
   unresolvedProperty,
   unresolvedUnit,
+  duplicateCount,
+  likelyDuplicateCount,
+  selectedCount,
+  skippedCount,
+  duplicateImported,
 }: {
   rowsImported?: number;
   rowsSkipped?: number;
@@ -18,11 +23,22 @@ export function ExpenseImportSummaryCard({
   lowConfidence?: number;
   unresolvedProperty?: number;
   unresolvedUnit?: number;
+  duplicateCount?: number;
+  likelyDuplicateCount?: number;
+  selectedCount?: number;
+  skippedCount?: number;
+  duplicateImported?: number;
 }) {
   const imported = Number(rowsImported || 0);
   const skipped = Number(rowsSkipped || 0);
+  const importedDuplicates = Number(duplicateImported || 0);
   const rowErrors = Array.isArray(errors) ? errors : [];
-  const showPreview = parsed != null || lowConfidence != null || unresolvedProperty != null || unresolvedUnit != null;
+  const showPreview =
+    parsed != null ||
+    lowConfidence != null ||
+    unresolvedProperty != null ||
+    unresolvedUnit != null ||
+    duplicateCount != null;
 
   return (
     <Card
@@ -38,13 +54,18 @@ export function ExpenseImportSummaryCard({
           <>
             <div>{Number(parsed || 0)} parsed</div>
             <div>{Number(lowConfidence || 0)} low confidence</div>
+            <div>{Number(duplicateCount || 0)} duplicate flagged</div>
+            <div>{Number(likelyDuplicateCount || 0)} likely duplicate</div>
             <div>{Number(unresolvedProperty || 0)} property needs review</div>
             <div>{Number(unresolvedUnit || 0)} unit needs review</div>
+            <div>{Number(selectedCount || 0)} selected for import</div>
+            <div>{Number(skippedCount || 0)} skipped for now</div>
           </>
         ) : (
           <>
             <div>{imported} imported</div>
             <div>{skipped} skipped</div>
+            <div>{importedDuplicates} duplicate-flagged imported</div>
           </>
         )}
       </div>

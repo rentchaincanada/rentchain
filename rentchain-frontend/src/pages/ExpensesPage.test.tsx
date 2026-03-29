@@ -109,7 +109,12 @@ describe("ExpensesPage", () => {
           notes: null,
           sourceFileName: "expenses.csv",
           confidence: 0.9,
+          warningCodes: [],
           warnings: [],
+          duplicateStatus: "none",
+          duplicateReason: null,
+          duplicateMatches: [],
+          lowConfidence: false,
         },
       ],
       summary: {
@@ -117,12 +122,15 @@ describe("ExpensesPage", () => {
         lowConfidence: 0,
         unresolvedProperty: 0,
         unresolvedUnit: 0,
+        duplicateCount: 0,
+        likelyDuplicateCount: 0,
       },
     });
     mocks.confirmExpenseImportRowsMock.mockResolvedValue({
       ok: true,
       imported: 1,
       skipped: 0,
+      duplicateImported: 0,
       errors: [],
     });
 
@@ -144,6 +152,7 @@ describe("ExpensesPage", () => {
     });
     expect(screen.getByText("Review extracted rows")).toBeInTheDocument();
     expect(screen.getByText("1 parsed")).toBeInTheDocument();
+    expect(screen.getByText("0 duplicate flagged")).toBeInTheDocument();
     expect(screen.getByDisplayValue("FixIt")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Confirm import" }));
@@ -153,6 +162,7 @@ describe("ExpensesPage", () => {
     });
     expect(screen.getByText("Import completed")).toBeInTheDocument();
     expect(screen.getByText("1 imported")).toBeInTheDocument();
+    expect(screen.getByText("0 duplicate-flagged imported")).toBeInTheDocument();
   });
 
 });

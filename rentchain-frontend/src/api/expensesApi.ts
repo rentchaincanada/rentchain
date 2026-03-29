@@ -257,6 +257,19 @@ export type ExpenseImportPreviewRow = {
   sourceFileName: string;
   confidence: number | null;
   warnings: string[];
+  warningCodes: string[];
+  duplicateStatus: "none" | "possible_duplicate" | "likely_duplicate";
+  duplicateReason?: string | null;
+  duplicateMatches?: Array<{
+    expenseId?: string | null;
+    source: "existing" | "batch";
+    date?: string | null;
+    vendor?: string | null;
+    description?: string | null;
+    amount?: number | null;
+    property?: string | null;
+  }>;
+  lowConfidence?: boolean;
   include?: boolean;
 };
 
@@ -265,6 +278,8 @@ export type ExpenseImportPreviewSummary = {
   lowConfidence: number;
   unresolvedProperty: number;
   unresolvedUnit: number;
+  duplicateCount: number;
+  likelyDuplicateCount: number;
 };
 
 export type ExpenseImportPreviewResponse = {
@@ -304,6 +319,7 @@ export type ConfirmExpenseImportResponse = {
   ok: true;
   imported: number;
   skipped: number;
+  duplicateImported: number;
   errors: string[];
 };
 

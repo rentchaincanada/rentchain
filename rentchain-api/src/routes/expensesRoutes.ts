@@ -16,6 +16,7 @@ import {
 } from "../services/expenses/expenseIngestionService";
 import type {
   ExpenseImportConfirmRow,
+  ExpenseExistingLookupRow,
   ExpenseImportPreviewResult,
   ExpensePropertyOption,
   ExpenseUnitOption,
@@ -150,6 +151,29 @@ async function listExpenseImportPropertiesAndUnits(req: any, landlordId: string)
     };
   });
   return { properties, units };
+}
+
+async function listExistingExpensesForImport(req: any, landlordId: string, properties: ExpensePropertyOption[]) {
+  const role = normalizeRole(req);
+  let query: FirebaseFirestore.Query = db.collection("expenses");
+  if (role !== "admin") {
+    query = query.where("landlordId", "==", landlordId);
+  }
+  const snap = await query.limit(1200).get();
+  const propertyNames = new Map(properties.map((property) => [property.id, property.name]));
+  return snap.docs.map((doc) => {
+    const data = doc.data() as any;
+    const incurredAtMs = Number(data?.incurredAtMs || 0);
+    return {
+      expenseId: doc.id,
+      date: Number.isFinite(incurredAtMs) && incurredAtMs > 0 ? new Date(incurredAtMs).toISOString().slice(0, 10) : null,
+      amount: Number.isFinite(Number(data?.amountCents)) ? Number(data.amountCents) / 100 : null,
+      vendor: String(data?.vendorName || "").trim() || null,
+      description: String(data?.notes || "").trim() || null,
+      property: propertyNames.get(String(data?.propertyId || "").trim()) || null,
+      propertyId: String(data?.propertyId || "").trim() || null,
+    } satisfies ExpenseExistingLookupRow;
+  });
 }
 
 async function requireProExpenseAccess(req: any, res: any) {
@@ -961,6 +985,7 @@ router.post("/expenses/import/preview", requireAuth, (req: any, res) => {
 
       const landlordId = entitlements.landlordId || landlordIdFromReq(req);
       const { properties, units } = await listExpenseImportPropertiesAndUnits(req, landlordId);
+      const existingExpenses = await listExistingExpensesForImport(req, landlordId, properties);
       const defaultPropertyId = String(req.body?.defaultPropertyId || "").trim() || null;
 
       const previews: ExpenseImportPreviewResult[] = [];
@@ -977,6 +1002,7 @@ router.post("/expenses/import/preview", requireAuth, (req: any, res) => {
               properties,
               units,
               defaultPropertyId,
+              existingExpenses,
             })
           );
           continue;
@@ -993,6 +1019,7 @@ router.post("/expenses/import/preview", requireAuth, (req: any, res) => {
                   properties,
                   units,
                   defaultPropertyId,
+                  existingExpenses,
                 })
               : previewDelimitedExpenseFile({
                   fileName,
@@ -1000,6 +1027,7 @@ router.post("/expenses/import/preview", requireAuth, (req: any, res) => {
                   properties,
                   units,
                   defaultPropertyId,
+                  existingExpenses,
                 })
           );
           continue;
@@ -1030,6 +1058,7 @@ router.post("/expenses/import/preview", requireAuth, (req: any, res) => {
             properties,
             units,
             aiSummary,
+            existingExpenses,
           })
         );
       }
