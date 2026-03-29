@@ -169,8 +169,62 @@ describe("properties routes publish + defaults", () => {
 
     expect(res.status).toBe(201);
     expect(res.body?.status).toBe("DRAFT");
+    expect(res.body?.portfolioStatus).toBe("active");
     expect(res.body?.screeningRequiredBeforeApproval).toBe(true);
     expect(res.body?.publishedAt).toBeNull();
+  });
+
+  it("excludes archived properties by default and returns them when filtered", async () => {
+    seedDoc("properties", "prop-active", {
+      landlordId: "landlord-1",
+      name: "Active Property",
+      createdAt: "2026-03-01T00:00:00.000Z",
+      portfolioStatus: "active",
+    });
+    seedDoc("properties", "prop-archived", {
+      landlordId: "landlord-1",
+      name: "Archived Property",
+      createdAt: "2026-03-02T00:00:00.000Z",
+      portfolioStatus: "archived",
+    });
+
+    const app = await createApp();
+    const activeRes = await request(app).get("/api/properties");
+    const archivedRes = await request(app).get("/api/properties?status=archived");
+
+    expect(activeRes.status).toBe(200);
+    expect(activeRes.body.items).toHaveLength(1);
+    expect(activeRes.body.items[0]?.id).toBe("prop-active");
+
+    expect(archivedRes.status).toBe(200);
+    expect(archivedRes.body.items).toHaveLength(1);
+    expect(archivedRes.body.items[0]?.id).toBe("prop-archived");
+  });
+
+  it("archives a property without deleting related records", async () => {
+    seedDoc("properties", "prop-archive", {
+      landlordId: "landlord-1",
+      name: "Archive Me",
+      portfolioStatus: "active",
+    });
+    seedDoc("units", "unit-archive", {
+      landlordId: "landlord-1",
+      propertyId: "prop-archive",
+      unitNumber: "10",
+    });
+
+    const app = await createApp();
+    const res = await request(app).post("/api/properties/prop-archive/archive").send({});
+
+    expect(res.status).toBe(200);
+    expect(res.body?.property?.portfolioStatus).toBe("archived");
+
+    const activeRes = await request(app).get("/api/properties");
+    const archivedRes = await request(app).get("/api/properties?status=archived");
+
+    expect(activeRes.body.items).toHaveLength(0);
+    expect(archivedRes.body.items).toHaveLength(1);
+    expect(archivedRes.body.items[0]?.id).toBe("prop-archive");
   });
 
   it("returns units_required when publishing with no units", async () => {
@@ -210,4 +264,3 @@ describe("properties routes publish + defaults", () => {
     expect(typeof res.body?.property?.publishedAt).toBe("number");
   });
 });
-
