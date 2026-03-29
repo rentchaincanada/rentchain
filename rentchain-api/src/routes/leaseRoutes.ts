@@ -25,6 +25,7 @@ import { evaluateSameLeaseAgreement, groupLeaseAgreementCandidates, pickAgreemen
 import { loadPropertyLeaseIntegrityDiagnostics } from "../services/leaseIntegrityService";
 import { buildLeaseRiskPersistenceFields, computeLeaseRiskSnapshot } from "../services/risk/recomputeLeaseRisk";
 import { loadPropertyCredibilitySummary } from "../services/risk/propertyCredibilitySummary";
+import { filterPropertyScopedLeases } from "../services/risk/propertyLeaseIsolation";
 
 const router = Router();
 const LEDGER_COLLECTION = "ledgerEntries";
@@ -653,7 +654,18 @@ router.get("/property/:propertyId", requireLandlord, async (req: any, res: Respo
       ...memoryLeases.map((lease) => ({ lease: toCanonicalLeaseRecord(lease.id, lease as any, units), raw: lease as any })),
       ...firestoreLeaseRows.map((entry: any) => ({ lease: toCanonicalLeaseRecord(entry.lease.id, entry.raw, units), raw: entry.raw })),
     ].filter((entry) => entry.lease.status);
-    const grouped = groupLeaseAgreementCandidates(agreementCandidates);
+    const { included: scopedAgreementCandidates } = filterPropertyScopedLeases({
+      leases: agreementCandidates.map((candidate) => candidate.lease),
+      requestedPropertyId: propertyId,
+      requestedLandlordId: landlordId,
+      units,
+      logger: (message, detail) => {
+        console.warn(message, detail);
+      },
+    });
+    const allowedLeaseIds = new Set(scopedAgreementCandidates.map((lease) => lease.id));
+    const filteredAgreementCandidates = agreementCandidates.filter((candidate) => allowedLeaseIds.has(candidate.lease.id));
+    const grouped = groupLeaseAgreementCandidates(filteredAgreementCandidates);
     const winnerIds = new Set<string>();
     grouped.mergeGroups.forEach((group) => winnerIds.add(pickAgreementWinner(group.candidates).lease.id));
     grouped.ambiguousGroups.forEach((group) => winnerIds.add(pickAgreementWinner(group.candidates).lease.id));
