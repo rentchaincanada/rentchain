@@ -1,5 +1,6 @@
 import type { Firestore } from "firebase-admin/firestore";
 import type { RiskGrade } from "./riskTypes";
+import { filterPropertyScopedLeases } from "./propertyLeaseIsolation";
 
 export const PROPERTY_CREDIBILITY_LOW_CONFIDENCE_THRESHOLD = 0.65;
 
@@ -21,6 +22,11 @@ export type PropertyCredibilitySummary = {
 
 export type PropertyCredibilityLeaseRecord = {
   id: string;
+  landlordId?: string | null;
+  propertyId?: string | null;
+  unitId?: string | null;
+  unitNumber?: string | null;
+  unitLabel?: string | null;
   status?: string | null;
   tenantId?: string | null;
   tenantIds?: string[];
@@ -150,7 +156,15 @@ export async function loadPropertyCredibilitySummary(options: {
   landlordId?: string | null;
   leases: PropertyCredibilityLeaseRecord[];
 }): Promise<PropertyCredibilitySummary> {
-  const tenantIds = Array.from(new Set(options.leases.flatMap((lease) => toTenantIds(lease))));
+  const { included: scopedLeases, excluded } = filterPropertyScopedLeases({
+    leases: options.leases,
+    requestedPropertyId: options.propertyId,
+    requestedLandlordId: options.landlordId,
+    logger: (message, detail) => {
+      console.warn(message, detail);
+    },
+  });
+  const tenantIds = Array.from(new Set(scopedLeases.flatMap((lease) => toTenantIds(lease))));
   const tenantSnapshots: Array<TenantCredibilityRecord | null> = await Promise.all(
     tenantIds.map(async (tenantId) => {
       try {
@@ -177,7 +191,7 @@ export async function loadPropertyCredibilitySummary(options: {
 
   return computePropertyCredibilitySummary({
     propertyId: options.propertyId,
-    leases: options.leases,
+    leases: scopedLeases,
     tenants: tenantSnapshots.filter((tenant): tenant is TenantCredibilityRecord => Boolean(tenant)),
   });
 }
