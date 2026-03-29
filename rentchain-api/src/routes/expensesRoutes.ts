@@ -8,6 +8,18 @@ import Papa from "papaparse";
 import PDFDocument from "pdfkit";
 import { runAIAgent } from "../ai/agent";
 import { getUserEntitlements } from "../services/entitlementsService";
+import {
+  confirmExpenseImport,
+  previewDelimitedExpenseFile,
+  previewDocumentTextFile,
+  previewSpreadsheetXmlFile,
+} from "../services/expenses/expenseIngestionService";
+import type {
+  ExpenseImportConfirmRow,
+  ExpenseImportPreviewResult,
+  ExpensePropertyOption,
+  ExpenseUnitOption,
+} from "../services/expenses/expenseIngestionTypes";
 
 const router = Router();
 
@@ -32,7 +44,7 @@ type ExpenseStatus = (typeof EXPENSE_STATUSES)[number];
 type ExpenseSource = (typeof EXPENSE_SOURCES)[number];
 
 const MAX_SOURCE_FILE_BYTES = Number(process.env.EXPENSE_UPLOAD_MAX_BYTES || 10 * 1024 * 1024);
-const ALLOWED_EXTENSIONS = new Set([".csv", ".xls", ".xlsx", ".doc", ".docx", ".pdf"]);
+const ALLOWED_EXTENSIONS = new Set([".csv", ".xls", ".xlsx", ".doc", ".docx", ".pdf", ".jpg", ".jpeg", ".png"]);
 const ALLOWED_MIME_TYPES = new Set([
   "text/csv",
   "application/vnd.ms-excel",
@@ -40,6 +52,8 @@ const ALLOWED_MIME_TYPES = new Set([
   "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "application/pdf",
+  "image/jpeg",
+  "image/png",
   "application/octet-stream",
 ]);
 
@@ -108,6 +122,34 @@ async function getExpenseEntitlements(req: any) {
     landlordIdHint: landlordIdFromReq(req),
     emailHint: req.user?.email || null,
   });
+}
+
+async function listExpenseImportPropertiesAndUnits(req: any, landlordId: string) {
+  const role = normalizeRole(req);
+  let propertyQuery: FirebaseFirestore.Query = db.collection("properties");
+  let unitQuery: FirebaseFirestore.Query = db.collection("units");
+  if (role !== "admin") {
+    propertyQuery = propertyQuery.where("landlordId", "==", landlordId);
+    unitQuery = unitQuery.where("landlordId", "==", landlordId);
+  }
+  const [propertySnap, unitSnap] = await Promise.all([propertyQuery.limit(500).get(), unitQuery.limit(1000).get()]);
+
+  const properties: ExpensePropertyOption[] = propertySnap.docs.map((doc) => {
+    const data = doc.data() as any;
+    return {
+      id: doc.id,
+      name: String(data?.name || data?.addressLine1 || data?.address || doc.id),
+    };
+  });
+  const units: ExpenseUnitOption[] = unitSnap.docs.map((doc) => {
+    const data = doc.data() as any;
+    return {
+      id: doc.id,
+      propertyId: String(data?.propertyId || "").trim(),
+      label: String(data?.unitNumber || data?.label || data?.name || data?.unitLabel || doc.id),
+    };
+  });
+  return { properties, units };
 }
 
 async function requireProExpenseAccess(req: any, res: any) {
@@ -887,6 +929,185 @@ router.post("/expenses/analyze-upload", requireAuth, async (req: any, res) => {
   } catch (err: any) {
     console.error("[expenses] analyze upload failed", err?.message || err);
     return res.status(500).json({ ok: false, error: "EXPENSE_ANALYZE_UPLOAD_FAILED" });
+  }
+});
+
+router.post("/expenses/import/preview", requireAuth, (req: any, res) => {
+  upload.array("files", 12)(req, res, async (uploadErr: any) => {
+    try {
+      if (uploadErr) {
+        const message = String(uploadErr?.message || "");
+        if (message.includes("UNSUPPORTED_FILE_TYPE")) {
+          return res.status(400).json({ ok: false, error: "UNSUPPORTED_FILE_TYPE" });
+        }
+        if (String(uploadErr?.code || "") === "LIMIT_FILE_SIZE") {
+          return res.status(400).json({ ok: false, error: "FILE_TOO_LARGE", maxBytes: MAX_SOURCE_FILE_BYTES });
+        }
+        return res.status(400).json({ ok: false, error: "UPLOAD_FAILED", detail: message || "upload_failed" });
+      }
+
+      const role = normalizeRole(req);
+      if (role !== "landlord" && role !== "admin") {
+        return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+      }
+
+      const entitlements = await requireProExpenseAccess(req, res);
+      if (!entitlements) return;
+
+      const files = Array.isArray(req.files) ? (req.files as Express.Multer.File[]) : [];
+      if (!files.length) {
+        return res.status(400).json({ ok: false, error: "FILES_REQUIRED" });
+      }
+
+      const landlordId = entitlements.landlordId || landlordIdFromReq(req);
+      const { properties, units } = await listExpenseImportPropertiesAndUnits(req, landlordId);
+      const defaultPropertyId = String(req.body?.defaultPropertyId || "").trim() || null;
+
+      const previews: ExpenseImportPreviewResult[] = [];
+      for (const file of files) {
+        const fileName = sanitizeFilename(file.originalname || `expense-import-${Date.now()}`);
+        const ext = path.extname(fileName).toLowerCase();
+        const textPreview = toTextPreview(file);
+
+        if (ext === ".csv") {
+          previews.push(
+            previewDelimitedExpenseFile({
+              fileName,
+              csvText: file.buffer.toString("utf8"),
+              properties,
+              units,
+              defaultPropertyId,
+            })
+          );
+          continue;
+        }
+
+        if (ext === ".xls" || ext === ".xlsx") {
+          const spreadsheetText = file.buffer.toString("utf8");
+          const isSpreadsheetXml = spreadsheetText.includes("<Workbook") && spreadsheetText.includes("<Row>");
+          previews.push(
+            isSpreadsheetXml
+              ? previewSpreadsheetXmlFile({
+                  fileName,
+                  xmlText: spreadsheetText,
+                  properties,
+                  units,
+                  defaultPropertyId,
+                })
+              : previewDelimitedExpenseFile({
+                  fileName,
+                  csvText: textPreview,
+                  properties,
+                  units,
+                  defaultPropertyId,
+                })
+          );
+          continue;
+        }
+
+        let aiSummary: string | null = null;
+        try {
+          const ai = await runAIAgent({
+            requestId: `expense_import_preview_${Date.now()}_${fileName}`,
+            inputType: "expense_import_preview",
+            inputData: {
+              sourceDocumentName: fileName,
+              sourceDocumentMimeType: String(file.mimetype || ""),
+              textPreview: textPreview.slice(0, 4000),
+              instruction:
+                "Summarize likely expense details and call out anything that needs manual review. Do not assume missing values.",
+            },
+          });
+          aiSummary = String(ai?.output?.summary || "").trim() || null;
+        } catch {
+          aiSummary = null;
+        }
+
+        previews.push(
+          previewDocumentTextFile({
+            fileName,
+            textPreview,
+            properties,
+            units,
+            aiSummary,
+          })
+        );
+      }
+
+      const mergedRows = previews.flatMap((preview) => preview.rows);
+      const mergedFiles = previews.flatMap((preview) => preview.files);
+      const summary = {
+        parsed: mergedRows.length,
+        lowConfidence: mergedRows.filter((row) => (row.confidence ?? 0) < 0.75).length,
+        unresolvedProperty: mergedRows.filter((row) => !row.propertyId).length,
+        unresolvedUnit: mergedRows.filter((row) => Boolean(row.unit) && !row.unitId).length,
+      };
+
+      return res.json({
+        ok: true,
+        files: mergedFiles,
+        rows: mergedRows,
+        summary,
+      });
+    } catch (err: any) {
+      console.error("[expenses] import preview failed", err?.message || err);
+      return res.status(500).json({ ok: false, error: "EXPENSE_IMPORT_PREVIEW_FAILED" });
+    }
+  });
+});
+
+router.post("/expenses/import/confirm", requireAuth, async (req: any, res) => {
+  try {
+    const role = normalizeRole(req);
+    if (role !== "landlord" && role !== "admin") {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const entitlements = await requireProExpenseAccess(req, res);
+    if (!entitlements) return;
+
+    const rows = Array.isArray(req.body?.rows) ? (req.body.rows as ExpenseImportConfirmRow[]) : [];
+    if (!rows.length) {
+      return res.status(400).json({ ok: false, error: "ROWS_REQUIRED" });
+    }
+
+    const landlordId = entitlements.landlordId || landlordIdFromReq(req);
+    const { properties, units } = await listExpenseImportPropertiesAndUnits(req, landlordId);
+    const result = await confirmExpenseImport({
+      rows,
+      properties,
+      units,
+      createExpense: async (payload) => {
+        const createdAtMs = nowMs();
+        await db.collection("expenses").add({
+          landlordId,
+          propertyId: payload.propertyId,
+          unitId: payload.unitId,
+          category: payload.category,
+          vendorName: payload.vendorName,
+          amountCents: payload.amountCents,
+          incurredAtMs: payload.incurredAtMs,
+          notes: payload.notes,
+          status: "recorded",
+          source: "imported",
+          linkedWorkOrderId: null,
+          receiptFileUrl: null,
+          sourceDocumentUrl: null,
+          sourceDocumentName: payload.sourceDocumentName,
+          sourceDocumentMimeType: payload.sourceDocumentMimeType || null,
+          aiSummary: payload.aiSummary || null,
+          aiExtractedFields: null,
+          aiProcessedAtMs: createdAtMs,
+          createdAtMs,
+          updatedAtMs: createdAtMs,
+        });
+      },
+    });
+
+    return res.json({ ok: true, ...result });
+  } catch (err: any) {
+    console.error("[expenses] import confirm failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "EXPENSE_IMPORT_CONFIRM_FAILED" });
   }
 });
 

@@ -18,4 +18,16 @@ describe("ExpenseImportSummaryCard", () => {
     expect(screen.getByText('Row 4: property "Summit" was not found in your portfolio.')).toBeInTheDocument();
     expect(screen.queryByText(/with imported\/skipped/i)).not.toBeInTheDocument();
   });
+
+  it("renders preview counts cleanly for review mode", () => {
+    render(
+      <ExpenseImportSummaryCard parsed={4} lowConfidence={2} unresolvedProperty={1} unresolvedUnit={1} />
+    );
+
+    expect(screen.getByText("Import review summary")).toBeInTheDocument();
+    expect(screen.getByText("4 parsed")).toBeInTheDocument();
+    expect(screen.getByText("2 low confidence")).toBeInTheDocument();
+    expect(screen.getByText("1 property needs review")).toBeInTheDocument();
+    expect(screen.getByText("1 unit needs review")).toBeInTheDocument();
+  });
 });

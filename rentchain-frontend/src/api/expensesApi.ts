@@ -240,3 +240,82 @@ export async function analyzeExpenseUpload(input: {
   if (!res?.ok) throw new Error("Failed to analyze expense upload");
   return res;
 }
+
+export type ExpenseImportPreviewRow = {
+  rowId: string;
+  date: string | null;
+  property: string | null;
+  propertyId: string | null;
+  unit: string | null;
+  unitId: string | null;
+  category: string | null;
+  vendor: string | null;
+  description: string | null;
+  amount: number | null;
+  currency: string | null;
+  notes: string | null;
+  sourceFileName: string;
+  confidence: number | null;
+  warnings: string[];
+  include?: boolean;
+};
+
+export type ExpenseImportPreviewSummary = {
+  parsed: number;
+  lowConfidence: number;
+  unresolvedProperty: number;
+  unresolvedUnit: number;
+};
+
+export type ExpenseImportPreviewResponse = {
+  ok: true;
+  files: Array<{
+    name: string;
+    type: string;
+    rowsParsed: number;
+  }>;
+  rows: ExpenseImportPreviewRow[];
+  summary: ExpenseImportPreviewSummary;
+};
+
+export async function previewExpenseImport(input: {
+  files: File[];
+  defaultPropertyId?: string | null;
+}) {
+  const form = new FormData();
+  for (const file of input.files) {
+    form.append("files", file);
+  }
+  if (input.defaultPropertyId) {
+    form.append("defaultPropertyId", input.defaultPropertyId);
+  }
+
+  const res = await apiFetch<ExpenseImportPreviewResponse>("/expenses/import/preview", {
+    method: "POST",
+    body: form,
+  });
+  if (!res?.ok) {
+    throw new Error("Failed to preview imported expenses");
+  }
+  return res;
+}
+
+export type ConfirmExpenseImportResponse = {
+  ok: true;
+  imported: number;
+  skipped: number;
+  errors: string[];
+};
+
+export async function confirmExpenseImportRows(input: {
+  rows: ExpenseImportPreviewRow[];
+}) {
+  const res = await apiFetch<ConfirmExpenseImportResponse>("/expenses/import/confirm", {
+    method: "POST",
+    body: input,
+  });
+  if (!res?.ok) {
+    throw new Error("Failed to confirm expense import");
+  }
+  return res;
+}
