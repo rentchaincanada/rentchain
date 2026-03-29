@@ -68,6 +68,8 @@ afterEach(() => {
 
 describe("DashboardPage", () => {
   beforeEach(() => {
+    window.localStorage.removeItem("rentchain.landlordWelcome.pending.landlord-1");
+    window.localStorage.removeItem("rentchain.landlordWelcome.seen.landlord-1");
     Object.defineProperty(window, "matchMedia", {
       writable: true,
       value: vi.fn().mockImplementation((query: string) => ({
@@ -155,5 +157,20 @@ describe("DashboardPage", () => {
     });
 
     expect(screen.getByText("Get your first tenant screened")).toBeInTheDocument();
+  });
+
+  it("shows the landlord welcome modal when a fresh signup marker exists", async () => {
+    window.localStorage.setItem("rentchain.landlordWelcome.pending.landlord-1", "1");
+
+    render(
+      <ToastProvider>
+        <MemoryRouter>
+          <DashboardPage />
+        </MemoryRouter>
+      </ToastProvider>
+    );
+
+    expect(await screen.findByText("Welcome to RentChain")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start setup" })).toBeInTheDocument();
   });
 });

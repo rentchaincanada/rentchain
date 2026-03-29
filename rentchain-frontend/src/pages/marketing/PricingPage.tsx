@@ -63,7 +63,7 @@ const PricingPage: React.FC = () => {
     width: "100%",
     maxWidth: isMobile ? 520 : "100%",
     margin: "0 auto",
-    padding: isMobile ? "0 8px" : 0,
+    padding: 0,
     boxSizing: "border-box",
     overflowX: isMobile ? "hidden" : undefined,
   };
@@ -163,7 +163,18 @@ const PricingPage: React.FC = () => {
 
   return (
     <MarketingLayout>
-      <div style={{ width: "100%", maxWidth: 1180, margin: "0 auto", display: "grid", gap: spacing.lg, overflowX: "hidden" }}>
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 1180,
+          margin: "0 auto",
+          display: "grid",
+          gap: isMobile ? spacing.md : spacing.lg,
+          overflowX: "hidden",
+          padding: isMobile ? `0 ${spacing.md}px ${spacing.lg}px` : 0,
+          boxSizing: "border-box",
+        }}
+      >
         <div>
           <h1 style={{ margin: 0, fontSize: "clamp(2rem, 4vw, 3rem)", lineHeight: 1.1 }}>
             {copy.pricing.headline}

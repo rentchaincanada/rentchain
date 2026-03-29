@@ -41,6 +41,25 @@ const MetricTile: React.FC<{ label: string; value: React.ReactNode; caption?: Re
 );
 
 export const PortfolioCredibilitySummaryCard: React.FC<PortfolioCredibilitySummaryCardProps> = ({ summary }) => {
+  const [isMobile, setIsMobile] = React.useState(false);
+
+  React.useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const media = window.matchMedia("(max-width: 767px)");
+    const update = () => setIsMobile(media.matches);
+    update();
+    if (typeof media.addEventListener === "function") {
+      media.addEventListener("change", update);
+      return () => media.removeEventListener("change", update);
+    }
+    media.addListener?.(update);
+    return () => media.removeListener?.(update);
+  }, []);
+
+  const metricsGridColumns = isMobile
+    ? "repeat(2, minmax(0, 1fr))"
+    : "repeat(auto-fit, minmax(180px, 1fr))";
+
   if (!summary || summary.healthStatus === "unknown") {
     return (
       <Card style={{ display: "grid", gap: spacing.md }}>
@@ -95,7 +114,7 @@ export const PortfolioCredibilitySummaryCard: React.FC<PortfolioCredibilitySumma
         </span>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: spacing.md }}>
+      <div style={{ display: "grid", gridTemplateColumns: metricsGridColumns, gap: spacing.md }}>
         <MetricTile
           label="Tenant score average"
           value={<RiskScoreBadge grade={summary.tenantScoreGradeAverage} score={summary.tenantScoreAverage} />}
@@ -110,7 +129,7 @@ export const PortfolioCredibilitySummaryCard: React.FC<PortfolioCredibilitySumma
         <MetricTile label="Properties represented" value={summary.propertyCount} caption="Properties contributing active credibility evidence" />
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: spacing.md }}>
+      <div style={{ display: "grid", gridTemplateColumns: metricsGridColumns, gap: spacing.md }}>
         <MetricTile label="Review items" value={summary.lowConfidenceCount} caption="Low-confidence records to review" />
         <MetricTile label="Missing credibility" value={summary.missingCredibilityCount} caption="Records without current score or risk data" />
       </div>
