@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import { MacShell } from "../components/layout/MacShell";
 import { useAuth } from "../context/useAuth";
 import {
   startTotpSetup,
@@ -11,7 +10,7 @@ import {
   disable2fa,
 } from "../api/authApi";
 import { QRCodeCanvas } from "qrcode.react";
-import { Card, Input, Button } from "../components/ui/Ui";
+import { Card, Input, Button, Section } from "../components/ui/Ui";
 import { colors, spacing, text } from "../styles/tokens";
 
 export const AccountSecurityPage: React.FC = () => {
@@ -123,16 +122,14 @@ export const AccountSecurityPage: React.FC = () => {
   };
 
   return (
-    <MacShell title="RentChain · Account security">
-      <div
-        style={{
-          maxWidth: 780,
-          margin: `${spacing.xl} auto`,
-          display: "flex",
-          flexDirection: "column",
-          gap: spacing.md,
-        }}
-      >
+    <Section
+      style={{
+        maxWidth: 780,
+        margin: "0 auto",
+        display: "grid",
+        gap: spacing.md,
+      }}
+    >
         <Card elevated>
           <h1
             style={{
@@ -705,8 +702,6 @@ export const AccountSecurityPage: React.FC = () => {
             </div>
           )}
         </Card>
-      </div>
-    </MacShell>
+    </Section>
   );
 };
-
