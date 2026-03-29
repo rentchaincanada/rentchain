@@ -116,7 +116,7 @@ const PricingPage: React.FC = () => {
   };
 
   return (
-    <MacShell title="RentChain · Pricing">
+    <MacShell title="RentChain · Pricing" showTopNav={false}>
       <Section style={{ maxWidth: 980, margin: "0 auto", display: "grid", gap: spacing.md }}>
         <Card elevated>
           <h1 style={{ margin: 0, fontSize: "1.5rem", fontWeight: 800 }}>Pricing</h1>
