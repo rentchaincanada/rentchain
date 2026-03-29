@@ -33,6 +33,7 @@ import { RiskScoreBadge } from "@/components/leases/RiskScoreBadge";
 import { PropertyCredibilitySummaryCard } from "@/components/properties/PropertyCredibilitySummaryCard";
 import type { PropertyCredibilitySummary } from "@/types/credibilitySummary";
 import { calculateConfiguredUnitRentTotal, resolveConfiguredUnitRent } from "@/lib/propertyRentSummary";
+import { getUnitsNeedingOccupancySetup } from "./occupancyPrompt";
 
 interface PropertyDetailPanelProps {
   property: Property | null;
@@ -428,20 +429,12 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
     () => new Set(activeLeases.map((lease) => lease.unitNumber)),
     [activeLeases]
   );
-  const hasCurrentOccupancyData = useMemo(
-    () =>
-      displayedUnits.some((unit: any) => {
-        const statusVal = String(unit?.status || "").toLowerCase();
-        return (
-          statusVal === "occupied" ||
-          Boolean(String(unit?.occupantName || "").trim()) ||
-          Boolean(String(unit?.leaseEndDate || "").trim())
-        );
-      }) || activeLeases.length > 0,
-    [activeLeases.length, displayedUnits]
+  const unitsNeedingOccupancySetup = useMemo(
+    () => getUnitsNeedingOccupancySetup(displayedUnits, activeLeases),
+    [activeLeases, displayedUnits]
   );
   const showOccupancyPrompt =
-    displayedUnits.length > 0 && !hasCurrentOccupancyData && !occupancyPromptDismissed;
+    displayedUnits.length > 0 && unitsNeedingOccupancySetup.length > 0 && !occupancyPromptDismissed;
 
   useEffect(() => {
     if (typeof window === "undefined" || !propertyId) return;
@@ -1114,7 +1107,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    setEditingUnit(displayedUnits[0] || null);
+                    setEditingUnit(unitsNeedingOccupancySetup[0] || displayedUnits[0] || null);
                     dismissOccupancyPrompt();
                   }}
                   style={{

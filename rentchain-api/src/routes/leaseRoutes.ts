@@ -25,7 +25,7 @@ import { evaluateSameLeaseAgreement, groupLeaseAgreementCandidates, pickAgreemen
 import { loadPropertyLeaseIntegrityDiagnostics } from "../services/leaseIntegrityService";
 import { buildLeaseRiskPersistenceFields, computeLeaseRiskSnapshot } from "../services/risk/recomputeLeaseRisk";
 import { loadPropertyCredibilitySummary } from "../services/risk/propertyCredibilitySummary";
-import { filterPropertyScopedLeases } from "../services/risk/propertyLeaseIsolation";
+import { dedupePropertyScopedLeasesByUnit, filterPropertyScopedLeases } from "../services/risk/propertyLeaseIsolation";
 
 const router = Router();
 const LEDGER_COLLECTION = "ledgerEntries";
@@ -666,10 +666,14 @@ router.get("/property/:propertyId", requireLandlord, async (req: any, res: Respo
     const allowedLeaseIds = new Set(scopedAgreementCandidates.map((lease) => lease.id));
     const filteredAgreementCandidates = agreementCandidates.filter((candidate) => allowedLeaseIds.has(candidate.lease.id));
     const grouped = groupLeaseAgreementCandidates(filteredAgreementCandidates);
-    const winnerIds = new Set<string>();
-    grouped.mergeGroups.forEach((group) => winnerIds.add(pickAgreementWinner(group.candidates).lease.id));
-    grouped.ambiguousGroups.forEach((group) => winnerIds.add(pickAgreementWinner(group.candidates).lease.id));
-    grouped.singles.forEach((candidate) => winnerIds.add(candidate.lease.id));
+    const groupedWinners = [
+      ...grouped.mergeGroups.map((group) => pickAgreementWinner(group.candidates).lease),
+      ...grouped.ambiguousGroups.map((group) => pickAgreementWinner(group.candidates).lease),
+      ...grouped.singles.map((candidate) => candidate.lease),
+    ];
+    const winnerIds = new Set(
+      dedupePropertyScopedLeasesByUnit(groupedWinners).map((lease) => lease.id)
+    );
 
     // Occupancy and rent roll consumers must operate on lease agreements, not per-tenant rows.
     const summaryLeases = mergeLeaseRows(combinedRows.filter((lease) => winnerIds.has(lease.id)));
