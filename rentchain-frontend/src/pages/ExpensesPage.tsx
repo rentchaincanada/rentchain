@@ -259,15 +259,31 @@ const ExpensesPage: React.FC = () => {
     }
   };
 
-  const handleChangePreviewRow = React.useCallback((rowId: string, patch: Partial<ExpenseImportPreviewRow>) => {
-    setPreviewRows((current) =>
-      current.map((row) => {
-        if (row.rowId !== rowId) return row;
-        return normalizePreviewRowForReview({ ...row, ...patch });
-      })
-    );
-  }, []);
+ const handleChangePreviewRow = React.useCallback((rowId: string, patch: Partial<ExpenseImportPreviewRow>) => {
+  setPreviewRows((current) =>
+    current.map((row) => {
+      if (row.rowId !== rowId) return row;
 
+      const next = { ...row, ...patch };
+      const warnings = new Set<string>();
+
+      for (const warning of next.warnings || []) {
+        if (!/needs review/i.test(warning)) warnings.add(warning);
+      }
+
+      if (!next.propertyId) warnings.add("Property needs review");
+      if (next.unit && !next.unitId) warnings.add("Unit needs review");
+      if (!next.category) warnings.add("Category needs review");
+      if (next.amount == null || Number.isNaN(Number(next.amount))) warnings.add("Amount needs review");
+      if (!next.date) warnings.add("Date needs review");
+
+      return normalizePreviewRowForReview({
+        ...next,
+        warnings: Array.from(warnings),
+      });
+    })
+  );
+}, []);
   React.useEffect(() => {
     if (!previewRows.length) return;
     setPreviewSummary({
