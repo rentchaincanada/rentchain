@@ -471,7 +471,7 @@ function App() {
           }
         />
         <Route
-          path="/admin/lease-overlaps"
+          path="/admin/lease-overlap-cleanup"
           element={
             <RequireAuth>
               <RequireAdmin>
@@ -482,6 +482,7 @@ function App() {
             </RequireAuth>
           }
         />
+        <Route path="/admin/lease-overlaps" element={<Navigate to="/admin/lease-overlap-cleanup" replace />} />
         <Route
           path="/screening"
           element={
