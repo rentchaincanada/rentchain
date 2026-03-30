@@ -125,6 +125,7 @@ const AdminVerifiedScreeningsPage = lazy(() => import("./pages/AdminVerifiedScre
 const AdminDashboardPage = lazy(() => import("./pages/admin/AdminDashboardPage"));
 const ControlTowerPage = lazy(() => import("./pages/admin/ControlTowerPage"));
 const AdminLeadsPage = lazyWithRetry(() => import("./pages/admin/AdminLeadsPage"));
+const AdminLeaseOverlapCleanupPage = lazy(() => import("./pages/admin/AdminLeaseOverlapCleanupPage"));
 const AutomationTimelinePage = lazy(
   () => import("./features/automation/timeline/AutomationTimelinePage")
 );
@@ -466,6 +467,18 @@ function App() {
                   </Suspense>
                 </RequireAdmin>
               </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/lease-overlaps"
+          element={
+            <RequireAuth>
+              <RequireAdmin>
+                <Suspense fallback={null}>
+                  <AdminLeaseOverlapCleanupPage />
+                </Suspense>
+              </RequireAdmin>
             </RequireAuth>
           }
         />
