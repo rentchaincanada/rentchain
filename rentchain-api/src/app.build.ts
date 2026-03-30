@@ -91,6 +91,7 @@ import workOrdersRoutes from "./routes/workOrdersRoutes";
 import transunionRoutes from "./services/integrations/transunion/transunionRoutes";
 import viewingRoutes from "./routes/viewingRoutes";
 import screeningOpsRoutes from "./routes/screeningOpsRoutes";
+import leaseOverlapCleanupRoutes from "./routes/leaseOverlapCleanupRoutes";
 
 process.on("unhandledRejection", (reason) => {
   console.error("[FATAL] unhandledRejection", reason);
@@ -248,6 +249,7 @@ app.use("/api", routeSource("usageBreakdownRoutes.ts"), usageBreakdownRoutes);
 app.use("/api/properties", propertiesRoutes);
 app.use("/api/integrations", routeSource("transunionRoutes.ts"), transunionRoutes);
 app.use("/api", routeSource("screeningOpsRoutes.ts"), screeningOpsRoutes);
+app.use("/api", routeSource("leaseOverlapCleanupRoutes.ts"), leaseOverlapCleanupRoutes);
 app.use("/api", routeSource("rentalApplicationsRoutes.ts"), rentalApplicationsRoutes);
 if (process.env.NODE_ENV !== "production") {
   console.log("[boot] mounted rentalApplicationsRoutes at /api (review-summary endpoints enabled)");
