@@ -2,11 +2,11 @@ import type { Firestore } from "firebase-admin/firestore";
 import { db } from "../../config/firebase";
 import {
   CURRENT_LEASE_STATUSES,
+  compareLeaseWinner,
   loadUnitsForProperty,
   resolveUnitReference,
   toCanonicalLeaseRecord,
   type CanonicalLeaseRecord,
-  type CanonicalUnitRecord,
 } from "../leaseCanonicalizationService";
 import {
   evaluateAgreementTermMatch,
@@ -20,6 +20,7 @@ import type {
   LeaseOverlapAuditGroup,
   LeaseOverlapAuditReport,
   LeaseOverlapSeverity,
+  LeaseOverlapSuggestion,
   LeaseOverlapType,
 } from "./leaseOverlapAuditTypes";
 
@@ -96,6 +97,124 @@ function buildSourceHints(candidates: LeaseAgreementCandidate[]): string[] {
   );
 }
 
+function toDayMillis(value: string | null | undefined): number | null {
+  const key = toDateKey(value);
+  if (!key) return null;
+  const millis = Date.parse(`${key}T00:00:00.000Z`);
+  return Number.isFinite(millis) ? millis : null;
+}
+
+function buildSuggestionFromCandidates(input: {
+  candidates: LeaseAgreementCandidate[];
+  leaseIds?: string[];
+  currentLeaseHints?: string[];
+}): LeaseOverlapSuggestion {
+  const candidates = input.candidates || [];
+  const currentLeaseHints = input.currentLeaseHints || [];
+  const fallbackLeaseIds = input.leaseIds || candidates.map((candidate) => candidate.lease.id);
+
+  if (!fallbackLeaseIds.length) {
+    return {
+      suggestedCanonicalLeaseId: null,
+      suggestedLoserLeaseIds: [],
+      suggestionConfidence: "low",
+      suggestionReasons: ["No current leases were available to compare for this overlap group."],
+    };
+  }
+
+  if (!candidates.length) {
+    const suggestedCanonicalLeaseId = currentLeaseHints[0] || fallbackLeaseIds[0] || null;
+    return {
+      suggestedCanonicalLeaseId,
+      suggestedLoserLeaseIds: fallbackLeaseIds.filter((leaseId) => leaseId !== suggestedCanonicalLeaseId),
+      suggestionConfidence: "low",
+      suggestionReasons: [
+        "Suggestion is based on pointer or overlap hints only, so a manual review is still needed before preview.",
+      ],
+    };
+  }
+
+  const latestStartMillis = Math.max(
+    ...candidates.map((candidate) => toDayMillis(candidate.lease.leaseStartDate) ?? Number.NEGATIVE_INFINITY)
+  );
+
+  const scored = candidates.map((candidate) => {
+    const reasons: string[] = [];
+    let score = 0;
+    const lease = candidate.lease;
+
+    if (lease.hasResolvedUnit) {
+      score += 3;
+      reasons.push("Resolves cleanly to the property unit.");
+    }
+    if (lease.sourceMonthlyRent > 0) {
+      score += 2;
+      reasons.push("Includes rent data.");
+    }
+    if (lease.leaseStartDate && lease.leaseEndDate) {
+      score += 2;
+      reasons.push("Includes complete lease dates.");
+    } else if (lease.leaseStartDate) {
+      score += 1;
+      reasons.push("Includes a lease start date.");
+    }
+    if (currentLeaseHints.includes(lease.id)) {
+      score += 3;
+      reasons.push("Matches current tenant pointer hints.");
+    }
+    if (lease.migrationSourceRank >= 2) {
+      score += 2;
+      reasons.push("Looks less like a migration duplicate than competing rows.");
+    } else if (lease.migrationSourceRank === 1) {
+      score += 1;
+    }
+    const startMillis = toDayMillis(lease.leaseStartDate);
+    if (startMillis != null && startMillis === latestStartMillis) {
+      score += 1;
+      reasons.push("Has the latest valid lease start date in this overlap group.");
+    }
+
+    return { candidate, score, reasons };
+  });
+
+  const sorted = [...scored].sort((a, b) => {
+    const byScore = b.score - a.score;
+    if (byScore !== 0) return byScore;
+    return compareLeaseWinner(a.candidate.lease, b.candidate.lease);
+  });
+
+  const winner = sorted[0];
+  const second = sorted[1] || null;
+  const winnerReasons = [...(winner?.reasons || [])];
+  const hasWeakerMigrationLoser =
+    Boolean(winner) &&
+    sorted.slice(1).some((entry) => entry.candidate.lease.migrationSourceRank < winner.candidate.lease.migrationSourceRank);
+  if (hasWeakerMigrationLoser) {
+    winnerReasons.unshift("Looks less like a migration duplicate than competing rows.");
+  }
+  const suggestionConfidence =
+    !second || winner.score - second.score >= 4
+      ? "high"
+      : winner.score - second.score >= 2
+        ? "medium"
+        : "low";
+
+  return {
+    suggestedCanonicalLeaseId: winner?.candidate.lease.id || null,
+    suggestedLoserLeaseIds: sorted
+      .slice(1)
+      .map((entry) => entry.candidate.lease.id)
+      .filter(Boolean),
+    suggestionConfidence,
+    suggestionReasons:
+      winnerReasons.length && suggestionConfidence !== "low"
+        ? winnerReasons.slice(0, 4)
+        : winnerReasons.length
+          ? [...winnerReasons.slice(0, 2), "Competing leases still look similar, so review before applying."]
+          : ["Competing leases look similar, so review before applying."],
+  };
+}
+
 function buildGroup(input: {
   overlapType: LeaseOverlapType;
   severity: LeaseOverlapSeverity;
@@ -119,6 +238,10 @@ function buildGroup(input: {
   const tenantIds = Array.from(
     new Set(candidates.flatMap((candidate) => getLeasePartyIds(candidate.raw, candidate.lease)))
   );
+  const suggestion = buildSuggestionFromCandidates({
+    candidates,
+    currentLeaseHints: input.currentLeaseHints,
+  });
 
   return {
     landlordId: input.landlordId,
@@ -140,6 +263,7 @@ function buildGroup(input: {
     sourceHints: input.sourceHints || buildSourceHints(candidates),
     recommendedReviewAction: input.recommendedReviewAction,
     generatedAt: input.generatedAt,
+    ...suggestion,
   };
 }
 
@@ -404,6 +528,11 @@ export async function generateLeaseOverlapAuditReport(options?: {
         sourceHints: [],
         recommendedReviewAction: issue.recommendedFix,
         generatedAt,
+        ...buildSuggestionFromCandidates({
+          candidates: candidates.filter((candidate) => issue.relatedLeaseIds.includes(candidate.lease.id)),
+          leaseIds: issue.relatedLeaseIds,
+          currentLeaseHints: issue.relatedLeaseIds,
+        }),
       });
     });
 
