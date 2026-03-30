@@ -17,6 +17,12 @@ const severityTone = {
   low: { background: "rgba(100,116,139,0.12)", color: "#475569", border: "1px solid rgba(148,163,184,0.22)" },
 } as const;
 
+const suggestionTone = {
+  high: { background: "rgba(34,197,94,0.12)", color: "#166534", border: "1px solid rgba(34,197,94,0.22)" },
+  medium: { background: "rgba(245,158,11,0.14)", color: "#b45309", border: "1px solid rgba(245,158,11,0.24)" },
+  low: { background: "rgba(100,116,139,0.12)", color: "#475569", border: "1px solid rgba(148,163,184,0.22)" },
+} as const;
+
 const overlapTypeLabel: Record<string, string> = {
   duplicate_current_same_unitId: "Same unitId overlap",
   duplicate_current_same_logical_unit: "Logical unit overlap",
@@ -131,11 +137,20 @@ const AdminLeaseOverlapCleanupPage: React.FC = () => {
   const selectedGroup = filteredGroups.find((group) => groupKey(group) === selectedKey) || null;
 
   useEffect(() => {
-    setCanonicalLeaseId(selectedGroup?.leaseIds?.[0] || "");
+    const nextCanonical =
+      selectedGroup?.suggestionConfidence === "high" && selectedGroup?.suggestedCanonicalLeaseId
+        ? selectedGroup.suggestedCanonicalLeaseId
+        : selectedGroup?.leaseIds?.[0] || "";
+    setCanonicalLeaseId(nextCanonical);
     setTargetStatus("superseded");
     setPreview(null);
     setConfirmReady(false);
-  }, [selectedGroup?.generatedAt, selectedGroup?.leaseIds?.join("|")]);
+  }, [
+    selectedGroup?.generatedAt,
+    selectedGroup?.leaseIds?.join("|"),
+    selectedGroup?.suggestedCanonicalLeaseId,
+    selectedGroup?.suggestionConfidence,
+  ]);
 
   useEffect(() => {
     setPreview(null);
@@ -149,9 +164,14 @@ const AdminLeaseOverlapCleanupPage: React.FC = () => {
       selectedGroup?.leaseIds?.includes(canonicalLeaseId)
   );
 
-  const canApply = Boolean(preview && !preview.dryRun && false);
-
   const leaseOptions = useMemo(() => selectedGroup?.leaseIds || [], [selectedGroup?.leaseIds]);
+
+  const handleUseSuggestion = () => {
+    if (!selectedGroup?.suggestedCanonicalLeaseId) return;
+    setCanonicalLeaseId(selectedGroup.suggestedCanonicalLeaseId);
+    setPreview(null);
+    setConfirmReady(false);
+  };
 
   const handlePreview = async () => {
     if (!selectedGroup?.landlordId || !selectedGroup?.propertyId || !canonicalLeaseId) return;
@@ -381,6 +401,52 @@ const AdminLeaseOverlapCleanupPage: React.FC = () => {
                     {safetyBullet("Non-canonical leases will be marked non-current.")}
                     {safetyBullet("Tenant currentLeaseId pointers may be updated.")}
                     {safetyBullet("A resolution log will be created for the action.")}
+                  </Card>
+                  <Card
+                    style={{
+                      display: "grid",
+                      gap: 10,
+                      padding: 14,
+                      background: "#fff",
+                      border: "1px solid rgba(148,163,184,0.2)",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+                      <div style={{ display: "grid", gap: 4 }}>
+                        <div style={{ fontWeight: 700 }}>Suggested cleanup</div>
+                        <div style={{ color: "#475569", fontSize: 13 }}>Review before applying.</div>
+                      </div>
+                      <span
+                        style={{
+                          ...suggestionTone[(selectedGroup.suggestionConfidence as keyof typeof suggestionTone) || "low"],
+                          borderRadius: 999,
+                          padding: "6px 10px",
+                          fontSize: 12,
+                          fontWeight: 700,
+                        }}
+                      >
+                        Confidence: {selectedGroup.suggestionConfidence}
+                      </span>
+                    </div>
+                    <div style={{ color: "#334155", fontSize: 14 }}>
+                      Suggested canonical lease: {selectedGroup.suggestedCanonicalLeaseId || "No safe suggestion"}
+                    </div>
+                    <div style={{ display: "grid", gap: 6 }}>
+                      {(selectedGroup.suggestionReasons?.length ? selectedGroup.suggestionReasons : ["No safe suggestion was available for this group."]).map((reason) => (
+                        <div key={reason} style={{ color: "#475569", fontSize: 13 }}>
+                          • {reason}
+                        </div>
+                      ))}
+                    </div>
+                    <div>
+                      <Button
+                        variant="secondary"
+                        onClick={handleUseSuggestion}
+                        disabled={!selectedGroup.suggestedCanonicalLeaseId}
+                      >
+                        Use suggestion
+                      </Button>
+                    </div>
                   </Card>
                 </div>
 

@@ -202,4 +202,82 @@ describe("leaseOverlapAuditService", () => {
 
     expect(report.groups).toEqual([]);
   });
+
+  it("returns a high-confidence suggestion when one lease is clearly more complete", async () => {
+    seedLease("lease-primary", {
+      tenantId: "tenant-1",
+      tenantIds: ["tenant-1"],
+      monthlyRent: 2100,
+      currentRent: 2100,
+      startDate: "2026-02-01",
+      endDate: "2027-01-31",
+      updatedAt: 10,
+    });
+    seedLease("lease-migration-dup", {
+      tenantId: "tenant-2",
+      tenantIds: ["tenant-2"],
+      unitId: "unit-1",
+      unitNumber: "A",
+      monthlyRent: null,
+      currentRent: null,
+      startDate: null,
+      endDate: null,
+      updatedAt: 1,
+    });
+
+    const { generateLeaseOverlapAuditReport } = await import("../leaseAudit/leaseOverlapAuditService");
+    const report = await generateLeaseOverlapAuditReport({ firestore: fakeDb as any });
+    const group = report.groups.find((item) => item.overlapType === "duplicate_current_same_unitId");
+
+    expect(group).toEqual(
+      expect.objectContaining({
+        suggestedCanonicalLeaseId: "lease-primary",
+        suggestedLoserLeaseIds: expect.arrayContaining(["lease-migration-dup"]),
+        suggestionConfidence: "high",
+      })
+    );
+  });
+
+  it("lowers suggestion confidence when overlapping leases are effectively tied", async () => {
+    seedLease("lease-a", { tenantId: "tenant-1", tenantIds: ["tenant-1"], updatedAt: 2 });
+    seedLease("lease-b", { tenantId: "tenant-2", tenantIds: ["tenant-2"], updatedAt: 3 });
+
+    const { generateLeaseOverlapAuditReport } = await import("../leaseAudit/leaseOverlapAuditService");
+    const report = await generateLeaseOverlapAuditReport({ firestore: fakeDb as any });
+    const group = report.groups.find((item) => item.overlapType === "duplicate_current_same_unitId");
+
+    expect(group?.suggestionConfidence).toBe("low");
+    expect(group?.suggestionReasons.join(" ")).toContain("review before applying");
+  });
+
+  it("prefers the stronger non-migration row over a migration-era duplicate suggestion", async () => {
+    seedLease("lease-clean", {
+      tenantId: "tenant-1",
+      tenantIds: ["tenant-1"],
+      monthlyRent: 1900,
+      currentRent: 1900,
+      startDate: "2026-03-01",
+      endDate: "2027-02-28",
+      updatedAt: 5,
+    });
+    seedLease("lease-migrated-copy", {
+      tenantId: "tenant-1",
+      tenantIds: ["tenant-1"],
+      unitId: "unit-1",
+      unitNumber: "A",
+      monthlyRent: 0,
+      currentRent: 0,
+      startDate: null,
+      endDate: null,
+      updatedAt: 1,
+    });
+
+    const { generateLeaseOverlapAuditReport } = await import("../leaseAudit/leaseOverlapAuditService");
+    const report = await generateLeaseOverlapAuditReport({ firestore: fakeDb as any });
+    const group = report.groups.find((item) => item.overlapType === "duplicate_current_same_unitId");
+
+    expect(group?.suggestedCanonicalLeaseId).toBe("lease-clean");
+    expect(group?.suggestedLoserLeaseIds).toContain("lease-migrated-copy");
+    expect(group?.suggestionConfidence).toBe("high");
+  });
 });

@@ -7,6 +7,13 @@ export type LeaseOverlapType =
 
 export type LeaseOverlapSeverity = "high" | "medium" | "low";
 
+export type LeaseOverlapSuggestion = {
+  suggestedCanonicalLeaseId: string | null;
+  suggestedLoserLeaseIds: string[];
+  suggestionConfidence: "high" | "medium" | "low";
+  suggestionReasons: string[];
+};
+
 export type LeaseOverlapAuditGroup = {
   landlordId: string | null;
   propertyId: string | null;
@@ -27,7 +34,7 @@ export type LeaseOverlapAuditGroup = {
   sourceHints: string[];
   recommendedReviewAction: string;
   generatedAt: string;
-};
+} & LeaseOverlapSuggestion;
 
 export type LeaseOverlapAuditSummary = {
   generatedAt: string;

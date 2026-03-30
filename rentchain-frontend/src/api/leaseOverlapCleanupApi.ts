@@ -20,6 +20,10 @@ export type LeaseOverlapAuditGroup = {
   sourceHints: string[];
   recommendedReviewAction: string;
   generatedAt: string;
+  suggestedCanonicalLeaseId: string | null;
+  suggestedLoserLeaseIds: string[];
+  suggestionConfidence: "high" | "medium" | "low";
+  suggestionReasons: string[];
 };
 
 export type LeaseOverlapAuditSummary = {
