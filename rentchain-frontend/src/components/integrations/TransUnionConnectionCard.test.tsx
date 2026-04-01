@@ -46,7 +46,9 @@ describe("TransUnionConnectionCard", () => {
       />
     );
 
-    expect(screen.getByText(/We’re waiting for your TransUnion membership details/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Your TransUnion credentialing is in progress/i)
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Enter Membership Details" })).toBeInTheDocument();
   });
 

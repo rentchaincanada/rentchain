@@ -7,9 +7,16 @@ type Props = {
   submitting?: boolean;
   onClose: () => void;
   onMarkInProgress: () => Promise<void> | void;
+  onEnterCredentials?: () => void;
 };
 
-export function GetTransUnionAccessModal({ open, submitting = false, onClose, onMarkInProgress }: Props) {
+export function GetTransUnionAccessModal({
+  open,
+  submitting = false,
+  onClose,
+  onMarkInProgress,
+  onEnterCredentials,
+}: Props) {
   if (!open) return null;
 
   return (
@@ -42,8 +49,8 @@ export function GetTransUnionAccessModal({ open, submitting = false, onClose, on
           <h2 style={{ margin: 0, fontSize: "1.2rem" }}>Get TransUnion Access</h2>
           <p style={{ margin: 0, color: text.muted, lineHeight: 1.6 }}>
             To use TransUnion screening through RentChain, your business must first be credentialed
-            by TransUnion. Contact the TransUnion representative you were provided. Once approved,
-            you’ll receive a member code and passcode to enter in RentChain.
+            by TransUnion. Once approved, you’ll receive a member code and passcode to enter in
+            RentChain.
           </p>
         </div>
         <div
@@ -56,14 +63,38 @@ export function GetTransUnionAccessModal({ open, submitting = false, onClose, on
             fontSize: "0.92rem",
           }}
         >
-          Return here once your TransUnion membership details are issued.
+          <div style={{ fontWeight: 700, color: text.primary, marginBottom: 8 }}>How credentialing works</div>
+          <ol style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 6 }}>
+            <li>Request TransUnion credentialing for your business.</li>
+            <li>Wait for your member code and passcode to be issued.</li>
+            <li>Return to RentChain and connect your account.</li>
+          </ol>
+        </div>
+        <div
+          style={{
+            border: `1px solid ${colors.border}`,
+            borderRadius: radius.md,
+            padding: spacing.sm,
+            background: "rgba(15,118,110,0.06)",
+            color: text.muted,
+            fontSize: "0.92rem",
+            lineHeight: 1.6,
+          }}
+        >
+          RentChain remains your screening workflow home. Once you receive your credentials, come
+          back here to connect and continue screening applicants.
         </div>
         <div style={{ display: "flex", justifyContent: "flex-end", gap: spacing.sm, flexWrap: "wrap" }}>
+          {onEnterCredentials ? (
+            <Button type="button" variant="secondary" onClick={onEnterCredentials} disabled={submitting}>
+              Already Credentialed?
+            </Button>
+          ) : null}
           <Button type="button" variant="ghost" onClick={onClose} disabled={submitting}>
             Close
           </Button>
           <Button type="button" onClick={() => void onMarkInProgress()} disabled={submitting}>
-            {submitting ? "Saving..." : "Mark In Progress"}
+            {submitting ? "Saving..." : "Get TransUnion Access"}
           </Button>
         </div>
       </Card>

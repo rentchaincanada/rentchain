@@ -1101,7 +1101,6 @@ const ApplicationsPage: React.FC = () => {
       try {
         const data = await connectTransUnion(payload);
         setTransUnionIntegration(data);
-        setTransUnionConnectOpen(false);
         showToast({ message: "TransUnion membership connected.", variant: "success" });
       } finally {
         setTransUnionSubmitting(false);
@@ -2040,18 +2039,19 @@ const ApplicationsPage: React.FC = () => {
                     }}
                   >
                     <div style={{ fontWeight: 700, fontSize: "1rem" }}>
-                      Connect TransUnion to start screening
+                      Connect TransUnion to continue
                     </div>
                     <div style={{ color: text.muted, lineHeight: 1.6 }}>
                       Before you can screen a tenant in RentChain, connect your TransUnion
-                      membership credentials.
+                      membership credentials. If you are still waiting on credentialing, start with
+                      the guided access steps here.
                     </div>
                     <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
                       <Button type="button" onClick={() => setTransUnionConnectOpen(true)}>
-                        Connect TransUnion
+                        Connect TransUnion to Continue
                       </Button>
                       <Button type="button" variant="secondary" onClick={() => setTransUnionAccessOpen(true)}>
-                        Get Access
+                        Get TransUnion Access
                       </Button>
                     </div>
                   </Card>
@@ -2818,11 +2818,26 @@ const ApplicationsPage: React.FC = () => {
           }
         }}
         onMarkInProgress={submitTransUnionOnboardingRequest}
+        onEnterCredentials={() => {
+          setTransUnionAccessOpen(false);
+          setTransUnionConnectOpen(true);
+        }}
       />
       <ConnectTransUnionModal
         open={transUnionConnectOpen}
         submitting={transUnionSubmitting}
         integration={transUnionIntegration}
+        onGetAccess={() => {
+          setTransUnionConnectOpen(false);
+          setTransUnionAccessOpen(true);
+        }}
+        onContinue={() => {
+          if (detail?.id) {
+            handleRowScreen(detail.id);
+          } else {
+            showToast({ message: "Select an application to continue to screening.", variant: "warning" });
+          }
+        }}
         onClose={() => {
           setTransUnionConnectOpen(false);
           if (location.search.includes("openTransUnionConnect=1")) {
