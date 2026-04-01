@@ -141,6 +141,37 @@ export type AdminOverview = {
   };
 };
 
+export type AdminIntegrity = {
+  sections: Array<{
+    key:
+      | "orphan_properties"
+      | "missing_owner_linkage"
+      | "duplicate_active_leases"
+      | "stale_lease_pointers"
+      | "property_unit_mismatches";
+    label: string;
+    severity: "high" | "medium" | "low";
+    count: number;
+    description: string;
+    samples: Array<{
+      id: string;
+      type: string;
+      label: string;
+      propertyId?: string | null;
+      leaseId?: string | null;
+      tenantId?: string | null;
+      relatedAdminPath?: string | null;
+    }>;
+  }>;
+  totals: {
+    issueTypes: number;
+    totalIssues: number;
+    highSeverity: number;
+    mediumSeverity: number;
+    lowSeverity: number;
+  };
+};
+
 export async function fetchAdminProperties(params?: FetchAdminPropertiesParams) {
   const query = new URLSearchParams();
   if (params?.q) query.set("q", params.q);
@@ -220,4 +251,12 @@ export async function fetchAdminOverview() {
     activity: AdminOverview["activity"];
     integrity: AdminOverview["integrity"];
   }>("/admin/overview");
+}
+
+export async function fetchAdminIntegrity() {
+  return apiFetch<{
+    ok: true;
+    sections: AdminIntegrity["sections"];
+    totals: AdminIntegrity["totals"];
+  }>("/admin/integrity");
 }

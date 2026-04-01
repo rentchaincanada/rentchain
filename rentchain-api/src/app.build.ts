@@ -66,6 +66,7 @@ import adminPropertiesRoutes from "./routes/adminPropertiesRoutes";
 import adminTenantsRoutes from "./routes/adminTenantsRoutes";
 import adminLeasesRoutes from "./routes/adminLeasesRoutes";
 import adminOverviewRoutes from "./routes/adminOverviewRoutes";
+import adminIntegrityRoutes from "./routes/adminIntegrityRoutes";
 import ledgerRoutes from "./routes/ledgerRoutes";
 import landlordApplicationLinksRoutes from "./routes/landlordApplicationLinksRoutes";
 import publicApplicationLinksRoutes from "./routes/publicApplicationLinksRoutes";
@@ -277,6 +278,7 @@ app.use("/api/admin", routeSource("adminPropertiesRoutes.ts"), adminPropertiesRo
 app.use("/api/admin", routeSource("adminTenantsRoutes.ts"), adminTenantsRoutes);
 app.use("/api/admin", routeSource("adminLeasesRoutes.ts"), adminLeasesRoutes);
 app.use("/api/admin", routeSource("adminOverviewRoutes.ts"), adminOverviewRoutes);
+app.use("/api/admin", routeSource("adminIntegrityRoutes.ts"), adminIntegrityRoutes);
 app.use("/api/admin", routeSource("adminScreeningResultsRoutes.ts"), adminScreeningResultsRoutes);
 app.use("/api/admin/demo", routeSource("adminDemoRoutes.ts"), adminDemoRoutes);
 app.use("/api", stubsRoutes);
