@@ -27,6 +27,13 @@ const { dbMock, resetDb, seedDoc } = vi.hoisted(() => {
 
   function buildQuery(name: string, filters: Array<{ field: string; op: string; value: any }> = []) {
     let limitCount: number | null = null;
+    const matchesFilter = (entry: StoredDoc, filter: { field: string; op: string; value: any }) => {
+      if (filter.op === "==") return entry.data?.[filter.field] === filter.value;
+      if (filter.op === "array-contains") {
+        return Array.isArray(entry.data?.[filter.field]) && entry.data?.[filter.field].includes(filter.value);
+      }
+      return true;
+    };
     return {
       where: (field: string, op: string, value: any) =>
         buildQuery(name, [...filters, { field, op, value }]),
@@ -37,9 +44,7 @@ const { dbMock, resetDb, seedDoc } = vi.hoisted(() => {
           get: async () => {
             const col = ensureCollection(name);
             let rows = Array.from(col.values());
-            rows = rows.filter((entry) =>
-              filters.every((f) => (f.op === "==" ? entry.data?.[f.field] === f.value : true))
-            );
+            rows = rows.filter((entry) => filters.every((f) => matchesFilter(entry, f)));
             if (limitCount !== null) rows = rows.slice(0, limitCount);
             return {
               empty: rows.length === 0,
@@ -52,9 +57,7 @@ const { dbMock, resetDb, seedDoc } = vi.hoisted(() => {
       get: async () => {
         const col = ensureCollection(name);
         let rows = Array.from(col.values());
-        rows = rows.filter((entry) =>
-          filters.every((f) => (f.op === "==" ? entry.data?.[f.field] === f.value : true))
-        );
+        rows = rows.filter((entry) => filters.every((f) => matchesFilter(entry, f)));
         return {
           empty: rows.length === 0,
           size: rows.length,
@@ -132,6 +135,14 @@ vi.mock("../../entitlements/entitlements.middleware", () => ({
   requireCapability: () => (_req: any, _res: any, next: any) => next(),
 }));
 
+vi.mock("../../middleware/requireAuth", () => ({
+  requireAuth: (req: any, _res: any, next: any) => next(),
+}));
+
+vi.mock("../../middleware/requireAuthz", () => ({
+  requirePermission: () => (_req: any, _res: any, next: any) => next(),
+}));
+
 vi.mock("../../config/firebase", () => ({
   db: dbMock,
   FieldValue: {
@@ -149,6 +160,30 @@ async function createApp() {
     next();
   });
   app.use("/api/properties", router);
+  return app;
+}
+
+async function createAppForUser(user: Record<string, unknown>) {
+  const router = (await import("../propertiesRoutes")).default;
+  const app = express();
+  app.use(express.json());
+  app.use((req: any, _res: any, next: any) => {
+    req.user = user;
+    next();
+  });
+  app.use("/api/properties", router);
+  return app;
+}
+
+async function createAdminApp(user: Record<string, unknown>) {
+  const router = (await import("../adminPropertiesRoutes")).default;
+  const app = express();
+  app.use(express.json());
+  app.use((req: any, _res: any, next: any) => {
+    req.user = user;
+    next();
+  });
+  app.use("/api/admin", router);
   return app;
 }
 
@@ -199,6 +234,114 @@ describe("properties routes publish + defaults", () => {
     expect(archivedRes.status).toBe(200);
     expect(archivedRes.body.items).toHaveLength(1);
     expect(archivedRes.body.items[0]?.id).toBe("prop-archived");
+  });
+
+  it("returns only landlord A owned and managed properties on the landlord endpoint", async () => {
+    seedDoc("properties", "prop-a-owned", {
+      landlordId: "landlord-a",
+      ownerUserId: "landlord-a",
+      name: "A Owned",
+      createdAt: "2026-03-01T00:00:00.000Z",
+      portfolioStatus: "active",
+    });
+    seedDoc("properties", "prop-a-managed", {
+      landlordId: "landlord-z",
+      ownerUserId: "landlord-z",
+      managerUserIds: ["landlord-a"],
+      name: "A Managed",
+      createdAt: "2026-03-02T00:00:00.000Z",
+      portfolioStatus: "active",
+    });
+    seedDoc("properties", "prop-b-owned", {
+      landlordId: "landlord-b",
+      ownerUserId: "landlord-b",
+      name: "B Owned",
+      createdAt: "2026-03-03T00:00:00.000Z",
+      portfolioStatus: "active",
+    });
+
+    const app = await createAppForUser({ id: "landlord-a", landlordId: "landlord-a", role: "landlord" });
+    const res = await request(app).get("/api/properties");
+
+    expect(res.status).toBe(200);
+    expect(res.body.items.map((item: any) => item.id).sort()).toEqual(["prop-a-managed", "prop-a-owned"]);
+  });
+
+  it("does not allow landlord query params to widen access to another landlord's properties", async () => {
+    seedDoc("properties", "prop-a-owned", {
+      landlordId: "landlord-a",
+      ownerUserId: "landlord-a",
+      name: "A Owned",
+      createdAt: "2026-03-01T00:00:00.000Z",
+      portfolioStatus: "active",
+    });
+    seedDoc("properties", "prop-b-owned", {
+      landlordId: "landlord-b",
+      ownerUserId: "landlord-b",
+      name: "B Owned",
+      createdAt: "2026-03-03T00:00:00.000Z",
+      portfolioStatus: "active",
+    });
+
+    const app = await createAppForUser({ id: "landlord-a", landlordId: "landlord-a", role: "landlord" });
+    const res = await request(app).get("/api/properties?landlordId=landlord-b");
+
+    expect(res.status).toBe(200);
+    expect(res.body.items).toHaveLength(1);
+    expect(res.body.items[0]?.id).toBe("prop-a-owned");
+  });
+
+  it("does not automatically widen landlord endpoint results for admin-role users", async () => {
+    seedDoc("properties", "prop-admin-owned", {
+      landlordId: "admin-1",
+      ownerUserId: "admin-1",
+      name: "Admin Owned",
+      createdAt: "2026-03-01T00:00:00.000Z",
+      portfolioStatus: "active",
+    });
+    seedDoc("properties", "prop-other", {
+      landlordId: "landlord-b",
+      ownerUserId: "landlord-b",
+      name: "Other",
+      createdAt: "2026-03-03T00:00:00.000Z",
+      portfolioStatus: "active",
+    });
+
+    const app = await createAppForUser({ id: "admin-1", landlordId: "admin-1", role: "admin" });
+    const res = await request(app).get("/api/properties");
+
+    expect(res.status).toBe(200);
+    expect(res.body.items).toHaveLength(1);
+    expect(res.body.items[0]?.id).toBe("prop-admin-owned");
+  });
+
+  it("allows system admin users to access the dedicated admin property list", async () => {
+    seedDoc("properties", "prop-a", {
+      landlordId: "landlord-a",
+      ownerUserId: "landlord-a",
+      name: "A Owned",
+      createdAt: "2026-03-01T00:00:00.000Z",
+      portfolioStatus: "active",
+    });
+    seedDoc("properties", "prop-b", {
+      landlordId: "landlord-b",
+      ownerUserId: "landlord-b",
+      name: "B Owned",
+      createdAt: "2026-03-03T00:00:00.000Z",
+      portfolioStatus: "active",
+    });
+
+    const app = await createAdminApp({
+      id: "admin-1",
+      landlordId: "admin-1",
+      role: "admin",
+      permissions: ["system.admin"],
+      revokedPermissions: [],
+    });
+    const res = await request(app).get("/api/admin/properties");
+
+    expect(res.status).toBe(200);
+    expect(res.body.items.map((item: any) => item.id).sort()).toEqual(["prop-a", "prop-b"]);
   });
 
   it("archives a property without deleting related records", async () => {

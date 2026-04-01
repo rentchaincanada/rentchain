@@ -58,12 +58,10 @@ export async function createProperty(
 export async function fetchProperties(filters?: {
   status?: "active" | "archived";
   includeArchived?: boolean;
-  landlordId?: string;
 }): Promise<{ properties: Property[]; items?: Property[] }> {
   const params = new URLSearchParams();
   if (filters?.status) params.set("status", filters.status);
   if (filters?.includeArchived) params.set("includeArchived", "1");
-  if (filters?.landlordId) params.set("landlordId", filters.landlordId);
   const path = params.toString() ? `/properties?${params.toString()}` : "/properties";
   const res = await api.get(path);
   return res.data;
