@@ -2,6 +2,7 @@ import { Router } from "express";
 import { requireAuth } from "../middleware/requireAuth";
 import { requirePermission } from "../middleware/requireAuthz";
 import { loadAdminOverview } from "../services/admin/adminOverviewView";
+import { recordAdminAuditEvent } from "../services/admin/adminAuditEvents";
 
 const router = Router();
 
@@ -13,6 +14,15 @@ router.get(
     const startedAt = Date.now();
     try {
       const result = await loadAdminOverview();
+      await recordAdminAuditEvent({
+        userId: String(req.user?.id || req.user?.sub || "").trim(),
+        category: "adminAction",
+        action: "view_overview",
+        label: "Viewed admin overview",
+        pageKey: "overview" as any,
+        route: "/api/admin/overview",
+        relatedAdminPath: "/admin",
+      }).catch(() => undefined);
 
       console.info("[admin.overview]", {
         route: "/api/admin/overview",

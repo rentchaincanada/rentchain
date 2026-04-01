@@ -175,6 +175,51 @@ export type AdminIntegrity = {
   };
 };
 
+export type AdminAudit = {
+  summary: {
+    recentAdminActions: number;
+    recentExports: number;
+    recentIntegrityEvents: number;
+    recentSavedFilterActions: number;
+  };
+  sections: {
+    adminActions: Array<{
+      id: string;
+      type: string;
+      label: string;
+      pageKey?: string | null;
+      route?: string | null;
+      occurredAt: string | number | null;
+      relatedAdminPath?: string | null;
+    }>;
+    exports: Array<{
+      id: string;
+      exportType: string;
+      label: string;
+      rowCount?: number | null;
+      capped?: boolean | null;
+      occurredAt: string | number | null;
+      relatedAdminPath?: string | null;
+    }>;
+    integrityEvents: Array<{
+      id: string;
+      severity?: string | null;
+      label: string;
+      eventType?: string | null;
+      occurredAt: string | number | null;
+      relatedAdminPath?: string | null;
+    }>;
+    savedFilterActions: Array<{
+      id: string;
+      action: string;
+      pageKey?: string | null;
+      label: string;
+      occurredAt: string | number | null;
+      relatedAdminPath?: string | null;
+    }>;
+  };
+};
+
 export type AdminSavedFilterPageKey = "properties" | "tenants" | "leases" | "integrity";
 
 export type AdminSavedFilterPreset = {
@@ -274,6 +319,14 @@ export async function fetchAdminIntegrity() {
     sections: AdminIntegrity["sections"];
     totals: AdminIntegrity["totals"];
   }>("/admin/integrity");
+}
+
+export async function fetchAdminAudit() {
+  return apiFetch<{
+    ok: true;
+    summary: AdminAudit["summary"];
+    sections: AdminAudit["sections"];
+  }>("/admin/audit");
 }
 
 export async function fetchAdminSavedFilters(pageKey: AdminSavedFilterPageKey) {

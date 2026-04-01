@@ -4,6 +4,7 @@ import { requireAuth } from "../middleware/requireAuth";
 import { requirePermission } from "../middleware/requireAuthz";
 import { listAdminProperties } from "../services/admin/adminPropertyView";
 import { buildAdminPropertiesCsv } from "../services/admin/adminCsvExport";
+import { recordAdminAuditEvent } from "../services/admin/adminAuditEvents";
 
 const router = Router();
 
@@ -42,6 +43,18 @@ router.get(
         rowCount: csv.rowCount,
         capped: csv.capped,
       });
+      await recordAdminAuditEvent({
+        userId: String(req.user?.id || req.user?.sub || "").trim(),
+        category: "export",
+        action: "export_properties_csv",
+        label: "Exported properties CSV",
+        pageKey: "properties",
+        route: "/api/admin/properties/export.csv",
+        relatedAdminPath: "/admin/properties",
+        exportType: "properties",
+        rowCount: csv.rowCount,
+        capped: csv.capped,
+      }).catch(() => undefined);
 
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
       res.setHeader("Content-Disposition", `attachment; filename="${csv.filename}"`);
@@ -91,6 +104,15 @@ router.get(
         total: result.total,
         adminOverridePathUsed: true,
       });
+      await recordAdminAuditEvent({
+        userId: String(req.user?.id || req.user?.sub || "").trim(),
+        category: "adminAction",
+        action: "view_properties",
+        label: "Viewed properties admin page",
+        pageKey: "properties",
+        route: "/api/admin/properties",
+        relatedAdminPath: "/admin/properties",
+      }).catch(() => undefined);
 
       return res.json({ ok: true, ...result });
     } catch (err: any) {

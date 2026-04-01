@@ -3,6 +3,7 @@ import { requireAuth } from "../middleware/requireAuth";
 import { requirePermission } from "../middleware/requireAuthz";
 import { listAdminLeases } from "../services/admin/adminLeaseView";
 import { buildAdminLeasesCsv } from "../services/admin/adminCsvExport";
+import { recordAdminAuditEvent } from "../services/admin/adminAuditEvents";
 
 const router = Router();
 
@@ -51,6 +52,18 @@ router.get(
         rowCount: csv.rowCount,
         capped: csv.capped,
       });
+      await recordAdminAuditEvent({
+        userId: String(req.user?.id || req.user?.sub || "").trim(),
+        category: "export",
+        action: "export_leases_csv",
+        label: "Exported leases CSV",
+        pageKey: "leases",
+        route: "/api/admin/leases/export.csv",
+        relatedAdminPath: "/admin/leases",
+        exportType: "leases",
+        rowCount: csv.rowCount,
+        capped: csv.capped,
+      }).catch(() => undefined);
 
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
       res.setHeader("Content-Disposition", `attachment; filename="${csv.filename}"`);
@@ -110,6 +123,15 @@ router.get(
         total: result.total,
         adminOverridePathUsed: true,
       });
+      await recordAdminAuditEvent({
+        userId: String(req.user?.id || req.user?.sub || "").trim(),
+        category: "adminAction",
+        action: "view_leases",
+        label: "Viewed leases admin page",
+        pageKey: "leases",
+        route: "/api/admin/leases",
+        relatedAdminPath: "/admin/leases",
+      }).catch(() => undefined);
 
       return res.json({ ok: true, ...result });
     } catch (err: any) {
