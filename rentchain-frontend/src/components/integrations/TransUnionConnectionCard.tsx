@@ -51,13 +51,13 @@ export function TransUnionConnectionCard({
 
   if (status === "pending_credentialing") {
     body =
-      "We’re waiting for your TransUnion membership details. Once you receive your member code and passcode, return here to complete setup.";
+      "Your TransUnion credentialing is in progress. Once TransUnion issues your member code and passcode, return to RentChain to complete setup.";
     actions = [
       { label: "Enter Membership Details", onClick: onEnterDetails, variant: "primary" },
       { label: "View Instructions", onClick: onViewInstructions },
     ];
   } else if (status === "connected") {
-    body = "Your TransUnion membership is connected and ready for screening.";
+    body = "Your TransUnion membership is connected and ready for screening inside RentChain.";
     actions = [
       { label: "Update Credentials", onClick: onUpdateCredentials },
       { label: "Disconnect", onClick: onDisconnect, variant: "ghost" },
@@ -74,7 +74,7 @@ export function TransUnionConnectionCard({
     ];
   } else {
     body =
-      "Use your TransUnion membership to enable tenant screening in RentChain. New to TransUnion? We’ll help you get credentialed first.";
+      "Use your TransUnion membership to enable tenant screening in RentChain. If you are not credentialed yet, RentChain will guide you through that first.";
     actions = [
       { label: "Get TransUnion Access", onClick: onGetAccess, variant: "primary" },
       { label: "Connect Existing Membership", onClick: onConnectExisting },
@@ -109,6 +109,7 @@ export function TransUnionConnectionCard({
             Last updated date: {updatedAt ? new Date(updatedAt).toLocaleDateString() : "Not available"}
           </div>
           <div>Connection type: Membership credentials</div>
+          <div>Passcode: Stored securely and never shown again</div>
         </div>
       ) : null}
 

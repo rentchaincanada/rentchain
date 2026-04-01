@@ -9,7 +9,8 @@ type Props = {
   initialValue?: Partial<TransUnionCredentialsPayload>;
   onClose: () => void;
   onSubmit: (payload: TransUnionCredentialsPayload) => Promise<void> | void;
-  title?: string;
+  onGetAccess?: () => void;
+  onContinue?: () => void;
   submitLabel?: string;
   integration?: TransUnionIntegration | null;
 };
@@ -20,8 +21,9 @@ export function ConnectTransUnionModal({
   initialValue,
   onClose,
   onSubmit,
-  title = "Connect TransUnion",
-  submitLabel = "Connect",
+  onGetAccess,
+  onContinue,
+  submitLabel = "Connect Account",
   integration,
 }: Props) {
   const [form, setForm] = useState<TransUnionCredentialsPayload>({
@@ -34,6 +36,7 @@ export function ConnectTransUnionModal({
   });
 
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -46,6 +49,7 @@ export function ConnectTransUnionModal({
       confirmPermissibleUse: false,
     });
     setError(null);
+    setSuccess(false);
   }, [
     initialValue?.businessName,
     initialValue?.contactEmail,
@@ -62,11 +66,78 @@ export function ConnectTransUnionModal({
     setForm((current) => ({ ...current, [field]: value }));
   };
 
+  if (success) {
+    return (
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="TransUnion Connected"
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(15,23,42,0.42)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: spacing.md,
+          zIndex: 1000,
+        }}
+      >
+        <Card
+          elevated
+          style={{
+            width: "min(620px, 100%)",
+            display: "grid",
+            gap: spacing.md,
+            borderRadius: radius.lg,
+            boxShadow: shadows.pop,
+          }}
+        >
+          <div style={{ display: "grid", gap: spacing.sm }}>
+            <h2 style={{ margin: 0, fontSize: "1.2rem" }}>TransUnion Connected</h2>
+            <p style={{ margin: 0, color: text.muted, lineHeight: 1.6 }}>
+              Your TransUnion membership is now connected to RentChain. You can continue screening
+              applicants without leaving this workflow.
+            </p>
+          </div>
+          <div
+            style={{
+              border: `1px solid ${colors.border}`,
+              borderRadius: radius.md,
+              padding: spacing.sm,
+              background: colors.bg,
+              display: "grid",
+              gap: 6,
+              fontSize: "0.94rem",
+            }}
+          >
+            <div>Member code: {integration?.memberCodeMasked || "Saved securely"}</div>
+            <div>Credentials are stored securely and the passcode is never shown again in RentChain.</div>
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: spacing.sm, flexWrap: "wrap" }}>
+            <Button type="button" variant="ghost" onClick={onClose}>
+              Close
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                onContinue?.();
+                onClose();
+              }}
+            >
+              Continue to Screening
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={title}
+      aria-label="Connect Your TransUnion Account"
       style={{
         position: "fixed",
         inset: 0,
@@ -89,10 +160,58 @@ export function ConnectTransUnionModal({
         }}
       >
         <div style={{ display: "grid", gap: spacing.xs }}>
-          <h2 style={{ margin: 0, fontSize: "1.2rem" }}>{title}</h2>
+          <h2 style={{ margin: 0, fontSize: "1.2rem" }}>Connect Your TransUnion Account</h2>
           <p style={{ margin: 0, color: text.muted }}>
-            Your credentials are encrypted and only used for your screening workflow.
+            Keep screening inside RentChain by saving your TransUnion member code and passcode
+            here. Your credentials are encrypted and never displayed back after save.
           </p>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gap: spacing.sm,
+          }}
+        >
+          <div
+            style={{
+              border: `1px solid ${colors.border}`,
+              borderRadius: radius.md,
+              background: colors.bg,
+              padding: spacing.sm,
+              display: "grid",
+              gap: 6,
+            }}
+          >
+            <div style={{ fontWeight: 700 }}>Need TransUnion access?</div>
+            <div style={{ color: text.muted, fontSize: "0.92rem", lineHeight: 1.5 }}>
+              If you are not credentialed yet, start with the access steps first. Once TransUnion
+              issues your membership details, return here to finish setup.
+            </div>
+            {onGetAccess ? (
+              <div>
+                <Button type="button" variant="secondary" onClick={onGetAccess}>
+                  Get TransUnion Access
+                </Button>
+              </div>
+            ) : null}
+          </div>
+          <div
+            style={{
+              border: `1px solid ${colors.border}`,
+              borderRadius: radius.md,
+              background: colors.bg,
+              padding: spacing.sm,
+              display: "grid",
+              gap: 6,
+            }}
+          >
+            <div style={{ fontWeight: 700 }}>Already credentialed?</div>
+            <div style={{ color: text.muted, fontSize: "0.92rem", lineHeight: 1.5 }}>
+              Enter the member code and passcode that TransUnion provided to your business.
+            </div>
+          </div>
         </div>
 
         <div style={{ display: "grid", gap: spacing.sm }}>
@@ -170,6 +289,7 @@ export function ConnectTransUnionModal({
               setError(null);
               try {
                 await onSubmit(form);
+                setSuccess(true);
               } catch (submissionError: any) {
                 setError(String(submissionError?.message || "Unable to save TransUnion credentials."));
               }

@@ -124,6 +124,14 @@ function buildCredentialPayload(memberCode: string, passcode: string) {
   }
 }
 
+function logTransUnionEvent(event: string, meta: Record<string, unknown>) {
+  console.info("[transunion_integration]", {
+    event,
+    provider: PROVIDER,
+    ...meta,
+  });
+}
+
 export async function getTransUnionIntegrationPublic(
   landlordId: string
 ): Promise<TransUnionPublicIntegration> {
@@ -158,6 +166,12 @@ export async function requestTransUnionOnboarding(
     createdAt: existing?.createdAt || now,
     updatedAt: now,
     updatedByUserId: userId,
+  });
+
+  logTransUnionEvent("onboarding_requested", {
+    landlordId,
+    userId,
+    status: "pending_credentialing",
   });
 
   return getTransUnionIntegrationPublic(landlordId);
@@ -200,6 +214,13 @@ export async function connectTransUnion(
     ...credentials,
   });
 
+  logTransUnionEvent("connected", {
+    landlordId,
+    userId,
+    status: "connected",
+    memberCodeMasked: credentials.memberCodeMasked,
+  });
+
   return getTransUnionIntegrationPublic(landlordId);
 }
 
@@ -237,6 +258,13 @@ export async function updateTransUnionCredentials(
     ...credentials,
   });
 
+  logTransUnionEvent("credentials_updated", {
+    landlordId,
+    userId,
+    status: "connected",
+    memberCodeMasked: credentials.memberCodeMasked,
+  });
+
   return getTransUnionIntegrationPublic(landlordId);
 }
 
@@ -259,6 +287,12 @@ export async function disconnectTransUnion(
     updatedByUserId: userId,
     version: existing?.version || VERSION,
     createdAt: existing?.createdAt || now,
+  });
+
+  logTransUnionEvent("disconnected", {
+    landlordId,
+    userId,
+    status: "disconnected",
   });
   return getTransUnionIntegrationPublic(landlordId);
 }
