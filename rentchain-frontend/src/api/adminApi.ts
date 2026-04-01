@@ -114,6 +114,33 @@ export type FetchAdminLeasesParams = {
   pageSize?: number;
 };
 
+export type AdminOverview = {
+  summary: {
+    totalProperties: number;
+    totalUnits: number;
+    totalTenants: number;
+    totalLeases: number;
+    activeLeases: number;
+    integrityWarnings: number;
+    orphanRecords: number;
+  };
+  activity: {
+    recentAdminAccessCount: number;
+    recentHighImpactEvents: Array<{
+      key: string;
+      label: string;
+      ts: string | number | null;
+    }>;
+  };
+  integrity: {
+    orphanProperties: number;
+    missingOwnerLinks: number;
+    duplicateActiveLeases: number;
+    staleLeasePointers: number;
+    propertyUnitMismatches: number;
+  };
+};
+
 export async function fetchAdminProperties(params?: FetchAdminPropertiesParams) {
   const query = new URLSearchParams();
   if (params?.q) query.set("q", params.q);
@@ -184,4 +211,13 @@ export async function fetchAdminLeases(params?: FetchAdminLeasesParams) {
     total: number;
     hasMore: boolean;
   }>(`/admin/leases${suffix}`);
+}
+
+export async function fetchAdminOverview() {
+  return apiFetch<{
+    ok: true;
+    summary: AdminOverview["summary"];
+    activity: AdminOverview["activity"];
+    integrity: AdminOverview["integrity"];
+  }>("/admin/overview");
 }
