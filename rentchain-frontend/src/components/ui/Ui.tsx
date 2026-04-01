@@ -2,11 +2,13 @@
 import React from "react";
 import { colors, radius, shadows, spacing, text } from "../../styles/tokens";
 
-export const Card: React.FC<
+export const Card = React.forwardRef<
+  HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement> & { elevated?: boolean }
-> = ({ children, style, elevated = false, ...rest }) => {
+>(({ children, style, elevated = false, ...rest }, ref) => {
   return (
     <div
+      ref={ref}
       style={{
         background: colors.card,
         borderRadius: radius.lg,
@@ -21,7 +23,8 @@ export const Card: React.FC<
       {children}
     </div>
   );
-};
+});
+Card.displayName = "Card";
 
 export const Section: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({
   children,

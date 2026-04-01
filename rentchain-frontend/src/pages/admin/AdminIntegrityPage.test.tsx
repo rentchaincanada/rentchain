@@ -24,6 +24,11 @@ vi.mock("../../components/layout/MacShell", () => ({
   MacShell: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
+vi.mock("../../components/admin/AdminSavedFilters", () => ({
+  AdminSavedFilters: () => <div>Saved filters</div>,
+  default: () => <div>Saved filters</div>,
+}));
+
 describe("AdminIntegrityPage", () => {
   beforeEach(() => {
     mocks.showToastMock.mockReset();
