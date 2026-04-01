@@ -7,6 +7,7 @@ import {
   isAdminSavedFilterPageKey,
   listAdminSavedFilters,
 } from "../services/admin/adminSavedFilters";
+import { recordAdminAuditEvent } from "../services/admin/adminAuditEvents";
 
 const router = Router();
 
@@ -29,6 +30,15 @@ router.get("/saved-filters", requireAuth, requirePermission("system.admin"), asy
       success: true,
       count: items.length,
     });
+    await recordAdminAuditEvent({
+      userId,
+      category: "savedFilter",
+      action: "list",
+      label: `Viewed saved filters for ${pageKey}`,
+      pageKey,
+      route: "/api/admin/saved-filters",
+      relatedAdminPath: `/admin/${pageKey === "properties" ? "properties" : pageKey === "tenants" ? "tenants" : pageKey === "leases" ? "leases" : "integrity"}`,
+    }).catch(() => undefined);
     return res.json({ ok: true, items });
   } catch (err: any) {
     console.error("[adminSavedFiltersRoutes] list failed", err?.message || err);
@@ -60,6 +70,15 @@ router.post("/saved-filters", requireAuth, requirePermission("system.admin"), as
       presetId: item.id,
       success: true,
     });
+    await recordAdminAuditEvent({
+      userId,
+      category: "savedFilter",
+      action: "create",
+      label: `Saved filter created for ${pageKey}`,
+      pageKey,
+      route: "/api/admin/saved-filters",
+      relatedAdminPath: `/admin/${pageKey === "properties" ? "properties" : pageKey === "tenants" ? "tenants" : pageKey === "leases" ? "leases" : "integrity"}`,
+    }).catch(() => undefined);
     return res.status(201).json({ ok: true, item });
   } catch (err: any) {
     const message = String(err?.message || "");
@@ -87,6 +106,14 @@ router.delete("/saved-filters/:id", requireAuth, requirePermission("system.admin
       presetId,
       success: true,
     });
+    await recordAdminAuditEvent({
+      userId,
+      category: "savedFilter",
+      action: "delete",
+      label: "Saved filter deleted",
+      route: "/api/admin/saved-filters/:id",
+      relatedAdminPath: "/admin",
+    }).catch(() => undefined);
     return res.json({ ok: true });
   } catch (err: any) {
     const message = String(err?.message || "");
