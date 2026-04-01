@@ -82,25 +82,61 @@ function isAdminRole(req: any): boolean {
 function resolveLandlordId(req: any): string {
   return String(req.user?.landlordId || req.user?.id || "").trim();
 }
+
+function uniqueById<T extends { id: string }>(items: T[]): T[] {
+  return Array.from(new Map(items.map((item) => [item.id, item])).values());
+}
+
+function isManagedByUser(item: any, userId: string): boolean {
+  const managerIds = Array.isArray(item?.managerUserIds) ? item.managerUserIds.map((value: any) => String(value || "").trim()) : [];
+  return managerIds.includes(userId);
+}
+
+function isOwnedOrManagedByUser(item: any, userId: string, landlordId: string): boolean {
+  const ownerUserId = String(item?.ownerUserId || "").trim();
+  const legacyLandlordId = String(item?.landlordId || "").trim();
+  return ownerUserId === userId || legacyLandlordId === landlordId || isManagedByUser(item, userId);
+}
+
+async function loadScopedPropertiesForUser(options: {
+  userId: string;
+  landlordId: string;
+  limit: number;
+}) {
+  const ownedByUserQuery = db.collection("properties").where("ownerUserId", "==", options.userId).get();
+  const managedByUserQuery = db.collection("properties").where("managerUserIds", "array-contains", options.userId).get();
+  const legacyLandlordQuery = db.collection("properties").where("landlordId", "==", options.landlordId).get();
+
+  const [ownedByUserSnap, managedByUserSnap, legacyLandlordSnap] = await Promise.all([
+    ownedByUserQuery,
+    managedByUserQuery,
+    legacyLandlordQuery,
+  ]);
+
+  return uniqueById(
+    [ownedByUserSnap, managedByUserSnap, legacyLandlordSnap]
+      .flatMap((snap: any) => snap.docs || [])
+      .map((doc: any) => ({ id: doc.id, ...(doc.data() as any) }))
+  )
+    .sort((a: any, b: any) => String(b?.createdAt || "").localeCompare(String(a?.createdAt || "")))
+    .slice(0, options.limit);
+}
 /**
  * GET /api/properties
  * Returns properties for the authenticated landlord.
  */
 router.get("/", async (req: any, res) => {
   const role = String(req.user?.role || "").toLowerCase();
-  const isAdmin = role === "admin";
-  const landlordId = req.user?.landlordId || req.user?.id;
-  const landlordFilter = String(req.query?.landlordId || "").trim() || null;
+  const userId = String(req.user?.id || "").trim();
+  const landlordId = resolveLandlordId(req);
   const statusFilter = String(req.query?.status || "").trim().toLowerCase();
   const includeArchived =
     String(req.query?.includeArchived || "")
       .trim()
       .toLowerCase() === "true" || String(req.query?.includeArchived || "").trim() === "1";
-  if (!isAdmin && !landlordId) return res.status(401).json({ error: "Unauthorized" });
+  if (!userId || !landlordId) return res.status(401).json({ error: "Unauthorized" });
 
   res.setHeader("x-route-source", "propertiesRoutes");
-  console.log("[GET /api/properties] user=", req.user);
-  console.log("[GET /api/properties] landlordId=", landlordId, "isAdmin=", isAdmin);
 
   try {
     const limitRaw = Number(req.query?.limit ?? 50);
@@ -109,18 +145,8 @@ router.get("/", async (req: any, res) => {
         ? Math.min(Math.max(limitRaw, 1), 200)
         : 50;
 
-    let query = db.collection("properties") as any;
-    if (isAdmin && landlordFilter) {
-      query = query.where("landlordId", "==", landlordFilter);
-    } else if (!isAdmin) {
-      query = query.where("landlordId", "==", landlordId);
-    }
-    const snap = await query.orderBy("createdAt", "desc").limit(limit).get();
-
-    const mineItems = snap.docs.map((doc: any) => ({
-      id: doc.id,
-      ...(doc.data() as any),
-    })) as any[];
+    const scopedItems = await loadScopedPropertiesForUser({ userId, landlordId, limit });
+    const mineItems = scopedItems.filter((item) => isOwnedOrManagedByUser(item, userId, landlordId));
 
     const filteredItems = mineItems.filter((item) => {
       const portfolioStatus = normalizePortfolioStatus(item?.portfolioStatus);
@@ -128,6 +154,14 @@ router.get("/", async (req: any, res) => {
       if (statusFilter === "active") return portfolioStatus === "active";
       if (includeArchived) return true;
       return portfolioStatus === "active";
+    });
+
+    console.info("[properties.scope]", {
+      route: "/api/properties",
+      userId,
+      role,
+      returnedPropertyCount: filteredItems.length,
+      adminOverridePathUsed: false,
     });
 
     return res.json({ items: filteredItems, nextCursor: null });
