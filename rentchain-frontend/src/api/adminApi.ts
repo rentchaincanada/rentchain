@@ -1,4 +1,7 @@
 import { apiFetch } from "./apiFetch";
+import { API_BASE_URL } from "./config";
+import { getAuthToken } from "../lib/authToken";
+import { getFirebaseIdToken } from "../lib/firebaseAuthToken";
 
 export type AdminPropertyView = {
   id: string;
@@ -259,4 +262,87 @@ export async function fetchAdminIntegrity() {
     sections: AdminIntegrity["sections"];
     totals: AdminIntegrity["totals"];
   }>("/admin/integrity");
+}
+
+function adminApiUrl(path: string, query?: URLSearchParams) {
+  const base = API_BASE_URL.replace(/\/$/, "").replace(/\/api$/i, "");
+  const normalized = path.startsWith("/") ? path : `/${path}`;
+  const suffix = query?.toString() ? `?${query.toString()}` : "";
+  return `${base}/api${normalized}${suffix}`;
+}
+
+async function downloadAdminCsv(path: string, params?: Record<string, string | number | null | undefined>) {
+  const query = new URLSearchParams();
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value == null || value === "") return;
+    query.set(key, String(value));
+  });
+
+  const firebaseToken = await getFirebaseIdToken();
+  const authToken = getAuthToken();
+  const token = authToken || firebaseToken;
+  const response = await fetch(adminApiUrl(path, query), {
+    headers: {
+      "x-api-client": "web",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(text || `Export failed (${response.status})`);
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("content-disposition") || "";
+  const filenameMatch = disposition.match(/filename="([^"]+)"/i);
+  const filename = filenameMatch?.[1] || "admin-export.csv";
+  return { blob, filename };
+}
+
+export async function exportAdminPropertiesCsv(params?: FetchAdminPropertiesParams) {
+  return downloadAdminCsv("/admin/properties/export.csv", {
+    q: params?.q,
+    province: params?.province,
+    landlordId: params?.landlordId,
+    ownerUserId: params?.ownerUserId,
+    integrity: params?.integrity,
+    sortBy: params?.sortBy,
+    sortDir: params?.sortDir,
+  });
+}
+
+export async function exportAdminTenantsCsv(params?: FetchAdminTenantsParams) {
+  return downloadAdminCsv("/admin/tenants/export.csv", {
+    q: params?.q,
+    landlordId: params?.landlordId,
+    propertyId: params?.propertyId,
+    leaseStatus: params?.leaseStatus,
+    screeningStatus: params?.screeningStatus,
+    moveInStatus: params?.moveInStatus,
+    sortBy: params?.sortBy,
+    sortDir: params?.sortDir,
+  });
+}
+
+export async function exportAdminLeasesCsv(params?: FetchAdminLeasesParams) {
+  return downloadAdminCsv("/admin/leases/export.csv", {
+    q: params?.q,
+    landlordId: params?.landlordId,
+    propertyId: params?.propertyId,
+    status: params?.status,
+    riskGrade: params?.riskGrade,
+    integrity: params?.integrity,
+    startAfter: params?.startAfter,
+    startBefore: params?.startBefore,
+    endAfter: params?.endAfter,
+    endBefore: params?.endBefore,
+    sortBy: params?.sortBy,
+    sortDir: params?.sortDir,
+  });
+}
+
+export async function exportAdminIntegrityCsv() {
+  return downloadAdminCsv("/admin/integrity/export.csv");
 }

@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { MacShell } from "../../components/layout/MacShell";
 import { Button, Card, Pill, Section } from "../../components/ui/Ui";
 import { useToast } from "../../components/ui/ToastProvider";
-import { fetchAdminIntegrity, type AdminIntegrity } from "../../api/adminApi";
+import { exportAdminIntegrityCsv, fetchAdminIntegrity, type AdminIntegrity } from "../../api/adminApi";
 
 const EMPTY_INTEGRITY: AdminIntegrity = {
   sections: [
@@ -66,6 +66,7 @@ export const AdminIntegrityPage: React.FC = () => {
   const { showToast } = useToast();
   const [data, setData] = useState<AdminIntegrity>(EMPTY_INTEGRITY);
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = async () => {
@@ -93,6 +94,29 @@ export const AdminIntegrityPage: React.FC = () => {
     void load();
   }, []);
 
+  const handleExport = async () => {
+    try {
+      setExporting(true);
+      const { blob, filename } = await exportAdminIntegrityCsv();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      showToast({
+        message: "Failed to export integrity CSV",
+        description: err?.message || "",
+        variant: "error",
+      });
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const hasIssues = data.totals.totalIssues > 0;
 
   return (
@@ -109,9 +133,14 @@ export const AdminIntegrityPage: React.FC = () => {
                 Read-only platform integrity snapshot across properties, leases, and tenant linkages with bounded samples and safe drill-through links.
               </div>
             </div>
-            <Button variant="secondary" onClick={load} disabled={loading}>
-              Refresh
-            </Button>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <Button variant="secondary" onClick={handleExport} disabled={loading || exporting}>
+                {exporting ? "Exporting..." : "Export CSV"}
+              </Button>
+              <Button variant="secondary" onClick={load} disabled={loading}>
+                Refresh
+              </Button>
+            </div>
           </div>
         </Section>
 

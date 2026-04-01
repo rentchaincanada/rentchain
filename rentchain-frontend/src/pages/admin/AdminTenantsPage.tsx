@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { MacShell } from "../../components/layout/MacShell";
 import { Button, Card, Pill, Section } from "../../components/ui/Ui";
 import { useToast } from "../../components/ui/ToastProvider";
-import { fetchAdminTenants, type AdminTenantView } from "../../api/adminApi";
+import { exportAdminTenantsCsv, fetchAdminTenants, type AdminTenantView } from "../../api/adminApi";
 
 function readFilters(search: string) {
   const params = new URLSearchParams(search);
@@ -40,6 +40,7 @@ export const AdminTenantsPage: React.FC = () => {
     hasMore: boolean;
   } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedTenant, setSelectedTenant] = useState<AdminTenantView | null>(null);
 
@@ -103,6 +104,29 @@ export const AdminTenantsPage: React.FC = () => {
     showToast,
   ]);
 
+  const handleExport = async () => {
+    try {
+      setExporting(true);
+      const { blob, filename } = await exportAdminTenantsCsv(filters);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      showToast({
+        message: "Failed to export tenants CSV",
+        description: err?.message || "",
+        variant: "error",
+      });
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <MacShell title="Admin · Tenants">
       <div style={{ display: "grid", gap: 16 }}>
@@ -117,9 +141,14 @@ export const AdminTenantsPage: React.FC = () => {
                 Review platform-wide tenant records through the dedicated admin API with safe view shaping, filters, and pagination.
               </div>
             </div>
-            <Button variant="secondary" onClick={() => window.location.reload()} disabled={loading}>
-              Refresh
-            </Button>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <Button variant="secondary" onClick={handleExport} disabled={loading || exporting}>
+                {exporting ? "Exporting..." : "Export CSV"}
+              </Button>
+              <Button variant="secondary" onClick={() => window.location.reload()} disabled={loading}>
+                Refresh
+              </Button>
+            </div>
           </div>
         </Section>
 
