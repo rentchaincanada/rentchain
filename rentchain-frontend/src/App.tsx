@@ -129,6 +129,7 @@ const AdminLeaseOverlapCleanupPage = lazy(() => import("./pages/admin/AdminLease
 const AdminPropertiesPage = lazy(() => import("./pages/admin/AdminPropertiesPage"));
 const AdminTenantsPage = lazy(() => import("./pages/admin/AdminTenantsPage"));
 const AdminLeasesPage = lazy(() => import("./pages/admin/AdminLeasesPage"));
+const AdminIntegrityPage = lazy(() => import("./pages/admin/AdminIntegrityPage"));
 const AutomationTimelinePage = lazy(
   () => import("./features/automation/timeline/AutomationTimelinePage")
 );
@@ -504,6 +505,18 @@ function App() {
               <RequireAdmin>
                 <Suspense fallback={null}>
                   <AdminLeasesPage />
+                </Suspense>
+              </RequireAdmin>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/integrity"
+          element={
+            <RequireAuth>
+              <RequireAdmin>
+                <Suspense fallback={null}>
+                  <AdminIntegrityPage />
                 </Suspense>
               </RequireAdmin>
             </RequireAuth>
