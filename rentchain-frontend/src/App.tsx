@@ -127,6 +127,7 @@ const ControlTowerPage = lazy(() => import("./pages/admin/ControlTowerPage"));
 const AdminLeadsPage = lazyWithRetry(() => import("./pages/admin/AdminLeadsPage"));
 const AdminLeaseOverlapCleanupPage = lazy(() => import("./pages/admin/AdminLeaseOverlapCleanupPage"));
 const AdminPropertiesPage = lazy(() => import("./pages/admin/AdminPropertiesPage"));
+const AdminTenantsPage = lazy(() => import("./pages/admin/AdminTenantsPage"));
 const AutomationTimelinePage = lazy(
   () => import("./features/automation/timeline/AutomationTimelinePage")
 );
@@ -478,6 +479,18 @@ function App() {
               <RequireAdmin>
                 <Suspense fallback={null}>
                   <AdminPropertiesPage />
+                </Suspense>
+              </RequireAdmin>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/tenants"
+          element={
+            <RequireAuth>
+              <RequireAdmin>
+                <Suspense fallback={null}>
+                  <AdminTenantsPage />
                 </Suspense>
               </RequireAdmin>
             </RequireAuth>

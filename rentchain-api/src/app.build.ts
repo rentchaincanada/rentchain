@@ -63,6 +63,7 @@ import reportsExportRoutes from "./routes/reportsExportRoutes";
 import compatRoutes from "./routes/compatRoutes";
 import unitsRoutes from "./routes/unitsRoutes";
 import adminPropertiesRoutes from "./routes/adminPropertiesRoutes";
+import adminTenantsRoutes from "./routes/adminTenantsRoutes";
 import ledgerRoutes from "./routes/ledgerRoutes";
 import landlordApplicationLinksRoutes from "./routes/landlordApplicationLinksRoutes";
 import publicApplicationLinksRoutes from "./routes/publicApplicationLinksRoutes";
@@ -271,6 +272,7 @@ app.use("/api/admin", routeSource("landlordInquiryRoutes.ts"), landlordInquiryAd
 app.use("/api/admin", routeSource("adminBootstrapRoutes"), adminBootstrapRoutes);
 app.use("/api", routeSource("screeningJobsAdminRoutes.ts"), screeningJobsAdminRoutes);
 app.use("/api/admin", routeSource("adminPropertiesRoutes.ts"), adminPropertiesRoutes);
+app.use("/api/admin", routeSource("adminTenantsRoutes.ts"), adminTenantsRoutes);
 app.use("/api/admin", routeSource("adminScreeningResultsRoutes.ts"), adminScreeningResultsRoutes);
 app.use("/api/admin/demo", routeSource("adminDemoRoutes.ts"), adminDemoRoutes);
 app.use("/api", stubsRoutes);
