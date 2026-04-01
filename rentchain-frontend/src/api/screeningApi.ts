@@ -1,5 +1,6 @@
 // src/api/screeningApi.ts
 import { apiFetch } from "./apiFetch";
+import { withAuthHeaders } from "./httpClient";
 import { getBureauAdapter } from "@/bureau";
 import { comparePrimaryVsShadow } from "@/bureau/shadow/compare";
 import { runShadowTask } from "@/bureau/shadow/runShadow";
@@ -53,6 +54,65 @@ export interface ScreeningRequest {
 export interface ScreeningRequestResponse {
   screeningRequest: ScreeningRequest;
 }
+
+export type ScreeningHistoryRecord = {
+  id: string;
+  landlordId: string;
+  propertyId: string | null;
+  unitId: string | null;
+  applicationId: string | null;
+  tenantId: string | null;
+  applicantName: string | null;
+  provider: "transunion" | "equifax" | "other";
+  providerReferenceId: string | null;
+  screeningType: string | null;
+  status: "pending" | "completed" | "failed";
+  result: "approved" | "review" | "declined" | "unknown";
+  riskLevel: "low" | "medium" | "high" | "unknown";
+  screenedAt: string | number | null;
+  requestedAt: string | number | null;
+  requestedByUserId: string | null;
+  summary: {
+    recommendation: string | null;
+    scoreBand: string | null;
+    confidence: string | null;
+    openAccounts: number | null;
+    pastDueTotal: number | null;
+    collectionsPresent: boolean | null;
+    bankruptcyPresent: boolean | null;
+    inquiriesCount: number | null;
+    flags: string[];
+    notes: string | null;
+  };
+  report: {
+    status: "available" | "archived" | "not_stored" | "retrieval_required" | "pending" | "failed";
+    storageMode: "rentchain_encrypted" | "provider_only" | "none";
+    fileRef: string | null;
+    archivedAt: string | number | null;
+    retrievalCost: number | null;
+    retrievalRequired: boolean | null;
+  };
+  audit: {
+    lastViewedAt: string | number | null;
+    lastViewedByUserId: string | null;
+    accessCount: number | null;
+  };
+  createdAt: string | number | null;
+  updatedAt: string | number | null;
+};
+
+export type ScreeningHistoryDetail = ScreeningHistoryRecord & {
+  propertyLabel: string | null;
+  unitLabel: string | null;
+  applicationStatus: string | null;
+  metadata: {
+    sourceType: "order" | "request";
+    sourceId: string;
+    referenceId: string | null;
+    packageType: string | null;
+    requestedByLabel: string | null;
+  };
+};
 
 const nowMs = () =>
   typeof performance !== "undefined" && typeof performance.now === "function"
@@ -195,6 +255,42 @@ export async function getScreening(
   id: string
 ): Promise<ScreeningRequestResponse> {
   return apiFetch<ScreeningRequestResponse>(`/screenings/${encodeURIComponent(id)}`);
+}
+
+export async function fetchScreeningHistory(params: {
+  applicationId?: string | null;
+  tenantId?: string | null;
+  limit?: number;
+}): Promise<{ ok: boolean; items: ScreeningHistoryRecord[] }> {
+  const query = new URLSearchParams();
+  if (params.applicationId) query.set("applicationId", params.applicationId);
+  if (params.tenantId) query.set("tenantId", params.tenantId);
+  if (typeof params.limit === "number") query.set("limit", String(params.limit));
+  return apiFetch<{ ok: boolean; items: ScreeningHistoryRecord[] }>(`/screenings/history?${query.toString()}`);
+}
+
+export async function fetchScreeningHistoryDetail(
+  id: string
+): Promise<{ ok: boolean; screening: ScreeningHistoryDetail }> {
+  return apiFetch<{ ok: boolean; screening: ScreeningHistoryDetail }>(
+    `/screenings/history/${encodeURIComponent(id)}`
+  );
+}
+
+export async function fetchScreeningReportBlob(id: string): Promise<Blob> {
+  const response = await fetch(`/api/screenings/history/${encodeURIComponent(id)}/report`, withAuthHeaders({ method: "GET" }));
+  if (!response.ok) {
+    let message = `Failed to load screening report: ${response.status}`;
+    try {
+      const text = await response.text();
+      const parsed = JSON.parse(text);
+      if (parsed?.error) message = parsed.error;
+    } catch {
+      // ignore parse errors
+    }
+    throw new Error(message);
+  }
+  return response.blob();
 }
 
 export async function downloadScreeningPdf(
