@@ -163,6 +163,13 @@ export const NAV_ITEMS: NavItem[] = [
     showInDrawer: true,
   },
   {
+    id: "admin-leases",
+    label: "Admin Leases",
+    to: "/admin/leases",
+    requiresAdmin: true,
+    showInDrawer: true,
+  },
+  {
     id: "verified-screenings",
     label: "Verified Screenings",
     to: "/verified-screenings",
