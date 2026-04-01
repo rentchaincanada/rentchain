@@ -3,8 +3,55 @@ import { db, FieldValue } from "../config/firebase";
 import { requireAuth } from "../middleware/requireAuth";
 import { requirePermission } from "../middleware/requireAuthz";
 import { listAdminProperties } from "../services/admin/adminPropertyView";
+import { buildAdminPropertiesCsv } from "../services/admin/adminCsvExport";
 
 const router = Router();
+
+router.get(
+  "/properties/export.csv",
+  requireAuth,
+  requirePermission("system.admin"),
+  async (req: any, res) => {
+    try {
+      const csv = await buildAdminPropertiesCsv({
+        q: String(req.query?.q || "").trim() || null,
+        province: String(req.query?.province || "").trim() || null,
+        landlordId: String(req.query?.landlordId || "").trim() || null,
+        ownerUserId: String(req.query?.ownerUserId || "").trim() || null,
+        integrity: (String(req.query?.integrity || "").trim() as any) || null,
+        sortBy: (String(req.query?.sortBy || "").trim() as any) || null,
+        sortDir: (String(req.query?.sortDir || "").trim() as any) || null,
+      });
+
+      console.info("[admin.export]", {
+        route: "/api/admin/properties/export.csv",
+        userId: String(req.user?.id || req.user?.sub || "").trim() || null,
+        role: String(req.user?.role || "").toLowerCase(),
+        adminAccessResolved: true,
+        exportType: "properties",
+        format: "csv",
+        filterSummary: {
+          q: String(req.query?.q || "").trim() || null,
+          province: String(req.query?.province || "").trim() || null,
+          landlordId: String(req.query?.landlordId || "").trim() || null,
+          ownerUserId: String(req.query?.ownerUserId || "").trim() || null,
+          integrity: String(req.query?.integrity || "").trim() || "all",
+          sortBy: String(req.query?.sortBy || "").trim() || "updatedAt",
+          sortDir: String(req.query?.sortDir || "").trim() || "desc",
+        },
+        rowCount: csv.rowCount,
+        capped: csv.capped,
+      });
+
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="${csv.filename}"`);
+      return res.status(200).send(csv.content);
+    } catch (err: any) {
+      console.error("[adminPropertiesRoutes] property export failed", err?.message || err);
+      return res.status(500).json({ ok: false, error: "admin_properties_export_failed" });
+    }
+  }
+);
 
 router.get(
   "/properties",
