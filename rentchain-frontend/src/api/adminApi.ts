@@ -74,6 +74,46 @@ export type FetchAdminTenantsParams = {
   pageSize?: number;
 };
 
+export type AdminLeaseView = {
+  id: string;
+  propertyId: string | null;
+  propertyName: string | null;
+  unitId: string | null;
+  unitNumber: string | null;
+  landlordId: string | null;
+  tenantIds: string[];
+  tenantNames: string[];
+  status: string | null;
+  monthlyRent: number | null;
+  startDate: string | null;
+  endDate: string | null;
+  riskGrade: string | null;
+  createdAt: string | number | null;
+  updatedAt: string | number | null;
+  integrity: {
+    hasIssues: boolean;
+    duplicateAgreement: boolean;
+    occupancyMismatch: boolean;
+  };
+};
+
+export type FetchAdminLeasesParams = {
+  q?: string;
+  landlordId?: string;
+  propertyId?: string;
+  status?: string;
+  riskGrade?: string;
+  integrity?: "all" | "issues" | "duplicateAgreement" | "occupancyMismatch";
+  startAfter?: string;
+  startBefore?: string;
+  endAfter?: string;
+  endBefore?: string;
+  sortBy?: "createdAt" | "updatedAt" | "startDate" | "monthlyRent";
+  sortDir?: "asc" | "desc";
+  page?: number;
+  pageSize?: number;
+};
+
 export async function fetchAdminProperties(params?: FetchAdminPropertiesParams) {
   const query = new URLSearchParams();
   if (params?.q) query.set("q", params.q);
@@ -117,4 +157,31 @@ export async function fetchAdminTenants(params?: FetchAdminTenantsParams) {
     total: number;
     hasMore: boolean;
   }>(`/admin/tenants${suffix}`);
+}
+
+export async function fetchAdminLeases(params?: FetchAdminLeasesParams) {
+  const query = new URLSearchParams();
+  if (params?.q) query.set("q", params.q);
+  if (params?.landlordId) query.set("landlordId", params.landlordId);
+  if (params?.propertyId) query.set("propertyId", params.propertyId);
+  if (params?.status) query.set("status", params.status);
+  if (params?.riskGrade) query.set("riskGrade", params.riskGrade);
+  if (params?.integrity) query.set("integrity", params.integrity);
+  if (params?.startAfter) query.set("startAfter", params.startAfter);
+  if (params?.startBefore) query.set("startBefore", params.startBefore);
+  if (params?.endAfter) query.set("endAfter", params.endAfter);
+  if (params?.endBefore) query.set("endBefore", params.endBefore);
+  if (params?.sortBy) query.set("sortBy", params.sortBy);
+  if (params?.sortDir) query.set("sortDir", params.sortDir);
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.pageSize) query.set("pageSize", String(params.pageSize));
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return apiFetch<{
+    ok: true;
+    items: AdminLeaseView[];
+    page: number;
+    pageSize: number;
+    total: number;
+    hasMore: boolean;
+  }>(`/admin/leases${suffix}`);
 }
