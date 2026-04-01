@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, FieldValue } from "../config/firebase";
 import { requireAuth } from "../middleware/requireAuth";
 import { requirePermission } from "../middleware/requireAuthz";
+import { listAdminProperties } from "../services/admin/adminPropertyView";
 
 const router = Router();
 
@@ -11,29 +12,40 @@ router.get(
   requirePermission("system.admin"),
   async (req: any, res) => {
     try {
-      const landlordFilter = String(req.query?.landlordId || "").trim() || null;
-      const limitRaw = Number(req.query?.limit ?? 100);
-      const limit =
-        Number.isFinite(limitRaw) && limitRaw > 0
-          ? Math.min(Math.max(limitRaw, 1), 500)
-          : 100;
-
-      let query: FirebaseFirestore.Query = db.collection("properties");
-      if (landlordFilter) {
-        query = query.where("landlordId", "==", landlordFilter);
-      }
-      const snap = await query.orderBy("createdAt", "desc").limit(limit).get();
-      const items = (snap.docs || []).map((doc: any) => ({ id: doc.id, ...(doc.data() || {}) }));
+      const result = await listAdminProperties({
+        q: String(req.query?.q || "").trim() || null,
+        province: String(req.query?.province || "").trim() || null,
+        landlordId: String(req.query?.landlordId || "").trim() || null,
+        ownerUserId: String(req.query?.ownerUserId || "").trim() || null,
+        integrity: (String(req.query?.integrity || "").trim() as any) || null,
+        sortBy: (String(req.query?.sortBy || "").trim() as any) || null,
+        sortDir: (String(req.query?.sortDir || "").trim() as any) || null,
+        page: Number(req.query?.page ?? 1),
+        pageSize: Number(req.query?.pageSize ?? 25),
+      });
 
       console.info("[properties.scope]", {
         route: "/api/admin/properties",
         userId: String(req.user?.id || req.user?.sub || "").trim() || null,
         role: String(req.user?.role || "").toLowerCase(),
-        returnedPropertyCount: items.length,
+        adminAccessResolved: true,
+        query: {
+          q: String(req.query?.q || "").trim() || null,
+          province: String(req.query?.province || "").trim() || null,
+          landlordId: String(req.query?.landlordId || "").trim() || null,
+          ownerUserId: String(req.query?.ownerUserId || "").trim() || null,
+          integrity: String(req.query?.integrity || "").trim() || "all",
+          sortBy: String(req.query?.sortBy || "").trim() || "updatedAt",
+          sortDir: String(req.query?.sortDir || "").trim() || "desc",
+        },
+        page: result.page,
+        pageSize: result.pageSize,
+        resultCount: result.items.length,
+        total: result.total,
         adminOverridePathUsed: true,
       });
 
-      return res.json({ ok: true, items, nextCursor: null });
+      return res.json({ ok: true, ...result });
     } catch (err: any) {
       console.error("[adminPropertiesRoutes] property list failed", err?.message || err);
       return res.status(500).json({ ok: false, error: "admin_properties_list_failed" });
