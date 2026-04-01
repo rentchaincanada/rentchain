@@ -4,6 +4,7 @@ import { MacShell } from "../../components/layout/MacShell";
 import { Button, Card, Pill, Section } from "../../components/ui/Ui";
 import { useToast } from "../../components/ui/ToastProvider";
 import { exportAdminTenantsCsv, fetchAdminTenants, type AdminTenantView } from "../../api/adminApi";
+import { AdminSavedFilters } from "../../components/admin/AdminSavedFilters";
 
 function readFilters(search: string) {
   const params = new URLSearchParams(search);
@@ -44,6 +45,17 @@ export const AdminTenantsPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectedTenant, setSelectedTenant] = useState<AdminTenantView | null>(null);
 
+  const currentPresetFilters = useMemo(() => {
+    const out: Record<string, string | number | boolean | null> = {};
+    if (filters.q) out.q = filters.q;
+    if (filters.leaseStatus) out.leaseStatus = filters.leaseStatus;
+    if (filters.screeningStatus) out.screeningStatus = filters.screeningStatus;
+    if (filters.moveInStatus) out.moveInStatus = filters.moveInStatus;
+    if (filters.sortBy !== "updatedAt") out.sortBy = filters.sortBy;
+    if (filters.sortDir !== "desc") out.sortDir = filters.sortDir;
+    return out;
+  }, [filters]);
+
   const updateFilters = (patch: Partial<typeof filters>) => {
     const next = new URLSearchParams(location.search);
     const merged = { ...filters, ...patch, page: patch.page ?? 1 };
@@ -65,6 +77,15 @@ export const AdminTenantsPage: React.FC = () => {
   };
 
   const resetFilters = () => navigate({ pathname: location.pathname, search: "" }, { replace: false });
+
+  const applyPreset = (presetFilters: Record<string, string | number | boolean | null>) => {
+    const next = new URLSearchParams();
+    Object.entries(presetFilters).forEach(([key, value]) => {
+      if (value == null || value === "") return;
+      next.set(key, String(value));
+    });
+    navigate({ pathname: location.pathname, search: next.toString() }, { replace: false });
+  };
 
   useEffect(() => {
     let active = true;
@@ -242,6 +263,8 @@ export const AdminTenantsPage: React.FC = () => {
             </Button>
           </div>
         </Card>
+
+        <AdminSavedFilters pageKey="tenants" currentFilters={currentPresetFilters} onApplyPreset={applyPreset} />
 
         <Card style={{ display: "grid", gap: 12 }}>
           {loading ? <div>Loading tenants…</div> : null}

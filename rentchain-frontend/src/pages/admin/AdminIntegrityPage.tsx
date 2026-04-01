@@ -4,6 +4,7 @@ import { MacShell } from "../../components/layout/MacShell";
 import { Button, Card, Pill, Section } from "../../components/ui/Ui";
 import { useToast } from "../../components/ui/ToastProvider";
 import { exportAdminIntegrityCsv, fetchAdminIntegrity, type AdminIntegrity } from "../../api/adminApi";
+import { AdminSavedFilters } from "../../components/admin/AdminSavedFilters";
 
 const EMPTY_INTEGRITY: AdminIntegrity = {
   sections: [
@@ -119,6 +120,11 @@ export const AdminIntegrityPage: React.FC = () => {
 
   const hasIssues = data.totals.totalIssues > 0;
 
+  const applyPreset = () => {
+    window.history.replaceState({}, "", "/admin/integrity");
+    void load();
+  };
+
   return (
     <MacShell title="Admin · Integrity">
       <div style={{ display: "grid", gap: 16 }}>
@@ -146,6 +152,8 @@ export const AdminIntegrityPage: React.FC = () => {
 
         {loading ? <Card>Loading integrity issues…</Card> : null}
         {!loading && error ? <Card style={{ color: "#b91c1c" }}>Failed to load admin integrity: {error}</Card> : null}
+
+        <AdminSavedFilters pageKey="integrity" currentFilters={{}} onApplyPreset={applyPreset} allowEmptySave />
 
         {!loading && !error ? (
           <>

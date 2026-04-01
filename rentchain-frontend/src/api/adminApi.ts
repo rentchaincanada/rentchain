@@ -175,6 +175,18 @@ export type AdminIntegrity = {
   };
 };
 
+export type AdminSavedFilterPageKey = "properties" | "tenants" | "leases" | "integrity";
+
+export type AdminSavedFilterPreset = {
+  id: string;
+  userId: string;
+  pageKey: AdminSavedFilterPageKey;
+  name: string;
+  filters: Record<string, string | number | boolean | null>;
+  createdAt: string | number;
+  updatedAt: string | number;
+};
+
 export async function fetchAdminProperties(params?: FetchAdminPropertiesParams) {
   const query = new URLSearchParams();
   if (params?.q) query.set("q", params.q);
@@ -262,6 +274,33 @@ export async function fetchAdminIntegrity() {
     sections: AdminIntegrity["sections"];
     totals: AdminIntegrity["totals"];
   }>("/admin/integrity");
+}
+
+export async function fetchAdminSavedFilters(pageKey: AdminSavedFilterPageKey) {
+  return apiFetch<{
+    ok: true;
+    items: AdminSavedFilterPreset[];
+  }>(`/admin/saved-filters?pageKey=${encodeURIComponent(pageKey)}`);
+}
+
+export async function createAdminSavedFilter(payload: {
+  pageKey: AdminSavedFilterPageKey;
+  name: string;
+  filters: Record<string, string | number | boolean | null>;
+}) {
+  return apiFetch<{
+    ok: true;
+    item: AdminSavedFilterPreset;
+  }>("/admin/saved-filters", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export async function deleteAdminSavedFilter(id: string) {
+  return apiFetch<{ ok: true }>(`/admin/saved-filters/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
 }
 
 function adminApiUrl(path: string, query?: URLSearchParams) {

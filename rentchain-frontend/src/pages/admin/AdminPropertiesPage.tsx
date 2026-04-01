@@ -7,6 +7,7 @@ import { exportAdminPropertiesCsv, fetchAdminProperties, type AdminPropertyView 
 import { AdminFilterBar } from "../../components/admin/AdminFilterBar";
 import { AdminDataTable } from "../../components/admin/AdminDataTable";
 import { AdminDetailDrawer } from "../../components/admin/AdminDetailDrawer";
+import { AdminSavedFilters } from "../../components/admin/AdminSavedFilters";
 
 function readFilters(search: string) {
   const params = new URLSearchParams(search);
@@ -32,6 +33,16 @@ export const AdminPropertiesPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectedProperty, setSelectedProperty] = useState<AdminPropertyView | null>(null);
 
+  const currentPresetFilters = useMemo(() => {
+    const out: Record<string, string | number | boolean | null> = {};
+    if (filters.q) out.q = filters.q;
+    if (filters.province) out.province = filters.province;
+    if (filters.integrity !== "all") out.integrity = filters.integrity;
+    if (filters.sortBy !== "updatedAt") out.sortBy = filters.sortBy;
+    if (filters.sortDir !== "desc") out.sortDir = filters.sortDir;
+    return out;
+  }, [filters]);
+
   const updateFilters = (patch: Partial<typeof filters>) => {
     const next = new URLSearchParams(location.search);
     const merged = { ...filters, ...patch, page: patch.page ?? 1 };
@@ -47,6 +58,15 @@ export const AdminPropertiesPage: React.FC = () => {
 
   const resetFilters = () => {
     navigate({ pathname: location.pathname, search: "" }, { replace: false });
+  };
+
+  const applyPreset = (presetFilters: Record<string, string | number | boolean | null>) => {
+    const next = new URLSearchParams();
+    Object.entries(presetFilters).forEach(([key, value]) => {
+      if (value == null || value === "") return;
+      next.set(key, String(value));
+    });
+    navigate({ pathname: location.pathname, search: next.toString() }, { replace: false });
   };
 
   useEffect(() => {
@@ -142,6 +162,8 @@ export const AdminPropertiesPage: React.FC = () => {
           }
           onReset={resetFilters}
         />
+
+        <AdminSavedFilters pageKey="properties" currentFilters={currentPresetFilters} onApplyPreset={applyPreset} />
 
         <Card style={{ display: "grid", gap: 12 }}>
           {loading ? <div>Loading properties…</div> : null}
