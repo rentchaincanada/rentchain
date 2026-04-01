@@ -35,6 +35,9 @@ import { getPrimaryTimeoutMs, hashSeedKey, isAllowlistedSeed, parseAllowlist } f
 import { logCutoverEvent } from "../services/screening/cutoverTelemetry";
 import { runPrimaryWithFallback } from "../services/screening/runPrimaryWithFallback";
 import { getBureauProvider } from "../services/screening/providers/bureauProvider";
+import { listScreeningHistory, getScreeningHistoryDetail } from "../services/screening/screeningHistoryService";
+import { resolveScreeningReportAccess, downloadScreeningReportBuffer } from "../services/screening/screeningAccessService";
+import { writeScreeningEvent } from "../services/screening/screeningEvents";
 
 const router = Router();
 
@@ -313,6 +316,143 @@ router.post(
       return res.status(500).json({
         error: "Unable to create checkout session",
       });
+    }
+  }
+);
+
+router.get(
+  "/screenings/history",
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const role = String(req.user?.role || "").toLowerCase();
+      if (role !== "landlord" && role !== "admin") {
+        return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+      }
+      const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+      if (!landlordId && role !== "admin") {
+        return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+      }
+      const applicationId = String(req.query?.applicationId || "").trim();
+      const tenantId = String(req.query?.tenantId || "").trim();
+      const limit = Number(req.query?.limit || 10);
+      if (!applicationId && !tenantId) {
+        return res.status(400).json({ ok: false, error: "APPLICATION_OR_TENANT_REQUIRED" });
+      }
+
+      const items = await listScreeningHistory({
+        landlordId,
+        applicationId: applicationId || null,
+        tenantId: tenantId || null,
+        limit,
+      });
+
+      return res.json({ ok: true, items });
+    } catch (err: any) {
+      console.error("[screenings/history] failed", err?.message || err);
+      return res.status(500).json({ ok: false, error: "SCREENING_HISTORY_READ_FAILED" });
+    }
+  }
+);
+
+router.get(
+  "/screenings/history/:id",
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const role = String(req.user?.role || "").toLowerCase();
+      if (role !== "landlord" && role !== "admin") {
+        return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+      }
+      const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+      if (!landlordId && role !== "admin") {
+        return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+      }
+
+      const detail = await getScreeningHistoryDetail({
+        landlordId,
+        screeningId: String(req.params?.id || ""),
+      });
+
+      if (!detail) {
+        return res.status(404).json({ ok: false, error: "SCREENING_NOT_FOUND" });
+      }
+
+      await writeScreeningEvent({
+        applicationId: detail.applicationId,
+        orderId: detail.metadata.sourceType === "order" ? detail.metadata.sourceId : null,
+        landlordId: detail.landlordId,
+        type: "summary_viewed",
+        actor: role === "admin" ? "admin" : "landlord",
+        meta: {
+          status: detail.status,
+          from: "screenings/history",
+        },
+      });
+
+      return res.json({ ok: true, screening: detail });
+    } catch (err: any) {
+      console.error("[screenings/history/:id] failed", err?.message || err);
+      return res.status(500).json({ ok: false, error: "SCREENING_DETAIL_READ_FAILED" });
+    }
+  }
+);
+
+router.get(
+  "/screenings/history/:id/report",
+  async (req: AuthenticatedRequest, res: Response) => {
+    const role = String(req.user?.role || "").toLowerCase();
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    if (role !== "landlord" && role !== "admin") {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+    if (!landlordId && role !== "admin") {
+      return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    }
+
+    const screeningId = String(req.params?.id || "").trim();
+    const detail = await getScreeningHistoryDetail({ landlordId, screeningId });
+    if (!detail) {
+      return res.status(404).json({ ok: false, error: "SCREENING_NOT_FOUND" });
+    }
+
+    const access = await resolveScreeningReportAccess({ landlordId, screeningId });
+    if (!access.ok) {
+      await writeScreeningEvent({
+        applicationId: detail.applicationId,
+        orderId: detail.metadata.sourceType === "order" ? detail.metadata.sourceId : null,
+        landlordId: detail.landlordId,
+        type: "report_access_denied",
+        actor: role === "admin" ? "admin" : "landlord",
+        meta: {
+          status: detail.report.status,
+          reasonCode: access.error,
+        },
+      });
+      return res.status(access.status).json({ ok: false, error: access.error, reportStatus: detail.report.status });
+    }
+
+    try {
+      const buffer = await downloadScreeningReportBuffer({
+        bucket: access.bucket,
+        objectKey: access.objectKey,
+      });
+
+      await writeScreeningEvent({
+        applicationId: detail.applicationId,
+        orderId: detail.metadata.sourceType === "order" ? detail.metadata.sourceId : null,
+        landlordId: detail.landlordId,
+        type: "report_viewed",
+        actor: role === "admin" ? "admin" : "landlord",
+        meta: {
+          status: detail.report.status,
+        },
+      });
+
+      res.setHeader("Content-Type", access.contentType);
+      res.setHeader("Content-Disposition", `inline; filename="${access.filename}"`);
+      return res.status(200).send(buffer);
+    } catch (err: any) {
+      console.error("[screenings/history/:id/report] failed", err?.message || err);
+      return res.status(500).json({ ok: false, error: "REPORT_STREAM_FAILED" });
     }
   }
 );

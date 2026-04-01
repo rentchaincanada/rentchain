@@ -91,6 +91,15 @@ import {
   requestManualScreening,
   type ScreeningStatusView,
 } from "@/api/screeningOpsApi";
+import {
+  fetchScreeningHistory,
+  fetchScreeningHistoryDetail,
+  fetchScreeningReportBlob,
+  type ScreeningHistoryDetail,
+  type ScreeningHistoryRecord,
+} from "@/api/screeningApi";
+import { ScreeningHistoryTable } from "@/components/screening/ScreeningHistoryTable";
+import { ScreeningDetailDrawer } from "@/components/screening/ScreeningDetailDrawer";
 const statusOptions: RentalApplicationStatus[] = [
   "SUBMITTED",
   "IN_REVIEW",
@@ -280,6 +289,14 @@ const ApplicationsPage: React.FC = () => {
   const [screeningEvents, setScreeningEvents] = useState<ScreeningEvent[]>([]);
   const [screeningEventsLoading, setScreeningEventsLoading] = useState(false);
   const [screeningEventsRefreshedAt, setScreeningEventsRefreshedAt] = useState<number | null>(null);
+  const [screeningHistory, setScreeningHistory] = useState<ScreeningHistoryRecord[]>([]);
+  const [screeningHistoryLoading, setScreeningHistoryLoading] = useState(false);
+  const [screeningDetailOpen, setScreeningDetailOpen] = useState(false);
+  const [selectedScreeningId, setSelectedScreeningId] = useState<string | null>(null);
+  const [selectedScreeningDetail, setSelectedScreeningDetail] = useState<ScreeningHistoryDetail | null>(null);
+  const [screeningDetailLoading, setScreeningDetailLoading] = useState(false);
+  const [screeningDetailError, setScreeningDetailError] = useState<string | null>(null);
+  const [screeningReportLoadingId, setScreeningReportLoadingId] = useState<string | null>(null);
   const [exportingReport, setExportingReport] = useState(false);
   const [exportShareUrl, setExportShareUrl] = useState<string | null>(null);
   const [exportExpiresAt, setExportExpiresAt] = useState<number | null>(null);
@@ -508,6 +525,58 @@ const ApplicationsPage: React.FC = () => {
     }
   };
 
+  const loadScreeningHistory = async (applicationId: string) => {
+    setScreeningHistoryLoading(true);
+    try {
+      const res = await fetchScreeningHistory({ applicationId, limit: 10 });
+      setScreeningHistory(Array.isArray(res?.items) ? res.items : []);
+    } catch {
+      setScreeningHistory([]);
+    } finally {
+      setScreeningHistoryLoading(false);
+    }
+  };
+
+  const loadScreeningDetail = useCallback(async (screeningId: string) => {
+    setSelectedScreeningId(screeningId);
+    setScreeningDetailOpen(true);
+    setScreeningDetailLoading(true);
+    setScreeningDetailError(null);
+    try {
+      const res = await fetchScreeningHistoryDetail(screeningId);
+      setSelectedScreeningDetail(res.screening || null);
+    } catch (err: any) {
+      setSelectedScreeningDetail(null);
+      setScreeningDetailError(err?.message || "Failed to load screening detail.");
+    } finally {
+      setScreeningDetailLoading(false);
+    }
+  }, []);
+
+  const openScreeningReport = useCallback(
+    async (screeningId: string) => {
+      setScreeningReportLoadingId(screeningId);
+      try {
+        const blob = await fetchScreeningReportBlob(screeningId);
+        const url = window.URL.createObjectURL(blob);
+        window.open(url, "_blank", "noopener,noreferrer");
+        window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
+        if (detail?.id) {
+          await loadScreeningHistory(detail.id);
+        }
+      } catch (err: any) {
+        showToast({
+          message: "Unable to open report",
+          description: err?.message || "",
+          variant: "error",
+        });
+      } finally {
+        setScreeningReportLoadingId(null);
+      }
+    },
+    [detail?.id, loadScreeningHistory, showToast]
+  );
+
   const refreshSelectedApplication = async (applicationId?: string | null) => {
     const id = String(applicationId || "").trim();
     if (!id) return;
@@ -528,6 +597,7 @@ const ApplicationsPage: React.FC = () => {
       await loadManualScreeningStatus(id);
       await loadScreeningEvents(id);
       await loadScreeningReceipt(id);
+      await loadScreeningHistory(id);
       setScreeningEventsRefreshedAt(Date.now());
       if (app?.screeningStatus === "complete" && app?.screeningResultId) {
         const res = await fetchScreeningResult(id);
@@ -538,6 +608,9 @@ const ApplicationsPage: React.FC = () => {
       } else {
         setResultData(null);
       }
+      setSelectedScreeningId(null);
+      setSelectedScreeningDetail(null);
+      setScreeningDetailOpen(false);
     } catch (err: any) {
       setError(err?.message || "Failed to load application details.");
     } finally {
@@ -1819,6 +1892,17 @@ const ApplicationsPage: React.FC = () => {
                     </div>
                   ) : null}
                   <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
+                    <div style={{ fontWeight: 700, fontSize: 15 }}>Screening history</div>
+                    <ScreeningHistoryTable
+                      items={screeningHistory}
+                      loading={screeningHistoryLoading}
+                      reportLoadingId={screeningReportLoadingId}
+                      onViewSummary={(item) => void loadScreeningDetail(item.id)}
+                      onViewReport={(item) => void openScreeningReport(item.id)}
+                      onRescreen={() => void handleManualScreeningPrimaryAction()}
+                    />
+                  </div>
+                  <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
                     {!SCREENING_ENABLED ? (
                       <div style={{ fontSize: 13, color: text.muted }}>
                         {screeningComingSoonDetailText}
@@ -2401,6 +2485,19 @@ const ApplicationsPage: React.FC = () => {
         />
       </Card>
     </div>
+      <ScreeningDetailDrawer
+        open={screeningDetailOpen}
+        screening={selectedScreeningDetail}
+        loading={screeningDetailLoading}
+        error={screeningDetailError}
+        reportLoading={screeningReportLoadingId === selectedScreeningId}
+        onClose={() => setScreeningDetailOpen(false)}
+        onViewReport={() => {
+          if (!selectedScreeningId) return;
+          void openScreeningReport(selectedScreeningId);
+        }}
+        onRescreen={() => void handleManualScreeningPrimaryAction()}
+      />
       {resultModalOpen && (
       <div
         style={{
