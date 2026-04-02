@@ -115,10 +115,71 @@ export interface MoveInRequirements {
   lastUpdatedAt?: string | null;
 }
 
-export type MoveInReadinessStatus = "not-started" | "in-progress" | "ready" | "completed" | "unknown";
+export type MoveInReadinessItemKey =
+  | "lease_signed"
+  | "tenant_portal_invite_sent"
+  | "tenant_portal_activated"
+  | "deposit_received"
+  | "first_rent_received"
+  | "insurance_received"
+  | "utility_setup_received"
+  | "inspection_scheduled"
+  | "inspection_completed"
+  | "keys_release_approved"
+  | "keys_released";
+
+export type MoveInReadinessItemStatus =
+  | "not_started"
+  | "pending"
+  | "submitted"
+  | "confirmed"
+  | "blocked"
+  | "not_required";
+
+export type MoveInReadinessOverallStatus =
+  | "not_started"
+  | "in_progress"
+  | "blocked"
+  | "ready_for_keys"
+  | "complete";
+
+export interface MoveInReadinessItem {
+  key: MoveInReadinessItemKey;
+  label: string;
+  stage: "lease" | "onboarding" | "funding" | "inspection" | "keys";
+  required: boolean;
+  status: MoveInReadinessItemStatus;
+  note?: string | null;
+  blockerReason?: string | null;
+  source: "system" | "manual";
+  updatedAt?: string | null;
+  updatedByUserId?: string | null;
+}
+
+export interface MoveInReadinessEvent {
+  id: string;
+  type: "item_updated" | "record_created";
+  itemKey?: MoveInReadinessItemKey | null;
+  label: string;
+  note?: string | null;
+  status?: MoveInReadinessItemStatus | null;
+  actorUserId?: string | null;
+  actorRole: "landlord" | "admin" | "system";
+  createdAt: string;
+}
 
 export interface MoveInReadiness {
-  status: MoveInReadinessStatus;
+  tenantId: string;
+  landlordId?: string | null;
+  overallStatus: MoveInReadinessOverallStatus;
+  completionPercent: number;
+  blockerCount: number;
+  nextRequiredStep?: string | null;
+  lastUpdatedAt?: string | null;
+  items: MoveInReadinessItem[];
+  events: MoveInReadinessEvent[];
+  // Legacy summary compatibility for older readiness UI/tests.
+  status?: "not-started" | "in-progress" | "ready" | "completed" | "unknown";
   readinessPercent?: number | null;
   leaseSigned?: boolean | null;
   portalInviteSent?: boolean | null;
@@ -134,7 +195,6 @@ export interface MoveInReadiness {
   keysReleaseReady?: boolean | null;
   outstandingItems?: string[];
   completedItems?: string[];
-  lastUpdatedAt?: string | null;
 }
 
 export interface TenantDetailBundle {
@@ -164,4 +224,24 @@ export async function fetchTenantDetail(tenantId: string): Promise<TenantDetailB
 
   const res = await apiFetch<TenantDetailBundle>(`/tenants/${encodeURIComponent(tenantId)}`);
   return res;
+}
+
+export async function updateTenantMoveInReadiness(
+  tenantId: string,
+  updates: Array<{
+    key: MoveInReadinessItemKey;
+    status: MoveInReadinessItemStatus;
+    note?: string | null;
+    blockerReason?: string | null;
+  }>
+): Promise<MoveInReadiness> {
+  const res = await apiFetch<{ ok: boolean; readiness: MoveInReadiness }>(
+    `/tenants/${encodeURIComponent(tenantId)}/move-in-readiness`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ updates }),
+    }
+  );
+  return res.readiness;
 }

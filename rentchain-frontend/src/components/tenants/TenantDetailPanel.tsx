@@ -3,6 +3,7 @@ import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTenantDetail } from "../../hooks/useTenantDetail";
 import { downloadTenantReport } from "@/api/tenantsApi";
+import { updateTenantMoveInReadiness, type MoveInReadiness } from "@/api/tenantDetail";
 import { getTenantSignals, type TenantSignals } from "@/api/tenantSignals";
 import { fetchLedger } from "@/api/ledgerApi";
 import { LedgerTimeline } from "../ledger/LedgerTimeline";
@@ -17,8 +18,7 @@ import { useUpgrade } from "@/context/UpgradeContext";
 import { upgradeStarterButtonStyle } from "../../lib/upgradeButtonStyles";
 import { useAuth } from "@/context/useAuth";
 import { CredibilityInsightsCard } from "./CredibilityInsightsCard";
-import { MoveInReadinessCard } from "./MoveInReadinessCard";
-import { MoveInRequirementsCard } from "./MoveInRequirementsCard";
+import { MoveInReadinessPanel } from "./MoveInReadinessPanel";
 
 interface TenantDetailPanelProps {
   tenantId: string | null;
@@ -120,8 +120,8 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
   const unit = bundle.unit || null;
   const latestLeaseNoticeSummary = bundle.latestLeaseNoticeSummary || null;
   const credibilityInsights = bundle.credibilityInsights || null;
-  const moveInRequirements = bundle.moveInRequirements || null;
-  const moveInReadiness = bundle.moveInReadiness || null;
+  const [moveInReadiness, setMoveInReadiness] = useState<MoveInReadiness | null>(bundle.moveInReadiness || null);
+  const [readinessSaving, setReadinessSaving] = useState(false);
 
   const [ledgerItems, setLedgerItems] = useState<any[]>([]);
   const [ledgerLoading, setLedgerLoading] = useState(false);
@@ -133,6 +133,10 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
   const [recordOpen, setRecordOpen] = useState(false);
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [leasePackOpen, setLeasePackOpen] = useState(false);
+
+  useEffect(() => {
+    setMoveInReadiness(bundle.moveInReadiness || null);
+  }, [bundle.moveInReadiness]);
 
   useEffect(() => {
     cancelledRef.current = false;
@@ -238,6 +242,35 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
   const propertyLabel = property?.name || tenant.propertyName || lease?.propertyName || "Unknown Property";
   const propertyAddress = [property?.addressLine1, property?.city, property?.province].filter(Boolean).join(", ");
   const unitLabel = unit?.unitNumber || tenant.unit || lease?.unit || "N/A";
+
+  const handleReadinessUpdate = React.useCallback(
+    async (update: {
+      key: string;
+      status: any;
+      note?: string | null;
+      blockerReason?: string | null;
+    }) => {
+      try {
+        setReadinessSaving(true);
+        const next = await updateTenantMoveInReadiness(tenantId, [update as any]);
+        setMoveInReadiness(next);
+        showToast({
+          message: "Move-in readiness updated",
+          description: "The readiness checklist has been refreshed.",
+          variant: "success",
+        });
+      } catch (err: any) {
+        showToast({
+          message: "Unable to update readiness",
+          description: err?.message || "Please try again.",
+          variant: "error",
+        });
+      } finally {
+        setReadinessSaving(false);
+      }
+    },
+    [showToast, tenantId]
+  );
 
   return (
     <div
@@ -437,9 +470,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
 
       <CredibilityInsightsCard insights={credibilityInsights} />
 
-      <MoveInRequirementsCard requirements={moveInRequirements} />
-
-      <MoveInReadinessCard readiness={moveInReadiness} />
+      <MoveInReadinessPanel readiness={moveInReadiness} saving={readinessSaving} onUpdate={handleReadinessUpdate} />
 
       {latestLeaseNoticeSummary ? (
         <div
