@@ -737,19 +737,6 @@ const PropertiesPage: React.FC = () => {
                   <strong>Edit Units (stub)</strong>  wire this to your Units edit flow.
                 </div>
               ) : null}
-              {openEditProperty ? (
-                <div
-                  style={{
-                    padding: spacing.sm,
-                    borderRadius: radius.md,
-                    border: `1px dashed ${colors.border}`,
-                    marginBottom: spacing.sm,
-                  }}
-                >
-                  <strong>Edit Property (stub)</strong>  wire this to your Edit Property flow.
-                </div>
-              ) : null}
-
               <PropertyDetailPanel
                 property={selectedProperty}
                 onRefresh={loadProperties}
@@ -766,6 +753,7 @@ const PropertiesPage: React.FC = () => {
                   setLeasePackInitialPropertyId(selectedProperty?.id || null);
                   setLeasePackOpen(true);
                 }}
+                openEditProperty={openEditProperty}
                 openSendApplication={openSendApplication}
                 highlightUnitId={unitIdFromUrl || null}
                 onSendApplicationOpened={() => {

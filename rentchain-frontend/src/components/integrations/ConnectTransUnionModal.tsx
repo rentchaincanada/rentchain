@@ -291,7 +291,8 @@ export function ConnectTransUnionModal({
               <div style={{ fontWeight: 700 }}>Business details required for setup</div>
               <div style={{ color: text.muted, fontSize: "0.92rem", lineHeight: 1.5 }}>
                 RentChain also saves the business contact details tied to this TransUnion
-                connection so we can keep your setup record complete.
+                connection so we can keep your setup record complete. If we already have them on
+                file, you can stay focused on the member code and passcode here.
               </div>
               {hasSavedBusinessDetails && !editingBusinessDetails ? (
                 <div
