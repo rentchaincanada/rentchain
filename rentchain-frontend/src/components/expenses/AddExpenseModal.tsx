@@ -369,7 +369,11 @@ export function AddExpenseModal({
       <div
         onMouseDown={(e) => e.stopPropagation()}
         style={{
-          width: "min(560px, 100%)",
+          width: "min(560px, calc(100vw - 32px))",
+          maxWidth: "100%",
+          maxHeight: "90vh",
+          overflowY: "auto",
+          overflowX: "hidden",
           background: "#fff",
           borderRadius: 12,
           border: "1px solid #e2e8f0",
@@ -377,6 +381,7 @@ export function AddExpenseModal({
           padding: 16,
           display: "grid",
           gap: 12,
+          boxSizing: "border-box",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
@@ -412,6 +417,7 @@ export function AddExpenseModal({
               border: "1px solid #cbd5e1",
               background: "#fff",
               fontSize: "0.9rem",
+              boxSizing: "border-box",
             }}
           >
             <option value="">Select property</option>
@@ -435,6 +441,7 @@ export function AddExpenseModal({
               border: "1px solid #cbd5e1",
               background: "#fff",
               fontSize: "0.9rem",
+              boxSizing: "border-box",
             }}
             disabled={!propertyId || unitsLoading}
           >
@@ -469,7 +476,7 @@ export function AddExpenseModal({
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+            gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
             gap: 12,
           }}
         >
@@ -485,6 +492,7 @@ export function AddExpenseModal({
                 border: "1px solid #cbd5e1",
                 background: "#fff",
                 fontSize: "0.9rem",
+                boxSizing: "border-box",
               }}
             >
               <option value="">Select category</option>
@@ -512,6 +520,7 @@ export function AddExpenseModal({
                 borderRadius: 8,
                 border: "1px solid #cbd5e1",
                 fontSize: "0.9rem",
+                boxSizing: "border-box",
               }}
             />
           </label>
@@ -520,7 +529,7 @@ export function AddExpenseModal({
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+            gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
             gap: 12,
           }}
         >
@@ -536,6 +545,7 @@ export function AddExpenseModal({
                 borderRadius: 8,
                 border: "1px solid #cbd5e1",
                 fontSize: "0.9rem",
+                boxSizing: "border-box",
               }}
             />
           </label>
@@ -552,6 +562,7 @@ export function AddExpenseModal({
                 borderRadius: 8,
                 border: "1px solid #cbd5e1",
                 fontSize: "0.9rem",
+                boxSizing: "border-box",
               }}
             />
           </label>
@@ -572,6 +583,7 @@ export function AddExpenseModal({
               fontSize: "0.9rem",
               resize: "vertical",
               minHeight: 80,
+              boxSizing: "border-box",
             }}
           />
         </label>
@@ -592,6 +604,7 @@ export function AddExpenseModal({
               border: "1px solid #cbd5e1",
               fontSize: "0.9rem",
               background: "#fff",
+              boxSizing: "border-box",
             }}
           />
           {selectedFile ? (
