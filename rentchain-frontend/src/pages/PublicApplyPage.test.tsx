@@ -90,4 +90,61 @@ describe("PublicApplyPage", () => {
       expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
     });
   });
+
+  it("lets applicants continue directly and only shows the viewing request form when they need it", async () => {
+    renderPage();
+
+    expect(await screen.findByText("Before you continue")).toBeInTheDocument();
+    expect(screen.queryByTestId("viewing-request-form")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "I need to request a viewing" }));
+    expect(await screen.findByTestId("viewing-request-form")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "I've already viewed it" }));
+    expect(screen.queryByTestId("viewing-request-form")).not.toBeInTheDocument();
+    expect(screen.getByText("Great. Continue below with the application.")).toBeInTheDocument();
+  });
+
+  it("requires co-applicant employment details before continuing", async () => {
+    renderPage();
+    fireEvent.change(await screen.findByLabelText("First name *"), { target: { value: "Jordan" } });
+    fireEvent.change(screen.getByLabelText("Last name *"), { target: { value: "Lee" } });
+    fireEvent.change(screen.getByLabelText("Email *"), { target: { value: "jordan@example.com" } });
+    fireEvent.change(screen.getByLabelText("Date of birth *"), { target: { value: "1990-01-01" } });
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.change(screen.getAllByLabelText("First name *")[1], { target: { value: "Taylor" } });
+    fireEvent.change(screen.getAllByLabelText("Last name *")[1], { target: { value: "Lee" } });
+    fireEvent.change(screen.getAllByLabelText("Email *")[1], { target: { value: "taylor@example.com" } });
+    fireEvent.change(screen.getAllByLabelText("Date of birth *")[1], { target: { value: "1991-02-02" } });
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+
+    await completeResidentialBase();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(await screen.findByText("Employment & income")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Employer *"), { target: { value: "North Wharf Ltd." } });
+    fireEvent.change(screen.getByLabelText("Job title *"), { target: { value: "Designer" } });
+    fireEvent.change(screen.getByLabelText("Gross income *"), { target: { value: "5200" } });
+    fireEvent.change(screen.getByLabelText("Length (months) *"), { target: { value: "24" } });
+
+    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("Employer"), {
+      target: { value: "Harbour Ops" },
+    });
+    fireEvent.change(screen.getByLabelText("Job title"), {
+      target: { value: "Analyst" },
+    });
+    fireEvent.change(screen.getByLabelText("Gross income"), {
+      target: { value: "4100" },
+    });
+    fireEvent.change(screen.getByLabelText("Length (months)"), {
+      target: { value: "18" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
+    });
+  });
 });

@@ -86,6 +86,7 @@ export default function PublicApplyPage() {
   const [applicationId, setApplicationId] = useState<string | null>(null);
   const [context, setContext] = useState<{ propertyName?: string | null; unitLabel?: string | null }>({});
   const [linkData, setLinkData] = useState<{ propertyId?: string | null; unitId?: string | null; expiresAt?: number | null }>({});
+  const [viewingChoice, setViewingChoice] = useState<"viewed" | "needs_viewing" | null>(null);
 
   const [applicant, setApplicant] = useState<Partial<RentalApplicationPayload["applicant"]>>({
     firstName: "",
@@ -305,7 +306,12 @@ export default function PublicApplyPage() {
         (employment.applicant.employer || "").trim() &&
         (employment.applicant.jobTitle || "").trim() &&
         Number(employment.applicant.monthlyIncomeCents || 0) > 0 &&
-        employment.applicant.lengthMonths != null
+        employment.applicant.lengthMonths != null &&
+        (!coApplicantEnabled ||
+          ((employment.coApplicant?.employer || "").trim() &&
+            (employment.coApplicant?.jobTitle || "").trim() &&
+            Number(employment.coApplicant?.monthlyIncomeCents || 0) > 0 &&
+            employment.coApplicant?.lengthMonths != null))
       );
     }
     if (step === 4) {
@@ -364,6 +370,23 @@ export default function PublicApplyPage() {
       setError("Time at current job is required.");
       setStep(2);
       return;
+    }
+    if (coApplicantEnabled) {
+      if (!(employment.coApplicant?.employer || "").trim() || !(employment.coApplicant?.jobTitle || "").trim()) {
+        setError("Co-applicant employment details are required.");
+        setStep(2);
+        return;
+      }
+      if (!employment.coApplicant?.monthlyIncomeCents || employment.coApplicant.monthlyIncomeCents <= 0) {
+        setError("Co-applicant income amount is required.");
+        setStep(2);
+        return;
+      }
+      if (employment.coApplicant.lengthMonths == null) {
+        setError("Co-applicant time at current job is required.");
+        setStep(2);
+        return;
+      }
     }
     if (!workReferenceName.trim() || !workReferencePhone.trim()) {
       setError("Work reference name and phone are required.");
@@ -583,7 +606,62 @@ export default function PublicApplyPage() {
     <div style={{ maxWidth: 760, margin: "40px auto", padding: "0 16px" }}>
       {header}
       {expiryNote ? <div style={{ fontSize: "0.85rem", opacity: 0.7 }}>{expiryNote}</div> : null}
-      <ViewingRequestForm propertyId={linkData.propertyId || null} unitId={linkData.unitId || null} />
+      <div
+        style={{
+          ...cardStyle,
+          marginBottom: 16,
+          borderColor: "rgba(37,99,235,0.18)",
+          background: "linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)",
+        }}
+      >
+        <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>Before you continue</div>
+        <div style={{ color: "#475569", lineHeight: 1.6 }}>
+          Have you already viewed this unit? You can continue the application now if you have. If not,
+          you can optionally request a viewing first.
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={() => setViewingChoice("viewed")}
+            style={{
+              padding: "10px 14px",
+              borderRadius: 10,
+              border: viewingChoice === "viewed" ? "1px solid #0f172a" : "1px solid #cbd5e1",
+              background: viewingChoice === "viewed" ? "#0f172a" : "#fff",
+              color: viewingChoice === "viewed" ? "#fff" : "#0f172a",
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            I&apos;ve already viewed it
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewingChoice("needs_viewing")}
+            style={{
+              padding: "10px 14px",
+              borderRadius: 10,
+              border: viewingChoice === "needs_viewing" ? "1px solid #0f172a" : "1px solid #cbd5e1",
+              background: viewingChoice === "needs_viewing" ? "#0f172a" : "#fff",
+              color: viewingChoice === "needs_viewing" ? "#fff" : "#0f172a",
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            I need to request a viewing
+          </button>
+        </div>
+        {viewingChoice === "viewed" ? (
+          <div style={{ fontSize: "0.92rem", color: "#334155" }}>
+            Great. Continue below with the application.
+          </div>
+        ) : null}
+      </div>
+      {viewingChoice === "needs_viewing" ? (
+        <div style={{ marginBottom: 16 }}>
+          <ViewingRequestForm propertyId={linkData.propertyId || null} unitId={linkData.unitId || null} />
+        </div>
+      ) : null}
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
         {steps.map((label, idx) => (
           <div

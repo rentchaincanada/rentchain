@@ -239,6 +239,17 @@ const buildScreeningFlags = (flags: string[]): ScreeningReportFlag[] =>
     description: SCREENING_FLAG_EXPLANATIONS[flag] || SCREENING_FLAG_EXPLANATIONS[AI_FLAG_LABELS[flag] || ""] || null,
   }));
 
+const normalizeTransUnionConfigError = (error: unknown) => {
+  const message = String((error as any)?.message || "").trim();
+  const normalized = message.toLowerCase();
+  if (normalized.includes("credential encryption is not configured")) {
+    return new Error(
+      "TransUnion setup is not available in this environment yet. Your credentials were not saved."
+    );
+  }
+  return error;
+};
+
 const ApplicationsPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -1176,6 +1187,8 @@ const ApplicationsPage: React.FC = () => {
         const data = await connectTransUnion(payload);
         setTransUnionIntegration(data);
         showToast({ message: "TransUnion membership connected.", variant: "success" });
+      } catch (err) {
+        throw normalizeTransUnionConfigError(err);
       } finally {
         setTransUnionSubmitting(false);
       }
@@ -1191,6 +1204,8 @@ const ApplicationsPage: React.FC = () => {
         setTransUnionIntegration(data);
         setTransUnionUpdateOpen(false);
         showToast({ message: "TransUnion credentials updated.", variant: "success" });
+      } catch (err) {
+        throw normalizeTransUnionConfigError(err);
       } finally {
         setTransUnionSubmitting(false);
       }
