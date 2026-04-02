@@ -16,8 +16,10 @@ export function useEntitlements() {
     const isAdmin = role === "admin";
     const featureMap = features || {};
     const plan = normalizePlanName(caps?.plan || user?.plan || null) || "free";
+    const hasPaidScreeningPlan = plan === "starter" || plan === "pro" || plan === "elite";
 
-    const canScreen = isAdmin || hasFeature(featureMap, ["screening", "screening_pay_per_use"]);
+    const canScreen =
+      isAdmin || hasPaidScreeningPlan || hasFeature(featureMap, ["screening", "screening_pay_per_use"]);
     const canViewScreeningHistory =
       isAdmin || hasFeature(featureMap, ["screening_history", "screening", "screening_pay_per_use"]);
     const canExportPdf = isAdmin || hasFeature(featureMap, ["pdf_export", "exports_basic", "tenantPdfReport"]);

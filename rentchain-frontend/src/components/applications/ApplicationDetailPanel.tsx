@@ -137,7 +137,40 @@ export const ApplicationDetailPanel: React.FC<ApplicationDetailPanelProps> = ({
       notes: application.notes ?? null,
     };
 
-    return [synthetic];
+    const coApplicantName = [application.coApplicant?.firstName, application.coApplicant?.lastName]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+    const syntheticCoApplicant: Applicant | null = application.coApplicant
+      ? {
+          id: `${application.id}-co-applicant`,
+          role: "co_applicant",
+          fullName: coApplicantName || "Co-applicant",
+          dateOfBirth: application.coApplicant.dob ?? null,
+          socialInsuranceNumber: null,
+          monthlyIncome:
+            typeof application.employment?.coApplicant?.monthlyIncomeCents === "number"
+              ? application.employment.coApplicant.monthlyIncomeCents / 100
+              : null,
+          currentAddress: application.currentAddress ?? null,
+          currentCity: application.currentCity ?? null,
+          currentProvince: application.currentProvince ?? null,
+          currentPostalCode: application.currentPostalCode ?? null,
+          landlordReferenceName: application.references?.coApplicantPersonal?.name ?? null,
+          landlordReferencePhone: application.references?.coApplicantPersonal?.phone ?? null,
+          employmentReferenceName: application.employment?.coApplicant?.employer ?? null,
+          employmentReferencePhone: application.employment?.coApplicant?.phone ?? null,
+          bankReferenceName: null,
+          bankReferenceAccountMasked: null,
+          vehicleMake: null,
+          vehicleModel: null,
+          vehicleYear: null,
+          vehiclePlate: null,
+          notes: null,
+        }
+      : null;
+
+    return syntheticCoApplicant ? [synthetic, syntheticCoApplicant] : [synthetic];
   }, [application]);
 
   useEffect(() => {

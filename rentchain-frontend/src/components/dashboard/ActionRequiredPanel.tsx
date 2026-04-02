@@ -26,13 +26,11 @@ export function ActionRequiredPanel({
     <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: spacing.sm }}>
         <div style={{ fontWeight: 800 }}>{title}</div>
-        <Button
-          onClick={canViewAll ? onViewAll : undefined}
-          disabled={!canViewAll}
-          title={canViewAll ? undefined : "Coming soon"}
-        >
-          View all
-        </Button>
+        {canViewAll ? (
+          <Button onClick={onViewAll}>View all</Button>
+        ) : (
+          <div style={{ color: text.muted, fontSize: 12, fontWeight: 600 }}>Top items</div>
+        )}
       </div>
 
       {loading ? (
@@ -96,7 +94,8 @@ export function ActionRequiredPanel({
                       Open
                     </button>
                   ) : null}
-                  <div
+                  <span
+                    aria-hidden="true"
                     style={{
                       padding: "4px 8px",
                       borderRadius: 12,
@@ -106,10 +105,12 @@ export function ActionRequiredPanel({
                       fontSize: 11,
                       fontWeight: 700,
                       textTransform: "capitalize",
+                      cursor: "default",
+                      userSelect: "none",
                     }}
                   >
                     {severity}
-                  </div>
+                  </span>
                 </div>
               </div>
             );

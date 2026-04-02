@@ -69,4 +69,26 @@ describe("useEntitlements", () => {
     expect(result.current.canExportPdf).toBe(false);
     expect(result.current.canViewReviewSummary).toBe(false);
   });
+
+  it("keeps Starter screening available even when the capability payload is behind the intended product policy", async () => {
+    const { useCapabilities } = await import("@/hooks/useCapabilities");
+    const { useAuth } = await import("@/context/useAuth");
+
+    vi.mocked(useCapabilities).mockReturnValue({
+      caps: { plan: "starter" },
+      features: {
+        screening: false,
+        screening_pay_per_use: false,
+      },
+      loading: false,
+    } as any);
+    vi.mocked(useAuth).mockReturnValue({
+      user: { id: "user-3", role: "landlord", plan: "starter" },
+    } as any);
+
+    const { result } = renderHook(() => useEntitlements());
+
+    expect(result.current.canScreen).toBe(true);
+    expect(result.current.canViewScreeningHistory).toBe(false);
+  });
 });

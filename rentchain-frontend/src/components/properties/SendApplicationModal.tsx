@@ -92,6 +92,15 @@ export function SendApplicationModal({
   }, [open, propertyId]);
 
   React.useEffect(() => {
+    if (!open || propertyId) return;
+    if (propertyOptions.length === 1) {
+      const onlyPropertyId = String(propertyOptions[0].id || "");
+      setSelectedPropertyId(onlyPropertyId);
+      onPropertyChange?.(onlyPropertyId);
+    }
+  }, [open, propertyId, propertyOptions, onPropertyChange]);
+
+  React.useEffect(() => {
     if (!open) return;
     if (initialUnitId) {
       setSelectedUnitId(String(initialUnitId));
@@ -206,6 +215,8 @@ export function SendApplicationModal({
         onMouseDown={(e) => e.stopPropagation()}
         style={{
           width: "min(520px, 100%)",
+          maxHeight: "min(88vh, 760px)",
+          overflowY: "auto",
           background: "#fff",
           borderRadius: 12,
           padding: 16,
@@ -274,10 +285,14 @@ export function SendApplicationModal({
                   border: "1px solid #e5e7eb",
                   fontSize: "0.9rem",
                   background: "#fff",
+                  boxSizing: "border-box",
                 }}
                 required
                 disabled={!allowGeneration}
               >
+                {!selectedPropertyId && propertyOptions.length > 1 ? (
+                  <option value="">Select a property</option>
+                ) : null}
                 {propertyOptions.map((option) => (
                   <option key={option.id} value={option.id}>
                     {option.name}
@@ -304,10 +319,11 @@ export function SendApplicationModal({
                     borderRadius: 8,
                     border: "1px solid #e5e7eb",
                     fontSize: "0.9rem",
-                  background: "#fff",
-                }}
-                disabled={!allowGeneration}
-              >
+                    background: "#fff",
+                    boxSizing: "border-box",
+                  }}
+                  disabled={!allowGeneration}
+                >
                   <option value="">
                     {unitsLoading
                       ? "Loading units..."
@@ -381,6 +397,7 @@ export function SendApplicationModal({
               borderRadius: 8,
               border: "1px solid #e5e7eb",
               fontSize: "0.9rem",
+              boxSizing: "border-box",
             }}
             disabled={!allowGeneration}
           />
@@ -426,6 +443,7 @@ export function SendApplicationModal({
                 borderRadius: 8,
                 border: "1px solid #e5e7eb",
                 fontSize: "0.9rem",
+                boxSizing: "border-box",
               }}
             />
             <div style={{ display: "flex", gap: 8 }}>
