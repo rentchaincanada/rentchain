@@ -7,6 +7,9 @@ import {
 import { getTenantLedger } from "../services/tenantLedgerService";
 import { generateTenantReportPdfBuffer } from "../services/tenantReportService";
 import { listTenanciesByTenantId } from "../services/tenanciesService";
+import {
+  updateMoveInReadinessItems,
+} from "../services/tenantMoveInReadinessService";
 
 const router = Router();
 
@@ -143,6 +146,80 @@ router.get("/:tenantId/report", async (req: any, res) => {
     }
     console.error("[GET /tenants/:tenantId/report] error", err);
     return res.status(500).json({ ok: false, error: "Failed to generate tenant report" });
+  }
+});
+
+router.get("/:tenantId/move-in-readiness", async (req: any, res) => {
+  const landlordId = getLandlordId(req);
+  const tenantId = String(req.params?.tenantId || "").trim();
+  if (!tenantId) return res.status(400).json({ ok: false, error: "tenantId is required" });
+
+  try {
+    const bundle = await getTenantDetailBundle(tenantId, { landlordId: landlordId || undefined });
+    if (!bundle?.tenant) return res.status(404).json({ ok: false, error: "Tenant not found" });
+    return res.status(200).json({ ok: true, readiness: bundle.moveInReadiness });
+  } catch (err: any) {
+    console.error("[GET /api/tenants/:tenantId/move-in-readiness] error", err);
+    return res.status(500).json({ ok: false, error: err?.message ?? "Failed to load move-in readiness" });
+  }
+});
+
+router.patch("/:tenantId/move-in-readiness", async (req: any, res) => {
+  const landlordId = getLandlordId(req);
+  const tenantId = String(req.params?.tenantId || "").trim();
+  if (!tenantId) return res.status(400).json({ ok: false, error: "tenantId is required" });
+
+  const updates = Array.isArray(req.body?.updates) ? req.body.updates : [];
+  if (!updates.length) {
+    return res.status(400).json({ ok: false, error: "updates are required" });
+  }
+  const validKeys = new Set([
+    "lease_signed",
+    "tenant_portal_invite_sent",
+    "tenant_portal_activated",
+    "deposit_received",
+    "first_rent_received",
+    "insurance_received",
+    "utility_setup_received",
+    "inspection_scheduled",
+    "inspection_completed",
+    "keys_release_approved",
+    "keys_released",
+  ]);
+  const validStatuses = new Set([
+    "not_started",
+    "pending",
+    "submitted",
+    "confirmed",
+    "blocked",
+    "not_required",
+  ]);
+  if (
+    updates.some(
+      (update: any) =>
+        !validKeys.has(String(update?.key || "")) || !validStatuses.has(String(update?.status || ""))
+    )
+  ) {
+    return res.status(400).json({ ok: false, error: "INVALID_MOVE_IN_READINESS_UPDATE" });
+  }
+
+  try {
+    const bundle = await getTenantDetailBundle(tenantId, { landlordId: landlordId || undefined });
+    if (!bundle?.tenant) return res.status(404).json({ ok: false, error: "Tenant not found" });
+
+    await updateMoveInReadinessItems({
+      tenantId,
+      landlordId: (bundle.tenant as any)?.landlordId || landlordId || null,
+      actorUserId: String(req.user?.id || "").trim() || null,
+      actorRole: String(req.user?.role || "").toLowerCase() === "admin" ? "admin" : "landlord",
+      updates,
+    });
+
+    const refreshed = await getTenantDetailBundle(tenantId, { landlordId: landlordId || undefined });
+    return res.status(200).json({ ok: true, readiness: refreshed.moveInReadiness });
+  } catch (err: any) {
+    console.error("[PATCH /api/tenants/:tenantId/move-in-readiness] error", err);
+    return res.status(500).json({ ok: false, error: err?.message ?? "Failed to update move-in readiness" });
   }
 });
 

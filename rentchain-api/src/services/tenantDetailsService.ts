@@ -16,8 +16,13 @@ import {
   pickTenantWinningAgreement,
 } from "./leasePartyConsolidationService";
 import { buildCredibilityInsights, type CredibilityInsights } from "./risk/credibilityInsights";
-import { buildMoveInReadiness, type MoveInReadiness } from "./moveInReadiness";
 import { buildMoveInRequirements, type MoveInRequirements } from "./moveInRequirements";
+import {
+  buildMoveInReadinessRecord,
+  getPersistedMoveInReadinessRecord,
+  listMoveInReadinessEvents,
+  type MoveInReadinessRecord as MoveInReadiness,
+} from "./tenantMoveInReadinessService";
 import { buildDerivedTenancyFromTenant, listTenanciesByTenantId } from "./tenanciesService";
 import type { TenantScore, TenantScoreTimelineEntry } from "./risk/tenantScoreTypes";
 import type { RiskGrade } from "./risk/riskTypes";
@@ -554,7 +559,13 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
     payments,
     ledger,
   });
-  const moveInReadiness = buildMoveInReadiness({
+  const [persistedMoveInReadiness, moveInReadinessEvents] = await Promise.all([
+    getPersistedMoveInReadinessRecord(tenantId).catch(() => null),
+    listMoveInReadinessEvents(tenantId).catch(() => []),
+  ]);
+  const moveInReadiness = buildMoveInReadinessRecord({
+    tenantId,
+    landlordId: tenant?.landlordId || landlordId || null,
     lease,
     leaseRaw: currentLeaseRaw,
     tenant,
@@ -562,6 +573,8 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
     invite: tenantInviteState,
     payments,
     ledger,
+    persisted: persistedMoveInReadiness,
+    events: moveInReadinessEvents,
   });
 
   return {
