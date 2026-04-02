@@ -17,6 +17,18 @@ export type TenantScreeningResultStatus =
   | "failed"
   | "manual_review_required";
 
+export type TenantScreeningSessionStatus =
+  | "created"
+  | "ready_for_consent"
+  | "consent_received"
+  | "redirect_pending"
+  | "in_progress"
+  | "pending_review"
+  | "completed"
+  | "inconclusive"
+  | "failed"
+  | "expired";
+
 export type TenantScreeningRequest = {
   id: string;
   rentalApplicationId: string | null;
@@ -43,7 +55,7 @@ export type TenantScreeningRequest = {
   session: {
     id: string;
     providerKey: string;
-    status: string;
+    status: TenantScreeningSessionStatus;
     handoffType: "manual" | "redirect";
     redirectUrl: string | null;
     returnUrl: string | null;
@@ -55,8 +67,6 @@ export type TenantScreeningRequest = {
     summary: string | null;
     normalizedDecision: string | null;
     reportAvailable: boolean;
-    rawPayloadRef: string | null;
-    fullReportStorageRef: string | null;
   } | null;
   summary: {
     status: TenantScreeningStatus;

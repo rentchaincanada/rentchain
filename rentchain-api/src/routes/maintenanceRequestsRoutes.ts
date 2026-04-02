@@ -48,10 +48,12 @@ const SCREENING_AUDIT_EVENTS = [
   "screening_requested",
   "consent_viewed",
   "consent_accepted",
+  "screening_started",
   "provider_session_created",
-  "screening_completed",
   "retry_requested",
   "manual_review_selected",
+  "screening_completed",
+  "result_viewed",
 ] as const;
 const WORKFLOW_TRANSITIONS: Record<(typeof WORKFLOW_STATUSES)[number], Array<(typeof WORKFLOW_STATUSES)[number]>> = {
   submitted: ["reviewed", "assigned", "cancelled"],
@@ -244,6 +246,10 @@ function normalizeScreeningRequestStatus(raw: any): (typeof SCREENING_REQUEST_ST
   return "requested";
 }
 
+function makeScreeningId(prefix: string): string {
+  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
 function cleanString(value: any, max = 200): string | null {
   const text = String(value || "").trim();
   if (!text) return null;
@@ -256,6 +262,15 @@ function normalizeScreeningList(value: any, maxItems = 8, maxLength = 80): strin
     .map((item) => cleanString(item, maxLength))
     .filter((item): item is string => Boolean(item))
     .slice(0, maxItems);
+}
+
+function makeDeterministicDocId(parts: Array<string | null | undefined>): string {
+  const normalized = parts
+    .map((part) => String(part || "").trim().replace(/[^a-zA-Z0-9_-]+/g, "_"))
+    .filter(Boolean)
+    .join("_")
+    .slice(0, 220);
+  return normalized || makeScreeningId("screening_audit");
 }
 
 function screeningConfigSnapshot() {
@@ -284,12 +299,16 @@ async function writeScreeningAuditEvent(input: {
   landlordId?: string | null;
   tenantId?: string | null;
   sessionId?: string | null;
+  idempotencyKey?: string | null;
   metadata?: Record<string, unknown>;
 }) {
-  const ref = db.collection("screening_audit_log").doc();
+  const auditId = input.idempotencyKey
+    ? makeDeterministicDocId([input.requestId, input.eventType, input.idempotencyKey])
+    : makeScreeningId("screening_audit");
+  const ref = db.collection("screening_audit_log").doc(auditId);
   const now = Date.now();
   await ref.set({
-    id: ref.id,
+    id: auditId,
     requestId: input.requestId,
     eventType: input.eventType,
     actorRole: cleanString(input.actorRole, 80) || "system",
@@ -297,8 +316,19 @@ async function writeScreeningAuditEvent(input: {
     landlordId: input.landlordId || null,
     tenantId: input.tenantId || null,
     sessionId: input.sessionId || null,
-    metadata: input.metadata || {},
+    idempotencyKey: input.idempotencyKey || null,
+    metadata: {
+      requestId: input.requestId,
+      eventType: input.eventType,
+      actorRole: cleanString(input.actorRole, 80) || "system",
+      actorId: input.actorId || null,
+      landlordId: input.landlordId || null,
+      tenantId: input.tenantId || null,
+      sessionId: input.sessionId || null,
+      ...(input.metadata || {}),
+    },
     createdAt: now,
+    updatedAt: now,
     createdAtServer: FieldValue.serverTimestamp(),
   });
 }
@@ -1570,6 +1600,7 @@ router.post("/rental-applications/:id/screening/request", async (req: any, res) 
       actorId: actorId || null,
       landlordId,
       tenantId: applicantTenantId || null,
+      idempotencyKey: `screening_requested_${rentalApplicationId}_${requestRef.id}`,
       metadata: {
         rentalApplicationId,
         packageType,
