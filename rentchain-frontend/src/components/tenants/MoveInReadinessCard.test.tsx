@@ -49,6 +49,25 @@ describe("MoveInReadinessCard", () => {
     expect(screen.getByText("No outstanding requirements right now.")).toBeInTheDocument();
   });
 
+  it("uses landlord-friendly labels when requirement evidence is still missing", () => {
+    render(
+      <MoveInReadinessCard
+        readiness={{
+          status: "in-progress",
+          readinessPercent: 20,
+          leaseSigned: null,
+          portalActivated: false,
+          keysReleaseReady: null,
+          completedItems: [],
+          outstandingItems: ["Confirm insurance"],
+        }}
+      />
+    );
+
+    expect(screen.getAllByText("Pending").length).toBeGreaterThan(0);
+    expect(screen.getByText("Not provided")).toBeInTheDocument();
+  });
+
   it("renders the empty state when readiness is unavailable", () => {
     render(<MoveInReadinessCard readiness={{ status: "unknown" }} />);
 

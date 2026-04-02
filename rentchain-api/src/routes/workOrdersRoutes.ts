@@ -126,7 +126,10 @@ function canTransitionWorkOrder(params: {
 
   if (actor === "landlord" || actor === "admin") {
     if (to === "cancelled" && ACTIVE_INCIDENT_WORK_ORDER_STATUSES.has(from)) return true;
-    if (to === "completed" && (from === "accepted" || from === "in_progress" || from === "assigned")) {
+    if (
+      to === "completed" &&
+      (from === "open" || from === "invited" || from === "assigned" || from === "accepted" || from === "in_progress")
+    ) {
       return true;
     }
     return false;
@@ -1006,7 +1009,11 @@ router.patch("/work-orders/:id", requireAuth, async (req: any, res) => {
         patch.status = nextStatus;
         if (nextStatus === "completed") patch.completedAtMs = nowMs();
         if (nextStatus === "in_progress") patch.startedAtMs = nowMs();
-        updateMessage = `Status changed to ${nextStatus}`;
+        const hasAssignedContractor = Boolean(asString((access.item as any)?.assignedContractorId, 120));
+        updateMessage =
+          nextStatus === "completed" && !hasAssignedContractor
+            ? "Work order marked completed in-house"
+            : `Status changed to ${nextStatus}`;
       }
     } else if (access.role === "contractor") {
       if (req.body?.status !== undefined) {

@@ -255,16 +255,17 @@ export default function MaintenanceRequestsPage() {
         onClick: () => updateStatus("scheduled", "Visit scheduled with the assigned contractor."),
       });
     }
+    if (["reviewed", "assigned", "scheduled", "in_progress"].includes(selected.status)) {
+      actions.push({
+        label: "Mark completed",
+        onClick: () =>
+          updateStatus("completed", "Landlord marked the request completed."),
+      });
+    }
     if (!["completed", "cancelled"].includes(selected.status)) {
       actions.push({
-        label: selected.status === "in_progress" ? "Close as completed" : "Close request",
-        onClick: () =>
-          updateStatus(
-            selected.status === "in_progress" ? "completed" : "cancelled",
-            selected.status === "in_progress"
-              ? "Landlord closed the request as completed."
-              : "Landlord closed the request."
-          ),
+        label: "Cancel request",
+        onClick: () => updateStatus("cancelled", "Landlord cancelled the request."),
       });
     }
     return actions;

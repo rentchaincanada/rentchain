@@ -5,6 +5,7 @@ import { AddExpenseModal } from "../../components/expenses/AddExpenseModal";
 import { fetchProperties } from "../../api/propertiesApi";
 import {
   addWorkOrderUpdate,
+  completeWorkOrder,
   getContractorProfileById,
   listWorkOrderUpdates,
   listWorkOrders,
@@ -19,6 +20,10 @@ function formatDate(ms?: number | null) {
   return new Date(ms).toLocaleString();
 }
 
+function canCompleteWorkOrder(item: WorkOrderRecord) {
+  return item.status !== "completed" && item.status !== "cancelled";
+}
+
 export default function WorkOrdersPage() {
   const [items, setItems] = React.useState<WorkOrderRecord[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -31,6 +36,24 @@ export default function WorkOrdersPage() {
   const [convertTarget, setConvertTarget] = React.useState<WorkOrderRecord | null>(null);
   const [convertVendor, setConvertVendor] = React.useState("");
   const [isMobile, setIsMobile] = React.useState(false);
+
+  const markCompleted = React.useCallback(
+    async (item: WorkOrderRecord) => {
+      if (!canCompleteWorkOrder(item)) return;
+      const shouldUseContractorCompletion = Boolean(item.assignedContractorId) && item.status === "in_progress";
+      if (shouldUseContractorCompletion) {
+        await completeWorkOrder(item.id);
+      } else {
+        await patchWorkOrder(item.id, { status: "completed" });
+      }
+      await load();
+      if (selected?.id === item.id) {
+        setSelected((prev) => (prev ? { ...prev, status: "completed" } : prev));
+        await loadUpdates(item.id);
+      }
+    },
+    [load, loadUpdates, selected?.id]
+  );
 
   const normalizeCategory = React.useCallback((input: string): ExpenseCategory => {
     const raw = String(input || "").trim().toLowerCase();
@@ -172,19 +195,12 @@ export default function WorkOrdersPage() {
                     >
                       Timeline
                     </Button>
-                    {item.status !== "completed" ? (
+                    {canCompleteWorkOrder(item) ? (
                       <Button
                         variant="ghost"
-                        onClick={async () => {
-                          await patchWorkOrder(item.id, { status: "completed" });
-                          await load();
-                          if (selected?.id === item.id) {
-                            setSelected((prev) => (prev ? { ...prev, status: "completed" } : prev));
-                            await loadUpdates(item.id);
-                          }
-                        }}
+                        onClick={() => void markCompleted(item)}
                       >
-                        Mark Completed
+                        {item.assignedContractorId ? "Mark Completed" : "Mark Completed In-house"}
                       </Button>
                     ) : null}
                     {item.status === "completed" && !item.linkedExpenseId ? (
@@ -253,19 +269,12 @@ export default function WorkOrdersPage() {
                         >
                           Timeline
                         </Button>
-                        {item.status !== "completed" ? (
+                        {canCompleteWorkOrder(item) ? (
                           <Button
                             variant="ghost"
-                            onClick={async () => {
-                              await patchWorkOrder(item.id, { status: "completed" });
-                              await load();
-                              if (selected?.id === item.id) {
-                                setSelected((prev) => (prev ? { ...prev, status: "completed" } : prev));
-                                await loadUpdates(item.id);
-                              }
-                            }}
+                            onClick={() => void markCompleted(item)}
                           >
-                            Mark Completed
+                            {item.assignedContractorId ? "Mark Completed" : "Mark Completed In-house"}
                           </Button>
                         ) : null}
                         {item.status === "completed" && !item.linkedExpenseId ? (

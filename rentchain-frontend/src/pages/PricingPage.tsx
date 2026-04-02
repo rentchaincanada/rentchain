@@ -120,13 +120,13 @@ const PricingPage: React.FC = () => {
       <Section style={{ maxWidth: 980, margin: "0 auto", display: "grid", gap: spacing.md }}>
         <Card elevated>
           <h1 style={{ margin: 0, fontSize: "1.5rem", fontWeight: 800 }}>Pricing</h1>
-          <p style={{ marginTop: spacing.sm, color: text.muted }}>
+          <p style={{ marginTop: spacing.sm, color: text.muted, maxWidth: 760, lineHeight: 1.65 }}>
             Free keeps guided onboarding, basic applicant workflow, manual expenses, and property archiving usable today. Upgrades add richer workflow tools, cleaner exports, and stronger reporting.
           </p>
-          <p style={{ marginTop: spacing.xs, color: text.muted }}>
+          <p style={{ marginTop: spacing.xs, color: text.muted, maxWidth: 760, lineHeight: 1.65 }}>
             Screening follows a guided request, status, and review workflow. Paid plans add more decision support and reporting depth without overpromising unsupported automation.
           </p>
-          <p style={{ marginTop: spacing.xs, color: text.muted }}>
+          <p style={{ marginTop: spacing.xs, color: text.muted, maxWidth: 760, lineHeight: 1.65 }}>
             Published plan prices mirror the current checkout pricing when billing is available.
           </p>
         </Card>
@@ -153,7 +153,7 @@ const PricingPage: React.FC = () => {
             </div>
           </Card>
           {PLAN_ORDER.map((plan) => (
-            <Card key={plan} style={{ display: "grid", gap: spacing.sm }}>
+            <Card key={plan} style={{ display: "grid", gap: spacing.sm, alignContent: "start", minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing.xs, flexWrap: "wrap" }}>
                 <div style={{ fontWeight: 800, fontSize: 18, textTransform: "capitalize" }}>{plan}</div>
                 {plan === "pro" ? (
@@ -166,6 +166,8 @@ const PricingPage: React.FC = () => {
                       fontWeight: 700,
                       color: "#1d4ed8",
                       background: "rgba(37,99,235,0.08)",
+                      maxWidth: "100%",
+                      overflowWrap: "anywhere",
                     }}
                   >
                     Most Popular for growing portfolios
@@ -173,13 +175,13 @@ const PricingPage: React.FC = () => {
                 ) : null}
               </div>
               <div style={{ fontSize: 22, fontWeight: 800 }}>{renderPrice(plan)}</div>
-              <ul style={{ margin: 0, paddingLeft: "1.1rem", color: text.muted, lineHeight: 1.7 }}>
+              <ul style={{ margin: 0, paddingLeft: "1.1rem", color: text.muted, lineHeight: 1.7, minWidth: 0 }}>
                 {PLAN_FEATURES[plan].map((feature) => (
-                  <li key={feature}>{feature}</li>
+                  <li key={feature} style={{ overflowWrap: "anywhere" }}>{feature}</li>
                 ))}
               </ul>
               {plan === "starter" ? (
-                <div style={{ color: text.muted, fontSize: 13 }}>
+                <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.6, overflowWrap: "anywhere" }}>
                   Free stays usable for setup, manual tracking, and archive support. Starter adds richer applicant and day-to-day workflow tools.
                 </div>
               ) : null}
@@ -196,10 +198,10 @@ const PricingPage: React.FC = () => {
                 >
                   <div style={{ fontWeight: 800 }}>Built for stronger reporting</div>
                   <ul style={{ margin: 0, paddingLeft: "1rem", color: text.muted, fontSize: 13, lineHeight: 1.6 }}>
-                    <li>CSV expense import</li>
-                    <li>CSV, spreadsheet, and PDF exports</li>
-                    <li>Screening workflow with decision support</li>
-                    <li>Cleaner month-end and accountant handoff</li>
+                    <li style={{ overflowWrap: "anywhere" }}>CSV expense import</li>
+                    <li style={{ overflowWrap: "anywhere" }}>CSV, spreadsheet, and PDF exports</li>
+                    <li style={{ overflowWrap: "anywhere" }}>Screening workflow with decision support</li>
+                    <li style={{ overflowWrap: "anywhere" }}>Cleaner month-end and accountant handoff</li>
                   </ul>
                 </div>
               ) : null}

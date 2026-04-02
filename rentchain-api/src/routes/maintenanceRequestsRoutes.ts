@@ -36,9 +36,9 @@ const WORKFLOW_STATUSES = [
 ] as const;
 const WORKFLOW_TRANSITIONS: Record<(typeof WORKFLOW_STATUSES)[number], Array<(typeof WORKFLOW_STATUSES)[number]>> = {
   submitted: ["reviewed", "assigned", "cancelled"],
-  reviewed: ["assigned", "cancelled"],
-  assigned: ["scheduled", "cancelled"],
-  scheduled: ["in_progress", "cancelled"],
+  reviewed: ["assigned", "completed", "cancelled"],
+  assigned: ["scheduled", "completed", "cancelled"],
+  scheduled: ["in_progress", "completed", "cancelled"],
   in_progress: ["completed", "cancelled"],
   completed: [],
   cancelled: [],
