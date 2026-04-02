@@ -53,7 +53,6 @@ import {
   type ScreeningReportFlag,
 } from "@/components/screening/ScreeningReportView";
 import { SamplePdfModal } from "../components/billing/SamplePdfModal";
-import { hasTier, normalizeTier } from "@/billing/requireTier";
 import {
   SCREENING_ENABLED,
   getUiLocale,
@@ -414,9 +413,15 @@ const ApplicationsPage: React.FC = () => {
     if (isRawScreeningStatusKey(raw)) return screeningComingSoonDetailText;
     return `Status: ${formatScreeningStatus(raw)}`;
   })();
-  const userTier = normalizeTier((caps?.plan as string) || user?.plan || null);
-  const canUseProFeatures = isAdmin || hasTier(userTier, "pro");
-  const canCreateApplicationLinks = isAdmin || entitlements.hasCapability("applications");
+  const currentPlan = entitlements.plan || "free";
+  const canRunScreening =
+    entitlements.canScreen || currentPlan === "starter" || currentPlan === "pro" || currentPlan === "elite";
+  const canCreateApplicationLinks =
+    isAdmin ||
+    entitlements.hasCapability("applications") ||
+    currentPlan === "starter" ||
+    currentPlan === "pro" ||
+    currentPlan === "elite";
   const canViewScreeningHistory = entitlements.canViewScreeningHistory;
   const canExportPdf = entitlements.canExportPdf;
   const canViewReviewSummary = entitlements.canViewReviewSummary;
@@ -566,16 +571,17 @@ const ApplicationsPage: React.FC = () => {
 
   const openProUpgrade = useCallback(
     (featureName: "screening" | "exports") => {
-      track("gating_blocked", { featureName, requiredTier: "pro", userTier });
+      const requiredTier = featureName === "screening" ? "starter" : "pro";
+      track("gating_blocked", { featureName, requiredTier, userTier: currentPlan });
       openUpgrade({
         reason: featureName,
-        plan: userTier,
-        ctaLabel: "Upgrade to Pro",
+        plan: currentPlan,
+        ctaLabel: requiredTier === "starter" ? "Upgrade to Starter" : "Upgrade to Pro",
         copy:
           featureName === "screening"
             ? {
-                title: "Upgrade to Pro",
-                body: "Screening is available on Pro plans. Upgrade to run screenings.",
+                title: "Upgrade to Starter",
+                body: "Starter includes applicant screening inside RentChain. Upgrade to continue.",
               }
             : {
                 title: "Upgrade to Pro",
@@ -583,7 +589,7 @@ const ApplicationsPage: React.FC = () => {
               },
       });
     },
-    [openUpgrade, userTier]
+    [currentPlan, openUpgrade]
   );
 
   const openScreeningReport = useCallback(
@@ -1308,7 +1314,7 @@ const ApplicationsPage: React.FC = () => {
       showToast({ message: screeningComingSoonText, variant: "warning" });
       return;
     }
-    if (!canUseProFeatures) {
+    if (!canRunScreening) {
       openProUpgrade("screening");
       return;
     }
@@ -1619,7 +1625,7 @@ const ApplicationsPage: React.FC = () => {
                 showToast({ message: screeningComingSoonText, variant: "warning" });
                 return;
               }
-              if (!canUseProFeatures) {
+              if (!canRunScreening) {
                 openProUpgrade("screening");
                 return;
               }

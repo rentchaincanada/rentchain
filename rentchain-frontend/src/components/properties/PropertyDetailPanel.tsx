@@ -26,6 +26,7 @@ import { useToast } from "../ui/ToastProvider";
 import { setOnboardingStep } from "../../api/onboardingApi";
 import "../../styles/propertiesMobile.css";
 import { useCapabilities } from "@/hooks/useCapabilities";
+import { useEntitlements } from "@/hooks/useEntitlements";
 import { useUpgrade } from "@/context/UpgradeContext";
 import { upgradeStarterButtonStyle } from "../../lib/upgradeButtonStyles";
 import { dispatchUpgradePrompt } from "@/lib/upgradePrompt";
@@ -39,6 +40,7 @@ interface PropertyDetailPanelProps {
   property: Property | null;
   onRefresh?: () => Promise<void> | void;
   onArchiveStateChanged?: (property: Property) => Promise<void> | void;
+  openEditProperty?: boolean;
   openSendApplication?: boolean;
   onSendApplicationOpened?: () => void;
   highlightUnitId?: string | null;
@@ -63,6 +65,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   property,
   onRefresh,
   onArchiveStateChanged,
+  openEditProperty = false,
   openSendApplication = false,
   onSendApplicationOpened,
   highlightUnitId = null,
@@ -73,9 +76,15 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   const navigate = useNavigate();
   const { showToast } = useToast();
   const { caps, features, loading: capsLoading } = useCapabilities();
+  const entitlements = useEntitlements();
   const { openUpgrade } = useUpgrade();
   const unitsEnabled = features?.unitsTable !== false;
-  const applicationsEnabled = features?.applications !== false;
+  const currentPlan = entitlements.plan || "free";
+  const applicationsEnabled =
+    entitlements.hasCapability("applications") ||
+    currentPlan === "starter" ||
+    currentPlan === "pro" ||
+    currentPlan === "elite";
   const [leases, setLeases] = useState<Lease[]>([]);
   const [credibilitySummary, setCredibilitySummary] = useState<PropertyCredibilitySummary | null>(null);
   const [isLeasesLoading, setIsLeasesLoading] = useState(false);
@@ -98,7 +107,20 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   const [isUpdatingArchiveState, setIsUpdatingArchiveState] = useState(false);
   const [isSavingScreeningToggle, setIsSavingScreeningToggle] = useState(false);
   const [sendAppUnit, setSendAppUnit] = useState<any | null>(null);
+  const [editPropertyOpen, setEditPropertyOpen] = useState(false);
+  const [isSavingPropertyEdit, setIsSavingPropertyEdit] = useState(false);
+  const [editPropertyError, setEditPropertyError] = useState<string | null>(null);
+  const [editPropertyForm, setEditPropertyForm] = useState({
+    name: "",
+    addressLine1: "",
+    addressLine2: "",
+    city: "",
+    province: "UNSET",
+    postalCode: "",
+    country: "Canada",
+  });
   const sendApplicationOpenedRef = useRef(false);
+  const editPropertyOpenedRef = useRef(false);
   const [highlightedUnitKey, setHighlightedUnitKey] = useState<string | null>(null);
   const [occupancyPromptDismissed, setOccupancyPromptDismissed] = useState(false);
   const unitRowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
@@ -206,6 +228,21 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
     [applicationsEnabled, caps?.plan]
   );
 
+  const openEditPropertyModal = useCallback(() => {
+    if (!property) return;
+    setEditPropertyError(null);
+    setEditPropertyForm({
+      name: String(property.name || ""),
+      addressLine1: String(property.addressLine1 || ""),
+      addressLine2: String(property.addressLine2 || ""),
+      city: String(property.city || ""),
+      province: String(property.province || "UNSET"),
+      postalCode: String(property.postalCode || ""),
+      country: String(property.country || "Canada"),
+    });
+    setEditPropertyOpen(true);
+  }, [property]);
+
   const sendApplicationActionLabel = applicationsEnabled
     ? "Send application"
     : "Upgrade to send application";
@@ -246,6 +283,19 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
     setSendAppUnit({ id: null });
     onSendApplicationOpened?.();
   }, [openSendApplication, applicationsEnabled, caps?.plan, onSendApplicationOpened, propertyId]);
+
+  useEffect(() => {
+    if (!openEditProperty) return;
+    if (editPropertyOpenedRef.current) return;
+    if (!property) return;
+    editPropertyOpenedRef.current = true;
+    openEditPropertyModal();
+  }, [openEditProperty, openEditPropertyModal, property]);
+
+  useEffect(() => {
+    if (openEditProperty) return;
+    editPropertyOpenedRef.current = false;
+  }, [openEditProperty]);
   const setLeasesLoadingStates = (loading: boolean, error: string | null) => {
     setIsLeasesLoading(loading);
     setLeasesError(error);
@@ -546,6 +596,39 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
     }
   }, [isArchived, onArchiveStateChanged, onRefresh, property?.id, showToast]);
 
+  const handleSavePropertyEdit = useCallback(async () => {
+    if (!property?.id) return;
+    const addressLine1 = editPropertyForm.addressLine1.trim();
+    const city = editPropertyForm.city.trim();
+    if (!addressLine1 || !city) {
+      setEditPropertyError("Address and city are required.");
+      return;
+    }
+
+    try {
+      setIsSavingPropertyEdit(true);
+      setEditPropertyError(null);
+      await updateProperty(String(property.id), {
+        name: editPropertyForm.name.trim() || undefined,
+        addressLine1,
+        addressLine2: editPropertyForm.addressLine2.trim() || undefined,
+        city,
+        province: editPropertyForm.province.trim() || "UNSET",
+        postalCode: editPropertyForm.postalCode.trim() || undefined,
+        country: editPropertyForm.country.trim() || undefined,
+      } as Partial<Property>);
+      showToast({ message: "Property details updated", variant: "success" });
+      setEditPropertyOpen(false);
+      await onRefresh?.();
+    } catch (e: any) {
+      const detail = String(e?.response?.data?.detail || e?.message || "Could not update property details");
+      setEditPropertyError(detail);
+      showToast({ message: "Update failed", description: detail, variant: "error" });
+    } finally {
+      setIsSavingPropertyEdit(false);
+    }
+  }, [editPropertyForm, onRefresh, property?.id, showToast]);
+
   const getUnitKey = useCallback((u: any, idx: number) => {
     return String(u?.id || u?.unitId || u?.uid || u?.unitNumber || `unit-${idx}`);
   }, []);
@@ -715,16 +798,16 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             </button>
             <button
               type="button"
-              title="Edit property (coming soon)"
-              disabled
+              onClick={openEditPropertyModal}
+              disabled={!property}
               className="rc-units-action"
               style={{
                 padding: "6px 10px",
                 borderRadius: 10,
                 border: "1px solid rgba(15,23,42,0.12)",
-                background: "rgba(0,0,0,0.02)",
-                color: "#6b7280",
-                cursor: "not-allowed",
+                background: "#fff",
+                color: property ? "#111827" : "#6b7280",
+                cursor: property ? "pointer" : "not-allowed",
               }}
             >
               Edit
@@ -1562,6 +1645,180 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
         unit={sendAppUnit}
         onClose={() => setSendAppUnit(null)}
       />
+      {editPropertyOpen ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Edit property details"
+          onMouseDown={() => {
+            if (isSavingPropertyEdit) return;
+            setEditPropertyOpen(false);
+            setEditPropertyError(null);
+          }}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15,23,42,0.42)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+            zIndex: 1200,
+          }}
+        >
+          <div
+            onMouseDown={(event) => event.stopPropagation()}
+            style={{
+              width: "min(560px, 100%)",
+              background: "#fff",
+              borderRadius: 16,
+              boxShadow: "0 20px 60px rgba(15,23,42,0.18)",
+              padding: 16,
+              display: "grid",
+              gap: 12,
+            }}
+          >
+            <div style={{ display: "grid", gap: 4 }}>
+              <div style={{ fontWeight: 700, fontSize: "1rem", color: "#0f172a" }}>Edit property details</div>
+              <div style={{ color: "#64748b", fontSize: "0.9rem", lineHeight: 1.5 }}>
+                Update the core address and naming details landlords rely on every day.
+              </div>
+            </div>
+
+            <label style={{ display: "grid", gap: 6, fontSize: "0.9rem", color: "#111827" }}>
+              Property name
+              <input
+                value={editPropertyForm.name}
+                onChange={(event) =>
+                  setEditPropertyForm((current) => ({ ...current, name: event.target.value }))
+                }
+                style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #e5e7eb" }}
+              />
+            </label>
+
+            <label style={{ display: "grid", gap: 6, fontSize: "0.9rem", color: "#111827" }}>
+              Address line 1
+              <input
+                value={editPropertyForm.addressLine1}
+                onChange={(event) =>
+                  setEditPropertyForm((current) => ({ ...current, addressLine1: event.target.value }))
+                }
+                style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #e5e7eb" }}
+              />
+            </label>
+
+            <label style={{ display: "grid", gap: 6, fontSize: "0.9rem", color: "#111827" }}>
+              Address line 2
+              <input
+                value={editPropertyForm.addressLine2}
+                onChange={(event) =>
+                  setEditPropertyForm((current) => ({ ...current, addressLine2: event.target.value }))
+                }
+                style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #e5e7eb" }}
+              />
+            </label>
+
+            <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
+              <label style={{ display: "grid", gap: 6, fontSize: "0.9rem", color: "#111827" }}>
+                City
+                <input
+                  value={editPropertyForm.city}
+                  onChange={(event) =>
+                    setEditPropertyForm((current) => ({ ...current, city: event.target.value }))
+                  }
+                  style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #e5e7eb" }}
+                />
+              </label>
+              <label style={{ display: "grid", gap: 6, fontSize: "0.9rem", color: "#111827" }}>
+                Province
+                <input
+                  value={editPropertyForm.province}
+                  onChange={(event) =>
+                    setEditPropertyForm((current) => ({ ...current, province: event.target.value }))
+                  }
+                  style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #e5e7eb" }}
+                />
+              </label>
+            </div>
+
+            <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
+              <label style={{ display: "grid", gap: 6, fontSize: "0.9rem", color: "#111827" }}>
+                Postal code
+                <input
+                  value={editPropertyForm.postalCode}
+                  onChange={(event) =>
+                    setEditPropertyForm((current) => ({ ...current, postalCode: event.target.value }))
+                  }
+                  style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #e5e7eb" }}
+                />
+              </label>
+              <label style={{ display: "grid", gap: 6, fontSize: "0.9rem", color: "#111827" }}>
+                Country
+                <input
+                  value={editPropertyForm.country}
+                  onChange={(event) =>
+                    setEditPropertyForm((current) => ({ ...current, country: event.target.value }))
+                  }
+                  style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #e5e7eb" }}
+                />
+              </label>
+            </div>
+
+            {editPropertyError ? (
+              <div
+                style={{
+                  border: "1px solid rgba(239,68,68,0.28)",
+                  background: "rgba(239,68,68,0.08)",
+                  borderRadius: 10,
+                  padding: "10px 12px",
+                  color: "#b91c1c",
+                  fontSize: "0.9rem",
+                }}
+              >
+                {editPropertyError}
+              </div>
+            ) : null}
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditPropertyOpen(false);
+                  setEditPropertyError(null);
+                }}
+                disabled={isSavingPropertyEdit}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 10,
+                  border: "1px solid rgba(15,23,42,0.12)",
+                  background: "#fff",
+                  color: "#0f172a",
+                  cursor: isSavingPropertyEdit ? "not-allowed" : "pointer",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void handleSavePropertyEdit();
+                }}
+                disabled={isSavingPropertyEdit}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 10,
+                  border: "1px solid rgba(37,99,235,0.22)",
+                  background: "#2563eb",
+                  color: "#fff",
+                  cursor: isSavingPropertyEdit ? "not-allowed" : "pointer",
+                }}
+              >
+                {isSavingPropertyEdit ? "Saving..." : "Save changes"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <UnitsCsvPreviewModal
         open={previewOpen}
         onClose={() => setPreviewOpen(false)}

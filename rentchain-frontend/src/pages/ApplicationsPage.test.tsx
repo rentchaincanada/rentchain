@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
   getTransUnionIntegration: vi.fn(),
   showToast: vi.fn(),
   openUpgrade: vi.fn(),
+  entitlementsMock: vi.fn(),
+  authUserMock: vi.fn(),
 }));
 
 vi.mock("../api/propertiesApi", () => ({
@@ -45,30 +47,12 @@ vi.mock("../components/ui/ToastProvider", () => ({
 }));
 
 vi.mock("@/hooks/useEntitlements", () => ({
-  useEntitlements: () => ({
-    loading: false,
-    plan: "free",
-    role: "landlord",
-    isAdmin: false,
-    capabilities: {},
-    hasCapability: () => false,
-    requiredPlanFor: () => "pro",
-    canScreen: false,
-    canViewScreeningHistory: false,
-    canExportPdf: false,
-    hasMoveInReadiness: false,
-    canUseWorkOrders: false,
-    canViewReviewSummary: false,
-  }),
+  useEntitlements: () => mocks.entitlementsMock(),
 }));
 
 vi.mock("../context/useAuth", () => ({
   useAuth: () => ({
-    user: {
-      id: "user-1",
-      role: "landlord",
-      plan: "free",
-    },
+    user: mocks.authUserMock(),
   }),
 }));
 
@@ -139,7 +123,7 @@ vi.mock("../components/properties/CreatePropertyFirstModal", () => ({
 }));
 
 vi.mock("../components/screening/SendScreeningInviteModal", () => ({
-  SendScreeningInviteModal: () => null,
+  SendScreeningInviteModal: ({ open }: any) => (open ? <div>Screening Invite Modal</div> : null),
 }));
 
 vi.mock("../components/screening/ScreeningStatusBadge", () => ({
@@ -225,6 +209,26 @@ vi.mock("@/lib/analytics", () => ({
 describe("ApplicationsPage", () => {
   beforeEach(() => {
     vi.spyOn(console, "debug").mockImplementation(() => {});
+    mocks.entitlementsMock.mockReturnValue({
+      loading: false,
+      plan: "free",
+      role: "landlord",
+      isAdmin: false,
+      capabilities: {},
+      hasCapability: () => false,
+      requiredPlanFor: () => "pro",
+      canScreen: false,
+      canViewScreeningHistory: false,
+      canExportPdf: false,
+      hasMoveInReadiness: false,
+      canUseWorkOrders: false,
+      canViewReviewSummary: false,
+    });
+    mocks.authUserMock.mockReturnValue({
+      id: "user-1",
+      role: "landlord",
+      plan: "free",
+    });
     mocks.fetchProperties.mockResolvedValue({
       items: [{ id: "prop-1", name: "Harbour View" }],
     });
@@ -260,5 +264,26 @@ describe("ApplicationsPage", () => {
 
     expect(screen.getByRole("button", { name: "Send screening invite" })).toBeInTheDocument();
     expect(screen.getByText("TransUnion Connection")).toBeInTheDocument();
+  });
+
+  it("shows Starter-aligned screening upgrade copy instead of the old Pro gate", async () => {
+    render(
+      <MemoryRouter>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    const button = await screen.findByRole("button", { name: "Send screening invite" });
+    button.click();
+
+    expect(mocks.openUpgrade).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ctaLabel: "Upgrade to Starter",
+        copy: expect.objectContaining({
+          title: "Upgrade to Starter",
+          body: "Starter includes applicant screening inside RentChain. Upgrade to continue.",
+        }),
+      })
+    );
   });
 });
