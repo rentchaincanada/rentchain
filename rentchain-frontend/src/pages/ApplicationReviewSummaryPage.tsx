@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Card, Button } from "../components/ui/Ui";
 import { colors, text } from "../styles/tokens";
+import { useEntitlements } from "@/hooks/useEntitlements";
+import { LockedFeature } from "@/components/billing/LockedFeature";
 import {
   fetchReviewSummary,
   fetchReviewSummaryPdfSignedUrl,
@@ -86,11 +88,18 @@ function ApplicationReviewSummaryPageBody() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const entitlements = useEntitlements();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<SummaryLoadError | null>(null);
   const [summary, setSummary] = useState<ApplicationReviewSummary | null>(null);
 
   const loadSummary = React.useCallback(async () => {
+    if (!entitlements.canViewReviewSummary) {
+      setLoading(false);
+      setSummary(null);
+      setError(null);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -113,7 +122,7 @@ function ApplicationReviewSummaryPageBody() {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [entitlements.canViewReviewSummary, id]);
 
   useEffect(() => {
     void loadSummary();
@@ -125,6 +134,14 @@ function ApplicationReviewSummaryPageBody() {
   }, [id]);
 
   const downloadPdf = async () => {
+    if (!entitlements.canExportPdf) {
+      showToast({
+        message: "Upgrade required",
+        description: "PDF review summaries are available on Pro plans.",
+        variant: "info",
+      });
+      return;
+    }
     try {
       const url = await fetchReviewSummaryPdfSignedUrl(id);
       window.open(url, "_blank", "noopener,noreferrer");
@@ -148,6 +165,17 @@ function ApplicationReviewSummaryPageBody() {
 
   return (
     <div style={{ padding: 16, display: "grid", gap: 12 }}>
+      {!entitlements.canViewReviewSummary ? (
+        <LockedFeature
+          featureKey="review_summary"
+          title="Screening decision summaries are available on Pro"
+          description="Keep application risk signals, screening recommendation, and landlord-ready review notes in one place once your plan includes review summaries."
+          hint="This page stays stable, but the richer decision-support view unlocks on Pro."
+          ctaLabel="Upgrade to Pro"
+        />
+      ) : null}
+      {entitlements.canViewReviewSummary ? (
+        <>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
         <div>
           <h1 style={{ margin: 0, fontSize: "1.2rem" }}>Application Review Summary</h1>
@@ -276,6 +304,8 @@ function ApplicationReviewSummaryPageBody() {
               This summary is descriptive and does not provide approval/denial recommendations.
             </div>
           </Card>
+        </>
+      ) : null}
         </>
       ) : null}
     </div>

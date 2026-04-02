@@ -13,12 +13,14 @@ import { CreateNoticeModal } from "./CreateNoticeModal";
 import { LeasePackWizardModal } from "./LeasePackWizardModal";
 import { useToast } from "../ui/ToastProvider";
 import { colors, radius, spacing, text, shadows } from "../../styles/tokens";
-import { useCapabilities } from "@/hooks/useCapabilities";
+import { useEntitlements } from "@/hooks/useEntitlements";
 import { useUpgrade } from "@/context/UpgradeContext";
 import { upgradeStarterButtonStyle } from "../../lib/upgradeButtonStyles";
 import { useAuth } from "@/context/useAuth";
 import { CredibilityInsightsCard } from "./CredibilityInsightsCard";
 import { MoveInReadinessPanel } from "./MoveInReadinessPanel";
+import { FeatureGate } from "@/components/billing/FeatureGate";
+import { LockedFeature } from "@/components/billing/LockedFeature";
 
 interface TenantDetailPanelProps {
   tenantId: string | null;
@@ -110,8 +112,10 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { showToast } = useToast();
-  const { features, loading: capsLoading } = useCapabilities();
+  const entitlements = useEntitlements();
   const { openUpgrade } = useUpgrade();
+  const features = entitlements.capabilities;
+  const capsLoading = entitlements.loading;
   const ledgerEnabled = features?.ledger !== false;
 
   const tenant = bundle.tenant || bundle;
@@ -161,6 +165,8 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
 
   const viewerRole = String(user?.actorRole || user?.role || "").toLowerCase();
   const isLandlord = viewerRole === "landlord" || viewerRole === "admin";
+  const canExportPdf = entitlements.canExportPdf;
+  const hasMoveInReadiness = entitlements.hasMoveInReadiness;
 
   const handleViewInLedger = () => {
     const leaseId = String(lease?.id || tenant?.currentLeaseId || tenant?.leaseId || "").trim();
@@ -205,6 +211,18 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
   }, [loadLedger]);
 
   const handleDownloadReport = async () => {
+    if (!canExportPdf) {
+      openUpgrade({
+        reason: "exports",
+        plan: user?.plan || "free",
+        ctaLabel: "Upgrade to Pro",
+        copy: {
+          title: "Upgrade for tenant PDF exports",
+          body: "Downloadable tenant summaries are available on Pro plans so you can share cleaner landlord-ready records.",
+        },
+      });
+      return;
+    }
     try {
       const report = await downloadTenantReport(tenantId);
       const url = URL.createObjectURL(report.blob);
@@ -366,7 +384,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
               <span role="img" aria-label="file">
                 📄
               </span>
-              <span>Download Tenant Summary (PDF)</span>
+              <span>{canExportPdf ? "Download Tenant Summary (PDF)" : "Upgrade for Tenant PDF"}</span>
             </button>
             {isLandlord ? (
               <>
@@ -470,7 +488,20 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
 
       <CredibilityInsightsCard insights={credibilityInsights} />
 
-      <MoveInReadinessPanel readiness={moveInReadiness} saving={readinessSaving} onUpdate={handleReadinessUpdate} />
+      <FeatureGate
+        enabled={hasMoveInReadiness}
+        fallback={
+          <LockedFeature
+            featureKey="move_in_readiness"
+            title="Move-In Readiness is available on Starter"
+            description="Track deposit, inspection, insurance, keys, and final move-in blockers in one operational checklist."
+            hint="Upgrade to keep signed lease steps, key release readiness, and landlord updates in one place."
+            ctaLabel="Upgrade to Starter"
+          />
+        }
+      >
+        <MoveInReadinessPanel readiness={moveInReadiness} saving={readinessSaving} onUpdate={handleReadinessUpdate} />
+      </FeatureGate>
 
       {latestLeaseNoticeSummary ? (
         <div

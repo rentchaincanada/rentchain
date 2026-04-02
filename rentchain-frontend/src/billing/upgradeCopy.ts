@@ -139,6 +139,9 @@ export function getUpgradeCopy(featureKey?: string): UpgradeCopy {
 
   if (key === "unitstable") return COPY_MAP.units;
   if (key === "tenantportal") return COPY_MAP.screening;
+  if (key === "move_in_readiness" || key === "work_orders") return COPY_MAP.maintenance;
+  if (key === "pdf_export") return COPY_MAP.exports;
+  if (key === "review_summary") return COPY_MAP.tenant_screening;
   if (key === "properties.create") return COPY_MAP.properties;
   if (key === "units.create") return COPY_MAP.units;
   if (key === "portfolio.ai" || key === "ai.summary") return COPY_MAP["ai.insights"];

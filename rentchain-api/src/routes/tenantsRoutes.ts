@@ -10,6 +10,7 @@ import { listTenanciesByTenantId } from "../services/tenanciesService";
 import {
   updateMoveInReadinessItems,
 } from "../services/tenantMoveInReadinessService";
+import { requireCapability } from "../services/capabilityGuard";
 
 const router = Router();
 
@@ -119,6 +120,7 @@ router.get("/:tenantId/ledger", async (req: any, res) => {
  */
 router.get("/:tenantId/report", async (req: any, res) => {
   const landlordId = getLandlordId(req);
+  const role = String(req.user?.role || "").toLowerCase();
 
   const tenantId = String(req.params?.tenantId || "").trim();
   if (!tenantId) return res.status(400).json({ ok: false, error: "tenantId is required" });
@@ -126,6 +128,19 @@ router.get("/:tenantId/report", async (req: any, res) => {
   try {
     const bundle = await getTenantDetailBundle(tenantId, { landlordId: landlordId || undefined });
     if (!bundle?.tenant) return res.status(404).json({ ok: false, error: "Tenant not found" });
+    if (role !== "admin" && landlordId) {
+      const cap = await requireCapability(String(landlordId), "exports_basic", req.user);
+      if (!cap.ok) {
+        return res.status(402).json({
+          ok: false,
+          error: "upgrade_required",
+          capability: "exports_basic",
+          requiredPlan: "pro",
+          plan: cap.plan,
+          source: "tenant_report_pdf",
+        });
+      }
+    }
 
     const buffer = await generateTenantReportPdfBuffer(tenantId);
 

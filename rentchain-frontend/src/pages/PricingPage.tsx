@@ -124,7 +124,7 @@ const PricingPage: React.FC = () => {
             Free keeps guided onboarding, basic applicant workflow, manual expenses, and property archiving usable today. Upgrades add richer workflow tools, cleaner exports, and stronger reporting.
           </p>
           <p style={{ marginTop: spacing.xs, color: text.muted, maxWidth: 760, lineHeight: 1.65 }}>
-            Screening follows a guided request, status, and review workflow. Paid plans add more decision support and reporting depth without overpromising unsupported automation.
+            Screening follows a guided request, status, and review workflow. Starter adds day-to-day operations like move-in readiness and work orders, while Pro adds decision summaries and landlord-ready PDF exports.
           </p>
           <p style={{ marginTop: spacing.xs, color: text.muted, maxWidth: 760, lineHeight: 1.65 }}>
             Published plan prices mirror the current checkout pricing when billing is available.
@@ -227,7 +227,7 @@ const PricingPage: React.FC = () => {
               Do I need a subscription to screen tenants?
             </summary>
             <p style={{ margin: `${spacing.sm} 0 0`, color: text.muted }}>
-              No. RentChain supports a guided screening request and review workflow, while paid plans add stronger workflow tools and reporting around that process.
+              No. RentChain supports a guided screening request path, while paid plans add stronger workflow tools, screening decision support, and PDF/reporting depth around that process.
             </p>
           </details>
         </Card>

@@ -5,10 +5,8 @@ import { fetchProperties } from "../../api/propertiesApi";
 import { fetchUnitsForProperty } from "../../api/unitsApi";
 import { createScreeningOrder } from "../../api/rentalApplicationsApi";
 import { useToast } from "../ui/ToastProvider";
-import { useAuth } from "../../context/useAuth";
-import { useCapabilities } from "../../hooks/useCapabilities";
+import { useEntitlements } from "@/hooks/useEntitlements";
 import { useUpgrade } from "../../context/UpgradeContext";
-import { hasTier, normalizeTier } from "@/billing/requireTier";
 import { track } from "../../lib/analytics";
 
 type PropertyOption = { id: string; name: string };
@@ -24,8 +22,7 @@ export function SendScreeningInviteModal({
   returnTo?: string;
 }) {
   const { showToast } = useToast();
-  const { user } = useAuth();
-  const { caps } = useCapabilities();
+  const entitlements = useEntitlements();
   const { openUpgrade } = useUpgrade();
   const [properties, setProperties] = useState<PropertyOption[]>([]);
   const [propertyId, setPropertyId] = useState("");
@@ -38,10 +35,7 @@ export function SendScreeningInviteModal({
   const [tier, setTier] = useState<"basic" | "verify" | "verify_ai">("basic");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const roleLower = String(user?.role || "").toLowerCase();
-  const isAdmin = roleLower === "admin";
-  const userTier = normalizeTier((caps?.plan as string) || user?.plan || null);
-  const canUseProFeatures = isAdmin || hasTier(userTier, "pro");
+  const canScreen = entitlements.canScreen;
 
   const packageOptions = useMemo(
     () => [
@@ -134,15 +128,19 @@ export function SendScreeningInviteModal({
 
   const handleSubmit = async () => {
     setError(null);
-    if (!canUseProFeatures) {
-      track("gating_blocked", { featureName: "screening", requiredTier: "pro", userTier });
+    if (!canScreen) {
+      track("gating_blocked", {
+        featureName: "screening",
+        requiredTier: entitlements.requiredPlanFor("screening"),
+        userTier: entitlements.plan,
+      });
       openUpgrade({
         reason: "screening",
-        plan: userTier,
-        ctaLabel: "Upgrade to Pro",
+        plan: entitlements.plan,
+        ctaLabel: "Upgrade to continue",
         copy: {
-          title: "Upgrade to Pro",
-          body: "Screening is available on Pro plans. Upgrade to send screening invites.",
+          title: "Upgrade to continue screening inside RentChain",
+          body: "This workflow is not active on your current plan. Upgrade when you're ready to run screening from the applicant workflow.",
         },
       });
       return;
@@ -357,9 +355,9 @@ export function SendScreeningInviteModal({
         </div>
 
         {error ? <div style={{ color: "#b91c1c", fontSize: 13 }}>{error}</div> : null}
-        {!canUseProFeatures ? (
+        {!canScreen ? (
           <div style={{ color: text.muted, fontSize: 13 }}>
-            Screening invites require Pro. Upgrade to continue.
+            Screening is not active on your current plan. Upgrade when you're ready to continue from the applicant workflow.
           </div>
         ) : null}
 
@@ -367,7 +365,7 @@ export function SendScreeningInviteModal({
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={submitting || !canUseProFeatures}>
+          <Button onClick={handleSubmit} disabled={submitting}>
             {submitting ? "Starting..." : "Send invite"}
           </Button>
         </div>
