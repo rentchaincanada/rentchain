@@ -41,24 +41,6 @@ export default function WorkOrdersPage() {
   const [isMobile, setIsMobile] = React.useState(false);
   const canUseWorkOrders = entitlements.canUseWorkOrders;
 
-  const markCompleted = React.useCallback(
-    async (item: WorkOrderRecord) => {
-      if (!canCompleteWorkOrder(item)) return;
-      const shouldUseContractorCompletion = Boolean(item.assignedContractorId) && item.status === "in_progress";
-      if (shouldUseContractorCompletion) {
-        await completeWorkOrder(item.id);
-      } else {
-        await patchWorkOrder(item.id, { status: "completed" });
-      }
-      await load();
-      if (selected?.id === item.id) {
-        setSelected((prev) => (prev ? { ...prev, status: "completed" } : prev));
-        await loadUpdates(item.id);
-      }
-    },
-    [load, loadUpdates, selected?.id]
-  );
-
   const normalizeCategory = React.useCallback((input: string): ExpenseCategory => {
     const raw = String(input || "").trim().toLowerCase();
     if (raw.includes("repair")) return "Repairs";
@@ -90,6 +72,24 @@ export default function WorkOrdersPage() {
       setUpdates([]);
     }
   }, []);
+
+  const markCompleted = React.useCallback(
+    async (item: WorkOrderRecord) => {
+      if (!canCompleteWorkOrder(item)) return;
+      const shouldUseContractorCompletion = Boolean(item.assignedContractorId) && item.status === "in_progress";
+      if (shouldUseContractorCompletion) {
+        await completeWorkOrder(item.id);
+      } else {
+        await patchWorkOrder(item.id, { status: "completed" });
+      }
+      await load();
+      if (selected?.id === item.id) {
+        setSelected((prev) => (prev ? { ...prev, status: "completed" } : prev));
+        await loadUpdates(item.id);
+      }
+    },
+    [load, loadUpdates, selected?.id]
+  );
 
   React.useEffect(() => {
     if (!canUseWorkOrders) {

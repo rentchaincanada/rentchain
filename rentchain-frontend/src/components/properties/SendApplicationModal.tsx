@@ -3,6 +3,7 @@ import { createApplicationLink } from "../../api/applicationLinksApi";
 import { useToast } from "../ui/ToastProvider";
 import { setOnboardingStep } from "../../api/onboardingApi";
 import { track } from "../../lib/analytics";
+import { Button } from "../ui/Ui";
 
 type Props = {
   open: boolean;
@@ -17,6 +18,9 @@ type Props = {
   initialUnitId?: string | null;
   onUnitChange?: (nextId: string | null) => void;
   unit?: any | null;
+  allowGeneration?: boolean;
+  lockedMessage?: string | null;
+  onUpgradeRequired?: () => void;
   onClose: () => void;
 };
 
@@ -33,6 +37,9 @@ export function SendApplicationModal({
   initialUnitId,
   onUnitChange,
   unit,
+  allowGeneration = true,
+  lockedMessage,
+  onUpgradeRequired,
   onClose,
 }: Props) {
   const { showToast } = useToast();
@@ -56,7 +63,10 @@ export function SendApplicationModal({
   );
   const availableUnits = units || [];
   const requiresUnitSelection = !unitsLoading && availableUnits.length > 0;
-  const canGenerate = Boolean(selectedPropertyId) && (!requiresUnitSelection || Boolean(selectedUnitId));
+  const canGenerate =
+    allowGeneration &&
+    Boolean(selectedPropertyId) &&
+    (!requiresUnitSelection || Boolean(selectedUnitId));
 
   React.useEffect(() => {
     if (!open) {
@@ -95,6 +105,11 @@ export function SendApplicationModal({
   if (!open) return null;
 
   const handleGenerate = async () => {
+    if (!allowGeneration) {
+      setError(null);
+      onUpgradeRequired?.();
+      return;
+    }
     if (!selectedPropertyId) {
       setError("Missing property id");
       return;
@@ -214,6 +229,31 @@ export function SendApplicationModal({
 
         {propertyOptions.length ? (
           <>
+            {!allowGeneration ? (
+              <div
+                style={{
+                  border: "1px solid rgba(37,99,235,0.22)",
+                  background: "rgba(37,99,235,0.08)",
+                  borderRadius: 12,
+                  padding: "12px 14px",
+                  display: "grid",
+                  gap: 8,
+                }}
+              >
+                <div style={{ fontWeight: 700, color: "#0f172a" }}>Upgrade to send application links</div>
+                <div style={{ color: "#334155", fontSize: "0.9rem", lineHeight: 1.6 }}>
+                  {lockedMessage ||
+                    "Starter unlocks secure application links so applicants can complete their application inside RentChain."}
+                </div>
+                {onUpgradeRequired ? (
+                  <div>
+                    <Button type="button" onClick={onUpgradeRequired}>
+                      Upgrade to Starter
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             <label style={{ display: "grid", gap: 6, fontSize: "0.9rem", color: "#111827" }}>
               Property
               <select
@@ -236,6 +276,7 @@ export function SendApplicationModal({
                   background: "#fff",
                 }}
                 required
+                disabled={!allowGeneration}
               >
                 {propertyOptions.map((option) => (
                   <option key={option.id} value={option.id}>
@@ -263,9 +304,10 @@ export function SendApplicationModal({
                     borderRadius: 8,
                     border: "1px solid #e5e7eb",
                     fontSize: "0.9rem",
-                    background: "#fff",
-                  }}
-                >
+                  background: "#fff",
+                }}
+                disabled={!allowGeneration}
+              >
                   <option value="">
                     {unitsLoading
                       ? "Loading units..."
@@ -340,6 +382,7 @@ export function SendApplicationModal({
               border: "1px solid #e5e7eb",
               fontSize: "0.9rem",
             }}
+            disabled={!allowGeneration}
           />
           <span style={{ fontSize: "0.8rem", color: "#6b7280" }}>
             We'll email the applicant a secure application link.
@@ -434,21 +477,23 @@ export function SendApplicationModal({
           >
             Close
           </button>
-          <button
-            type="button"
-            onClick={handleGenerate}
-            disabled={loading || !canGenerate}
-            style={{
-              padding: "8px 10px",
-              borderRadius: 8,
-              border: "1px solid #0f172a",
-              background: "#0f172a",
-              color: "#fff",
-              cursor: loading ? "default" : "pointer",
-            }}
-          >
-            {loading ? "Generating..." : "Generate link"}
-          </button>
+          {allowGeneration ? (
+            <button
+              type="button"
+              onClick={handleGenerate}
+              disabled={loading || !canGenerate}
+              style={{
+                padding: "8px 10px",
+                borderRadius: 8,
+                border: "1px solid #0f172a",
+                background: loading || !canGenerate ? "#94a3b8" : "#0f172a",
+                color: "#fff",
+                cursor: loading || !canGenerate ? "not-allowed" : "pointer",
+              }}
+            >
+              {loading ? "Generating..." : "Generate link"}
+            </button>
+          ) : null}
         </div>
       </div>
     </div>

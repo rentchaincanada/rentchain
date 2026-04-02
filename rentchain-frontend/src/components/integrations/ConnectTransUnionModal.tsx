@@ -40,6 +40,7 @@ export function ConnectTransUnionModal({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [step, setStep] = useState<ConnectStep>("chooser");
+  const [editingBusinessDetails, setEditingBusinessDetails] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -54,6 +55,7 @@ export function ConnectTransUnionModal({
     setError(null);
     setSuccess(false);
     setStep(integration?.status === "pending_credentialing" ? "credentials" : "chooser");
+    setEditingBusinessDetails(false);
   }, [
     initialValue?.businessName,
     initialValue?.contactEmail,
@@ -72,6 +74,20 @@ export function ConnectTransUnionModal({
 
   const showChooser = step === "chooser";
   const showCredentials = step === "credentials";
+  const savedBusinessName = String(
+    form.businessName || initialValue?.businessName || integration?.businessName || ""
+  ).trim();
+  const savedContactName = String(
+    form.contactName || initialValue?.contactName || integration?.contactName || ""
+  ).trim();
+  const savedContactEmail = String(
+    form.contactEmail || initialValue?.contactEmail || integration?.contactEmail || ""
+  ).trim();
+  const hasSavedBusinessDetails = Boolean(
+    savedBusinessName &&
+      savedContactName &&
+      savedContactEmail
+  );
 
   if (success) {
     return (
@@ -277,28 +293,65 @@ export function ConnectTransUnionModal({
                 RentChain also saves the business contact details tied to this TransUnion
                 connection so we can keep your setup record complete.
               </div>
-              <label style={{ display: "grid", gap: 6 }}>
-                <span>Legal business name</span>
-                <Input
-                  value={form.businessName}
-                  onChange={(event) => setField("businessName", event.target.value)}
-                />
-              </label>
-              <label style={{ display: "grid", gap: 6 }}>
-                <span>Contact name</span>
-                <Input
-                  value={form.contactName}
-                  onChange={(event) => setField("contactName", event.target.value)}
-                />
-              </label>
-              <label style={{ display: "grid", gap: 6 }}>
-                <span>Contact email</span>
-                <Input
-                  type="email"
-                  value={form.contactEmail}
-                  onChange={(event) => setField("contactEmail", event.target.value)}
-                />
-              </label>
+              {hasSavedBusinessDetails && !editingBusinessDetails ? (
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: radius.md,
+                    background: "#fff",
+                    padding: spacing.sm,
+                    display: "grid",
+                    gap: 6,
+                    fontSize: "0.92rem",
+                  }}
+                >
+                  <div>Business: {savedBusinessName}</div>
+                  <div>Contact: {savedContactName}</div>
+                  <div>Email: {savedContactEmail}</div>
+                  <div>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => {
+                        setForm((current) => ({
+                          ...current,
+                          businessName: savedBusinessName,
+                          contactName: savedContactName,
+                          contactEmail: savedContactEmail,
+                        }));
+                        setEditingBusinessDetails(true);
+                      }}
+                    >
+                      Edit business details
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <label style={{ display: "grid", gap: 6 }}>
+                    <span>Legal business name</span>
+                    <Input
+                      value={form.businessName}
+                      onChange={(event) => setField("businessName", event.target.value)}
+                    />
+                  </label>
+                  <label style={{ display: "grid", gap: 6 }}>
+                    <span>Contact name</span>
+                    <Input
+                      value={form.contactName}
+                      onChange={(event) => setField("contactName", event.target.value)}
+                    />
+                  </label>
+                  <label style={{ display: "grid", gap: 6 }}>
+                    <span>Contact email</span>
+                    <Input
+                      type="email"
+                      value={form.contactEmail}
+                      onChange={(event) => setField("contactEmail", event.target.value)}
+                    />
+                  </label>
+                </>
+              )}
             </div>
 
             <label style={{ display: "flex", gap: spacing.sm, alignItems: "flex-start" }}>
