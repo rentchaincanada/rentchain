@@ -17,7 +17,7 @@ function statusTone(status?: MoveInReadiness["status"] | null) {
     case "not-started":
       return { background: "rgba(241,245,249,0.96)", border: "rgba(148,163,184,0.28)", color: "#475569", label: "Not started" };
     default:
-      return { background: "rgba(248,250,252,0.96)", border: "rgba(148,163,184,0.24)", color: "#64748b", label: "Unknown" };
+      return { background: "rgba(248,250,252,0.96)", border: "rgba(148,163,184,0.24)", color: "#64748b", label: "Pending" };
   }
 }
 
@@ -38,9 +38,9 @@ function formatUpdated(value?: string | null) {
 }
 
 function yesNoUnknown(value?: boolean | null) {
-  if (value === true) return "Yes";
-  if (value === false) return "No";
-  return "Unknown";
+  if (value === true) return "Confirmed";
+  if (value === false) return "Not provided";
+  return "Pending";
 }
 
 const MetricTile: React.FC<{ label: string; value: React.ReactNode; caption?: React.ReactNode }> = ({ label, value, caption }) => (

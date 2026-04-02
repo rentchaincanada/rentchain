@@ -159,7 +159,16 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
   const isLandlord = viewerRole === "landlord" || viewerRole === "admin";
 
   const handleViewInLedger = () => {
-    navigate(`/ledger?tenantId=${tenantId}`);
+    const leaseId = String(lease?.id || tenant?.currentLeaseId || tenant?.leaseId || "").trim();
+    if (leaseId) {
+      navigate(`/leases/${encodeURIComponent(leaseId)}/ledger`);
+      return;
+    }
+    showToast({
+      message: "No lease ledger is available yet",
+      description: "Recent tenant events are still available in the timeline below.",
+      variant: "info",
+    });
   };
 
   const loadLedger = React.useCallback(async () => {
@@ -194,20 +203,17 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
   const handleDownloadReport = async () => {
     try {
       const report = await downloadTenantReport(tenantId);
-      if (report && typeof report === "object") {
-        const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `tenant-report-${tenantId}.json`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-      }
+      const url = URL.createObjectURL(report.blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = report.filename || `tenant-summary-${tenantId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
       showToast({
-        message: "Report downloaded",
-        description: "Tenant report has been saved.",
+        message: "Tenant summary downloaded",
+        description: "The PDF summary has been saved.",
         variant: "success",
       });
     } catch (err: any) {
@@ -327,7 +333,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
               <span role="img" aria-label="file">
                 📄
               </span>
-              <span>Download report (JSON)</span>
+              <span>Download Tenant Summary (PDF)</span>
             </button>
             {isLandlord ? (
               <>
@@ -541,7 +547,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
                 boxShadow: shadows.sm,
               }}
             >
-              View all ledger events →
+              Open current lease ledger →
             </button>
           </div>
 

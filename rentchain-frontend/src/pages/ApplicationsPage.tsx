@@ -1595,7 +1595,7 @@ const ApplicationsPage: React.FC = () => {
         <div style={{ display: "grid", gap: 4 }}>
           <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>Viewing requests</div>
           <div style={{ color: text.muted, fontSize: "0.94rem" }}>
-            Review incoming viewing requests, propose times, and manage scheduling without leaving Applications.
+            Viewing requests live in Applications. Review requests here, propose times, and keep scheduling in one place.
           </div>
         </div>
         {viewingError ? (
@@ -1857,7 +1857,7 @@ const ApplicationsPage: React.FC = () => {
                         onClick={() => navigate(`/applications/${detail.id}/review-summary`)}
                         disabled={!detail?.id}
                       >
-                        Review Summary
+                        View Screening Decision
                       </Button>
                       {screeningOrderId && orderReportReady ? (
                         <Button

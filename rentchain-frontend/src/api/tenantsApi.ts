@@ -1,4 +1,5 @@
-import { apiFetch, apiJson } from "@/lib/apiClient";
+import { apiJson, getAuthToken, resolveApiUrl } from "@/lib/apiClient";
+import { getFirebaseIdToken } from "@/lib/firebaseAuthToken";
 
 export type TenancyMoveOutReason =
   | "LEASE_TERM_END"
@@ -48,9 +49,49 @@ export async function fetchTenants(): Promise<TenantApiModel[]> {
   }
 }
 
-export async function downloadTenantReport(tenantId: string): Promise<any> {
-  // Uses landlord-protected JSON endpoint; backend currently returns JSON report.
-  return apiFetch(`/tenants/${tenantId}/report`, { method: "GET" });
+export async function downloadTenantReport(tenantId: string): Promise<{ filename: string; blob: Blob }> {
+  const path = `/tenants/${encodeURIComponent(tenantId)}/report`;
+  const url = resolveApiUrl(path);
+  const bearerToken = getAuthToken();
+  const firebaseToken = !bearerToken ? await getFirebaseIdToken() : null;
+  const token = bearerToken || firebaseToken;
+  const headers = new Headers({
+    Accept: "application/pdf,application/json",
+    "x-api-client": "web",
+    "x-rc-auth": bearerToken ? "bearer" : firebaseToken ? "firebase" : "missing",
+  });
+
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers,
+    credentials: "include",
+  });
+
+  const contentType = response.headers.get("content-type") || "";
+  if (!response.ok) {
+    const payload = contentType.includes("application/json")
+      ? await response.json().catch(() => null)
+      : await response.text().catch(() => "");
+    const message =
+      (payload && (payload.message || payload.error || payload.code)) ||
+      (typeof payload === "string" ? payload : "") ||
+      `Tenant report download failed (${response.status})`;
+    const err = new Error(String(message));
+    (err as any).payload = payload;
+    (err as any).status = response.status;
+    throw err;
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("content-disposition") || "";
+  const match = disposition.match(/filename="?([^"]+)"?/i);
+  const filename = match?.[1] || `tenant-summary-${tenantId}.pdf`;
+
+  return { filename, blob };
 }
 
 export async function fetchTenantTenancies(tenantId: string): Promise<TenancyApiModel[]> {

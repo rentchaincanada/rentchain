@@ -15,7 +15,7 @@ function statusTone(status?: MoveInRequirements["status"] | null) {
     case "not-started":
       return { background: "rgba(241,245,249,0.96)", border: "rgba(148,163,184,0.28)", color: "#475569", label: "Not started" };
     default:
-      return { background: "rgba(248,250,252,0.96)", border: "rgba(148,163,184,0.24)", color: "#64748b", label: "Unknown" };
+      return { background: "rgba(248,250,252,0.96)", border: "rgba(148,163,184,0.24)", color: "#64748b", label: "Pending" };
   }
 }
 
@@ -28,7 +28,7 @@ function stateTone(state?: string | null) {
     case "not-required":
       return { background: "rgba(241,245,249,0.96)", border: "rgba(148,163,184,0.22)", color: "#475569", label: "Not required" };
     default:
-      return { background: "rgba(248,250,252,0.96)", border: "rgba(148,163,184,0.24)", color: "#64748b", label: "Unknown" };
+      return { background: "rgba(248,250,252,0.96)", border: "rgba(148,163,184,0.24)", color: "#64748b", label: "Pending" };
   }
 }
 
@@ -146,7 +146,7 @@ export const MoveInRequirementsCard: React.FC<MoveInRequirementsCardProps> = ({ 
                 <div style={{ color: text.primary, fontWeight: 700, fontSize: 14 }}>{item.label}</div>
                 <div style={{ color: text.muted, fontSize: 12 }}>
                   {item.required ? "Required before move-in" : "Optional or not currently required"}
-                  {item.source ? ` • Source: ${item.source.replace(/_/g, " ")}` : ""}
+                  {item.source ? ` - Source: ${item.source.replace(/_/g, " ")}` : ""}
                 </div>
                 {item.note ? <div style={{ color: text.secondary, fontSize: 12, lineHeight: 1.5 }}>{item.note}</div> : null}
               </div>

@@ -51,6 +51,23 @@ describe("MoveInRequirementsCard", () => {
     expect(screen.getByText("Pending")).toBeInTheDocument();
   });
 
+  it("uses landlord-friendly pending labels for incomplete requirement states", () => {
+    render(
+      <MoveInRequirementsCard
+        requirements={{
+          status: "unknown",
+          completedCount: 0,
+          requiredCount: 1,
+          progressPercent: 0,
+          items: [{ key: "insurance", label: "Insurance received", required: true, state: null }],
+        }}
+      />
+    );
+
+    expect(screen.getAllByText("Pending").length).toBeGreaterThan(0);
+    expect(screen.getByText("Insurance received")).toBeInTheDocument();
+  });
+
   it("renders the empty state when requirements are unavailable", () => {
     render(<MoveInRequirementsCard requirements={{ status: "unknown", items: [], completedCount: 0, requiredCount: 0 }} />);
 
