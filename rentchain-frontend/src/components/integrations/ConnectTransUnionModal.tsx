@@ -3,6 +3,8 @@ import { Button, Card, Input } from "../ui/Ui";
 import { colors, radius, shadows, spacing, text } from "@/styles/tokens";
 import type { TransUnionCredentialsPayload, TransUnionIntegration } from "@/api/integrationsApi";
 
+type ConnectStep = "chooser" | "credentials";
+
 type Props = {
   open: boolean;
   submitting?: boolean;
@@ -37,6 +39,7 @@ export function ConnectTransUnionModal({
 
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [step, setStep] = useState<ConnectStep>("chooser");
 
   useEffect(() => {
     if (!open) return;
@@ -50,6 +53,7 @@ export function ConnectTransUnionModal({
     });
     setError(null);
     setSuccess(false);
+    setStep(integration?.status === "pending_credentialing" ? "credentials" : "chooser");
   }, [
     initialValue?.businessName,
     initialValue?.contactEmail,
@@ -65,6 +69,9 @@ export function ConnectTransUnionModal({
   const setField = (field: keyof TransUnionCredentialsPayload, value: string | boolean) => {
     setForm((current) => ({ ...current, [field]: value }));
   };
+
+  const showChooser = step === "chooser";
+  const showCredentials = step === "credentials";
 
   if (success) {
     return (
@@ -167,137 +174,195 @@ export function ConnectTransUnionModal({
           </p>
         </div>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-            gap: spacing.sm,
-          }}
-        >
+        {showChooser ? (
           <div
             style={{
-              border: `1px solid ${colors.border}`,
-              borderRadius: radius.md,
-              background: colors.bg,
-              padding: spacing.sm,
               display: "grid",
-              gap: 6,
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: spacing.sm,
             }}
           >
-            <div style={{ fontWeight: 700 }}>Need TransUnion access?</div>
-            <div style={{ color: text.muted, fontSize: "0.92rem", lineHeight: 1.5 }}>
-              If you are not credentialed yet, start with the access steps first. Once TransUnion
-              issues your membership details, return here to finish setup.
+            <div
+              style={{
+                border: `1px solid ${colors.border}`,
+                borderRadius: radius.md,
+                background: colors.bg,
+                padding: spacing.sm,
+                display: "grid",
+                gap: 10,
+              }}
+            >
+              <div style={{ fontWeight: 700 }}>Need TransUnion access?</div>
+              <div style={{ color: text.muted, fontSize: "0.92rem", lineHeight: 1.5 }}>
+                Start with credentialing first. Once TransUnion issues your member code and
+                passcode, come back here to finish setup in RentChain.
+              </div>
+              {onGetAccess ? (
+                <div>
+                  <Button type="button" variant="secondary" onClick={onGetAccess}>
+                    Get TransUnion Access
+                  </Button>
+                </div>
+              ) : null}
             </div>
-            {onGetAccess ? (
+            <div
+              style={{
+                border: `1px solid ${colors.border}`,
+                borderRadius: radius.md,
+                background: colors.bg,
+                padding: spacing.sm,
+                display: "grid",
+                gap: 10,
+              }}
+            >
+              <div style={{ fontWeight: 700 }}>Already credentialed?</div>
+              <div style={{ color: text.muted, fontSize: "0.92rem", lineHeight: 1.5 }}>
+                Use the membership details TransUnion already issued to your business.
+              </div>
               <div>
-                <Button type="button" variant="secondary" onClick={onGetAccess}>
-                  Get TransUnion Access
+                <Button type="button" onClick={() => setStep("credentials")}>
+                  I Already Have Credentials
                 </Button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {showCredentials ? (
+          <div style={{ display: "grid", gap: spacing.sm }}>
+            <div
+              style={{
+                border: `1px solid ${colors.border}`,
+                borderRadius: radius.md,
+                background: colors.bg,
+                padding: spacing.sm,
+                display: "grid",
+                gap: 6,
+              }}
+            >
+              <div style={{ fontWeight: 700 }}>Membership credentials</div>
+              <div style={{ color: text.muted, fontSize: "0.92rem", lineHeight: 1.5 }}>
+                Enter the member code and passcode exactly as TransUnion provided them.
+              </div>
+            </div>
+
+            <label style={{ display: "grid", gap: 6 }}>
+              <span>Member code</span>
+              <Input
+                value={form.memberCode}
+                onChange={(event) => setField("memberCode", event.target.value)}
+              />
+            </label>
+            <label style={{ display: "grid", gap: 6 }}>
+              <span>Passcode</span>
+              <Input
+                type="password"
+                value={form.passcode}
+                onChange={(event) => setField("passcode", event.target.value)}
+              />
+            </label>
+
+            <div
+              style={{
+                border: `1px solid ${colors.border}`,
+                borderRadius: radius.md,
+                background: "rgba(15,23,42,0.02)",
+                padding: spacing.sm,
+                display: "grid",
+                gap: spacing.sm,
+              }}
+            >
+              <div style={{ fontWeight: 700 }}>Business details required for setup</div>
+              <div style={{ color: text.muted, fontSize: "0.92rem", lineHeight: 1.5 }}>
+                RentChain also saves the business contact details tied to this TransUnion
+                connection so we can keep your setup record complete.
+              </div>
+              <label style={{ display: "grid", gap: 6 }}>
+                <span>Legal business name</span>
+                <Input
+                  value={form.businessName}
+                  onChange={(event) => setField("businessName", event.target.value)}
+                />
+              </label>
+              <label style={{ display: "grid", gap: 6 }}>
+                <span>Contact name</span>
+                <Input
+                  value={form.contactName}
+                  onChange={(event) => setField("contactName", event.target.value)}
+                />
+              </label>
+              <label style={{ display: "grid", gap: 6 }}>
+                <span>Contact email</span>
+                <Input
+                  type="email"
+                  value={form.contactEmail}
+                  onChange={(event) => setField("contactEmail", event.target.value)}
+                />
+              </label>
+            </div>
+
+            <label style={{ display: "flex", gap: spacing.sm, alignItems: "flex-start" }}>
+              <input
+                type="checkbox"
+                checked={form.confirmPermissibleUse}
+                onChange={(event) => setField("confirmPermissibleUse", event.target.checked)}
+              />
+              <span style={{ color: text.muted, lineHeight: 1.5 }}>
+                I confirm these credentials were issued by TransUnion for permissible tenant-screening
+                use.
+              </span>
+            </label>
+            {error ? (
+              <div
+                style={{
+                  border: `1px solid rgba(239,68,68,0.3)`,
+                  background: "rgba(239,68,68,0.08)",
+                  borderRadius: radius.md,
+                  padding: spacing.sm,
+                  color: colors.danger,
+                  fontSize: "0.92rem",
+                }}
+              >
+                {error}
               </div>
             ) : null}
           </div>
-          <div
-            style={{
-              border: `1px solid ${colors.border}`,
-              borderRadius: radius.md,
-              background: colors.bg,
-              padding: spacing.sm,
-              display: "grid",
-              gap: 6,
-            }}
-          >
-            <div style={{ fontWeight: 700 }}>Already credentialed?</div>
-            <div style={{ color: text.muted, fontSize: "0.92rem", lineHeight: 1.5 }}>
-              Enter the member code and passcode that TransUnion provided to your business.
-            </div>
-          </div>
-        </div>
-
-        <div style={{ display: "grid", gap: spacing.sm }}>
-          <label style={{ display: "grid", gap: 6 }}>
-            <span>Legal business name</span>
-            <Input
-              value={form.businessName}
-              onChange={(event) => setField("businessName", event.target.value)}
-            />
-          </label>
-          <label style={{ display: "grid", gap: 6 }}>
-            <span>Contact name</span>
-            <Input
-              value={form.contactName}
-              onChange={(event) => setField("contactName", event.target.value)}
-            />
-          </label>
-          <label style={{ display: "grid", gap: 6 }}>
-            <span>Contact email</span>
-            <Input
-              type="email"
-              value={form.contactEmail}
-              onChange={(event) => setField("contactEmail", event.target.value)}
-            />
-          </label>
-          <label style={{ display: "grid", gap: 6 }}>
-            <span>Member code</span>
-            <Input
-              value={form.memberCode}
-              onChange={(event) => setField("memberCode", event.target.value)}
-            />
-          </label>
-          <label style={{ display: "grid", gap: 6 }}>
-            <span>Passcode</span>
-            <Input
-              type="password"
-              value={form.passcode}
-              onChange={(event) => setField("passcode", event.target.value)}
-            />
-          </label>
-          <label style={{ display: "flex", gap: spacing.sm, alignItems: "flex-start" }}>
-            <input
-              type="checkbox"
-              checked={form.confirmPermissibleUse}
-              onChange={(event) => setField("confirmPermissibleUse", event.target.checked)}
-            />
-            <span style={{ color: text.muted, lineHeight: 1.5 }}>
-              I confirm these credentials were issued by TransUnion for permissible tenant-screening
-              use.
-            </span>
-          </label>
-          {error ? (
-            <div
-              style={{
-                border: `1px solid rgba(239,68,68,0.3)`,
-                background: "rgba(239,68,68,0.08)",
-                borderRadius: radius.md,
-                padding: spacing.sm,
-                color: colors.danger,
-                fontSize: "0.92rem",
-              }}
-            >
-              {error}
-            </div>
-          ) : null}
-        </div>
+        ) : null}
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: spacing.sm, flexWrap: "wrap" }}>
+          {showCredentials ? (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setError(null);
+                setStep("chooser");
+              }}
+              disabled={submitting}
+            >
+              Back
+            </Button>
+          ) : null}
           <Button type="button" variant="ghost" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
-          <Button
-            type="button"
-            onClick={async () => {
-              setError(null);
-              try {
-                await onSubmit(form);
-                setSuccess(true);
-              } catch (submissionError: any) {
-                setError(String(submissionError?.message || "Unable to save TransUnion credentials."));
-              }
-            }}
-            disabled={submitting}
-          >
-            {submitting ? "Saving..." : submitLabel}
-          </Button>
+          {showCredentials ? (
+            <Button
+              type="button"
+              onClick={async () => {
+                setError(null);
+                try {
+                  await onSubmit(form);
+                  setSuccess(true);
+                } catch (submissionError: any) {
+                  setError(String(submissionError?.message || "Unable to save TransUnion credentials."));
+                }
+              }}
+              disabled={submitting}
+            >
+              {submitting ? "Saving..." : submitLabel}
+            </Button>
+          ) : null}
         </div>
       </Card>
     </div>

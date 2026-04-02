@@ -562,6 +562,28 @@ const ApplicationsPage: React.FC = () => {
     }
   }, []);
 
+  const openProUpgrade = useCallback(
+    (featureName: "screening" | "exports") => {
+      track("gating_blocked", { featureName, requiredTier: "pro", userTier });
+      openUpgrade({
+        reason: featureName,
+        plan: userTier,
+        ctaLabel: "Upgrade to Pro",
+        copy:
+          featureName === "screening"
+            ? {
+                title: "Upgrade to Pro",
+                body: "Screening is available on Pro plans. Upgrade to run screenings.",
+              }
+            : {
+                title: "Upgrade to Pro",
+                body: "Verified exports are available on Pro plans. Upgrade to continue.",
+              },
+      });
+    },
+    [openUpgrade, userTier]
+  );
+
   const openScreeningReport = useCallback(
     async (screeningId: string) => {
       if (!canExportPdf) {
@@ -1153,25 +1175,6 @@ const ApplicationsPage: React.FC = () => {
       setTransUnionSubmitting(false);
     }
   }, [showToast]);
-
-  const openProUpgrade = (featureName: "screening" | "exports") => {
-    track("gating_blocked", { featureName, requiredTier: "pro", userTier });
-    openUpgrade({
-      reason: featureName,
-      plan: userTier,
-      ctaLabel: "Upgrade to Pro",
-      copy:
-        featureName === "screening"
-          ? {
-              title: "Upgrade to Pro",
-              body: "Screening is available on Pro plans. Upgrade to run screenings.",
-            }
-          : {
-              title: "Upgrade to Pro",
-              body: "Verified exports are available on Pro plans. Upgrade to continue.",
-            },
-    });
-  };
 
   const handleExportReport = async (copyOnly: boolean) => {
     if (!detail?.id) return;

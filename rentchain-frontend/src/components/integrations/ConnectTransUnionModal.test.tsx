@@ -17,6 +17,30 @@ describe("ConnectTransUnionModal", () => {
     expect(screen.getByText("Need TransUnion access?")).toBeInTheDocument();
     expect(screen.getByText("Already credentialed?")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Get TransUnion Access" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "I Already Have Credentials" })).toBeInTheDocument();
+    expect(screen.queryByText("Member code")).not.toBeInTheDocument();
+  });
+
+  it("reveals the credential form only after the landlord chooses the credentialed path", async () => {
+    render(
+      <ConnectTransUnionModal
+        open
+        onClose={vi.fn()}
+        onSubmit={vi.fn()}
+        onGetAccess={vi.fn()}
+      />
+    );
+
+    const dialog = screen.getAllByRole("dialog").find((node) =>
+      node.getAttribute("aria-label") === "Connect Your TransUnion Account"
+    ) as HTMLElement;
+    const dialogQueries = within(dialog);
+
+    fireEvent.click(dialogQueries.getByRole("button", { name: "I Already Have Credentials" }));
+
+    expect(dialogQueries.getByText("Member code")).toBeInTheDocument();
+    expect(dialogQueries.getByText("Passcode")).toBeInTheDocument();
+    expect(dialogQueries.getByText("Business details required for setup")).toBeInTheDocument();
   });
 
   it("shows a connected success state after credentials are submitted", async () => {
@@ -40,6 +64,12 @@ describe("ConnectTransUnionModal", () => {
       node.getAttribute("aria-label") === "Connect Your TransUnion Account"
     ) as HTMLElement;
     const dialogQueries = within(dialog);
+    const credentialButton = dialogQueries.queryByRole("button", {
+      name: "I Already Have Credentials",
+    });
+    if (credentialButton) {
+      fireEvent.click(credentialButton);
+    }
     const textboxes = dialogQueries.getAllByRole("textbox");
     fireEvent.change(textboxes[0], {
       target: { value: "North Wharf Holdings" },

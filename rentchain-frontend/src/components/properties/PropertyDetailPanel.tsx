@@ -206,6 +206,24 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
     [applicationsEnabled, caps?.plan]
   );
 
+  const sendApplicationActionLabel = applicationsEnabled
+    ? "Send application"
+    : "Upgrade to send application";
+  const sendApplicationActionStyle = applicationsEnabled
+    ? {
+        padding: "6px 10px",
+        borderRadius: 8,
+        border: "1px solid #e5e7eb",
+        background: "#fff",
+        cursor: "pointer",
+        fontSize: "0.85rem",
+      }
+    : {
+        ...upgradeStarterButtonStyle,
+        padding: "6px 10px",
+        fontSize: "0.85rem",
+      };
+
   useEffect(() => {
     if (!openSendApplication) return;
     if (sendApplicationOpenedRef.current) return;
@@ -1337,20 +1355,21 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                             Edit
                           </button>
                           {(u as any)?.id ? (
-                            <button
-                              type="button"
-                            onClick={() => handleSendApplication(u)}
-                              style={{
-                                padding: "6px 10px",
-                                borderRadius: 8,
-                                border: "1px solid #e5e7eb",
-                                background: "#fff",
-                                cursor: "pointer",
-                                fontSize: "0.85rem",
-                              }}
-                            >
-                              Send application
-                            </button>
+                            <div style={{ display: "grid", gap: 4 }}>
+                              <button
+                                type="button"
+                                onClick={() => handleSendApplication(u)}
+                                aria-label={`${sendApplicationActionLabel} for unit ${unitNum}`}
+                                style={sendApplicationActionStyle}
+                              >
+                                {sendApplicationActionLabel}
+                              </button>
+                              {!applicationsEnabled ? (
+                                <div style={{ fontSize: "0.75rem", color: "#64748b" }}>
+                                  Starter unlocks tenant invites and application links.
+                                </div>
+                              ) : null}
+                            </div>
                           ) : null}
                         </div>
                       </td>
@@ -1471,20 +1490,21 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                     Edit
                   </button>
                   {(u as any)?.id ? (
-                    <button
-                      type="button"
-                    onClick={() => handleSendApplication(u)}
-                      style={{
-                        padding: "6px 10px",
-                        borderRadius: 8,
-                        border: "1px solid #e5e7eb",
-                        background: "#fff",
-                        cursor: "pointer",
-                        fontSize: "0.85rem",
-                      }}
-                    >
-                      Send application
-                    </button>
+                    <div style={{ display: "grid", gap: 4 }}>
+                      <button
+                        type="button"
+                        onClick={() => handleSendApplication(u)}
+                        aria-label={`${sendApplicationActionLabel} for unit ${unitNum}`}
+                        style={sendApplicationActionStyle}
+                      >
+                        {sendApplicationActionLabel}
+                      </button>
+                      {!applicationsEnabled ? (
+                        <div style={{ fontSize: "0.75rem", color: "#64748b" }}>
+                          Starter unlocks tenant invites and application links.
+                        </div>
+                      ) : null}
+                    </div>
                   ) : null}
                 </div>
               </div>
