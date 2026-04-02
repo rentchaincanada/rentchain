@@ -103,6 +103,7 @@ import { ScreeningDetailDrawer } from "@/components/screening/ScreeningDetailDra
 import { FeatureGate } from "@/components/billing/FeatureGate";
 import { FeatureTeaser } from "@/components/billing/FeatureTeaser";
 import { UpgradeCTA } from "@/components/billing/UpgradeCTA";
+import { dispatchUpgradePrompt } from "@/lib/upgradePrompt";
 const statusOptions: RentalApplicationStatus[] = [
   "SUBMITTED",
   "IN_REVIEW",
@@ -415,6 +416,7 @@ const ApplicationsPage: React.FC = () => {
   })();
   const userTier = normalizeTier((caps?.plan as string) || user?.plan || null);
   const canUseProFeatures = isAdmin || hasTier(userTier, "pro");
+  const canCreateApplicationLinks = isAdmin || entitlements.hasCapability("applications");
   const canViewScreeningHistory = entitlements.canViewScreeningHistory;
   const canExportPdf = entitlements.canExportPdf;
   const canViewReviewSummary = entitlements.canViewReviewSummary;
@@ -809,6 +811,22 @@ const ApplicationsPage: React.FC = () => {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (params.get("openSendApplication") !== "1") return;
+    if (!canCreateApplicationLinks) {
+      const redirectTo =
+        typeof window !== "undefined"
+          ? `${window.location.pathname}${window.location.search}`
+          : "/applications";
+      dispatchUpgradePrompt({
+        featureKey: "applications",
+        currentPlan: caps?.plan,
+        source: "applications_page",
+        redirectTo,
+      });
+      params.delete("openSendApplication");
+      params.delete("autoSelectProperty");
+      navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
+      return;
+    }
     if (!propertiesLoaded) return;
     if (propertiesError) {
       showToast({ message: "Couldn’t load properties. Retry.", variant: "error" });
@@ -854,6 +872,8 @@ const ApplicationsPage: React.FC = () => {
     propertiesLoaded,
     propertiesReady,
     showToast,
+    canCreateApplicationLinks,
+    caps?.plan,
   ]);
 
   useEffect(() => {
@@ -1067,6 +1087,19 @@ const ApplicationsPage: React.FC = () => {
   };
 
   const handleCreateApplication = (autoSelectProperty: boolean = false) => {
+    if (!canCreateApplicationLinks) {
+      const redirectTo =
+        typeof window !== "undefined"
+          ? `${window.location.pathname}${window.location.search}`
+          : "/applications";
+      dispatchUpgradePrompt({
+        featureKey: "applications",
+        currentPlan: caps?.plan,
+        source: "applications_page",
+        redirectTo,
+      });
+      return;
+    }
     if (!propertiesLoaded) {
       showToast({ message: "Loading properties…", variant: "info" });
       return;
@@ -2718,6 +2751,20 @@ const ApplicationsPage: React.FC = () => {
         }}
         onUnitChange={(nextId) => {
           setModalUnitId(nextId);
+        }}
+        allowGeneration={canCreateApplicationLinks}
+        lockedMessage="Starter unlocks secure application links so applicants can complete their application inside RentChain."
+        onUpgradeRequired={() => {
+          const redirectTo =
+            typeof window !== "undefined"
+              ? `${window.location.pathname}${window.location.search}`
+              : "/applications";
+          dispatchUpgradePrompt({
+            featureKey: "applications",
+            currentPlan: caps?.plan,
+            source: "applications_page",
+            redirectTo,
+          });
         }}
         unit={null}
         onClose={() => setSendAppOpen(false)}

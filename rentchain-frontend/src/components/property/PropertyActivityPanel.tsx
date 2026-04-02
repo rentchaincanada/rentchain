@@ -87,7 +87,7 @@ export const PropertyActivityPanel: React.FC<PropertyActivityPanelProps> = ({
           fontSize: 12,
           textTransform: "uppercase",
           letterSpacing: 0.08,
-          color: "#9ca3af",
+          color: "#e2e8f0",
           marginBottom: 2,
           display: "flex",
           justifyContent: "space-between",
@@ -97,7 +97,7 @@ export const PropertyActivityPanel: React.FC<PropertyActivityPanelProps> = ({
         <span
           style={{
             fontSize: 11,
-            color: "#6b7280",
+            color: "#cbd5e1",
           }}
         >
           Audit feed for this property
@@ -108,7 +108,7 @@ export const PropertyActivityPanel: React.FC<PropertyActivityPanelProps> = ({
         <div
           style={{
             fontSize: 13,
-            color: "#6b7280",
+            color: "#e2e8f0",
           }}
         >
           Select a property to see its activity.
@@ -126,7 +126,7 @@ export const PropertyActivityPanel: React.FC<PropertyActivityPanelProps> = ({
         <div
           style={{
             fontSize: 13,
-            color: "#6b7280",
+            color: "#e2e8f0",
           }}
         >
           No activity has been recorded for this property yet.
@@ -188,7 +188,7 @@ export const PropertyActivityPanel: React.FC<PropertyActivityPanelProps> = ({
                     {evt.detail && (
                       <div
                         style={{
-                          color: "#9ca3af",
+                          color: "#e2e8f0",
                         }}
                       >
                         {evt.detail}
@@ -198,7 +198,7 @@ export const PropertyActivityPanel: React.FC<PropertyActivityPanelProps> = ({
                   <div
                     style={{
                       fontSize: 11,
-                      color: "#6b7280",
+                      color: "#cbd5e1",
                       whiteSpace: "nowrap",
                     }}
                   >

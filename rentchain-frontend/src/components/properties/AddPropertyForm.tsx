@@ -634,10 +634,11 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
                         fontSize: "0.75rem",
                         padding: "4px 8px",
                         borderRadius: 999,
-                        border: "1px solid #6b7280",
-                        background: "transparent",
-                        color: "#e5e7eb",
+                        border: "1px solid #cbd5e1",
+                        background: "rgba(248,250,252,0.92)",
+                        color: "#1f2937",
                         cursor: "pointer",
+                        fontWeight: 600,
                       }}
                     >
                       Remove
@@ -658,11 +659,12 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
             fontSize: "0.8rem",
             padding: "6px 12px",
             borderRadius: 999,
-            border: "1px dashed #4b5563",
-            background: "transparent",
-            color: "#e5e7eb",
+            border: "1px dashed #2563eb",
+            background: "rgba(219,234,254,0.7)",
+            color: "#1d4ed8",
             cursor: "pointer",
             alignSelf: "flex-start",
+            fontWeight: 700,
           }}
         >
           + Add unit row

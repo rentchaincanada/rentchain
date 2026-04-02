@@ -43,6 +43,35 @@ describe("ConnectTransUnionModal", () => {
     expect(dialogQueries.getByText("Business details required for setup")).toBeInTheDocument();
   });
 
+  it("opens the pending credentialing flow directly in the focused credential-entry step", async () => {
+    render(
+      <ConnectTransUnionModal
+        open
+        integration={{
+          provider: "transunion",
+          status: "pending_credentialing",
+          businessName: "North Wharf Holdings",
+          contactName: "Avery Stone",
+          contactEmail: "ops@example.com",
+          version: 1,
+        }}
+        onClose={vi.fn()}
+        onSubmit={vi.fn()}
+      />
+    );
+
+    const dialog = screen.getAllByRole("dialog").find((node) =>
+      node.getAttribute("aria-label") === "Connect Your TransUnion Account"
+    ) as HTMLElement;
+    const dialogQueries = within(dialog);
+
+    await waitFor(() => {
+      expect(dialogQueries.getByText("Membership credentials")).toBeInTheDocument();
+    });
+    expect(dialogQueries.getByText("Business details required for setup")).toBeInTheDocument();
+    expect(dialogQueries.queryByRole("button", { name: "I Already Have Credentials" })).not.toBeInTheDocument();
+  });
+
   it("shows a connected success state after credentials are submitted", async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
 

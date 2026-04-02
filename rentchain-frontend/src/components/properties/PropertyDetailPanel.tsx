@@ -1544,6 +1544,21 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
           }))
           .filter((u: any) => u.id)}
         initialUnitId={(sendAppUnit as any)?.id ? String((sendAppUnit as any).id) : null}
+        allowGeneration={applicationsEnabled}
+        lockedMessage="Starter unlocks tenant invites and secure application links for each unit."
+        onUpgradeRequired={() => {
+          const redirectTo =
+            typeof window !== "undefined"
+              ? `${window.location.pathname}${window.location.search}`
+              : "/properties";
+          dispatchUpgradePrompt({
+            featureKey: "applications",
+            currentPlan: caps?.plan,
+            source: "property_detail_panel",
+            redirectTo,
+          });
+          setSendAppUnit(null);
+        }}
         unit={sendAppUnit}
         onClose={() => setSendAppUnit(null)}
       />
