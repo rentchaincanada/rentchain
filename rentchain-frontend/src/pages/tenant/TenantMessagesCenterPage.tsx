@@ -7,17 +7,27 @@ import {
   markTenantMaintenanceUpdateRead,
   markTenantMessageRead,
   markTenantMessagesReadAll,
+  markTenantScreeningUpdateRead,
 } from "../../api/tenantCommunicationsApi";
+import {
+  TenantScreeningRequest,
+  acceptTenantScreeningConsent,
+  getTenantScreeningStatus,
+  markTenantScreeningViewed,
+  retryTenantScreening,
+  startTenantScreening,
+} from "../../api/tenantScreeningApi";
 import { colors, spacing, text as textTokens } from "../../styles/tokens";
 import { track } from "../../lib/analytics";
 
-type FilterKey = "all" | "unread" | "message" | "maintenance_update";
+type FilterKey = "all" | "unread" | "message" | "maintenance_update" | "screening_update";
 
 const filters: Array<{ key: FilterKey; label: string }> = [
   { key: "all", label: "All" },
   { key: "unread", label: "Unread" },
   { key: "message", label: "Messages" },
   { key: "maintenance_update", label: "Maintenance" },
+  { key: "screening_update", label: "Screening" },
 ];
 
 function fmtDate(value: string): string {
@@ -45,11 +55,39 @@ function relatedLink(item: TenantCommunicationItem): string | null {
   return null;
 }
 
+function screeningTone(status?: string | null) {
+  switch (status) {
+    case "completed":
+      return { bg: "#dcfce7", color: "#166534", label: "Completed" };
+    case "manual_review_required":
+      return { bg: "#fef3c7", color: "#92400e", label: "Manual review" };
+    case "failed":
+      return { bg: "#fee2e2", color: "#991b1b", label: "Failed" };
+    case "in_progress":
+      return { bg: "#dbeafe", color: "#1d4ed8", label: "In progress" };
+    case "consented":
+      return { bg: "#e0f2fe", color: "#0369a1", label: "Ready to start" };
+    case "consent_pending":
+      return { bg: "#ede9fe", color: "#6d28d9", label: "Consent needed" };
+    default:
+      return { bg: "#e2e8f0", color: "#475569", label: "Requested" };
+  }
+}
+
+function screeningProviderDisclosure(screening?: TenantScreeningRequest | null) {
+  if (screening?.provider && screening.provider !== "manual") {
+    return `RentChain may route this screening through ${screening.provider.replace(/_/g, " ")} once you continue.`;
+  }
+  return "RentChain may route this screening through a secure provider selected at runtime, or move it to manual review if no live provider is active.";
+}
+
 export default function TenantMessagesCenterPage() {
   const [items, setItems] = useState<TenantCommunicationItem[]>([]);
+  const [screeningById, setScreeningById] = useState<Record<string, TenantScreeningRequest>>({});
   const [filter, setFilter] = useState<FilterKey>("all");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [screeningSaving, setScreeningSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -88,6 +126,10 @@ export default function TenantMessagesCenterPage() {
     () => filtered.find((item) => item.id === selectedId) || filtered[0] || null,
     [filtered, selectedId]
   );
+  const selectedScreening =
+    selected?.relatedEntityType === "screening" && selected.relatedEntityId
+      ? screeningById[selected.relatedEntityId] || null
+      : null;
 
   useEffect(() => {
     if (!filtered.length) {
@@ -108,6 +150,10 @@ export default function TenantMessagesCenterPage() {
         const requestId = item.relatedEntityId;
         if (!requestId) return;
         await markTenantMaintenanceUpdateRead(requestId);
+      } else if (item.type === "screening_update") {
+        const requestId = item.relatedEntityId;
+        if (!requestId) return;
+        await markTenantScreeningUpdateRead(requestId);
       } else {
         return;
       }
@@ -118,9 +164,64 @@ export default function TenantMessagesCenterPage() {
     }
   };
 
+  const loadScreening = React.useCallback(async (requestId: string) => {
+    const res = await getTenantScreeningStatus(requestId);
+    if (res?.screeningRequest) {
+      setScreeningById((prev) => ({ ...prev, [requestId]: res.screeningRequest }));
+      return res.screeningRequest;
+    }
+    return null;
+  }, []);
+
   const onSelect = (item: TenantCommunicationItem) => {
     setSelectedId(item.id);
     void markOneRead(item);
+    if (item.relatedEntityType === "screening" && item.relatedEntityId) {
+      void loadScreening(item.relatedEntityId).then((screening) => {
+        if (!screening?.consent?.viewedAt && screening.status === "consent_pending") {
+          void markTenantScreeningViewed(item.relatedEntityId as string, {
+            providerDisclosure: screeningProviderDisclosure(screening),
+            disclosureVersion: "screening-consent-v1",
+          })
+            .then((res) => {
+              if (res?.screeningRequest) {
+                setScreeningById((prev) => ({ ...prev, [item.relatedEntityId as string]: res.screeningRequest }));
+              }
+            })
+            .catch(() => {
+              // keep panel usable even if view logging fails
+            });
+        }
+      });
+    }
+  };
+
+  const runScreeningAction = async (action: "consent" | "start" | "retry") => {
+    if (!selected?.relatedEntityId) return;
+    setScreeningSaving(true);
+    setError(null);
+    try {
+      const requestId = selected.relatedEntityId;
+      const response =
+        action === "consent"
+          ? await acceptTenantScreeningConsent(requestId, {
+              providerDisclosure: screeningProviderDisclosure(selectedScreening),
+              disclosureVersion: "screening-consent-v1",
+            })
+          : action === "start"
+          ? await startTenantScreening(requestId)
+          : await retryTenantScreening(requestId);
+      if (response?.screeningRequest) {
+        setScreeningById((prev) => ({ ...prev, [requestId]: response.screeningRequest }));
+      } else {
+        await loadScreening(requestId);
+      }
+      await load();
+    } catch (err: any) {
+      setError(err?.message || "Unable to update screening.");
+    } finally {
+      setScreeningSaving(false);
+    }
   };
 
   const markAll = async () => {
@@ -151,7 +252,7 @@ export default function TenantMessagesCenterPage() {
       >
         <div>
           <h1 style={{ margin: 0, color: textTokens.primary, fontSize: "1.4rem" }}>
-Messages & Maintenance Updates
+            Messages, Maintenance & Screening
           </h1>
           <div style={{ marginTop: 6, color: textTokens.muted }}>
             Unread: <strong>{unreadCount}</strong>
@@ -200,7 +301,7 @@ Messages & Maintenance Updates
       {loading ? (
         <div style={{ color: textTokens.muted }}>Loading messages…</div>
       ) : filtered.length === 0 ? (
-        <div style={{ color: textTokens.muted }}>No messages or maintenance updates for this filter.</div>
+        <div style={{ color: textTokens.muted }}>No messages, maintenance updates, or screening actions for this filter.</div>
       ) : (
         <div
           style={{
@@ -278,6 +379,123 @@ Messages & Maintenance Updates
                 <div style={{ color: textTokens.secondary, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
                   {selected.body || "No additional details."}
                 </div>
+                {selected.type === "screening_update" && selected.relatedEntityId ? (
+                  selectedScreening ? (
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 12,
+                        background: colors.panel,
+                        padding: spacing.sm,
+                        display: "grid",
+                        gap: 10,
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                        <div style={{ display: "grid", gap: 4 }}>
+                          <div style={{ fontWeight: 700, color: textTokens.primary }}>Screening summary</div>
+                          <div style={{ color: textTokens.muted, fontSize: "0.9rem" }}>
+                            {selectedScreening.applicantName || "Applicant"}
+                            {selectedScreening.propertyLabel ? ` • ${selectedScreening.propertyLabel}` : ""}
+                            {selectedScreening.unitLabel ? ` • Unit ${selectedScreening.unitLabel}` : ""}
+                          </div>
+                        </div>
+                        <span
+                          style={{
+                            alignSelf: "start",
+                            borderRadius: 999,
+                            padding: "4px 8px",
+                            fontWeight: 700,
+                            fontSize: 12,
+                            background: screeningTone(selectedScreening.status).bg,
+                            color: screeningTone(selectedScreening.status).color,
+                          }}
+                        >
+                          {screeningTone(selectedScreening.status).label}
+                        </span>
+                      </div>
+                      <div style={{ display: "grid", gap: 6, color: textTokens.secondary, fontSize: "0.92rem" }}>
+                        <div>Package: {selectedScreening.packageType || "standard"}</div>
+                        <div>Provider: {selectedScreening.provider ? selectedScreening.provider.replace(/_/g, " ") : "runtime selected"}</div>
+                        <div>Requested: {selectedScreening.requestedAt ? fmtDate(new Date(selectedScreening.requestedAt).toISOString()) : "—"}</div>
+                        <div>{selectedScreening.summary.summaryResult}</div>
+                      </div>
+                      <div
+                        style={{
+                          border: `1px solid ${colors.border}`,
+                          borderRadius: 10,
+                          background: colors.card,
+                          padding: "10px 12px",
+                          color: textTokens.secondary,
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        <div style={{ fontWeight: 700, color: textTokens.primary, marginBottom: 6 }}>Consent disclosure</div>
+                        <div>
+                          RentChain will not start screening until you accept consent. {screeningProviderDisclosure(selectedScreening)}
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
+                        {selectedScreening.status === "consent_pending" ? (
+                          <button
+                            type="button"
+                            onClick={() => void runScreeningAction("consent")}
+                            disabled={screeningSaving}
+                            style={{
+                              border: `1px solid ${colors.border}`,
+                              borderRadius: 10,
+                              background: "#dbeafe",
+                              color: "#1d4ed8",
+                              padding: "8px 12px",
+                              cursor: screeningSaving ? "not-allowed" : "pointer",
+                              fontWeight: 700,
+                            }}
+                          >
+                            {screeningSaving ? "Saving..." : "Accept consent"}
+                          </button>
+                        ) : null}
+                        {(selectedScreening.status === "consented" || selectedScreening.status === "requested") && !selectedScreening.session ? (
+                          <button
+                            type="button"
+                            onClick={() => void runScreeningAction("start")}
+                            disabled={screeningSaving}
+                            style={{
+                              border: `1px solid ${colors.border}`,
+                              borderRadius: 10,
+                              background: "#dcfce7",
+                              color: "#166534",
+                              padding: "8px 12px",
+                              cursor: screeningSaving ? "not-allowed" : "pointer",
+                              fontWeight: 700,
+                            }}
+                          >
+                            {screeningSaving ? "Starting..." : "Start screening"}
+                          </button>
+                        ) : null}
+                        {(selectedScreening.status === "failed" || selectedScreening.status === "manual_review_required") ? (
+                          <button
+                            type="button"
+                            onClick={() => void runScreeningAction("retry")}
+                            disabled={screeningSaving}
+                            style={{
+                              border: `1px solid ${colors.border}`,
+                              borderRadius: 10,
+                              background: colors.card,
+                              color: textTokens.primary,
+                              padding: "8px 12px",
+                              cursor: screeningSaving ? "not-allowed" : "pointer",
+                              fontWeight: 700,
+                            }}
+                          >
+                            {screeningSaving ? "Retrying..." : "Retry screening"}
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ color: textTokens.muted }}>Loading screening details…</div>
+                  )
+                ) : null}
                 <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
                   {!selected.read ? (
                     <button

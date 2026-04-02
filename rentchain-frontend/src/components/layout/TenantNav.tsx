@@ -44,6 +44,7 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
   );
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [unreadNotices, setUnreadNotices] = useState(0);
+  const [unreadScreening, setUnreadScreening] = useState(0);
   useEffect(() => {
     let cancelled = false;
     const loadIdentity = async () => {
@@ -89,13 +90,15 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
       try {
         const summary = await getTenantCommunicationSummary();
         if (!cancelled) {
-          setUnreadMessages(Number(summary?.unreadMessages || 0));
+          setUnreadMessages(Number(summary?.unreadMessages || 0) + Number(summary?.unreadScreeningUpdates || 0));
           setUnreadNotices(Number(summary?.unreadNotices || 0));
+          setUnreadScreening(Number(summary?.unreadScreeningUpdates || 0));
         }
       } catch {
         if (!cancelled) {
           setUnreadMessages(0);
           setUnreadNotices(0);
+          setUnreadScreening(0);
         }
       }
     };
@@ -188,6 +191,26 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
                       }}
                     >
                       {unreadMessages > 99 ? "99+" : unreadMessages}
+                    </span>
+                  ) : null}
+                  {item.to === "/tenant/messages" && unreadScreening > 0 ? (
+                    <span
+                      style={{
+                        minWidth: 18,
+                        height: 18,
+                        borderRadius: 999,
+                        background: "#0f766e",
+                        color: "#fff",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        lineHeight: 1,
+                        padding: "0 5px",
+                      }}
+                    >
+                      S
                     </span>
                   ) : null}
                   {item.to === "/tenant/notices" && unreadNotices > 0 ? (

@@ -61,7 +61,7 @@ function timestampToSort(value: any): number {
   return 0;
 }
 
-type TenantCommunicationType = "notice" | "message" | "maintenance_update" | "system";
+type TenantCommunicationType = "notice" | "message" | "maintenance_update" | "screening_update" | "system";
 
 type TenantCommunicationItem = {
   id: string;
@@ -72,8 +72,131 @@ type TenantCommunicationItem = {
   read: boolean;
   priority: "low" | "normal" | "high";
   fromLabel: "Landlord" | "RentChain" | "Maintenance Team";
-  relatedEntityType: "notice" | "maintenance" | "message" | null;
+  relatedEntityType: "notice" | "maintenance" | "message" | "screening" | null;
   relatedEntityId: string | null;
+};
+
+const SCREENING_REQUEST_STATUSES = [
+  "requested",
+  "consent_pending",
+  "consented",
+  "in_progress",
+  "completed",
+  "inconclusive",
+  "failed",
+  "manual_review_required",
+] as const;
+const SCREENING_RESULT_STATUSES = [
+  "pending",
+  "completed",
+  "inconclusive",
+  "failed",
+  "manual_review_required",
+] as const;
+const SCREENING_SESSION_STATUSES = [
+  "created",
+  "ready_for_consent",
+  "consent_received",
+  "redirect_pending",
+  "in_progress",
+  "pending_review",
+  "completed",
+  "inconclusive",
+  "failed",
+  "expired",
+] as const;
+const SCREENING_AUDIT_EVENTS = [
+  "screening_requested",
+  "consent_viewed",
+  "consent_accepted",
+  "screening_started",
+  "provider_session_created",
+  "retry_requested",
+  "manual_review_selected",
+  "screening_completed",
+  "result_viewed",
+] as const;
+type ScreeningProviderKey = "manual" | "equifax" | "transunion_redirect";
+type ScreeningRequestStatus = (typeof SCREENING_REQUEST_STATUSES)[number];
+type ScreeningResultStatus = (typeof SCREENING_RESULT_STATUSES)[number];
+type ScreeningSessionStatus = (typeof SCREENING_SESSION_STATUSES)[number];
+
+type ScreeningRequestRecord = {
+  id: string;
+  rentalApplicationId: string | null;
+  landlordId: string | null;
+  applicantTenantId: string | null;
+  applicantUserId: string | null;
+  applicantEmail: string | null;
+  applicantName: string | null;
+  propertyId: string | null;
+  unitId: string | null;
+  propertyLabel: string | null;
+  unitLabel: string | null;
+  packageType: string | null;
+  payerType: string | null;
+  addOns: string[];
+  status: ScreeningRequestStatus;
+  normalizedResultStatus: ScreeningResultStatus;
+  providerSelection: ScreeningProviderKey | null;
+  providerRoutingSnapshot?: any;
+  latestConsentId: string | null;
+  activeSessionId: string | null;
+  latestResultId: string | null;
+  nextAction?: string | null;
+  requestedAt?: number | null;
+  consentedAt?: number | null;
+  startedAt?: number | null;
+  completedAt?: number | null;
+  failedAt?: number | null;
+  retryCount?: number | null;
+  createdAt?: number | null;
+  updatedAt?: number | null;
+};
+
+type ScreeningConsentRecord = {
+  id: string;
+  requestId: string;
+  tenantId: string;
+  viewedAt: number | null;
+  acceptedAt: number | null;
+  providerDisclosure: string | null;
+  disclosureVersion: string | null;
+};
+
+type ScreeningSessionRecord = {
+  id: string;
+  requestId: string;
+  providerKey: ScreeningProviderKey;
+  status: ScreeningSessionStatus;
+  providerSessionStatus?: string | null;
+  handoffType: "manual" | "redirect";
+  redirectUrl: string | null;
+  returnUrl: string | null;
+  expiresAt: number | null;
+  correlationId: string | null;
+  stateToken: string | null;
+  isActive?: boolean;
+  duplicateOfSessionId?: string | null;
+  callbackReceivedAt?: number | null;
+  normalizedResultStatus: ScreeningResultStatus;
+  createdAt: number;
+  updatedAt: number;
+};
+
+type ScreeningResultRecord = {
+  id: string;
+  requestId: string;
+  sessionId: string;
+  providerKey: ScreeningProviderKey;
+  status: ScreeningResultStatus;
+  summary: string | null;
+  normalizedDecision: string | null;
+  reportAvailable: boolean;
+  rawPayloadRef: string | null;
+  fullReportStorageRef: string | null;
+  createdAt: number;
+  updatedAt: number;
 };
 
 function isoFromMs(ms: number | null | undefined): string {
@@ -86,6 +209,332 @@ function truncateText(value: any, max = 220): string {
   if (!text) return "";
   if (text.length <= max) return text;
   return `${text.slice(0, max - 1)}…`;
+}
+
+function cleanString(value: any, max = 200): string | null {
+  const text = String(value || "").trim();
+  if (!text) return null;
+  return text.slice(0, max);
+}
+
+function normalizeStringList(value: any, maxItems = 8, maxLength = 80): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => cleanString(item, maxLength))
+    .filter((item): item is string => Boolean(item))
+    .slice(0, maxItems);
+}
+
+function normalizeScreeningRequestStatus(raw: any): ScreeningRequestStatus {
+  const value = String(raw || "").trim().toLowerCase();
+  if ((SCREENING_REQUEST_STATUSES as readonly string[]).includes(value)) {
+    return value as ScreeningRequestStatus;
+  }
+  return "requested";
+}
+
+function normalizeScreeningResultStatus(raw: any): ScreeningResultStatus {
+  const value = String(raw || "").trim().toLowerCase();
+  if ((SCREENING_RESULT_STATUSES as readonly string[]).includes(value)) {
+    return value as ScreeningResultStatus;
+  }
+  return "pending";
+}
+
+function normalizeScreeningSessionStatus(raw: any): ScreeningSessionStatus {
+  const value = String(raw || "").trim().toLowerCase();
+  if ((SCREENING_SESSION_STATUSES as readonly string[]).includes(value)) {
+    return value as ScreeningSessionStatus;
+  }
+  return "created";
+}
+
+function makeScreeningCorrelationId(prefix: string): string {
+  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function makeDeterministicDocId(parts: Array<string | null | undefined>): string {
+  const normalized = parts
+    .map((part) => String(part || "").trim().replace(/[^a-zA-Z0-9_-]+/g, "_"))
+    .filter(Boolean)
+    .join("_")
+    .slice(0, 220);
+  return normalized || makeScreeningCorrelationId("doc");
+}
+
+function isTerminalScreeningSessionStatus(status: ScreeningSessionStatus | null | undefined): boolean {
+  return Boolean(status && ["completed", "inconclusive", "failed", "expired"].includes(status));
+}
+
+function isTerminalScreeningRequestStatus(status: ScreeningRequestStatus | null | undefined): boolean {
+  return Boolean(status && ["completed", "inconclusive", "failed", "manual_review_required"].includes(status));
+}
+
+function getScreeningConfig() {
+  const defaultProvider = (cleanString(process.env.SCREENING_DEFAULT_PROVIDER, 80) || "manual") as ScreeningProviderKey;
+  const providerPriority = String(process.env.SCREENING_PROVIDER_PRIORITY || "transunion_redirect,equifax,manual")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean) as ScreeningProviderKey[];
+  return {
+    enabled: String(process.env.SCREENING_ENABLED || "true").toLowerCase() !== "false",
+    defaultProvider,
+    providerPriority,
+    providers: {
+      transunion_redirect: String(process.env.SCREENING_TRANSUNION_ENABLED || "false").toLowerCase() === "true",
+      equifax: String(process.env.SCREENING_EQUIFAX_ENABLED || "false").toLowerCase() === "true",
+      manual: String(process.env.SCREENING_MANUAL_ENABLED || "true").toLowerCase() !== "false",
+    },
+  };
+}
+
+async function writeScreeningAuditEvent(input: {
+  requestId: string;
+  eventType: (typeof SCREENING_AUDIT_EVENTS)[number];
+  actorRole: string;
+  actorId: string | null;
+  tenantId?: string | null;
+  landlordId?: string | null;
+  sessionId?: string | null;
+  idempotencyKey?: string | null;
+  metadata?: Record<string, unknown>;
+}) {
+  const auditId = input.idempotencyKey
+    ? makeDeterministicDocId([input.requestId, input.eventType, input.idempotencyKey])
+    : makeScreeningCorrelationId("audit");
+  const ref = db.collection("screening_audit_log").doc(auditId);
+  const createdAt = Date.now();
+  await ref.set({
+    id: auditId,
+    requestId: input.requestId,
+    eventType: input.eventType,
+    actorRole: cleanString(input.actorRole, 80) || "system",
+    actorId: input.actorId || null,
+    tenantId: input.tenantId || null,
+    landlordId: input.landlordId || null,
+    sessionId: input.sessionId || null,
+    idempotencyKey: input.idempotencyKey || null,
+    metadata: {
+      requestId: input.requestId,
+      eventType: input.eventType,
+      actorRole: cleanString(input.actorRole, 80) || "system",
+      actorId: input.actorId || null,
+      tenantId: input.tenantId || null,
+      landlordId: input.landlordId || null,
+      sessionId: input.sessionId || null,
+      ...(input.metadata || {}),
+    },
+    createdAt,
+    updatedAt: createdAt,
+    createdAtServer: FieldValue.serverTimestamp(),
+  });
+}
+
+async function getTenantScreeningReadMap(tenantId: string): Promise<Map<string, number>> {
+  const snap = await db
+    .collection("tenantScreeningReads")
+    .where("tenantId", "==", tenantId)
+    .limit(500)
+    .get();
+  const map = new Map<string, number>();
+  snap.docs.forEach((doc) => {
+    const data = (doc.data() as any) || {};
+    const requestId = String(data.requestId || "").trim();
+    const readAtMs = Number(data.readAtMs || 0);
+    if (requestId) map.set(requestId, readAtMs || Date.now());
+  });
+  return map;
+}
+
+async function getScreeningRequestById(requestId: string): Promise<ScreeningRequestRecord | null> {
+  const snap = await db.collection("screening_requests").doc(requestId).get();
+  if (!snap.exists) return null;
+  const data = (snap.data() as any) || {};
+  return {
+    id: snap.id,
+    rentalApplicationId: cleanString(data.rentalApplicationId, 160),
+    landlordId: cleanString(data.landlordId, 160),
+    applicantTenantId: cleanString(data.applicantTenantId, 160),
+    applicantUserId: cleanString(data.applicantUserId, 160),
+    applicantEmail: cleanString(data.applicantEmail, 200),
+    applicantName: cleanString(data.applicantName, 200),
+    propertyId: cleanString(data.propertyId, 160),
+    unitId: cleanString(data.unitId, 160),
+    propertyLabel: cleanString(data.propertyLabel, 200),
+    unitLabel: cleanString(data.unitLabel, 120),
+    packageType: cleanString(data.packageType, 80),
+    payerType: cleanString(data.payerType, 80),
+    addOns: normalizeStringList(data.addOns),
+    status: normalizeScreeningRequestStatus(data.status),
+    normalizedResultStatus: normalizeScreeningResultStatus(data.normalizedResultStatus),
+    providerSelection: (cleanString(data.providerSelection, 80) as ScreeningProviderKey | null) || null,
+    providerRoutingSnapshot: data.providerRoutingSnapshot || null,
+    latestConsentId: cleanString(data.latestConsentId, 160),
+    activeSessionId: cleanString(data.activeSessionId, 160),
+    latestResultId: cleanString(data.latestResultId, 160),
+    nextAction: cleanString(data.nextAction, 120),
+    requestedAt: Number(data.requestedAt || data.createdAt || 0) || null,
+    consentedAt: Number(data.consentedAt || 0) || null,
+    startedAt: Number(data.startedAt || 0) || null,
+    completedAt: Number(data.completedAt || 0) || null,
+    failedAt: Number(data.failedAt || 0) || null,
+    retryCount: Number(data.retryCount || 0) || 0,
+    createdAt: Number(data.createdAt || 0) || null,
+    updatedAt: Number(data.updatedAt || 0) || null,
+  };
+}
+
+async function getLatestConsent(requestId: string): Promise<ScreeningConsentRecord | null> {
+  const snap = await db
+    .collection("screening_consents")
+    .where("requestId", "==", requestId)
+    .limit(50)
+    .get();
+  const items = snap.docs
+    .map((doc) => ({ id: doc.id, ...(doc.data() as any) }))
+    .sort((a, b) => Number(b.acceptedAt || b.viewedAt || 0) - Number(a.acceptedAt || a.viewedAt || 0));
+  const item = items[0];
+  if (!item) return null;
+  return {
+    id: item.id,
+    requestId,
+    tenantId: cleanString(item.tenantId, 160) || "",
+    viewedAt: Number(item.viewedAt || 0) || null,
+    acceptedAt: Number(item.acceptedAt || 0) || null,
+    providerDisclosure: cleanString(item.providerDisclosure, 200),
+    disclosureVersion: cleanString(item.disclosureVersion, 80),
+  };
+}
+
+async function getLatestSession(requestId: string): Promise<ScreeningSessionRecord | null> {
+  const snap = await db
+    .collection("screening_sessions")
+    .where("requestId", "==", requestId)
+    .limit(50)
+    .get();
+  const items = snap.docs
+    .map((doc) => ({ id: doc.id, ...(doc.data() as any) }))
+    .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+  const item = items[0];
+  if (!item) return null;
+  return {
+    id: item.id,
+    requestId,
+    providerKey: ((cleanString(item.providerKey, 80) || "manual") as ScreeningProviderKey),
+    status: normalizeScreeningSessionStatus(item.status),
+    providerSessionStatus: cleanString(item.providerSessionStatus, 120),
+    handoffType: item.handoffType === "redirect" ? "redirect" : "manual",
+    redirectUrl: cleanString(item.redirectUrl, 500),
+    returnUrl: cleanString(item.returnUrl, 500),
+    expiresAt: Number(item.expiresAt || 0) || null,
+    correlationId: cleanString(item.correlationId, 120),
+    stateToken: cleanString(item.stateToken, 120),
+    isActive: item.isActive !== false,
+    duplicateOfSessionId: cleanString(item.duplicateOfSessionId, 160),
+    callbackReceivedAt: Number(item.callbackReceivedAt || 0) || null,
+    normalizedResultStatus: normalizeScreeningResultStatus(item.normalizedResultStatus),
+    createdAt: Number(item.createdAt || 0) || Date.now(),
+    updatedAt: Number(item.updatedAt || 0) || Date.now(),
+  };
+}
+
+async function getScreeningSessionById(sessionId: string): Promise<ScreeningSessionRecord | null> {
+  const snap = await db.collection("screening_sessions").doc(sessionId).get();
+  if (!snap.exists) return null;
+  const item = (snap.data() as any) || {};
+  return {
+    id: snap.id,
+    requestId: cleanString(item.requestId, 160) || "",
+    providerKey: ((cleanString(item.providerKey, 80) || "manual") as ScreeningProviderKey),
+    status: normalizeScreeningSessionStatus(item.status),
+    providerSessionStatus: cleanString(item.providerSessionStatus, 120),
+    handoffType: item.handoffType === "redirect" ? "redirect" : "manual",
+    redirectUrl: cleanString(item.redirectUrl, 500),
+    returnUrl: cleanString(item.returnUrl, 500),
+    expiresAt: Number(item.expiresAt || 0) || null,
+    correlationId: cleanString(item.correlationId, 120),
+    stateToken: cleanString(item.stateToken, 120),
+    isActive: item.isActive !== false,
+    duplicateOfSessionId: cleanString(item.duplicateOfSessionId, 160),
+    callbackReceivedAt: Number(item.callbackReceivedAt || 0) || null,
+    normalizedResultStatus: normalizeScreeningResultStatus(item.normalizedResultStatus),
+    createdAt: Number(item.createdAt || 0) || Date.now(),
+    updatedAt: Number(item.updatedAt || 0) || Date.now(),
+  };
+}
+
+async function findScreeningSessionByStateToken(stateToken: string): Promise<ScreeningSessionRecord | null> {
+  const safeStateToken = cleanString(stateToken, 160);
+  if (!safeStateToken) return null;
+  const snap = await db
+    .collection("screening_sessions")
+    .where("stateToken", "==", safeStateToken)
+    .limit(5)
+    .get();
+  const items = snap.docs
+    .map((doc) => ({ id: doc.id, ...(doc.data() as any) }))
+    .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+  const item = items[0];
+  if (!item) return null;
+  return getScreeningSessionById(String(item.id));
+}
+
+async function getActiveScreeningSession(request: ScreeningRequestRecord): Promise<ScreeningSessionRecord | null> {
+  if (request.activeSessionId) {
+    const session = await getScreeningSessionById(request.activeSessionId);
+    if (session && session.requestId === request.id && session.isActive !== false) return session;
+  }
+  const session = await getLatestSession(request.id);
+  if (!session || session.isActive === false) return null;
+  return session;
+}
+
+async function getLatestResult(requestId: string): Promise<ScreeningResultRecord | null> {
+  const snap = await db
+    .collection("screening_results")
+    .where("requestId", "==", requestId)
+    .limit(50)
+    .get();
+  const items = snap.docs
+    .map((doc) => ({ id: doc.id, ...(doc.data() as any) }))
+    .sort((a, b) => Number(b.updatedAt || b.createdAt || 0) - Number(a.updatedAt || a.createdAt || 0));
+  const item = items[0];
+  if (!item) return null;
+  return {
+    id: item.id,
+    requestId,
+    sessionId: cleanString(item.sessionId, 160) || "",
+    providerKey: ((cleanString(item.providerKey, 80) || "manual") as ScreeningProviderKey),
+    status: normalizeScreeningResultStatus(item.status),
+    summary: cleanString(item.summary, 500),
+    normalizedDecision: cleanString(item.normalizedDecision, 120),
+    reportAvailable: Boolean(item.reportAvailable),
+    rawPayloadRef: cleanString(item.rawPayloadRef, 240),
+    fullReportStorageRef: cleanString(item.fullReportStorageRef, 240),
+    createdAt: Number(item.createdAt || 0) || Date.now(),
+    updatedAt: Number(item.updatedAt || 0) || Date.now(),
+  };
+}
+
+async function getScreeningAuditTrail(requestId: string, limit = 25) {
+  const snap = await db
+    .collection("screening_audit_log")
+    .where("requestId", "==", requestId)
+    .limit(limit)
+    .get();
+  return snap.docs
+    .map((doc) => ({ id: doc.id, ...(doc.data() as any) }))
+    .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+}
+
+function screeningSummaryText(request: ScreeningRequestRecord, session: ScreeningSessionRecord | null, result: ScreeningResultRecord | null): string {
+  if (result?.summary) return result.summary;
+  if (request.status === "manual_review_required") return "A manual review path is active while provider routing remains unavailable.";
+  if (request.status === "completed") return "Screening is complete. Your landlord can review the summary.";
+  if (request.status === "failed") return "We could not complete the screening. You can retry when ready.";
+  if (session?.handoffType === "redirect") return "Your screening partner handoff is ready. Continue when you are ready.";
+  if (request.status === "consent_pending") return "Consent is required before screening can begin.";
+  return "Screening is queued and ready for the next step.";
 }
 
 async function getTenantConversationIds(tenantId: string): Promise<string[]> {
@@ -143,6 +592,542 @@ async function getMaintenanceReadMap(tenantId: string): Promise<Map<string, numb
     if (requestId) map.set(requestId, readAtMs || Date.now());
   });
   return map;
+}
+
+function getProviderPriority(config: ReturnType<typeof getScreeningConfig>): ScreeningProviderKey[] {
+  const allowed: ScreeningProviderKey[] = ["transunion_redirect", "equifax", "manual"];
+  const ranked = config.providerPriority.filter((item): item is ScreeningProviderKey => allowed.includes(item));
+  if (!ranked.includes(config.defaultProvider)) ranked.push(config.defaultProvider);
+  if (!ranked.includes("manual")) ranked.push("manual");
+  return ranked;
+}
+
+function selectScreeningProvider(config: ReturnType<typeof getScreeningConfig>): ScreeningProviderKey | null {
+  if (!config.enabled) return null;
+  const ranked = getProviderPriority(config);
+  for (const provider of ranked) {
+    if (provider === "manual" && config.providers.manual) return provider;
+    if (provider === "equifax" && config.providers.equifax) return provider;
+    if (provider === "transunion_redirect" && config.providers.transunion_redirect) return provider;
+  }
+  return null;
+}
+
+type ScreeningAdapterContext = {
+  request: ScreeningRequestRecord;
+  consent: ScreeningConsentRecord;
+  providerKey: ScreeningProviderKey;
+  config: ReturnType<typeof getScreeningConfig>;
+};
+
+type ScreeningAdapterResult = {
+  session: Omit<ScreeningSessionRecord, "id">;
+  result: Omit<ScreeningResultRecord, "id"> | null;
+  requestStatus: ScreeningRequestStatus;
+  nextAction: string;
+};
+
+type ScreeningCallbackContext = {
+  session: ScreeningSessionRecord;
+  request: ScreeningRequestRecord;
+  payload: any;
+};
+
+type ScreeningProviderAdapter = {
+  createSession: (ctx: ScreeningAdapterContext) => Promise<ScreeningAdapterResult>;
+  handleCallback: (ctx: ScreeningCallbackContext) => Promise<{
+    requestStatus: ScreeningRequestStatus;
+    sessionStatus: ScreeningSessionStatus;
+    resultStatus: ScreeningResultStatus;
+    summary: string;
+  }>;
+  normalizeResult: (payload: any) => {
+    status: ScreeningResultStatus;
+    summary: string;
+    normalizedDecision: string | null;
+    reportAvailable: boolean;
+  };
+};
+
+const screeningAdapters: Record<ScreeningProviderKey, ScreeningProviderAdapter> = {
+  manual: {
+    async createSession(ctx) {
+      const now = Date.now();
+      return {
+        session: {
+          requestId: ctx.request.id,
+          providerKey: "manual",
+          status: "pending_review",
+          providerSessionStatus: "manual_review_pending",
+          handoffType: "manual",
+          redirectUrl: null,
+          returnUrl: null,
+          expiresAt: null,
+          correlationId: makeScreeningCorrelationId("manual"),
+          stateToken: null,
+          isActive: true,
+          duplicateOfSessionId: null,
+          callbackReceivedAt: null,
+          normalizedResultStatus: "manual_review_required",
+          createdAt: now,
+          updatedAt: now,
+        },
+        result: {
+          requestId: ctx.request.id,
+          sessionId: "",
+          providerKey: "manual",
+          status: "manual_review_required",
+          summary: "Manual review required while external screening providers are unavailable.",
+          normalizedDecision: "manual_review_required",
+          reportAvailable: false,
+          rawPayloadRef: "manual://screening/manual-review",
+          fullReportStorageRef: null,
+          createdAt: now,
+          updatedAt: now,
+        },
+        requestStatus: "manual_review_required",
+        nextAction: "await_manual_review",
+      };
+    },
+    async handleCallback() {
+      return {
+        requestStatus: "manual_review_required",
+        sessionStatus: "pending_review",
+        resultStatus: "manual_review_required",
+        summary: "Manual review remains active.",
+      };
+    },
+    normalizeResult() {
+      return {
+        status: "manual_review_required",
+        summary: "Manual review required while external screening providers are unavailable.",
+        normalizedDecision: "manual_review_required",
+        reportAvailable: false,
+      };
+    },
+  },
+  equifax: {
+    async createSession(ctx) {
+      const now = Date.now();
+      return {
+        session: {
+          requestId: ctx.request.id,
+          providerKey: "equifax",
+          status: "created",
+          providerSessionStatus: "stub_not_enabled",
+          handoffType: "redirect",
+          redirectUrl: null,
+          returnUrl: null,
+          expiresAt: now + 1000 * 60 * 30,
+          correlationId: makeScreeningCorrelationId("eqx"),
+          stateToken: makeScreeningCorrelationId("eqx_state"),
+          isActive: true,
+          duplicateOfSessionId: null,
+          callbackReceivedAt: null,
+          normalizedResultStatus: "pending",
+          createdAt: now,
+          updatedAt: now,
+        },
+        result: null,
+        requestStatus: "in_progress",
+        nextAction: "provider_activation_pending",
+      };
+    },
+    async handleCallback() {
+      return {
+        requestStatus: "in_progress",
+        sessionStatus: "in_progress",
+        resultStatus: "pending",
+        summary: "Equifax redirect scaffold is not enabled in this environment.",
+      };
+    },
+    normalizeResult() {
+      return {
+        status: "pending",
+        summary: "Equifax redirect scaffold is not enabled in this environment.",
+        normalizedDecision: null,
+        reportAvailable: false,
+      };
+    },
+  },
+  transunion_redirect: {
+    async createSession(ctx) {
+      const now = Date.now();
+      const returnBase = String(process.env.PUBLIC_APP_URL || process.env.VITE_PUBLIC_APP_URL || "").replace(/\/$/, "");
+      return {
+        session: {
+          requestId: ctx.request.id,
+          providerKey: "transunion_redirect",
+          status: "redirect_pending",
+          providerSessionStatus: "stub_not_enabled",
+          handoffType: "redirect",
+          redirectUrl: null,
+          returnUrl: returnBase ? `${returnBase}/tenant/messages` : null,
+          expiresAt: now + 1000 * 60 * 30,
+          correlationId: makeScreeningCorrelationId("tu"),
+          stateToken: makeScreeningCorrelationId("tu_state"),
+          isActive: true,
+          duplicateOfSessionId: null,
+          callbackReceivedAt: null,
+          normalizedResultStatus: "pending",
+          createdAt: now,
+          updatedAt: now,
+        },
+        result: null,
+        requestStatus: "in_progress",
+        nextAction: "await_redirect_provider_start",
+      };
+    },
+    async handleCallback() {
+      return {
+        requestStatus: "in_progress",
+        sessionStatus: "in_progress",
+        resultStatus: "pending",
+        summary: "TransUnion redirect scaffold is registered but live callbacks are disabled.",
+      };
+    },
+    normalizeResult() {
+      return {
+        status: "pending",
+        summary: "TransUnion redirect scaffold is registered but live callbacks are disabled.",
+        normalizedDecision: null,
+        reportAvailable: false,
+      };
+    },
+  },
+};
+
+function shapeScreeningResponse(input: {
+  request: ScreeningRequestRecord;
+  consent: ScreeningConsentRecord | null;
+  session: ScreeningSessionRecord | null;
+  result: ScreeningResultRecord | null;
+  auditTrail?: any[];
+}) {
+  const { request, consent, session, result } = input;
+  return {
+    id: request.id,
+    rentalApplicationId: request.rentalApplicationId,
+    status: request.status,
+    normalizedResultStatus: result?.status || request.normalizedResultStatus,
+    requestedAt: request.requestedAt || request.createdAt || null,
+    consentedAt: request.consentedAt || consent?.acceptedAt || null,
+    startedAt: request.startedAt || session?.createdAt || null,
+    completedAt: request.completedAt || result?.updatedAt || null,
+    provider: session?.providerKey || request.providerSelection || null,
+    packageType: request.packageType,
+    payerType: request.payerType,
+    propertyLabel: request.propertyLabel,
+    unitLabel: request.unitLabel,
+    applicantName: request.applicantName,
+    nextAction: request.nextAction || null,
+    consent: consent
+      ? {
+          id: consent.id,
+          viewedAt: consent.viewedAt,
+          acceptedAt: consent.acceptedAt,
+          providerDisclosure: consent.providerDisclosure,
+          disclosureVersion: consent.disclosureVersion,
+        }
+      : null,
+    session: session
+      ? {
+          id: session.id,
+          providerKey: session.providerKey,
+          status: session.status,
+          handoffType: session.handoffType,
+          redirectUrl: session.redirectUrl,
+          returnUrl: session.returnUrl,
+          expiresAt: session.expiresAt,
+        }
+      : null,
+    result: result
+      ? {
+          id: result.id,
+          status: result.status,
+          summary: result.summary,
+          normalizedDecision: result.normalizedDecision,
+          reportAvailable: result.reportAvailable,
+        }
+      : null,
+    summary: {
+      status: request.status,
+      provider: session?.providerKey || request.providerSelection || "pending",
+      requestedDate: request.requestedAt || request.createdAt || null,
+      package: request.packageType,
+      summaryResult: screeningSummaryText(request, session, result),
+      nextActions: request.nextAction ? [request.nextAction] : [],
+    },
+    auditTrail: Array.isArray(input.auditTrail)
+      ? input.auditTrail.map((item) => ({
+          id: item.id,
+          eventType: item.eventType || null,
+          actorRole: item.actorRole || null,
+          createdAt: Number(item.createdAt || 0) || null,
+          metadata: item.metadata || {},
+        }))
+      : [],
+  };
+}
+
+async function createScreeningSessionSafely(input: {
+  requestId: string;
+  actorRole: string;
+  actorId: string | null;
+  tenantId: string;
+}): Promise<{
+  request: ScreeningRequestRecord;
+  consent: ScreeningConsentRecord;
+  session: ScreeningSessionRecord;
+  result: ScreeningResultRecord | null;
+  created: boolean;
+}> {
+  const config = getScreeningConfig();
+  const requestRef = db.collection("screening_requests").doc(input.requestId);
+  const sessionRef = db.collection("screening_sessions").doc();
+  const resultRef = db.collection("screening_results").doc();
+
+  const transactionResult = await db.runTransaction(async (tx) => {
+    const requestSnap = await tx.get(requestRef);
+    if (!requestSnap.exists) {
+      throw new Error("NOT_FOUND");
+    }
+    const request = await getScreeningRequestById(input.requestId);
+    if (!request) throw new Error("NOT_FOUND");
+    if (!request.applicantTenantId || request.applicantTenantId !== input.tenantId) {
+      throw new Error("FORBIDDEN");
+    }
+    if (!request.latestConsentId) {
+      throw new Error("CONSENT_REQUIRED");
+    }
+    const consentRef = db.collection("screening_consents").doc(request.latestConsentId);
+    const consentSnap = await tx.get(consentRef);
+    if (!consentSnap.exists) throw new Error("CONSENT_REQUIRED");
+    const consentData = (consentSnap.data() as any) || {};
+    const consent: ScreeningConsentRecord = {
+      id: consentSnap.id,
+      requestId: input.requestId,
+      tenantId: cleanString(consentData.tenantId, 160) || "",
+      viewedAt: Number(consentData.viewedAt || 0) || null,
+      acceptedAt: Number(consentData.acceptedAt || 0) || null,
+      providerDisclosure: cleanString(consentData.providerDisclosure, 200),
+      disclosureVersion: cleanString(consentData.disclosureVersion, 80),
+    };
+    if (!consent.acceptedAt) throw new Error("CONSENT_REQUIRED");
+
+    if (request.activeSessionId) {
+      const existingActiveSnap = await tx.get(db.collection("screening_sessions").doc(request.activeSessionId));
+      if (existingActiveSnap.exists) {
+        const existing = await getScreeningSessionById(request.activeSessionId);
+        if (existing && existing.isActive !== false) {
+          return { request, consent, session: existing, result: await getLatestResult(input.requestId), created: false };
+        }
+      }
+    }
+
+    if (isTerminalScreeningRequestStatus(request.status) && request.activeSessionId) {
+      const terminalSession = await getScreeningSessionById(request.activeSessionId);
+      if (terminalSession) {
+        return { request, consent, session: terminalSession, result: await getLatestResult(input.requestId), created: false };
+      }
+    }
+
+    const providerKey = selectScreeningProvider(config) || "manual";
+    const adapter = screeningAdapters[providerKey];
+    const started = await adapter.createSession({
+      request,
+      consent,
+      providerKey,
+      config,
+    });
+    const now = Date.now();
+    const sessionRecord: ScreeningSessionRecord = {
+      id: sessionRef.id,
+      ...started.session,
+      isActive: true,
+      updatedAt: now,
+    };
+    tx.set(sessionRef, sessionRecord);
+
+    let resultRecord: ScreeningResultRecord | null = null;
+    if (started.result) {
+      resultRecord = {
+        id: resultRef.id,
+        ...started.result,
+        sessionId: sessionRef.id,
+        updatedAt: now,
+      };
+      tx.set(resultRef, resultRecord);
+    }
+
+    tx.set(
+      requestRef,
+      {
+        status: started.requestStatus,
+        normalizedResultStatus: resultRecord?.status || sessionRecord.normalizedResultStatus,
+        providerSelection: providerKey,
+        activeSessionId: sessionRef.id,
+        latestResultId: resultRecord?.id || null,
+        nextAction: started.nextAction,
+        startedAt: now,
+        updatedAt: now,
+        latestAuditEventType: providerKey === "manual" ? "manual_review_selected" : "provider_session_created",
+      },
+      { merge: true }
+    );
+
+    return {
+      request: {
+        ...request,
+        status: started.requestStatus,
+        normalizedResultStatus: resultRecord?.status || sessionRecord.normalizedResultStatus,
+        providerSelection: providerKey,
+        activeSessionId: sessionRef.id,
+        latestResultId: resultRecord?.id || null,
+        nextAction: started.nextAction,
+        startedAt: now,
+        updatedAt: now,
+      },
+      consent,
+      session: sessionRecord,
+      result: resultRecord,
+      created: true,
+    };
+  });
+
+  return transactionResult;
+}
+
+async function prepareScreeningRetrySafely(input: {
+  requestId: string;
+  actorId: string | null;
+  tenantId: string;
+}): Promise<ScreeningRequestRecord> {
+  const requestRef = db.collection("screening_requests").doc(input.requestId);
+  return db.runTransaction(async (tx) => {
+    const requestSnap = await tx.get(requestRef);
+    if (!requestSnap.exists) throw new Error("NOT_FOUND");
+    const request = await getScreeningRequestById(input.requestId);
+    if (!request) throw new Error("NOT_FOUND");
+    if (!request.applicantTenantId || request.applicantTenantId !== input.tenantId) throw new Error("FORBIDDEN");
+
+    const activeSession = request.activeSessionId ? await getScreeningSessionById(request.activeSessionId) : null;
+    const duplicateRetryPrepared =
+      !request.activeSessionId &&
+      request.status === "consented" &&
+      request.nextAction === "ready_to_start" &&
+      request.latestResultId === null;
+    if (duplicateRetryPrepared) return request;
+    if (activeSession && !isTerminalScreeningSessionStatus(activeSession.status) && request.status === "in_progress") {
+      throw new Error("SCREENING_STILL_IN_PROGRESS");
+    }
+
+    const now = Date.now();
+    if (request.activeSessionId) {
+      tx.set(
+        db.collection("screening_sessions").doc(request.activeSessionId),
+        {
+          isActive: false,
+          duplicateOfSessionId: null,
+          updatedAt: now,
+        },
+        { merge: true }
+      );
+    }
+    tx.set(
+      requestRef,
+      {
+        status: "consented",
+        normalizedResultStatus: "pending",
+        activeSessionId: null,
+        latestResultId: null,
+        nextAction: "ready_to_start",
+        retryCount: Number(request.retryCount || 0) + 1,
+        updatedAt: now,
+        latestAuditEventType: "retry_requested",
+      },
+      { merge: true }
+    );
+    return {
+      ...request,
+      status: "consented",
+      normalizedResultStatus: "pending",
+      activeSessionId: null,
+      latestResultId: null,
+      nextAction: "ready_to_start",
+      retryCount: Number(request.retryCount || 0) + 1,
+      updatedAt: now,
+    };
+  });
+}
+
+async function buildTenantScreeningItems(tenantId: string): Promise<TenantCommunicationItem[]> {
+  const [requestSnap, readMap] = await Promise.all([
+    db.collection("screening_requests").where("applicantTenantId", "==", tenantId).limit(50).get(),
+    getTenantScreeningReadMap(tenantId),
+  ]);
+
+  const items = requestSnap.docs.map((doc) => {
+    const data = (doc.data() as any) || {};
+    const request = {
+      id: doc.id,
+      status: normalizeScreeningRequestStatus(data.status),
+      providerSelection: cleanString(data.providerSelection, 80),
+      packageType: cleanString(data.packageType, 80),
+      requestedAt: Number(data.requestedAt || data.createdAt || 0) || Date.now(),
+      applicantName: cleanString(data.applicantName, 200) || "Applicant",
+      nextAction: cleanString(data.nextAction, 120),
+    };
+    const title =
+      request.status === "consent_pending"
+        ? "Screening consent required"
+        : request.status === "manual_review_required"
+        ? "Screening moved to manual review"
+        : request.status === "completed"
+        ? "Screening complete"
+        : "Screening update";
+    const body = screeningSummaryText(
+      {
+        id: request.id,
+        rentalApplicationId: null,
+        landlordId: null,
+        applicantTenantId: tenantId,
+        applicantUserId: null,
+        applicantEmail: null,
+        applicantName: request.applicantName,
+        propertyId: null,
+        unitId: null,
+        propertyLabel: null,
+        unitLabel: null,
+        packageType: request.packageType,
+        payerType: null,
+        addOns: [],
+        status: request.status,
+        normalizedResultStatus: "pending",
+        providerSelection: (request.providerSelection as ScreeningProviderKey | null) || null,
+        latestConsentId: null,
+        activeSessionId: null,
+        latestResultId: null,
+        nextAction: request.nextAction,
+      },
+      null,
+      null
+    );
+    return {
+      id: `screening_${doc.id}`,
+      type: "screening_update" as const,
+      title,
+      body,
+      createdAt: isoFromMs(request.requestedAt),
+      read: readMap.has(doc.id),
+      priority: request.status === "failed" || request.status === "consent_pending" ? ("high" as const) : ("normal" as const),
+      fromLabel: "RentChain" as const,
+      relatedEntityType: "screening" as const,
+      relatedEntityId: doc.id,
+    };
+  });
+
+  return items.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 }
 
 async function buildTenantNoticeItems(tenantId: string): Promise<TenantCommunicationItem[]> {
@@ -552,12 +1537,14 @@ router.get("/messages", requireTenant, async (req: any, res) => {
     if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
 
     const includeMaintenance = String(req.query?.includeMaintenance ?? "1") !== "0";
-    const [messageItems, maintenanceItems] = await Promise.all([
+    const includeScreening = String(req.query?.includeScreening ?? "1") !== "0";
+    const [messageItems, maintenanceItems, screeningItems] = await Promise.all([
       buildTenantMessageItems(tenantId),
       includeMaintenance ? buildTenantMaintenanceUpdateItems(tenantId) : Promise.resolve([]),
+      includeScreening ? buildTenantScreeningItems(tenantId) : Promise.resolve([]),
     ]);
 
-    const items = [...messageItems, ...maintenanceItems]
+    const items = [...messageItems, ...maintenanceItems, ...screeningItems]
       .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
       .slice(0, 200);
     const unreadCount = items.filter((item) => !item.read).length;
@@ -581,13 +1568,15 @@ router.post("/messages/read-all", requireTenant, async (req: any, res) => {
     const tenantId = String(req.user?.tenantId || "").trim();
     if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
 
-    const [messageItems, maintenanceItems] = await Promise.all([
+    const [messageItems, maintenanceItems, screeningItems] = await Promise.all([
       buildTenantMessageItems(tenantId),
       buildTenantMaintenanceUpdateItems(tenantId),
+      buildTenantScreeningItems(tenantId),
     ]);
     const unreadMessages = messageItems.filter((item) => !item.read).slice(0, 400);
     const unreadMaintenance = maintenanceItems.filter((item) => !item.read).slice(0, 400);
-    const totalUnread = unreadMessages.length + unreadMaintenance.length;
+    const unreadScreening = screeningItems.filter((item) => !item.read).slice(0, 400);
+    const totalUnread = unreadMessages.length + unreadMaintenance.length + unreadScreening.length;
     if (!totalUnread) {
       console.info("[tenant.messages.read_all]", { tenantId, count: 0 });
       return res.json({ ok: true, updated: 0 });
@@ -612,6 +1601,21 @@ router.post("/messages/read-all", requireTenant, async (req: any, res) => {
       const requestId = String(item.relatedEntityId || "").trim();
       if (!requestId) return;
       const ref = db.collection("tenantMaintenanceReads").doc(`${tenantId}_${requestId}`);
+      batch.set(
+        ref,
+        {
+          tenantId,
+          requestId,
+          readAtMs: now,
+          createdAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    });
+    unreadScreening.forEach((item) => {
+      const requestId = String(item.relatedEntityId || "").trim();
+      if (!requestId) return;
+      const ref = db.collection("tenantScreeningReads").doc(`${tenantId}_${requestId}`);
       batch.set(
         ref,
         {
@@ -699,6 +1703,532 @@ router.post("/messages/maintenance/:requestId/read", requireTenant, async (req: 
       message: err?.message || "failed",
     });
     return res.status(500).json({ ok: false, error: "TENANT_MAINTENANCE_READ_FAILED" });
+  }
+});
+
+router.post("/messages/screening/:requestId/read", requireTenant, async (req: any, res) => {
+  try {
+    const tenantId = String(req.user?.tenantId || "").trim();
+    const requestId = String(req.params?.requestId || "").trim();
+    if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    if (!requestId) return res.status(400).json({ ok: false, error: "REQUEST_ID_REQUIRED" });
+
+    const request = await getScreeningRequestById(requestId);
+    if (!request) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    if (!request.applicantTenantId || request.applicantTenantId !== tenantId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    await db
+      .collection("tenantScreeningReads")
+      .doc(`${tenantId}_${requestId}`)
+      .set(
+        {
+          tenantId,
+          requestId,
+          readAtMs: Date.now(),
+          createdAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+    return res.json({ ok: true });
+  } catch (err: any) {
+    console.error("[tenant/messages/screening/:requestId/read] failed", {
+      tenantId: req.user?.tenantId,
+      requestId: req.params?.requestId,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_SCREENING_READ_FAILED" });
+  }
+});
+
+router.get("/screening", requireTenant, async (req: any, res) => {
+  try {
+    const tenantId = String(req.user?.tenantId || "").trim();
+    if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+
+    const snap = await db
+      .collection("screening_requests")
+      .where("applicantTenantId", "==", tenantId)
+      .limit(50)
+      .get();
+    const requests = snap.docs
+      .map((doc) => ({ id: doc.id, ...(doc.data() as any) }))
+      .sort((a, b) => Number(b.updatedAt || b.createdAt || 0) - Number(a.updatedAt || a.createdAt || 0));
+
+    const items = await Promise.all(
+      requests.map(async (item) => {
+        const request = await getScreeningRequestById(item.id);
+        if (!request) return null;
+        const [consent, session, result] = await Promise.all([
+          getLatestConsent(item.id),
+          getLatestSession(item.id),
+          getLatestResult(item.id),
+        ]);
+        return shapeScreeningResponse({ request, consent, session, result });
+      })
+    );
+
+    return res.json({ ok: true, items: items.filter(Boolean) });
+  } catch (err: any) {
+    console.error("[tenant/screening] failed", {
+      tenantId: req.user?.tenantId,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_SCREENING_LIST_FAILED" });
+  }
+});
+
+router.get("/screening/:requestId/status", requireTenant, async (req: any, res) => {
+  try {
+    const tenantId = String(req.user?.tenantId || "").trim();
+    const requestId = String(req.params?.requestId || "").trim();
+    if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    if (!requestId) return res.status(400).json({ ok: false, error: "REQUEST_ID_REQUIRED" });
+
+    const request = await getScreeningRequestById(requestId);
+    if (!request) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    if (!request.applicantTenantId || request.applicantTenantId !== tenantId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const [consent, session, result, auditTrail] = await Promise.all([
+      getLatestConsent(requestId),
+      getLatestSession(requestId),
+      getLatestResult(requestId),
+      getScreeningAuditTrail(requestId),
+    ]);
+
+    if (result) {
+      await writeScreeningAuditEvent({
+        requestId,
+        eventType: "result_viewed",
+        actorRole: "tenant",
+        actorId: String(req.user?.id || tenantId).trim() || tenantId,
+        tenantId,
+        landlordId: request.landlordId,
+        sessionId: session?.id || null,
+        idempotencyKey: `${tenantId}_${result.id}`,
+        metadata: {
+          resultId: result.id,
+          resultStatus: result.status,
+        },
+      });
+    }
+
+    return res.json({
+      ok: true,
+      screeningRequest: shapeScreeningResponse({ request, consent, session, result, auditTrail }),
+    });
+  } catch (err: any) {
+    console.error("[tenant/screening/:requestId/status] failed", {
+      tenantId: req.user?.tenantId,
+      requestId: req.params?.requestId,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_SCREENING_STATUS_FAILED" });
+  }
+});
+
+router.post("/screening/:requestId/consent", requireTenant, async (req: any, res) => {
+  try {
+    const tenantId = String(req.user?.tenantId || "").trim();
+    const actorId = String(req.user?.id || tenantId).trim() || tenantId;
+    const requestId = String(req.params?.requestId || "").trim();
+    if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    if (!requestId) return res.status(400).json({ ok: false, error: "REQUEST_ID_REQUIRED" });
+
+    const request = await getScreeningRequestById(requestId);
+    if (!request) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    if (!request.applicantTenantId || request.applicantTenantId !== tenantId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const existingConsent = await getLatestConsent(requestId);
+    const viewOnly = Boolean(req.body?.viewed) && !Boolean(req.body?.accepted);
+    const accepted = Boolean(req.body?.accepted);
+    if (!viewOnly && !accepted) {
+      return res.status(400).json({ ok: false, error: "CONSENT_ACTION_REQUIRED" });
+    }
+
+    const now = Date.now();
+    const consentRef =
+      existingConsent && !existingConsent.acceptedAt
+        ? db.collection("screening_consents").doc(existingConsent.id)
+        : db.collection("screening_consents").doc();
+    const providerDisclosure =
+      cleanString(req.body?.providerDisclosure, 200) ||
+      (request.providerSelection ? `This screening may be completed using ${request.providerSelection}.` : "This screening may be completed by a secure screening provider selected at runtime.");
+    const disclosureVersion = cleanString(req.body?.disclosureVersion, 80) || "screening-consent-v1";
+
+    await consentRef.set(
+      {
+        id: consentRef.id,
+        requestId,
+        tenantId,
+        applicantName: request.applicantName || null,
+        viewedAt: existingConsent?.viewedAt || now,
+        acceptedAt: accepted ? now : existingConsent?.acceptedAt || null,
+        providerDisclosure,
+        disclosureVersion,
+        ipAddress: cleanString(req.ip, 120),
+        userAgent: cleanString(req.headers["user-agent"], 240),
+        createdAt: existingConsent?.viewedAt || now,
+        updatedAt: now,
+        updatedAtServer: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    const nextStatus: ScreeningRequestStatus = accepted ? "consented" : request.status === "requested" ? "consent_pending" : request.status;
+    await db.collection("screening_requests").doc(requestId).set(
+      {
+        latestConsentId: consentRef.id,
+        status: nextStatus,
+        consentedAt: accepted ? now : request.consentedAt || null,
+        lastViewedAt: now,
+        updatedAt: now,
+        nextAction: accepted ? "ready_to_start" : "awaiting_applicant_consent",
+        latestAuditEventType: accepted ? "consent_accepted" : "consent_viewed",
+      },
+      { merge: true }
+    );
+
+    await writeScreeningAuditEvent({
+      requestId,
+      eventType: accepted ? "consent_accepted" : "consent_viewed",
+      actorRole: "tenant",
+      actorId,
+      tenantId,
+      landlordId: request.landlordId,
+      idempotencyKey: accepted ? `${consentRef.id}_accepted` : `${consentRef.id}_viewed`,
+      metadata: {
+        consentId: consentRef.id,
+        disclosureVersion,
+      },
+    });
+
+    const refreshedRequest = await getScreeningRequestById(requestId);
+    const refreshedConsent = await getLatestConsent(requestId);
+    return res.json({
+      ok: true,
+      screeningRequest: shapeScreeningResponse({
+        request: refreshedRequest || request,
+        consent: refreshedConsent,
+        session: await getLatestSession(requestId),
+        result: await getLatestResult(requestId),
+      }),
+    });
+  } catch (err: any) {
+    console.error("[tenant/screening/:requestId/consent] failed", {
+      tenantId: req.user?.tenantId,
+      requestId: req.params?.requestId,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_SCREENING_CONSENT_FAILED" });
+  }
+});
+
+router.post("/screening/:requestId/start", requireTenant, async (req: any, res) => {
+  try {
+    const tenantId = String(req.user?.tenantId || "").trim();
+    const actorId = String(req.user?.id || tenantId).trim() || tenantId;
+    const requestId = String(req.params?.requestId || "").trim();
+    if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    if (!requestId) return res.status(400).json({ ok: false, error: "REQUEST_ID_REQUIRED" });
+
+    const request = await getScreeningRequestById(requestId);
+    if (!request) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    if (!request.applicantTenantId || request.applicantTenantId !== tenantId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+    const started = await createScreeningSessionSafely({
+      requestId,
+      actorRole: "tenant",
+      actorId,
+      tenantId,
+    });
+
+    await writeScreeningAuditEvent({
+      requestId,
+      eventType: "screening_started",
+      actorRole: "tenant",
+      actorId,
+      tenantId,
+      landlordId: started.request.landlordId,
+      sessionId: started.session.id,
+      idempotencyKey: `screening_started_${started.session.id}`,
+      metadata: {
+        providerKey: started.session.providerKey,
+        sessionStatus: started.session.status,
+        created: started.created,
+      },
+    });
+    await writeScreeningAuditEvent({
+      requestId,
+      eventType: "provider_session_created",
+      actorRole: "tenant",
+      actorId,
+      tenantId,
+      landlordId: started.request.landlordId,
+      sessionId: started.session.id,
+      idempotencyKey: `provider_session_created_${started.session.id}`,
+      metadata: {
+        providerKey: started.session.providerKey,
+        handoffType: started.session.handoffType,
+        correlationId: started.session.correlationId,
+        stateToken: started.session.stateToken,
+      },
+    });
+    if (started.session.providerKey === "manual") {
+      await writeScreeningAuditEvent({
+        requestId,
+        eventType: "manual_review_selected",
+        actorRole: "system",
+        actorId: null,
+        tenantId,
+        landlordId: started.request.landlordId,
+        sessionId: started.session.id,
+        idempotencyKey: `manual_review_${started.session.id}`,
+        metadata: {
+          reason: "provider_fallback",
+        },
+      });
+    }
+    if (started.result?.status === "manual_review_required" || started.result?.status === "completed") {
+      await writeScreeningAuditEvent({
+        requestId,
+        eventType: "screening_completed",
+        actorRole: "system",
+        actorId: null,
+        tenantId,
+        landlordId: started.request.landlordId,
+        sessionId: started.session.id,
+        idempotencyKey: `screening_completed_${started.session.id}_${started.result?.status}`,
+        metadata: {
+          resultStatus: started.result?.status,
+        },
+      });
+    }
+
+    const refreshedRequest = await getScreeningRequestById(requestId);
+    return res.json({
+      ok: true,
+      screeningRequest: shapeScreeningResponse({
+        request: refreshedRequest || started.request,
+        consent: started.consent,
+        session: await getLatestSession(requestId),
+        result: await getLatestResult(requestId),
+        auditTrail: await getScreeningAuditTrail(requestId),
+      }),
+    });
+  } catch (err: any) {
+    const code = err?.message || "failed";
+    console.error("[tenant/screening/:requestId/start] failed", {
+      tenantId: req.user?.tenantId,
+      requestId: req.params?.requestId,
+      message: code,
+    });
+    const status =
+      code === "NOT_FOUND"
+        ? 404
+        : code === "FORBIDDEN"
+        ? 403
+        : code === "CONSENT_REQUIRED"
+        ? 400
+        : code === "SCREENING_STILL_IN_PROGRESS"
+        ? 409
+        : 500;
+    return res.status(status).json({ ok: false, error: status === 500 ? "TENANT_SCREENING_START_FAILED" : code });
+  }
+});
+
+router.post("/screening/:requestId/retry", requireTenant, async (req: any, res) => {
+  try {
+    const tenantId = String(req.user?.tenantId || "").trim();
+    const actorId = String(req.user?.id || tenantId).trim() || tenantId;
+    const requestId = String(req.params?.requestId || "").trim();
+    if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    if (!requestId) return res.status(400).json({ ok: false, error: "REQUEST_ID_REQUIRED" });
+
+    const request = await getScreeningRequestById(requestId);
+    if (!request) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    if (!request.applicantTenantId || request.applicantTenantId !== tenantId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+    await writeScreeningAuditEvent({
+      requestId,
+      eventType: "retry_requested",
+      actorRole: "tenant",
+      actorId,
+      tenantId,
+      landlordId: request.landlordId,
+      idempotencyKey: `retry_prepare_${request.activeSessionId || request.latestResultId || request.retryCount || 0}`,
+      metadata: {
+        previousSessionId: request.activeSessionId,
+      },
+    });
+
+    const refreshedRequest = await prepareScreeningRetrySafely({
+      requestId,
+      actorId,
+      tenantId,
+    });
+    return res.json({
+      ok: true,
+      screeningRequest: shapeScreeningResponse({
+        request: refreshedRequest || request,
+        consent: await getLatestConsent(requestId),
+        session: await getLatestSession(requestId),
+        result: await getLatestResult(requestId),
+        auditTrail: await getScreeningAuditTrail(requestId),
+      }),
+    });
+  } catch (err: any) {
+    const code = err?.message || "failed";
+    console.error("[tenant/screening/:requestId/retry] failed", {
+      tenantId: req.user?.tenantId,
+      requestId: req.params?.requestId,
+      message: code,
+    });
+    const status =
+      code === "NOT_FOUND" ? 404 : code === "FORBIDDEN" ? 403 : code === "SCREENING_STILL_IN_PROGRESS" ? 409 : 500;
+    return res.status(status).json({ ok: false, error: status === 500 ? "TENANT_SCREENING_RETRY_FAILED" : code });
+  }
+});
+
+router.post("/screening/provider/transunion/callback", async (req: any, res) => {
+  try {
+    const role = String(req.user?.role || "").trim().toLowerCase();
+    if (role !== "admin") {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const stateToken = cleanString(req.body?.stateToken || req.body?.state, 160);
+    if (!stateToken) {
+      return res.status(400).json({ ok: false, error: "STATE_TOKEN_REQUIRED" });
+    }
+
+    const session = await findScreeningSessionByStateToken(stateToken);
+    if (!session || session.providerKey !== "transunion_redirect") {
+      return res.status(404).json({ ok: false, error: "SESSION_NOT_FOUND" });
+    }
+    const request = await getScreeningRequestById(session.requestId);
+    if (!request) {
+      return res.status(404).json({ ok: false, error: "REQUEST_NOT_FOUND" });
+    }
+
+    const duplicateCallback = Boolean(session.callbackReceivedAt);
+    if (duplicateCallback) {
+      return res.json({
+        ok: true,
+        duplicate: true,
+        screeningRequest: shapeScreeningResponse({
+          request,
+          consent: await getLatestConsent(request.id),
+          session,
+          result: await getLatestResult(request.id),
+          auditTrail: await getScreeningAuditTrail(request.id),
+        }),
+      });
+    }
+
+    const callbackResult = await screeningAdapters.transunion_redirect.handleCallback({
+      session,
+      request,
+      payload: req.body || {},
+    });
+    const normalized = screeningAdapters.transunion_redirect.normalizeResult(req.body || {});
+    const now = Date.now();
+    const resultRef = db.collection("screening_results").doc(
+      makeDeterministicDocId([request.id, session.id, "tu_callback_result"])
+    );
+
+    await db.runTransaction(async (tx) => {
+      const sessionDoc = await tx.get(db.collection("screening_sessions").doc(session.id));
+      const current = (sessionDoc.data() as any) || {};
+      if (current.callbackReceivedAt) return;
+
+      tx.set(
+        db.collection("screening_sessions").doc(session.id),
+        {
+          status: callbackResult.sessionStatus,
+          providerSessionStatus: "callback_received_stub",
+          callbackReceivedAt: now,
+          updatedAt: now,
+          normalizedResultStatus: callbackResult.resultStatus,
+        },
+        { merge: true }
+      );
+      tx.set(
+        resultRef,
+        {
+          id: resultRef.id,
+          requestId: request.id,
+          sessionId: session.id,
+          providerKey: "transunion_redirect",
+          status: normalized.status,
+          summary: normalized.summary,
+          normalizedDecision: normalized.normalizedDecision,
+          reportAvailable: normalized.reportAvailable,
+          rawPayloadRef: "transunion://callback/stub",
+          fullReportStorageRef: null,
+          createdAt: now,
+          updatedAt: now,
+        },
+        { merge: true }
+      );
+      tx.set(
+        db.collection("screening_requests").doc(request.id),
+        {
+          status: callbackResult.requestStatus,
+          normalizedResultStatus: callbackResult.resultStatus,
+          latestResultId: resultRef.id,
+          updatedAt: now,
+          completedAt: callbackResult.requestStatus === "completed" ? now : request.completedAt || null,
+          failedAt: callbackResult.requestStatus === "failed" ? now : request.failedAt || null,
+          latestAuditEventType: "screening_completed",
+        },
+        { merge: true }
+      );
+    });
+
+    await writeScreeningAuditEvent({
+      requestId: request.id,
+      eventType: "screening_completed",
+      actorRole: "system",
+      actorId: null,
+      tenantId: request.applicantTenantId,
+      landlordId: request.landlordId,
+      sessionId: session.id,
+      idempotencyKey: `tu_callback_${session.id}_${stateToken}`,
+      metadata: {
+        providerKey: "transunion_redirect",
+        resultStatus: normalized.status,
+        callbackMode: "disabled_scaffold",
+      },
+    });
+
+    return res.json({
+      ok: true,
+      duplicate: false,
+      screeningRequest: shapeScreeningResponse({
+        request: (await getScreeningRequestById(request.id)) || request,
+        consent: await getLatestConsent(request.id),
+        session: (await getScreeningSessionById(session.id)) || session,
+        result: await getLatestResult(request.id),
+        auditTrail: await getScreeningAuditTrail(request.id),
+      }),
+    });
+  } catch (err: any) {
+    const code = err?.message || "failed";
+    const status =
+      code === "FORBIDDEN" ? 403 : code === "STATE_TOKEN_REQUIRED" ? 400 : code === "SESSION_NOT_FOUND" ? 404 : 500;
+    console.error("[tenant/screening/provider/transunion/callback] failed", {
+      message: code,
+    });
+    return res.status(status).json({ ok: false, error: code === "failed" ? "TRANSUNION_CALLBACK_FAILED" : code });
   }
 });
 
@@ -1130,20 +2660,23 @@ router.get("/communication/summary", requireTenant, async (req: any, res) => {
   try {
     const tenantId = String(req.user?.tenantId || "").trim();
     if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
-    const [messages, notices, maintenance] = await Promise.all([
+    const [messages, notices, maintenance, screening] = await Promise.all([
       buildTenantMessageItems(tenantId),
       buildTenantNoticeItems(tenantId),
       buildTenantMaintenanceUpdateItems(tenantId),
+      buildTenantScreeningItems(tenantId),
     ]);
     const unreadMessages = messages.filter((item) => !item.read).length;
     const unreadNotices = notices.filter((item) => !item.read).length;
     const unreadMaintenanceUpdates = maintenance.filter((item) => !item.read).length;
+    const unreadScreeningUpdates = screening.filter((item) => !item.read).length;
     return res.json({
       ok: true,
       unreadMessages,
       unreadNotices,
       unreadMaintenanceUpdates,
-      unreadTotal: unreadMessages + unreadNotices + unreadMaintenanceUpdates,
+      unreadScreeningUpdates,
+      unreadTotal: unreadMessages + unreadNotices + unreadMaintenanceUpdates + unreadScreeningUpdates,
     });
   } catch (err: any) {
     console.error("[tenant/communication/summary] failed", {

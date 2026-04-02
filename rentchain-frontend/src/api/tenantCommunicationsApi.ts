@@ -1,6 +1,6 @@
 import { tenantApiFetch } from "./tenantApiFetch";
 
-export type TenantCommunicationType = "notice" | "message" | "maintenance_update" | "system";
+export type TenantCommunicationType = "notice" | "message" | "maintenance_update" | "screening_update" | "system";
 export type TenantCommunicationPriority = "low" | "normal" | "high";
 
 export type TenantCommunicationItem = {
@@ -12,7 +12,7 @@ export type TenantCommunicationItem = {
   read: boolean;
   priority: TenantCommunicationPriority;
   fromLabel: "Landlord" | "RentChain" | "Maintenance Team";
-  relatedEntityType: "notice" | "maintenance" | "message" | null;
+  relatedEntityType: "notice" | "maintenance" | "message" | "screening" | null;
   relatedEntityId: string | null;
 };
 
@@ -21,6 +21,7 @@ export type TenantCommunicationSummary = {
   unreadMessages: number;
   unreadNotices: number;
   unreadMaintenanceUpdates: number;
+  unreadScreeningUpdates?: number;
   unreadTotal: number;
 };
 
@@ -56,6 +57,12 @@ export async function markTenantMessagesReadAll() {
 
 export async function markTenantMaintenanceUpdateRead(requestId: string) {
   return tenantApiFetch<{ ok: boolean }>(`/tenant/messages/maintenance/${encodeURIComponent(requestId)}/read`, {
+    method: "POST",
+  });
+}
+
+export async function markTenantScreeningUpdateRead(requestId: string) {
+  return tenantApiFetch<{ ok: boolean }>(`/tenant/messages/screening/${encodeURIComponent(requestId)}/read`, {
     method: "POST",
   });
 }

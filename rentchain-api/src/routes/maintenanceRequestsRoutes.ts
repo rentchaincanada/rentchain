@@ -34,6 +34,27 @@ const WORKFLOW_STATUSES = [
   "completed",
   "cancelled",
 ] as const;
+const SCREENING_REQUEST_STATUSES = [
+  "requested",
+  "consent_pending",
+  "consented",
+  "in_progress",
+  "completed",
+  "inconclusive",
+  "failed",
+  "manual_review_required",
+] as const;
+const SCREENING_AUDIT_EVENTS = [
+  "screening_requested",
+  "consent_viewed",
+  "consent_accepted",
+  "screening_started",
+  "provider_session_created",
+  "retry_requested",
+  "manual_review_selected",
+  "screening_completed",
+  "result_viewed",
+] as const;
 const WORKFLOW_TRANSITIONS: Record<(typeof WORKFLOW_STATUSES)[number], Array<(typeof WORKFLOW_STATUSES)[number]>> = {
   submitted: ["reviewed", "assigned", "cancelled"],
   reviewed: ["assigned", "completed", "cancelled"],
@@ -215,6 +236,108 @@ function normalizeWorkflowStatus(raw: any): (typeof WORKFLOW_STATUSES)[number] |
   }
   const upper = value.toUpperCase();
   return LEGACY_TO_WORKFLOW_STATUS[upper] ?? null;
+}
+
+function normalizeScreeningRequestStatus(raw: any): (typeof SCREENING_REQUEST_STATUSES)[number] {
+  const value = String(raw || "").trim().toLowerCase();
+  if ((SCREENING_REQUEST_STATUSES as readonly string[]).includes(value)) {
+    return value as (typeof SCREENING_REQUEST_STATUSES)[number];
+  }
+  return "requested";
+}
+
+function makeScreeningId(prefix: string): string {
+  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function cleanString(value: any, max = 200): string | null {
+  const text = String(value || "").trim();
+  if (!text) return null;
+  return text.slice(0, max);
+}
+
+function normalizeScreeningList(value: any, maxItems = 8, maxLength = 80): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => cleanString(item, maxLength))
+    .filter((item): item is string => Boolean(item))
+    .slice(0, maxItems);
+}
+
+function makeDeterministicDocId(parts: Array<string | null | undefined>): string {
+  const normalized = parts
+    .map((part) => String(part || "").trim().replace(/[^a-zA-Z0-9_-]+/g, "_"))
+    .filter(Boolean)
+    .join("_")
+    .slice(0, 220);
+  return normalized || makeScreeningId("screening_audit");
+}
+
+function screeningConfigSnapshot() {
+  const defaultProvider = cleanString(process.env.SCREENING_DEFAULT_PROVIDER, 80) || "manual";
+  const providerPriority = String(process.env.SCREENING_PROVIDER_PRIORITY || "transunion_redirect,equifax,manual")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return {
+    enabled: String(process.env.SCREENING_ENABLED || "true").toLowerCase() !== "false",
+    defaultProvider,
+    providerPriority,
+    providers: {
+      transunion_redirect: String(process.env.SCREENING_TRANSUNION_ENABLED || "false").toLowerCase() === "true",
+      equifax: String(process.env.SCREENING_EQUIFAX_ENABLED || "false").toLowerCase() === "true",
+      manual: String(process.env.SCREENING_MANUAL_ENABLED || "true").toLowerCase() !== "false",
+    },
+  };
+}
+
+async function writeScreeningAuditEvent(input: {
+  requestId: string;
+  eventType: (typeof SCREENING_AUDIT_EVENTS)[number];
+  actorRole: string;
+  actorId: string | null;
+  landlordId?: string | null;
+  tenantId?: string | null;
+  sessionId?: string | null;
+  idempotencyKey?: string | null;
+  metadata?: Record<string, unknown>;
+}) {
+  const auditId = input.idempotencyKey
+    ? makeDeterministicDocId([input.requestId, input.eventType, input.idempotencyKey])
+    : makeScreeningId("screening_audit");
+  const ref = db.collection("screening_audit_log").doc(auditId);
+  const now = Date.now();
+  await ref.set({
+    id: auditId,
+    requestId: input.requestId,
+    eventType: input.eventType,
+    actorRole: cleanString(input.actorRole, 80) || "system",
+    actorId: input.actorId || null,
+    landlordId: input.landlordId || null,
+    tenantId: input.tenantId || null,
+    sessionId: input.sessionId || null,
+    idempotencyKey: input.idempotencyKey || null,
+    metadata: {
+      requestId: input.requestId,
+      eventType: input.eventType,
+      actorRole: cleanString(input.actorRole, 80) || "system",
+      actorId: input.actorId || null,
+      landlordId: input.landlordId || null,
+      tenantId: input.tenantId || null,
+      sessionId: input.sessionId || null,
+      ...(input.metadata || {}),
+    },
+    createdAt: now,
+    updatedAt: now,
+    createdAtServer: FieldValue.serverTimestamp(),
+  });
+}
+
+async function resolveTenantIdByEmail(email: string | null): Promise<string | null> {
+  const safeEmail = String(email || "").trim().toLowerCase();
+  if (!safeEmail) return null;
+  const snap = await db.collection("tenants").where("email", "==", safeEmail).limit(1).get();
+  return snap.empty ? null : snap.docs[0].id;
 }
 
 function ensureStatusHistory(item: any) {
@@ -1371,6 +1494,143 @@ router.patch("/contractor/jobs/:id/status", async (req: any, res) => {
       message: err?.message || "failed",
     });
     return res.status(500).json({ ok: false, error: "CONTRACTOR_MAINTENANCE_PATCH_FAILED" });
+  }
+});
+
+router.post("/rental-applications/:id/screening/request", async (req: any, res) => {
+  try {
+    const role = roleOf(req);
+    if (role !== "landlord" && role !== "admin") {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+    const landlordId = landlordIdOf(req);
+    const actorId = String(req.user?.id || "").trim() || landlordId;
+    const rentalApplicationId = String(req.params?.id || "").trim();
+    if (!landlordId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    if (!rentalApplicationId) return res.status(400).json({ ok: false, error: "RENTAL_APPLICATION_ID_REQUIRED" });
+
+    const permissibleUseConfirmed = Boolean(req.body?.permissibleUseConfirmed);
+    if (!permissibleUseConfirmed) {
+      return res.status(400).json({ ok: false, error: "PERMISSIBLE_USE_CONFIRMATION_REQUIRED" });
+    }
+
+    const appRef = db.collection("rentalApplications").doc(rentalApplicationId);
+    const appSnap = await appRef.get();
+    const appData = (appSnap.exists ? (appSnap.data() as any) : {}) || {};
+    const ownerLandlordId =
+      cleanString(appData?.landlordId || appData?.ownerId || appData?.userId, 120) || landlordId;
+    if (appSnap.exists && ownerLandlordId !== landlordId && role !== "admin") {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const applicantEmail =
+      cleanString(
+        req.body?.applicantEmail ||
+          appData?.applicantEmail ||
+          appData?.email ||
+          appData?.tenantEmail,
+        200
+      ) || null;
+    const applicantName =
+      cleanString(
+        req.body?.applicantName ||
+          appData?.applicantName ||
+          [appData?.firstName, appData?.lastName].filter(Boolean).join(" "),
+        200
+      ) || "Applicant";
+    const applicantTenantId =
+      cleanString(req.body?.applicantTenantId || appData?.tenantId || appData?.applicantTenantId, 160) ||
+      (await resolveTenantIdByEmail(applicantEmail));
+    const propertyId = cleanString(req.body?.propertyId || appData?.propertyId, 160);
+    const unitId = cleanString(req.body?.unitId || appData?.unitId || appData?.unit, 160);
+    const propertyLabel =
+      cleanString(req.body?.property || req.body?.propertyLabel || appData?.propertyName || appData?.property, 200) ||
+      propertyId;
+    const unitLabel =
+      cleanString(req.body?.unit || req.body?.unitLabel || appData?.unitLabel || appData?.unit, 120) || unitId;
+    const packageType = cleanString(req.body?.packageType, 80) || "standard";
+    const payerType = cleanString(req.body?.payerType, 80) || "applicant";
+    const addOns = normalizeScreeningList(req.body?.addOns);
+    const now = Date.now();
+    const requestRef = db.collection("screening_requests").doc();
+    const screeningRequest = {
+      id: requestRef.id,
+      rentalApplicationId,
+      landlordId,
+      applicantTenantId: applicantTenantId || null,
+      applicantUserId: cleanString(req.body?.applicantUserId || appData?.applicantUserId, 160),
+      applicantEmail,
+      applicantName,
+      propertyId,
+      unitId,
+      propertyLabel,
+      unitLabel,
+      packageType,
+      payerType,
+      addOns,
+      permissibleUseConfirmed: true,
+      providerRoutingSnapshot: screeningConfigSnapshot(),
+      providerSelection: null,
+      status: normalizeScreeningRequestStatus("consent_pending"),
+      normalizedResultStatus: "pending",
+      latestConsentId: null,
+      activeSessionId: null,
+      latestResultId: null,
+      latestAuditEventType: "screening_requested",
+      nextAction: applicantTenantId ? "awaiting_applicant_consent" : "manual_applicant_link_required",
+      requestSource: "landlord_application_detail",
+      requestedAt: now,
+      consentedAt: null,
+      startedAt: null,
+      completedAt: null,
+      failedAt: null,
+      lastViewedAt: null,
+      retryCount: 0,
+      createdAt: now,
+      updatedAt: now,
+      createdByRole: role,
+      createdById: actorId || null,
+    };
+
+    await requestRef.set(screeningRequest);
+    await writeScreeningAuditEvent({
+      requestId: requestRef.id,
+      eventType: "screening_requested",
+      actorRole: role,
+      actorId: actorId || null,
+      landlordId,
+      tenantId: applicantTenantId || null,
+      idempotencyKey: `screening_requested_${rentalApplicationId}_${requestRef.id}`,
+      metadata: {
+        rentalApplicationId,
+        packageType,
+        payerType,
+        providerRoutingSnapshot: screeningRequest.providerRoutingSnapshot,
+      },
+    });
+
+    if (appSnap.exists) {
+      await appRef.set(
+        {
+          screeningRequestId: requestRef.id,
+          screeningStatus: screeningRequest.status,
+          screeningRequestedAt: now,
+          screeningLastUpdatedAt: now,
+          screeningProvider: null,
+          screeningPackageType: packageType,
+        },
+        { merge: true }
+      );
+    }
+
+    return res.status(201).json({ ok: true, screeningRequest });
+  } catch (err: any) {
+    console.error("[screening] request create failed", {
+      rentalApplicationId: req.params?.id || null,
+      landlordId: landlordIdOf(req),
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "SCREENING_REQUEST_CREATE_FAILED" });
   }
 });
 
