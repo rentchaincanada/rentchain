@@ -8,6 +8,7 @@ import {
   MaintenanceRequest,
 } from "../../api/tenantMaintenanceApi";
 import { TenantCommunicationItem } from "../../api/tenantCommunicationsApi";
+import { TenantScreeningRequest, listTenantScreenings } from "../../api/tenantScreeningApi";
 import { CreateMaintenanceRequestModal } from "../../components/tenant/CreateMaintenanceRequestModal";
 import { Card, Section } from "../../components/ui/Ui";
 import { clearTenantToken, getTenantToken } from "../../lib/tenantAuth";
@@ -292,6 +293,8 @@ export default function TenantDashboardPage() {
   const [maintLoading, setMaintLoading] = useState(true);
   const [communications, setCommunications] = useState<TenantCommunicationItem[]>([]);
   const [communicationsError, setCommunicationsError] = useState<string | null>(null);
+  const [screenings, setScreenings] = useState<TenantScreeningRequest[]>([]);
+  const [screeningsError, setScreeningsError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const attachmentsByLedgerId = useMemo(() => {
     const map = new Map<string, Attachment[]>();
@@ -314,6 +317,7 @@ export default function TenantDashboardPage() {
     setAttachments([]);
     setMaintRequests([]);
     setCommunications([]);
+    setScreenings([]);
     setError(null);
     setActivityError(null);
     setLedgerError(null);
@@ -321,6 +325,7 @@ export default function TenantDashboardPage() {
     setNoticesError(null);
     setMaintError(null);
     setCommunicationsError(null);
+    setScreeningsError(null);
   }, []);
 
   const loadAll = React.useCallback(async () => {
@@ -340,7 +345,7 @@ export default function TenantDashboardPage() {
     setMaintError(null);
     setCommunicationsError(null);
     try {
-      const [meRes, activityRes, ledgerRes, attachmentsRes, noticesRes, maintRes, commsRes] = await Promise.allSettled([
+      const [meRes, activityRes, ledgerRes, attachmentsRes, noticesRes, maintRes, commsRes, screeningsRes] = await Promise.allSettled([
         tenantApiFetch<TenantMeResponse>("/tenant/me"),
         tenantApiFetch<{ ok: boolean; data: ActivityItem[] }>("/tenant/activity"),
         tenantApiFetch<{ ok: boolean; data: LedgerItem[] }>("/tenant/ledger"),
@@ -348,6 +353,7 @@ export default function TenantDashboardPage() {
         tenantApiFetch<{ ok: boolean; data: Notice[] }>("/tenant/notices"),
         getTenantMaintenanceRequests(),
         tenantApiFetch<{ ok: boolean; items: TenantCommunicationItem[] }>("/tenant/messages"),
+        listTenantScreenings(),
       ]);
 
       const isUnauthorized = (err: any) =>
@@ -466,6 +472,22 @@ export default function TenantDashboardPage() {
           setCommunicationsError(String(message));
         }
       }
+
+      if (screeningsRes.status === "fulfilled") {
+        const payload = screeningsRes.value;
+        const list = Array.isArray((payload as any)?.items) ? (payload as any).items : [];
+        setScreenings(list);
+      } else {
+        if (isUnauthorized(screeningsRes.reason)) {
+          expireSession();
+        } else {
+          const message =
+            (screeningsRes.reason as any)?.message ||
+            (screeningsRes.reason as any)?.payload?.error ||
+            "Unable to load screening requests";
+          setScreeningsError(String(message));
+        }
+      }
     } catch (e: any) {
       if (e?.payload?.error === "UNAUTHORIZED" || e?.status === 401) {
         setSessionExpired(true);
@@ -506,6 +528,7 @@ export default function TenantDashboardPage() {
   const unreadNotice = notices.find((item: any) => !(item as any).read) as any;
   const unreadMessage = communications.find((item) => item.type === "message" && !item.read);
   const latestMaintenanceUpdate = communications.find((item) => item.type === "maintenance_update");
+  const activeScreening = screenings[0] || null;
 
   const checklist = useMemo(
     () => [
@@ -771,9 +794,54 @@ export default function TenantDashboardPage() {
           <Card elevated style={{ gridColumn: "1 / -1" }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: spacing.sm, gap: spacing.sm, flexWrap: "wrap" }}>
               <div>
+                <div style={labelStyle}>Screening</div>
+                <div style={{ fontSize: "1.2rem", fontWeight: 800, color: textTokens.primary }}>
+                  Rental screening workflow
+                </div>
+              </div>
+              <a
+                href="/tenant/messages"
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: radius.md,
+                  border: `1px solid ${colors.border}`,
+                  textDecoration: "none",
+                  color: textTokens.primary,
+                  fontWeight: 700,
+                  background: colors.panel,
+                }}
+              >
+                Open screening inbox
+              </a>
+            </div>
+            {screeningsError ? (
+              <div style={{ color: colors.danger }}>{screeningsError}</div>
+            ) : activeScreening ? (
+              <div style={{ display: "grid", gap: 8 }}>
+                <div style={{ color: textTokens.secondary }}>
+                  Status: <strong style={{ color: textTokens.primary }}>{activeScreening.summary.status.replace(/_/g, " ")}</strong>
+                </div>
+                <div style={{ color: textTokens.secondary }}>
+                  Provider: <strong style={{ color: textTokens.primary }}>{(activeScreening.provider || "runtime selected").replace(/_/g, " ")}</strong>
+                </div>
+                <div style={{ color: textTokens.secondary }}>
+                  Requested: <strong style={{ color: textTokens.primary }}>{fmtDate(activeScreening.requestedAt)}</strong>
+                </div>
+                <div style={{ color: textTokens.secondary }}>{activeScreening.summary.summaryResult}</div>
+              </div>
+            ) : (
+              <div style={{ color: textTokens.muted }}>
+                No active screening requests yet. When a landlord requests screening, the consent and next steps will appear here and in Messages.
+              </div>
+            )}
+          </Card>
+
+          <Card elevated style={{ gridColumn: "1 / -1" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: spacing.sm, gap: spacing.sm, flexWrap: "wrap" }}>
+              <div>
                 <div style={labelStyle}>Communication Center</div>
                 <div style={{ fontSize: "1.2rem", fontWeight: 800, color: textTokens.primary }}>
-                  Messages, notices, and maintenance updates
+                  Messages, notices, maintenance, and screening
                 </div>
               </div>
               <div style={{ display: "flex", gap: 8 }}>
@@ -840,6 +908,16 @@ export default function TenantDashboardPage() {
                   </a>
                 ) : (
                   "No recent updates"
+                )}
+              </div>
+              <div style={{ color: textTokens.secondary }}>
+                Screening request:{" "}
+                {activeScreening ? (
+                  <a href="/tenant/messages" style={{ color: colors.accent, fontWeight: 700 }}>
+                    {activeScreening.summary.summaryResult}
+                  </a>
+                ) : (
+                  "No active request"
                 )}
               </div>
             </div>
