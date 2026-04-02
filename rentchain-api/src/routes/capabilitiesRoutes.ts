@@ -13,10 +13,19 @@ const router = Router();
 router.use(authenticateJwt);
 
 function buildFeatures(plan: ReturnType<typeof resolvePlanTier>, isAdmin = false) {
+  const planFeatures = CAPABILITIES[plan];
   const base = {
-    ...CAPABILITIES[plan],
+    ...planFeatures,
+    screening: Boolean(planFeatures.screening || planFeatures.screening_pay_per_use),
+    screening_history: Boolean(
+      planFeatures.screening_history || planFeatures.screening || planFeatures.screening_pay_per_use
+    ),
+    pdf_export: Boolean(planFeatures.pdf_export || planFeatures.exports_basic),
+    move_in_readiness: Boolean(planFeatures.move_in_readiness || planFeatures.tenant_invites),
+    work_orders: Boolean(planFeatures.work_orders || planFeatures.maintenance),
+    review_summary: Boolean(planFeatures.review_summary || planFeatures.pdf_export || planFeatures.exports_basic),
     microLive: false,
-    tenantPdfReport: false,
+    tenantPdfReport: Boolean(planFeatures.pdf_export || planFeatures.exports_basic),
     creditHistoryExport: false,
     dashboardAiSummary: true,
     tenantInvites: true,

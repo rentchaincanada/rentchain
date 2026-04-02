@@ -30,7 +30,7 @@ import {
 } from "@/api/rentalApplicationsApi";
 import type { ApplicationDecisionSummary } from "@/types/applicationDecisionSummary";
 import { useToast } from "../components/ui/ToastProvider";
-import { useCapabilities } from "@/hooks/useCapabilities";
+import { useEntitlements } from "@/hooks/useEntitlements";
 import { track } from "@/lib/analytics";
 import { useAuth } from "../context/useAuth";
 import { useUpgrade } from "../context/UpgradeContext";
@@ -100,6 +100,9 @@ import {
 } from "@/api/screeningApi";
 import { ScreeningHistoryTable } from "@/components/screening/ScreeningHistoryTable";
 import { ScreeningDetailDrawer } from "@/components/screening/ScreeningDetailDrawer";
+import { FeatureGate } from "@/components/billing/FeatureGate";
+import { FeatureTeaser } from "@/components/billing/FeatureTeaser";
+import { UpgradeCTA } from "@/components/billing/UpgradeCTA";
 const statusOptions: RentalApplicationStatus[] = [
   "SUBMITTED",
   "IN_REVIEW",
@@ -256,7 +259,10 @@ const ApplicationsPage: React.FC = () => {
   const [propertiesError, setPropertiesError] = useState<string | null>(null);
   const propertiesLoaded = !propertiesLoading;
   const propertiesReady = propertiesLoaded && !propertiesError;
-  const { caps, features, loading: loadingCaps } = useCapabilities();
+  const entitlements = useEntitlements();
+  const caps = { plan: entitlements.plan };
+  const features = entitlements.capabilities;
+  const loadingCaps = entitlements.loading;
   const { user } = useAuth();
   const { openUpgrade } = useUpgrade();
   const [screeningQuote, setScreeningQuote] = useState<ScreeningQuote | null>(null);
@@ -409,6 +415,9 @@ const ApplicationsPage: React.FC = () => {
   })();
   const userTier = normalizeTier((caps?.plan as string) || user?.plan || null);
   const canUseProFeatures = isAdmin || hasTier(userTier, "pro");
+  const canViewScreeningHistory = entitlements.canViewScreeningHistory;
+  const canExportPdf = entitlements.canExportPdf;
+  const canViewReviewSummary = entitlements.canViewReviewSummary;
   const selectedLabel = detail
     ? `${detail.applicant.firstName} ${detail.applicant.lastName}`.trim()
     : "Application";
@@ -555,6 +564,10 @@ const ApplicationsPage: React.FC = () => {
 
   const openScreeningReport = useCallback(
     async (screeningId: string) => {
+      if (!canExportPdf) {
+        openProUpgrade("exports");
+        return;
+      }
       setScreeningReportLoadingId(screeningId);
       try {
         const blob = await fetchScreeningReportBlob(screeningId);
@@ -574,7 +587,7 @@ const ApplicationsPage: React.FC = () => {
         setScreeningReportLoadingId(null);
       }
     },
-    [detail?.id, loadScreeningHistory, showToast]
+    [canExportPdf, detail?.id, loadScreeningHistory, openProUpgrade, showToast]
   );
 
   const refreshSelectedApplication = async (applicationId?: string | null) => {
@@ -1162,6 +1175,10 @@ const ApplicationsPage: React.FC = () => {
 
   const handleExportReport = async (copyOnly: boolean) => {
     if (!detail?.id) return;
+    if (!canExportPdf) {
+      openProUpgrade("exports");
+      return;
+    }
     setExportingReport(true);
     try {
       const res = await exportScreeningReport(detail.id);
@@ -1188,6 +1205,10 @@ const ApplicationsPage: React.FC = () => {
 
   const handleViewOrderReport = async () => {
     if (!screeningOrderId) return;
+    if (!canExportPdf) {
+      openProUpgrade("exports");
+      return;
+    }
     setOrderReportLoading(true);
     try {
       const res = await fetchScreeningOrderReport(screeningOrderId);
@@ -1852,21 +1873,37 @@ const ApplicationsPage: React.FC = () => {
                   <div className="rc-applications-card-header" style={{ marginBottom: 8 }}>
                     <div style={{ fontWeight: 700, fontSize: 16 }}>Screening</div>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                      <Button
-                        variant="secondary"
-                        onClick={() => navigate(`/applications/${detail.id}/review-summary`)}
-                        disabled={!detail?.id}
-                      >
-                        View Screening Decision
-                      </Button>
-                      {screeningOrderId && orderReportReady ? (
+                      {canViewReviewSummary ? (
                         <Button
                           variant="secondary"
-                          onClick={() => void handleViewOrderReport()}
-                          disabled={orderReportLoading}
+                          onClick={() => navigate(`/applications/${detail.id}/review-summary`)}
+                          disabled={!detail?.id}
                         >
-                          {orderReportLoading ? "Opening..." : "View report"}
+                          View Screening Decision
                         </Button>
+                      ) : (
+                        <UpgradeCTA
+                          featureKey="review_summary"
+                          label="Upgrade for Decision Summary"
+                          variant="secondary"
+                        />
+                      )}
+                      {screeningOrderId && orderReportReady ? (
+                        canExportPdf ? (
+                          <Button
+                            variant="secondary"
+                            onClick={() => void handleViewOrderReport()}
+                            disabled={orderReportLoading}
+                          >
+                            {orderReportLoading ? "Opening..." : "View report"}
+                          </Button>
+                        ) : (
+                          <UpgradeCTA
+                            featureKey="pdf_export"
+                            label="Upgrade for Report PDF"
+                            variant="secondary"
+                          />
+                        )
                       ) : null}
                       <Button
                         variant="ghost"
@@ -1892,14 +1929,27 @@ const ApplicationsPage: React.FC = () => {
                   ) : null}
                   <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
                     <div style={{ fontWeight: 700, fontSize: 15 }}>Screening history</div>
-                    <ScreeningHistoryTable
-                      items={screeningHistory}
-                      loading={screeningHistoryLoading}
-                      reportLoadingId={screeningReportLoadingId}
-                      onViewSummary={(item) => void loadScreeningDetail(item.id)}
-                      onViewReport={(item) => void openScreeningReport(item.id)}
-                      onRescreen={() => void handleManualScreeningPrimaryAction()}
-                    />
+                    <FeatureGate
+                      enabled={canViewScreeningHistory}
+                      fallback={
+                        <FeatureTeaser
+                          featureKey="screening_history"
+                          eyebrow="Upgrade available"
+                          title="Keep past screenings in one review flow"
+                          description="Screening history keeps prior results, summary access, and re-screen actions together so you can review applicants without losing context."
+                          ctaLabel="Upgrade for Screening History"
+                        />
+                      }
+                    >
+                      <ScreeningHistoryTable
+                        items={screeningHistory}
+                        loading={screeningHistoryLoading}
+                        reportLoadingId={screeningReportLoadingId}
+                        onViewSummary={(item) => void loadScreeningDetail(item.id)}
+                        onViewReport={(item) => void openScreeningReport(item.id)}
+                        onRescreen={() => void handleManualScreeningPrimaryAction()}
+                      />
+                    </FeatureGate>
                   </div>
                   <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
                     {!SCREENING_ENABLED ? (
@@ -2253,20 +2303,28 @@ const ApplicationsPage: React.FC = () => {
                     ) : null}
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       {screeningReceipt.reportUrl ? (
-                        <Button
-                          variant="secondary"
-                          onClick={() => window.open(screeningReceipt.reportUrl || "", "_blank", "noopener,noreferrer")}
-                        >
-                          View report
-                        </Button>
+                        canExportPdf ? (
+                          <Button
+                            variant="secondary"
+                            onClick={() => window.open(screeningReceipt.reportUrl || "", "_blank", "noopener,noreferrer")}
+                          >
+                            View report
+                          </Button>
+                        ) : (
+                          <UpgradeCTA featureKey="pdf_export" label="Upgrade for Report Access" variant="secondary" />
+                        )
                       ) : null}
                       {screeningReceipt.pdfUrl ? (
-                        <Button
-                          variant="secondary"
-                          onClick={() => window.open(screeningReceipt.pdfUrl || "", "_blank", "noopener,noreferrer")}
-                        >
-                          Download PDF
-                        </Button>
+                        canExportPdf ? (
+                          <Button
+                            variant="secondary"
+                            onClick={() => window.open(screeningReceipt.pdfUrl || "", "_blank", "noopener,noreferrer")}
+                          >
+                            Download PDF
+                          </Button>
+                        ) : (
+                          <UpgradeCTA featureKey="pdf_export" label="Upgrade for PDF Export" variant="secondary" />
+                        )
                       ) : null}
                       {screeningReceipt.referenceId ? (
                         <Button

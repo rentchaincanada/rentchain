@@ -33,6 +33,7 @@ export const DEFAULT_PLANS: PricingPlan[] = [
       "Viewing coordination and workflow tools",
       "Messaging and day-to-day landlord operations",
       "Basic ledger and billing workspace",
+      "Move-In Readiness and work orders",
     ],
   },
   {
@@ -44,6 +45,7 @@ export const DEFAULT_PLANS: PricingPlan[] = [
       "CSV expense import",
       "Accountant-ready CSV, spreadsheet, and PDF exports",
       "Screening workflow with decision support",
+      "Screening decision summaries and landlord-ready PDFs",
       "Portfolio dashboard and stronger reporting",
       "Team workflow tools",
     ],

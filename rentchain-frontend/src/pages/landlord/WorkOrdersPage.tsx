@@ -2,6 +2,8 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { Button, Card } from "../../components/ui/Ui";
 import { AddExpenseModal } from "../../components/expenses/AddExpenseModal";
+import { useEntitlements } from "@/hooks/useEntitlements";
+import { LockedFeature } from "@/components/billing/LockedFeature";
 import { fetchProperties } from "../../api/propertiesApi";
 import {
   addWorkOrderUpdate,
@@ -25,6 +27,7 @@ function canCompleteWorkOrder(item: WorkOrderRecord) {
 }
 
 export default function WorkOrdersPage() {
+  const entitlements = useEntitlements();
   const [items, setItems] = React.useState<WorkOrderRecord[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -36,6 +39,7 @@ export default function WorkOrdersPage() {
   const [convertTarget, setConvertTarget] = React.useState<WorkOrderRecord | null>(null);
   const [convertVendor, setConvertVendor] = React.useState("");
   const [isMobile, setIsMobile] = React.useState(false);
+  const canUseWorkOrders = entitlements.canUseWorkOrders;
 
   const markCompleted = React.useCallback(
     async (item: WorkOrderRecord) => {
@@ -88,8 +92,13 @@ export default function WorkOrdersPage() {
   }, []);
 
   React.useEffect(() => {
+    if (!canUseWorkOrders) {
+      setLoading(false);
+      setItems([]);
+      return;
+    }
     void load();
-  }, [load]);
+  }, [canUseWorkOrders, load]);
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
@@ -105,6 +114,10 @@ export default function WorkOrdersPage() {
   }, []);
 
   React.useEffect(() => {
+    if (!canUseWorkOrders) {
+      setProperties([]);
+      return;
+    }
     const run = async () => {
       try {
         const data = await fetchProperties();
@@ -126,7 +139,19 @@ export default function WorkOrdersPage() {
       }
     };
     void run();
-  }, []);
+  }, [canUseWorkOrders]);
+
+  if (!canUseWorkOrders) {
+    return (
+      <LockedFeature
+        featureKey="work_orders"
+        title="Work orders start on Starter"
+        description="Keep contractor assignments, in-house completion, and maintenance follow-through in one workflow once your plan includes work orders."
+        hint="Starter adds day-to-day operations tools so maintenance work does not split across notes, texts, and spreadsheets."
+        ctaLabel="Upgrade to Starter"
+      />
+    );
+  }
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
