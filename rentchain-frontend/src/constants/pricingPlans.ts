@@ -125,8 +125,8 @@ export const CANONICAL_TIER_MATRIX: Record<PricingPlanKey, TierMatrixPlan> = {
   pro: {
     key: "pro",
     label: "Pro",
-    monthlyPrice: "$59",
-    yearlyPrice: "$590",
+    monthlyPrice: "$49",
+    yearlyPrice: "$490",
     tagline: "Best for growing portfolios that need exports, reporting, and team workflows.",
     ctaLabel: "Upgrade to Pro",
     features: [
@@ -154,8 +154,8 @@ export const CANONICAL_TIER_MATRIX: Record<PricingPlanKey, TierMatrixPlan> = {
   elite: {
     key: "elite",
     label: "Elite",
-    monthlyPrice: "$99",
-    yearlyPrice: "$990",
+    monthlyPrice: "$79",
+    yearlyPrice: "$790",
     tagline: "Best for premium visibility, audit depth, and advanced portfolio oversight.",
     ctaLabel: "Upgrade to Elite",
     features: [

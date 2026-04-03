@@ -19,14 +19,14 @@ const PLAN_MATRIX: Record<BillingPlanKey, PlanConfig> = {
   pro: {
     key: "pro",
     label: "Pro",
-    monthlyAmountCents: 5900,
-    yearlyAmountCents: 59000,
+    monthlyAmountCents: 4900,
+    yearlyAmountCents: 49000,
   },
   elite: {
     key: "elite",
     label: "Elite",
-    monthlyAmountCents: 9900,
-    yearlyAmountCents: 99000,
+    monthlyAmountCents: 7900,
+    yearlyAmountCents: 79000,
   },
 };
 
