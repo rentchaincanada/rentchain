@@ -1,17 +1,15 @@
-export type TierKey = "starter" | "pro" | "business" | "elite";
+export type TierKey = "starter" | "pro" | "elite";
 
 const TIER_ORDER: Record<TierKey, number> = {
   starter: 0,
   pro: 1,
-  business: 2,
-  elite: 3,
+  elite: 2,
 };
 
 export function normalizeTier(input?: string | null): TierKey {
   const value = String(input || "").trim().toLowerCase();
   if (value === "pro" || value === "professional") return "pro";
-  if (value === "business" || value === "enterprise") return "business";
-  if (value === "elite") return "elite";
+  if (value === "business" || value === "elite" || value === "enterprise") return "elite";
   return "starter";
 }
 

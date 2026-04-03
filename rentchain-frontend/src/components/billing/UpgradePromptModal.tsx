@@ -43,7 +43,7 @@ export function UpgradePromptModal({
     const raw = String(input || "").trim().toLowerCase();
     if (raw === "starter" || raw === "core") return "starter";
     if (raw === "pro") return "pro";
-    if (raw === "business" || raw === "elite" || raw === "enterprise") return "business";
+    if (raw === "business" || raw === "elite" || raw === "enterprise") return "elite";
     return "pro";
   };
   const requiredTier = resolveTier(requiredPlanKey);

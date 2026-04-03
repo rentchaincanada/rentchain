@@ -1,4 +1,4 @@
-export type PlanKey = "starter" | "pro" | "business" | "elite" | "screening";
+export type PlanKey = "starter" | "pro" | "elite" | "screening";
 
 const isEliteUiEnabled = () => {
   const raw =
@@ -10,7 +10,7 @@ const isEliteUiEnabled = () => {
 
 export function getVisiblePlans(role?: string | null): PlanKey[] {
   const isAdmin = String(role || "").toLowerCase() === "admin";
-  const base: PlanKey[] = ["starter", "pro", "business"];
+  const base: PlanKey[] = ["starter", "pro"];
   if (isAdmin || isEliteUiEnabled()) {
     base.push("elite");
   }

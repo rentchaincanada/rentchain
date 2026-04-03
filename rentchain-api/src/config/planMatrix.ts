@@ -1,4 +1,4 @@
-export type BillingPlanKey = "starter" | "pro" | "business";
+export type BillingPlanKey = "starter" | "pro" | "elite";
 type PlanInterval = "monthly" | "yearly";
 type StripeEnv = "live" | "test";
 
@@ -22,9 +22,9 @@ const PLAN_MATRIX: Record<BillingPlanKey, PlanConfig> = {
     monthlyAmountCents: 5900,
     yearlyAmountCents: 59000,
   },
-  business: {
-    key: "business",
-    label: "Business",
+  elite: {
+    key: "elite",
+    label: "Elite",
     monthlyAmountCents: 9900,
     yearlyAmountCents: 99000,
   },
@@ -50,14 +50,25 @@ const compact = <T,>(arr: Array<T | null | undefined>): T[] =>
   arr.filter((value): value is T => value != null);
 
 function resolveEnvKeys(plan: BillingPlanKey, interval: PlanInterval, env: StripeEnv) {
-  const upper = plan.toUpperCase();
+  const preferredUpper = plan.toUpperCase();
+  const legacyUpper = plan === "elite" ? "BUSINESS" : preferredUpper;
   const intervalUpper = interval === "yearly" ? "YEARLY" : "MONTHLY";
 
-  const preferred = `STRIPE_PRICE_${upper}_${intervalUpper}_${env.toUpperCase()}`;
-  const fallback = `STRIPE_PRICE_${upper}_${intervalUpper}`;
-  const legacy = interval === "monthly" ? `STRIPE_PRICE_${upper}` : null;
+  const preferred = `STRIPE_PRICE_${preferredUpper}_${intervalUpper}_${env.toUpperCase()}`;
+  const fallback = `STRIPE_PRICE_${preferredUpper}_${intervalUpper}`;
+  const legacyPreferred = interval === "monthly" ? `STRIPE_PRICE_${preferredUpper}` : null;
+  const legacyEnvPreferred = plan === "elite" ? `STRIPE_PRICE_${legacyUpper}_${intervalUpper}_${env.toUpperCase()}` : null;
+  const legacyEnvFallback = plan === "elite" ? `STRIPE_PRICE_${legacyUpper}_${intervalUpper}` : null;
+  const legacyLegacy = plan === "elite" && interval === "monthly" ? `STRIPE_PRICE_${legacyUpper}` : null;
 
-  return { preferred, fallback, legacy };
+  return {
+    preferred,
+    fallback,
+    legacyPreferred,
+    legacyEnvPreferred,
+    legacyEnvFallback,
+    legacyLegacy,
+  };
 }
 
 function isProductionEnv() {
@@ -81,9 +92,20 @@ export function resolvePlanPriceId(params: {
   fallbackUsed: boolean;
 } {
   const env = params.env || inferStripeEnv();
-  const { preferred, fallback, legacy } = resolveEnvKeys(params.plan, params.interval, env);
+  const {
+    preferred,
+    fallback,
+    legacyPreferred,
+    legacyEnvPreferred,
+    legacyEnvFallback,
+    legacyLegacy,
+  } = resolveEnvKeys(params.plan, params.interval, env);
   const candidates = compact([preferred]).concat(
-    compact(allowFallback(env) ? [fallback, legacy] : [])
+    compact(
+      allowFallback(env)
+        ? [fallback, legacyPreferred, legacyEnvPreferred, legacyEnvFallback, legacyLegacy]
+        : [legacyEnvPreferred]
+    )
   );
 
   for (const key of candidates) {
@@ -120,8 +142,8 @@ export function getPricingHealth() {
     { plan: "starter", interval: "yearly" },
     { plan: "pro", interval: "monthly" },
     { plan: "pro", interval: "yearly" },
-    { plan: "business", interval: "monthly" },
-    { plan: "business", interval: "yearly" },
+    { plan: "elite", interval: "monthly" },
+    { plan: "elite", interval: "yearly" },
   ];
 
   const missing: string[] = [];
@@ -176,15 +198,26 @@ export function resolvePlanFromPriceId(priceId?: string | null): BillingPlanKey 
   if (!id) return null;
   const envs: StripeEnv[] = ["live", "test"];
   const intervals: PlanInterval[] = ["monthly", "yearly"];
-  const plans: BillingPlanKey[] = ["starter", "pro", "business"];
+  const plans: BillingPlanKey[] = ["starter", "pro", "elite"];
 
   for (const env of envs) {
     const includeFallback = allowFallback(env);
     for (const plan of plans) {
       for (const interval of intervals) {
-        const { preferred, fallback, legacy } = resolveEnvKeys(plan, interval, env);
+        const {
+          preferred,
+          fallback,
+          legacyPreferred,
+          legacyEnvPreferred,
+          legacyEnvFallback,
+          legacyLegacy,
+        } = resolveEnvKeys(plan, interval, env);
         const keys = compact([preferred]).concat(
-          compact(includeFallback ? [fallback, legacy] : [])
+          compact(
+            includeFallback
+              ? [fallback, legacyPreferred, legacyEnvPreferred, legacyEnvFallback, legacyLegacy]
+              : [legacyEnvPreferred]
+          )
         );
         for (const key of keys) {
           const value = envVal(key);

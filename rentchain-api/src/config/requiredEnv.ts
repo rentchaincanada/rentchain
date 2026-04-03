@@ -17,7 +17,11 @@ const BASE_HARD_REQUIREMENTS: EnvRequirement[] = [
   { kind: "name", name: "FIREBASE_API_KEY" },
   { kind: "name", name: "STRIPE_PRICE_STARTER_MONTHLY_LIVE" },
   { kind: "name", name: "STRIPE_PRICE_PRO_MONTHLY_LIVE" },
-  { kind: "name", name: "STRIPE_PRICE_BUSINESS_MONTHLY_LIVE" },
+  {
+    kind: "oneOf",
+    label: "STRIPE_PRICE_ELITE_MONTHLY_LIVE|STRIPE_PRICE_BUSINESS_MONTHLY_LIVE",
+    names: ["STRIPE_PRICE_ELITE_MONTHLY_LIVE", "STRIPE_PRICE_BUSINESS_MONTHLY_LIVE"],
+  },
 ];
 
 const SOFT_REQUIREMENTS = [

@@ -495,7 +495,7 @@ function normalizeTier(input?: string | null): BillingPlanKey | null {
   const raw = String(input || "").trim().toLowerCase();
   if (raw === "starter" || raw === "core") return "starter";
   if (raw === "pro" || raw === "professional") return "pro";
-  if (raw === "business" || raw === "enterprise") return "business";
+  if (raw === "business" || raw === "elite" || raw === "enterprise") return "elite";
   return null;
 }
 
@@ -503,11 +503,11 @@ type SubscriptionMetrics = {
   activeSubscribers: number;
   mrrCents: number;
   arrCents: number;
-  subscriptionsByTier: { starter: number; pro: number; business: number; elite: number };
+  subscriptionsByTier: { starter: number; pro: number; elite: number };
 };
 
 async function getSubscriptionMetrics(): Promise<SubscriptionMetrics> {
-  const byTier = { starter: 0, pro: 0, business: 0, elite: 0 };
+  const byTier = { starter: 0, pro: 0, elite: 0 };
   let mrrCents = 0;
   let activeSubscribers = 0;
 

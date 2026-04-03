@@ -27,7 +27,7 @@ export type AdminMetrics = {
   activeSubscribers: number;
   mrrCents: number;
   arrCents: number;
-  subscriptionsByTier: { starter: number; pro: number; business: number; elite: number };
+  subscriptionsByTier: { starter: number; pro: number; elite: number };
   screeningsPaidThisMonth: number;
   screeningsPaidYtd: number;
   screeningRevenueCentsThisMonth: number;

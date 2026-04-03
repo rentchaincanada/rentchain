@@ -14,7 +14,7 @@ type Props = {
   role?: string | null;
   mode: "billing" | "pricing";
   planActionLoading?: string | null;
-  onSelectPlan: (planKey: "starter" | "pro" | "business") => void;
+  onSelectPlan: (planKey: "starter" | "pro" | "elite") => void;
   onContactSales?: () => void;
 };
 
@@ -22,8 +22,7 @@ const normalizePlan = (input?: string | null): PlanKey => {
   const raw = String(input || "").trim().toLowerCase();
   if (raw === "starter" || raw === "core") return "starter";
   if (raw === "pro") return "pro";
-  if (raw === "business") return "business";
-  if (raw === "elite") return "elite";
+  if (raw === "business" || raw === "elite" || raw === "enterprise") return "elite";
   return "screening";
 };
 
@@ -68,16 +67,12 @@ export function BillingPlansPanel({
     const label =
       planId === "pro"
         ? "Pro"
-        : planId === "business"
-        ? "Business"
         : planId === "elite"
         ? "Elite"
         : "Starter";
     const desc =
       planId === "pro"
         ? "Messaging, ledger, exports."
-        : planId === "business"
-        ? "Portfolio analytics and compliance."
         : planId === "elite"
         ? "Enterprise controls and compliance."
         : "Rental management + maintenance.";
@@ -155,13 +150,6 @@ export function BillingPlansPanel({
               </>
             ) : null}
 
-            {planId === "business" ? (
-              <>
-                <li>Portfolio analytics dashboard</li>
-                <li>Compliance and reporting tools</li>
-              </>
-            ) : null}
-
             {planId === "elite" ? (
               <>
                 <li>Enterprise controls and approvals</li>
@@ -179,7 +167,7 @@ export function BillingPlansPanel({
                   onContactSales?.();
                   return;
                 }
-                if (planId === "starter" || planId === "pro" || planId === "business") {
+                if (planId === "starter" || planId === "pro") {
                   onSelectPlan(planId);
                 }
               }}

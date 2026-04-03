@@ -133,7 +133,7 @@ const BillingPage: React.FC = () => {
 
   const pricingUnavailable = !pricingLoading && pricingError;
 
-  const handlePlanAction = async (planKey: "starter" | "pro" | "business") => {
+  const handlePlanAction = async (planKey: "starter" | "pro" | "elite") => {
     if (pricingUnavailable) return;
     if (planKey === currentPlan) return;
     track("billing_upgrade_clicked", { toTier: planKey, interval });
