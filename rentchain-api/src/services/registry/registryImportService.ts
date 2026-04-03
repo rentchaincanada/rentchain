@@ -13,10 +13,58 @@ import { HalifaxR400Adapter } from "./adapters/HalifaxR400Adapter";
 import type { RegistrySourceAdapter } from "./adapters/RegistrySourceAdapter";
 import { evaluateRegistryMatch, findRegistryCandidatesForRecord, reEvaluatePropertyAgainstRegistry } from "./registryMatchingService";
 import { getPropertyRegistryProjection, upsertPropertyRegistryProjection } from "./registryStatusProjectionService";
+import { getPropertyById } from "../firestorePropertiesService";
+
+class RegistryOverrideError extends Error {
+  code: string;
+  statusCode: number;
+
+  constructor(message: string, options: { code: string; statusCode: number }) {
+    super(message);
+    this.name = "RegistryOverrideError";
+    this.code = options.code;
+    this.statusCode = options.statusCode;
+  }
+}
 
 function getAdapter(sourceKey: RegistrySourceKey): RegistrySourceAdapter {
   if (sourceKey === "halifax_r400") return new HalifaxR400Adapter();
   throw new Error(`Unsupported registry source: ${sourceKey}`);
+}
+
+async function resolvePropertyForRegistryOverride(propertyIdInput: string) {
+  const propertyId = String(propertyIdInput || "").trim();
+  if (!propertyId) {
+    throw new RegistryOverrideError("propertyId is required to attach a registry record", {
+      code: "invalid_property_id",
+      statusCode: 400,
+    });
+  }
+
+  const directSnap = await db.collection("properties").doc(propertyId).get();
+  if (directSnap.exists) {
+    return { id: directSnap.id, ...(directSnap.data() || {}) } as any;
+  }
+
+  const canonical = await getPropertyById(propertyId).catch(() => null);
+  if (canonical) {
+    return { ...canonical, id: String((canonical as any).id || propertyId) } as any;
+  }
+
+  const [idFieldSnap, propertyIdFieldSnap] = await Promise.all([
+    db.collection("properties").where("id", "==", propertyId).limit(1).get(),
+    db.collection("properties").where("propertyId", "==", propertyId).limit(1).get(),
+  ]);
+
+  const fallbackDoc = idFieldSnap.docs?.[0] || propertyIdFieldSnap.docs?.[0] || null;
+  if (fallbackDoc?.exists) {
+    return { id: fallbackDoc.id, ...(fallbackDoc.data() || {}) } as any;
+  }
+
+  throw new RegistryOverrideError(`No property document was found for id "${propertyId}"`, {
+    code: "property_not_found",
+    statusCode: 404,
+  });
 }
 
 export async function ensureRegistrySource(sourceKey: RegistrySourceKey) {
@@ -284,7 +332,12 @@ export async function applyRegistryMatchOverride(input: {
   actorId: string;
 }) {
   const detail = await getRegistryRecordDetail(input.normalizedRecordId);
-  if (!detail) throw new Error("Registry record not found");
+  if (!detail) {
+    throw new RegistryOverrideError("Registry record not found", {
+      code: "registry_record_not_found",
+      statusCode: 404,
+    });
+  }
   const { source } = await ensureRegistrySource(detail.normalizedRecord.sourceKey);
   const matchId = makeStableId([detail.normalizedRecord.sourceKey, detail.normalizedRecord.registryRecordId]);
   const current = detail.match;
@@ -292,17 +345,16 @@ export async function applyRegistryMatchOverride(input: {
 
   let nextMatch: RegistryMatchRecord;
   if (input.action === "attach") {
-    if (!input.propertyId) throw new Error("propertyId is required to attach a registry record");
-    const propertySnap = await db.collection("properties").doc(input.propertyId).get();
-    if (!propertySnap.exists) throw new Error("Property not found");
-    const property = { id: propertySnap.id, ...(propertySnap.data() || {}) } as any;
+    const property = await resolvePropertyForRegistryOverride(String(input.propertyId || ""));
+    const resolvedLandlordId =
+      String(property.landlordId || property.ownerId || property.owner || "").trim() || null;
     nextMatch = {
       id: matchId,
       sourceKey: detail.normalizedRecord.sourceKey,
       registryRecordId: detail.normalizedRecord.registryRecordId,
       normalizedRecordId: detail.normalizedRecord.id,
       propertyId: property.id,
-      landlordId: String(property.landlordId || "").trim() || null,
+      landlordId: resolvedLandlordId,
       matchMethod: "manual",
       matchScore: 1,
       matchStatus: "matched",
@@ -356,6 +408,10 @@ export async function applyRegistryMatchOverride(input: {
     },
   });
   return nextMatch;
+}
+
+export function isRegistryOverrideError(error: unknown): error is RegistryOverrideError {
+  return error instanceof RegistryOverrideError;
 }
 
 export async function getPropertyRegistryReview(propertyId: string) {
