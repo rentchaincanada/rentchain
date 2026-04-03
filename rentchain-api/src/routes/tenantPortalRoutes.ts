@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from "crypto";
 import { Router } from "express";
 import { authenticateJwt } from "../middleware/authMiddleware";
 import { db, FieldValue } from "../config/firebase";
@@ -111,15 +112,29 @@ const SCREENING_AUDIT_EVENTS = [
   "consent_accepted",
   "screening_started",
   "provider_session_created",
+  "redirect_prepared",
   "retry_requested",
   "manual_review_selected",
+  "callback_received",
+  "callback_rejected",
+  "callback_duplicate_ignored",
+  "return_state_resolved",
   "screening_completed",
   "result_viewed",
+] as const;
+const SCREENING_RETURN_STATES = [
+  "completed",
+  "pending",
+  "action_needed",
+  "expired",
+  "unable_to_complete",
+  "callback_received_but_not_finalized",
 ] as const;
 type ScreeningProviderKey = "manual" | "equifax" | "transunion_redirect";
 type ScreeningRequestStatus = (typeof SCREENING_REQUEST_STATUSES)[number];
 type ScreeningResultStatus = (typeof SCREENING_RESULT_STATUSES)[number];
 type ScreeningSessionStatus = (typeof SCREENING_SESSION_STATUSES)[number];
+type ScreeningReturnState = (typeof SCREENING_RETURN_STATES)[number];
 
 type ScreeningRequestRecord = {
   id: string;
@@ -170,12 +185,20 @@ type ScreeningSessionRecord = {
   providerKey: ScreeningProviderKey;
   status: ScreeningSessionStatus;
   providerSessionStatus?: string | null;
+  providerSessionId?: string | null;
   handoffType: "manual" | "redirect";
   redirectUrl: string | null;
   returnUrl: string | null;
   expiresAt: number | null;
   correlationId: string | null;
   stateToken: string | null;
+  stateTokenHash?: string | null;
+  redirectStateId?: string | null;
+  redirectPreparedAt?: number | null;
+  redirectLastUpdatedAt?: number | null;
+  redirectPreparationStatus?: "not_applicable" | "prepared" | "blocked" | "expired" | "consumed";
+  returnState?: ScreeningReturnState | null;
+  returnStateResolvedAt?: number | null;
   isActive?: boolean;
   duplicateOfSessionId?: string | null;
   callbackReceivedAt?: number | null;
@@ -192,11 +215,41 @@ type ScreeningResultRecord = {
   status: ScreeningResultStatus;
   summary: string | null;
   normalizedDecision: string | null;
+  identityVerified?: boolean | null;
+  creditIncluded?: boolean | null;
+  incomeIncluded?: boolean | null;
+  fraudFlags?: string[];
+  providerStatusMapped?: string | null;
+  reportAvailability?: {
+    summaryAvailable: boolean;
+    fullReportAvailable: boolean;
+  } | null;
   reportAvailable: boolean;
   rawPayloadRef: string | null;
   fullReportStorageRef: string | null;
   createdAt: number;
   updatedAt: number;
+};
+
+type ScreeningRedirectStateRecord = {
+  id: string;
+  requestId: string;
+  sessionId: string;
+  providerKey: ScreeningProviderKey;
+  correlationId: string | null;
+  providerSessionId: string | null;
+  stateTokenHash: string;
+  stateTokenPreview: string | null;
+  returnUrl: string | null;
+  expiresAt: number | null;
+  preparedAt: number;
+  updatedAt: number;
+  callbackReceivedAt: number | null;
+  consumedAt: number | null;
+  callbackCount: number;
+  status: "prepared" | "callback_received" | "completed" | "expired" | "rejected" | "duplicate";
+  lastOutcome: string | null;
+  lastRejectedReason: string | null;
 };
 
 function isoFromMs(ms: number | null | undefined): string {
@@ -250,7 +303,81 @@ function normalizeScreeningSessionStatus(raw: any): ScreeningSessionStatus {
 }
 
 function makeScreeningCorrelationId(prefix: string): string {
-  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+  return `${prefix}_${randomBytes(12).toString("hex")}`;
+}
+
+function makeSecureOpaqueToken(size = 32): string {
+  return randomBytes(size).toString("base64url");
+}
+
+function hashOpaqueToken(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function makeStateTokenPreview(value: string | null | undefined): string | null {
+  const safe = String(value || "").trim();
+  if (!safe) return null;
+  if (safe.length <= 10) return safe;
+  return `${safe.slice(0, 6)}...${safe.slice(-4)}`;
+}
+
+function buildTenantScreeningReturnUrl(requestId: string): string | null {
+  const returnBase = String(process.env.PUBLIC_APP_URL || process.env.VITE_PUBLIC_APP_URL || "").replace(/\/$/, "");
+  if (!returnBase) return null;
+  return `${returnBase}/tenant/messages?screeningReturn=1&requestId=${encodeURIComponent(requestId)}`;
+}
+
+function mapSessionStatusToReturnState(status: ScreeningSessionStatus): ScreeningReturnState {
+  if (status === "completed") return "completed";
+  if (status === "expired") return "expired";
+  if (status === "failed" || status === "inconclusive") return "unable_to_complete";
+  if (status === "redirect_pending" || status === "created" || status === "consent_received" || status === "in_progress") {
+    return "pending";
+  }
+  if (status === "pending_review") return "action_needed";
+  return "pending";
+}
+
+function resolveReturnState(
+  request: ScreeningRequestRecord,
+  session: ScreeningSessionRecord | null,
+  result: ScreeningResultRecord | null
+): ScreeningReturnState {
+  const now = Date.now();
+  if (request.status === "completed" || result?.status === "completed" || session?.status === "completed") return "completed";
+  if (session?.expiresAt && session.expiresAt <= now && !result) return "expired";
+  if (session?.callbackReceivedAt && request.status === "in_progress" && result?.status === "pending") {
+    return "callback_received_but_not_finalized";
+  }
+  if (request.status === "failed" || result?.status === "failed" || session?.status === "failed") return "unable_to_complete";
+  if (request.status === "manual_review_required" || result?.status === "manual_review_required") return "action_needed";
+  if (request.status === "consent_pending" || request.status === "consented") return "action_needed";
+  return session ? mapSessionStatusToReturnState(session.status) : "pending";
+}
+
+function sanitizeAuditMetadata(metadata: Record<string, unknown> | undefined): Record<string, unknown> {
+  if (!metadata) return {};
+  const sanitized: Record<string, unknown> = {};
+  Object.entries(metadata).forEach(([key, value]) => {
+    if (["stateToken", "state_token", "rawPayload", "payload", "providerPayload"].includes(key)) return;
+    sanitized[key] = value;
+  });
+  return sanitized;
+}
+
+function summarizeCallbackPayload(payload: any) {
+  const providerSessionId = cleanString(
+    payload?.providerSessionId || payload?.provider_session_id || payload?.sessionId,
+    160
+  );
+  const correlationId = cleanString(payload?.correlationId || payload?.correlation_id, 160);
+  const providerStatus = cleanString(payload?.status || payload?.providerStatus || payload?.decision, 160);
+  return {
+    providerSessionId,
+    correlationId,
+    providerStatus,
+    hasState: Boolean(cleanString(payload?.stateToken || payload?.state, 200)),
+  };
 }
 
 function makeDeterministicDocId(parts: Array<string | null | undefined>): string {
@@ -322,7 +449,7 @@ async function writeScreeningAuditEvent(input: {
       tenantId: input.tenantId || null,
       landlordId: input.landlordId || null,
       sessionId: input.sessionId || null,
-      ...(input.metadata || {}),
+      ...sanitizeAuditMetadata(input.metadata),
     },
     createdAt,
     updatedAt: createdAt,
@@ -423,12 +550,31 @@ async function getLatestSession(requestId: string): Promise<ScreeningSessionReco
     providerKey: ((cleanString(item.providerKey, 80) || "manual") as ScreeningProviderKey),
     status: normalizeScreeningSessionStatus(item.status),
     providerSessionStatus: cleanString(item.providerSessionStatus, 120),
+    providerSessionId: cleanString(item.providerSessionId, 160),
     handoffType: item.handoffType === "redirect" ? "redirect" : "manual",
     redirectUrl: cleanString(item.redirectUrl, 500),
     returnUrl: cleanString(item.returnUrl, 500),
     expiresAt: Number(item.expiresAt || 0) || null,
     correlationId: cleanString(item.correlationId, 120),
     stateToken: cleanString(item.stateToken, 120),
+    stateTokenHash: cleanString(item.stateTokenHash, 120),
+    redirectStateId: cleanString(item.redirectStateId, 160),
+    redirectPreparedAt: Number(item.redirectPreparedAt || 0) || null,
+    redirectLastUpdatedAt: Number(item.redirectLastUpdatedAt || 0) || null,
+    redirectPreparationStatus:
+      item.redirectPreparationStatus === "prepared" ||
+      item.redirectPreparationStatus === "blocked" ||
+      item.redirectPreparationStatus === "expired" ||
+      item.redirectPreparationStatus === "consumed"
+        ? item.redirectPreparationStatus
+        : item.handoffType === "redirect"
+        ? "prepared"
+        : "not_applicable",
+    returnState:
+      (SCREENING_RETURN_STATES as readonly string[]).includes(String(item.returnState || ""))
+        ? (item.returnState as ScreeningReturnState)
+        : null,
+    returnStateResolvedAt: Number(item.returnStateResolvedAt || 0) || null,
     isActive: item.isActive !== false,
     duplicateOfSessionId: cleanString(item.duplicateOfSessionId, 160),
     callbackReceivedAt: Number(item.callbackReceivedAt || 0) || null,
@@ -448,12 +594,31 @@ async function getScreeningSessionById(sessionId: string): Promise<ScreeningSess
     providerKey: ((cleanString(item.providerKey, 80) || "manual") as ScreeningProviderKey),
     status: normalizeScreeningSessionStatus(item.status),
     providerSessionStatus: cleanString(item.providerSessionStatus, 120),
+    providerSessionId: cleanString(item.providerSessionId, 160),
     handoffType: item.handoffType === "redirect" ? "redirect" : "manual",
     redirectUrl: cleanString(item.redirectUrl, 500),
     returnUrl: cleanString(item.returnUrl, 500),
     expiresAt: Number(item.expiresAt || 0) || null,
     correlationId: cleanString(item.correlationId, 120),
     stateToken: cleanString(item.stateToken, 120),
+    stateTokenHash: cleanString(item.stateTokenHash, 120),
+    redirectStateId: cleanString(item.redirectStateId, 160),
+    redirectPreparedAt: Number(item.redirectPreparedAt || 0) || null,
+    redirectLastUpdatedAt: Number(item.redirectLastUpdatedAt || 0) || null,
+    redirectPreparationStatus:
+      item.redirectPreparationStatus === "prepared" ||
+      item.redirectPreparationStatus === "blocked" ||
+      item.redirectPreparationStatus === "expired" ||
+      item.redirectPreparationStatus === "consumed"
+        ? item.redirectPreparationStatus
+        : item.handoffType === "redirect"
+        ? "prepared"
+        : "not_applicable",
+    returnState:
+      (SCREENING_RETURN_STATES as readonly string[]).includes(String(item.returnState || ""))
+        ? (item.returnState as ScreeningReturnState)
+        : null,
+    returnStateResolvedAt: Number(item.returnStateResolvedAt || 0) || null,
     isActive: item.isActive !== false,
     duplicateOfSessionId: cleanString(item.duplicateOfSessionId, 160),
     callbackReceivedAt: Number(item.callbackReceivedAt || 0) || null,
@@ -464,19 +629,9 @@ async function getScreeningSessionById(sessionId: string): Promise<ScreeningSess
 }
 
 async function findScreeningSessionByStateToken(stateToken: string): Promise<ScreeningSessionRecord | null> {
-  const safeStateToken = cleanString(stateToken, 160);
-  if (!safeStateToken) return null;
-  const snap = await db
-    .collection("screening_sessions")
-    .where("stateToken", "==", safeStateToken)
-    .limit(5)
-    .get();
-  const items = snap.docs
-    .map((doc) => ({ id: doc.id, ...(doc.data() as any) }))
-    .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
-  const item = items[0];
-  if (!item) return null;
-  return getScreeningSessionById(String(item.id));
+  const redirectState = await getRedirectStateByToken(stateToken);
+  if (!redirectState?.sessionId) return null;
+  return getScreeningSessionById(redirectState.sessionId);
 }
 
 async function getActiveScreeningSession(request: ScreeningRequestRecord): Promise<ScreeningSessionRecord | null> {
@@ -508,12 +663,63 @@ async function getLatestResult(requestId: string): Promise<ScreeningResultRecord
     status: normalizeScreeningResultStatus(item.status),
     summary: cleanString(item.summary, 500),
     normalizedDecision: cleanString(item.normalizedDecision, 120),
+    identityVerified: typeof item.identityVerified === "boolean" ? item.identityVerified : null,
+    creditIncluded: typeof item.creditIncluded === "boolean" ? item.creditIncluded : null,
+    incomeIncluded: typeof item.incomeIncluded === "boolean" ? item.incomeIncluded : null,
+    fraudFlags: normalizeStringList(item.fraudFlags, 12, 80),
+    providerStatusMapped: cleanString(item.providerStatusMapped, 160),
+    reportAvailability: item.reportAvailability
+      ? {
+          summaryAvailable: Boolean(item.reportAvailability.summaryAvailable),
+          fullReportAvailable: Boolean(item.reportAvailability.fullReportAvailable),
+        }
+      : null,
     reportAvailable: Boolean(item.reportAvailable),
     rawPayloadRef: cleanString(item.rawPayloadRef, 240),
     fullReportStorageRef: cleanString(item.fullReportStorageRef, 240),
     createdAt: Number(item.createdAt || 0) || Date.now(),
     updatedAt: Number(item.updatedAt || 0) || Date.now(),
   };
+}
+
+async function getRedirectStateById(redirectStateId: string): Promise<ScreeningRedirectStateRecord | null> {
+  const snap = await db.collection("screening_redirect_states").doc(redirectStateId).get();
+  if (!snap.exists) return null;
+  const item = (snap.data() as any) || {};
+  return {
+    id: snap.id,
+    requestId: cleanString(item.requestId, 160) || "",
+    sessionId: cleanString(item.sessionId, 160) || "",
+    providerKey: ((cleanString(item.providerKey, 80) || "manual") as ScreeningProviderKey),
+    correlationId: cleanString(item.correlationId, 160),
+    providerSessionId: cleanString(item.providerSessionId, 160),
+    stateTokenHash: cleanString(item.stateTokenHash, 120) || "",
+    stateTokenPreview: cleanString(item.stateTokenPreview, 32),
+    returnUrl: cleanString(item.returnUrl, 500),
+    expiresAt: Number(item.expiresAt || 0) || null,
+    preparedAt: Number(item.preparedAt || 0) || 0,
+    updatedAt: Number(item.updatedAt || 0) || 0,
+    callbackReceivedAt: Number(item.callbackReceivedAt || 0) || null,
+    consumedAt: Number(item.consumedAt || 0) || null,
+    callbackCount: Number(item.callbackCount || 0) || 0,
+    status:
+      item.status === "callback_received" ||
+      item.status === "completed" ||
+      item.status === "expired" ||
+      item.status === "rejected" ||
+      item.status === "duplicate"
+        ? item.status
+        : "prepared",
+    lastOutcome: cleanString(item.lastOutcome, 160),
+    lastRejectedReason: cleanString(item.lastRejectedReason, 160),
+  };
+}
+
+async function getRedirectStateByToken(stateToken: string): Promise<ScreeningRedirectStateRecord | null> {
+  const safeStateToken = cleanString(stateToken, 200);
+  if (!safeStateToken) return null;
+  const redirectStateId = makeDeterministicDocId(["redirect_state", hashOpaqueToken(safeStateToken)]);
+  return getRedirectStateById(redirectStateId);
 }
 
 async function getScreeningAuditTrail(requestId: string, limit = 25) {
@@ -633,6 +839,36 @@ type ScreeningCallbackContext = {
   payload: any;
 };
 
+type NormalizedScreeningResultContract = {
+  status: ScreeningResultStatus;
+  summary: string;
+  normalizedDecision: string | null;
+  identityVerified: boolean | null;
+  creditIncluded: boolean | null;
+  incomeIncluded: boolean | null;
+  fraudFlags: string[];
+  providerStatusMapped: string | null;
+  reportAvailability: {
+    summaryAvailable: boolean;
+    fullReportAvailable: boolean;
+  };
+  reportAvailable: boolean;
+};
+
+type RedirectPreparationResult = {
+  redirectUrl: string | null;
+  returnUrl: string | null;
+  expiresAt: number | null;
+  providerSessionId: string | null;
+  correlationId: string;
+  stateToken: string;
+  stateTokenHash: string;
+  redirectStateId: string;
+  redirectPreparedAt: number;
+  redirectPreparationStatus: "prepared";
+  returnState: ScreeningReturnState;
+};
+
 type ScreeningProviderAdapter = {
   createSession: (ctx: ScreeningAdapterContext) => Promise<ScreeningAdapterResult>;
   handleCallback: (ctx: ScreeningCallbackContext) => Promise<{
@@ -641,13 +877,34 @@ type ScreeningProviderAdapter = {
     resultStatus: ScreeningResultStatus;
     summary: string;
   }>;
-  normalizeResult: (payload: any) => {
-    status: ScreeningResultStatus;
-    summary: string;
-    normalizedDecision: string | null;
-    reportAvailable: boolean;
-  };
+  normalizeResult: (payload: any) => NormalizedScreeningResultContract;
 };
+
+async function prepareRedirectSession(input: {
+  request: ScreeningRequestRecord;
+  providerKey: ScreeningProviderKey;
+  requestedSessionId: string;
+  existingCorrelationId?: string | null;
+  existingProviderSessionId?: string | null;
+}): Promise<RedirectPreparationResult> {
+  const now = Date.now();
+  const stateToken = makeSecureOpaqueToken();
+  const stateTokenHash = hashOpaqueToken(stateToken);
+  const redirectStateId = makeDeterministicDocId(["redirect_state", stateTokenHash]);
+  return {
+    redirectUrl: null,
+    returnUrl: buildTenantScreeningReturnUrl(input.request.id),
+    expiresAt: now + 1000 * 60 * 30,
+    providerSessionId: input.existingProviderSessionId || null,
+    correlationId: input.existingCorrelationId || makeScreeningCorrelationId(`${input.providerKey}_corr`),
+    stateToken,
+    stateTokenHash,
+    redirectStateId,
+    redirectPreparedAt: now,
+    redirectPreparationStatus: "prepared",
+    returnState: "pending",
+  };
+}
 
 const screeningAdapters: Record<ScreeningProviderKey, ScreeningProviderAdapter> = {
   manual: {
@@ -702,31 +959,52 @@ const screeningAdapters: Record<ScreeningProviderKey, ScreeningProviderAdapter> 
         status: "manual_review_required",
         summary: "Manual review required while external screening providers are unavailable.",
         normalizedDecision: "manual_review_required",
+        identityVerified: null,
+        creditIncluded: false,
+        incomeIncluded: false,
+        fraudFlags: [],
+        providerStatusMapped: "manual_review_required",
+        reportAvailability: {
+          summaryAvailable: true,
+          fullReportAvailable: false,
+        },
         reportAvailable: false,
       };
     },
   },
   equifax: {
     async createSession(ctx) {
-      const now = Date.now();
+      const redirect = await prepareRedirectSession({
+        request: ctx.request,
+        providerKey: "equifax",
+        requestedSessionId: makeScreeningCorrelationId("eqx_session"),
+      });
       return {
         session: {
           requestId: ctx.request.id,
           providerKey: "equifax",
-          status: "created",
+          status: "redirect_pending",
           providerSessionStatus: "stub_not_enabled",
+          providerSessionId: redirect.providerSessionId,
           handoffType: "redirect",
-          redirectUrl: null,
-          returnUrl: null,
-          expiresAt: now + 1000 * 60 * 30,
-          correlationId: makeScreeningCorrelationId("eqx"),
-          stateToken: makeScreeningCorrelationId("eqx_state"),
+          redirectUrl: redirect.redirectUrl,
+          returnUrl: redirect.returnUrl,
+          expiresAt: redirect.expiresAt,
+          correlationId: redirect.correlationId,
+          stateToken: redirect.stateToken,
+          stateTokenHash: redirect.stateTokenHash,
+          redirectStateId: redirect.redirectStateId,
+          redirectPreparedAt: redirect.redirectPreparedAt,
+          redirectLastUpdatedAt: redirect.redirectPreparedAt,
+          redirectPreparationStatus: redirect.redirectPreparationStatus,
+          returnState: redirect.returnState,
+          returnStateResolvedAt: redirect.redirectPreparedAt,
           isActive: true,
           duplicateOfSessionId: null,
           callbackReceivedAt: null,
           normalizedResultStatus: "pending",
-          createdAt: now,
-          updatedAt: now,
+          createdAt: redirect.redirectPreparedAt,
+          updatedAt: redirect.redirectPreparedAt,
         },
         result: null,
         requestStatus: "in_progress",
@@ -741,37 +1019,57 @@ const screeningAdapters: Record<ScreeningProviderKey, ScreeningProviderAdapter> 
         summary: "Equifax redirect scaffold is not enabled in this environment.",
       };
     },
-    normalizeResult() {
+    normalizeResult(payload: any) {
       return {
         status: "pending",
         summary: "Equifax redirect scaffold is not enabled in this environment.",
         normalizedDecision: null,
+        identityVerified: null,
+        creditIncluded: false,
+        incomeIncluded: false,
+        fraudFlags: [],
+        providerStatusMapped: "stub_not_enabled",
+        reportAvailability: {
+          summaryAvailable: false,
+          fullReportAvailable: false,
+        },
         reportAvailable: false,
       };
     },
   },
   transunion_redirect: {
     async createSession(ctx) {
-      const now = Date.now();
-      const returnBase = String(process.env.PUBLIC_APP_URL || process.env.VITE_PUBLIC_APP_URL || "").replace(/\/$/, "");
+      const redirect = await prepareRedirectSession({
+        request: ctx.request,
+        providerKey: "transunion_redirect",
+        requestedSessionId: makeScreeningCorrelationId("tu_session"),
+      });
       return {
         session: {
           requestId: ctx.request.id,
           providerKey: "transunion_redirect",
           status: "redirect_pending",
           providerSessionStatus: "stub_not_enabled",
+          providerSessionId: redirect.providerSessionId,
           handoffType: "redirect",
-          redirectUrl: null,
-          returnUrl: returnBase ? `${returnBase}/tenant/messages` : null,
-          expiresAt: now + 1000 * 60 * 30,
-          correlationId: makeScreeningCorrelationId("tu"),
-          stateToken: makeScreeningCorrelationId("tu_state"),
+          redirectUrl: redirect.redirectUrl,
+          returnUrl: redirect.returnUrl,
+          expiresAt: redirect.expiresAt,
+          correlationId: redirect.correlationId,
+          stateToken: redirect.stateToken,
+          stateTokenHash: redirect.stateTokenHash,
+          redirectStateId: redirect.redirectStateId,
+          redirectPreparedAt: redirect.redirectPreparedAt,
+          redirectLastUpdatedAt: redirect.redirectPreparedAt,
+          redirectPreparationStatus: redirect.redirectPreparationStatus,
+          returnState: redirect.returnState,
+          returnStateResolvedAt: redirect.redirectPreparedAt,
           isActive: true,
           duplicateOfSessionId: null,
           callbackReceivedAt: null,
           normalizedResultStatus: "pending",
-          createdAt: now,
-          updatedAt: now,
+          createdAt: redirect.redirectPreparedAt,
+          updatedAt: redirect.redirectPreparedAt,
         },
         result: null,
         requestStatus: "in_progress",
@@ -786,11 +1084,22 @@ const screeningAdapters: Record<ScreeningProviderKey, ScreeningProviderAdapter> 
         summary: "TransUnion redirect scaffold is registered but live callbacks are disabled.",
       };
     },
-    normalizeResult() {
+    normalizeResult(payload: any) {
+      const providerStatusMapped =
+        cleanString(payload?.providerStatus || payload?.status || payload?.decision, 160) || "callback_received_stub";
       return {
         status: "pending",
         summary: "TransUnion redirect scaffold is registered but live callbacks are disabled.",
         normalizedDecision: null,
+        identityVerified: null,
+        creditIncluded: false,
+        incomeIncluded: false,
+        fraudFlags: normalizeStringList(payload?.fraudFlags, 12, 80),
+        providerStatusMapped,
+        reportAvailability: {
+          summaryAvailable: false,
+          fullReportAvailable: false,
+        },
         reportAvailable: false,
       };
     },
@@ -805,6 +1114,7 @@ function shapeScreeningResponse(input: {
   auditTrail?: any[];
 }) {
   const { request, consent, session, result } = input;
+  const returnState = resolveReturnState(request, session, result);
   return {
     id: request.id,
     rentalApplicationId: request.rentalApplicationId,
@@ -835,10 +1145,26 @@ function shapeScreeningResponse(input: {
           id: session.id,
           providerKey: session.providerKey,
           status: session.status,
+          providerSessionStatus: session.providerSessionStatus || null,
           handoffType: session.handoffType,
           redirectUrl: session.redirectUrl,
           returnUrl: session.returnUrl,
           expiresAt: session.expiresAt,
+          redirect: {
+            eligible: session.handoffType === "redirect" && session.isActive !== false,
+            prepared: Boolean(session.redirectPreparedAt),
+            preparedAt: session.redirectPreparedAt || null,
+            lastUpdatedAt: session.redirectLastUpdatedAt || session.updatedAt || null,
+            status: session.redirectPreparationStatus || (session.handoffType === "redirect" ? "prepared" : "not_applicable"),
+            activationEnabled:
+              session.providerKey === "transunion_redirect"
+                ? getScreeningConfig().providers.transunion_redirect
+                : session.providerKey === "equifax"
+                ? getScreeningConfig().providers.equifax
+                : false,
+          },
+          returnState: session.returnState || returnState,
+          callbackReceivedAt: session.callbackReceivedAt || null,
         }
       : null,
     result: result
@@ -847,9 +1173,24 @@ function shapeScreeningResponse(input: {
           status: result.status,
           summary: result.summary,
           normalizedDecision: result.normalizedDecision,
+          identityVerified: result.identityVerified ?? null,
+          creditIncluded: result.creditIncluded ?? null,
+          incomeIncluded: result.incomeIncluded ?? null,
+          fraudFlags: result.fraudFlags || [],
+          providerStatusMapped: result.providerStatusMapped || null,
+          reportAvailability: result.reportAvailability || {
+            summaryAvailable: Boolean(result.summary),
+            fullReportAvailable: Boolean(result.fullReportStorageRef),
+          },
           reportAvailable: result.reportAvailable,
         }
       : null,
+    returnFlow: {
+      state: returnState,
+      callbackReceivedAt: session?.callbackReceivedAt || null,
+      resolvedAt: session?.returnStateResolvedAt || result?.updatedAt || request.updatedAt || null,
+      isFinalized: ["completed", "expired", "unable_to_complete"].includes(returnState),
+    },
     summary: {
       status: request.status,
       provider: session?.providerKey || request.providerSelection || "pending",
@@ -857,6 +1198,7 @@ function shapeScreeningResponse(input: {
       package: request.packageType,
       summaryResult: screeningSummaryText(request, session, result),
       nextActions: request.nextAction ? [request.nextAction] : [],
+      returnState,
     },
     auditTrail: Array.isArray(input.auditTrail)
       ? input.auditTrail.map((item) => ({
@@ -941,13 +1283,39 @@ async function createScreeningSessionSafely(input: {
       config,
     });
     const now = Date.now();
+    const rawStateToken = started.session.stateToken;
     const sessionRecord: ScreeningSessionRecord = {
       id: sessionRef.id,
       ...started.session,
+      stateToken: null,
       isActive: true,
       updatedAt: now,
     };
     tx.set(sessionRef, sessionRecord);
+
+    if (sessionRecord.handoffType === "redirect" && sessionRecord.redirectStateId && rawStateToken && sessionRecord.stateTokenHash) {
+      const redirectStateRecord: ScreeningRedirectStateRecord = {
+        id: sessionRecord.redirectStateId,
+        requestId: request.id,
+        sessionId: sessionRef.id,
+        providerKey,
+        correlationId: sessionRecord.correlationId || null,
+        providerSessionId: sessionRecord.providerSessionId || null,
+        stateTokenHash: sessionRecord.stateTokenHash,
+        stateTokenPreview: makeStateTokenPreview(rawStateToken),
+        returnUrl: sessionRecord.returnUrl,
+        expiresAt: sessionRecord.expiresAt,
+        preparedAt: sessionRecord.redirectPreparedAt || now,
+        updatedAt: now,
+        callbackReceivedAt: null,
+        consumedAt: null,
+        callbackCount: 0,
+        status: "prepared",
+        lastOutcome: "redirect_prepared",
+        lastRejectedReason: null,
+      };
+      tx.set(db.collection("screening_redirect_states").doc(sessionRecord.redirectStateId), redirectStateRecord);
+    }
 
     let resultRecord: ScreeningResultRecord | null = null;
     if (started.result) {
@@ -1024,6 +1392,18 @@ async function prepareScreeningRetrySafely(input: {
 
     const now = Date.now();
     if (request.activeSessionId) {
+      if (activeSession?.redirectStateId) {
+        tx.set(
+          db.collection("screening_redirect_states").doc(activeSession.redirectStateId),
+          {
+            status: "rejected",
+            updatedAt: now,
+            lastOutcome: "retry_superseded",
+            lastRejectedReason: "SESSION_RETIRED_ON_RETRY",
+          },
+          { merge: true }
+        );
+      }
       tx.set(
         db.collection("screening_sessions").doc(request.activeSessionId),
         {
@@ -1978,9 +2358,41 @@ router.post("/screening/:requestId/start", requireTenant, async (req: any, res) 
         providerKey: started.session.providerKey,
         handoffType: started.session.handoffType,
         correlationId: started.session.correlationId,
-        stateToken: started.session.stateToken,
+        providerSessionId: started.session.providerSessionId || null,
       },
     });
+    if (started.session.handoffType === "redirect") {
+      await writeScreeningAuditEvent({
+        requestId,
+        eventType: "redirect_prepared",
+        actorRole: "system",
+        actorId: null,
+        tenantId,
+        landlordId: started.request.landlordId,
+        sessionId: started.session.id,
+        idempotencyKey: `redirect_prepared_${started.session.id}`,
+        metadata: {
+          providerKey: started.session.providerKey,
+          redirectPreparedAt: started.session.redirectPreparedAt || started.session.createdAt,
+          expiresAt: started.session.expiresAt,
+          returnState: started.session.returnState || "pending",
+        },
+      });
+      await writeScreeningAuditEvent({
+        requestId,
+        eventType: "return_state_resolved",
+        actorRole: "system",
+        actorId: null,
+        tenantId,
+        landlordId: started.request.landlordId,
+        sessionId: started.session.id,
+        idempotencyKey: `return_state_${started.session.id}_${started.session.returnState || "pending"}`,
+        metadata: {
+          providerKey: started.session.providerKey,
+          returnState: started.session.returnState || "pending",
+        },
+      });
+    }
     if (started.session.providerKey === "manual") {
       await writeScreeningAuditEvent({
         requestId,
@@ -2110,7 +2522,11 @@ router.post("/screening/provider/transunion/callback", async (req: any, res) => 
       return res.status(400).json({ ok: false, error: "STATE_TOKEN_REQUIRED" });
     }
 
-    const session = await findScreeningSessionByStateToken(stateToken);
+    const redirectState = await getRedirectStateByToken(stateToken);
+    if (!redirectState || redirectState.providerKey !== "transunion_redirect") {
+      return res.status(404).json({ ok: false, error: "SESSION_NOT_FOUND" });
+    }
+    const session = await getScreeningSessionById(redirectState.sessionId);
     if (!session || session.providerKey !== "transunion_redirect") {
       return res.status(404).json({ ok: false, error: "SESSION_NOT_FOUND" });
     }
@@ -2119,8 +2535,117 @@ router.post("/screening/provider/transunion/callback", async (req: any, res) => 
       return res.status(404).json({ ok: false, error: "REQUEST_NOT_FOUND" });
     }
 
-    const duplicateCallback = Boolean(session.callbackReceivedAt);
+    const callbackSummary = summarizeCallbackPayload(req.body || {});
+    const now = Date.now();
+    const expired = Boolean(redirectState.expiresAt && redirectState.expiresAt <= now);
+    const correlationMismatch =
+      Boolean(callbackSummary.correlationId && session.correlationId && callbackSummary.correlationId !== session.correlationId);
+    const providerSessionMismatch =
+      Boolean(callbackSummary.providerSessionId && session.providerSessionId && callbackSummary.providerSessionId !== session.providerSessionId);
+    const sessionMismatch =
+      request.activeSessionId !== session.id ||
+      session.redirectStateId !== redirectState.id ||
+      redirectState.stateTokenHash !== hashOpaqueToken(stateToken);
+    const duplicateCallback = Boolean(redirectState.consumedAt || session.callbackReceivedAt);
+    const finalizedSession = isTerminalScreeningRequestStatus(request.status) || isTerminalScreeningSessionStatus(session.status);
+
+    if (expired || correlationMismatch || providerSessionMismatch || sessionMismatch || (finalizedSession && !duplicateCallback)) {
+      const rejectionReason = expired
+        ? "STATE_TOKEN_EXPIRED"
+        : correlationMismatch
+        ? "CORRELATION_MISMATCH"
+        : providerSessionMismatch
+        ? "PROVIDER_SESSION_MISMATCH"
+        : sessionMismatch
+        ? "SESSION_MISMATCH"
+        : "SESSION_ALREADY_FINALIZED";
+
+      await db.runTransaction(async (tx) => {
+        tx.set(
+          db.collection("screening_redirect_states").doc(redirectState.id),
+          {
+            status: expired ? "expired" : "rejected",
+            updatedAt: now,
+            callbackCount: Number(redirectState.callbackCount || 0) + 1,
+            lastOutcome: "callback_rejected",
+            lastRejectedReason: rejectionReason,
+          },
+          { merge: true }
+        );
+        if (expired && !isTerminalScreeningSessionStatus(session.status)) {
+          tx.set(
+            db.collection("screening_sessions").doc(session.id),
+            {
+              status: "expired",
+              updatedAt: now,
+              redirectLastUpdatedAt: now,
+              redirectPreparationStatus: "expired",
+              returnState: "expired",
+              returnStateResolvedAt: now,
+              normalizedResultStatus: "failed",
+            },
+            { merge: true }
+          );
+          tx.set(
+            db.collection("screening_requests").doc(request.id),
+            {
+              status: request.status === "completed" ? request.status : "failed",
+              normalizedResultStatus: request.status === "completed" ? request.normalizedResultStatus : "failed",
+              failedAt: request.failedAt || now,
+              nextAction: request.status === "completed" ? request.nextAction || null : "retry_available",
+              updatedAt: now,
+              latestAuditEventType: "callback_rejected",
+            },
+            { merge: true }
+          );
+        }
+      });
+
+      await writeScreeningAuditEvent({
+        requestId: request.id,
+        eventType: "callback_rejected",
+        actorRole: "system",
+        actorId: null,
+        tenantId: request.applicantTenantId,
+        landlordId: request.landlordId,
+        sessionId: session.id,
+        idempotencyKey: `tu_callback_rejected_${session.id}_${redirectState.callbackCount}_${rejectionReason}`,
+        metadata: {
+          providerKey: "transunion_redirect",
+          rejectionReason,
+          callback: callbackSummary,
+        },
+      });
+
+      const status =
+        rejectionReason === "STATE_TOKEN_EXPIRED" ? 410 : rejectionReason === "SESSION_ALREADY_FINALIZED" ? 409 : 400;
+      return res.status(status).json({ ok: false, error: rejectionReason });
+    }
+
     if (duplicateCallback) {
+      await db.collection("screening_redirect_states").doc(redirectState.id).set(
+        {
+          status: "duplicate",
+          updatedAt: now,
+          callbackCount: Number(redirectState.callbackCount || 0) + 1,
+          lastOutcome: "callback_duplicate_ignored",
+        },
+        { merge: true }
+      );
+      await writeScreeningAuditEvent({
+        requestId: request.id,
+        eventType: "callback_duplicate_ignored",
+        actorRole: "system",
+        actorId: null,
+        tenantId: request.applicantTenantId,
+        landlordId: request.landlordId,
+        sessionId: session.id,
+        idempotencyKey: `tu_callback_duplicate_${session.id}_${redirectState.callbackCount}`,
+        metadata: {
+          providerKey: "transunion_redirect",
+          callback: callbackSummary,
+        },
+      });
       return res.json({
         ok: true,
         duplicate: true,
@@ -2140,24 +2665,64 @@ router.post("/screening/provider/transunion/callback", async (req: any, res) => 
       payload: req.body || {},
     });
     const normalized = screeningAdapters.transunion_redirect.normalizeResult(req.body || {});
-    const now = Date.now();
     const resultRef = db.collection("screening_results").doc(
       makeDeterministicDocId([request.id, session.id, "tu_callback_result"])
     );
 
     await db.runTransaction(async (tx) => {
-      const sessionDoc = await tx.get(db.collection("screening_sessions").doc(session.id));
-      const current = (sessionDoc.data() as any) || {};
-      if (current.callbackReceivedAt) return;
+      const [requestSnap, sessionSnap, redirectSnap] = await Promise.all([
+        tx.get(db.collection("screening_requests").doc(request.id)),
+        tx.get(db.collection("screening_sessions").doc(session.id)),
+        tx.get(db.collection("screening_redirect_states").doc(redirectState.id)),
+      ]);
+      const currentRequest = (requestSnap.data() as any) || {};
+      const currentSession = (sessionSnap.data() as any) || {};
+      const currentRedirect = (redirectSnap.data() as any) || {};
+      if (currentSession.callbackReceivedAt || currentRedirect.consumedAt) return;
+      if (String(currentRequest.activeSessionId || "") !== session.id) {
+        throw new Error("SESSION_MISMATCH");
+      }
+      if (isTerminalScreeningRequestStatus(normalizeScreeningRequestStatus(currentRequest.status))) {
+        throw new Error("SESSION_ALREADY_FINALIZED");
+      }
 
+      const requestStatus = callbackResult.requestStatus;
+      const sessionStatus = callbackResult.sessionStatus;
+      const callbackReceivedAt = now;
+      const returnState =
+        requestStatus === "completed"
+          ? "completed"
+          : requestStatus === "failed"
+          ? "unable_to_complete"
+          : "callback_received_but_not_finalized";
+
+      tx.set(
+        db.collection("screening_redirect_states").doc(redirectState.id),
+        {
+          providerSessionId: session.providerSessionId || callbackSummary.providerSessionId || null,
+          callbackReceivedAt,
+          consumedAt: callbackReceivedAt,
+          updatedAt: callbackReceivedAt,
+          callbackCount: Number(currentRedirect.callbackCount || 0) + 1,
+          status: requestStatus === "completed" ? "completed" : "callback_received",
+          lastOutcome: "callback_received",
+          lastRejectedReason: null,
+        },
+        { merge: true }
+      );
       tx.set(
         db.collection("screening_sessions").doc(session.id),
         {
-          status: callbackResult.sessionStatus,
-          providerSessionStatus: "callback_received_stub",
-          callbackReceivedAt: now,
-          updatedAt: now,
+          status: sessionStatus,
+          providerSessionStatus: normalized.providerStatusMapped || "callback_received_stub",
+          providerSessionId: session.providerSessionId || callbackSummary.providerSessionId || null,
+          callbackReceivedAt,
+          updatedAt: callbackReceivedAt,
+          redirectLastUpdatedAt: callbackReceivedAt,
+          redirectPreparationStatus: "consumed",
           normalizedResultStatus: callbackResult.resultStatus,
+          returnState,
+          returnStateResolvedAt: callbackReceivedAt,
         },
         { merge: true }
       );
@@ -2171,6 +2736,12 @@ router.post("/screening/provider/transunion/callback", async (req: any, res) => 
           status: normalized.status,
           summary: normalized.summary,
           normalizedDecision: normalized.normalizedDecision,
+          identityVerified: normalized.identityVerified,
+          creditIncluded: normalized.creditIncluded,
+          incomeIncluded: normalized.incomeIncluded,
+          fraudFlags: normalized.fraudFlags,
+          providerStatusMapped: normalized.providerStatusMapped,
+          reportAvailability: normalized.reportAvailability,
           reportAvailable: normalized.reportAvailable,
           rawPayloadRef: "transunion://callback/stub",
           fullReportStorageRef: null,
@@ -2182,49 +2753,102 @@ router.post("/screening/provider/transunion/callback", async (req: any, res) => 
       tx.set(
         db.collection("screening_requests").doc(request.id),
         {
-          status: callbackResult.requestStatus,
+          status: requestStatus,
           normalizedResultStatus: callbackResult.resultStatus,
           latestResultId: resultRef.id,
+          nextAction: requestStatus === "completed" ? "view_result" : "await_internal_finalization",
           updatedAt: now,
-          completedAt: callbackResult.requestStatus === "completed" ? now : request.completedAt || null,
-          failedAt: callbackResult.requestStatus === "failed" ? now : request.failedAt || null,
-          latestAuditEventType: "screening_completed",
+          completedAt: requestStatus === "completed" ? now : currentRequest.completedAt || null,
+          failedAt: requestStatus === "failed" ? now : currentRequest.failedAt || null,
+          latestAuditEventType: requestStatus === "completed" ? "screening_completed" : "callback_received",
         },
         { merge: true }
       );
     });
 
+    const [refreshedRequest, refreshedSession, refreshedResult] = await Promise.all([
+      getScreeningRequestById(request.id),
+      getScreeningSessionById(session.id),
+      getLatestResult(request.id),
+    ]);
+    const resolvedReturnState = resolveReturnState(
+      refreshedRequest || request,
+      refreshedSession || session,
+      refreshedResult
+    );
+
     await writeScreeningAuditEvent({
       requestId: request.id,
-      eventType: "screening_completed",
+      eventType: "callback_received",
       actorRole: "system",
       actorId: null,
       tenantId: request.applicantTenantId,
       landlordId: request.landlordId,
       sessionId: session.id,
-      idempotencyKey: `tu_callback_${session.id}_${stateToken}`,
+      idempotencyKey: `tu_callback_received_${session.id}_${redirectState.id}`,
       metadata: {
         providerKey: "transunion_redirect",
         resultStatus: normalized.status,
         callbackMode: "disabled_scaffold",
+        callback: callbackSummary,
       },
     });
+    await writeScreeningAuditEvent({
+      requestId: request.id,
+      eventType: "return_state_resolved",
+      actorRole: "system",
+      actorId: null,
+      tenantId: request.applicantTenantId,
+      landlordId: request.landlordId,
+      sessionId: session.id,
+      idempotencyKey: `tu_return_state_${session.id}_${resolvedReturnState}`,
+      metadata: {
+        providerKey: "transunion_redirect",
+        returnState: resolvedReturnState,
+      },
+    });
+    if (resolvedReturnState === "completed" || resolvedReturnState === "unable_to_complete") {
+      await writeScreeningAuditEvent({
+        requestId: request.id,
+        eventType: "screening_completed",
+        actorRole: "system",
+        actorId: null,
+        tenantId: request.applicantTenantId,
+        landlordId: request.landlordId,
+        sessionId: session.id,
+        idempotencyKey: `tu_callback_complete_${session.id}_${normalized.status}`,
+        metadata: {
+          providerKey: "transunion_redirect",
+          resultStatus: normalized.status,
+        },
+      });
+    }
 
     return res.json({
       ok: true,
       duplicate: false,
       screeningRequest: shapeScreeningResponse({
-        request: (await getScreeningRequestById(request.id)) || request,
+        request: refreshedRequest || request,
         consent: await getLatestConsent(request.id),
-        session: (await getScreeningSessionById(session.id)) || session,
-        result: await getLatestResult(request.id),
+        session: refreshedSession || session,
+        result: refreshedResult,
         auditTrail: await getScreeningAuditTrail(request.id),
       }),
     });
   } catch (err: any) {
     const code = err?.message || "failed";
     const status =
-      code === "FORBIDDEN" ? 403 : code === "STATE_TOKEN_REQUIRED" ? 400 : code === "SESSION_NOT_FOUND" ? 404 : 500;
+      code === "FORBIDDEN"
+        ? 403
+        : code === "STATE_TOKEN_REQUIRED"
+        ? 400
+        : code === "SESSION_NOT_FOUND" || code === "REQUEST_NOT_FOUND"
+        ? 404
+        : code === "STATE_TOKEN_EXPIRED"
+        ? 410
+        : code === "SESSION_ALREADY_FINALIZED" || code === "SESSION_MISMATCH"
+        ? 409
+        : 500;
     console.error("[tenant/screening/provider/transunion/callback] failed", {
       message: code,
     });
