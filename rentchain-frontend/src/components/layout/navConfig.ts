@@ -156,6 +156,13 @@ export const NAV_ITEMS: NavItem[] = [
     showInDrawer: true,
   },
   {
+    id: "admin-registry",
+    label: "Registry Sources",
+    to: "/admin/registry/sources",
+    requiresAdmin: true,
+    showInDrawer: true,
+  },
+  {
     id: "admin-tenants",
     label: "Admin Tenants",
     to: "/admin/tenants",

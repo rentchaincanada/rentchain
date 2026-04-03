@@ -32,6 +32,7 @@ import { upgradeStarterButtonStyle } from "../../lib/upgradeButtonStyles";
 import { dispatchUpgradePrompt } from "@/lib/upgradePrompt";
 import { RiskScoreBadge } from "@/components/leases/RiskScoreBadge";
 import { PropertyCredibilitySummaryCard } from "@/components/properties/PropertyCredibilitySummaryCard";
+import { PropertyRegistryStatusCard } from "@/components/properties/PropertyRegistryStatusCard";
 import type { PropertyCredibilitySummary } from "@/types/credibilitySummary";
 import { calculateConfiguredUnitRentTotal, resolveConfiguredUnitRent } from "@/lib/propertyRentSummary";
 import { getUnitsNeedingOccupancySetup } from "./occupancyPrompt";
@@ -1094,6 +1095,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
       )}
 
       <PropertyCredibilitySummaryCard summary={credibilitySummary} />
+      <PropertyRegistryStatusCard property={property} />
 
       {activeLeases.length > 0 && (
         <div
