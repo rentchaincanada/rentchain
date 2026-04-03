@@ -17,6 +17,14 @@ export type TenantScreeningResultStatus =
   | "failed"
   | "manual_review_required";
 
+export type TenantScreeningReturnState =
+  | "completed"
+  | "pending"
+  | "action_needed"
+  | "expired"
+  | "unable_to_complete"
+  | "callback_received_but_not_finalized";
+
 export type TenantScreeningSessionStatus =
   | "created"
   | "ready_for_consent"
@@ -56,17 +64,43 @@ export type TenantScreeningRequest = {
     id: string;
     providerKey: string;
     status: TenantScreeningSessionStatus;
+    providerSessionStatus?: string | null;
     handoffType: "manual" | "redirect";
     redirectUrl: string | null;
     returnUrl: string | null;
     expiresAt: number | null;
+    redirect?: {
+      eligible: boolean;
+      prepared: boolean;
+      preparedAt: number | null;
+      lastUpdatedAt: number | null;
+      status: "not_applicable" | "prepared" | "blocked" | "expired" | "consumed";
+      activationEnabled: boolean;
+    } | null;
+    returnState?: TenantScreeningReturnState | null;
+    callbackReceivedAt?: number | null;
   } | null;
   result: {
     id: string;
     status: TenantScreeningResultStatus;
     summary: string | null;
     normalizedDecision: string | null;
+    identityVerified?: boolean | null;
+    creditIncluded?: boolean | null;
+    incomeIncluded?: boolean | null;
+    fraudFlags?: string[];
+    providerStatusMapped?: string | null;
+    reportAvailability?: {
+      summaryAvailable: boolean;
+      fullReportAvailable: boolean;
+    } | null;
     reportAvailable: boolean;
+  } | null;
+  returnFlow?: {
+    state: TenantScreeningReturnState;
+    callbackReceivedAt: number | null;
+    resolvedAt: number | null;
+    isFinalized: boolean;
   } | null;
   summary: {
     status: TenantScreeningStatus;
@@ -75,6 +109,7 @@ export type TenantScreeningRequest = {
     package: string | null;
     summaryResult: string;
     nextActions: string[];
+    returnState?: TenantScreeningReturnState;
   };
   auditTrail: Array<{
     id: string;
