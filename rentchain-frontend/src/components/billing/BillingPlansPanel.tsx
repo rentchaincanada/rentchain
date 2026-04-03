@@ -112,7 +112,6 @@ export function BillingPlansPanel({
                   {plan.tagline}
                 </div>
               </div>
-
               {highlight ? (
                 <span style={{ fontSize: 12, fontWeight: 700, color: colors.accent }}>Current</span>
               ) : null}
@@ -122,7 +121,10 @@ export function BillingPlansPanel({
               {pricingLoading ? "—" : renderPrice(planId)}
             </div>
 
-            <ul className="rc-billing-plan-features" style={{ color: text.muted, margin: 0, paddingLeft: "1.1rem" }}>
+            <ul
+              className="rc-billing-plan-features"
+              style={{ color: text.muted, margin: 0, paddingLeft: "1.1rem" }}
+            >
               {plan.features.slice(0, 4).map((feature) => (
                 <li key={`${planId}-${feature}`}>{feature}</li>
               ))}

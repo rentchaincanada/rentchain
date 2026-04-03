@@ -17,7 +17,7 @@ function setCommonRequiredEnv() {
   process.env.FIREBASE_API_KEY = "firebase_test";
   process.env.STRIPE_PRICE_STARTER_MONTHLY_LIVE = "price_starter";
   process.env.STRIPE_PRICE_PRO_MONTHLY_LIVE = "price_pro";
-  process.env.STRIPE_PRICE_BUSINESS_MONTHLY_LIVE = "price_business";
+  process.env.STRIPE_PRICE_ELITE_MONTHLY_LIVE = "price_elite";
 }
 
 describe("requiredEnv provider-aware email requirements", () => {

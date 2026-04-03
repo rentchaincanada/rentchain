@@ -1,7 +1,7 @@
 import { apiFetch } from "@/lib/apiClient";
 
 export type StartCheckoutArgs = {
-  tier?: "starter" | "pro" | "elite" | "business";
+  tier?: "starter" | "pro" | "elite";
   interval?: "monthly" | "yearly" | "month" | "year";
   requiredPlan?: string;
   featureKey: string;
