@@ -146,7 +146,7 @@ export const marketingCopy: Record<Locale, MarketingCopy> = {
     pricing: {
       headline: "Pricing that matches how RentChain works today",
       subheadline:
-        "Start on Free with guided setup, then upgrade for richer workflow tools, accountant-ready exports, and stronger reporting.",
+        "Start on Free with guided setup and pay-per-use screening, then upgrade for richer workflow tools, accountant-ready exports, and stronger reporting.",
       intervalLabels: {
         monthly: "Monthly",
         yearly: "Annual",
@@ -158,10 +158,10 @@ export const marketingCopy: Record<Locale, MarketingCopy> = {
         elite: "Elite",
       },
       tierTaglines: {
-        free: "Best for guided setup, basic workflow, and manual tracking",
+        free: "Best for guided setup, manual workflows, and pay-per-use screening",
         starter: "Best for active landlords coordinating applicants and day-to-day operations",
-        pro: "Best for growing portfolios that need screening support, imports, and exports",
-        elite: "Best for premium operations visibility and advanced workflow controls",
+        pro: "Best for growing portfolios that need exports, reporting, and team workflows",
+        elite: "Best for premium visibility, analytics, and audit-ready operations",
       },
       tierBadges: {
         pro: "Most Popular",
@@ -171,7 +171,7 @@ export const marketingCopy: Record<Locale, MarketingCopy> = {
       ctaByTier: {
         starter: "Upgrade to Starter",
         pro: "Upgrade to Pro",
-        elite: "Explore Elite",
+        elite: "Upgrade to Elite",
       },
       comparisonTitle: "Plan comparison",
       capabilityTitle: "Capability",
@@ -180,9 +180,9 @@ export const marketingCopy: Record<Locale, MarketingCopy> = {
           title: "Portfolio setup",
           items: {
             free: "Properties, units, archive support",
-            starter: "Properties, units, archive support",
-            pro: "Properties, units, archive support",
-            elite: "Properties, units, archive support",
+            starter: "Portfolio + tenant operations",
+            pro: "Full portfolio workflows",
+            elite: "Full portfolio workflows",
           },
         },
         {
@@ -197,10 +197,10 @@ export const marketingCopy: Record<Locale, MarketingCopy> = {
         {
           title: "Applicant workflow",
           items: {
-            free: "Basic applicants + viewings",
-            starter: "Invites, viewings, messaging",
-            pro: "Invites, viewings, messaging",
-            elite: "Invites, viewings, messaging",
+            free: "Manual applicants + viewings",
+            starter: "Invites, linked apps, messaging",
+            pro: "Invites, linked apps, messaging",
+            elite: "Invites, linked apps, messaging",
           },
         },
         {
@@ -208,8 +208,8 @@ export const marketingCopy: Record<Locale, MarketingCopy> = {
           items: {
             free: "Manual tracking",
             starter: "Manual tracking",
-            pro: "CSV import + reporting exports",
-            elite: "Advanced reporting workflows",
+            pro: "CSV import + export workflows",
+            elite: "Advanced export workflows",
           },
         },
         {
@@ -217,8 +217,8 @@ export const marketingCopy: Record<Locale, MarketingCopy> = {
           items: {
             free: "Basic dashboard",
             starter: "Workflow reporting",
-            pro: "Decision support + exports",
-            elite: "Advanced analytics",
+            pro: "Exports, summaries, compliance",
+            elite: "Advanced analytics + audit visibility",
           },
         },
       ],
@@ -231,24 +231,24 @@ export const marketingCopy: Record<Locale, MarketingCopy> = {
           "Cleaner records for reviews and reporting",
           "Property and applicant context in one place",
           "Export paths for stakeholders and accountants",
-          "More operational leverage as your portfolio grows",
+          "Analytics and audit visibility on Elite",
         ],
         proofLine: "Designed to add clarity without overpromising unsupported automation.",
       },
       screeningRow: {
         label: "Screening workflow",
-        subtext: "Guided and operationally assisted today",
+        subtext: "Pay-per-use on every tier; paid plans add workflow and reporting depth",
         values: {
-          free: "Guided setup path",
+          free: "Guided setup + history",
           starter: "Request + status workflow",
-          pro: "Decision support + reporting",
-          elite: "Advanced ops visibility",
+          pro: "Summaries + reporting",
+          elite: "Advanced reporting context",
         },
       },
       faqTitle: "FAQ",
       faqQuestion: "Do I need a subscription to screen tenants?",
       faqAnswer:
-        "No. Screening follows a guided request and review workflow, with paid plans adding stronger reporting and workflow depth.",
+        "No. Screening is pay-per-use on every tier, with paid plans adding stronger workflow support, summaries, exports, and reporting around that process.",
     },
     about: {
       headline: "Built for clarity in Canadian renting",
@@ -360,7 +360,7 @@ export const marketingCopy: Record<Locale, MarketingCopy> = {
     pricing: {
       headline: "Une tarification alignee sur le produit actuel",
       subheadline:
-        "Commencez sur Gratuit avec une configuration guidee, puis passez a un forfait superieur pour plus d'outils, d'exports et de rapports.",
+        "Commencez sur Gratuit avec une configuration guidee et une verification a l'usage, puis passez a un forfait superieur pour plus d'outils, d'exports et de rapports.",
       intervalLabels: {
         monthly: "Mensuel",
         yearly: "Annuel",
@@ -372,10 +372,10 @@ export const marketingCopy: Record<Locale, MarketingCopy> = {
         elite: "Elite",
       },
       tierTaglines: {
-        free: "Ideal pour la configuration guidee et le suivi manuel",
+        free: "Ideal pour la configuration guidee, les flux manuels et la verification a l'usage",
         starter: "Ideal pour les proprietaires actifs qui coordonnent les candidats",
-        pro: "Ideal pour les portefeuilles qui veulent imports, exports et plus de rapports",
-        elite: "Ideal pour une visibilite premium et des controles avances",
+        pro: "Ideal pour les portefeuilles qui veulent exports, rapports et outils d'equipe",
+        elite: "Ideal pour une visibilite premium, l'analytique et les audits",
       },
       tierBadges: {
         pro: "Le plus choisi",
@@ -385,7 +385,7 @@ export const marketingCopy: Record<Locale, MarketingCopy> = {
       ctaByTier: {
         starter: "Passer a Starter",
         pro: "Passer a Pro",
-        elite: "Explorer Elite",
+        elite: "Passer a Elite",
       },
       comparisonTitle: "Comparaison des forfaits",
       capabilityTitle: "Capacite",
@@ -411,10 +411,10 @@ export const marketingCopy: Record<Locale, MarketingCopy> = {
         {
           title: "Flux candidat",
           items: {
-            free: "Candidats + visites de base",
-            starter: "Invitations, visites, messagerie",
-            pro: "Invitations, visites, messagerie",
-            elite: "Invitations, visites, messagerie",
+            free: "Candidats manuels + visites",
+            starter: "Invitations, candidatures liees, messagerie",
+            pro: "Invitations, candidatures liees, messagerie",
+            elite: "Invitations, candidatures liees, messagerie",
           },
         },
         {
@@ -423,7 +423,7 @@ export const marketingCopy: Record<Locale, MarketingCopy> = {
             free: "Suivi manuel",
             starter: "Suivi manuel",
             pro: "Import CSV + exports",
-            elite: "Flux de rapports avances",
+            elite: "Exports et rapports avances",
           },
         },
         {
@@ -431,8 +431,8 @@ export const marketingCopy: Record<Locale, MarketingCopy> = {
           items: {
             free: "Tableau de bord de base",
             starter: "Rapports operationnels",
-            pro: "Aide a la decision + exports",
-            elite: "Analytique avancee",
+            pro: "Exports, resumes, conformite",
+            elite: "Analytique avancee + visibilite d'audit",
           },
         },
       ],
@@ -445,24 +445,24 @@ export const marketingCopy: Record<Locale, MarketingCopy> = {
           "Dossiers plus propres pour examens et rapports",
           "Contexte propriete et candidat au meme endroit",
           "Exports pour parties prenantes et comptables",
-          "Plus de levier operationnel quand le portefeuille grandit",
+          "Analytique et visibilite d'audit sur Elite",
         ],
         proofLine: "Concu pour ajouter de la clarte sans promettre une automatisation non prise en charge.",
       },
       screeningRow: {
         label: "Flux de verification",
-        subtext: "Guide et assiste aujourd'hui",
+        subtext: "A l'usage sur tous les forfaits; les forfaits payants ajoutent plus de flux et de rapports",
         values: {
-          free: "Parcours guide",
+          free: "Parcours guide + historique",
           starter: "Demande + suivi du statut",
-          pro: "Aide a la decision + rapports",
-          elite: "Visibilite operationnelle avancee",
+          pro: "Resumes + rapports",
+          elite: "Contexte avance pour les rapports",
         },
       },
       faqTitle: "FAQ",
       faqQuestion: "Ai-je besoin d'un abonnement pour verifier des locataires?",
       faqAnswer:
-        "Non. La verification suit deja un flux guide de demande et d'examen, et les forfaits payants ajoutent plus d'outils et de rapports.",
+        "Non. La verification est facturation a l'usage sur tous les forfaits, et les forfaits payants ajoutent plus de flux, de resumes, d'exports et de rapports.",
     },
     about: {
       headline: "Concu pour la clarte dans la location au Canada",

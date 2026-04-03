@@ -16,6 +16,7 @@ import { apiFetch } from "@/lib/apiClient";
 import { track } from "@/lib/analytics";
 import { billingTierLabel, useBillingStatus } from "@/hooks/useBillingStatus";
 import { refreshEntitlements } from "@/lib/entitlements";
+import { CANONICAL_TIER_MATRIX } from "@/constants/pricingPlans";
 
 const formatAmount = (amountCents: number, currency: string) => {
   const amount = (amountCents || 0) / 100;
@@ -133,7 +134,7 @@ const BillingPage: React.FC = () => {
 
   const pricingUnavailable = !pricingLoading && pricingError;
 
-  const handlePlanAction = async (planKey: "starter" | "pro" | "business") => {
+  const handlePlanAction = async (planKey: "starter" | "pro" | "elite") => {
     if (pricingUnavailable) return;
     if (planKey === currentPlan) return;
     track("billing_upgrade_clicked", { toTier: planKey, interval });
@@ -178,13 +179,16 @@ const BillingPage: React.FC = () => {
     }
   };
 
-  const handleContactSales = () => {
-    track("billing_contact_sales_clicked", { tier: currentPlan, interval });
-    window.location.href = "mailto:sales@rentchain.ai";
-  };
-
-  const proUpgradeLabel = interval === "year" ? "Upgrade to Pro (Yearly)" : "Upgrade to Pro (Monthly)";
-  const proUpgradeHelp = `You'll be taken to checkout for the ${interval === "year" ? "Yearly" : "Monthly"} Pro plan.`;
+  const nextUpgradeTier =
+    currentPlan === "free" ? "starter" : currentPlan === "starter" ? "pro" : currentPlan === "pro" ? "elite" : null;
+  const nextUpgradeLabel = nextUpgradeTier
+    ? interval === "year"
+      ? `${CANONICAL_TIER_MATRIX[nextUpgradeTier].ctaLabel} (Yearly)`
+      : `${CANONICAL_TIER_MATRIX[nextUpgradeTier].ctaLabel} (Monthly)`
+    : null;
+  const nextUpgradeHelp = nextUpgradeTier
+    ? `You'll be taken to checkout for the ${interval === "year" ? "Yearly" : "Monthly"} ${CANONICAL_TIER_MATRIX[nextUpgradeTier].label} plan.`
+    : null;
 
   return (
     <Section
@@ -200,7 +204,7 @@ const BillingPage: React.FC = () => {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: spacing.sm }}>
           <div>
             <h1 style={{ margin: 0, fontSize: "1.3rem", fontWeight: 700 }}>Billing & Receipts</h1>
-            <div style={{ color: text.muted, fontSize: "0.95rem" }}>Screening charges and receipts.</div>
+            <div style={{ color: text.muted, fontSize: "0.95rem" }}>Current plan, upgrade options, subscription details, and screening receipts.</div>
           </div>
           <div className="rc-wrap-row">
             <Button type="button" variant="secondary" onClick={load} disabled={loading}>
@@ -256,20 +260,34 @@ const BillingPage: React.FC = () => {
                 {planActionLoading === "starter" ? "Opening..." : "Upgrade plan"}
               </Button>
             )}
-            {currentPlan === "starter" ? (
-              <Button type="button" onClick={() => void handlePlanAction("pro")} disabled={planActionLoading === "pro" || pricingUnavailable}>
-                {proUpgradeLabel}
+            {nextUpgradeTier ? (
+              <Button
+                type="button"
+                onClick={() => void handlePlanAction(nextUpgradeTier)}
+                disabled={planActionLoading === nextUpgradeTier || pricingUnavailable}
+              >
+                {nextUpgradeLabel}
               </Button>
             ) : null}
           </div>
-          {currentPlan === "starter" ? (
+          {currentPlan === "free" ? (
             <div style={{ marginTop: spacing.xs, color: text.muted }}>
-              Upgrade to Pro to unlock screening + verified records.
+              Free includes guided setup and pay-per-use screening. Upgrade when you want richer rental operations, communication, exports, and reporting.
             </div>
           ) : null}
           {currentPlan === "starter" ? (
             <div style={{ marginTop: spacing.xs, color: text.muted, fontSize: 14 }}>
-              {proUpgradeHelp}
+              Starter includes messaging, leases, maintenance, and work orders. Pro adds exports, screening summaries, compliance reports, and team workflows.
+            </div>
+          ) : null}
+          {currentPlan === "pro" ? (
+            <div style={{ marginTop: spacing.xs, color: text.muted, fontSize: 14 }}>
+              Pro includes exports, reporting, and team workflows. Elite adds advanced analytics, AI summaries, and audit visibility.
+            </div>
+          ) : null}
+          {nextUpgradeHelp ? (
+            <div style={{ marginTop: spacing.xs, color: text.muted, fontSize: 14 }}>
+              {nextUpgradeHelp}
             </div>
           ) : null}
         </div>
@@ -293,7 +311,6 @@ const BillingPage: React.FC = () => {
           mode="billing"
           planActionLoading={planActionLoading}
           onSelectPlan={handlePlanAction}
-          onContactSales={handleContactSales}
         />
       </Card>
 

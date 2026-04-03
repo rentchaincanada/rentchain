@@ -33,7 +33,7 @@ export async function fetchBillingHistory(): Promise<BillingRecord[]> {
 }
 
 export interface SubscriptionStatus {
-  planId: "free" | "pro" | "enterprise";
+  planId: "free" | "starter" | "pro" | "elite";
   status: "active" | "past_due" | "canceled";
 }
 
@@ -90,7 +90,7 @@ export async function simulateCreditPull(
 }
 
 export type BillingPlanPricing = {
-  key: "starter" | "pro" | "business";
+  key: "starter" | "pro" | "elite";
   label: string;
   currency: string;
   monthlyAmountCents: number;
