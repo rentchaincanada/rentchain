@@ -126,7 +126,7 @@ export function UpgradeModal({
       case "pro":
         return `Team workflows and ledger exports · ${renderPriceLabel(planKey)}`;
       case "elite":
-        return `Enterprise controls · ${renderPriceLabel(planKey)}`;
+        return `Advanced analytics and audit visibility · ${renderPriceLabel(planKey)}`;
       default:
         return `Rental management + maintenance · ${renderPriceLabel(planKey)}`;
     }
