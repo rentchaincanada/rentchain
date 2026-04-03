@@ -5,6 +5,7 @@ import {
   applyRegistryMatchOverride,
   getPropertyRegistryReview,
   getRegistryRecordDetail,
+  isRegistryOverrideError,
   listRegistryImports,
   listRegistryReviewQueue,
   listRegistrySources,
@@ -113,6 +114,13 @@ router.post(
       return res.json({ ok: true, match });
     } catch (error: any) {
       console.error("[adminRegistryRoutes] override failed", error);
+      if (isRegistryOverrideError(error)) {
+        return res.status(error.statusCode).json({
+          ok: false,
+          error: error.code,
+          message: error.message,
+        });
+      }
       return res.status(500).json({
         ok: false,
         error: "registry_override_failed",
