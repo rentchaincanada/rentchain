@@ -1,4 +1,4 @@
-export type BillingPlanKey = "starter" | "pro" | "business";
+export type BillingPlanKey = "starter" | "pro" | "elite";
 type PlanInterval = "monthly" | "yearly";
 type StripeEnv = "live" | "test";
 
@@ -19,14 +19,14 @@ const PLAN_MATRIX: Record<BillingPlanKey, PlanConfig> = {
   pro: {
     key: "pro",
     label: "Pro",
-    monthlyAmountCents: 5900,
-    yearlyAmountCents: 59000,
+    monthlyAmountCents: 4900,
+    yearlyAmountCents: 49000,
   },
-  business: {
-    key: "business",
-    label: "Business",
-    monthlyAmountCents: 9900,
-    yearlyAmountCents: 99000,
+  elite: {
+    key: "elite",
+    label: "Elite",
+    monthlyAmountCents: 7900,
+    yearlyAmountCents: 79000,
   },
 };
 
@@ -50,7 +50,7 @@ const compact = <T,>(arr: Array<T | null | undefined>): T[] =>
   arr.filter((value): value is T => value != null);
 
 function resolveEnvKeys(plan: BillingPlanKey, interval: PlanInterval, env: StripeEnv) {
-  const upper = plan.toUpperCase();
+  const upper = plan === "elite" ? "BUSINESS" : plan.toUpperCase();
   const intervalUpper = interval === "yearly" ? "YEARLY" : "MONTHLY";
 
   const preferred = `STRIPE_PRICE_${upper}_${intervalUpper}_${env.toUpperCase()}`;
@@ -120,8 +120,8 @@ export function getPricingHealth() {
     { plan: "starter", interval: "yearly" },
     { plan: "pro", interval: "monthly" },
     { plan: "pro", interval: "yearly" },
-    { plan: "business", interval: "monthly" },
-    { plan: "business", interval: "yearly" },
+    { plan: "elite", interval: "monthly" },
+    { plan: "elite", interval: "yearly" },
   ];
 
   const missing: string[] = [];
@@ -176,7 +176,7 @@ export function resolvePlanFromPriceId(priceId?: string | null): BillingPlanKey 
   if (!id) return null;
   const envs: StripeEnv[] = ["live", "test"];
   const intervals: PlanInterval[] = ["monthly", "yearly"];
-  const plans: BillingPlanKey[] = ["starter", "pro", "business"];
+  const plans: BillingPlanKey[] = ["starter", "pro", "elite"];
 
   for (const env of envs) {
     const includeFallback = allowFallback(env);

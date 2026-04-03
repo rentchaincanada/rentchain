@@ -6,23 +6,22 @@ import { MarketingLayout } from "./MarketingLayout";
 import { useAuth } from "../../context/useAuth";
 import { useCapabilities } from "../../hooks/useCapabilities";
 import { startCheckout } from "../../billing/startCheckout";
-import { DEFAULT_PLANS, type PricingInterval, type PricingPlanKey } from "../../constants/pricingPlans";
+import {
+  CANONICAL_TIER_MATRIX,
+  DEFAULT_PLANS,
+  PLAN_ORDER,
+  type PricingInterval,
+  type PricingPlanKey,
+} from "../../constants/pricingPlans";
 import { useLanguage } from "../../context/LanguageContext";
 import { marketingCopy } from "../../content/marketingCopy";
 import { track } from "../../lib/analytics";
 import { fetchBillingPricing, type BillingPlanPricing } from "../../api/billingApi";
 
 type PlanKey = PricingPlanKey;
-
-const PLAN_ORDER: PlanKey[] = ["free", "starter", "pro", "elite"];
 const TIMELINE_MARKERS: Record<string, string> = {
   X: "❌",
   check: "✅",
-};
-const BILLING_PLAN_KEY_BY_UI_PLAN: Record<Exclude<PlanKey, "free">, BillingPlanPricing["key"]> = {
-  starter: "starter",
-  pro: "pro",
-  elite: "business",
 };
 
 function normalizePlan(input?: string | null): PlanKey {
@@ -113,7 +112,7 @@ const PricingPage: React.FC = () => {
       const value = interval === "yearly" ? plan.yearlyPrice : plan.monthlyPrice;
       return value;
     }
-    const billingPlan = pricingByPlan[BILLING_PLAN_KEY_BY_UI_PLAN[planKey]];
+    const billingPlan = pricingByPlan[planKey];
     if (billingPlan) {
       const amountCents =
         interval === "yearly" ? billingPlan.yearlyAmountCents : billingPlan.monthlyAmountCents;
@@ -153,7 +152,7 @@ const PricingPage: React.FC = () => {
       return;
     }
     void startCheckout({
-      tier: plan === "elite" ? "business" : plan,
+      tier: plan,
       interval: "monthly",
       featureKey: "pricing",
       source: "marketing_pricing",
@@ -255,19 +254,13 @@ const PricingPage: React.FC = () => {
                 ) : null}
               </div>
               <div style={{ color: text.muted, fontSize: "0.92rem", minHeight: 40 }}>
-                {copy.pricing.tierTaglines[plan]}
+                {CANONICAL_TIER_MATRIX[plan].tagline}
               </div>
               <div style={{ fontSize: 22, fontWeight: 800 }}>{renderPrice(plan)}</div>
               <ul style={{ margin: 0, paddingLeft: "1.1rem", color: text.muted, lineHeight: 1.7 }}>
-                {copy.pricing.featureGroups.map((group) => (
-                  <li key={`${plan}-${group.title}`}>
-                    <span style={{ color: text.secondary, fontWeight: 600 }}>{group.title}:</span>{" "}
-                    {displayFeatureValue(group.items[plan])}
-                  </li>
+                {CANONICAL_TIER_MATRIX[plan].features.map((feature) => (
+                  <li key={`${plan}-${feature}`}>{feature}</li>
                 ))}
-                <li>
-                  {copy.pricing.screeningRow.label}: {copy.pricing.screeningRow.subtext}
-                </li>
               </ul>
               {plan === "pro" || plan === "elite" ? (
                 <div

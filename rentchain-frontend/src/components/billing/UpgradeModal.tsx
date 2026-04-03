@@ -44,8 +44,7 @@ export function UpgradeModal({
     const raw = String(input || "").trim().toLowerCase();
     if (raw === "starter" || raw === "core") return "starter";
     if (raw === "pro") return "pro";
-    if (raw === "business") return "business";
-    if (raw === "elite") return "elite";
+    if (raw === "business" || raw === "elite" || raw === "enterprise") return "elite";
     return "starter";
   };
   const currentPlanKey = normalizePlan(currentPlan);
@@ -116,8 +115,6 @@ export function UpgradeModal({
     switch (planKey) {
       case "pro":
         return "Pro";
-      case "business":
-        return "Business";
       case "elite":
         return "Elite";
       default:
@@ -128,10 +125,8 @@ export function UpgradeModal({
     switch (planKey) {
       case "pro":
         return `Team workflows and ledger exports · ${renderPriceLabel(planKey)}`;
-      case "business":
-        return `Portfolio analytics and compliance · ${renderPriceLabel(planKey)}`;
       case "elite":
-        return `Enterprise controls · ${renderPriceLabel(planKey)}`;
+        return `Advanced analytics and audit visibility · ${renderPriceLabel(planKey)}`;
       default:
         return `Rental management + maintenance · ${renderPriceLabel(planKey)}`;
     }
@@ -299,7 +294,7 @@ export function UpgradeModal({
               {ctaLabel ||
                 (selectedPlan === "starter"
                   ? "Choose Starter"
-                  : selectedPlan === "business" || selectedPlan === "elite"
+                  : selectedPlan === "elite"
                   ? "Choose plan"
                   : "Upgrade to Pro")}
             </button>

@@ -7,20 +7,21 @@ import { useAuth } from "../context/useAuth";
 import { useCapabilities } from "../hooks/useCapabilities";
 import { startCheckout } from "../billing/startCheckout";
 import { createBillingPortalSession, fetchBillingPricing, type BillingPlanPricing } from "../api/billingApi";
-import { DEFAULT_PLANS, type PricingInterval, type PricingPlanKey } from "../constants/pricingPlans";
+import {
+  CANONICAL_TIER_MATRIX,
+  DEFAULT_PLANS,
+  PLAN_ORDER,
+  TIER_MATRIX_AREAS,
+  type PricingInterval,
+  type PricingPlanKey,
+} from "../constants/pricingPlans";
 import { track } from "@/lib/analytics";
 
 type PlanKey = PricingPlanKey;
 
-const PLAN_ORDER: PlanKey[] = ["free", "starter", "pro", "elite"];
 const PLAN_FEATURES: Record<PlanKey, string[]> = Object.fromEntries(
   DEFAULT_PLANS.map((plan) => [plan.key, plan.features])
 ) as Record<PlanKey, string[]>;
-const BILLING_PLAN_KEY_BY_UI_PLAN: Record<Exclude<PlanKey, "free">, BillingPlanPricing["key"]> = {
-  starter: "starter",
-  pro: "pro",
-  elite: "business",
-};
 
 function normalizePlan(input?: string | null): PlanKey {
   const raw = String(input || "").trim().toLowerCase();
@@ -31,9 +32,7 @@ function normalizePlan(input?: string | null): PlanKey {
 }
 
 function ctaLabel(plan: Exclude<PlanKey, "free">) {
-  if (plan === "pro") return "Upgrade to Pro";
-  if (plan === "elite") return "Explore Elite";
-  return "Upgrade to Starter";
+  return CANONICAL_TIER_MATRIX[plan].ctaLabel;
 }
 
 const PricingPage: React.FC = () => {
@@ -77,7 +76,7 @@ const PricingPage: React.FC = () => {
       const value = interval === "yearly" ? plan.yearlyPrice : plan.monthlyPrice;
       return value;
     }
-    const billingPlan = pricingByPlan[BILLING_PLAN_KEY_BY_UI_PLAN[planKey]];
+    const billingPlan = pricingByPlan[planKey];
     if (billingPlan) {
       const amountCents =
         interval === "yearly" ? billingPlan.yearlyAmountCents : billingPlan.monthlyAmountCents;
@@ -107,7 +106,7 @@ const PricingPage: React.FC = () => {
     }
 
     void startCheckout({
-      tier: target === "elite" ? "business" : target,
+      tier: target,
       interval: "monthly",
       featureKey: "pricing",
       source: "workspace_pricing",
@@ -121,10 +120,10 @@ const PricingPage: React.FC = () => {
         <Card elevated>
           <h1 style={{ margin: 0, fontSize: "1.5rem", fontWeight: 800 }}>Pricing</h1>
           <p style={{ marginTop: spacing.sm, color: text.muted, maxWidth: 760, lineHeight: 1.65 }}>
-            Free keeps guided onboarding, basic applicant workflow, manual expenses, and property archiving usable today. Upgrades add richer workflow tools, cleaner exports, and stronger reporting.
+            Free keeps guided onboarding, manual workflows, and pay-per-use screening usable today. Starter adds day-to-day rental operations, Pro adds exports and compliance reporting, and Elite adds advanced analytics and audit visibility.
           </p>
           <p style={{ marginTop: spacing.xs, color: text.muted, maxWidth: 760, lineHeight: 1.65 }}>
-            Screening follows a guided request, status, and review workflow. Starter adds day-to-day operations like move-in readiness and work orders, while Pro adds decision summaries and landlord-ready PDF exports.
+            Screening is available across all tiers as pay-per-use when you run it. Paid plans add stronger workflow support, review visibility, summaries, and reporting around that same screening flow.
           </p>
           <p style={{ marginTop: spacing.xs, color: text.muted, maxWidth: 760, lineHeight: 1.65 }}>
             Published plan prices mirror the current checkout pricing when billing is available.
@@ -155,7 +154,7 @@ const PricingPage: React.FC = () => {
           {PLAN_ORDER.map((plan) => (
             <Card key={plan} style={{ display: "grid", gap: spacing.sm, alignContent: "start", minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing.xs, flexWrap: "wrap" }}>
-                <div style={{ fontWeight: 800, fontSize: 18, textTransform: "capitalize" }}>{plan}</div>
+                <div style={{ fontWeight: 800, fontSize: 18 }}>{CANONICAL_TIER_MATRIX[plan].label}</div>
                 {plan === "pro" ? (
                   <span
                     style={{
@@ -175,6 +174,7 @@ const PricingPage: React.FC = () => {
                 ) : null}
               </div>
               <div style={{ fontSize: 22, fontWeight: 800 }}>{renderPrice(plan)}</div>
+              <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.6 }}>{CANONICAL_TIER_MATRIX[plan].tagline}</div>
               <ul style={{ margin: 0, paddingLeft: "1.1rem", color: text.muted, lineHeight: 1.7, minWidth: 0 }}>
                 {PLAN_FEATURES[plan].map((feature) => (
                   <li key={feature} style={{ overflowWrap: "anywhere" }}>{feature}</li>
@@ -200,9 +200,26 @@ const PricingPage: React.FC = () => {
                   <ul style={{ margin: 0, paddingLeft: "1rem", color: text.muted, fontSize: 13, lineHeight: 1.6 }}>
                     <li style={{ overflowWrap: "anywhere" }}>CSV expense import</li>
                     <li style={{ overflowWrap: "anywhere" }}>CSV, spreadsheet, and PDF exports</li>
-                    <li style={{ overflowWrap: "anywhere" }}>Screening workflow with decision support</li>
+                    <li style={{ overflowWrap: "anywhere" }}>Compliance reports and screening review summaries</li>
                     <li style={{ overflowWrap: "anywhere" }}>Cleaner month-end and accountant handoff</li>
                   </ul>
+                </div>
+              ) : null}
+              {plan !== "free" ? (
+                <div
+                  style={{
+                    border: "1px solid rgba(15,23,42,0.12)",
+                    borderRadius: 12,
+                    padding: "10px 12px",
+                    display: "grid",
+                    gap: 6,
+                  }}
+                >
+                  {TIER_MATRIX_AREAS.slice(0, 4).map((area) => (
+                    <div key={`${plan}-${area.key}`} style={{ color: text.muted, fontSize: 13, lineHeight: 1.5 }}>
+                      <strong style={{ color: text.secondary }}>{area.label}:</strong> {CANONICAL_TIER_MATRIX[plan].capabilities[area.key].summary}
+                    </div>
+                  ))}
                 </div>
               ) : null}
               <div>
@@ -227,7 +244,7 @@ const PricingPage: React.FC = () => {
               Do I need a subscription to screen tenants?
             </summary>
             <p style={{ margin: `${spacing.sm} 0 0`, color: text.muted }}>
-              No. RentChain supports a guided screening request path, while paid plans add stronger workflow tools, screening decision support, and PDF/reporting depth around that process.
+              No. Screening is available as a pay-per-use workflow on every tier. Paid plans add more operational workflow, summaries, exports, and reporting around screening.
             </p>
           </details>
         </Card>

@@ -1,7 +1,7 @@
 import { apiFetch } from "@/lib/apiClient";
 
 export type StartCheckoutArgs = {
-  tier?: "starter" | "pro" | "business";
+  tier?: "starter" | "pro" | "elite" | "business";
   interval?: "monthly" | "yearly" | "month" | "year";
   requiredPlan?: string;
   featureKey: string;
@@ -9,13 +9,13 @@ export type StartCheckoutArgs = {
   redirectTo?: string;
 };
 
-function normalizeTier(input?: string): "starter" | "pro" | "business" | "free" | null {
+function normalizeTier(input?: string): "starter" | "pro" | "elite" | "free" | null {
   const raw = String(input || "").trim().toLowerCase();
   if (!raw) return null;
   if (raw === "free" || raw === "screening") return "free";
   if (raw === "starter" || raw === "core") return "starter";
   if (raw === "pro") return "pro";
-  if (raw === "business" || raw === "elite" || raw === "enterprise") return "business";
+  if (raw === "business" || raw === "elite" || raw === "enterprise") return "elite";
   return null;
 }
 

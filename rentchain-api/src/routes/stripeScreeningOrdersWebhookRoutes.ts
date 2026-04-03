@@ -16,7 +16,7 @@ interface StripeWebhookRequest extends Request {
 
 const router = Router();
 
-type BillingTier = "starter" | "pro" | "business";
+type BillingTier = "starter" | "pro" | "elite";
 
 type ScreeningPaidUpdateStatus = "paid_set" | "already_paid" | "ignored";
 
