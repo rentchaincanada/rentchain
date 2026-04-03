@@ -3,6 +3,8 @@ import { Router } from "express";
 import { requireCapability } from "../entitlements/entitlements.middleware";
 import { db, FieldValue } from "../config/firebase";
 import { normalizeProvince } from "../lib/province";
+import { ensureRegistrySource } from "../services/registry/registryImportService";
+import { getPropertyRegistryProjection, upsertPropertyRegistryProjection } from "../services/registry/registryStatusProjectionService";
 
 const router = Router();
 
@@ -120,6 +122,12 @@ async function loadScopedPropertiesForUser(options: {
   )
     .sort((a: any, b: any) => String(b?.createdAt || "").localeCompare(String(a?.createdAt || "")))
     .slice(0, options.limit);
+}
+
+async function loadPropertyOr404(propertyId: string) {
+  const snap = await db.collection("properties").doc(propertyId).get();
+  if (!snap.exists) return null;
+  return { id: snap.id, ...(snap.data() || {}) } as any;
 }
 /**
  * GET /api/properties
@@ -495,6 +503,75 @@ router.patch("/:propertyId", async (req: any, res) => {
       ok: false,
       error: "db_failed",
       message: err?.message || "Failed to update property",
+    });
+  }
+});
+
+router.get("/:propertyId/registry-status", async (req: any, res) => {
+  const roleAdmin = isAdminRole(req);
+  const landlordId = resolveLandlordId(req);
+  const propertyId = String(req.params?.propertyId || "").trim();
+
+  if (!propertyId) return res.status(400).json({ ok: false, error: "property_id_required" });
+  if (!roleAdmin && !landlordId) return res.status(401).json({ ok: false, error: "unauthorized" });
+
+  try {
+    const property = await loadPropertyOr404(propertyId);
+    if (!property) return res.status(404).json({ ok: false, error: "not_found" });
+    const ownerLandlordId = String(property?.landlordId || "").trim();
+    if (!roleAdmin && ownerLandlordId !== landlordId) {
+      return res.status(403).json({ ok: false, error: "forbidden" });
+    }
+
+    const { source } = await ensureRegistrySource("halifax_r400");
+    const propertyProvince = String(property?.province || "").trim().toUpperCase();
+    const coverageAvailable = propertyProvince === source.jurisdictionProvince.toUpperCase();
+    if (!coverageAvailable) {
+      return res.json({
+        ok: true,
+        status: null,
+        source: {
+          sourceKey: source.sourceKey,
+          sourceLabel: source.sourceLabel,
+          jurisdictionProvince: source.jurisdictionProvince,
+          jurisdictionMunicipality: source.jurisdictionMunicipality,
+        },
+        coverage: {
+          available: false,
+          message: "Registry intelligence is currently available for Halifax properties only.",
+        },
+      });
+    }
+    let projection = await getPropertyRegistryProjection({ propertyId, source });
+    if (!projection) {
+      projection = await upsertPropertyRegistryProjection({
+        propertyId,
+        source,
+        match: null,
+        record: null,
+      });
+    }
+
+    return res.json({
+      ok: true,
+      status: projection,
+      source: {
+        sourceKey: source.sourceKey,
+        sourceLabel: source.sourceLabel,
+        jurisdictionProvince: source.jurisdictionProvince,
+        jurisdictionMunicipality: source.jurisdictionMunicipality,
+      },
+      coverage: {
+        available: true,
+        message: null,
+      },
+    });
+  } catch (err: any) {
+    console.error("[GET /api/properties/:propertyId/registry-status] failed", err);
+    return res.status(500).json({
+      ok: false,
+      error: "registry_status_failed",
+      message: err?.message || "Failed to load property registry status",
     });
   }
 });

@@ -84,6 +84,7 @@ import { transunionWebhookHandler } from "./routes/transunionWebhookRoutes";
 import { requireAuth } from "./middleware/requireAuth";
 import screeningJobsAdminRoutes from "./routes/screeningJobsAdminRoutes";
 import adminRoutes from "./routes/adminRoutes";
+import adminRegistryRoutes from "./routes/adminRegistryRoutes";
 import adminScreeningResultsRoutes from "./routes/adminScreeningResultsRoutes";
 import screeningReportRoutes from "./routes/screeningReportRoutes";
 import telemetryRoutes from "./routes/telemetryRoutes";
@@ -272,6 +273,7 @@ app.use("/api/action-requests", routeSource("actionRequestsRecomputeRoutes.ts"),
 app.use("/api", authzRoutes);
 app.use("/api", reportsExportRoutes);
 app.use("/api/admin", routeSource("adminRoutes.ts"), adminRoutes);
+app.use("/api/admin", routeSource("adminRegistryRoutes.ts"), adminRegistryRoutes);
 app.use("/api/admin", routeSource("landlordInvitesAdminRoutes.ts"), landlordInvitesAdminRoutes);
 app.use("/api/admin", routeSource("landlordInquiryRoutes.ts"), landlordInquiryAdminRoutes);
 app.use("/api/admin", routeSource("adminBootstrapRoutes"), adminBootstrapRoutes);

@@ -127,6 +127,11 @@ const ControlTowerPage = lazy(() => import("./pages/admin/ControlTowerPage"));
 const AdminLeadsPage = lazyWithRetry(() => import("./pages/admin/AdminLeadsPage"));
 const AdminLeaseOverlapCleanupPage = lazy(() => import("./pages/admin/AdminLeaseOverlapCleanupPage"));
 const AdminPropertiesPage = lazy(() => import("./pages/admin/AdminPropertiesPage"));
+const AdminRegistrySourcesPage = lazy(() => import("./pages/admin/AdminRegistrySourcesPage"));
+const AdminRegistryImportsPage = lazy(() => import("./pages/admin/AdminRegistryImportsPage"));
+const AdminRegistryReviewPage = lazy(() => import("./pages/admin/AdminRegistryReviewPage"));
+const AdminRegistryRecordDetailPage = lazy(() => import("./pages/admin/AdminRegistryRecordDetailPage"));
+const AdminRegistryPropertyReviewPage = lazy(() => import("./pages/admin/AdminRegistryPropertyReviewPage"));
 const AdminTenantsPage = lazy(() => import("./pages/admin/AdminTenantsPage"));
 const AdminLeasesPage = lazy(() => import("./pages/admin/AdminLeasesPage"));
 const AdminIntegrityPage = lazy(() => import("./pages/admin/AdminIntegrityPage"));
@@ -482,6 +487,66 @@ function App() {
               <RequireAdmin>
                 <Suspense fallback={null}>
                   <AdminPropertiesPage />
+                </Suspense>
+              </RequireAdmin>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/registry/sources"
+          element={
+            <RequireAuth>
+              <RequireAdmin>
+                <Suspense fallback={null}>
+                  <AdminRegistrySourcesPage />
+                </Suspense>
+              </RequireAdmin>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/registry/imports"
+          element={
+            <RequireAuth>
+              <RequireAdmin>
+                <Suspense fallback={null}>
+                  <AdminRegistryImportsPage />
+                </Suspense>
+              </RequireAdmin>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/registry/review"
+          element={
+            <RequireAuth>
+              <RequireAdmin>
+                <Suspense fallback={null}>
+                  <AdminRegistryReviewPage />
+                </Suspense>
+              </RequireAdmin>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/registry/records/:normalizedRecordId"
+          element={
+            <RequireAuth>
+              <RequireAdmin>
+                <Suspense fallback={null}>
+                  <AdminRegistryRecordDetailPage />
+                </Suspense>
+              </RequireAdmin>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/registry/properties/:propertyId"
+          element={
+            <RequireAuth>
+              <RequireAdmin>
+                <Suspense fallback={null}>
+                  <AdminRegistryPropertyReviewPage />
                 </Suspense>
               </RequireAdmin>
             </RequireAuth>

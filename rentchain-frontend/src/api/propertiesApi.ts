@@ -46,6 +46,30 @@ export interface Property extends PropertyInput {
   occupancyRate?: number;
 }
 
+export interface PropertyRegistryStatus {
+  id: string;
+  propertyId: string;
+  sourceKey: "halifax_r400";
+  jurisdictionProvince: string;
+  jurisdictionMunicipality: string;
+  registryStatus:
+    | "verified"
+    | "pending_review"
+    | "not_found"
+    | "possible_mismatch"
+    | "manual_review";
+  registryRecordId: string | null;
+  registrationNumber: string | null;
+  matchedAt: string | null;
+  matchConfidence: number | null;
+  summary: string;
+  recommendedAction: string;
+  lastSourceRefreshAt: string | null;
+  lastEvaluatedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export async function createProperty(
   payload: PropertyInput
 ): Promise<{ property: Property }> {
@@ -72,6 +96,23 @@ export async function fetchPropertyLedger(
 ): Promise<PropertyLedgerEntry[]> {
   const res = await api.get(`/properties/${encodeURIComponent(propertyId)}/ledger`);
   return res.data as PropertyLedgerEntry[];
+}
+
+export async function fetchPropertyRegistryStatus(propertyId: string): Promise<{
+  status: PropertyRegistryStatus | null;
+  source: {
+    sourceKey: "halifax_r400";
+    sourceLabel: string;
+    jurisdictionProvince: string;
+    jurisdictionMunicipality: string;
+  };
+  coverage: {
+    available: boolean;
+    message: string | null;
+  };
+}> {
+  const res = await api.get(`/properties/${encodeURIComponent(propertyId)}/registry-status`);
+  return res.data;
 }
 
 export async function updateProperty(
