@@ -198,6 +198,8 @@ export type RegistryAuditEventType =
   | "match_returned_to_review"
   | "match_ignored"
   | "match_reinstated"
+  | "active_projection_replaced"
+  | "candidate_returned_to_review_due_to_stronger_match"
   | "projection_updated"
   | "property_pid_updated_from_registry";
 

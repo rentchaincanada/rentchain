@@ -7,6 +7,45 @@ import type {
 } from "./registryTypes";
 import { makeStableId, nowIso } from "./registryUtils";
 
+function getRegistryProjectionPrecedence(match: RegistryMatchRecord) {
+  if (!match.propertyId) return 999;
+  if (match.matchStatus === "ignored" || match.matchStatus === "unmatched") return 999;
+  if (match.matchStatus === "matched") {
+    if (match.matchMethod === "manual") return 0;
+    if (match.matchMethod === "pid_exact") return 1;
+    if (match.matchMethod === "address_exact") return 2;
+    return 3;
+  }
+  if (match.matchStatus === "possible_match") return 4;
+  if (match.matchStatus === "mismatch") return 5;
+  return 999;
+}
+
+export function canRegistryMatchDriveProjection(match: RegistryMatchRecord | null | undefined) {
+  if (!match?.propertyId) return false;
+  return getRegistryProjectionPrecedence(match) < 999;
+}
+
+export function compareRegistryProjectionMatches(a: RegistryMatchRecord, b: RegistryMatchRecord) {
+  const precedence = getRegistryProjectionPrecedence(a) - getRegistryProjectionPrecedence(b);
+  if (precedence !== 0) return precedence;
+
+  const reviewedAt = String(b.reviewedAt || "").localeCompare(String(a.reviewedAt || ""));
+  if (reviewedAt !== 0) return reviewedAt;
+
+  const updatedAt = String(b.updatedAt || "").localeCompare(String(a.updatedAt || ""));
+  if (updatedAt !== 0) return updatedAt;
+
+  const score = Number(b.matchScore || 0) - Number(a.matchScore || 0);
+  if (score !== 0) return score;
+
+  return String(b.id || "").localeCompare(String(a.id || ""));
+}
+
+export function selectRegistryProjectionWinner(matches: RegistryMatchRecord[]) {
+  return matches.filter(canRegistryMatchDriveProjection).sort(compareRegistryProjectionMatches)[0] || null;
+}
+
 // All landlord-facing registry messaging comes from the persisted
 // `propertyRegistryStatus` projection. We never render raw source rows
 // directly to landlords. This projection is refreshed after imports,

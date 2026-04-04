@@ -13,7 +13,13 @@ import { makeStableId, normalizePid, nowIso } from "./registryUtils";
 import { HalifaxR400Adapter } from "./adapters/HalifaxR400Adapter";
 import type { RegistrySourceAdapter } from "./adapters/RegistrySourceAdapter";
 import { evaluateRegistryMatch, findRegistryCandidatesForRecord, reEvaluatePropertyAgainstRegistry } from "./registryMatchingService";
-import { getPropertyRegistryProjection, upsertPropertyRegistryProjection } from "./registryStatusProjectionService";
+import {
+  canRegistryMatchDriveProjection,
+  compareRegistryProjectionMatches,
+  getPropertyRegistryProjection,
+  selectRegistryProjectionWinner,
+  upsertPropertyRegistryProjection,
+} from "./registryStatusProjectionService";
 import { getPropertyById } from "../firestorePropertiesService";
 import { listAdminProperties } from "../admin/adminPropertyView";
 
@@ -678,10 +684,6 @@ async function resolvePropertyForRegistryOverride(propertyIdInput: string) {
   });
 }
 
-function isActiveTrustedMatchStatus(status: RegistryMatchRecord["matchStatus"] | null | undefined) {
-  return status === "matched" || status === "mismatch" || status === "possible_match";
-}
-
 async function findActiveMatchForPropertySource(params: {
   propertyId: string;
   sourceKey: RegistrySourceKey;
@@ -696,11 +698,11 @@ async function findActiveMatchForPropertySource(params: {
   const matches = (snap.docs || [])
     .map((doc: any) => ({ id: doc.id, ...(doc.data() || {}) } as RegistryMatchRecord))
     .filter((match) => {
-      if (!isActiveTrustedMatchStatus(match.matchStatus)) return false;
+      if (!canRegistryMatchDriveProjection(match)) return false;
       if (params.excludeNormalizedRecordId && match.normalizedRecordId === params.excludeNormalizedRecordId) return false;
       return true;
     })
-    .sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
+    .sort(compareRegistryProjectionMatches);
 
   return matches[0] || null;
 }
@@ -710,6 +712,8 @@ async function transitionExistingMatchToReview(params: {
   actorId: string;
   reason: string;
   source: RegistrySourceRecord;
+  eventType?: "match_returned_to_review" | "candidate_returned_to_review_due_to_stronger_match";
+  eventData?: Record<string, unknown>;
 }) {
   const snap = await db.collection("registryRecordsNormalized").doc(params.existingMatch.normalizedRecordId).get();
   const normalizedRecord = snap.exists ? ({ id: snap.id, ...(snap.data() || {}) } as RegistryRecordNormalized) : null;
@@ -761,14 +765,67 @@ async function transitionExistingMatchToReview(params: {
     propertyId: String(params.existingMatch.propertyId || "") || null,
     actorType: "admin",
     actorId: params.actorId,
-    eventType: "match_returned_to_review",
+    eventType: params.eventType || "match_returned_to_review",
     eventData: {
       reason: params.reason,
       replacementMatchStatus: replacement.matchStatus,
       replacedByNormalizedRecordId: params.existingMatch.normalizedRecordId,
+      ...(params.eventData || {}),
     },
   });
   return replacement;
+}
+
+async function listPropertySourceMatches(params: { propertyId: string; sourceKey: RegistrySourceKey }) {
+  const snap = await db
+    .collection("registryMatches")
+    .where("propertyId", "==", params.propertyId)
+    .where("sourceKey", "==", params.sourceKey)
+    .get();
+  return (snap.docs || []).map((doc: any) => ({ id: doc.id, ...(doc.data() || {}) } as RegistryMatchRecord));
+}
+
+async function cleanupWeakerProjectionCandidates(params: {
+  winningMatch: RegistryMatchRecord;
+  source: RegistrySourceRecord;
+  actorId: string;
+  reason: string;
+}) {
+  if (!params.winningMatch.propertyId || params.winningMatch.matchStatus !== "matched") {
+    return [] as RegistryMatchRecord[];
+  }
+
+  const attachedMatches = await listPropertySourceMatches({
+    propertyId: params.winningMatch.propertyId,
+    sourceKey: params.source.sourceKey,
+  });
+  const projectionWinner = selectRegistryProjectionWinner(attachedMatches);
+  if (!projectionWinner || projectionWinner.id !== params.winningMatch.id) {
+    return [] as RegistryMatchRecord[];
+  }
+
+  const demoted: RegistryMatchRecord[] = [];
+  for (const sibling of attachedMatches) {
+    if (sibling.id === params.winningMatch.id) continue;
+    if (!canRegistryMatchDriveProjection(sibling)) continue;
+    const siblingWouldWin = selectRegistryProjectionWinner([params.winningMatch, sibling]);
+    if (siblingWouldWin?.id === sibling.id) continue;
+
+    const replacement = await transitionExistingMatchToReview({
+      existingMatch: sibling,
+      actorId: params.actorId,
+      reason: params.reason,
+      source: params.source,
+      eventType: "candidate_returned_to_review_due_to_stronger_match",
+      eventData: {
+        activeProjectionNormalizedRecordId: params.winningMatch.normalizedRecordId,
+        activeProjectionRegistryRecordId: params.winningMatch.registryRecordId,
+      },
+    });
+    demoted.push(replacement);
+  }
+
+  return demoted;
 }
 
 export async function ensureRegistrySource(sourceKey: RegistrySourceKey) {
@@ -815,11 +872,8 @@ async function refreshPropertyProjectionFromCurrentMatches(params: {
     // no-op for mocked/query-like objects
   }
   const matchesSnap = await query.get();
-  const matches = (matchesSnap.docs || [])
-    .map((doc: any) => ({ id: doc.id, ...(doc.data() || {}) } as RegistryMatchRecord))
-    .filter((match) => match.matchStatus === "matched" || match.matchStatus === "mismatch" || match.matchStatus === "possible_match")
-    .sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
-  const best = matches[0] || null;
+  const matches = (matchesSnap.docs || []).map((doc: any) => ({ id: doc.id, ...(doc.data() || {}) } as RegistryMatchRecord));
+  const best = selectRegistryProjectionWinner(matches);
 
   let record: RegistryRecordNormalized | null = null;
   if (best?.normalizedRecordId) {
@@ -844,6 +898,7 @@ async function refreshPropertyProjectionFromCurrentMatches(params: {
     eventData: {
       triggeredBy: best ? "match_refresh" : "projection_reset",
       registryStatus: projection.registryStatus,
+      activeNormalizedRecordId: best?.normalizedRecordId || null,
     },
   });
   return projection;
@@ -944,27 +999,11 @@ export async function runRegistryImport(params: {
       });
     }
 
-    for (const match of matches.filter((item) => item.propertyId)) {
-      const record = normalizedRows.find((item) => item.id === match.normalizedRecordId) || null;
-      if (!record || !match.propertyId) continue;
-      const projection = await upsertPropertyRegistryProjection({
-        propertyId: match.propertyId,
+    for (const propertyId of Array.from(new Set(matches.map((item) => String(item.propertyId || "").trim()).filter(Boolean)))) {
+      await refreshPropertyProjectionFromCurrentMatches({
+        propertyId,
         source,
-        match,
-        record,
-      });
-      await recordRegistryAuditEvent({
-        sourceKey: params.sourceKey,
         importBatchId,
-        registryRecordId: record.registryRecordId,
-        propertyId: match.propertyId,
-        actorType: "system",
-        actorId: null,
-        eventType: "projection_updated",
-        eventData: {
-          registryStatus: projection.registryStatus,
-          matchStatus: match.matchStatus,
-        },
       });
     }
 
@@ -1347,7 +1386,7 @@ export async function applyRegistryMatchOverride(input: {
       sourceKey: detail.normalizedRecord.sourceKey,
       excludeNormalizedRecordId: detail.normalizedRecord.id,
     });
-    if (conflictingMatch && !input.replaceExistingMatch) {
+    if (conflictingMatch && conflictingMatch.matchStatus === "matched" && !input.replaceExistingMatch) {
       throw new RegistryOverrideError(
         "This property already has an active matched Halifax registry record. Confirm replacement before attaching this record.",
         {
@@ -1446,6 +1485,15 @@ export async function applyRegistryMatchOverride(input: {
 
   const previousPropertyId = String(current?.propertyId || "").trim() || null;
   await db.collection("registryMatches").doc(matchId).set(nextMatch, { merge: true });
+  const demotedCandidates =
+    nextMatch.propertyId && nextMatch.matchStatus === "matched"
+      ? await cleanupWeakerProjectionCandidates({
+          winningMatch: nextMatch,
+          source,
+          actorId: input.actorId,
+          reason: "Returned to review after a stronger property/source registry match became active.",
+        })
+      : [];
   if (nextMatch.propertyId) {
     await refreshPropertyProjectionFromCurrentMatches({
       propertyId: nextMatch.propertyId,
@@ -1484,8 +1532,26 @@ export async function applyRegistryMatchOverride(input: {
       replaceExistingMatch: Boolean(input.replaceExistingMatch),
       replacedExistingMatchId: replacedExistingMatch?.id || null,
       replacedExistingNormalizedRecordId: replacedExistingMatch?.normalizedRecordId || null,
+      demotedCandidateNormalizedRecordIds: demotedCandidates.map((match) => match.normalizedRecordId),
     },
   });
+  if ((replacedExistingMatch || demotedCandidates.length) && nextMatch.propertyId) {
+    await recordRegistryAuditEvent({
+      sourceKey: detail.normalizedRecord.sourceKey,
+      registryRecordId: detail.normalizedRecord.registryRecordId,
+      propertyId: nextMatch.propertyId,
+      actorType: "admin",
+      actorId: input.actorId,
+      eventType: "active_projection_replaced",
+      eventData: {
+        action: input.action,
+        reason: input.reason,
+        activeNormalizedRecordId: nextMatch.normalizedRecordId,
+        replacedActiveNormalizedRecordId: replacedExistingMatch?.normalizedRecordId || null,
+        demotedCandidateNormalizedRecordIds: demotedCandidates.map((match) => match.normalizedRecordId),
+      },
+    });
+  }
   return nextMatch;
 }
 
@@ -1693,21 +1759,32 @@ export async function getPropertyRegistryReview(propertyId: string, input?: { no
 export async function reEvaluatePropertyRegistry(propertyId: string, actorId: string) {
   const { adapter, source } = await ensureRegistrySource("halifax_r400");
   const matches = await reEvaluatePropertyAgainstRegistry({ adapter, propertyId, sourceKey: source.sourceKey });
-  const best = matches[0] || null;
-  let record: RegistryRecordNormalized | null = null;
-  if (best?.normalizedRecordId) {
-    const snap = await db.collection("registryRecordsNormalized").doc(best.normalizedRecordId).get();
-    if (snap.exists) record = { id: snap.id, ...(snap.data() || {}) } as RegistryRecordNormalized;
+  const best = selectRegistryProjectionWinner(matches);
+  if (best?.propertyId) {
+    await cleanupWeakerProjectionCandidates({
+      winningMatch: best,
+      source,
+      actorId,
+      reason: "Returned to review after a stronger property/source registry match became active during re-evaluation.",
+    });
   }
-  const projection = await upsertPropertyRegistryProjection({ propertyId, source, match: best, record });
+  const projection = await refreshPropertyProjectionFromCurrentMatches({
+    propertyId,
+    source,
+    actorId,
+  });
   await recordRegistryAuditEvent({
     sourceKey: source.sourceKey,
     propertyId,
-    registryRecordId: record?.registryRecordId || null,
+    registryRecordId: projection?.registryRecordId || null,
     actorType: "admin",
     actorId,
     eventType: "projection_updated",
-    eventData: { triggeredBy: "re_evaluate", registryStatus: projection.registryStatus },
+    eventData: {
+      triggeredBy: "re_evaluate",
+      registryStatus: projection.registryStatus,
+      activeNormalizedRecordId: best?.normalizedRecordId || null,
+    },
   });
   return { matches, projection };
 }

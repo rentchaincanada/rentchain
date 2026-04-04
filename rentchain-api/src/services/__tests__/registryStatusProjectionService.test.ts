@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { derivePropertyRegistryProjection } from "../registry/registryStatusProjectionService";
+import {
+  canRegistryMatchDriveProjection,
+  derivePropertyRegistryProjection,
+  selectRegistryProjectionWinner,
+} from "../registry/registryStatusProjectionService";
 
 const source = {
   id: "halifax_r400",
@@ -91,5 +95,87 @@ describe("registryStatusProjectionService", () => {
     expect(projection.summary).toContain("No public registry match found");
     expect(projection.summary).toContain("not a definitive compliance determination");
     expect(projection.recommendedAction).toContain("Review property details");
+  });
+
+  it("selects the strongest active projection winner for the same property/source", () => {
+    const winner = selectRegistryProjectionWinner([
+      {
+        id: "weak-possible",
+        sourceKey: "halifax_r400",
+        registryRecordId: "reg-weak",
+        normalizedRecordId: "norm-weak",
+        propertyId: "prop-1",
+        landlordId: "landlord-1",
+        matchMethod: "address_fuzzy",
+        matchScore: 0.82,
+        matchStatus: "possible_match",
+        mismatchReasons: ["manual_confirmation_recommended"],
+        reviewedBy: null,
+        reviewedAt: null,
+        overrideReason: null,
+        createdAt: "2026-04-01T00:00:00.000Z",
+        updatedAt: "2026-04-03T00:00:00.000Z",
+      },
+      {
+        id: "strong-match",
+        sourceKey: "halifax_r400",
+        registryRecordId: "reg-strong",
+        normalizedRecordId: "norm-strong",
+        propertyId: "prop-1",
+        landlordId: "landlord-1",
+        matchMethod: "manual",
+        matchScore: 1,
+        matchStatus: "matched",
+        mismatchReasons: [],
+        reviewedBy: "admin-1",
+        reviewedAt: "2026-04-02T00:00:00.000Z",
+        overrideReason: "confirmed",
+        createdAt: "2026-04-01T00:00:00.000Z",
+        updatedAt: "2026-04-02T00:00:00.000Z",
+      },
+    ]);
+
+    expect(winner?.id).toBe("strong-match");
+  });
+
+  it("never projects ignored or detached records", () => {
+    expect(
+      canRegistryMatchDriveProjection({
+        id: "ignored",
+        sourceKey: "halifax_r400",
+        registryRecordId: "reg-ignored",
+        normalizedRecordId: "norm-ignored",
+        propertyId: "prop-1",
+        landlordId: "landlord-1",
+        matchMethod: "manual",
+        matchScore: 1,
+        matchStatus: "ignored",
+        mismatchReasons: [],
+        reviewedBy: "admin-1",
+        reviewedAt: "2026-04-01T00:00:00.000Z",
+        overrideReason: "ignored",
+        createdAt: "2026-04-01T00:00:00.000Z",
+        updatedAt: "2026-04-01T00:00:00.000Z",
+      })
+    ).toBe(false);
+    expect(
+      canRegistryMatchDriveProjection({
+        id: "detached",
+        sourceKey: "halifax_r400",
+        registryRecordId: "reg-detached",
+        normalizedRecordId: "norm-detached",
+        propertyId: null,
+        landlordId: null,
+        matchMethod: "manual",
+        matchScore: 1,
+        matchStatus: "matched",
+        mismatchReasons: [],
+        reviewedBy: "admin-1",
+        reviewedAt: "2026-04-01T00:00:00.000Z",
+        overrideReason: "detached",
+        createdAt: "2026-04-01T00:00:00.000Z",
+        updatedAt: "2026-04-01T00:00:00.000Z",
+      })
+    ).toBe(false);
   });
 });
