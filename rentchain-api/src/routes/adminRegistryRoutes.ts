@@ -81,12 +81,17 @@ router.get("/registry/review", requireAuth, requirePermission("system.admin"), a
     const sourceKey = String(req.query?.sourceKey || "").trim() || null;
     const matchStatus = String(req.query?.matchStatus || "all").trim() || "all";
     const search = String(req.query?.q || "").trim() || null;
-    const items = await listRegistryReviewQueue({
+    const pageSizeRaw = Number(req.query?.pageSize ?? 50);
+    const pageSize = Number.isFinite(pageSizeRaw) ? pageSizeRaw : 50;
+    const pageCursor = String(req.query?.pageCursor || "").trim() || null;
+    const result = await listRegistryReviewQueue({
       sourceKey: sourceKey as any,
       matchStatus: matchStatus as any,
       search,
+      pageSize,
+      pageCursor,
     });
-    return res.json({ ok: true, items });
+    return res.json({ ok: true, ...result });
   } catch (error: any) {
     console.error("[adminRegistryRoutes] review queue failed", error);
     return res.status(500).json({ ok: false, error: "registry_review_failed" });

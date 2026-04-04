@@ -26,16 +26,25 @@ function mergeDoc(target: DocData | undefined, source: DocData, merge = false) {
   return { ...clone(target), ...clone(source) };
 }
 
-function buildQuery(collectionName: string, filters: Array<{ field: string; value: any }> = [], orderByField?: string, orderDir: "asc" | "desc" = "asc", limitCount?: number) {
+function buildQuery(
+  collectionName: string,
+  filters: Array<{ field: string; op?: string; value: any }> = [],
+  orderByFields: Array<{ field: string; dir: "asc" | "desc" }> = [],
+  limitCount?: number,
+  cursorValues?: any[]
+) {
   return {
-    where(field: string, _op: string, value: any) {
-      return buildQuery(collectionName, [...filters, { field, value }], orderByField, orderDir, limitCount);
+    where(field: string, op: string, value: any) {
+      return buildQuery(collectionName, [...filters, { field, op, value }], orderByFields, limitCount, cursorValues);
     },
     orderBy(field: string, dir: "asc" | "desc" = "asc") {
-      return buildQuery(collectionName, filters, field, dir, limitCount);
+      return buildQuery(collectionName, filters, [...orderByFields, { field, dir }], limitCount, cursorValues);
     },
     limit(count: number) {
-      return buildQuery(collectionName, filters, orderByField, orderDir, count);
+      return buildQuery(collectionName, filters, orderByFields, count, cursorValues);
+    },
+    startAfter(...values: any[]) {
+      return buildQuery(collectionName, filters, orderByFields, limitCount, values);
     },
     async get() {
       const collection = ensureCollection(collectionName);
@@ -45,14 +54,34 @@ function buildQuery(collectionName: string, filters: Array<{ field: string; valu
         data: () => clone(data),
       }));
       docs = docs.filter((doc) =>
-        filters.every((filter) => String(doc.data()?.[filter.field] ?? "") === String(filter.value ?? ""))
+        filters.every((filter) => {
+          const current = doc.data()?.[filter.field];
+          if (filter.op === "array-contains") return Array.isArray(current) && current.includes(filter.value);
+          return String(current ?? "") === String(filter.value ?? "");
+        })
       );
-      if (orderByField) {
+      if (orderByFields.length) {
         docs.sort((a, b) => {
-          const av = a.data()?.[orderByField];
-          const bv = b.data()?.[orderByField];
-          const result = String(av ?? "").localeCompare(String(bv ?? ""));
-          return orderDir === "desc" ? -result : result;
+          for (const rule of orderByFields) {
+            const av = rule.field === "__name__" ? a.id : a.data()?.[rule.field];
+            const bv = rule.field === "__name__" ? b.id : b.data()?.[rule.field];
+            const result = String(av ?? "").localeCompare(String(bv ?? ""));
+            if (result !== 0) return rule.dir === "desc" ? -result : result;
+          }
+          return 0;
+        });
+      }
+      if (cursorValues?.length && orderByFields.length) {
+        docs = docs.filter((doc) => {
+          for (let index = 0; index < orderByFields.length; index += 1) {
+            const rule = orderByFields[index];
+            const current = rule.field === "__name__" ? doc.id : doc.data()?.[rule.field];
+            const cursor = cursorValues[index];
+            const compare = String(current ?? "").localeCompare(String(cursor ?? ""));
+            if (compare === 0) continue;
+            return rule.dir === "desc" ? compare < 0 : compare > 0;
+          }
+          return false;
         });
       }
       if (typeof limitCount === "number") docs = docs.slice(0, limitCount);
@@ -707,10 +736,106 @@ describe("registryImportService", () => {
       updatedAt: "2026-04-01T00:00:00.000Z",
     });
 
-    await expect(listRegistryReviewQueue({ matchStatus: "matched", search: "harbour" })).resolves.toHaveLength(1);
-    await expect(listRegistryReviewQueue({ matchStatus: "matched", search: "9191919" })).resolves.toHaveLength(1);
-    await expect(listRegistryReviewQueue({ matchStatus: "matched", search: "REG-SEARCH" })).resolves.toHaveLength(1);
-    await expect(listRegistryReviewQueue({ matchStatus: "matched", search: "other" })).resolves.toHaveLength(0);
+    await expect(listRegistryReviewQueue({ matchStatus: "matched", search: "harbour" })).resolves.toMatchObject({
+      items: [expect.any(Object)],
+      pageInfo: expect.any(Object),
+      summary: expect.any(Object),
+    });
+    await expect(listRegistryReviewQueue({ matchStatus: "matched", search: "9191919" })).resolves.toMatchObject({
+      items: [expect.any(Object)],
+    });
+    await expect(listRegistryReviewQueue({ matchStatus: "matched", search: "REG-SEARCH" })).resolves.toMatchObject({
+      items: [expect.any(Object)],
+    });
+    await expect(listRegistryReviewQueue({ matchStatus: "matched", search: "other" })).resolves.toMatchObject({
+      items: [],
+    });
+  });
+
+  it("returns paginated queue pages with cursor metadata and summary counts", async () => {
+    const { listRegistryReviewQueue } = await import("../registry/registryImportService");
+
+    for (let index = 1; index <= 3; index += 1) {
+      const id = `record-page-${index}`;
+      ensureCollection("registryRecordsNormalized").set(id, {
+        id,
+        importBatchId: "import-1",
+        sourceKey: "halifax_r400",
+        jurisdictionCountry: "CA",
+        jurisdictionProvince: "NS",
+        jurisdictionMunicipality: "Halifax",
+        registryCategory: "rental_registry",
+        registryRecordId: `reg-page-${index}`,
+        registrationNumber: `REG-PAGE-${index}`,
+        pid: `${index}${index}${index}${index}`,
+        addressRaw: `${index} Queue Street, Halifax`,
+        primaryAddressCandidate: `${index} queue st halifax ns`,
+        addressCandidates: [`${index} queue st halifax ns`],
+        addressNormalized: `${index} queue st halifax ns`,
+        postalCode: null,
+        rentalUnitTypeRaw: null,
+        rentalUnitTypeNormalized: null,
+        buildingTypeRaw: null,
+        buildingTypeNormalized: null,
+        registeredUnits: 1,
+        numberOfFloors: 1,
+        sharedFacilities: null,
+        registrationStatusRaw: "Y",
+        registrationStatusNormalized: "registered",
+        registrationIssuedAt: null,
+        lat: null,
+        lng: null,
+        sourceConfidence: 0.94,
+        internalDiagnostics: { unmatchedReasons: [], pidSourceFieldsChecked: ["pid"], addressCandidateCount: 1 },
+        importedAt: "2026-04-01T00:00:00.000Z",
+        updatedAt: `2026-04-0${index}T00:00:00.000Z`,
+      });
+      ensureCollection("registryMatches").set(`halifax_r400_reg-page-${index}`, {
+        id: `halifax_r400_reg-page-${index}`,
+        sourceKey: "halifax_r400",
+        registryRecordId: `reg-page-${index}`,
+        normalizedRecordId: id,
+        propertyId: null,
+        landlordId: null,
+        matchMethod: index === 1 ? "manual" : null,
+        matchScore: index,
+        matchStatus: index === 1 ? "matched" : index === 2 ? "mismatch" : "unmatched",
+        mismatchReasons: [],
+        reviewedBy: null,
+        reviewedAt: null,
+        overrideReason: null,
+        createdAt: `2026-04-0${index}T00:00:00.000Z`,
+        updatedAt: `2026-04-0${index}T00:00:00.000Z`,
+      });
+    }
+
+    const firstPage = await listRegistryReviewQueue({ pageSize: 2 });
+    expect(firstPage.items).toHaveLength(2);
+    expect(firstPage.pageInfo.pageSize).toBe(2);
+    expect(firstPage.pageInfo.hasMore).toBe(true);
+    expect(firstPage.pageInfo.nextCursor).toBeTruthy();
+    expect(firstPage.summary.all).toBe(3);
+    expect(firstPage.summary.matched).toBe(1);
+    expect(firstPage.summary.mismatch).toBe(1);
+    expect(firstPage.summary.unmatched).toBe(1);
+
+    const secondPage = await listRegistryReviewQueue({
+      pageSize: 2,
+      pageCursor: firstPage.pageInfo.nextCursor,
+    });
+    expect(secondPage.items).toHaveLength(1);
+  });
+
+  it("returns stable empty pagination state when no queue items match", async () => {
+    const { listRegistryReviewQueue } = await import("../registry/registryImportService");
+    await expect(listRegistryReviewQueue({ matchStatus: "ignored", search: "missing", pageSize: 25 })).resolves.toMatchObject({
+      items: [],
+      pageInfo: {
+        pageSize: 25,
+        nextCursor: null,
+        hasMore: false,
+      },
+    });
   });
 
   it("returns PID enrichment cues for property review when internal PID is missing", async () => {

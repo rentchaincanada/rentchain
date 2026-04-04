@@ -134,6 +134,33 @@ export type RegistryMatchRecord = {
   reviewedBy: string | null;
   reviewedAt: string | null;
   overrideReason: string | null;
+  queueSummary?: {
+    displayAddress: string | null;
+    registrationNumber: string | null;
+    registryPid: string | null;
+    property: {
+      id: string;
+      name: string | null;
+      addressLine1: string | null;
+      city: string | null;
+      province: string | null;
+      postalCode: string | null;
+      pid: string | null;
+    } | null;
+    topCandidate: {
+      propertyId: string;
+      propertyName: string | null;
+      addressLine1: string | null;
+      city: string | null;
+      province: string | null;
+      postalCode: string | null;
+      pid: string | null;
+      unitCount: number | null;
+      score: number;
+    } | null;
+    reasonSummary: string[];
+  };
+  queueSearchTokens?: string[];
   createdAt: string;
   updatedAt: string;
 };

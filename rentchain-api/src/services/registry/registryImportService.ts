@@ -94,6 +94,159 @@ function safeLower(value: unknown) {
   return String(value || "").trim().toLowerCase();
 }
 
+function tokenizeSearchValue(value: unknown) {
+  const normalized = safeLower(value);
+  if (!normalized) return [] as string[];
+  const compact = normalized.replace(/\s+/g, " ").trim();
+  const alnumCompact = compact.replace(/[^a-z0-9_-]+/g, "");
+  const tokens = compact
+    .split(/[^a-z0-9_-]+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 2);
+  return Array.from(new Set([compact, alnumCompact, ...tokens].filter(Boolean)));
+}
+
+function encodeRegistryReviewCursor(input: { updatedAt: string; id: string }) {
+  return Buffer.from(JSON.stringify(input), "utf8").toString("base64");
+}
+
+function decodeRegistryReviewCursor(input: string | null | undefined) {
+  if (!input) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(String(input), "base64").toString("utf8"));
+    const updatedAt = String(parsed?.updatedAt || "").trim();
+    const id = String(parsed?.id || "").trim();
+    if (!updatedAt || !id) return null;
+    return { updatedAt, id };
+  } catch {
+    return null;
+  }
+}
+
+async function buildRegistryReviewQueueSummary(params: {
+  adapter: RegistrySourceAdapter;
+  match: RegistryMatchRecord;
+  normalizedRecord: RegistryRecordNormalized | null;
+  property?: Record<string, any> | null;
+  includeTopCandidate?: boolean;
+}) {
+  const propertySummary = params.property
+    ? {
+        id: String(params.property.id || params.match.propertyId || ""),
+        name: String(params.property.name || "").trim() || null,
+        addressLine1: String(params.property.addressLine1 || params.property.address1 || params.property.address || "").trim() || null,
+        city: String(params.property.city || "").trim() || null,
+        province: String(params.property.province || "").trim() || null,
+        postalCode: String(params.property.postalCode || "").trim() || null,
+        pid: resolvePropertyPidLikeValue(params.property),
+      }
+    : null;
+
+  let topCandidate: NonNullable<NonNullable<RegistryMatchRecord["queueSummary"]>["topCandidate"]> | null = null;
+  if (params.includeTopCandidate && params.normalizedRecord && !params.match.propertyId) {
+    const candidate = (await findRegistryCandidatesForRecord({
+      adapter: params.adapter,
+      record: params.normalizedRecord,
+    }))[0];
+    if (candidate) {
+      topCandidate = {
+        propertyId: candidate.propertyId,
+        propertyName: candidate.propertyName,
+        addressLine1: candidate.addressLine1,
+        city: candidate.city,
+        province: candidate.province,
+        postalCode: candidate.postalCode,
+        pid: candidate.pid,
+        unitCount: candidate.unitCount,
+        score: candidate.score,
+      };
+    }
+  }
+
+  const reasonSummary = summarizeRegistryReasons([
+    ...(params.match.mismatchReasons || []),
+    ...(params.normalizedRecord?.internalDiagnostics?.unmatchedReasons || []),
+  ]);
+
+  const queueSummary = {
+    displayAddress: params.normalizedRecord?.addressRaw || null,
+    registrationNumber: params.normalizedRecord?.registrationNumber || null,
+    registryPid: params.normalizedRecord?.pid || null,
+    property: propertySummary,
+    topCandidate,
+    reasonSummary,
+  };
+
+  const queueSearchTokens = Array.from(
+    new Set([
+      ...tokenizeSearchValue(queueSummary.displayAddress),
+      ...tokenizeSearchValue(queueSummary.registrationNumber),
+      ...tokenizeSearchValue(queueSummary.registryPid),
+      ...tokenizeSearchValue(queueSummary.property?.name),
+      ...tokenizeSearchValue(queueSummary.property?.addressLine1),
+      ...tokenizeSearchValue(queueSummary.property?.pid),
+      ...tokenizeSearchValue(queueSummary.topCandidate?.propertyName),
+      ...tokenizeSearchValue(queueSummary.topCandidate?.addressLine1),
+      ...tokenizeSearchValue(queueSummary.topCandidate?.pid),
+    ])
+  );
+
+  return { queueSummary, queueSearchTokens };
+}
+
+async function enrichRegistryMatchForQueue(params: {
+  match: RegistryMatchRecord;
+  normalizedRecord?: RegistryRecordNormalized | null;
+  source?: RegistrySourceRecord | null;
+  includeTopCandidate?: boolean;
+}) {
+  const normalizedResolved =
+    params.normalizedRecord ??
+    (params.match.normalizedRecordId
+      ? await (async () => {
+          const snap = await db.collection("registryRecordsNormalized").doc(params.match.normalizedRecordId).get();
+          return snap.exists ? ({ id: snap.id, ...(snap.data() || {}) } as RegistryRecordNormalized) : null;
+        })()
+      : null);
+  const source =
+    params.source || (normalizedResolved ? (await ensureRegistrySource(normalizedResolved.sourceKey)).source : null);
+  const adapter = source ? getAdapter(source.sourceKey) : null;
+  const property =
+    params.match.propertyId && adapter
+      ? await (async () => {
+          const snap = await db.collection("properties").doc(String(params.match.propertyId)).get();
+          return snap.exists ? ({ id: snap.id, ...(snap.data() || {}) } as any) : null;
+        })()
+      : null;
+  if (!adapter) {
+    return {
+      ...params.match,
+      queueSummary: params.match.queueSummary,
+      queueSearchTokens: params.match.queueSearchTokens || [],
+    };
+  }
+  const queue = await buildRegistryReviewQueueSummary({
+    adapter,
+    match: params.match,
+    normalizedRecord: normalizedResolved,
+    property,
+    includeTopCandidate: params.includeTopCandidate !== false,
+  });
+  const enriched = {
+    ...params.match,
+    queueSummary: queue.queueSummary,
+    queueSearchTokens: queue.queueSearchTokens,
+  };
+  await db.collection("registryMatches").doc(params.match.id).set(
+    {
+      queueSummary: queue.queueSummary,
+      queueSearchTokens: queue.queueSearchTokens,
+    },
+    { merge: true }
+  );
+  return enriched;
+}
+
 function resolvePropertyPidLikeValue(property: Record<string, any>) {
   const metadata = property?.metadata && typeof property.metadata === "object" ? property.metadata : {};
   return (
@@ -556,7 +709,13 @@ export async function runRegistryImport(params: {
 
     const matches: RegistryMatchRecord[] = [];
     for (const row of normalizedRows) {
-      const evaluated = await evaluateRegistryMatch({ adapter, record: row });
+      const evaluatedBase = await evaluateRegistryMatch({ adapter, record: row });
+      const evaluated = await enrichRegistryMatchForQueue({
+        match: evaluatedBase,
+        normalizedRecord: row,
+        source,
+        includeTopCandidate: true,
+      });
       matches.push(evaluated);
       await db.collection("registryMatches").doc(evaluated.id).set(evaluated, { merge: true });
       await recordRegistryAuditEvent({
@@ -693,68 +852,220 @@ export async function listRegistryReviewQueue(input?: {
   sourceKey?: RegistrySourceKey | null;
   matchStatus?: RegistryMatchRecord["matchStatus"] | "all" | null;
   search?: string | null;
+  pageSize?: number | null;
+  pageCursor?: string | null;
 }) {
-  let query: FirebaseFirestore.Query = db.collection("registryMatches").orderBy("updatedAt", "desc");
-  if (input?.sourceKey) {
-    query = db.collection("registryMatches").where("sourceKey", "==", input.sourceKey).orderBy("updatedAt", "desc");
+  const sourceKey = (input?.sourceKey || "halifax_r400") as RegistrySourceKey;
+  const searchTokens = tokenizeSearchValue(input?.search).slice(0, 8);
+  const statusFilter = input?.matchStatus && input.matchStatus !== "all" ? input.matchStatus : null;
+  const pageSizeRaw = Number(input?.pageSize ?? 50);
+  const pageSize = Number.isFinite(pageSizeRaw) ? Math.min(Math.max(Math.floor(pageSizeRaw), 1), 100) : 50;
+  const cursor = decodeRegistryReviewCursor(input?.pageCursor);
+
+  const summary = {
+    all: 0,
+    possible_match: 0,
+    mismatch: 0,
+    unmatched: 0,
+    matched: 0,
+    ignored: 0,
+  } as Record<"all" | RegistryMatchRecord["matchStatus"], number>;
+
+  const summarySnap = await db.collection("registryMatches").where("sourceKey", "==", sourceKey).get();
+  for (const doc of summarySnap.docs || []) {
+    const status = String((doc.data() || {}).matchStatus || "").trim() as RegistryMatchRecord["matchStatus"];
+    summary.all += 1;
+    if (status && status in summary) summary[status] += 1;
   }
-  let snap: FirebaseFirestore.QuerySnapshot;
-  try {
-    snap = await query.get();
-  } catch (error) {
-    if (isMissingIndexError(error)) {
-      console.warn("[registry] listRegistryReviewQueue missing index", { input, message: (error as any)?.message });
-      return [];
-    }
-    throw error;
+
+  let query: FirebaseFirestore.Query = db.collection("registryMatches").where("sourceKey", "==", sourceKey);
+  if (statusFilter) {
+    query = query.where("matchStatus", "==", statusFilter);
   }
+  query = query.orderBy("updatedAt", "desc").orderBy("__name__", "desc");
+  if (cursor) {
+    query = query.startAfter(cursor.updatedAt, cursor.id);
+  }
+  query = query.limit(searchTokens.length ? Math.max(pageSize * 2, pageSize + 1) : pageSize + 1);
+
+  let collected: any[] = [];
+  let lastScanned: { updatedAt: string; id: string } | null = cursor;
+  let hasMore = false;
+  let exhausted = false;
   const search = safeLower(input?.search);
-  const items = await Promise.all(
-    (snap.docs || []).map(async (doc: any) => {
-      const match = { id: doc.id, ...(doc.data() || {}) } as RegistryMatchRecord;
-      if (input?.matchStatus && input.matchStatus !== "all" && match.matchStatus !== input.matchStatus) return null;
-      const normalizedSnap = await db.collection("registryRecordsNormalized").doc(match.normalizedRecordId).get();
-      const propertySnap = match.propertyId ? await db.collection("properties").doc(match.propertyId).get() : null;
-      const normalizedRecord = normalizedSnap.exists ? ({ id: normalizedSnap.id, ...(normalizedSnap.data() || {}) } as RegistryRecordNormalized) : null;
-      const { adapter } = normalizedRecord ? await ensureRegistrySource(normalizedRecord.sourceKey) : { adapter: null as any };
-      const topCandidate =
-        normalizedRecord && !match.propertyId
-          ? ((await findRegistryCandidatesForRecord({ adapter, record: normalizedRecord }))[0] || null)
-          : null;
-      return {
-        match,
-        normalizedRecord,
-        property: propertySnap?.exists ? { id: propertySnap.id, ...(propertySnap.data() || {}) } : null,
-        topCandidate,
-        reasonSummary: summarizeRegistryReasons([
-          ...(match.mismatchReasons || []),
-          ...(normalizedRecord?.internalDiagnostics?.unmatchedReasons || []),
-        ]),
-      };
-    })
-  );
-  return items.filter((entry: any) => {
-    if (!entry) return false;
-    if (!search) return true;
-    const haystack = [
-      entry.match?.registryRecordId,
-      entry.normalizedRecord?.addressRaw,
-      entry.normalizedRecord?.registrationNumber,
-      entry.normalizedRecord?.pid,
-      entry.property?.name,
-      entry.property?.addressLine1,
-      entry.property?.city,
-      entry.property?.province,
-      entry.property?.pid,
-      entry.topCandidate?.propertyName,
-      entry.topCandidate?.addressLine1,
-      entry.topCandidate?.pid,
-    ]
-      .map((value) => safeLower(value))
-      .filter(Boolean)
-      .join(" ");
-    return haystack.includes(search);
-  });
+
+  if (!searchTokens.length) {
+    let snap: FirebaseFirestore.QuerySnapshot;
+    try {
+      snap = await query.get();
+    } catch (error) {
+      if (isMissingIndexError(error)) {
+        console.warn("[registry] listRegistryReviewQueue missing index", { input, message: (error as any)?.message });
+        return {
+          items: [],
+          pageInfo: { pageSize, nextCursor: null, hasMore: false },
+          summary,
+        };
+      }
+      throw error;
+    }
+    const docs = snap.docs || [];
+    const pageDocs = docs.slice(0, pageSize);
+    const items = await Promise.all(
+      pageDocs.map(async (doc: any) => {
+        const match = await enrichRegistryMatchForQueue({
+          match: { id: doc.id, ...(doc.data() || {}) } as RegistryMatchRecord,
+          includeTopCandidate: true,
+        });
+        const queueSummary = match.queueSummary || null;
+        return {
+          match: {
+            id: match.id,
+            sourceKey: match.sourceKey,
+            registryRecordId: match.registryRecordId,
+            normalizedRecordId: match.normalizedRecordId,
+            propertyId: match.propertyId,
+            landlordId: match.landlordId,
+            matchMethod: match.matchMethod,
+            matchScore: match.matchScore,
+            matchStatus: match.matchStatus,
+            mismatchReasons: match.mismatchReasons,
+            reviewedBy: match.reviewedBy,
+            reviewedAt: match.reviewedAt,
+            overrideReason: match.overrideReason,
+            createdAt: match.createdAt,
+            updatedAt: match.updatedAt,
+          },
+          normalizedRecord: queueSummary
+            ? {
+                id: match.normalizedRecordId,
+                registryRecordId: match.registryRecordId,
+                registrationNumber: queueSummary.registrationNumber,
+                pid: queueSummary.registryPid,
+                addressRaw: queueSummary.displayAddress,
+              }
+            : null,
+          property: queueSummary?.property || null,
+          topCandidate: queueSummary?.topCandidate || null,
+          reasonSummary: queueSummary?.reasonSummary || [],
+        };
+      })
+    );
+    const hasMore = docs.length > pageSize;
+    const nextCursor = hasMore
+      ? encodeRegistryReviewCursor({
+          updatedAt: String(pageDocs[pageDocs.length - 1]?.data()?.updatedAt || ""),
+          id: String(pageDocs[pageDocs.length - 1]?.id || ""),
+        })
+      : null;
+    return {
+      items,
+      pageInfo: {
+        pageSize,
+        nextCursor,
+        hasMore,
+      },
+      summary,
+    };
+  }
+
+  while (collected.length < pageSize && !exhausted) {
+    let snap: FirebaseFirestore.QuerySnapshot;
+    try {
+      snap = await query.get();
+    } catch (error) {
+      if (isMissingIndexError(error)) {
+        console.warn("[registry] listRegistryReviewQueue missing index", { input, message: (error as any)?.message });
+        return {
+          items: [],
+          pageInfo: { pageSize, nextCursor: null, hasMore: false },
+          summary,
+        };
+      }
+      throw error;
+    }
+
+    const docs = snap.docs || [];
+    if (!docs.length) {
+      exhausted = true;
+      break;
+    }
+
+    const chunk = await Promise.all(
+      docs.map(async (doc: any) => {
+        const match = await enrichRegistryMatchForQueue({
+          match: { id: doc.id, ...(doc.data() || {}) } as RegistryMatchRecord,
+          includeTopCandidate: true,
+        });
+        const queueSummary = match.queueSummary || null;
+        const matchesAllTokens = searchTokens.every((token) => (match.queueSearchTokens || []).includes(token));
+        if (search && !matchesAllTokens) return null;
+        return {
+          match: {
+            id: match.id,
+            sourceKey: match.sourceKey,
+            registryRecordId: match.registryRecordId,
+            normalizedRecordId: match.normalizedRecordId,
+            propertyId: match.propertyId,
+            landlordId: match.landlordId,
+            matchMethod: match.matchMethod,
+            matchScore: match.matchScore,
+            matchStatus: match.matchStatus,
+            mismatchReasons: match.mismatchReasons,
+            reviewedBy: match.reviewedBy,
+            reviewedAt: match.reviewedAt,
+            overrideReason: match.overrideReason,
+            createdAt: match.createdAt,
+            updatedAt: match.updatedAt,
+          },
+          normalizedRecord: queueSummary
+            ? {
+                id: match.normalizedRecordId,
+                registryRecordId: match.registryRecordId,
+                registrationNumber: queueSummary.registrationNumber,
+                pid: queueSummary.registryPid,
+                addressRaw: queueSummary.displayAddress,
+              }
+            : null,
+          property: queueSummary?.property || null,
+          topCandidate: queueSummary?.topCandidate || null,
+          reasonSummary: queueSummary?.reasonSummary || [],
+        };
+      })
+    );
+
+    collected = collected.concat(chunk.filter(Boolean));
+    const lastDoc = docs[docs.length - 1];
+    lastScanned = { updatedAt: String(lastDoc.data()?.updatedAt || ""), id: String(lastDoc.id || "") };
+    if (docs.length < Math.max(pageSize * 2, pageSize + 1)) {
+      exhausted = true;
+    } else {
+      query = db.collection("registryMatches").where("sourceKey", "==", sourceKey);
+      if (statusFilter) query = query.where("matchStatus", "==", statusFilter);
+      query = query.orderBy("updatedAt", "desc").orderBy("__name__", "desc");
+      if (lastScanned) query = query.startAfter(lastScanned.updatedAt, lastScanned.id);
+      query = query.limit(Math.max(pageSize * 2, pageSize + 1));
+    }
+  }
+
+  if (!exhausted && lastScanned) {
+    hasMore = true;
+  }
+  const items = collected.slice(0, pageSize);
+  if (collected.length > pageSize) {
+    hasMore = true;
+  }
+  const nextCursor = hasMore && lastScanned ? encodeRegistryReviewCursor(lastScanned) : null;
+
+  return {
+    items,
+    pageInfo: {
+      pageSize,
+      nextCursor,
+      hasMore,
+    },
+    summary,
+  };
 }
 
 export async function getRegistryRecordDetail(normalizedRecordId: string) {
@@ -950,6 +1261,13 @@ export async function applyRegistryMatchOverride(input: {
     };
   }
 
+  nextMatch = await enrichRegistryMatchForQueue({
+    match: nextMatch,
+    normalizedRecord: detail.normalizedRecord,
+    source,
+    includeTopCandidate: true,
+  });
+
   const previousPropertyId = String(current?.propertyId || "").trim() || null;
   await db.collection("registryMatches").doc(matchId).set(nextMatch, { merge: true });
   if (nextMatch.propertyId) {
@@ -1029,18 +1347,24 @@ export async function applyRegistryPidToPropertyFromRecord(input: {
   }
 
   if (previousPid === registryPid) {
-    const reevaluatedExisting = await evaluateRegistryMatch({
+    const reevaluatedExistingBase = await evaluateRegistryMatch({
       adapter,
       record: detail.normalizedRecord,
     });
-    await db.collection("registryMatches").doc(makeStableId([detail.normalizedRecord.sourceKey, detail.normalizedRecord.registryRecordId])).set(
-      {
-        ...reevaluatedExisting,
+    const reevaluatedExisting = await enrichRegistryMatchForQueue({
+      match: {
+        ...reevaluatedExistingBase,
         createdAt: detail.match?.createdAt || nowIso(),
         updatedAt: nowIso(),
         reviewedBy: input.actorId,
         reviewedAt: nowIso(),
       },
+      normalizedRecord: detail.normalizedRecord,
+      source,
+      includeTopCandidate: true,
+    });
+    await db.collection("registryMatches").doc(makeStableId([detail.normalizedRecord.sourceKey, detail.normalizedRecord.registryRecordId])).set(
+      reevaluatedExisting,
       { merge: true }
     );
     await refreshPropertyProjectionFromCurrentMatches({
@@ -1083,18 +1407,24 @@ export async function applyRegistryPidToPropertyFromRecord(input: {
     },
   });
 
-  const refreshedMatch = await evaluateRegistryMatch({
+  const refreshedMatchBase = await evaluateRegistryMatch({
     adapter,
     record: detail.normalizedRecord,
   });
-  await db.collection("registryMatches").doc(makeStableId([detail.normalizedRecord.sourceKey, detail.normalizedRecord.registryRecordId])).set(
-    {
-      ...refreshedMatch,
+  const refreshedMatch = await enrichRegistryMatchForQueue({
+    match: {
+      ...refreshedMatchBase,
       createdAt: detail.match?.createdAt || nowIso(),
       updatedAt: nowIso(),
       reviewedBy: input.actorId,
       reviewedAt: nowIso(),
     },
+    normalizedRecord: detail.normalizedRecord,
+    source,
+    includeTopCandidate: true,
+  });
+  await db.collection("registryMatches").doc(makeStableId([detail.normalizedRecord.sourceKey, detail.normalizedRecord.registryRecordId])).set(
+    refreshedMatch,
     { merge: true }
   );
   await refreshPropertyProjectionFromCurrentMatches({

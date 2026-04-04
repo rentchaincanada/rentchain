@@ -71,10 +71,6 @@ export type RegistryReviewItem = {
     registrationNumber: string | null;
     pid: string | null;
     addressRaw: string | null;
-    addressNormalized: string | null;
-    registrationStatusNormalized: "registered" | "pending_review" | "not_registered" | "unknown";
-    registeredUnits: number | null;
-    buildingTypeRaw: string | null;
   } | null;
   property: {
     id: string;
@@ -224,9 +220,56 @@ export async function fetchAdminRegistryReview(matchStatus: string = "all", sear
   const query = new URLSearchParams();
   if (matchStatus && matchStatus !== "all") query.set("matchStatus", matchStatus);
   if (searchQuery?.trim()) query.set("q", searchQuery.trim());
+  query.set("pageSize", "50");
   const suffix = query.toString() ? `?${query.toString()}` : "";
-  const response = await apiFetch<{ ok: true; items: RegistryReviewItem[] }>(`/admin/registry/review${suffix}`);
-  return response.items;
+  return apiFetch<{
+    ok: true;
+    items: RegistryReviewItem[];
+    pageInfo: {
+      pageSize: number;
+      nextCursor: string | null;
+      hasMore: boolean;
+    };
+    summary: {
+      all: number;
+      possible_match: number;
+      mismatch: number;
+      unmatched: number;
+      matched: number;
+      ignored: number;
+    };
+  }>(`/admin/registry/review${suffix}`);
+}
+
+export async function fetchNextAdminRegistryReviewPage(input: {
+  matchStatus?: string;
+  searchQuery?: string;
+  pageSize?: number;
+  pageCursor?: string | null;
+}) {
+  const query = new URLSearchParams();
+  if (input.matchStatus && input.matchStatus !== "all") query.set("matchStatus", input.matchStatus);
+  if (input.searchQuery?.trim()) query.set("q", input.searchQuery.trim());
+  if (input.pageSize) query.set("pageSize", String(input.pageSize));
+  if (input.pageCursor) query.set("pageCursor", input.pageCursor);
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return apiFetch<{
+    ok: true;
+    items: RegistryReviewItem[];
+    pageInfo: {
+      pageSize: number;
+      nextCursor: string | null;
+      hasMore: boolean;
+    };
+    summary: {
+      all: number;
+      possible_match: number;
+      mismatch: number;
+      unmatched: number;
+      matched: number;
+      ignored: number;
+    };
+  }>(`/admin/registry/review${suffix}`);
 }
 
 export async function searchAdminRegistryAttachProperties(query: string) {
