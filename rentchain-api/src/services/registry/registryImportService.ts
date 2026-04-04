@@ -123,6 +123,114 @@ function decodeRegistryReviewCursor(input: string | null | undefined) {
   }
 }
 
+function compareRegistryReviewQueueDocs(a: { id: string; data: () => any }, b: { id: string; data: () => any }) {
+  const updatedCompare = String(b.data()?.updatedAt || "").localeCompare(String(a.data()?.updatedAt || ""));
+  if (updatedCompare !== 0) return updatedCompare;
+  return String(b.id || "").localeCompare(String(a.id || ""));
+}
+
+function isAfterRegistryReviewCursor(
+  doc: { id: string; data: () => any },
+  cursor: { updatedAt: string; id: string } | null
+) {
+  if (!cursor) return true;
+  const updatedAt = String(doc.data()?.updatedAt || "");
+  const updatedCompare = updatedAt.localeCompare(cursor.updatedAt);
+  if (updatedCompare !== 0) return updatedCompare < 0;
+  return String(doc.id || "").localeCompare(cursor.id) < 0;
+}
+
+function buildRegistryReviewQueueItem(match: RegistryMatchRecord) {
+  const queueSummary = match.queueSummary || null;
+  return {
+    match: {
+      id: match.id,
+      sourceKey: match.sourceKey,
+      registryRecordId: match.registryRecordId,
+      normalizedRecordId: match.normalizedRecordId,
+      propertyId: match.propertyId,
+      landlordId: match.landlordId,
+      matchMethod: match.matchMethod,
+      matchScore: match.matchScore,
+      matchStatus: match.matchStatus,
+      mismatchReasons: match.mismatchReasons,
+      reviewedBy: match.reviewedBy,
+      reviewedAt: match.reviewedAt,
+      overrideReason: match.overrideReason,
+      createdAt: match.createdAt,
+      updatedAt: match.updatedAt,
+    },
+    normalizedRecord: queueSummary
+      ? {
+          id: match.normalizedRecordId,
+          registryRecordId: match.registryRecordId,
+          registrationNumber: queueSummary.registrationNumber,
+          pid: queueSummary.registryPid,
+          addressRaw: queueSummary.displayAddress,
+        }
+      : {
+          id: match.normalizedRecordId,
+          registryRecordId: match.registryRecordId,
+          registrationNumber: null,
+          pid: null,
+          addressRaw: null,
+        },
+    property: queueSummary?.property || null,
+    topCandidate: queueSummary?.topCandidate || null,
+    reasonSummary: queueSummary?.reasonSummary || summarizeRegistryReasons(match.mismatchReasons || []),
+  };
+}
+
+async function listRegistryReviewQueueFallback(params: {
+  sourceKey: RegistrySourceKey;
+  statusFilter: RegistryMatchRecord["matchStatus"] | null;
+  searchTokens: string[];
+  pageSize: number;
+  cursor: { updatedAt: string; id: string } | null;
+  summary: Record<"all" | RegistryMatchRecord["matchStatus"], number>;
+}) {
+  let baseQuery: FirebaseFirestore.Query = db.collection("registryMatches").where("sourceKey", "==", params.sourceKey);
+  if (params.statusFilter) {
+    baseQuery = baseQuery.where("matchStatus", "==", params.statusFilter);
+  }
+  const snap = await baseQuery.get();
+  const docs = (snap.docs || []).sort(compareRegistryReviewQueueDocs);
+  const scannedDocs = docs.filter((doc) => isAfterRegistryReviewCursor(doc, params.cursor));
+  const collected: ReturnType<typeof buildRegistryReviewQueueItem>[] = [];
+  const matchedDocs: Array<{ id: string; data: () => any }> = [];
+
+  for (const doc of scannedDocs) {
+    const match = await enrichRegistryMatchForQueue({
+      match: { id: doc.id, ...(doc.data() || {}) } as RegistryMatchRecord,
+      includeTopCandidate: true,
+    });
+    const matchesAllTokens = params.searchTokens.every((token) => (match.queueSearchTokens || []).includes(token));
+    if (params.searchTokens.length && !matchesAllTokens) continue;
+    collected.push(buildRegistryReviewQueueItem(match));
+    matchedDocs.push(doc);
+    if (collected.length >= params.pageSize + 1) break;
+  }
+
+  const pageItems = collected.slice(0, params.pageSize);
+  const hasMore = collected.length > params.pageSize;
+  const cursorDoc = hasMore ? matchedDocs[params.pageSize - 1] || null : null;
+
+  return {
+    items: pageItems,
+    pageInfo: {
+      pageSize: params.pageSize,
+      nextCursor: cursorDoc
+        ? encodeRegistryReviewCursor({
+            updatedAt: String(cursorDoc.data()?.updatedAt || ""),
+            id: String(cursorDoc.id || ""),
+          })
+        : null,
+      hasMore,
+    },
+    summary: params.summary,
+  };
+}
+
 async function buildRegistryReviewQueueSummary(params: {
   adapter: RegistrySourceAdapter;
   match: RegistryMatchRecord;
@@ -901,11 +1009,14 @@ export async function listRegistryReviewQueue(input?: {
     } catch (error) {
       if (isMissingIndexError(error)) {
         console.warn("[registry] listRegistryReviewQueue missing index", { input, message: (error as any)?.message });
-        return {
-          items: [],
-          pageInfo: { pageSize, nextCursor: null, hasMore: false },
+        return listRegistryReviewQueueFallback({
+          sourceKey,
+          statusFilter,
+          searchTokens,
+          pageSize,
+          cursor,
           summary,
-        };
+        });
       }
       throw error;
     }
@@ -917,38 +1028,7 @@ export async function listRegistryReviewQueue(input?: {
           match: { id: doc.id, ...(doc.data() || {}) } as RegistryMatchRecord,
           includeTopCandidate: true,
         });
-        const queueSummary = match.queueSummary || null;
-        return {
-          match: {
-            id: match.id,
-            sourceKey: match.sourceKey,
-            registryRecordId: match.registryRecordId,
-            normalizedRecordId: match.normalizedRecordId,
-            propertyId: match.propertyId,
-            landlordId: match.landlordId,
-            matchMethod: match.matchMethod,
-            matchScore: match.matchScore,
-            matchStatus: match.matchStatus,
-            mismatchReasons: match.mismatchReasons,
-            reviewedBy: match.reviewedBy,
-            reviewedAt: match.reviewedAt,
-            overrideReason: match.overrideReason,
-            createdAt: match.createdAt,
-            updatedAt: match.updatedAt,
-          },
-          normalizedRecord: queueSummary
-            ? {
-                id: match.normalizedRecordId,
-                registryRecordId: match.registryRecordId,
-                registrationNumber: queueSummary.registrationNumber,
-                pid: queueSummary.registryPid,
-                addressRaw: queueSummary.displayAddress,
-              }
-            : null,
-          property: queueSummary?.property || null,
-          topCandidate: queueSummary?.topCandidate || null,
-          reasonSummary: queueSummary?.reasonSummary || [],
-        };
+        return buildRegistryReviewQueueItem(match);
       })
     );
     const hasMore = docs.length > pageSize;
@@ -976,11 +1056,14 @@ export async function listRegistryReviewQueue(input?: {
     } catch (error) {
       if (isMissingIndexError(error)) {
         console.warn("[registry] listRegistryReviewQueue missing index", { input, message: (error as any)?.message });
-        return {
-          items: [],
-          pageInfo: { pageSize, nextCursor: null, hasMore: false },
+        return listRegistryReviewQueueFallback({
+          sourceKey,
+          statusFilter,
+          searchTokens,
+          pageSize,
+          cursor,
           summary,
-        };
+        });
       }
       throw error;
     }
@@ -997,40 +1080,9 @@ export async function listRegistryReviewQueue(input?: {
           match: { id: doc.id, ...(doc.data() || {}) } as RegistryMatchRecord,
           includeTopCandidate: true,
         });
-        const queueSummary = match.queueSummary || null;
         const matchesAllTokens = searchTokens.every((token) => (match.queueSearchTokens || []).includes(token));
         if (search && !matchesAllTokens) return null;
-        return {
-          match: {
-            id: match.id,
-            sourceKey: match.sourceKey,
-            registryRecordId: match.registryRecordId,
-            normalizedRecordId: match.normalizedRecordId,
-            propertyId: match.propertyId,
-            landlordId: match.landlordId,
-            matchMethod: match.matchMethod,
-            matchScore: match.matchScore,
-            matchStatus: match.matchStatus,
-            mismatchReasons: match.mismatchReasons,
-            reviewedBy: match.reviewedBy,
-            reviewedAt: match.reviewedAt,
-            overrideReason: match.overrideReason,
-            createdAt: match.createdAt,
-            updatedAt: match.updatedAt,
-          },
-          normalizedRecord: queueSummary
-            ? {
-                id: match.normalizedRecordId,
-                registryRecordId: match.registryRecordId,
-                registrationNumber: queueSummary.registrationNumber,
-                pid: queueSummary.registryPid,
-                addressRaw: queueSummary.displayAddress,
-              }
-            : null,
-          property: queueSummary?.property || null,
-          topCandidate: queueSummary?.topCandidate || null,
-          reasonSummary: queueSummary?.reasonSummary || [],
-        };
+        return buildRegistryReviewQueueItem(match);
       })
     );
 
