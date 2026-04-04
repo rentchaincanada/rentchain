@@ -41,6 +41,8 @@ type RegistryMatchOverrideErrorCode =
   | "invalid_property_id"
   | "property_not_found";
 
+type RegistryQueueSummary = NonNullable<RegistryMatchRecord["queueSummary"]>;
+
 function getAdapter(sourceKey: RegistrySourceKey): RegistrySourceAdapter {
   if (sourceKey === "halifax_r400") return new HalifaxR400Adapter();
   throw new Error(`Unsupported registry source: ${sourceKey}`);
@@ -94,7 +96,7 @@ function safeLower(value: unknown) {
   return String(value || "").trim().toLowerCase();
 }
 
-function tokenizeSearchValue(value: unknown) {
+function tokenizeSearchValue(value: unknown, options?: { includeCompact?: boolean }) {
   const normalized = safeLower(value);
   if (!normalized) return [] as string[];
   const compact = normalized.replace(/\s+/g, " ").trim();
@@ -103,7 +105,49 @@ function tokenizeSearchValue(value: unknown) {
     .split(/[^a-z0-9_-]+/)
     .map((token) => token.trim())
     .filter((token) => token.length >= 2);
+  if (options?.includeCompact === false) {
+    return Array.from(new Set(tokens.filter(Boolean)));
+  }
   return Array.from(new Set([compact, alnumCompact, ...tokens].filter(Boolean)));
+}
+
+function createRegistryReviewQueueSummaryShape(input?: Partial<RegistryQueueSummary> | RegistryQueueSummary | null): RegistryQueueSummary {
+  return {
+    displayAddress: input?.displayAddress || null,
+    registrationNumber: input?.registrationNumber || null,
+    registryPid: input?.registryPid || null,
+    property: input?.property || null,
+    topCandidate: input?.topCandidate || null,
+    reasonSummary: Array.isArray(input?.reasonSummary) ? input?.reasonSummary.filter(Boolean) : [],
+  };
+}
+
+function buildQueueSearchTokensFromSummary(summary?: Partial<RegistryQueueSummary> | RegistryQueueSummary | null) {
+  const normalized = createRegistryReviewQueueSummaryShape(summary);
+  return Array.from(
+    new Set([
+      ...tokenizeSearchValue(normalized.displayAddress),
+      ...tokenizeSearchValue(normalized.registrationNumber),
+      ...tokenizeSearchValue(normalized.registryPid),
+      ...tokenizeSearchValue(normalized.property?.name),
+      ...tokenizeSearchValue(normalized.property?.addressLine1),
+      ...tokenizeSearchValue(normalized.property?.pid),
+      ...tokenizeSearchValue(normalized.topCandidate?.propertyName),
+      ...tokenizeSearchValue(normalized.topCandidate?.addressLine1),
+      ...tokenizeSearchValue(normalized.topCandidate?.pid),
+    ])
+  );
+}
+
+function hasCompleteQueueSummaryForList(match: RegistryMatchRecord, includeTopCandidate: boolean) {
+  const summary = match.queueSummary;
+  if (!summary) return false;
+  const hasReasonSummary = Array.isArray(summary.reasonSummary);
+  const hasSearchTokens = Array.isArray(match.queueSearchTokens) && match.queueSearchTokens.length > 0;
+  const hasPrimaryContext = Boolean(summary.displayAddress || summary.registrationNumber || summary.registryPid || summary.property);
+  if (!hasReasonSummary || !hasPrimaryContext) return false;
+  if (!includeTopCandidate || match.propertyId) return true;
+  return Boolean(summary.topCandidate) && hasSearchTokens;
 }
 
 function encodeRegistryReviewCursor(input: { updatedAt: string; id: string }) {
@@ -200,9 +244,10 @@ async function listRegistryReviewQueueFallback(params: {
   const matchedDocs: Array<{ id: string; data: () => any }> = [];
 
   for (const doc of scannedDocs) {
+    const raw = doc.data() || {};
     const match = await enrichRegistryMatchForQueue({
-      match: { id: doc.id, ...(doc.data() || {}) } as RegistryMatchRecord,
-      includeTopCandidate: true,
+      match: { id: doc.id, ...raw } as RegistryMatchRecord,
+      includeTopCandidate: !raw.propertyId,
     });
     const matchesAllTokens = params.searchTokens.every((token) => (match.queueSearchTokens || []).includes(token));
     if (params.searchTokens.length && !matchesAllTokens) continue;
@@ -229,6 +274,57 @@ async function listRegistryReviewQueueFallback(params: {
     },
     summary: params.summary,
   };
+}
+
+async function getRegistryReviewQueueCount(query: FirebaseFirestore.Query) {
+  const countFn = (query as any)?.count;
+  if (typeof countFn !== "function") return null;
+  try {
+    const snapshot = await countFn.call(query).get();
+    const data = typeof snapshot?.data === "function" ? snapshot.data() : snapshot;
+    const parsed = Number(data?.count ?? 0);
+    return Number.isFinite(parsed) ? parsed : 0;
+  } catch {
+    return null;
+  }
+}
+
+async function getRegistryReviewQueueSummary(sourceKey: RegistrySourceKey) {
+  const summary = {
+    all: 0,
+    possible_match: 0,
+    mismatch: 0,
+    unmatched: 0,
+    matched: 0,
+    ignored: 0,
+  } as Record<"all" | RegistryMatchRecord["matchStatus"], number>;
+  const baseQuery = db.collection("registryMatches").where("sourceKey", "==", sourceKey);
+  const statuses: RegistryMatchRecord["matchStatus"][] = ["possible_match", "mismatch", "unmatched", "matched", "ignored"];
+  const allCount = await getRegistryReviewQueueCount(baseQuery);
+  if (allCount !== null) {
+    summary.all = allCount;
+    const statusCounts = await Promise.all(
+      statuses.map(async (status) => ({
+        status,
+        count: await getRegistryReviewQueueCount(baseQuery.where("matchStatus", "==", status)),
+      }))
+    );
+    const hasAllStatusCounts = statusCounts.every((entry) => entry.count !== null);
+    if (hasAllStatusCounts) {
+      for (const entry of statusCounts) {
+        summary[entry.status] = Number(entry.count || 0);
+      }
+      return summary;
+    }
+  }
+
+  const summarySnap = await baseQuery.get();
+  for (const doc of summarySnap.docs || []) {
+    const status = String((doc.data() || {}).matchStatus || "").trim() as RegistryMatchRecord["matchStatus"];
+    summary.all += 1;
+    if (status && status in summary) summary[status] += 1;
+  }
+  return summary;
 }
 
 async function buildRegistryReviewQueueSummary(params: {
@@ -276,28 +372,16 @@ async function buildRegistryReviewQueueSummary(params: {
     ...(params.normalizedRecord?.internalDiagnostics?.unmatchedReasons || []),
   ]);
 
-  const queueSummary = {
+  const queueSummary = createRegistryReviewQueueSummaryShape({
     displayAddress: params.normalizedRecord?.addressRaw || null,
     registrationNumber: params.normalizedRecord?.registrationNumber || null,
     registryPid: params.normalizedRecord?.pid || null,
     property: propertySummary,
     topCandidate,
     reasonSummary,
-  };
+  });
 
-  const queueSearchTokens = Array.from(
-    new Set([
-      ...tokenizeSearchValue(queueSummary.displayAddress),
-      ...tokenizeSearchValue(queueSummary.registrationNumber),
-      ...tokenizeSearchValue(queueSummary.registryPid),
-      ...tokenizeSearchValue(queueSummary.property?.name),
-      ...tokenizeSearchValue(queueSummary.property?.addressLine1),
-      ...tokenizeSearchValue(queueSummary.property?.pid),
-      ...tokenizeSearchValue(queueSummary.topCandidate?.propertyName),
-      ...tokenizeSearchValue(queueSummary.topCandidate?.addressLine1),
-      ...tokenizeSearchValue(queueSummary.topCandidate?.pid),
-    ])
-  );
+  const queueSearchTokens = buildQueueSearchTokensFromSummary(queueSummary);
 
   return { queueSummary, queueSearchTokens };
 }
@@ -307,7 +391,24 @@ async function enrichRegistryMatchForQueue(params: {
   normalizedRecord?: RegistryRecordNormalized | null;
   source?: RegistrySourceRecord | null;
   includeTopCandidate?: boolean;
-}) {
+}): Promise<RegistryMatchRecord> {
+  const includeTopCandidate = params.includeTopCandidate !== false;
+  if (params.match.queueSummary && (!Array.isArray(params.match.queueSearchTokens) || !params.match.queueSearchTokens.length)) {
+    const queueSearchTokens = buildQueueSearchTokensFromSummary(params.match.queueSummary);
+    await db.collection("registryMatches").doc(params.match.id).set({ queueSearchTokens }, { merge: true });
+    return {
+      ...params.match,
+      queueSummary: createRegistryReviewQueueSummaryShape(params.match.queueSummary),
+      queueSearchTokens,
+    };
+  }
+  if (hasCompleteQueueSummaryForList(params.match, includeTopCandidate)) {
+    return {
+      ...params.match,
+      queueSummary: createRegistryReviewQueueSummaryShape(params.match.queueSummary),
+      queueSearchTokens: params.match.queueSearchTokens || [],
+    };
+  }
   const normalizedResolved =
     params.normalizedRecord ??
     (params.match.normalizedRecordId
@@ -329,7 +430,7 @@ async function enrichRegistryMatchForQueue(params: {
   if (!adapter) {
     return {
       ...params.match,
-      queueSummary: params.match.queueSummary,
+      queueSummary: params.match.queueSummary ? createRegistryReviewQueueSummaryShape(params.match.queueSummary) : undefined,
       queueSearchTokens: params.match.queueSearchTokens || [],
     };
   }
@@ -338,7 +439,7 @@ async function enrichRegistryMatchForQueue(params: {
     match: params.match,
     normalizedRecord: normalizedResolved,
     property,
-    includeTopCandidate: params.includeTopCandidate !== false,
+    includeTopCandidate,
   });
   const enriched = {
     ...params.match,
@@ -963,28 +1064,16 @@ export async function listRegistryReviewQueue(input?: {
   pageSize?: number | null;
   pageCursor?: string | null;
 }) {
+  const startedAt = Date.now();
   const sourceKey = (input?.sourceKey || "halifax_r400") as RegistrySourceKey;
-  const searchTokens = tokenizeSearchValue(input?.search).slice(0, 8);
+  const searchTokens = tokenizeSearchValue(input?.search, { includeCompact: false }).slice(0, 8);
   const statusFilter = input?.matchStatus && input.matchStatus !== "all" ? input.matchStatus : null;
   const pageSizeRaw = Number(input?.pageSize ?? 50);
   const pageSize = Number.isFinite(pageSizeRaw) ? Math.min(Math.max(Math.floor(pageSizeRaw), 1), 100) : 50;
   const cursor = decodeRegistryReviewCursor(input?.pageCursor);
-
-  const summary = {
-    all: 0,
-    possible_match: 0,
-    mismatch: 0,
-    unmatched: 0,
-    matched: 0,
-    ignored: 0,
-  } as Record<"all" | RegistryMatchRecord["matchStatus"], number>;
-
-  const summarySnap = await db.collection("registryMatches").where("sourceKey", "==", sourceKey).get();
-  for (const doc of summarySnap.docs || []) {
-    const status = String((doc.data() || {}).matchStatus || "").trim() as RegistryMatchRecord["matchStatus"];
-    summary.all += 1;
-    if (status && status in summary) summary[status] += 1;
-  }
+  const summaryStartedAt = Date.now();
+  const summary = await getRegistryReviewQueueSummary(sourceKey);
+  const summaryMs = Date.now() - summaryStartedAt;
 
   let query: FirebaseFirestore.Query = db.collection("registryMatches").where("sourceKey", "==", sourceKey);
   if (statusFilter) {
@@ -1001,6 +1090,7 @@ export async function listRegistryReviewQueue(input?: {
   let hasMore = false;
   let exhausted = false;
   const search = safeLower(input?.search);
+  const queryStartedAt = Date.now();
 
   if (!searchTokens.length) {
     let snap: FirebaseFirestore.QuerySnapshot;
@@ -1022,15 +1112,18 @@ export async function listRegistryReviewQueue(input?: {
     }
     const docs = snap.docs || [];
     const pageDocs = docs.slice(0, pageSize);
+    const enrichmentStartedAt = Date.now();
     const items = await Promise.all(
       pageDocs.map(async (doc: any) => {
+        const raw = doc.data() || {};
         const match = await enrichRegistryMatchForQueue({
-          match: { id: doc.id, ...(doc.data() || {}) } as RegistryMatchRecord,
-          includeTopCandidate: true,
+          match: { id: doc.id, ...raw } as RegistryMatchRecord,
+          includeTopCandidate: !raw.propertyId,
         });
         return buildRegistryReviewQueueItem(match);
       })
     );
+    const enrichmentMs = Date.now() - enrichmentStartedAt;
     const hasMore = docs.length > pageSize;
     const nextCursor = hasMore
       ? encodeRegistryReviewCursor({
@@ -1038,7 +1131,7 @@ export async function listRegistryReviewQueue(input?: {
           id: String(pageDocs[pageDocs.length - 1]?.id || ""),
         })
       : null;
-    return {
+    const result = {
       items,
       pageInfo: {
         pageSize,
@@ -1047,6 +1140,21 @@ export async function listRegistryReviewQueue(input?: {
       },
       summary,
     };
+    const totalMs = Date.now() - startedAt;
+    if (totalMs >= 150) {
+      console.info("[registry] review queue timing", {
+        sourceKey,
+        matchStatus: statusFilter || "all",
+        searchTokens: searchTokens.length,
+        pageSize,
+        returnedItems: items.length,
+        summaryMs,
+        queryMs: Date.now() - queryStartedAt - enrichmentMs,
+        enrichmentMs,
+        totalMs,
+      });
+    }
+    return result;
   }
 
   while (collected.length < pageSize && !exhausted) {
@@ -1076,9 +1184,10 @@ export async function listRegistryReviewQueue(input?: {
 
     const chunk = await Promise.all(
       docs.map(async (doc: any) => {
+        const raw = doc.data() || {};
         const match = await enrichRegistryMatchForQueue({
-          match: { id: doc.id, ...(doc.data() || {}) } as RegistryMatchRecord,
-          includeTopCandidate: true,
+          match: { id: doc.id, ...raw } as RegistryMatchRecord,
+          includeTopCandidate: !raw.propertyId,
         });
         const matchesAllTokens = searchTokens.every((token) => (match.queueSearchTokens || []).includes(token));
         if (search && !matchesAllTokens) return null;
@@ -1109,7 +1218,7 @@ export async function listRegistryReviewQueue(input?: {
   }
   const nextCursor = hasMore && lastScanned ? encodeRegistryReviewCursor(lastScanned) : null;
 
-  return {
+  const result = {
     items,
     pageInfo: {
       pageSize,
@@ -1118,6 +1227,21 @@ export async function listRegistryReviewQueue(input?: {
     },
     summary,
   };
+  const totalMs = Date.now() - startedAt;
+  if (totalMs >= 150) {
+    console.info("[registry] review queue timing", {
+      sourceKey,
+      matchStatus: statusFilter || "all",
+      searchTokens: searchTokens.length,
+      pageSize,
+      returnedItems: items.length,
+      summaryMs,
+      queryMs: Date.now() - queryStartedAt,
+      totalMs,
+      usedSearchScan: true,
+    });
+  }
+  return result;
 }
 
 export async function getRegistryRecordDetail(normalizedRecordId: string) {
