@@ -273,6 +273,265 @@ describe("registryImportService", () => {
     expect(propertyReview?.projection?.registryStatus).toBe("verified");
   });
 
+  it("confirms a possible-match style record attach and refreshes projection plus audit state", async () => {
+    const { applyRegistryMatchOverride, getPropertyRegistryReview } = await import("../registry/registryImportService");
+
+    ensureCollection("properties").set("prop-possible", {
+      id: "prop-possible",
+      landlordId: "landlord-3",
+      name: "Possible Match Property",
+      addressLine1: "6428 Summit Street",
+      city: "Halifax",
+      province: "NS",
+      postalCode: "B3L 1S1",
+    });
+    ensureCollection("registryRecordsNormalized").set("record-possible", {
+      id: "record-possible",
+      importBatchId: "import-1",
+      sourceKey: "halifax_r400",
+      jurisdictionCountry: "CA",
+      jurisdictionProvince: "NS",
+      jurisdictionMunicipality: "Halifax",
+      registryCategory: "rental_registry",
+      registryRecordId: "reg-possible",
+      registrationNumber: "REG-POSSIBLE",
+      pid: "7654321",
+      addressRaw: "6420 SUMMIT STREET,6428 SUMMIT STREET,HALIFAX,B3L 1S1",
+      primaryAddressCandidate: "6420 summit st halifax ns b3l 1s1",
+      addressCandidates: [
+        "6420 summit st halifax ns b3l 1s1",
+        "6428 summit st halifax ns b3l 1s1",
+      ],
+      addressNormalized: "6420 summit st halifax ns b3l 1s1",
+      postalCode: "B3L1S1",
+      rentalUnitTypeRaw: null,
+      rentalUnitTypeNormalized: null,
+      buildingTypeRaw: null,
+      buildingTypeNormalized: null,
+      registeredUnits: 2,
+      numberOfFloors: 2,
+      sharedFacilities: null,
+      registrationStatusRaw: "Y",
+      registrationStatusNormalized: "registered",
+      registrationIssuedAt: "2026-04-01T00:00:00.000Z",
+      lat: null,
+      lng: null,
+      sourceConfidence: 0.94,
+      internalDiagnostics: {
+        unmatchedReasons: ["ambiguous_multi_address"],
+        pidSourceFieldsChecked: ["pid"],
+        addressCandidateCount: 2,
+      },
+      importedAt: "2026-04-01T00:00:00.000Z",
+      updatedAt: "2026-04-01T00:00:00.000Z",
+    });
+    ensureCollection("registryMatches").set("halifax_r400_reg-possible", {
+      id: "halifax_r400_reg-possible",
+      sourceKey: "halifax_r400",
+      registryRecordId: "reg-possible",
+      normalizedRecordId: "record-possible",
+      propertyId: null,
+      landlordId: null,
+      matchMethod: "address_fuzzy",
+      matchScore: 0.82,
+      matchStatus: "possible_match",
+      mismatchReasons: ["ambiguous_multi_address", "manual_confirmation_recommended"],
+      reviewedBy: null,
+      reviewedAt: null,
+      overrideReason: null,
+      createdAt: "2026-04-01T00:00:00.000Z",
+      updatedAt: "2026-04-01T00:00:00.000Z",
+    });
+
+    const updated = await applyRegistryMatchOverride({
+      normalizedRecordId: "record-possible",
+      action: "attach",
+      propertyId: "prop-possible",
+      reason: "Confirmed during possible match review",
+      actorId: "admin-2",
+    });
+
+    expect(updated.matchStatus).toBe("matched");
+    expect(updated.propertyId).toBe("prop-possible");
+
+    const propertyReview = await getPropertyRegistryReview("prop-possible", { normalizedRecordId: "record-possible" });
+    expect(propertyReview?.projection?.registryStatus).toBe("verified");
+    expect(propertyReview?.selectedComparison?.registryPid).toBe("7654321");
+
+    const auditEvents = Array.from(ensureCollection("registryAuditLog").values());
+    expect(
+      auditEvents.some(
+        (event) =>
+          event.eventType === "match_overridden" &&
+          event.propertyId === "prop-possible" &&
+          event.eventData?.action === "attach"
+      )
+    ).toBe(true);
+  });
+
+  it("returns PID enrichment cues for property review when internal PID is missing", async () => {
+    const { getPropertyRegistryReview } = await import("../registry/registryImportService");
+
+    ensureCollection("properties").set("prop-review", {
+      id: "prop-review",
+      landlordId: "landlord-4",
+      name: "Review Property",
+      addressLine1: "500 Example Street",
+      city: "Halifax",
+      province: "NS",
+      postalCode: "B3H 1A1",
+      unitCount: 3,
+    });
+    ensureCollection("registryRecordsNormalized").set("record-review", {
+      id: "record-review",
+      importBatchId: "import-1",
+      sourceKey: "halifax_r400",
+      jurisdictionCountry: "CA",
+      jurisdictionProvince: "NS",
+      jurisdictionMunicipality: "Halifax",
+      registryCategory: "rental_registry",
+      registryRecordId: "reg-review",
+      registrationNumber: "REG-REVIEW",
+      pid: "8888888",
+      addressRaw: "500 EXAMPLE STREET,HALIFAX,B3H 1A1",
+      primaryAddressCandidate: "500 example st halifax ns b3h 1a1",
+      addressCandidates: ["500 example st halifax ns b3h 1a1"],
+      addressNormalized: "500 example st halifax ns b3h 1a1",
+      postalCode: "B3H1A1",
+      rentalUnitTypeRaw: null,
+      rentalUnitTypeNormalized: null,
+      buildingTypeRaw: "Apartment",
+      buildingTypeNormalized: "apartment_building",
+      registeredUnits: 3,
+      numberOfFloors: 2,
+      sharedFacilities: null,
+      registrationStatusRaw: "Y",
+      registrationStatusNormalized: "registered",
+      registrationIssuedAt: "2026-04-01T00:00:00.000Z",
+      lat: null,
+      lng: null,
+      sourceConfidence: 0.94,
+      internalDiagnostics: {
+        unmatchedReasons: ["missing_internal_property_pid"],
+        pidSourceFieldsChecked: ["pid", "metadata.pid"],
+        addressCandidateCount: 1,
+      },
+      importedAt: "2026-04-01T00:00:00.000Z",
+      updatedAt: "2026-04-01T00:00:00.000Z",
+    });
+
+    const propertyReview = await getPropertyRegistryReview("prop-review", { normalizedRecordId: "record-review" });
+    expect(propertyReview?.propertyPid).toBe(null);
+    expect(propertyReview?.selectedComparison?.pidStatus).toBe("missing_internal_pid");
+    expect(propertyReview?.selectedComparison?.operatorPrompts).toContain(
+      "Property PID missing; registry record includes PID. Consider updating property data before confirming registry link."
+    );
+    expect(propertyReview?.selectedComparison?.reasonSummary).toContain(
+      "Internal property PID is missing, so PID auto-match could not run."
+    );
+  });
+
+  it("reports exact and mismatched PID comparison states for property review", async () => {
+    const { getPropertyRegistryReview } = await import("../registry/registryImportService");
+
+    ensureCollection("properties").set("prop-pid-exact", {
+      id: "prop-pid-exact",
+      name: "Exact PID Property",
+      addressLine1: "10 Exact Street",
+      city: "Halifax",
+      province: "NS",
+      postalCode: "B3K 1K1",
+      pid: "1111111",
+    });
+    ensureCollection("properties").set("prop-pid-mismatch", {
+      id: "prop-pid-mismatch",
+      name: "Mismatch PID Property",
+      addressLine1: "20 Mismatch Street",
+      city: "Halifax",
+      province: "NS",
+      postalCode: "B3K 1K2",
+      pid: "2222222",
+    });
+    ensureCollection("registryRecordsNormalized").set("record-pid-exact", {
+      id: "record-pid-exact",
+      importBatchId: "import-1",
+      sourceKey: "halifax_r400",
+      jurisdictionCountry: "CA",
+      jurisdictionProvince: "NS",
+      jurisdictionMunicipality: "Halifax",
+      registryCategory: "rental_registry",
+      registryRecordId: "reg-pid-exact",
+      registrationNumber: "REG-PID-EXACT",
+      pid: "1111111",
+      addressRaw: "10 EXACT STREET,HALIFAX,B3K 1K1",
+      primaryAddressCandidate: "10 exact st halifax ns b3k 1k1",
+      addressCandidates: ["10 exact st halifax ns b3k 1k1"],
+      addressNormalized: "10 exact st halifax ns b3k 1k1",
+      postalCode: "B3K1K1",
+      rentalUnitTypeRaw: null,
+      rentalUnitTypeNormalized: null,
+      buildingTypeRaw: null,
+      buildingTypeNormalized: null,
+      registeredUnits: 1,
+      numberOfFloors: 1,
+      sharedFacilities: null,
+      registrationStatusRaw: "Y",
+      registrationStatusNormalized: "registered",
+      registrationIssuedAt: null,
+      lat: null,
+      lng: null,
+      sourceConfidence: 0.94,
+      internalDiagnostics: { unmatchedReasons: [], pidSourceFieldsChecked: ["pid"], addressCandidateCount: 1 },
+      importedAt: "2026-04-01T00:00:00.000Z",
+      updatedAt: "2026-04-01T00:00:00.000Z",
+    });
+    ensureCollection("registryRecordsNormalized").set("record-pid-mismatch", {
+      id: "record-pid-mismatch",
+      importBatchId: "import-1",
+      sourceKey: "halifax_r400",
+      jurisdictionCountry: "CA",
+      jurisdictionProvince: "NS",
+      jurisdictionMunicipality: "Halifax",
+      registryCategory: "rental_registry",
+      registryRecordId: "reg-pid-mismatch",
+      registrationNumber: "REG-PID-MISMATCH",
+      pid: "3333333",
+      addressRaw: "20 MISMATCH STREET,HALIFAX,B3K 1K2",
+      primaryAddressCandidate: "20 mismatch st halifax ns b3k 1k2",
+      addressCandidates: ["20 mismatch st halifax ns b3k 1k2"],
+      addressNormalized: "20 mismatch st halifax ns b3k 1k2",
+      postalCode: "B3K1K2",
+      rentalUnitTypeRaw: null,
+      rentalUnitTypeNormalized: null,
+      buildingTypeRaw: null,
+      buildingTypeNormalized: null,
+      registeredUnits: 1,
+      numberOfFloors: 1,
+      sharedFacilities: null,
+      registrationStatusRaw: "Y",
+      registrationStatusNormalized: "registered",
+      registrationIssuedAt: null,
+      lat: null,
+      lng: null,
+      sourceConfidence: 0.94,
+      internalDiagnostics: { unmatchedReasons: [], pidSourceFieldsChecked: ["pid"], addressCandidateCount: 1 },
+      importedAt: "2026-04-01T00:00:00.000Z",
+      updatedAt: "2026-04-01T00:00:00.000Z",
+    });
+
+    const exactReview = await getPropertyRegistryReview("prop-pid-exact", { normalizedRecordId: "record-pid-exact" });
+    const mismatchReview = await getPropertyRegistryReview("prop-pid-mismatch", { normalizedRecordId: "record-pid-mismatch" });
+
+    expect(exactReview?.selectedComparison?.pidStatus).toBe("exact_match");
+    expect(exactReview?.selectedComparison?.operatorPrompts).toContain(
+      "Internal property PID matches the registry PID exactly."
+    );
+    expect(mismatchReview?.selectedComparison?.pidStatus).toBe("mismatch");
+    expect(mismatchReview?.selectedComparison?.operatorPrompts).toContain(
+      "Property PID differs from the registry PID. Manual confirmation is recommended."
+    );
+  });
+
   it("normalizes Halifax fields using the adapter contract", async () => {
     const { HalifaxR400Adapter } = await import("../registry/adapters/HalifaxR400Adapter");
     const adapter = new HalifaxR400Adapter();

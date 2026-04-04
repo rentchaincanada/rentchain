@@ -48,6 +48,9 @@ export default function AdminRegistryReviewPage() {
               </div>
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <Link to="/admin/registry/imports">
+                <Button variant="secondary">Back to imports</Button>
+              </Link>
               {["all", "possible_match", "mismatch", "unmatched", "matched", "ignored"].map((status) => (
                 <Button key={status} variant={matchStatus === status ? "primary" : "secondary"} onClick={() => setSearchParams(status === "all" ? {} : { matchStatus: status })}>
                   {status}
@@ -83,7 +86,17 @@ export default function AdminRegistryReviewPage() {
               <div style={{ color: "#475569", fontSize: 14 }}>
                 Property: {item.property?.name || item.property?.addressLine1 || item.match.propertyId || "--"}
               </div>
-              {item.match.mismatchReasons?.length ? <div style={{ color: "#92400e", fontSize: 14 }}>Reasons: {item.match.mismatchReasons.join(", ")}</div> : null}
+              {item.reasonSummary?.length ? (
+                <div style={{ color: "#92400e", fontSize: 14 }}>
+                  Review notes: {item.reasonSummary.join(" ")}
+                </div>
+              ) : null}
+              {!item.property && item.topCandidate ? (
+                <div style={{ color: "#475569", fontSize: 14 }}>
+                  Top candidate: {item.topCandidate.propertyName || item.topCandidate.addressLine1 || item.topCandidate.propertyId} · Score:{" "}
+                  {item.topCandidate.score}
+                </div>
+              ) : null}
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <Link to={`/admin/registry/records/${encodeURIComponent(item.match.normalizedRecordId)}`}>
                   <Button variant="secondary">Open record</Button>
@@ -91,6 +104,14 @@ export default function AdminRegistryReviewPage() {
                 {item.match.propertyId ? (
                   <Link to={`/admin/registry/properties/${encodeURIComponent(item.match.propertyId)}`}>
                     <Button variant="secondary">Open property review</Button>
+                  </Link>
+                ) : item.topCandidate ? (
+                  <Link
+                    to={`/admin/registry/properties/${encodeURIComponent(item.topCandidate.propertyId)}?normalizedRecordId=${encodeURIComponent(
+                      item.match.normalizedRecordId
+                    )}`}
+                  >
+                    <Button variant="secondary">Open candidate review</Button>
                   </Link>
                 ) : null}
               </div>

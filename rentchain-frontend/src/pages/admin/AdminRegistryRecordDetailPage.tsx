@@ -7,8 +7,15 @@ import {
   overrideAdminRegistryRecord,
   searchAdminRegistryAttachProperties,
   type RegistryAttachPropertySearchResult,
+  type RegistryPropertyComparison,
   type RegistryRecordDetail,
 } from "../../api/adminRegistryApi";
+
+function pidTone(status: RegistryPropertyComparison["pidStatus"] | undefined) {
+  if (status === "exact_match") return "accent";
+  if (status === "mismatch" || status === "missing_internal_pid") return "muted";
+  return "muted";
+}
 
 export default function AdminRegistryRecordDetailPage() {
   const { normalizedRecordId } = useParams<{ normalizedRecordId: string }>();
@@ -21,6 +28,7 @@ export default function AdminRegistryRecordDetailPage() {
   const [searchResults, setSearchResults] = useState<RegistryAttachPropertySearchResult[]>([]);
   const [propertyId, setPropertyId] = useState("");
   const [reason, setReason] = useState("Manual registry review");
+  const [copiedPid, setCopiedPid] = useState(false);
 
   const load = async () => {
     if (!normalizedRecordId) return;
@@ -66,7 +74,7 @@ export default function AdminRegistryRecordDetailPage() {
     };
   }, [searchQuery]);
 
-  const handleOverride = async (action: "attach" | "ignore" | "return_to_review") => {
+  const handleOverride = async (action: "attach" | "ignore" | "return_to_review", overridePropertyId?: string | null) => {
     if (!normalizedRecordId) return;
     try {
       setSaving(true);
@@ -74,7 +82,7 @@ export default function AdminRegistryRecordDetailPage() {
       await overrideAdminRegistryRecord({
         normalizedRecordId,
         action,
-        propertyId: action === "attach" ? propertyId : null,
+        propertyId: action === "attach" ? overridePropertyId || propertyId : null,
         reason,
       });
       await load();
@@ -82,6 +90,18 @@ export default function AdminRegistryRecordDetailPage() {
       setError(err?.message || "Failed to apply registry override");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const copyRegistryPid = async () => {
+    const pid = detail?.normalizedRecord?.pid;
+    if (!pid) return;
+    try {
+      await navigator.clipboard.writeText(pid);
+      setCopiedPid(true);
+      window.setTimeout(() => setCopiedPid(false), 1500);
+    } catch {
+      setCopiedPid(false);
     }
   };
 
@@ -115,7 +135,17 @@ export default function AdminRegistryRecordDetailPage() {
               <div>Address: {detail.normalizedRecord?.addressRaw || "--"}</div>
               <div>Status: {detail.normalizedRecord?.registrationStatusNormalized || "--"}</div>
               <div>Registration number: {detail.normalizedRecord?.registrationNumber || "--"}</div>
-              <div>PID: {detail.normalizedRecord?.pid || "--"}</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <span>PID: {detail.normalizedRecord?.pid || "--"}</span>
+                {detail.normalizedRecord?.pid ? (
+                  <Button variant="secondary" onClick={() => void copyRegistryPid()}>
+                    {copiedPid ? "PID copied" : "Copy registry PID"}
+                  </Button>
+                ) : null}
+              </div>
+              {detail.operatorReview?.reasonSummary?.length ? (
+                <div style={{ color: "#92400e" }}>Review notes: {detail.operatorReview.reasonSummary.join(" ")}</div>
+              ) : null}
             </Card>
 
             <Card style={{ display: "grid", gap: 8 }}>
@@ -149,7 +179,9 @@ export default function AdminRegistryRecordDetailPage() {
                       <div style={{ color: "#475569", fontSize: 14 }}>
                         {[candidate.addressLine1, candidate.city, candidate.province, candidate.postalCode].filter(Boolean).join(", ")}
                       </div>
-                      <div style={{ color: "#64748b", fontSize: 13 }}>Property ID: {candidate.id}</div>
+                      <div style={{ color: "#64748b", fontSize: 13 }}>
+                        Property ID: {candidate.id} · PID: {candidate.pid || "--"} · Units: {candidate.unitCount ?? "--"}
+                      </div>
                     </button>
                   ))}
                 </div>
@@ -179,10 +211,50 @@ export default function AdminRegistryRecordDetailPage() {
               {!detail.candidates?.length ? <div style={{ color: "#475569" }}>No likely property candidates were found.</div> : null}
               {detail.candidates?.map((candidate) => (
                 <div key={candidate.propertyId} style={{ border: "1px solid rgba(148,163,184,0.2)", borderRadius: 14, padding: 12 }}>
-                  <div style={{ fontWeight: 700 }}>{candidate.propertyName || candidate.propertyId}</div>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+                    <div style={{ fontWeight: 700 }}>{candidate.propertyName || candidate.propertyId}</div>
+                    <Pill tone={pidTone(candidate.comparison?.pidStatus)}>{candidate.comparison?.pidStatus || "review"}</Pill>
+                  </div>
                   <div style={{ color: "#475569", fontSize: 14 }}>{[candidate.addressLine1, candidate.city, candidate.province].filter(Boolean).join(", ")}</div>
                   <div style={{ color: "#64748b", fontSize: 13 }}>
                     Score: {candidate.score} · PID: {candidate.pid || "--"} · Units: {candidate.unitCount ?? "--"}
+                  </div>
+                  {candidate.comparison ? (
+                    <div style={{ display: "grid", gap: 8, marginTop: 10, padding: 12, borderRadius: 12, background: "#f8fafc" }}>
+                      <div style={{ fontWeight: 600 }}>Property vs registry</div>
+                      <div style={{ color: "#475569", fontSize: 14 }}>
+                        Property: {candidate.comparison.propertyAddress || "--"}
+                      </div>
+                      <div style={{ color: "#475569", fontSize: 14 }}>
+                        Registry: {candidate.comparison.registryAddress || "--"}
+                      </div>
+                      <div style={{ color: "#475569", fontSize: 14 }}>
+                        PID: {candidate.comparison.propertyPid || "--"} vs {candidate.comparison.registryPid || "--"}
+                      </div>
+                      <div style={{ color: "#475569", fontSize: 14 }}>
+                        Units: {candidate.comparison.propertyUnitCount ?? "--"} vs {candidate.comparison.registryUnitCount ?? "--"}
+                      </div>
+                      {candidate.comparison.operatorPrompts?.length ? (
+                        <div style={{ color: "#92400e", fontSize: 14 }}>{candidate.comparison.operatorPrompts.join(" ")}</div>
+                      ) : null}
+                      {candidate.comparison.reasonSummary?.length ? (
+                        <div style={{ color: "#64748b", fontSize: 13 }}>{candidate.comparison.reasonSummary.join(" ")}</div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+                    <Button
+                      onClick={() => {
+                        setPropertyId(candidate.propertyId);
+                        void handleOverride("attach", candidate.propertyId);
+                      }}
+                      disabled={saving || !reason.trim()}
+                    >
+                      Confirm this match
+                    </Button>
+                    <Link to={`/admin/registry/properties/${encodeURIComponent(candidate.propertyId)}?normalizedRecordId=${encodeURIComponent(detail.normalizedRecord?.id || "")}`}>
+                      <Button variant="secondary">Open property review</Button>
+                    </Link>
                   </div>
                 </div>
               ))}

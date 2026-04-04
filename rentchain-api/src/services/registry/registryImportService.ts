@@ -4,11 +4,12 @@ import { recordRegistryAuditEvent } from "./registryAuditService";
 import type {
   RegistryImportRecord,
   RegistryMatchRecord,
+  RegistryPropertyCandidate,
   RegistryRecordNormalized,
   RegistrySourceKey,
   RegistrySourceRecord,
 } from "./registryTypes";
-import { makeStableId, nowIso } from "./registryUtils";
+import { makeStableId, normalizePid, nowIso } from "./registryUtils";
 import { HalifaxR400Adapter } from "./adapters/HalifaxR400Adapter";
 import type { RegistrySourceAdapter } from "./adapters/RegistrySourceAdapter";
 import { evaluateRegistryMatch, findRegistryCandidatesForRecord, reEvaluatePropertyAgainstRegistry } from "./registryMatchingService";
@@ -36,6 +37,155 @@ function getAdapter(sourceKey: RegistrySourceKey): RegistrySourceAdapter {
 function isMissingIndexError(error: unknown) {
   const message = String((error as any)?.message || "").toLowerCase();
   return message.includes("index") && (message.includes("firestore") || message.includes("query requires"));
+}
+
+function summarizeRegistryReason(code: string) {
+  switch (String(code || "").trim()) {
+    case "no_pid_match":
+      return "Registry PID did not match any internal property PID.";
+    case "missing_internal_property_pid":
+      return "Internal property PID is missing, so PID auto-match could not run.";
+    case "no_exact_address_match":
+      return "No exact address match was found.";
+    case "no_candidate_address_match":
+      return "No candidate address match was found from the registry row.";
+    case "ambiguous_multi_address":
+      return "Multi-address registry row requires review before confirming a property link.";
+    case "multi_address_candidate_match":
+      return "One address candidate aligns with the property, but the row contains multiple civic addresses.";
+    case "manual_confirmation_recommended":
+      return "Manual confirmation is recommended before trusting this match.";
+    case "address_ambiguous":
+      return "More than one property may fit this address.";
+    case "pid_ambiguous":
+      return "More than one property shares this PID and needs manual review.";
+    case "unit_count_conflict":
+      return "Registered unit count differs from the internal property count.";
+    case "building_type_conflict":
+      return "Building type differs between the registry record and the property.";
+    default:
+      return code ? code.replace(/_/g, " ") : "";
+  }
+}
+
+function summarizeRegistryReasons(codes: Array<string | null | undefined>) {
+  return Array.from(
+    new Set(
+      codes
+        .map((code) => summarizeRegistryReason(String(code || "").trim()))
+        .filter(Boolean)
+    )
+  );
+}
+
+function resolvePropertyPidLikeValue(property: Record<string, any>) {
+  const metadata = property?.metadata && typeof property.metadata === "object" ? property.metadata : {};
+  return (
+    normalizePid(property?.pid) ||
+    normalizePid(property?.PID) ||
+    normalizePid(property?.propertyPid) ||
+    normalizePid(property?.parcelId) ||
+    normalizePid(property?.parcelPid) ||
+    normalizePid((metadata as any)?.pid) ||
+    normalizePid((metadata as any)?.propertyPid) ||
+    normalizePid((metadata as any)?.parcelId) ||
+    null
+  );
+}
+
+function getPropertyUnitCount(property: Record<string, any>) {
+  const raw = property?.unitCount ?? property?.totalUnits ?? property?.unitsTotal ?? null;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getPropertyDisplayAddress(property: Record<string, any>) {
+  return [
+    String(property?.addressLine1 || property?.address1 || property?.address || "").trim() || null,
+    String(property?.city || "").trim() || null,
+    String(property?.province || "").trim() || null,
+    String(property?.postalCode || "").trim() || null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+}
+
+function getPropertyAddressCandidates(propertyCandidate: RegistryPropertyCandidate) {
+  const candidates = Array.isArray(propertyCandidate.addressCandidates)
+    ? propertyCandidate.addressCandidates.filter(Boolean)
+    : [];
+  if (propertyCandidate.addressNormalized && !candidates.includes(propertyCandidate.addressNormalized)) {
+    candidates.unshift(propertyCandidate.addressNormalized);
+  }
+  return Array.from(new Set(candidates));
+}
+
+function buildRegistryPropertyComparison(params: {
+  adapter: RegistrySourceAdapter;
+  property: Record<string, any>;
+  record: RegistryRecordNormalized | null;
+  match?: RegistryMatchRecord | null;
+}) {
+  const propertyCandidate = params.adapter.buildPropertyAddressCandidate({
+    id: params.property.id,
+    ...params.property,
+  });
+  const propertyPid = resolvePropertyPidLikeValue(params.property);
+  const registryPid = params.record?.pid || null;
+  const propertyAddressCandidates = getPropertyAddressCandidates(propertyCandidate);
+  const registryAddressCandidates = Array.isArray(params.record?.addressCandidates)
+    ? params.record?.addressCandidates.filter(Boolean)
+    : [];
+  if (params.record?.addressNormalized && !registryAddressCandidates.includes(params.record.addressNormalized)) {
+    registryAddressCandidates.unshift(params.record.addressNormalized);
+  }
+  const exactAddressMatch = registryAddressCandidates.some((candidate) => propertyAddressCandidates.includes(candidate));
+
+  let pidStatus: "exact_match" | "missing_internal_pid" | "mismatch" | "missing_registry_pid" | "unavailable" =
+    "unavailable";
+  if (propertyPid && registryPid) pidStatus = propertyPid === registryPid ? "exact_match" : "mismatch";
+  else if (!propertyPid && registryPid) pidStatus = "missing_internal_pid";
+  else if (propertyPid && !registryPid) pidStatus = "missing_registry_pid";
+
+  const operatorPrompts: string[] = [];
+  if (pidStatus === "missing_internal_pid" && registryPid) {
+    operatorPrompts.push(
+      "Property PID missing; registry record includes PID. Consider updating property data before confirming registry link."
+    );
+  }
+  if (pidStatus === "exact_match") {
+    operatorPrompts.push("Internal property PID matches the registry PID exactly.");
+  }
+  if (pidStatus === "mismatch") {
+    operatorPrompts.push("Property PID differs from the registry PID. Manual confirmation is recommended.");
+  }
+  if ((params.record?.internalDiagnostics?.addressCandidateCount || 0) > 1) {
+    operatorPrompts.push("Registry row contains multiple civic addresses. Review the selected property carefully.");
+  }
+
+  return {
+    propertyId: propertyCandidate.propertyId,
+    propertyName: propertyCandidate.propertyName,
+    propertyAddress: getPropertyDisplayAddress(params.property),
+    propertyPid,
+    registryRecordId: params.record?.registryRecordId || null,
+    registryRegistrationNumber: params.record?.registrationNumber || null,
+    registryAddress: params.record?.addressRaw || null,
+    registryPid,
+    propertyPostalCode: propertyCandidate.postalCode,
+    registryPostalCode: params.record?.postalCode || null,
+    propertyUnitCount: propertyCandidate.unitCount ?? getPropertyUnitCount(params.property),
+    registryUnitCount: params.record?.registeredUnits ?? null,
+    propertyBuildingType: propertyCandidate.buildingType || null,
+    registryBuildingType: params.record?.buildingTypeRaw || null,
+    pidStatus,
+    exactAddressMatch,
+    operatorPrompts,
+    reasonSummary: summarizeRegistryReasons([
+      ...(params.match?.mismatchReasons || []),
+      ...(params.record?.internalDiagnostics?.unmatchedReasons || []),
+    ]),
+  };
 }
 
 function summarizeImportDiagnostics(params: {
@@ -432,10 +582,21 @@ export async function listRegistryReviewQueue(input?: {
       if (input?.matchStatus && input.matchStatus !== "all" && match.matchStatus !== input.matchStatus) return null;
       const normalizedSnap = await db.collection("registryRecordsNormalized").doc(match.normalizedRecordId).get();
       const propertySnap = match.propertyId ? await db.collection("properties").doc(match.propertyId).get() : null;
+      const normalizedRecord = normalizedSnap.exists ? ({ id: normalizedSnap.id, ...(normalizedSnap.data() || {}) } as RegistryRecordNormalized) : null;
+      const { adapter } = normalizedRecord ? await ensureRegistrySource(normalizedRecord.sourceKey) : { adapter: null as any };
+      const topCandidate =
+        normalizedRecord && !match.propertyId
+          ? ((await findRegistryCandidatesForRecord({ adapter, record: normalizedRecord }))[0] || null)
+          : null;
       return {
         match,
-        normalizedRecord: normalizedSnap.exists ? { id: normalizedSnap.id, ...(normalizedSnap.data() || {}) } : null,
+        normalizedRecord,
         property: propertySnap?.exists ? { id: propertySnap.id, ...(propertySnap.data() || {}) } : null,
+        topCandidate,
+        reasonSummary: summarizeRegistryReasons([
+          ...(match.mismatchReasons || []),
+          ...(normalizedRecord?.internalDiagnostics?.unmatchedReasons || []),
+        ]),
       };
     })
   );
@@ -462,11 +623,43 @@ export async function getRegistryRecordDetail(normalizedRecordId: string) {
     .limit(20)
     .get();
 
+  const candidateComparisons = await Promise.all(
+    candidates.map(async (candidate) => {
+      const propertySnap = await db.collection("properties").doc(candidate.propertyId).get();
+      const property = propertySnap.exists ? { id: propertySnap.id, ...(propertySnap.data() || {}) } : null;
+      return {
+        ...candidate,
+        comparison: property ? buildRegistryPropertyComparison({ adapter, property, record: normalizedRecord }) : null,
+      };
+    })
+  );
+  const currentProperty =
+    matchSnap.exists && (matchSnap.data() as any)?.propertyId
+      ? await db.collection("properties").doc(String((matchSnap.data() as any)?.propertyId)).get()
+      : null;
+
   return {
     normalizedRecord,
     rawRecord: rawSnap.docs?.[0] ? { id: rawSnap.docs[0].id, ...(rawSnap.docs[0].data() || {}) } : null,
     match: matchSnap.exists ? ({ id: matchSnap.id, ...(matchSnap.data() || {}) } as RegistryMatchRecord) : null,
-    candidates,
+    candidates: candidateComparisons,
+    operatorReview: {
+      reasonSummary: summarizeRegistryReasons([
+        ...(matchSnap.exists ? (((matchSnap.data() || {}) as any).mismatchReasons || []) : []),
+        ...(normalizedRecord.internalDiagnostics?.unmatchedReasons || []),
+      ]),
+      pidState:
+        currentProperty?.exists
+          ? buildRegistryPropertyComparison({
+              adapter,
+              property: { id: currentProperty.id, ...(currentProperty.data() || {}) },
+              record: normalizedRecord,
+              match: matchSnap.exists ? ({ id: matchSnap.id, ...(matchSnap.data() || {}) } as RegistryMatchRecord) : null,
+            })
+          : null,
+      registryPid: normalizedRecord.pid,
+      registryAddressCandidates: normalizedRecord.addressCandidates || [],
+    },
     auditTrail: (auditSnap.docs || []).map((doc: any) => ({ id: doc.id, ...(doc.data() || {}) })),
   };
 }
@@ -583,15 +776,64 @@ export function isRegistryOverrideError(error: unknown): error is RegistryOverri
   return error instanceof RegistryOverrideError;
 }
 
-export async function getPropertyRegistryReview(propertyId: string) {
+export async function getPropertyRegistryReview(propertyId: string, input?: { normalizedRecordId?: string | null }) {
   const propertySnap = await db.collection("properties").doc(propertyId).get();
   if (!propertySnap.exists) return null;
   const property = { id: propertySnap.id, ...(propertySnap.data() || {}) } as any;
   const { source } = await ensureRegistrySource("halifax_r400");
   const projection = await getPropertyRegistryProjection({ propertyId, source });
+  const adapter = getAdapter(source.sourceKey);
   const matchesSnap = await db.collection("registryMatches").where("propertyId", "==", propertyId).get();
   const matches = (matchesSnap.docs || []).map((doc: any) => ({ id: doc.id, ...(doc.data() || {}) })) as RegistryMatchRecord[];
-  return { property, projection, matches };
+  const matchDetails = await Promise.all(
+    matches.map(async (match) => {
+      const normalizedSnap = match.normalizedRecordId
+        ? await db.collection("registryRecordsNormalized").doc(match.normalizedRecordId).get()
+        : null;
+      const normalizedRecord =
+        normalizedSnap?.exists ? ({ id: normalizedSnap.id, ...(normalizedSnap.data() || {}) } as RegistryRecordNormalized) : null;
+      return {
+        ...match,
+        normalizedRecord,
+        comparison: buildRegistryPropertyComparison({ adapter, property, record: normalizedRecord, match }),
+        reasonSummary: summarizeRegistryReasons([
+          ...(match.mismatchReasons || []),
+          ...(normalizedRecord?.internalDiagnostics?.unmatchedReasons || []),
+        ]),
+      };
+    })
+  );
+
+  const selectedRecordId = String(input?.normalizedRecordId || "").trim() || null;
+  let selectedRecord: RegistryRecordNormalized | null = null;
+  let selectedComparison: ReturnType<typeof buildRegistryPropertyComparison> | null = null;
+  let selectedMatch: RegistryMatchRecord | null = null;
+  if (selectedRecordId) {
+    const selectedSnap = await db.collection("registryRecordsNormalized").doc(selectedRecordId).get();
+    if (selectedSnap.exists) {
+      selectedRecord = { id: selectedSnap.id, ...(selectedSnap.data() || {}) } as RegistryRecordNormalized;
+      selectedMatch =
+        matchDetails.find((match) => match.normalizedRecordId === selectedRecordId) ||
+        null;
+      selectedComparison = buildRegistryPropertyComparison({
+        adapter,
+        property,
+        record: selectedRecord,
+        match: selectedMatch,
+      });
+    }
+  }
+
+  return {
+    property,
+    projection,
+    propertyPid: resolvePropertyPidLikeValue(property),
+    matches,
+    matchDetails,
+    selectedRecord,
+    selectedMatch,
+    selectedComparison,
+  };
 }
 
 export async function reEvaluatePropertyRegistry(propertyId: string, actorId: string) {
@@ -633,5 +875,7 @@ export async function searchRegistryAttachProperties(queryInput: string) {
     province: item.province,
     postalCode: item.postalCode,
     landlordId: item.landlordId,
+    pid: (item as any).pid || null,
+    unitCount: item.unitCount ?? null,
   }));
 }
