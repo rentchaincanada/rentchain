@@ -1,7 +1,8 @@
-import React, { memo, startTransition, useDeferredValue, useEffect, useState } from "react";
+import React, { startTransition, useDeferredValue, useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { MacShell } from "../../components/layout/MacShell";
 import { Button, Card, Input, Pill, Section } from "../../components/ui/Ui";
+import { RegistryReviewQueueRow } from "../../components/admin/RegistryReviewQueueRow";
 import {
   fetchAdminRegistryReview,
   fetchNextAdminRegistryReviewPage,
@@ -10,85 +11,140 @@ import {
 
 const REVIEW_STATUSES = ["all", "possible_match", "mismatch", "unmatched", "matched", "ignored"] as const;
 const REVIEW_PAGE_SIZE = 50;
+const VIRTUAL_LIST_HEIGHT = 720;
+const VIRTUAL_ROW_ESTIMATE = 260;
+const VIRTUAL_ROW_GAP = 12;
+const VIRTUAL_OVERSCAN = 3;
 
-function formatLocation(parts: Array<string | null | undefined>) {
-  return parts.filter(Boolean).join(", ");
-}
+type HeightMap = Record<string, number>;
 
-const RegistryReviewQueueRow = memo(function RegistryReviewQueueRow({ item }: { item: RegistryReviewItem }) {
-  const propertyAddress = item.property
-    ? formatLocation([item.property.addressLine1, item.property.city, item.property.province, item.property.postalCode])
-    : "";
-  const candidateAddress = item.topCandidate
-    ? formatLocation([item.topCandidate.addressLine1, item.topCandidate.city, item.topCandidate.province, item.topCandidate.postalCode])
-    : "";
+function MeasuredVirtualRow(props: {
+  item: RegistryReviewItem;
+  top: number;
+  setHeightMap: React.Dispatch<React.SetStateAction<HeightMap>>;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+
+    const measure = () => {
+      const nextHeight = Math.max(Math.ceil(node.getBoundingClientRect().height || 0), VIRTUAL_ROW_ESTIMATE);
+      props.setHeightMap((current) => (current[props.item.match.id] === nextHeight ? current : { ...current, [props.item.match.id]: nextHeight }));
+    };
+
+    measure();
+
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => measure());
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [props.item, props.item.match.id, props.setHeightMap]);
 
   return (
-    <div style={{ border: "1px solid rgba(148,163,184,0.18)", borderRadius: 16, padding: 16, display: "grid", gap: 8 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-        <div>
-          <div style={{ fontWeight: 700 }}>{item.normalizedRecord?.addressRaw || item.match.registryRecordId}</div>
-          <div style={{ color: "#64748b", fontSize: 13 }}>{item.normalizedRecord?.registrationNumber || item.match.registryRecordId}</div>
-        </div>
-        <Pill tone={item.match.matchStatus === "matched" ? "accent" : "muted"}>{item.match.matchStatus}</Pill>
-      </div>
-      <div style={{ color: "#475569", fontSize: 14 }}>
-        Method: {item.match.matchMethod || "--"} · Score: {item.match.matchScore || 0}
-      </div>
-      <div style={{ color: "#475569", fontSize: 14 }}>
-        Property: {item.property?.name || item.property?.addressLine1 || item.match.propertyId || "--"}
-      </div>
-      {item.property ? (
-        <div style={{ color: "#64748b", fontSize: 13 }}>
-          Property document ID: {item.property.id} · Property PID: {item.property.pid || "--"} · Address: {propertyAddress}
-        </div>
-      ) : null}
-      {item.normalizedRecord ? (
-        <div style={{ color: "#64748b", fontSize: 13 }}>
-          Registry PID: {item.normalizedRecord.pid || "--"} · Registration number: {item.normalizedRecord.registrationNumber || "--"}
-        </div>
-      ) : null}
-      {item.topCandidate ? (
-        <div style={{ color: "#475569", fontSize: 14 }}>
-          Top candidate: {item.topCandidate.propertyName || item.topCandidate.addressLine1 || item.topCandidate.propertyId}
-        </div>
-      ) : null}
-      {item.topCandidate ? (
-        <div style={{ color: "#64748b", fontSize: 13 }}>
-          Property document ID: {item.topCandidate.propertyId} · Property PID: {item.topCandidate.pid || "--"} · Units:{" "}
-          {item.topCandidate.unitCount ?? "--"} · Address: {candidateAddress}
-        </div>
-      ) : null}
-      {item.match.propertyId ? (
-        <div style={{ color: "#0f172a", fontSize: 13, fontWeight: 600 }}>Currently linked property is active for this record.</div>
-      ) : null}
-      {item.reasonSummary?.length ? (
-        <div style={{ color: "#92400e", fontSize: 14 }}>Review notes: {item.reasonSummary.join(" ")}</div>
-      ) : null}
-      {!item.property && item.topCandidate ? (
-        <div style={{ color: "#475569", fontSize: 14 }}>Candidate score: {item.topCandidate.score}</div>
-      ) : null}
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <Link to={`/admin/registry/records/${encodeURIComponent(item.match.normalizedRecordId)}`}>
-          <Button variant="secondary">Open record</Button>
-        </Link>
-        {item.match.propertyId ? (
-          <Link to={`/admin/registry/properties/${encodeURIComponent(item.match.propertyId)}`}>
-            <Button variant="secondary">Open property review</Button>
-          </Link>
-        ) : item.topCandidate ? (
-          <Link
-            to={`/admin/registry/properties/${encodeURIComponent(item.topCandidate.propertyId)}?normalizedRecordId=${encodeURIComponent(
-              item.match.normalizedRecordId
-            )}`}
-          >
-            <Button variant="secondary">Open candidate review</Button>
-          </Link>
-        ) : null}
+    <div
+      ref={ref}
+      style={{
+        position: "absolute",
+        top: props.top,
+        left: 0,
+        right: 0,
+      }}
+    >
+      <RegistryReviewQueueRow item={props.item} />
+    </div>
+  );
+}
+
+function VirtualizedRegistryReviewList(props: {
+  items: RegistryReviewItem[];
+  resetKey: string;
+}) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(VIRTUAL_LIST_HEIGHT);
+  const [heightMap, setHeightMap] = useState<HeightMap>({});
+
+  useEffect(() => {
+    setHeightMap({});
+    setScrollTop(0);
+    const node = containerRef.current;
+    if (node) node.scrollTop = 0;
+  }, [props.resetKey]);
+
+  useEffect(() => {
+    const node = containerRef.current;
+    if (!node) return;
+
+    const measureViewport = () => {
+      setViewportHeight(node.clientHeight > 0 ? node.clientHeight : VIRTUAL_LIST_HEIGHT);
+    };
+
+    measureViewport();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", measureViewport);
+      return () => window.removeEventListener("resize", measureViewport);
+    }
+
+    const observer = new ResizeObserver(() => measureViewport());
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  const itemMetrics: Array<{ item: RegistryReviewItem; top: number; height: number }> = [];
+  let totalHeight = 0;
+  for (const item of props.items) {
+    const height = heightMap[item.match.id] || VIRTUAL_ROW_ESTIMATE;
+    itemMetrics.push({ item, top: totalHeight, height });
+    totalHeight += height + VIRTUAL_ROW_GAP;
+  }
+  totalHeight = Math.max(totalHeight - VIRTUAL_ROW_GAP, 0);
+
+  const viewportBottom = scrollTop + viewportHeight;
+  let startIndex = 0;
+  while (startIndex < itemMetrics.length && itemMetrics[startIndex].top + itemMetrics[startIndex].height < scrollTop) {
+    startIndex += 1;
+  }
+  startIndex = Math.max(0, startIndex - VIRTUAL_OVERSCAN);
+
+  let endIndex = startIndex;
+  while (endIndex < itemMetrics.length && itemMetrics[endIndex].top < viewportBottom) {
+    endIndex += 1;
+  }
+  endIndex = Math.min(itemMetrics.length, endIndex + VIRTUAL_OVERSCAN);
+
+  const visibleItems = itemMetrics.slice(startIndex, endIndex);
+
+  return (
+    <div
+      ref={containerRef}
+      aria-label="Registry review queue list"
+      style={{
+        position: "relative",
+        overflowY: "auto",
+        maxHeight: VIRTUAL_LIST_HEIGHT,
+        minHeight: Math.min(VIRTUAL_LIST_HEIGHT, Math.max(280, props.items.length * 120)),
+        paddingRight: 4,
+      }}
+      onScroll={(event) => {
+        setScrollTop(event.currentTarget.scrollTop);
+      }}
+    >
+      <div style={{ position: "relative", height: totalHeight }}>
+        {visibleItems.map((entry) => (
+          <MeasuredVirtualRow
+            key={entry.item.match.id}
+            item={entry.item}
+            top={entry.top}
+            setHeightMap={setHeightMap}
+          />
+        ))}
       </div>
     </div>
   );
-});
+}
 
 export default function AdminRegistryReviewPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -153,6 +209,8 @@ export default function AdminRegistryReviewPage() {
       active = false;
     };
   }, [matchStatus, searchQuery]);
+
+  const resetKey = `${matchStatus}:${searchQuery}`;
 
   const loadMore = async () => {
     if (!nextCursor || loadingMore) return;
@@ -255,9 +313,7 @@ export default function AdminRegistryReviewPage() {
                 </div>
               ))
             : null}
-          {items.map((item) => (
-            <RegistryReviewQueueRow key={item.match.id} item={item} />
-          ))}
+          {!loading && items.length ? <VirtualizedRegistryReviewList items={items} resetKey={resetKey} /> : null}
           {!loading && hasMore ? (
             <div style={{ display: "flex", justifyContent: "center" }}>
               <Button variant="secondary" onClick={() => void loadMore()} disabled={loadingMore}>
