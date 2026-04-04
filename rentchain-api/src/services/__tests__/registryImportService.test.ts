@@ -197,6 +197,8 @@ describe("registryImportService", () => {
       registrationNumber: "REG-1",
       pid: "1234567",
       addressRaw: "222 New St",
+      primaryAddressCandidate: "222 new st",
+      addressCandidates: ["222 new st"],
       addressNormalized: "222 new st",
       postalCode: null,
       rentalUnitTypeRaw: "Apartment",
@@ -212,6 +214,11 @@ describe("registryImportService", () => {
       lat: null,
       lng: null,
       sourceConfidence: 0.94,
+      internalDiagnostics: {
+        unmatchedReasons: [],
+        pidSourceFieldsChecked: ["pid"],
+        addressCandidateCount: 1,
+      },
       importedAt: "2026-04-01T00:00:00.000Z",
       updatedAt: "2026-04-01T00:00:00.000Z",
     });
@@ -316,5 +323,6 @@ describe("registryImportService", () => {
     expect(normalized.pid).toBe("1234567");
     expect(normalized.registrationStatusNormalized).toBe("registered");
     expect(normalized.addressNormalized).toContain("123 example st");
+    expect(normalized.addressCandidates).toEqual(expect.arrayContaining([normalized.addressNormalized]));
   });
 });
