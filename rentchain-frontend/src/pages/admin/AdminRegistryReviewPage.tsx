@@ -58,6 +58,13 @@ export default function AdminRegistryReviewPage() {
         </Section>
 
         <Card style={{ display: "grid", gap: 12 }}>
+          {!loading && items.length ? (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <Pill tone="muted">Visible items: {items.length}</Pill>
+              <Pill tone="muted">Filter: {matchStatus}</Pill>
+              {matchStatus === "ignored" ? <Pill tone="muted">Ignored items can be returned to review from record detail.</Pill> : null}
+            </div>
+          ) : null}
           {loading ? <div>Loading registry review queue…</div> : null}
           {!loading && error ? <div style={{ color: "#b91c1c" }}>{error}</div> : null}
           {!loading && !items.length ? <div style={{ color: "#475569" }}>No registry records match this review state.</div> : null}

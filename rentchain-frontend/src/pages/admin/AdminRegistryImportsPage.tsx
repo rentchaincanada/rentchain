@@ -127,7 +127,13 @@ export default function AdminRegistryImportsPage() {
                 Rows: {item.rowCount} · Parsed: {item.parsedRowCount} · Normalized: {item.normalizedRowCount}
               </div>
               <div style={{ color: "#475569", fontSize: 14 }}>
-                Matched: {item.matchedRowCount} · Unmatched: {item.unmatchedRowCount} · Mismatches: {item.mismatchRowCount}
+                Matched: {item.matchedRowCount} · Unmatched: {item.unmatchedRowCount} · Mismatches: {item.mismatchRowCount} · Ignored: {item.ignoredRowCount ?? 0} · Skipped: {item.skippedRowCount ?? 0}
+              </div>
+              <div style={{ color: "#64748b", fontSize: 13 }}>
+                Missing PID: {item.diagnostics?.missingPidCount ?? 0} · Missing address: {item.diagnostics?.missingAddressCount ?? 0} · Unsupported status: {item.diagnostics?.unsupportedStatusCount ?? 0}
+              </div>
+              <div style={{ color: "#64748b", fontSize: 13 }}>
+                Invalid numeric fields: {item.diagnostics?.invalidNumericFieldCount ?? 0} · Duplicate row hash: {item.diagnostics?.duplicateRowHashCount ?? 0}
               </div>
               <div style={{ color: "#64748b", fontSize: 13 }}>
                 Started: {formatDate(item.startedAt)} · Completed: {formatDate(item.completedAt)}

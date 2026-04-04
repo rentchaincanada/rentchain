@@ -30,8 +30,17 @@ export type RegistryImportView = {
   matchedRowCount: number;
   unmatchedRowCount: number;
   mismatchRowCount: number;
+  ignoredRowCount: number;
+  skippedRowCount: number;
   status: "uploaded" | "processing" | "completed" | "failed";
   errorSummary: string | null;
+  diagnostics: {
+    missingPidCount: number;
+    missingAddressCount: number;
+    unsupportedStatusCount: number;
+    invalidNumericFieldCount: number;
+    duplicateRowHashCount: number;
+  };
   startedAt: string;
   completedAt: string | null;
   createdBy: string | null;
@@ -104,6 +113,16 @@ export type RegistryRecordDetail = {
   }>;
 };
 
+export type RegistryAttachPropertySearchResult = {
+  id: string;
+  name: string | null;
+  addressLine1: string | null;
+  city: string | null;
+  province: string | null;
+  postalCode: string | null;
+  landlordId: string | null;
+};
+
 export type AdminPropertyRegistryReview = {
   property: any;
   projection: any;
@@ -141,13 +160,21 @@ export async function fetchAdminRegistryReview(matchStatus: string = "all") {
   return response.items;
 }
 
+export async function searchAdminRegistryAttachProperties(query: string) {
+  const suffix = query.trim() ? `?q=${encodeURIComponent(query.trim())}` : "";
+  const response = await apiFetch<{ ok: true; items: RegistryAttachPropertySearchResult[] }>(
+    `/admin/registry/properties/search${suffix}`
+  );
+  return response.items;
+}
+
 export async function fetchAdminRegistryRecordDetail(normalizedRecordId: string) {
   return apiFetch<RegistryRecordDetail>(`/admin/registry/records/${encodeURIComponent(normalizedRecordId)}`);
 }
 
 export async function overrideAdminRegistryRecord(input: {
   normalizedRecordId: string;
-  action: "attach" | "ignore";
+  action: "attach" | "ignore" | "return_to_review";
   propertyId?: string | null;
   reason: string;
 }) {

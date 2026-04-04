@@ -94,6 +94,10 @@ function matchesSearch(raw: Record<string, unknown>, propertyId: string, q: stri
     raw.address1,
     raw.city,
     raw.landlordId,
+    raw.pid,
+    raw.propertyPid,
+    raw.parcelId,
+    raw.parcelPid,
   ]
     .map((value) => asTrimmedString(value).toLowerCase())
     .filter(Boolean)

@@ -7,7 +7,11 @@ import type {
 } from "./registryTypes";
 import { makeStableId, nowIso } from "./registryUtils";
 
-function buildProjection(params: {
+// All landlord-facing registry messaging comes from the persisted
+// `propertyRegistryStatus` projection. We never render raw source rows
+// directly to landlords. This projection is refreshed after imports,
+// manual attach/ignore/review actions, and explicit re-evaluation.
+export function derivePropertyRegistryProjection(params: {
   propertyId: string;
   source: RegistrySourceRecord;
   match: RegistryMatchRecord | null;
@@ -36,7 +40,7 @@ function buildProjection(params: {
       registryStatus = "possible_mismatch";
       summary = "Possible mismatch detected between public registry data and your property details.";
       recommendedAction = "Review property details or contact support for manual confirmation.";
-    } else if (params.match.matchStatus === "possible_match" || params.match.matchStatus === "ignored") {
+    } else if (params.match.matchStatus === "possible_match") {
       registryStatus = "manual_review";
       summary = "Manual review in progress before a public registry status can be confirmed.";
       recommendedAction = "No action needed while the record is being reviewed.";
@@ -72,7 +76,7 @@ export async function upsertPropertyRegistryProjection(params: {
   const docId = makeStableId([params.source.sourceKey, params.propertyId]);
   const ref = db.collection("propertyRegistryStatus").doc(docId);
   const existing = await ref.get();
-  const projection = buildProjection({
+  const projection = derivePropertyRegistryProjection({
     ...params,
     existing: existing.exists ? ({ id: existing.id, ...(existing.data() || {}) } as any) : null,
   });

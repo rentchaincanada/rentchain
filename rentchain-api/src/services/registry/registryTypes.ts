@@ -32,8 +32,17 @@ export type RegistryImportRecord = {
   matchedRowCount: number;
   unmatchedRowCount: number;
   mismatchRowCount: number;
+  ignoredRowCount: number;
+  skippedRowCount: number;
   status: RegistryImportStatus;
   errorSummary: string | null;
+  diagnostics: {
+    missingPidCount: number;
+    missingAddressCount: number;
+    unsupportedStatusCount: number;
+    invalidNumericFieldCount: number;
+    duplicateRowHashCount: number;
+  };
   startedAt: string;
   completedAt: string | null;
   createdBy: string | null;
