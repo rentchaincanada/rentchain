@@ -131,6 +131,10 @@ describe("PropertyDetailPanel", () => {
     fireEvent.change(screen.getByLabelText("Property name"), {
       target: { value: "Harbour View Residences" },
     });
+    fireEvent.click(screen.getByRole("button", { name: /Compliance & Registry \(Optional\)/i }));
+    fireEvent.change(screen.getByLabelText("Property Identifier (PID)"), {
+      target: { value: "ns_123-45" },
+    });
     fireEvent.change(screen.getByLabelText("Address line 1"), {
       target: { value: "14 Wharf Street" },
     });
@@ -142,6 +146,7 @@ describe("PropertyDetailPanel", () => {
         "prop-1",
         expect.objectContaining({
           name: "Harbour View Residences",
+          pid: "ns_123-45",
           addressLine1: "14 Wharf Street",
           city: "Halifax",
           province: "NS",

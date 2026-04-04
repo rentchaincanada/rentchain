@@ -12,6 +12,7 @@ export interface UnitInput {
 
 export interface PropertyInput {
   name?: string;
+  pid?: string | null;
   addressLine1: string;
   addressLine2?: string;
   city: string;
@@ -60,6 +61,7 @@ export interface PropertyRegistryStatus {
     | "manual_review";
   registryRecordId: string | null;
   registrationNumber: string | null;
+  pid: string | null;
   matchedAt: string | null;
   matchConfidence: number | null;
   summary: string;
@@ -109,6 +111,16 @@ export async function fetchPropertyRegistryStatus(propertyId: string): Promise<{
   coverage: {
     available: boolean;
     message: string | null;
+  };
+  pidPrompt: {
+    propertyPid: string | null;
+    propertyPidMissing: boolean;
+    registryPid: string | null;
+    registryPidAvailable: boolean;
+    pidPromptEligible: boolean;
+    pidPromptMessage: string | null;
+    sourceLabel: string;
+    actionable: boolean;
   };
 }> {
   const res = await api.get(`/properties/${encodeURIComponent(propertyId)}/registry-status`);
