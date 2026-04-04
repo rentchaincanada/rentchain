@@ -40,6 +40,15 @@ async function resolvePropertyForRegistryOverride(propertyIdInput: string) {
       statusCode: 400,
     });
   }
+  if (!/^[A-Za-z0-9_-]{6,128}$/.test(propertyId)) {
+    throw new RegistryOverrideError(
+      "propertyId must be a valid property document identifier using letters, numbers, underscores, or hyphens",
+      {
+        code: "invalid_property_id",
+        statusCode: 400,
+      }
+    );
+  }
 
   const directSnap = await db.collection("properties").doc(propertyId).get();
   if (directSnap.exists) {
