@@ -82,6 +82,8 @@ export type RegistryReviewItem = {
     addressLine1?: string | null;
     city?: string | null;
     province?: string | null;
+    postalCode?: string | null;
+    pid?: string | null;
   } | null;
   topCandidate?: {
     propertyId: string;
@@ -91,6 +93,7 @@ export type RegistryReviewItem = {
     province: string | null;
     postalCode: string | null;
     pid: string | null;
+    unitCount?: number | null;
     score: number;
   } | null;
   reasonSummary?: string[];
@@ -121,6 +124,8 @@ export type RegistryRecordDetail = {
     registryPid: string | null;
     registryAddressCandidates: string[];
   };
+  currentLinkedProperty?: RegistryAttachPropertySearchResult | null;
+  propertyConflict?: RegistryReviewItem["match"] | null;
   auditTrail: Array<{
     id: string;
     actorType: string;
@@ -139,6 +144,7 @@ export type RegistryAttachPropertySearchResult = {
   province: string | null;
   postalCode: string | null;
   landlordId: string | null;
+  ownerUserId?: string | null;
   pid: string | null;
   unitCount: number | null;
 };
@@ -188,6 +194,7 @@ export type AdminPropertyRegistryReview = {
   selectedRecord?: any | null;
   selectedMatch?: RegistryReviewItem["match"] | null;
   selectedComparison?: RegistryPropertyComparison | null;
+  conflictingMatch?: RegistryReviewItem["match"] | null;
 };
 
 export async function fetchAdminRegistrySources() {
@@ -213,9 +220,10 @@ export async function startAdminRegistryImport(input: {
   });
 }
 
-export async function fetchAdminRegistryReview(matchStatus: string = "all") {
+export async function fetchAdminRegistryReview(matchStatus: string = "all", searchQuery?: string) {
   const query = new URLSearchParams();
   if (matchStatus && matchStatus !== "all") query.set("matchStatus", matchStatus);
+  if (searchQuery?.trim()) query.set("q", searchQuery.trim());
   const suffix = query.toString() ? `?${query.toString()}` : "";
   const response = await apiFetch<{ ok: true; items: RegistryReviewItem[] }>(`/admin/registry/review${suffix}`);
   return response.items;
@@ -235,9 +243,10 @@ export async function fetchAdminRegistryRecordDetail(normalizedRecordId: string)
 
 export async function overrideAdminRegistryRecord(input: {
   normalizedRecordId: string;
-  action: "attach" | "ignore" | "return_to_review";
+  action: "attach" | "ignore" | "return_to_review" | "detach";
   propertyId?: string | null;
   reason: string;
+  replaceExistingMatch?: boolean;
 }) {
   return apiFetch(`/admin/registry/records/${encodeURIComponent(input.normalizedRecordId)}/override`, {
     method: "POST",
@@ -245,6 +254,7 @@ export async function overrideAdminRegistryRecord(input: {
       action: input.action,
       propertyId: input.propertyId || null,
       reason: input.reason,
+      replaceExistingMatch: Boolean(input.replaceExistingMatch),
     },
   });
 }

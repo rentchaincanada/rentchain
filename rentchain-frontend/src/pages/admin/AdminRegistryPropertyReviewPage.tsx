@@ -10,6 +10,19 @@ import {
   type AdminPropertyRegistryReview,
 } from "../../api/adminRegistryApi";
 
+function buildPropertyReviewSummary(detail: AdminPropertyRegistryReview | null) {
+  return [
+    `Property: ${detail?.property?.name || detail?.property?.addressLine1 || detail?.property?.id || "--"}`,
+    `Property document ID: ${detail?.property?.id || "--"}`,
+    `Address: ${[detail?.property?.addressLine1, detail?.property?.city, detail?.property?.province, detail?.property?.postalCode].filter(Boolean).join(", ") || "--"}`,
+    `Property PID: ${detail?.selectedComparison?.propertyPid || detail?.propertyPid || "--"}`,
+    `Registry record ID: ${detail?.selectedComparison?.registryRecordId || detail?.selectedRecord?.registryRecordId || "--"}`,
+    `Registration number: ${detail?.selectedComparison?.registryRegistrationNumber || detail?.selectedRecord?.registrationNumber || "--"}`,
+    `Registry PID: ${detail?.selectedComparison?.registryPid || "--"}`,
+    "Source: Halifax Residential Rental Registry",
+  ].join("\n");
+}
+
 export default function AdminRegistryPropertyReviewPage() {
   const { propertyId } = useParams<{ propertyId: string }>();
   const [searchParams] = useSearchParams();
@@ -22,6 +35,7 @@ export default function AdminRegistryPropertyReviewPage() {
   const [reason, setReason] = useState("Confirmed during property review");
   const [copiedPid, setCopiedPid] = useState(false);
   const [confirmPidOverwrite, setConfirmPidOverwrite] = useState(false);
+  const [replaceExistingMatch, setReplaceExistingMatch] = useState(false);
 
   const load = async () => {
     if (!propertyId) return;
@@ -56,6 +70,16 @@ export default function AdminRegistryPropertyReviewPage() {
 
   const handleConfirmSelected = async () => {
     if (!propertyId || !normalizedRecordId) return;
+    const confirmed = window.confirm(
+      [
+        "Confirm this registry match for the selected property?",
+        buildPropertyReviewSummary(detail),
+        detail?.conflictingMatch
+          ? "Warning: this property already has another active Halifax registry match. Confirm replacement to proceed."
+          : "Warning: this may affect future automatic matching.",
+      ].join("\n\n")
+    );
+    if (!confirmed) return;
     try {
       setSaving(true);
       setError(null);
@@ -64,6 +88,7 @@ export default function AdminRegistryPropertyReviewPage() {
         action: "attach",
         propertyId,
         reason,
+        replaceExistingMatch,
       });
       await load();
     } catch (err: any) {
@@ -91,6 +116,32 @@ export default function AdminRegistryPropertyReviewPage() {
     }
   };
 
+  const handleDetachSelected = async () => {
+    if (!normalizedRecordId) return;
+    const confirmed = window.confirm(
+      [
+        "Detach this registry record from the current property?",
+        buildPropertyReviewSummary(detail),
+        "This clears the trusted link and refreshes landlord-facing registry status.",
+      ].join("\n\n")
+    );
+    if (!confirmed) return;
+    try {
+      setSaving(true);
+      setError(null);
+      await overrideAdminRegistryRecord({
+        normalizedRecordId,
+        action: "detach",
+        reason,
+      });
+      await load();
+    } catch (err: any) {
+      setError(err?.message || "Failed to detach registry record");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const copyRegistryPid = async () => {
     const pid = detail?.selectedComparison?.registryPid;
     if (!pid) return;
@@ -105,6 +156,14 @@ export default function AdminRegistryPropertyReviewPage() {
 
   const handleApplySelectedPid = async () => {
     if (!propertyId || !normalizedRecordId) return;
+    const confirmed = window.confirm(
+      [
+        "Apply Halifax registry PID to this property?",
+        buildPropertyReviewSummary(detail),
+        "Warning: this may affect future automatic matching.",
+      ].join("\n\n")
+    );
+    if (!confirmed) return;
     try {
       setSaving(true);
       setError(null);
@@ -159,9 +218,15 @@ export default function AdminRegistryPropertyReviewPage() {
               <div style={{ color: "#475569" }}>
                 {[detail.property?.addressLine1, detail.property?.city, detail.property?.province, detail.property?.postalCode].filter(Boolean).join(", ")}
               </div>
-              <div style={{ color: "#475569" }}>Internal PID: {detail.propertyPid || "--"}</div>
+              <div style={{ color: "#475569" }}>Property document ID: {detail.property?.id || "--"}</div>
+              <div style={{ color: "#475569" }}>Property PID: {detail.propertyPid || "--"}</div>
               <div style={{ color: "#475569" }}>Projected summary: {detail.projection?.summary || "--"}</div>
               <div style={{ color: "#475569" }}>Recommended action: {detail.projection?.recommendedAction || "--"}</div>
+              {detail.conflictingMatch ? (
+                <div style={{ color: "#92400e", fontSize: 13 }}>
+                  Conflict warning: this property already has another active Halifax registry match. Confirming a different record should replace the existing trusted link explicitly.
+                </div>
+              ) : null}
             </Card>
 
             {detail.selectedComparison ? (
@@ -177,7 +242,8 @@ export default function AdminRegistryPropertyReviewPage() {
                     <div style={{ fontWeight: 600 }}>Internal property</div>
                     <div>{detail.selectedComparison.propertyName || detail.property?.name || detail.property?.id}</div>
                     <div style={{ color: "#475569" }}>{detail.selectedComparison.propertyAddress || "--"}</div>
-                    <div style={{ color: "#475569" }}>PID: {detail.selectedComparison.propertyPid || "--"}</div>
+                    <div style={{ color: "#475569" }}>Property document ID: {detail.property?.id || "--"}</div>
+                    <div style={{ color: "#475569" }}>Property PID: {detail.selectedComparison.propertyPid || "--"}</div>
                     <div style={{ color: "#475569" }}>Units: {detail.selectedComparison.propertyUnitCount ?? "--"}</div>
                     <div style={{ color: "#475569" }}>Building: {detail.selectedComparison.propertyBuildingType || "--"}</div>
                   </div>
@@ -185,8 +251,9 @@ export default function AdminRegistryPropertyReviewPage() {
                     <div style={{ fontWeight: 600 }}>Registry candidate</div>
                     <div>{detail.selectedComparison.registryRegistrationNumber || detail.selectedComparison.registryRecordId || "--"}</div>
                     <div style={{ color: "#475569" }}>{detail.selectedComparison.registryAddress || "--"}</div>
+                    <div style={{ color: "#475569" }}>Registry record ID: {detail.selectedComparison.registryRecordId || "--"}</div>
                     <div style={{ color: "#475569", display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                      <span>PID: {detail.selectedComparison.registryPid || "--"}</span>
+                      <span>Registry PID: {detail.selectedComparison.registryPid || "--"}</span>
                       {detail.selectedComparison.registryPid ? (
                         <Button variant="secondary" onClick={() => void copyRegistryPid()}>
                           {copiedPid ? "PID copied" : "Copy registry PID"}
@@ -204,6 +271,14 @@ export default function AdminRegistryPropertyReviewPage() {
                   <div style={{ color: "#64748b" }}>{detail.selectedComparison.reasonSummary.join(" ")}</div>
                 ) : null}
                 <Input placeholder="Reason" value={reason} onChange={(event) => setReason(event.target.value)} />
+                <label style={{ display: "flex", gap: 8, alignItems: "flex-start", color: "#475569", fontSize: 13 }}>
+                  <input
+                    type="checkbox"
+                    checked={replaceExistingMatch}
+                    onChange={(event) => setReplaceExistingMatch(event.target.checked)}
+                  />
+                  <span>Replace the property's existing active Halifax match if one already exists.</span>
+                </label>
                 {(detail.selectedComparison.pidStatus === "missing_internal_pid" || detail.selectedComparison.pidStatus === "mismatch") &&
                 detail.selectedComparison.registryPid ? (
                   <>
@@ -241,6 +316,15 @@ export default function AdminRegistryPropertyReviewPage() {
                   <Button variant="secondary" onClick={() => void handleIgnoreSelected()} disabled={saving || !reason.trim()}>
                     Ignore record
                   </Button>
+                  {detail.selectedMatch?.propertyId ? (
+                    <Button
+                      variant="secondary"
+                      onClick={() => void handleDetachSelected()}
+                      disabled={saving || !reason.trim()}
+                    >
+                      Detach from property
+                    </Button>
+                  ) : null}
                   {detail.selectedRecord?.id ? (
                     <Link to={`/admin/registry/records/${encodeURIComponent(detail.selectedRecord.id)}`}>
                       <Button variant="secondary">Open registry record</Button>
@@ -263,7 +347,7 @@ export default function AdminRegistryPropertyReviewPage() {
                     Method: {match.matchMethod || "--"} · Score: {match.matchScore}
                   </div>
                   <div style={{ color: "#475569", fontSize: 14 }}>
-                    PID: {match.comparison?.propertyPid || "--"} vs {match.comparison?.registryPid || "--"}
+                    Property PID: {match.comparison?.propertyPid || "--"} vs Registry PID: {match.comparison?.registryPid || "--"}
                   </div>
                   {match.reasonSummary?.length ? <div style={{ color: "#64748b", fontSize: 13 }}>{match.reasonSummary.join(" ")}</div> : null}
                   {match.normalizedRecordId ? (

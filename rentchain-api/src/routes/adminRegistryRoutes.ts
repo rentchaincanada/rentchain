@@ -80,9 +80,11 @@ router.get("/registry/review", requireAuth, requirePermission("system.admin"), a
   try {
     const sourceKey = String(req.query?.sourceKey || "").trim() || null;
     const matchStatus = String(req.query?.matchStatus || "all").trim() || "all";
+    const search = String(req.query?.q || "").trim() || null;
     const items = await listRegistryReviewQueue({
       sourceKey: sourceKey as any,
       matchStatus: matchStatus as any,
+      search,
     });
     return res.json({ ok: true, items });
   } catch (error: any) {
@@ -111,13 +113,14 @@ router.post(
   async (req: any, res) => {
     try {
       const normalizedRecordId = String(req.params?.normalizedRecordId || "").trim();
-      const action = String(req.body?.action || "").trim() as "attach" | "ignore" | "return_to_review";
+      const action = String(req.body?.action || "").trim() as "attach" | "ignore" | "return_to_review" | "detach";
       const propertyId = String(req.body?.propertyId || "").trim() || null;
       const reason = String(req.body?.reason || "").trim();
+      const replaceExistingMatch = Boolean(req.body?.replaceExistingMatch);
       if (!normalizedRecordId || !action || !reason) {
         return res.status(400).json({ ok: false, error: "missing_override_fields" });
       }
-      if (!["attach", "ignore", "return_to_review"].includes(action)) {
+      if (!["attach", "ignore", "return_to_review", "detach"].includes(action)) {
         return res.status(400).json({ ok: false, error: "invalid_override_action" });
       }
       const match = await applyRegistryMatchOverride({
@@ -126,6 +129,7 @@ router.post(
         propertyId,
         reason,
         actorId: String(req.user?.id || req.user?.sub || "").trim(),
+        replaceExistingMatch,
       });
       return res.json({ ok: true, match });
     } catch (error: any) {

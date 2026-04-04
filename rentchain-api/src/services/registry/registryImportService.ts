@@ -34,6 +34,13 @@ type PropertyPidUpdateErrorCode =
   | "missing_property_context"
   | "pid_update_confirmation_required";
 
+type RegistryMatchOverrideErrorCode =
+  | PropertyPidUpdateErrorCode
+  | "existing_property_match_conflict"
+  | "registry_record_not_found"
+  | "invalid_property_id"
+  | "property_not_found";
+
 function getAdapter(sourceKey: RegistrySourceKey): RegistrySourceAdapter {
   if (sourceKey === "halifax_r400") return new HalifaxR400Adapter();
   throw new Error(`Unsupported registry source: ${sourceKey}`);
@@ -81,6 +88,10 @@ function summarizeRegistryReasons(codes: Array<string | null | undefined>) {
         .filter(Boolean)
     )
   );
+}
+
+function safeLower(value: unknown) {
+  return String(value || "").trim().toLowerCase();
 }
 
 function resolvePropertyPidLikeValue(property: Record<string, any>) {
@@ -300,9 +311,102 @@ async function resolvePropertyForRegistryOverride(propertyIdInput: string) {
   }
 
   throw new RegistryOverrideError(`No property document was found for id "${propertyId}"`, {
-    code: "property_not_found",
+    code: "property_not_found" satisfies RegistryMatchOverrideErrorCode,
     statusCode: 404,
   });
+}
+
+function isActiveTrustedMatchStatus(status: RegistryMatchRecord["matchStatus"] | null | undefined) {
+  return status === "matched" || status === "mismatch" || status === "possible_match";
+}
+
+async function findActiveMatchForPropertySource(params: {
+  propertyId: string;
+  sourceKey: RegistrySourceKey;
+  excludeNormalizedRecordId?: string | null;
+}) {
+  const snap = await db
+    .collection("registryMatches")
+    .where("propertyId", "==", params.propertyId)
+    .where("sourceKey", "==", params.sourceKey)
+    .get();
+
+  const matches = (snap.docs || [])
+    .map((doc: any) => ({ id: doc.id, ...(doc.data() || {}) } as RegistryMatchRecord))
+    .filter((match) => {
+      if (!isActiveTrustedMatchStatus(match.matchStatus)) return false;
+      if (params.excludeNormalizedRecordId && match.normalizedRecordId === params.excludeNormalizedRecordId) return false;
+      return true;
+    })
+    .sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
+
+  return matches[0] || null;
+}
+
+async function transitionExistingMatchToReview(params: {
+  existingMatch: RegistryMatchRecord;
+  actorId: string;
+  reason: string;
+  source: RegistrySourceRecord;
+}) {
+  const snap = await db.collection("registryRecordsNormalized").doc(params.existingMatch.normalizedRecordId).get();
+  const normalizedRecord = snap.exists ? ({ id: snap.id, ...(snap.data() || {}) } as RegistryRecordNormalized) : null;
+  let replacement: RegistryMatchRecord;
+  if (normalizedRecord) {
+    const reevaluated = await evaluateRegistryMatch({
+      adapter: getAdapter(normalizedRecord.sourceKey),
+      record: normalizedRecord,
+    });
+    replacement = {
+      ...reevaluated,
+      id: params.existingMatch.id,
+      normalizedRecordId: params.existingMatch.normalizedRecordId,
+      createdAt: params.existingMatch.createdAt || nowIso(),
+      updatedAt: nowIso(),
+      reviewedBy: params.actorId,
+      reviewedAt: nowIso(),
+      overrideReason: params.reason,
+      propertyId: null,
+      landlordId: null,
+      matchStatus:
+        reevaluated.matchStatus === "matched" || reevaluated.matchStatus === "mismatch"
+          ? "possible_match"
+          : reevaluated.matchStatus,
+    };
+  } else {
+    replacement = {
+      ...params.existingMatch,
+      propertyId: null,
+      landlordId: null,
+      matchStatus: "unmatched",
+      matchMethod: params.existingMatch.matchMethod || null,
+      updatedAt: nowIso(),
+      reviewedBy: params.actorId,
+      reviewedAt: nowIso(),
+      overrideReason: params.reason,
+    };
+  }
+
+  await db.collection("registryMatches").doc(params.existingMatch.id).set(replacement, { merge: true });
+  await refreshPropertyProjectionFromCurrentMatches({
+    propertyId: String(params.existingMatch.propertyId || ""),
+    source: params.source,
+    actorId: params.actorId,
+  });
+  await recordRegistryAuditEvent({
+    sourceKey: params.source.sourceKey,
+    registryRecordId: params.existingMatch.registryRecordId,
+    propertyId: String(params.existingMatch.propertyId || "") || null,
+    actorType: "admin",
+    actorId: params.actorId,
+    eventType: "match_returned_to_review",
+    eventData: {
+      reason: params.reason,
+      replacementMatchStatus: replacement.matchStatus,
+      replacedByNormalizedRecordId: params.existingMatch.normalizedRecordId,
+    },
+  });
+  return replacement;
 }
 
 export async function ensureRegistrySource(sourceKey: RegistrySourceKey) {
@@ -588,6 +692,7 @@ export async function listRegistryImports(sourceKey?: RegistrySourceKey | null) 
 export async function listRegistryReviewQueue(input?: {
   sourceKey?: RegistrySourceKey | null;
   matchStatus?: RegistryMatchRecord["matchStatus"] | "all" | null;
+  search?: string | null;
 }) {
   let query: FirebaseFirestore.Query = db.collection("registryMatches").orderBy("updatedAt", "desc");
   if (input?.sourceKey) {
@@ -603,6 +708,7 @@ export async function listRegistryReviewQueue(input?: {
     }
     throw error;
   }
+  const search = safeLower(input?.search);
   const items = await Promise.all(
     (snap.docs || []).map(async (doc: any) => {
       const match = { id: doc.id, ...(doc.data() || {}) } as RegistryMatchRecord;
@@ -627,7 +733,28 @@ export async function listRegistryReviewQueue(input?: {
       };
     })
   );
-  return items.filter(Boolean);
+  return items.filter((entry: any) => {
+    if (!entry) return false;
+    if (!search) return true;
+    const haystack = [
+      entry.match?.registryRecordId,
+      entry.normalizedRecord?.addressRaw,
+      entry.normalizedRecord?.registrationNumber,
+      entry.normalizedRecord?.pid,
+      entry.property?.name,
+      entry.property?.addressLine1,
+      entry.property?.city,
+      entry.property?.province,
+      entry.property?.pid,
+      entry.topCandidate?.propertyName,
+      entry.topCandidate?.addressLine1,
+      entry.topCandidate?.pid,
+    ]
+      .map((value) => safeLower(value))
+      .filter(Boolean)
+      .join(" ");
+    return haystack.includes(search);
+  });
 }
 
 export async function getRegistryRecordDetail(normalizedRecordId: string) {
@@ -664,6 +791,17 @@ export async function getRegistryRecordDetail(normalizedRecordId: string) {
     matchSnap.exists && (matchSnap.data() as any)?.propertyId
       ? await db.collection("properties").doc(String((matchSnap.data() as any)?.propertyId)).get()
       : null;
+  const currentLinkedProperty = currentProperty?.exists
+    ? ({ id: currentProperty.id, ...(currentProperty.data() || {}) } as any)
+    : null;
+  const propertyConflict =
+    currentLinkedProperty?.id
+      ? await findActiveMatchForPropertySource({
+          propertyId: currentLinkedProperty.id,
+          sourceKey: normalizedRecord.sourceKey,
+          excludeNormalizedRecordId: normalizedRecord.id,
+        })
+      : null;
 
   return {
     normalizedRecord,
@@ -687,16 +825,19 @@ export async function getRegistryRecordDetail(normalizedRecordId: string) {
       registryPid: normalizedRecord.pid,
       registryAddressCandidates: normalizedRecord.addressCandidates || [],
     },
+    currentLinkedProperty,
+    propertyConflict,
     auditTrail: (auditSnap.docs || []).map((doc: any) => ({ id: doc.id, ...(doc.data() || {}) })),
   };
 }
 
 export async function applyRegistryMatchOverride(input: {
   normalizedRecordId: string;
-  action: "attach" | "ignore" | "return_to_review";
+  action: "attach" | "ignore" | "return_to_review" | "detach";
   propertyId?: string | null;
   reason: string;
   actorId: string;
+  replaceExistingMatch?: boolean;
 }) {
   const detail = await getRegistryRecordDetail(input.normalizedRecordId);
   if (!detail) {
@@ -711,8 +852,31 @@ export async function applyRegistryMatchOverride(input: {
   const now = nowIso();
 
   let nextMatch: RegistryMatchRecord;
+  let replacedExistingMatch: RegistryMatchRecord | null = null;
   if (input.action === "attach") {
     const property = await resolvePropertyForRegistryOverride(String(input.propertyId || ""));
+    const conflictingMatch = await findActiveMatchForPropertySource({
+      propertyId: property.id,
+      sourceKey: detail.normalizedRecord.sourceKey,
+      excludeNormalizedRecordId: detail.normalizedRecord.id,
+    });
+    if (conflictingMatch && !input.replaceExistingMatch) {
+      throw new RegistryOverrideError(
+        "This property already has an active matched Halifax registry record. Confirm replacement before attaching this record.",
+        {
+          code: "existing_property_match_conflict" satisfies RegistryMatchOverrideErrorCode,
+          statusCode: 409,
+        }
+      );
+    }
+    if (conflictingMatch && input.replaceExistingMatch) {
+      replacedExistingMatch = await transitionExistingMatchToReview({
+        existingMatch: conflictingMatch,
+        actorId: input.actorId,
+        reason: `Replaced during manual attach: ${input.reason}`,
+        source,
+      });
+    }
     const resolvedLandlordId =
       String(property.landlordId || property.ownerId || property.owner || "").trim() || null;
     nextMatch = {
@@ -726,6 +890,26 @@ export async function applyRegistryMatchOverride(input: {
       matchScore: 1,
       matchStatus: "matched",
       mismatchReasons: [],
+      reviewedBy: input.actorId,
+      reviewedAt: now,
+      overrideReason: input.reason,
+      createdAt: current?.createdAt || now,
+      updatedAt: now,
+    };
+  } else if (input.action === "detach") {
+    nextMatch = {
+      id: matchId,
+      sourceKey: detail.normalizedRecord.sourceKey,
+      registryRecordId: detail.normalizedRecord.registryRecordId,
+      normalizedRecordId: detail.normalizedRecord.id,
+      propertyId: null,
+      landlordId: null,
+      matchMethod: current?.matchMethod || null,
+      matchScore: current?.matchScore || 0,
+      matchStatus: "unmatched",
+      mismatchReasons: Array.from(
+        new Set([...(current?.mismatchReasons || []), "manual_confirmation_recommended"])
+      ),
       reviewedBy: input.actorId,
       reviewedAt: now,
       overrideReason: input.reason,
@@ -788,12 +972,24 @@ export async function applyRegistryMatchOverride(input: {
     propertyId: nextMatch.propertyId,
     actorType: "admin",
     actorId: input.actorId,
-    eventType: "match_overridden",
+    eventType:
+      input.action === "detach"
+        ? "match_detached"
+        : input.action === "ignore"
+        ? "match_ignored"
+        : input.action === "return_to_review"
+        ? "match_returned_to_review"
+        : current?.matchStatus === "ignored"
+        ? "match_reinstated"
+        : "match_overridden",
     eventData: {
       action: input.action,
       reason: input.reason,
       propertyId: nextMatch.propertyId,
       previousPropertyId,
+      replaceExistingMatch: Boolean(input.replaceExistingMatch),
+      replacedExistingMatchId: replacedExistingMatch?.id || null,
+      replacedExistingNormalizedRecordId: replacedExistingMatch?.normalizedRecordId || null,
     },
   });
   return nextMatch;
@@ -969,6 +1165,12 @@ export async function getPropertyRegistryReview(propertyId: string, input?: { no
     }
   }
 
+  const conflictingMatch = await findActiveMatchForPropertySource({
+    propertyId,
+    sourceKey: source.sourceKey,
+    excludeNormalizedRecordId: selectedRecord?.id || null,
+  });
+
   return {
     property,
     projection,
@@ -978,6 +1180,7 @@ export async function getPropertyRegistryReview(propertyId: string, input?: { no
     selectedRecord,
     selectedMatch,
     selectedComparison,
+    conflictingMatch,
   };
 }
 
@@ -1020,6 +1223,7 @@ export async function searchRegistryAttachProperties(queryInput: string) {
     province: item.province,
     postalCode: item.postalCode,
     landlordId: item.landlordId,
+    ownerUserId: item.ownerUserId,
     pid: (item as any).pid || null,
     unitCount: item.unitCount ?? null,
   }));
