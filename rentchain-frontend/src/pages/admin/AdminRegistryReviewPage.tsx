@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { MacShell } from "../../components/layout/MacShell";
-import { Button, Card, Pill, Section } from "../../components/ui/Ui";
+import { Button, Card, Input, Pill, Section } from "../../components/ui/Ui";
 import { fetchAdminRegistryReview, type RegistryReviewItem } from "../../api/adminRegistryApi";
 
 export default function AdminRegistryReviewPage() {
