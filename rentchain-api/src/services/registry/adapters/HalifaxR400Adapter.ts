@@ -63,6 +63,56 @@ function mapRegisteredStatus(value: string | null): RegistryRecordNormalized["re
   return "unknown";
 }
 
+function splitAddressTokens(address: string | null): string[] {
+  return String(address || "")
+    .split(",")
+    .map((part) => String(part || "").trim())
+    .filter(Boolean);
+}
+
+function looksLikePostalCode(value: string) {
+  return /^[A-Za-z]\d[A-Za-z]\s?\d[A-Za-z]\d$/.test(String(value || "").trim());
+}
+
+function looksLikeStreetStart(value: string) {
+  return /^\d+[A-Za-z]?\s+/.test(String(value || "").trim());
+}
+
+function buildAddressCandidates(address: string | null, province: string) {
+  const tokens = splitAddressTokens(address);
+  const postalCode = tokens.find((token) => looksLikePostalCode(token)) || null;
+  const city = tokens.find((token) => !looksLikePostalCode(token) && !looksLikeStreetStart(token) && token.length >= 3) || null;
+  const streetTokens = tokens.filter((token) => looksLikeStreetStart(token));
+
+  if (!streetTokens.length) {
+    const normalized = normalizeAddress(address);
+    return {
+      primary: normalized,
+      candidates: normalized ? [normalized] : [],
+      postalCode: postalCode ? postalCode.replace(/\s+/g, "").toUpperCase() : null,
+    };
+  }
+
+  const candidates = Array.from(
+    new Set(
+      streetTokens
+        .map((street) => normalizeAddressFromParts([street, city, province, postalCode]))
+        .filter(Boolean)
+    )
+  ) as string[];
+
+  return {
+    primary: candidates[0] || normalizeAddress(address),
+    candidates: candidates.length ? candidates : compactSingleCandidate(address),
+    postalCode: postalCode ? postalCode.replace(/\s+/g, "").toUpperCase() : null,
+  };
+}
+
+function compactSingleCandidate(address: string | null) {
+  const normalized = normalizeAddress(address);
+  return normalized ? [normalized] : [];
+}
+
 export class HalifaxR400Adapter implements RegistrySourceAdapter {
   readonly sourceKey = "halifax_r400" as const;
 
@@ -129,6 +179,7 @@ export class HalifaxR400Adapter implements RegistrySourceAdapter {
   normalizeRawRow(rawRow: RegistryRecordRaw, context: RegistryAdapterContext): RegistryRecordNormalized {
     const registryRecordId =
       rawRow.registrationNumber || rawRow.globalId || rawRow.objectId || rawRow.sourceRowHash.slice(0, 16);
+    const addressCandidates = buildAddressCandidates(rawRow.address, context.source.jurisdictionProvince);
     return {
       id: makeStableId([this.sourceKey, registryRecordId]),
       importBatchId: context.importRecord.importBatchId,
@@ -141,8 +192,10 @@ export class HalifaxR400Adapter implements RegistrySourceAdapter {
       registrationNumber: rawRow.registrationNumber,
       pid: rawRow.pid,
       addressRaw: rawRow.address,
-      addressNormalized: normalizeAddress(rawRow.address),
-      postalCode: null,
+      primaryAddressCandidate: addressCandidates.primary,
+      addressCandidates: addressCandidates.candidates,
+      addressNormalized: addressCandidates.primary,
+      postalCode: addressCandidates.postalCode,
       rentalUnitTypeRaw: rawRow.rentalUnitType,
       rentalUnitTypeNormalized: normalizeRentalUnitType(rawRow.rentalUnitType),
       buildingTypeRaw: rawRow.buildingType,
@@ -156,6 +209,11 @@ export class HalifaxR400Adapter implements RegistrySourceAdapter {
       lat: rawRow.y,
       lng: rawRow.x,
       sourceConfidence: rawRow.registrationNumber || rawRow.pid ? 0.94 : 0.8,
+      internalDiagnostics: {
+        unmatchedReasons: [],
+        pidSourceFieldsChecked: ["pid", "propertyPid", "parcelId", "parcelPid", "PID", "metadata.pid", "metadata.propertyPid"],
+        addressCandidateCount: addressCandidates.candidates.length,
+      },
       importedAt: context.importedAt,
       updatedAt: context.importedAt,
     };
@@ -163,6 +221,32 @@ export class HalifaxR400Adapter implements RegistrySourceAdapter {
 
   buildPropertyAddressCandidate(property: Record<string, unknown>): RegistryPropertyCandidate {
     const propertyId = trimString(property.id) || trimString(property.propertyId) || "";
+    const pidSourceFields = [
+      "pid",
+      "PID",
+      "propertyPid",
+      "parcelId",
+      "parcelPid",
+      "metadata.pid",
+      "metadata.propertyPid",
+      "metadata.parcelId",
+    ];
+    const metadata = (property.metadata && typeof property.metadata === "object" ? property.metadata : {}) as Record<string, unknown>;
+    const resolvedPid =
+      normalizePid(property.pid) ||
+      normalizePid((property as any).PID) ||
+      normalizePid(property.propertyPid) ||
+      normalizePid(property.parcelId) ||
+      normalizePid(property.parcelPid) ||
+      normalizePid(metadata.pid) ||
+      normalizePid(metadata.propertyPid) ||
+      normalizePid(metadata.parcelId);
+    const primaryAddress = normalizeAddressFromParts([
+      property.addressLine1 || property.address1 || property.address,
+      property.city,
+      property.province,
+      property.postalCode,
+    ]);
     return {
       propertyId,
       landlordId: trimString(property.landlordId),
@@ -171,11 +255,7 @@ export class HalifaxR400Adapter implements RegistrySourceAdapter {
       city: trimString(property.city),
       province: trimString(property.province),
       postalCode: trimString(property.postalCode),
-      pid:
-        normalizePid(property.pid) ||
-        normalizePid(property.propertyPid) ||
-        normalizePid(property.parcelId) ||
-        normalizePid(property.parcelPid),
+      pid: resolvedPid,
       unitCount:
         typeof property.unitCount === "number"
           ? property.unitCount
@@ -183,12 +263,9 @@ export class HalifaxR400Adapter implements RegistrySourceAdapter {
             ? property.totalUnits
             : null,
       buildingType: trimString(property.buildingType),
-      addressNormalized: normalizeAddressFromParts([
-        property.addressLine1 || property.address1 || property.address,
-        property.city,
-        property.province,
-        property.postalCode,
-      ]),
+      pidSourceFields,
+      addressCandidates: primaryAddress ? [primaryAddress] : [],
+      addressNormalized: primaryAddress,
     };
   }
 }

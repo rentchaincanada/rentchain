@@ -94,6 +94,8 @@ export type RegistryRecordNormalized = {
   registrationNumber: string | null;
   pid: string | null;
   addressRaw: string | null;
+  primaryAddressCandidate: string | null;
+  addressCandidates: string[];
   addressNormalized: string | null;
   postalCode: string | null;
   rentalUnitTypeRaw: string | null;
@@ -109,6 +111,11 @@ export type RegistryRecordNormalized = {
   lat: number | null;
   lng: number | null;
   sourceConfidence: number;
+  internalDiagnostics?: {
+    unmatchedReasons?: string[];
+    pidSourceFieldsChecked?: string[];
+    addressCandidateCount?: number;
+  };
   importedAt: string;
   updatedAt: string;
 };
@@ -185,5 +192,7 @@ export type RegistryPropertyCandidate = {
   pid: string | null;
   unitCount: number | null;
   buildingType: string | null;
+  pidSourceFields?: string[];
+  addressCandidates?: string[];
   addressNormalized: string | null;
 };
