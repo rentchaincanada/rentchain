@@ -838,6 +838,62 @@ describe("registryImportService", () => {
     });
   });
 
+  it("returns queue rows for legacy match docs when summary counts exist and search is blank", async () => {
+    const { listRegistryReviewQueue } = await import("../registry/registryImportService");
+
+    ensureCollection("registryMatches").set("halifax_r400_reg-legacy-unmatched", {
+      id: "halifax_r400_reg-legacy-unmatched",
+      sourceKey: "halifax_r400",
+      registryRecordId: "reg-legacy-unmatched",
+      normalizedRecordId: "record-legacy-unmatched",
+      propertyId: null,
+      landlordId: null,
+      matchMethod: null,
+      matchScore: 0,
+      matchStatus: "unmatched",
+      mismatchReasons: ["manual_confirmation_recommended"],
+      reviewedBy: null,
+      reviewedAt: null,
+      overrideReason: null,
+      createdAt: "2026-04-01T00:00:00.000Z",
+      updatedAt: "2026-04-02T00:00:00.000Z",
+    });
+    ensureCollection("registryMatches").set("halifax_r400_reg-legacy-matched", {
+      id: "halifax_r400_reg-legacy-matched",
+      sourceKey: "halifax_r400",
+      registryRecordId: "reg-legacy-matched",
+      normalizedRecordId: "record-legacy-matched",
+      propertyId: "prop-legacy",
+      landlordId: "landlord-legacy",
+      matchMethod: "manual",
+      matchScore: 1,
+      matchStatus: "matched",
+      mismatchReasons: [],
+      reviewedBy: "admin-1",
+      reviewedAt: "2026-04-03T00:00:00.000Z",
+      overrideReason: "seed",
+      createdAt: "2026-04-01T00:00:00.000Z",
+      updatedAt: "2026-04-03T00:00:00.000Z",
+    });
+
+    const allResults = await listRegistryReviewQueue({ matchStatus: "all", search: "" });
+    expect(allResults.summary.all).toBe(2);
+    expect(allResults.summary.unmatched).toBe(1);
+    expect(allResults.summary.matched).toBe(1);
+    expect(allResults.items).toHaveLength(2);
+    expect(allResults.items[0]?.match?.id).toBe("halifax_r400_reg-legacy-matched");
+    expect(allResults.items[1]?.match?.id).toBe("halifax_r400_reg-legacy-unmatched");
+    expect(allResults.items[0]?.normalizedRecord).toMatchObject({
+      id: "record-legacy-matched",
+      registryRecordId: "reg-legacy-matched",
+    });
+
+    const unmatchedResults = await listRegistryReviewQueue({ matchStatus: "unmatched", search: "   " });
+    expect(unmatchedResults.summary.all).toBe(2);
+    expect(unmatchedResults.items).toHaveLength(1);
+    expect(unmatchedResults.items[0]?.match?.id).toBe("halifax_r400_reg-legacy-unmatched");
+  });
+
   it("returns PID enrichment cues for property review when internal PID is missing", async () => {
     const { getPropertyRegistryReview } = await import("../registry/registryImportService");
 

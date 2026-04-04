@@ -325,6 +325,27 @@
       "collectionGroup": "registryMatches",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "sourceKey", "order": "ASCENDING" },
+        { "fieldPath": "matchStatus", "order": "ASCENDING" },
+        { "fieldPath": "queueSearchTokens", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "registryMatches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sourceKey", "order": "ASCENDING" },
+        { "fieldPath": "queueSearchTokens", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "registryMatches",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "propertyId", "order": "ASCENDING" },
         { "fieldPath": "sourceKey", "order": "ASCENDING" },
         { "fieldPath": "updatedAt", "order": "DESCENDING" },
