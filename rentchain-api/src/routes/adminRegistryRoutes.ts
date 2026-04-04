@@ -11,6 +11,7 @@ import {
   listRegistrySources,
   reEvaluatePropertyRegistry,
   runRegistryImport,
+  searchRegistryAttachProperties,
 } from "../services/registry/registryImportService";
 
 const router = Router();
@@ -33,6 +34,17 @@ router.get("/registry/imports", requireAuth, requirePermission("system.admin"), 
   } catch (error: any) {
     console.error("[adminRegistryRoutes] list imports failed", error);
     return res.status(500).json({ ok: false, error: "registry_imports_failed" });
+  }
+});
+
+router.get("/registry/properties/search", requireAuth, requirePermission("system.admin"), async (req: any, res) => {
+  try {
+    const q = String(req.query?.q || "").trim();
+    const items = await searchRegistryAttachProperties(q);
+    return res.json({ ok: true, items });
+  } catch (error: any) {
+    console.error("[adminRegistryRoutes] property search failed", error);
+    return res.status(500).json({ ok: false, error: "registry_property_search_failed" });
   }
 });
 
@@ -98,11 +110,14 @@ router.post(
   async (req: any, res) => {
     try {
       const normalizedRecordId = String(req.params?.normalizedRecordId || "").trim();
-      const action = String(req.body?.action || "").trim() as "attach" | "ignore";
+      const action = String(req.body?.action || "").trim() as "attach" | "ignore" | "return_to_review";
       const propertyId = String(req.body?.propertyId || "").trim() || null;
       const reason = String(req.body?.reason || "").trim();
       if (!normalizedRecordId || !action || !reason) {
         return res.status(400).json({ ok: false, error: "missing_override_fields" });
+      }
+      if (!["attach", "ignore", "return_to_review"].includes(action)) {
+        return res.status(400).json({ ok: false, error: "invalid_override_action" });
       }
       const match = await applyRegistryMatchOverride({
         normalizedRecordId,

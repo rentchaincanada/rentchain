@@ -14,6 +14,7 @@ import type { RegistrySourceAdapter } from "./adapters/RegistrySourceAdapter";
 import { evaluateRegistryMatch, findRegistryCandidatesForRecord, reEvaluatePropertyAgainstRegistry } from "./registryMatchingService";
 import { getPropertyRegistryProjection, upsertPropertyRegistryProjection } from "./registryStatusProjectionService";
 import { getPropertyById } from "../firestorePropertiesService";
+import { listAdminProperties } from "../admin/adminPropertyView";
 
 class RegistryOverrideError extends Error {
   code: string;
@@ -30,6 +31,57 @@ class RegistryOverrideError extends Error {
 function getAdapter(sourceKey: RegistrySourceKey): RegistrySourceAdapter {
   if (sourceKey === "halifax_r400") return new HalifaxR400Adapter();
   throw new Error(`Unsupported registry source: ${sourceKey}`);
+}
+
+function isMissingIndexError(error: unknown) {
+  const message = String((error as any)?.message || "").toLowerCase();
+  return message.includes("index") && (message.includes("firestore") || message.includes("query requires"));
+}
+
+function summarizeImportDiagnostics(params: {
+  rawRows: Array<Record<string, any>>;
+  normalizedRows: RegistryRecordNormalized[];
+  matches: RegistryMatchRecord[];
+}) {
+  const seenHashes = new Set<string>();
+  let duplicateRowHashCount = 0;
+  let missingPidCount = 0;
+  let missingAddressCount = 0;
+  let unsupportedStatusCount = 0;
+  let invalidNumericFieldCount = 0;
+
+  for (const row of params.rawRows) {
+    const hash = String(row.sourceRowHash || "").trim();
+    if (hash) {
+      if (seenHashes.has(hash)) duplicateRowHashCount += 1;
+      else seenHashes.add(hash);
+    }
+    if (!row.pid) missingPidCount += 1;
+    if (!row.address) missingAddressCount += 1;
+    const registeredRaw = String(row.registered || "").trim();
+    if (registeredRaw && !["y", "yes", "true", "registered", "n", "no", "false"].includes(registeredRaw.toLowerCase())) {
+      unsupportedStatusCount += 1;
+    }
+    const numericInputs: Array<[unknown, unknown]> = [
+      [row.registeredUnits, row.sourcePayload?.["Registered Units"]],
+      [row.numberOfFloors, row.sourcePayload?.["Number of Floors"]],
+      [row.x, row.sourcePayload?.x],
+      [row.y, row.sourcePayload?.y],
+    ];
+    for (const [parsed, raw] of numericInputs) {
+      if (parsed == null && String(raw ?? "").trim()) invalidNumericFieldCount += 1;
+    }
+  }
+
+  return {
+    missingPidCount,
+    missingAddressCount,
+    unsupportedStatusCount,
+    invalidNumericFieldCount,
+    duplicateRowHashCount,
+    ignoredRowCount: params.matches.filter((item) => item.matchStatus === "ignored").length,
+    skippedRowCount: Math.max(0, params.rawRows.length - params.normalizedRows.length),
+  };
 }
 
 async function resolvePropertyForRegistryOverride(propertyIdInput: string) {
@@ -104,6 +156,56 @@ async function writeImportRecord(input: RegistryImportRecord) {
   await db.collection("registryImports").doc(input.id).set(input, { merge: true });
 }
 
+async function refreshPropertyProjectionFromCurrentMatches(params: {
+  propertyId: string;
+  source: RegistrySourceRecord;
+  actorId?: string | null;
+  importBatchId?: string | null;
+}) {
+  let query: FirebaseFirestore.Query = db
+    .collection("registryMatches")
+    .where("propertyId", "==", params.propertyId)
+    .where("sourceKey", "==", params.source.sourceKey);
+  try {
+    query = query.orderBy("updatedAt", "desc");
+  } catch {
+    // no-op for mocked/query-like objects
+  }
+  const matchesSnap = await query.get();
+  const matches = (matchesSnap.docs || [])
+    .map((doc: any) => ({ id: doc.id, ...(doc.data() || {}) } as RegistryMatchRecord))
+    .filter((match) => match.matchStatus === "matched" || match.matchStatus === "mismatch" || match.matchStatus === "possible_match")
+    .sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
+  const best = matches[0] || null;
+
+  let record: RegistryRecordNormalized | null = null;
+  if (best?.normalizedRecordId) {
+    const snap = await db.collection("registryRecordsNormalized").doc(best.normalizedRecordId).get();
+    if (snap.exists) record = { id: snap.id, ...(snap.data() || {}) } as RegistryRecordNormalized;
+  }
+
+  const projection = await upsertPropertyRegistryProjection({
+    propertyId: params.propertyId,
+    source: params.source,
+    match: best,
+    record,
+  });
+  await recordRegistryAuditEvent({
+    sourceKey: params.source.sourceKey,
+    importBatchId: params.importBatchId || null,
+    registryRecordId: record?.registryRecordId || null,
+    propertyId: params.propertyId,
+    actorType: params.actorId ? "admin" : "system",
+    actorId: params.actorId || null,
+    eventType: "projection_updated",
+    eventData: {
+      triggeredBy: best ? "match_refresh" : "projection_reset",
+      registryStatus: projection.registryStatus,
+    },
+  });
+  return projection;
+}
+
 export async function runRegistryImport(params: {
   sourceKey: RegistrySourceKey;
   csvText: string;
@@ -126,8 +228,17 @@ export async function runRegistryImport(params: {
     matchedRowCount: 0,
     unmatchedRowCount: 0,
     mismatchRowCount: 0,
+    ignoredRowCount: 0,
+    skippedRowCount: 0,
     status: "processing",
     errorSummary: null,
+    diagnostics: {
+      missingPidCount: 0,
+      missingAddressCount: 0,
+      unsupportedStatusCount: 0,
+      invalidNumericFieldCount: 0,
+      duplicateRowHashCount: 0,
+    },
     startedAt: now,
     completedAt: null,
     createdBy: params.actorId || null,
@@ -208,6 +319,7 @@ export async function runRegistryImport(params: {
       });
     }
 
+    const diagnostics = summarizeImportDiagnostics({ rawRows, normalizedRows, matches });
     const summary = {
       rowCount: parsedRows.length,
       parsedRowCount: rawRows.length,
@@ -215,6 +327,15 @@ export async function runRegistryImport(params: {
       matchedRowCount: matches.filter((item) => item.matchStatus === "matched").length,
       unmatchedRowCount: matches.filter((item) => item.matchStatus === "unmatched").length,
       mismatchRowCount: matches.filter((item) => item.matchStatus === "mismatch").length,
+      ignoredRowCount: diagnostics.ignoredRowCount,
+      skippedRowCount: diagnostics.skippedRowCount,
+      diagnostics: {
+        missingPidCount: diagnostics.missingPidCount,
+        missingAddressCount: diagnostics.missingAddressCount,
+        unsupportedStatusCount: diagnostics.unsupportedStatusCount,
+        invalidNumericFieldCount: diagnostics.invalidNumericFieldCount,
+        duplicateRowHashCount: diagnostics.duplicateRowHashCount,
+      },
     };
 
     const completedImport: RegistryImportRecord = {
@@ -275,8 +396,16 @@ export async function listRegistryImports(sourceKey?: RegistrySourceKey | null) 
   if (sourceKey) {
     query = db.collection("registryImports").where("sourceKey", "==", sourceKey).orderBy("createdAt", "desc");
   }
-  const snap = await query.get();
-  return (snap.docs || []).map((doc: any) => ({ id: doc.id, ...(doc.data() || {}) }));
+  try {
+    const snap = await query.get();
+    return (snap.docs || []).map((doc: any) => ({ id: doc.id, ...(doc.data() || {}) }));
+  } catch (error) {
+    if (isMissingIndexError(error)) {
+      console.warn("[registry] listRegistryImports missing index", { sourceKey, message: (error as any)?.message });
+      return [];
+    }
+    throw error;
+  }
 }
 
 export async function listRegistryReviewQueue(input?: {
@@ -287,7 +416,16 @@ export async function listRegistryReviewQueue(input?: {
   if (input?.sourceKey) {
     query = db.collection("registryMatches").where("sourceKey", "==", input.sourceKey).orderBy("updatedAt", "desc");
   }
-  const snap = await query.get();
+  let snap: FirebaseFirestore.QuerySnapshot;
+  try {
+    snap = await query.get();
+  } catch (error) {
+    if (isMissingIndexError(error)) {
+      console.warn("[registry] listRegistryReviewQueue missing index", { input, message: (error as any)?.message });
+      return [];
+    }
+    throw error;
+  }
   const items = await Promise.all(
     (snap.docs || []).map(async (doc: any) => {
       const match = { id: doc.id, ...(doc.data() || {}) } as RegistryMatchRecord;
@@ -335,7 +473,7 @@ export async function getRegistryRecordDetail(normalizedRecordId: string) {
 
 export async function applyRegistryMatchOverride(input: {
   normalizedRecordId: string;
-  action: "attach" | "ignore";
+  action: "attach" | "ignore" | "return_to_review";
   propertyId?: string | null;
   reason: string;
   actorId: string;
@@ -374,7 +512,7 @@ export async function applyRegistryMatchOverride(input: {
       createdAt: current?.createdAt || now,
       updatedAt: now,
     };
-  } else {
+  } else if (input.action === "ignore") {
     nextMatch = {
       id: matchId,
       sourceKey: detail.normalizedRecord.sourceKey,
@@ -392,15 +530,36 @@ export async function applyRegistryMatchOverride(input: {
       createdAt: current?.createdAt || now,
       updatedAt: now,
     };
+  } else {
+    const reevaluated = await evaluateRegistryMatch({
+      adapter: getAdapter(detail.normalizedRecord.sourceKey),
+      record: detail.normalizedRecord,
+    });
+    nextMatch = {
+      ...reevaluated,
+      id: matchId,
+      createdAt: current?.createdAt || now,
+      updatedAt: now,
+      reviewedBy: input.actorId,
+      reviewedAt: now,
+      overrideReason: input.reason,
+    };
   }
 
+  const previousPropertyId = String(current?.propertyId || "").trim() || null;
   await db.collection("registryMatches").doc(matchId).set(nextMatch, { merge: true });
   if (nextMatch.propertyId) {
-    await upsertPropertyRegistryProjection({
+    await refreshPropertyProjectionFromCurrentMatches({
       propertyId: nextMatch.propertyId,
       source,
-      match: nextMatch,
-      record: detail.normalizedRecord,
+      actorId: input.actorId,
+    });
+  }
+  if (previousPropertyId && previousPropertyId !== nextMatch.propertyId) {
+    await refreshPropertyProjectionFromCurrentMatches({
+      propertyId: previousPropertyId,
+      source,
+      actorId: input.actorId,
     });
   }
   await recordRegistryAuditEvent({
@@ -414,6 +573,7 @@ export async function applyRegistryMatchOverride(input: {
       action: input.action,
       reason: input.reason,
       propertyId: nextMatch.propertyId,
+      previousPropertyId,
     },
   });
   return nextMatch;
@@ -454,4 +614,24 @@ export async function reEvaluatePropertyRegistry(propertyId: string, actorId: st
     eventData: { triggeredBy: "re_evaluate", registryStatus: projection.registryStatus },
   });
   return { matches, projection };
+}
+
+export async function searchRegistryAttachProperties(queryInput: string) {
+  const q = String(queryInput || "").trim();
+  if (!q) return [];
+  const result = await listAdminProperties({
+    q,
+    province: "NS",
+    page: 1,
+    pageSize: 8,
+  });
+  return result.items.map((item) => ({
+    id: item.id,
+    name: item.name,
+    addressLine1: item.address1,
+    city: item.city,
+    province: item.province,
+    postalCode: item.postalCode,
+    landlordId: item.landlordId,
+  }));
 }

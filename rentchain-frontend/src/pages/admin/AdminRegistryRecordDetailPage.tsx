@@ -2,7 +2,13 @@ import React, { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { MacShell } from "../../components/layout/MacShell";
 import { Button, Card, Input, Pill, Section } from "../../components/ui/Ui";
-import { fetchAdminRegistryRecordDetail, overrideAdminRegistryRecord, type RegistryRecordDetail } from "../../api/adminRegistryApi";
+import {
+  fetchAdminRegistryRecordDetail,
+  overrideAdminRegistryRecord,
+  searchAdminRegistryAttachProperties,
+  type RegistryAttachPropertySearchResult,
+  type RegistryRecordDetail,
+} from "../../api/adminRegistryApi";
 
 export default function AdminRegistryRecordDetailPage() {
   const { normalizedRecordId } = useParams<{ normalizedRecordId: string }>();
@@ -10,6 +16,9 @@ export default function AdminRegistryRecordDetailPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState<RegistryAttachPropertySearchResult[]>([]);
   const [propertyId, setPropertyId] = useState("");
   const [reason, setReason] = useState("Manual registry review");
 
@@ -31,7 +40,33 @@ export default function AdminRegistryRecordDetailPage() {
     void load();
   }, [normalizedRecordId]);
 
-  const handleOverride = async (action: "attach" | "ignore") => {
+  useEffect(() => {
+    let active = true;
+    const q = searchQuery.trim();
+    if (!q) {
+      setSearchResults([]);
+      return;
+    }
+    const timer = window.setTimeout(async () => {
+      try {
+        setSearching(true);
+        const items = await searchAdminRegistryAttachProperties(q);
+        if (!active) return;
+        setSearchResults(items);
+      } catch {
+        if (!active) return;
+        setSearchResults([]);
+      } finally {
+        if (active) setSearching(false);
+      }
+    }, 200);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [searchQuery]);
+
+  const handleOverride = async (action: "attach" | "ignore" | "return_to_review") => {
     if (!normalizedRecordId) return;
     try {
       setSaving(true);
@@ -85,8 +120,45 @@ export default function AdminRegistryRecordDetailPage() {
 
             <Card style={{ display: "grid", gap: 8 }}>
               <div style={{ fontWeight: 700 }}>Manual Review Controls</div>
+              <Input
+                placeholder="Search Halifax properties by name, address, or city"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+              />
+              {searching ? <div style={{ color: "#475569", fontSize: 14 }}>Searching properties…</div> : null}
+              {!searching && searchQuery.trim() && !searchResults.length ? (
+                <div style={{ color: "#64748b", fontSize: 14 }}>No matching admin-visible Halifax properties found.</div>
+              ) : null}
+              {searchResults.length ? (
+                <div style={{ display: "grid", gap: 8 }}>
+                  {searchResults.map((candidate) => (
+                    <button
+                      key={candidate.id}
+                      type="button"
+                      onClick={() => setPropertyId(candidate.id)}
+                      style={{
+                        textAlign: "left",
+                        padding: 12,
+                        borderRadius: 12,
+                        border: propertyId === candidate.id ? "1px solid #2563eb" : "1px solid rgba(148,163,184,0.2)",
+                        background: propertyId === candidate.id ? "rgba(37,99,235,0.08)" : "#fff",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <div style={{ fontWeight: 700 }}>{candidate.name || candidate.id}</div>
+                      <div style={{ color: "#475569", fontSize: 14 }}>
+                        {[candidate.addressLine1, candidate.city, candidate.province, candidate.postalCode].filter(Boolean).join(", ")}
+                      </div>
+                      <div style={{ color: "#64748b", fontSize: 13 }}>Property ID: {candidate.id}</div>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
               <Input placeholder="Property ID for manual attach" value={propertyId} onChange={(event) => setPropertyId(event.target.value)} />
               <Input placeholder="Reason" value={reason} onChange={(event) => setReason(event.target.value)} />
+              <div style={{ color: "#64748b", fontSize: 13 }}>
+                Search and select a property above, or enter a valid property document id manually as a fallback.
+              </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <Button onClick={() => void handleOverride("attach")} disabled={saving || !propertyId.trim() || !reason.trim()}>
                   {saving ? "Saving..." : "Attach to property"}
@@ -94,6 +166,11 @@ export default function AdminRegistryRecordDetailPage() {
                 <Button variant="secondary" onClick={() => void handleOverride("ignore")} disabled={saving || !reason.trim()}>
                   Ignore record
                 </Button>
+                {detail.match?.matchStatus === "ignored" ? (
+                  <Button variant="secondary" onClick={() => void handleOverride("return_to_review")} disabled={saving || !reason.trim()}>
+                    Return to review
+                  </Button>
+                ) : null}
               </div>
             </Card>
 
