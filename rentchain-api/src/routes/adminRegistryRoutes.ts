@@ -2,6 +2,7 @@ import { Router } from "express";
 import { requireAuth } from "../middleware/requireAuth";
 import { requirePermission } from "../middleware/requireAuthz";
 import {
+  applyRegistryPidToPropertyFromRecord,
   applyRegistryMatchOverride,
   getPropertyRegistryReview,
   getRegistryRecordDetail,
@@ -140,6 +141,45 @@ router.post(
         ok: false,
         error: "registry_override_failed",
         message: error?.message || "Override failed",
+      });
+    }
+  }
+);
+
+router.post(
+  "/registry/records/:normalizedRecordId/apply-property-pid",
+  requireAuth,
+  requirePermission("system.admin"),
+  async (req: any, res) => {
+    try {
+      const normalizedRecordId = String(req.params?.normalizedRecordId || "").trim();
+      const propertyId = String(req.body?.propertyId || "").trim();
+      const reason = String(req.body?.reason || "").trim();
+      const confirmOverwrite = Boolean(req.body?.confirmOverwrite);
+      if (!normalizedRecordId || !propertyId || !reason) {
+        return res.status(400).json({ ok: false, error: "missing_pid_update_fields" });
+      }
+      const result = await applyRegistryPidToPropertyFromRecord({
+        normalizedRecordId,
+        propertyId,
+        reason,
+        confirmOverwrite,
+        actorId: String(req.user?.id || req.user?.sub || "").trim(),
+      });
+      return res.json({ ok: true, ...result });
+    } catch (error: any) {
+      console.error("[adminRegistryRoutes] apply property pid failed", error);
+      if (isRegistryOverrideError(error)) {
+        return res.status(error.statusCode).json({
+          ok: false,
+          error: error.code,
+          message: error.message,
+        });
+      }
+      return res.status(500).json({
+        ok: false,
+        error: "registry_property_pid_update_failed",
+        message: error?.message || "Property PID update failed",
       });
     }
   }

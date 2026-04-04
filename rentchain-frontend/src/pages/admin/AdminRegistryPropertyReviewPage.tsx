@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { MacShell } from "../../components/layout/MacShell";
 import { Button, Card, Input, Pill, Section } from "../../components/ui/Ui";
 import {
+  applyRegistryPidToProperty,
   fetchAdminPropertyRegistryReview,
   overrideAdminRegistryRecord,
   reEvaluateAdminPropertyRegistry,
@@ -20,6 +21,7 @@ export default function AdminRegistryPropertyReviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [reason, setReason] = useState("Confirmed during property review");
   const [copiedPid, setCopiedPid] = useState(false);
+  const [confirmPidOverwrite, setConfirmPidOverwrite] = useState(false);
 
   const load = async () => {
     if (!propertyId) return;
@@ -98,6 +100,25 @@ export default function AdminRegistryPropertyReviewPage() {
       window.setTimeout(() => setCopiedPid(false), 1500);
     } catch {
       setCopiedPid(false);
+    }
+  };
+
+  const handleApplySelectedPid = async () => {
+    if (!propertyId || !normalizedRecordId) return;
+    try {
+      setSaving(true);
+      setError(null);
+      await applyRegistryPidToProperty({
+        normalizedRecordId,
+        propertyId,
+        reason,
+        confirmOverwrite: confirmPidOverwrite,
+      });
+      await load();
+    } catch (err: any) {
+      setError(err?.message || "Failed to update property PID from registry");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -183,10 +204,40 @@ export default function AdminRegistryPropertyReviewPage() {
                   <div style={{ color: "#64748b" }}>{detail.selectedComparison.reasonSummary.join(" ")}</div>
                 ) : null}
                 <Input placeholder="Reason" value={reason} onChange={(event) => setReason(event.target.value)} />
+                {(detail.selectedComparison.pidStatus === "missing_internal_pid" || detail.selectedComparison.pidStatus === "mismatch") &&
+                detail.selectedComparison.registryPid ? (
+                  <>
+                    <label style={{ display: "flex", gap: 8, alignItems: "flex-start", color: "#475569", fontSize: 13 }}>
+                      <input
+                        type="checkbox"
+                        checked={confirmPidOverwrite}
+                        onChange={(event) => setConfirmPidOverwrite(event.target.checked)}
+                      />
+                      <span>
+                        {detail.selectedComparison.pidStatus === "mismatch"
+                          ? "Confirm replacing the current property PID with the selected Halifax registry PID."
+                          : "Confirm applying the selected Halifax registry PID to this property."}
+                      </span>
+                    </label>
+                    <div style={{ color: "#64748b", fontSize: 13 }}>
+                      Applying the registry PID may improve future exact matching for this property.
+                    </div>
+                  </>
+                ) : null}
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <Button onClick={() => void handleConfirmSelected()} disabled={saving || !reason.trim()}>
                     {saving ? "Saving..." : "Confirm this match"}
                   </Button>
+                  {(detail.selectedComparison.pidStatus === "missing_internal_pid" || detail.selectedComparison.pidStatus === "mismatch") &&
+                  detail.selectedComparison.registryPid ? (
+                    <Button
+                      variant="secondary"
+                      onClick={() => void handleApplySelectedPid()}
+                      disabled={saving || !reason.trim() || (detail.selectedComparison.pidStatus === "mismatch" && !confirmPidOverwrite)}
+                    >
+                      Update property PID from registry
+                    </Button>
+                  ) : null}
                   <Button variant="secondary" onClick={() => void handleIgnoreSelected()} disabled={saving || !reason.trim()}>
                     Ignore record
                   </Button>
