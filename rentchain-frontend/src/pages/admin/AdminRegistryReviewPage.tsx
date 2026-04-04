@@ -2,14 +2,29 @@ import React, { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { MacShell } from "../../components/layout/MacShell";
 import { Button, Card, Input, Pill, Section } from "../../components/ui/Ui";
-import { fetchAdminRegistryReview, type RegistryReviewItem } from "../../api/adminRegistryApi";
+import {
+  fetchAdminRegistryReview,
+  fetchNextAdminRegistryReviewPage,
+  type RegistryReviewItem,
+} from "../../api/adminRegistryApi";
 
 export default function AdminRegistryReviewPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const matchStatus = searchParams.get("matchStatus") || "all";
   const searchQuery = searchParams.get("q") || "";
   const [items, setItems] = useState<RegistryReviewItem[]>([]);
+  const [summary, setSummary] = useState({
+    all: 0,
+    possible_match: 0,
+    mismatch: 0,
+    unmatched: 0,
+    matched: 0,
+    ignored: 0,
+  });
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -20,7 +35,10 @@ export default function AdminRegistryReviewPage() {
         setError(null);
         const result = await fetchAdminRegistryReview(matchStatus, searchQuery);
         if (!active) return;
-        setItems(result);
+        setItems(result.items);
+        setSummary(result.summary);
+        setNextCursor(result.pageInfo.nextCursor);
+        setHasMore(result.pageInfo.hasMore);
       } catch (err: any) {
         if (!active) return;
         setError(err?.message || "Failed to load registry review queue");
@@ -33,6 +51,28 @@ export default function AdminRegistryReviewPage() {
       active = false;
     };
   }, [matchStatus, searchQuery]);
+
+  const loadMore = async () => {
+    if (!nextCursor || loadingMore) return;
+    try {
+      setLoadingMore(true);
+      setError(null);
+      const result = await fetchNextAdminRegistryReviewPage({
+        matchStatus,
+        searchQuery,
+        pageSize: 50,
+        pageCursor: nextCursor,
+      });
+      setItems((current) => [...current, ...result.items]);
+      setSummary(result.summary);
+      setNextCursor(result.pageInfo.nextCursor);
+      setHasMore(result.pageInfo.hasMore);
+    } catch (err: any) {
+      setError(err?.message || "Failed to load more review records");
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   return (
     <MacShell title="Admin · Registry Review">
@@ -64,8 +104,17 @@ export default function AdminRegistryReviewPage() {
                 <Button variant="secondary">Back to imports</Button>
               </Link>
               {["all", "possible_match", "mismatch", "unmatched", "matched", "ignored"].map((status) => (
-                <Button key={status} variant={matchStatus === status ? "primary" : "secondary"} onClick={() => setSearchParams(status === "all" ? {} : { matchStatus: status })}>
-                  {status}
+                <Button
+                  key={status}
+                  variant={matchStatus === status ? "primary" : "secondary"}
+                  onClick={() => {
+                    const next: Record<string, string> = {};
+                    if (status !== "all") next.matchStatus = status;
+                    if (searchQuery) next.q = searchQuery;
+                    setSearchParams(next);
+                  }}
+                >
+                  {status} ({summary[status as keyof typeof summary] ?? 0})
                 </Button>
               ))}
             </div>
@@ -77,13 +126,18 @@ export default function AdminRegistryReviewPage() {
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <Pill tone="muted">Visible items: {items.length}</Pill>
               <Pill tone="muted">Filter: {matchStatus}</Pill>
+              <Pill tone="muted">Queue total: {summary.all}</Pill>
               {searchQuery ? <Pill tone="muted">Search: {searchQuery}</Pill> : null}
               {matchStatus === "ignored" ? <Pill tone="muted">Ignored items can be returned to review from record detail.</Pill> : null}
             </div>
           ) : null}
           {loading ? <div>Loading registry review queue…</div> : null}
           {!loading && error ? <div style={{ color: "#b91c1c" }}>{error}</div> : null}
-          {!loading && !items.length ? <div style={{ color: "#475569" }}>No registry records match this review state.</div> : null}
+          {!loading && !items.length ? (
+            <div style={{ color: "#475569" }}>
+              {searchQuery ? "No registry records matched this search and filter combination." : "No registry records match this review state."}
+            </div>
+          ) : null}
           {items.map((item) => (
             <div key={item.match.id} style={{ border: "1px solid rgba(148,163,184,0.18)", borderRadius: 16, padding: 16, display: "grid", gap: 8 }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
@@ -162,6 +216,13 @@ export default function AdminRegistryReviewPage() {
               </div>
             </div>
           ))}
+          {!loading && hasMore ? (
+            <div style={{ display: "flex", justifyContent: "center" }}>
+              <Button variant="secondary" onClick={() => void loadMore()} disabled={loadingMore}>
+                {loadingMore ? "Loading more…" : "Load more"}
+              </Button>
+            </div>
+          ) : null}
         </Card>
       </div>
     </MacShell>
