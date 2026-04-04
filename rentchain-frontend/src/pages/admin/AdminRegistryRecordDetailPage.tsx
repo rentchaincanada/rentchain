@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { MacShell } from "../../components/layout/MacShell";
 import { Button, Card, Input, Pill, Section } from "../../components/ui/Ui";
 import {
+  applyRegistryPidToProperty,
   fetchAdminRegistryRecordDetail,
   overrideAdminRegistryRecord,
   searchAdminRegistryAttachProperties,
@@ -29,6 +30,7 @@ export default function AdminRegistryRecordDetailPage() {
   const [propertyId, setPropertyId] = useState("");
   const [reason, setReason] = useState("Manual registry review");
   const [copiedPid, setCopiedPid] = useState(false);
+  const [confirmPidOverwrite, setConfirmPidOverwrite] = useState(false);
 
   const load = async () => {
     if (!normalizedRecordId) return;
@@ -102,6 +104,25 @@ export default function AdminRegistryRecordDetailPage() {
       window.setTimeout(() => setCopiedPid(false), 1500);
     } catch {
       setCopiedPid(false);
+    }
+  };
+
+  const handleApplyRegistryPid = async (targetPropertyId: string) => {
+    if (!normalizedRecordId) return;
+    try {
+      setSaving(true);
+      setError(null);
+      await applyRegistryPidToProperty({
+        normalizedRecordId,
+        propertyId: targetPropertyId,
+        reason,
+        confirmOverwrite: confirmPidOverwrite,
+      });
+      await load();
+    } catch (err: any) {
+      setError(err?.message || "Failed to update property PID from registry");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -191,6 +212,14 @@ export default function AdminRegistryRecordDetailPage() {
               <div style={{ color: "#64748b", fontSize: 13 }}>
                 Search and select a property above, or enter a valid property document id manually as a fallback.
               </div>
+              <label style={{ display: "flex", gap: 8, alignItems: "flex-start", color: "#475569", fontSize: 13 }}>
+                <input
+                  type="checkbox"
+                  checked={confirmPidOverwrite}
+                  onChange={(event) => setConfirmPidOverwrite(event.target.checked)}
+                />
+                <span>Allow PID overwrite when the property already has a different PID.</span>
+              </label>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <Button onClick={() => void handleOverride("attach")} disabled={saving || !propertyId.trim() || !reason.trim()}>
                   {saving ? "Saving..." : "Attach to property"}
@@ -255,7 +284,26 @@ export default function AdminRegistryRecordDetailPage() {
                     <Link to={`/admin/registry/properties/${encodeURIComponent(candidate.propertyId)}?normalizedRecordId=${encodeURIComponent(detail.normalizedRecord?.id || "")}`}>
                       <Button variant="secondary">Open property review</Button>
                     </Link>
+                    {candidate.comparison?.registryPid &&
+                    (candidate.comparison.pidStatus === "missing_internal_pid" || candidate.comparison.pidStatus === "mismatch") ? (
+                      <Button
+                        variant="secondary"
+                        onClick={() => void handleApplyRegistryPid(candidate.propertyId)}
+                        disabled={saving || !reason.trim() || (candidate.comparison.pidStatus === "mismatch" && !confirmPidOverwrite)}
+                      >
+                        Update property PID from registry
+                      </Button>
+                    ) : null}
                   </div>
+                  {candidate.comparison?.registryPid &&
+                  (candidate.comparison.pidStatus === "missing_internal_pid" || candidate.comparison.pidStatus === "mismatch") ? (
+                    <div style={{ color: "#64748b", fontSize: 13, marginTop: 8 }}>
+                      Applying the registry PID may improve future exact matching for this property.
+                      {candidate.comparison.pidStatus === "mismatch"
+                        ? " This will replace the current property PID with the selected Halifax registry PID."
+                        : ""}
+                    </div>
+                  ) : null}
                 </div>
               ))}
             </Card>

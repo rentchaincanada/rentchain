@@ -164,6 +164,17 @@ export type RegistryPropertyComparison = {
   reasonSummary: string[];
 };
 
+export type RegistryPidUpdateResult = {
+  propertyId: string;
+  previousPid: string | null;
+  newPid: string | null;
+  changed: boolean;
+  reEvaluation: {
+    matches: RegistryReviewItem["match"][];
+    projection: any;
+  };
+};
+
 export type AdminPropertyRegistryReview = {
   property: any;
   projection: any;
@@ -249,4 +260,23 @@ export async function reEvaluateAdminPropertyRegistry(propertyId: string) {
   return apiFetch(`/admin/registry/properties/${encodeURIComponent(propertyId)}/re-evaluate`, {
     method: "POST",
   });
+}
+
+export async function applyRegistryPidToProperty(input: {
+  normalizedRecordId: string;
+  propertyId: string;
+  reason: string;
+  confirmOverwrite?: boolean;
+}) {
+  return apiFetch<RegistryPidUpdateResult>(
+    `/admin/registry/records/${encodeURIComponent(input.normalizedRecordId)}/apply-property-pid`,
+    {
+      method: "POST",
+      body: {
+        propertyId: input.propertyId,
+        reason: input.reason,
+        confirmOverwrite: Boolean(input.confirmOverwrite),
+      },
+    }
+  );
 }

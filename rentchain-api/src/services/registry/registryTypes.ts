@@ -166,7 +166,8 @@ export type RegistryAuditEventType =
   | "normalized_row_written"
   | "match_evaluated"
   | "match_overridden"
-  | "projection_updated";
+  | "projection_updated"
+  | "property_pid_updated_from_registry";
 
 export type RegistryAuditLogRecord = {
   id: string;

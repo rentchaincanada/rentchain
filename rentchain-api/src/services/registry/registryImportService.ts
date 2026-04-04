@@ -29,6 +29,11 @@ class RegistryOverrideError extends Error {
   }
 }
 
+type PropertyPidUpdateErrorCode =
+  | "missing_registry_pid"
+  | "missing_property_context"
+  | "pid_update_confirmation_required";
+
 function getAdapter(sourceKey: RegistrySourceKey): RegistrySourceAdapter {
   if (sourceKey === "halifax_r400") return new HalifaxR400Adapter();
   throw new Error(`Unsupported registry source: ${sourceKey}`);
@@ -186,6 +191,28 @@ function buildRegistryPropertyComparison(params: {
       ...(params.record?.internalDiagnostics?.unmatchedReasons || []),
     ]),
   };
+}
+
+function requireRegistryPidUpdateConfirmation(params: {
+  propertyPid: string | null;
+  registryPid: string | null;
+  confirmOverwrite?: boolean;
+}) {
+  if (!params.registryPid) {
+    throw new RegistryOverrideError("The selected registry record does not include a PID to apply.", {
+      code: "missing_registry_pid" satisfies PropertyPidUpdateErrorCode,
+      statusCode: 400,
+    });
+  }
+  if (params.propertyPid && params.propertyPid !== params.registryPid && !params.confirmOverwrite) {
+    throw new RegistryOverrideError(
+      "Property already has a different PID. Confirm overwrite to apply the registry PID.",
+      {
+        code: "pid_update_confirmation_required" satisfies PropertyPidUpdateErrorCode,
+        statusCode: 409,
+      }
+    );
+  }
 }
 
 function summarizeImportDiagnostics(params: {
@@ -770,6 +797,124 @@ export async function applyRegistryMatchOverride(input: {
     },
   });
   return nextMatch;
+}
+
+export async function applyRegistryPidToPropertyFromRecord(input: {
+  normalizedRecordId: string;
+  propertyId: string;
+  reason: string;
+  actorId: string;
+  confirmOverwrite?: boolean;
+}) {
+  const detail = await getRegistryRecordDetail(input.normalizedRecordId);
+  if (!detail) {
+    throw new RegistryOverrideError("Registry record not found", {
+      code: "registry_record_not_found",
+      statusCode: 404,
+    });
+  }
+
+  const property = await resolvePropertyForRegistryOverride(input.propertyId);
+  const registryPid = normalizePid(detail.normalizedRecord?.pid);
+  const previousPid = resolvePropertyPidLikeValue(property);
+  const { source } = await ensureRegistrySource(detail.normalizedRecord.sourceKey);
+  const adapter = getAdapter(detail.normalizedRecord.sourceKey);
+  requireRegistryPidUpdateConfirmation({
+    propertyPid: previousPid,
+    registryPid,
+    confirmOverwrite: input.confirmOverwrite,
+  });
+
+  if (!property?.id) {
+    throw new RegistryOverrideError("A valid property context is required before updating PID.", {
+      code: "missing_property_context" satisfies PropertyPidUpdateErrorCode,
+      statusCode: 400,
+    });
+  }
+
+  if (previousPid === registryPid) {
+    const reevaluatedExisting = await evaluateRegistryMatch({
+      adapter,
+      record: detail.normalizedRecord,
+    });
+    await db.collection("registryMatches").doc(makeStableId([detail.normalizedRecord.sourceKey, detail.normalizedRecord.registryRecordId])).set(
+      {
+        ...reevaluatedExisting,
+        createdAt: detail.match?.createdAt || nowIso(),
+        updatedAt: nowIso(),
+        reviewedBy: input.actorId,
+        reviewedAt: nowIso(),
+      },
+      { merge: true }
+    );
+    await refreshPropertyProjectionFromCurrentMatches({
+      propertyId: property.id,
+      source,
+      actorId: input.actorId,
+    });
+    return {
+      propertyId: property.id,
+      previousPid,
+      newPid: registryPid,
+      changed: false,
+      reEvaluation: await reEvaluatePropertyRegistry(property.id, input.actorId),
+    };
+  }
+
+  await db.collection("properties").doc(property.id).set(
+    {
+      pid: registryPid,
+      updatedAt: nowIso(),
+    },
+    { merge: true }
+  );
+
+  await recordRegistryAuditEvent({
+    sourceKey: detail.normalizedRecord.sourceKey,
+    registryRecordId: detail.normalizedRecord.registryRecordId,
+    propertyId: property.id,
+    actorType: "admin",
+    actorId: input.actorId,
+    eventType: "property_pid_updated_from_registry",
+    eventData: {
+      previousPid,
+      newPid: registryPid,
+      reason: input.reason,
+      registrationNumber: detail.normalizedRecord.registrationNumber || null,
+      propertyAddress: getPropertyDisplayAddress(property),
+      registryAddress: detail.normalizedRecord.addressRaw || null,
+      overwriteConfirmed: Boolean(input.confirmOverwrite),
+    },
+  });
+
+  const refreshedMatch = await evaluateRegistryMatch({
+    adapter,
+    record: detail.normalizedRecord,
+  });
+  await db.collection("registryMatches").doc(makeStableId([detail.normalizedRecord.sourceKey, detail.normalizedRecord.registryRecordId])).set(
+    {
+      ...refreshedMatch,
+      createdAt: detail.match?.createdAt || nowIso(),
+      updatedAt: nowIso(),
+      reviewedBy: input.actorId,
+      reviewedAt: nowIso(),
+    },
+    { merge: true }
+  );
+  await refreshPropertyProjectionFromCurrentMatches({
+    propertyId: property.id,
+    source,
+    actorId: input.actorId,
+  });
+
+  const reEvaluation = await reEvaluatePropertyRegistry(property.id, input.actorId);
+  return {
+    propertyId: property.id,
+    previousPid,
+    newPid: registryPid,
+    changed: true,
+    reEvaluation,
+  };
 }
 
 export function isRegistryOverrideError(error: unknown): error is RegistryOverrideError {

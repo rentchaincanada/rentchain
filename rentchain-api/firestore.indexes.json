@@ -296,6 +296,15 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "sourceKey", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "registryMatches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sourceKey", "order": "ASCENDING" },
         { "fieldPath": "matchStatus", "order": "ASCENDING" },
         { "fieldPath": "updatedAt", "order": "DESCENDING" },
         { "fieldPath": "__name__", "order": "DESCENDING" }
@@ -308,6 +317,15 @@
         { "fieldPath": "propertyId", "order": "ASCENDING" },
         { "fieldPath": "sourceKey", "order": "ASCENDING" },
         { "fieldPath": "updatedAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "registryAuditLog",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "registryRecordId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" },
         { "fieldPath": "__name__", "order": "DESCENDING" }
       ]
     },

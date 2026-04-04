@@ -532,6 +532,241 @@ describe("registryImportService", () => {
     );
   });
 
+  it("updates the canonical property pid from a registry record and audits the change", async () => {
+    const { applyRegistryPidToPropertyFromRecord, getPropertyRegistryReview } = await import("../registry/registryImportService");
+
+    ensureCollection("properties").set("prop-pid-update", {
+      id: "prop-pid-update",
+      landlordId: "landlord-5",
+      name: "PID Update Property",
+      addressLine1: "77 Registry Street",
+      city: "Halifax",
+      province: "NS",
+      postalCode: "B3J 2K9",
+    });
+    ensureCollection("registryRecordsNormalized").set("record-pid-update", {
+      id: "record-pid-update",
+      importBatchId: "import-1",
+      sourceKey: "halifax_r400",
+      jurisdictionCountry: "CA",
+      jurisdictionProvince: "NS",
+      jurisdictionMunicipality: "Halifax",
+      registryCategory: "rental_registry",
+      registryRecordId: "reg-pid-update",
+      registrationNumber: "REG-PID-UPDATE",
+      pid: "7777777",
+      addressRaw: "77 REGISTRY STREET,HALIFAX,B3J 2K9",
+      primaryAddressCandidate: "77 registry st halifax ns b3j 2k9",
+      addressCandidates: ["77 registry st halifax ns b3j 2k9"],
+      addressNormalized: "77 registry st halifax ns b3j 2k9",
+      postalCode: "B3J2K9",
+      rentalUnitTypeRaw: null,
+      rentalUnitTypeNormalized: null,
+      buildingTypeRaw: null,
+      buildingTypeNormalized: null,
+      registeredUnits: 1,
+      numberOfFloors: 1,
+      sharedFacilities: null,
+      registrationStatusRaw: "Y",
+      registrationStatusNormalized: "registered",
+      registrationIssuedAt: "2026-04-01T00:00:00.000Z",
+      lat: null,
+      lng: null,
+      sourceConfidence: 0.94,
+      internalDiagnostics: {
+        unmatchedReasons: ["missing_internal_property_pid"],
+        pidSourceFieldsChecked: ["pid"],
+        addressCandidateCount: 1,
+      },
+      importedAt: "2026-04-01T00:00:00.000Z",
+      updatedAt: "2026-04-01T00:00:00.000Z",
+    });
+    ensureCollection("registryMatches").set("halifax_r400_reg-pid-update", {
+      id: "halifax_r400_reg-pid-update",
+      sourceKey: "halifax_r400",
+      registryRecordId: "reg-pid-update",
+      normalizedRecordId: "record-pid-update",
+      propertyId: null,
+      landlordId: null,
+      matchMethod: "address_fuzzy",
+      matchScore: 0.78,
+      matchStatus: "possible_match",
+      mismatchReasons: ["missing_internal_property_pid"],
+      reviewedBy: null,
+      reviewedAt: null,
+      overrideReason: null,
+      createdAt: "2026-04-01T00:00:00.000Z",
+      updatedAt: "2026-04-01T00:00:00.000Z",
+    });
+
+    const result = await applyRegistryPidToPropertyFromRecord({
+      normalizedRecordId: "record-pid-update",
+      propertyId: "prop-pid-update",
+      reason: "Apply verified Halifax PID",
+      actorId: "admin-9",
+    });
+
+    expect(result.changed).toBe(true);
+    expect(result.previousPid).toBe(null);
+    expect(result.newPid).toBe("7777777");
+
+    const property = ensureCollection("properties").get("prop-pid-update");
+    expect(property?.pid).toBe("7777777");
+
+    const refreshedMatch = ensureCollection("registryMatches").get("halifax_r400_reg-pid-update");
+    expect(refreshedMatch?.matchStatus).toBe("matched");
+    expect(refreshedMatch?.matchMethod).toBe("pid_exact");
+    expect(refreshedMatch?.propertyId).toBe("prop-pid-update");
+
+    const propertyReview = await getPropertyRegistryReview("prop-pid-update", { normalizedRecordId: "record-pid-update" });
+    expect(propertyReview?.projection?.registryStatus).toBe("verified");
+    expect(propertyReview?.propertyPid).toBe("7777777");
+
+    const auditEvents = Array.from(ensureCollection("registryAuditLog").values());
+    expect(
+      auditEvents.some(
+        (event) =>
+          event.eventType === "property_pid_updated_from_registry" &&
+          event.propertyId === "prop-pid-update" &&
+          event.eventData?.previousPid === null &&
+          event.eventData?.newPid === "7777777"
+      )
+    ).toBe(true);
+  });
+
+  it("requires explicit confirmation before overwriting a different property pid", async () => {
+    const { applyRegistryPidToPropertyFromRecord } = await import("../registry/registryImportService");
+
+    ensureCollection("properties").set("prop-pid-overwrite", {
+      id: "prop-pid-overwrite",
+      name: "Overwrite Property",
+      addressLine1: "9 Overwrite Lane",
+      city: "Halifax",
+      province: "NS",
+      pid: "1111111",
+    });
+    ensureCollection("registryRecordsNormalized").set("record-pid-overwrite", {
+      id: "record-pid-overwrite",
+      sourceKey: "halifax_r400",
+      importBatchId: "import-1",
+      jurisdictionCountry: "CA",
+      jurisdictionProvince: "NS",
+      jurisdictionMunicipality: "Halifax",
+      registryCategory: "rental_registry",
+      registryRecordId: "reg-pid-overwrite",
+      registrationNumber: "REG-PID-OVERWRITE",
+      pid: "9999999",
+      addressRaw: "9 OVERWRITE LANE,HALIFAX",
+      primaryAddressCandidate: "9 overwrite ln halifax ns",
+      addressCandidates: ["9 overwrite ln halifax ns"],
+      addressNormalized: "9 overwrite ln halifax ns",
+      postalCode: null,
+      rentalUnitTypeRaw: null,
+      rentalUnitTypeNormalized: null,
+      buildingTypeRaw: null,
+      buildingTypeNormalized: null,
+      registeredUnits: null,
+      numberOfFloors: null,
+      sharedFacilities: null,
+      registrationStatusRaw: "Y",
+      registrationStatusNormalized: "registered",
+      registrationIssuedAt: null,
+      lat: null,
+      lng: null,
+      sourceConfidence: 0.94,
+      internalDiagnostics: {
+        unmatchedReasons: [],
+        pidSourceFieldsChecked: ["pid"],
+        addressCandidateCount: 1,
+      },
+      importedAt: "2026-04-01T00:00:00.000Z",
+      updatedAt: "2026-04-01T00:00:00.000Z",
+    });
+
+    await expect(
+      applyRegistryPidToPropertyFromRecord({
+        normalizedRecordId: "record-pid-overwrite",
+        propertyId: "prop-pid-overwrite",
+        reason: "Attempt overwrite",
+        actorId: "admin-1",
+      })
+    ).rejects.toMatchObject({ code: "pid_update_confirmation_required", statusCode: 409 });
+
+    expect(ensureCollection("properties").get("prop-pid-overwrite")?.pid).toBe("1111111");
+
+    await expect(
+      applyRegistryPidToPropertyFromRecord({
+        normalizedRecordId: "record-pid-overwrite",
+        propertyId: "prop-pid-overwrite",
+        reason: "Confirmed overwrite",
+        actorId: "admin-1",
+        confirmOverwrite: true,
+      })
+    ).resolves.toMatchObject({ changed: true, newPid: "9999999" });
+
+    expect(ensureCollection("properties").get("prop-pid-overwrite")?.pid).toBe("9999999");
+  });
+
+  it("rejects pid updates when the selected registry record does not include a pid", async () => {
+    const { applyRegistryPidToPropertyFromRecord } = await import("../registry/registryImportService");
+
+    ensureCollection("properties").set("prop-no-pid", {
+      id: "prop-no-pid",
+      name: "No PID Property",
+      addressLine1: "12 No PID Avenue",
+      city: "Halifax",
+      province: "NS",
+    });
+    ensureCollection("registryRecordsNormalized").set("record-no-pid", {
+      id: "record-no-pid",
+      sourceKey: "halifax_r400",
+      importBatchId: "import-1",
+      jurisdictionCountry: "CA",
+      jurisdictionProvince: "NS",
+      jurisdictionMunicipality: "Halifax",
+      registryCategory: "rental_registry",
+      registryRecordId: "reg-no-pid",
+      registrationNumber: "REG-NO-PID",
+      pid: null,
+      addressRaw: "12 NO PID AVENUE,HALIFAX",
+      primaryAddressCandidate: "12 no pid ave halifax ns",
+      addressCandidates: ["12 no pid ave halifax ns"],
+      addressNormalized: "12 no pid ave halifax ns",
+      postalCode: null,
+      rentalUnitTypeRaw: null,
+      rentalUnitTypeNormalized: null,
+      buildingTypeRaw: null,
+      buildingTypeNormalized: null,
+      registeredUnits: null,
+      numberOfFloors: null,
+      sharedFacilities: null,
+      registrationStatusRaw: "Y",
+      registrationStatusNormalized: "registered",
+      registrationIssuedAt: null,
+      lat: null,
+      lng: null,
+      sourceConfidence: 0.94,
+      internalDiagnostics: {
+        unmatchedReasons: [],
+        pidSourceFieldsChecked: ["pid"],
+        addressCandidateCount: 1,
+      },
+      importedAt: "2026-04-01T00:00:00.000Z",
+      updatedAt: "2026-04-01T00:00:00.000Z",
+    });
+
+    await expect(
+      applyRegistryPidToPropertyFromRecord({
+        normalizedRecordId: "record-no-pid",
+        propertyId: "prop-no-pid",
+        reason: "Cannot update",
+        actorId: "admin-2",
+      })
+    ).rejects.toMatchObject({ code: "missing_registry_pid", statusCode: 400 });
+
+    expect(ensureCollection("properties").get("prop-no-pid")?.pid).toBeUndefined();
+  });
+
   it("normalizes Halifax fields using the adapter contract", async () => {
     const { HalifaxR400Adapter } = await import("../registry/adapters/HalifaxR400Adapter");
     const adapter = new HalifaxR400Adapter();
