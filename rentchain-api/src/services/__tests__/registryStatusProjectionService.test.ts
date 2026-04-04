@@ -74,6 +74,7 @@ describe("registryStatusProjectionService", () => {
     });
 
     expect(projection.registryStatus).toBe("verified");
+    expect(projection.pid).toBe("1234567");
     expect(projection.summary).toContain("Verified against public Halifax rental registry data");
     expect(projection.recommendedAction).toBe("No action needed.");
   });

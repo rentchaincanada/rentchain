@@ -56,6 +56,7 @@ export function derivePropertyRegistryProjection(params: {
     registryStatus,
     registryRecordId: params.record?.registryRecordId || null,
     registrationNumber: params.record?.registrationNumber || null,
+    pid: params.record?.pid || null,
     matchedAt: params.match ? now : params.existing?.matchedAt || null,
     matchConfidence: params.match ? params.match.matchScore : null,
     summary,

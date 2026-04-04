@@ -62,6 +62,28 @@ const formatDate = (iso: string): string => {
   });
 };
 
+function safeStorageGet(key: string): string | null {
+  if (typeof window === "undefined") return null;
+  const storage = window.localStorage;
+  if (!storage || typeof storage.getItem !== "function") return null;
+  try {
+    return storage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeStorageSet(key: string, value: string) {
+  if (typeof window === "undefined") return;
+  const storage = window.localStorage;
+  if (!storage || typeof storage.setItem !== "function") return;
+  try {
+    storage.setItem(key, value);
+  } catch {
+    // ignore storage write failures
+  }
+}
+
 export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   property,
   onRefresh,
@@ -113,6 +135,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   const [editPropertyError, setEditPropertyError] = useState<string | null>(null);
   const [editPropertyForm, setEditPropertyForm] = useState({
     name: "",
+    pid: "",
     addressLine1: "",
     addressLine2: "",
     city: "",
@@ -124,6 +147,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   const editPropertyOpenedRef = useRef(false);
   const [highlightedUnitKey, setHighlightedUnitKey] = useState<string | null>(null);
   const [occupancyPromptDismissed, setOccupancyPromptDismissed] = useState(false);
+  const [editComplianceExpanded, setEditComplianceExpanded] = useState(false);
   const unitRowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
   const unitCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
@@ -234,6 +258,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
     setEditPropertyError(null);
     setEditPropertyForm({
       name: String(property.name || ""),
+      pid: String(property.pid || ""),
       addressLine1: String(property.addressLine1 || ""),
       addressLine2: String(property.addressLine2 || ""),
       city: String(property.city || ""),
@@ -241,6 +266,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
       postalCode: String(property.postalCode || ""),
       country: String(property.country || "Canada"),
     });
+    setEditComplianceExpanded(Boolean(property.pid));
     setEditPropertyOpen(true);
   }, [property]);
 
@@ -507,15 +533,12 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
 
   useEffect(() => {
     if (typeof window === "undefined" || !propertyId) return;
-    const dismissed =
-      window.localStorage.getItem(`rentchain.occupancyPrompt.dismissed.${propertyId}`) === "1";
+    const dismissed = safeStorageGet(`rentchain.occupancyPrompt.dismissed.${propertyId}`) === "1";
     setOccupancyPromptDismissed(dismissed);
   }, [propertyId]);
 
   const dismissOccupancyPrompt = useCallback(() => {
-    if (typeof window !== "undefined" && propertyId) {
-      window.localStorage.setItem(`rentchain.occupancyPrompt.dismissed.${propertyId}`, "1");
-    }
+    if (propertyId) safeStorageSet(`rentchain.occupancyPrompt.dismissed.${propertyId}`, "1");
     setOccupancyPromptDismissed(true);
   }, [propertyId]);
 
@@ -611,6 +634,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
       setEditPropertyError(null);
       await updateProperty(String(property.id), {
         name: editPropertyForm.name.trim() || undefined,
+        pid: editPropertyForm.pid.trim() || null,
         addressLine1,
         addressLine2: editPropertyForm.addressLine2.trim() || undefined,
         city,
@@ -689,6 +713,9 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             </div>
             <div className="rc-property-unit-count" style={{ color: "#0f172a", fontSize: "0.8rem", fontWeight: 600 }}>
               Units: {unitCount}
+            </div>
+            <div style={{ color: "#475569", fontSize: "0.8rem" }}>
+              PID: {property.pid || "--"}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span
@@ -1764,6 +1791,58 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                   style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #e5e7eb" }}
                 />
               </label>
+            </div>
+
+            <div
+              style={{
+                borderRadius: 12,
+                border: "1px solid #dbe4f0",
+                background: "#f8fbff",
+                padding: 12,
+                display: "grid",
+                gap: 10,
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setEditComplianceExpanded((current) => !current)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 10,
+                  width: "100%",
+                  border: "none",
+                  background: "transparent",
+                  padding: 0,
+                  cursor: "pointer",
+                  color: "#0f172a",
+                }}
+              >
+                <span style={{ fontSize: "0.9rem", fontWeight: 700 }}>Compliance &amp; Registry (Optional)</span>
+                <span style={{ fontSize: "0.8rem", color: "#475569" }}>
+                  {editComplianceExpanded ? "Hide" : "Add details"}
+                </span>
+              </button>
+              {editComplianceExpanded ? (
+                <div style={{ display: "grid", gap: 8 }}>
+                  <label style={{ display: "grid", gap: 6, fontSize: "0.9rem", color: "#111827" }}>
+                    Property Identifier (PID)
+                    <input
+                      value={editPropertyForm.pid}
+                      onChange={(event) =>
+                        setEditPropertyForm((current) => ({ ...current, pid: event.target.value }))
+                      }
+                      placeholder="Optional PID"
+                      style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #e5e7eb" }}
+                    />
+                  </label>
+                  <div style={{ color: "#64748b", fontSize: "0.85rem", lineHeight: 1.5 }}>
+                    Used for municipal registry matching and property verification in supported jurisdictions.
+                    Adding a PID can improve automatic matching and reduce manual review.
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             {editPropertyError ? (

@@ -131,6 +131,12 @@ const { dbMock, resetDb, seedDoc } = vi.hoisted(() => {
   };
 });
 
+const registryMocks = vi.hoisted(() => ({
+  ensureRegistrySource: vi.fn(),
+  getPropertyRegistryProjection: vi.fn(),
+  upsertPropertyRegistryProjection: vi.fn(),
+}));
+
 vi.mock("../../entitlements/entitlements.middleware", () => ({
   requireCapability: () => (_req: any, _res: any, next: any) => next(),
 }));
@@ -150,6 +156,21 @@ vi.mock("../../config/firebase", () => ({
     serverTimestamp: () => Date.now(),
   },
 }));
+
+vi.mock("../../services/registry/registryImportService", () => ({
+  ensureRegistrySource: registryMocks.ensureRegistrySource,
+}));
+
+vi.mock("../../services/registry/registryStatusProjectionService", async () => {
+  const actual = await vi.importActual<typeof import("../../services/registry/registryStatusProjectionService")>(
+    "../../services/registry/registryStatusProjectionService"
+  );
+  return {
+    ...actual,
+    getPropertyRegistryProjection: registryMocks.getPropertyRegistryProjection,
+    upsertPropertyRegistryProjection: registryMocks.upsertPropertyRegistryProjection,
+  };
+});
 
 async function createApp() {
   const router = (await import("../propertiesRoutes")).default;
@@ -191,6 +212,34 @@ describe("properties routes publish + defaults", () => {
   beforeEach(() => {
     vi.resetModules();
     resetDb();
+    registryMocks.ensureRegistrySource.mockResolvedValue({
+      source: {
+        sourceKey: "halifax_r400",
+        sourceLabel: "Halifax Residential Rental Registry",
+        jurisdictionProvince: "NS",
+        jurisdictionMunicipality: "Halifax",
+      },
+    });
+    registryMocks.getPropertyRegistryProjection.mockResolvedValue(null);
+    registryMocks.upsertPropertyRegistryProjection.mockResolvedValue({
+      id: "halifax_r400_prop-1",
+      propertyId: "prop-1",
+      sourceKey: "halifax_r400",
+      jurisdictionProvince: "NS",
+      jurisdictionMunicipality: "Halifax",
+      registryStatus: "not_found",
+      registryRecordId: null,
+      registrationNumber: null,
+      pid: null,
+      matchedAt: null,
+      matchConfidence: null,
+      summary: "No public registry match found.",
+      recommendedAction: "Review property details.",
+      lastSourceRefreshAt: null,
+      lastEvaluatedAt: "2026-04-01T00:00:00.000Z",
+      createdAt: "2026-04-01T00:00:00.000Z",
+      updatedAt: "2026-04-01T00:00:00.000Z",
+    });
   });
 
   it("creates properties as DRAFT with screeningRequiredBeforeApproval=true", async () => {
@@ -207,6 +256,49 @@ describe("properties routes publish + defaults", () => {
     expect(res.body?.portfolioStatus).toBe("active");
     expect(res.body?.screeningRequiredBeforeApproval).toBe(true);
     expect(res.body?.publishedAt).toBeNull();
+  });
+
+  it("creates properties without a pid by default", async () => {
+    const app = await createApp();
+    const res = await request(app).post("/api/properties").send({
+      addressLine1: "123 Main St",
+      city: "Halifax",
+      province: "NS",
+      totalUnits: 1,
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body?.pid).toBeNull();
+  });
+
+  it("creates properties with a normalized pid", async () => {
+    const app = await createApp();
+    const res = await request(app).post("/api/properties").send({
+      addressLine1: "456 Main St",
+      city: "Halifax",
+      province: "NS",
+      totalUnits: 1,
+      pid: " ab-123_cd ",
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body?.pid).toBe("AB-123_CD");
+  });
+
+  it("rejects malformed pid values during create", async () => {
+    const app = await createApp();
+    const res = await request(app).post("/api/properties").send({
+      addressLine1: "789 Main St",
+      city: "Halifax",
+      province: "NS",
+      totalUnits: 1,
+      pid: "BAD PID!",
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({
+      error: "invalid_pid",
+    });
   });
 
   it("excludes archived properties by default and returns them when filtered", async () => {
@@ -405,5 +497,144 @@ describe("properties routes publish + defaults", () => {
     expect(res.body?.ok).toBe(true);
     expect(res.body?.property?.status).toBe("PUBLISHED");
     expect(typeof res.body?.property?.publishedAt).toBe("number");
+  });
+
+  it("updates property pid later through patch", async () => {
+    seedDoc("properties", "prop-pid-update", {
+      landlordId: "landlord-1",
+      name: "PID Later",
+      addressLine1: "10 Updated St",
+      city: "Halifax",
+      province: "NS",
+    });
+
+    const app = await createApp();
+    const res = await request(app).patch("/api/properties/prop-pid-update").send({
+      pid: "ns_123-77",
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.property?.pid).toBe("NS_123-77");
+  });
+
+  it("suppresses the pid prompt when the property already has a pid", async () => {
+    seedDoc("properties", "prop-has-pid", {
+      landlordId: "landlord-1",
+      name: "Matched",
+      addressLine1: "1 Registry St",
+      city: "Halifax",
+      province: "NS",
+      pid: "1234567",
+    });
+    registryMocks.getPropertyRegistryProjection.mockResolvedValue({
+      id: "halifax_r400_prop-has-pid",
+      propertyId: "prop-has-pid",
+      sourceKey: "halifax_r400",
+      jurisdictionProvince: "NS",
+      jurisdictionMunicipality: "Halifax",
+      registryStatus: "verified",
+      registryRecordId: "reg-1",
+      registrationNumber: "REG-1",
+      pid: "1234567",
+      matchedAt: "2026-04-01T00:00:00.000Z",
+      matchConfidence: 1,
+      summary: "Verified",
+      recommendedAction: "No action needed.",
+      lastSourceRefreshAt: "2026-04-01T00:00:00.000Z",
+      lastEvaluatedAt: "2026-04-01T00:00:00.000Z",
+      createdAt: "2026-04-01T00:00:00.000Z",
+      updatedAt: "2026-04-01T00:00:00.000Z",
+    });
+
+    const app = await createApp();
+    const res = await request(app).get("/api/properties/prop-has-pid/registry-status");
+
+    expect(res.status).toBe(200);
+    expect(res.body?.pidPrompt).toMatchObject({
+      propertyPidMissing: false,
+      registryPidAvailable: true,
+      pidPromptEligible: false,
+      pidPromptMessage: null,
+    });
+  });
+
+  it("returns pid prompt data when the property pid is missing and registry pid exists", async () => {
+    seedDoc("properties", "prop-missing-pid", {
+      landlordId: "landlord-1",
+      name: "Missing PID",
+      addressLine1: "2 Registry St",
+      city: "Halifax",
+      province: "NS",
+    });
+    registryMocks.getPropertyRegistryProjection.mockResolvedValue({
+      id: "halifax_r400_prop-missing-pid",
+      propertyId: "prop-missing-pid",
+      sourceKey: "halifax_r400",
+      jurisdictionProvince: "NS",
+      jurisdictionMunicipality: "Halifax",
+      registryStatus: "manual_review",
+      registryRecordId: "reg-2",
+      registrationNumber: "REG-2",
+      pid: "7654321",
+      matchedAt: null,
+      matchConfidence: 0.8,
+      summary: "Manual review in progress",
+      recommendedAction: "No action needed.",
+      lastSourceRefreshAt: "2026-04-01T00:00:00.000Z",
+      lastEvaluatedAt: "2026-04-01T00:00:00.000Z",
+      createdAt: "2026-04-01T00:00:00.000Z",
+      updatedAt: "2026-04-01T00:00:00.000Z",
+    });
+
+    const app = await createApp();
+    const res = await request(app).get("/api/properties/prop-missing-pid/registry-status");
+
+    expect(res.status).toBe(200);
+    expect(res.body?.pidPrompt).toMatchObject({
+      propertyPidMissing: true,
+      registryPidAvailable: true,
+      pidPromptEligible: true,
+      registryPid: "7654321",
+    });
+    expect(String(res.body?.pidPrompt?.pidPromptMessage || "")).toContain("Property PID missing");
+  });
+
+  it("suppresses the pid prompt when no registry pid exists", async () => {
+    seedDoc("properties", "prop-no-registry-pid", {
+      landlordId: "landlord-1",
+      name: "No Registry PID",
+      addressLine1: "3 Registry St",
+      city: "Halifax",
+      province: "NS",
+    });
+    registryMocks.getPropertyRegistryProjection.mockResolvedValue({
+      id: "halifax_r400_prop-no-registry-pid",
+      propertyId: "prop-no-registry-pid",
+      sourceKey: "halifax_r400",
+      jurisdictionProvince: "NS",
+      jurisdictionMunicipality: "Halifax",
+      registryStatus: "manual_review",
+      registryRecordId: "reg-3",
+      registrationNumber: "REG-3",
+      pid: null,
+      matchedAt: null,
+      matchConfidence: 0.72,
+      summary: "Manual review in progress",
+      recommendedAction: "No action needed.",
+      lastSourceRefreshAt: "2026-04-01T00:00:00.000Z",
+      lastEvaluatedAt: "2026-04-01T00:00:00.000Z",
+      createdAt: "2026-04-01T00:00:00.000Z",
+      updatedAt: "2026-04-01T00:00:00.000Z",
+    });
+
+    const app = await createApp();
+    const res = await request(app).get("/api/properties/prop-no-registry-pid/registry-status");
+
+    expect(res.status).toBe(200);
+    expect(res.body?.pidPrompt).toMatchObject({
+      propertyPidMissing: true,
+      registryPidAvailable: false,
+      pidPromptEligible: false,
+    });
   });
 });

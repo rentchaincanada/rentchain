@@ -5,6 +5,7 @@ import { db, FieldValue } from "../config/firebase";
 import { normalizeProvince } from "../lib/province";
 import { ensureRegistrySource } from "../services/registry/registryImportService";
 import { getPropertyRegistryProjection, upsertPropertyRegistryProjection } from "../services/registry/registryStatusProjectionService";
+import { normalizePid } from "../services/registry/registryUtils";
 
 const router = Router();
 
@@ -21,6 +22,52 @@ function firstString(...values: any[]) {
     if (typeof v === "string" && v.trim()) return v.trim();
   }
   return "";
+}
+
+function resolvePropertyPidLikeValue(property: Record<string, any>) {
+  const metadata = property?.metadata && typeof property.metadata === "object" ? property.metadata : {};
+  return (
+    normalizePid(property?.pid) ||
+    normalizePid(property?.PID) ||
+    normalizePid(property?.propertyPid) ||
+    normalizePid(property?.parcelId) ||
+    normalizePid(property?.parcelPid) ||
+    normalizePid((metadata as any)?.pid) ||
+    normalizePid((metadata as any)?.propertyPid) ||
+    normalizePid((metadata as any)?.parcelId) ||
+    null
+  );
+}
+
+function sanitizePidInput(value: any) {
+  if (value === undefined) return { ok: true as const, value: undefined };
+  if (value === null) return { ok: true as const, value: null };
+  const normalized = String(value).trim().toUpperCase();
+  if (!normalized) return { ok: true as const, value: null };
+  if (!/^[A-Z0-9_-]+$/.test(normalized)) {
+    return {
+      ok: false as const,
+      error: "invalid_pid",
+      message: "PID may only include letters, numbers, hyphens, and underscores.",
+    };
+  }
+  if (normalized.length > 64) {
+    return {
+      ok: false as const,
+      error: "invalid_pid",
+      message: "PID must be 64 characters or fewer.",
+    };
+  }
+  return { ok: true as const, value: normalized };
+}
+
+function resolveIncomingPid(body: Record<string, any>) {
+  return body.pid ?? body.PID ?? body.propertyPid ?? body.parcelId ?? body.parcelPid ?? body?.metadata?.pid;
+}
+
+function normalizePropertyForResponse<T extends Record<string, any>>(property: T): T & { pid?: string | null } {
+  const pid = resolvePropertyPidLikeValue(property);
+  return (pid && !property?.pid ? { ...property, pid } : property) as T & { pid?: string | null };
 }
 
 function makeAddressKeyFromParts(street: string, city: string, province: string, postal: string) {
@@ -104,7 +151,7 @@ async function loadScopedPropertiesForUser(options: {
   userId: string;
   landlordId: string;
   limit: number;
-}) {
+}): Promise<any[]> {
   const ownedByUserQuery = db.collection("properties").where("ownerUserId", "==", options.userId).get();
   const managedByUserQuery = db.collection("properties").where("managerUserIds", "array-contains", options.userId).get();
   const legacyLandlordQuery = db.collection("properties").where("landlordId", "==", options.landlordId).get();
@@ -118,7 +165,7 @@ async function loadScopedPropertiesForUser(options: {
   return uniqueById(
     [ownedByUserSnap, managedByUserSnap, legacyLandlordSnap]
       .flatMap((snap: any) => snap.docs || [])
-      .map((doc: any) => ({ id: doc.id, ...(doc.data() as any) }))
+      .map((doc: any) => normalizePropertyForResponse({ id: doc.id, ...(doc.data() as any) }))
   )
     .sort((a: any, b: any) => String(b?.createdAt || "").localeCompare(String(a?.createdAt || "")))
     .slice(0, options.limit);
@@ -127,7 +174,7 @@ async function loadScopedPropertiesForUser(options: {
 async function loadPropertyOr404(propertyId: string) {
   const snap = await db.collection("properties").doc(propertyId).get();
   if (!snap.exists) return null;
-  return { id: snap.id, ...(snap.data() || {}) } as any;
+  return normalizePropertyForResponse({ id: snap.id, ...(snap.data() || {}) }) as any;
 }
 /**
  * GET /api/properties
@@ -156,7 +203,7 @@ router.get("/", async (req: any, res) => {
     const scopedItems = await loadScopedPropertiesForUser({ userId, landlordId, limit });
     const mineItems = scopedItems.filter((item) => isOwnedOrManagedByUser(item, userId, landlordId));
 
-    const filteredItems = mineItems.filter((item) => {
+    const filteredItems = mineItems.filter((item: any) => {
       const portfolioStatus = normalizePortfolioStatus(item?.portfolioStatus);
       if (statusFilter === "archived") return portfolioStatus === "archived";
       if (statusFilter === "active") return portfolioStatus === "active";
@@ -207,6 +254,7 @@ router.post(
       address,
       nickname,
       name,
+      pid: _canonicalPid,
       addressLine1,
       addressLine2,
       city,
@@ -217,6 +265,13 @@ router.post(
       totalUnits,
       units,
     } = req.body ?? {};
+    const pidInput = sanitizePidInput(resolveIncomingPid(req.body ?? {}));
+    if (!pidInput.ok) {
+      return res.status(400).json({
+        error: pidInput.error,
+        message: pidInput.message,
+      });
+    }
     const addressObj =
       typeof address === "object" && address !== null ? address : req.body?.location || {};
     const resolvedAddressLine1 = firstString(
@@ -310,6 +365,7 @@ router.post(
       province: resolvedProvince,
       postalCode: resolvedPostalCode,
       country: resolvedCountry,
+      pid: pidInput.value ?? null,
       unitCount: resolvedUnitCount,
       unitsCount: resolvedUnitCount,
       totalUnits: resolvedUnitCount,
@@ -402,7 +458,11 @@ router.post(
         }
       }
 
-      const property = { id: propertyRef.id, propertyId: propertyRef.id, ...propertyBase };
+      const property = normalizePropertyForResponse({
+        id: propertyRef.id,
+        propertyId: propertyRef.id,
+        ...propertyBase,
+      });
       if (process.env.NODE_ENV !== "production") {
         console.log(
           "[create property] property write success propertyId=",
@@ -481,6 +541,14 @@ router.patch("/:propertyId", async (req: any, res) => {
       }
     }
 
+    const pidInput = sanitizePidInput(resolveIncomingPid(body));
+    if (!pidInput.ok) {
+      return res.status(400).json({ ok: false, error: pidInput.error, message: pidInput.message });
+    }
+    if (pidInput.value !== undefined) {
+      updates.pid = pidInput.value;
+    }
+
     if (body.screeningRequiredBeforeApproval !== undefined) {
       updates.screeningRequiredBeforeApproval = parseScreeningRequiredBeforeApproval(
         body.screeningRequiredBeforeApproval,
@@ -489,14 +557,17 @@ router.patch("/:propertyId", async (req: any, res) => {
     }
 
     if (Object.keys(updates).length === 0) {
-      return res.json({ ok: true, property: { id: propertyId, ...current } });
+      return res.json({ ok: true, property: normalizePropertyForResponse({ id: propertyId, ...current }) });
     }
 
     updates.updatedAt = new Date().toISOString();
     updates.updatedAtServer = FieldValue.serverTimestamp();
 
     await ref.set(updates, { merge: true });
-    return res.json({ ok: true, property: { id: propertyId, ...current, ...updates } });
+    return res.json({
+      ok: true,
+      property: normalizePropertyForResponse({ id: propertyId, ...current, ...updates }),
+    });
   } catch (err: any) {
     console.error("[PATCH /api/properties/:propertyId] failed", err);
     return res.status(500).json({
@@ -527,6 +598,7 @@ router.get("/:propertyId/registry-status", async (req: any, res) => {
     const propertyProvince = String(property?.province || "").trim().toUpperCase();
     const coverageAvailable = propertyProvince === source.jurisdictionProvince.toUpperCase();
     if (!coverageAvailable) {
+      const propertyPid = resolvePropertyPidLikeValue(property);
       return res.json({
         ok: true,
         status: null,
@@ -540,6 +612,16 @@ router.get("/:propertyId/registry-status", async (req: any, res) => {
           available: false,
           message: "Registry intelligence is currently available for Halifax properties only.",
         },
+        pidPrompt: {
+          propertyPid: propertyPid || null,
+          propertyPidMissing: !propertyPid,
+          registryPid: null,
+          registryPidAvailable: false,
+          pidPromptEligible: false,
+          pidPromptMessage: null,
+          sourceLabel: source.sourceLabel,
+          actionable: false,
+        },
       });
     }
     let projection = await getPropertyRegistryProjection({ propertyId, source });
@@ -551,6 +633,20 @@ router.get("/:propertyId/registry-status", async (req: any, res) => {
         record: null,
       });
     }
+
+    const propertyPid = resolvePropertyPidLikeValue(property);
+    const registryPid = projection?.pid || null;
+    const propertyPidMissing = !propertyPid;
+    const registryPidAvailable = Boolean(registryPid);
+    const pidPromptEligible = Boolean(
+      coverageAvailable &&
+        propertyPidMissing &&
+        registryPidAvailable &&
+        projection?.registryRecordId
+    );
+    const pidPromptMessage = pidPromptEligible
+      ? "Property PID missing; registry record includes PID. Adding it can improve registry verification and future matching."
+      : null;
 
     return res.json({
       ok: true,
@@ -564,6 +660,16 @@ router.get("/:propertyId/registry-status", async (req: any, res) => {
       coverage: {
         available: true,
         message: null,
+      },
+      pidPrompt: {
+        propertyPid: propertyPid || null,
+        propertyPidMissing,
+        registryPid: registryPid || null,
+        registryPidAvailable,
+        pidPromptEligible,
+        pidPromptMessage,
+        sourceLabel: source.sourceLabel,
+        actionable: pidPromptEligible,
       },
     });
   } catch (err: any) {

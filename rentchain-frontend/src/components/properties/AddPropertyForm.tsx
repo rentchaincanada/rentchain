@@ -40,6 +40,7 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
   onExistingPropertyId,
 }) => {
   const [name, setName] = useState("");
+  const [pid, setPid] = useState("");
   const [addressLine1, setAddressLine1] = useState("");
   const [addressLine2, setAddressLine2] = useState("");
   const [city, setCity] = useState("");
@@ -54,6 +55,7 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
   const [errorText, setErrorText] = useState<string | null>(null);
   const [successText, setSuccessText] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(true);
+  const [complianceExpanded, setComplianceExpanded] = useState(false);
   const { showToast } = useToast();
   const inputStyle: React.CSSProperties = {
     padding: "8px 10px",
@@ -220,6 +222,7 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
 
     const payload: PropertyInput = {
       name: name.trim() || undefined,
+      pid: pid.trim() || undefined,
       addressLine1: addressLine1.trim(),
       addressLine2: addressLine2.trim() || undefined,
       city: city.trim(),
@@ -252,6 +255,7 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
       }
 
       setName("");
+      setPid("");
       setAddressLine1("");
       setAddressLine2("");
       setCity("");
@@ -415,6 +419,57 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
             style={{ width: "100%", padding: 8, borderRadius: 8, border: "1px solid #374151" }}
           />
         </div>
+      </div>
+
+      <div
+        style={{
+          borderRadius: 12,
+          border: "1px solid #dbe4f0",
+          background: "#f8fbff",
+          padding: 12,
+          display: "grid",
+          gap: 10,
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => setComplianceExpanded((current) => !current)}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 10,
+            width: "100%",
+            border: "none",
+            background: "transparent",
+            padding: 0,
+            cursor: "pointer",
+            color: "#0f172a",
+          }}
+        >
+          <span style={{ fontSize: "0.9rem", fontWeight: 700 }}>Compliance &amp; Registry (Optional)</span>
+          <span style={{ fontSize: "0.8rem", color: "#475569" }}>
+            {complianceExpanded ? "Hide" : "Add details"}
+          </span>
+        </button>
+        {complianceExpanded ? (
+          <div style={{ display: "grid", gap: 8 }}>
+            <label style={{ display: "grid", gap: 6, fontSize: "0.85rem", color: "#111827" }}>
+              Property Identifier (PID)
+              <input
+                type="text"
+                value={pid}
+                onChange={(e) => setPid(e.target.value)}
+                placeholder="Optional PID"
+                style={{ width: "100%", padding: 8, borderRadius: 8, border: "1px solid #374151" }}
+              />
+            </label>
+            <div style={{ fontSize: "0.8rem", color: "#475569", lineHeight: 1.5 }}>
+              Used for municipal registry matching and property verification in supported jurisdictions.
+              Adding a PID can improve automatic matching and reduce manual review.
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div>

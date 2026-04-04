@@ -147,6 +147,7 @@ export type PropertyRegistryStatusRecord = {
   registryStatus: PropertyRegistryStatusCode;
   registryRecordId: string | null;
   registrationNumber: string | null;
+  pid: string | null;
   matchedAt: string | null;
   matchConfidence: number | null;
   summary: string;
