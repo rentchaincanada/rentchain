@@ -483,6 +483,158 @@ describe("registryImportService", () => {
     ).toBe(true);
   });
 
+  it("returns weaker attached candidates to review when a stronger matched record wins projection", async () => {
+    const { applyRegistryMatchOverride, getPropertyRegistryReview } = await import("../registry/registryImportService");
+
+    ensureCollection("properties").set("prop-winner", {
+      id: "prop-winner",
+      landlordId: "landlord-winner",
+      name: "Winner Property",
+      addressLine1: "500 Winner Street",
+      city: "Halifax",
+      province: "NS",
+      postalCode: "B3H1A1",
+    });
+    ensureCollection("registryRecordsNormalized").set("record-weak", {
+      id: "record-weak",
+      importBatchId: "import-1",
+      sourceKey: "halifax_r400",
+      jurisdictionCountry: "CA",
+      jurisdictionProvince: "NS",
+      jurisdictionMunicipality: "Halifax",
+      registryCategory: "rental_registry",
+      registryRecordId: "reg-weak",
+      registrationNumber: "REG-WEAK",
+      pid: "5005005",
+      addressRaw: "500 WINNER STREET,HALIFAX",
+      primaryAddressCandidate: "500 winner st halifax ns",
+      addressCandidates: ["500 winner st halifax ns"],
+      addressNormalized: "500 winner st halifax ns",
+      postalCode: null,
+      rentalUnitTypeRaw: null,
+      rentalUnitTypeNormalized: null,
+      buildingTypeRaw: null,
+      buildingTypeNormalized: null,
+      registeredUnits: 2,
+      numberOfFloors: 2,
+      sharedFacilities: null,
+      registrationStatusRaw: "Y",
+      registrationStatusNormalized: "registered",
+      registrationIssuedAt: null,
+      lat: null,
+      lng: null,
+      sourceConfidence: 0.9,
+      internalDiagnostics: { unmatchedReasons: ["manual_confirmation_recommended"], pidSourceFieldsChecked: ["pid"], addressCandidateCount: 1 },
+      importedAt: "2026-04-01T00:00:00.000Z",
+      updatedAt: "2026-04-01T00:00:00.000Z",
+    });
+    ensureCollection("registryRecordsNormalized").set("record-strong", {
+      id: "record-strong",
+      importBatchId: "import-1",
+      sourceKey: "halifax_r400",
+      jurisdictionCountry: "CA",
+      jurisdictionProvince: "NS",
+      jurisdictionMunicipality: "Halifax",
+      registryCategory: "rental_registry",
+      registryRecordId: "reg-strong",
+      registrationNumber: "REG-STRONG",
+      pid: "5005005",
+      addressRaw: "500 WINNER STREET,HALIFAX",
+      primaryAddressCandidate: "500 winner st halifax ns",
+      addressCandidates: ["500 winner st halifax ns"],
+      addressNormalized: "500 winner st halifax ns",
+      postalCode: null,
+      rentalUnitTypeRaw: null,
+      rentalUnitTypeNormalized: null,
+      buildingTypeRaw: null,
+      buildingTypeNormalized: null,
+      registeredUnits: 2,
+      numberOfFloors: 2,
+      sharedFacilities: null,
+      registrationStatusRaw: "Y",
+      registrationStatusNormalized: "registered",
+      registrationIssuedAt: null,
+      lat: null,
+      lng: null,
+      sourceConfidence: 0.96,
+      internalDiagnostics: { unmatchedReasons: [], pidSourceFieldsChecked: ["pid"], addressCandidateCount: 1 },
+      importedAt: "2026-04-01T00:00:00.000Z",
+      updatedAt: "2026-04-01T00:00:00.000Z",
+    });
+    ensureCollection("registryMatches").set("halifax_r400_reg-weak", {
+      id: "halifax_r400_reg-weak",
+      sourceKey: "halifax_r400",
+      registryRecordId: "reg-weak",
+      normalizedRecordId: "record-weak",
+      propertyId: "prop-winner",
+      landlordId: "landlord-winner",
+      matchMethod: "address_fuzzy",
+      matchScore: 0.81,
+      matchStatus: "possible_match",
+      mismatchReasons: ["manual_confirmation_recommended"],
+      reviewedBy: null,
+      reviewedAt: null,
+      overrideReason: null,
+      createdAt: "2026-04-01T00:00:00.000Z",
+      updatedAt: "2026-04-03T00:00:00.000Z",
+    });
+    ensureCollection("registryMatches").set("halifax_r400_reg-strong", {
+      id: "halifax_r400_reg-strong",
+      sourceKey: "halifax_r400",
+      registryRecordId: "reg-strong",
+      normalizedRecordId: "record-strong",
+      propertyId: null,
+      landlordId: null,
+      matchMethod: "pid_exact",
+      matchScore: 0.99,
+      matchStatus: "matched",
+      mismatchReasons: [],
+      reviewedBy: null,
+      reviewedAt: null,
+      overrideReason: null,
+      createdAt: "2026-04-01T00:00:00.000Z",
+      updatedAt: "2026-04-02T00:00:00.000Z",
+    });
+
+    const updated = await applyRegistryMatchOverride({
+      normalizedRecordId: "record-strong",
+      action: "attach",
+      propertyId: "prop-winner",
+      reason: "Confirmed stronger registry match",
+      actorId: "admin-strong",
+    });
+
+    expect(updated.matchStatus).toBe("matched");
+    expect(updated.propertyId).toBe("prop-winner");
+    expect(ensureCollection("registryMatches").get("halifax_r400_reg-weak")?.propertyId).toBeNull();
+    expect(ensureCollection("registryMatches").get("halifax_r400_reg-weak")?.matchStatus).toBe("possible_match");
+    expect(ensureCollection("propertyRegistryStatus").get("halifax_r400_prop-winner")?.registryRecordId).toBe("reg-strong");
+    expect(ensureCollection("propertyRegistryStatus").get("halifax_r400_prop-winner")?.registryStatus).toBe("verified");
+
+    const propertyReview = await getPropertyRegistryReview("prop-winner");
+    expect(propertyReview?.projection?.registryRecordId).toBe("reg-strong");
+    expect(propertyReview?.matches.filter((match) => match.propertyId === "prop-winner")).toHaveLength(1);
+
+    const auditEvents = Array.from(ensureCollection("registryAuditLog").values());
+    expect(
+      auditEvents.some(
+        (event) =>
+          event.eventType === "candidate_returned_to_review_due_to_stronger_match" &&
+          event.registryRecordId === "reg-weak" &&
+          event.eventData?.activeProjectionNormalizedRecordId === "record-strong"
+      )
+    ).toBe(true);
+    expect(
+      auditEvents.some(
+        (event) =>
+          event.eventType === "active_projection_replaced" &&
+          event.propertyId === "prop-winner" &&
+          Array.isArray(event.eventData?.demotedCandidateNormalizedRecordIds) &&
+          event.eventData?.demotedCandidateNormalizedRecordIds?.includes("record-weak")
+      )
+    ).toBe(true);
+  });
+
   it("requires explicit replacement when a property already has another active source match", async () => {
     const { applyRegistryMatchOverride } = await import("../registry/registryImportService");
 
