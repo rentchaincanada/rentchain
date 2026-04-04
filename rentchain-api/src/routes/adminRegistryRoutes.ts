@@ -78,6 +78,7 @@ router.post("/registry/imports", requireAuth, requirePermission("system.admin"),
 
 router.get("/registry/review", requireAuth, requirePermission("system.admin"), async (req: any, res) => {
   try {
+    const startedAt = Date.now();
     const sourceKey = String(req.query?.sourceKey || "").trim() || null;
     const matchStatus = String(req.query?.matchStatus || "all").trim() || "all";
     const search = String(req.query?.q || "").trim() || null;
@@ -91,7 +92,19 @@ router.get("/registry/review", requireAuth, requirePermission("system.admin"), a
       pageSize,
       pageCursor,
     });
-    return res.json({ ok: true, ...result });
+    const payload = { ok: true, ...result };
+    const totalMs = Date.now() - startedAt;
+    if (totalMs >= 150) {
+      console.info("[adminRegistryRoutes] review queue request", {
+        matchStatus,
+        hasSearch: Boolean(search),
+        pageSize,
+        itemCount: Array.isArray(result.items) ? result.items.length : 0,
+        totalMs,
+        payloadBytes: Buffer.byteLength(JSON.stringify(payload), "utf8"),
+      });
+    }
+    return res.json(payload);
   } catch (error: any) {
     console.error("[adminRegistryRoutes] review queue failed", error);
     return res.status(500).json({ ok: false, error: "registry_review_failed" });

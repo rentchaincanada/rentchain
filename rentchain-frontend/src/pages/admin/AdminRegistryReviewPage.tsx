@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { memo, startTransition, useDeferredValue, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { MacShell } from "../../components/layout/MacShell";
 import { Button, Card, Input, Pill, Section } from "../../components/ui/Ui";
@@ -8,10 +8,94 @@ import {
   type RegistryReviewItem,
 } from "../../api/adminRegistryApi";
 
+const REVIEW_STATUSES = ["all", "possible_match", "mismatch", "unmatched", "matched", "ignored"] as const;
+const REVIEW_PAGE_SIZE = 50;
+
+function formatLocation(parts: Array<string | null | undefined>) {
+  return parts.filter(Boolean).join(", ");
+}
+
+const RegistryReviewQueueRow = memo(function RegistryReviewQueueRow({ item }: { item: RegistryReviewItem }) {
+  const propertyAddress = item.property
+    ? formatLocation([item.property.addressLine1, item.property.city, item.property.province, item.property.postalCode])
+    : "";
+  const candidateAddress = item.topCandidate
+    ? formatLocation([item.topCandidate.addressLine1, item.topCandidate.city, item.topCandidate.province, item.topCandidate.postalCode])
+    : "";
+
+  return (
+    <div style={{ border: "1px solid rgba(148,163,184,0.18)", borderRadius: 16, padding: 16, display: "grid", gap: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+        <div>
+          <div style={{ fontWeight: 700 }}>{item.normalizedRecord?.addressRaw || item.match.registryRecordId}</div>
+          <div style={{ color: "#64748b", fontSize: 13 }}>{item.normalizedRecord?.registrationNumber || item.match.registryRecordId}</div>
+        </div>
+        <Pill tone={item.match.matchStatus === "matched" ? "accent" : "muted"}>{item.match.matchStatus}</Pill>
+      </div>
+      <div style={{ color: "#475569", fontSize: 14 }}>
+        Method: {item.match.matchMethod || "--"} · Score: {item.match.matchScore || 0}
+      </div>
+      <div style={{ color: "#475569", fontSize: 14 }}>
+        Property: {item.property?.name || item.property?.addressLine1 || item.match.propertyId || "--"}
+      </div>
+      {item.property ? (
+        <div style={{ color: "#64748b", fontSize: 13 }}>
+          Property document ID: {item.property.id} · Property PID: {item.property.pid || "--"} · Address: {propertyAddress}
+        </div>
+      ) : null}
+      {item.normalizedRecord ? (
+        <div style={{ color: "#64748b", fontSize: 13 }}>
+          Registry PID: {item.normalizedRecord.pid || "--"} · Registration number: {item.normalizedRecord.registrationNumber || "--"}
+        </div>
+      ) : null}
+      {item.topCandidate ? (
+        <div style={{ color: "#475569", fontSize: 14 }}>
+          Top candidate: {item.topCandidate.propertyName || item.topCandidate.addressLine1 || item.topCandidate.propertyId}
+        </div>
+      ) : null}
+      {item.topCandidate ? (
+        <div style={{ color: "#64748b", fontSize: 13 }}>
+          Property document ID: {item.topCandidate.propertyId} · Property PID: {item.topCandidate.pid || "--"} · Units:{" "}
+          {item.topCandidate.unitCount ?? "--"} · Address: {candidateAddress}
+        </div>
+      ) : null}
+      {item.match.propertyId ? (
+        <div style={{ color: "#0f172a", fontSize: 13, fontWeight: 600 }}>Currently linked property is active for this record.</div>
+      ) : null}
+      {item.reasonSummary?.length ? (
+        <div style={{ color: "#92400e", fontSize: 14 }}>Review notes: {item.reasonSummary.join(" ")}</div>
+      ) : null}
+      {!item.property && item.topCandidate ? (
+        <div style={{ color: "#475569", fontSize: 14 }}>Candidate score: {item.topCandidate.score}</div>
+      ) : null}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <Link to={`/admin/registry/records/${encodeURIComponent(item.match.normalizedRecordId)}`}>
+          <Button variant="secondary">Open record</Button>
+        </Link>
+        {item.match.propertyId ? (
+          <Link to={`/admin/registry/properties/${encodeURIComponent(item.match.propertyId)}`}>
+            <Button variant="secondary">Open property review</Button>
+          </Link>
+        ) : item.topCandidate ? (
+          <Link
+            to={`/admin/registry/properties/${encodeURIComponent(item.topCandidate.propertyId)}?normalizedRecordId=${encodeURIComponent(
+              item.match.normalizedRecordId
+            )}`}
+          >
+            <Button variant="secondary">Open candidate review</Button>
+          </Link>
+        ) : null}
+      </div>
+    </div>
+  );
+});
+
 export default function AdminRegistryReviewPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const matchStatus = searchParams.get("matchStatus") || "all";
   const searchQuery = searchParams.get("q") || "";
+  const [searchInput, setSearchInput] = useState(searchQuery);
+  const deferredSearchInput = useDeferredValue(searchInput);
   const [items, setItems] = useState<RegistryReviewItem[]>([]);
   const [summary, setSummary] = useState({
     all: 0,
@@ -26,6 +110,24 @@ export default function AdminRegistryReviewPage() {
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSearchInput(searchQuery);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      const nextQuery = deferredSearchInput.trim();
+      if (nextQuery === searchQuery) return;
+      startTransition(() => {
+        const nextParams: Record<string, string> = {};
+        if (matchStatus !== "all") nextParams.matchStatus = matchStatus;
+        if (nextQuery) nextParams.q = nextQuery;
+        setSearchParams(nextParams);
+      });
+    }, 300);
+    return () => window.clearTimeout(handle);
+  }, [deferredSearchInput, matchStatus, searchQuery, setSearchParams]);
 
   useEffect(() => {
     let active = true;
@@ -60,7 +162,7 @@ export default function AdminRegistryReviewPage() {
       const result = await fetchNextAdminRegistryReviewPage({
         matchStatus,
         searchQuery,
-        pageSize: 50,
+        pageSize: REVIEW_PAGE_SIZE,
         pageCursor: nextCursor,
       });
       setItems((current) => [...current, ...result.items]);
@@ -89,13 +191,9 @@ export default function AdminRegistryReviewPage() {
               </div>
               <Input
                 placeholder="Search by registry address, registration number, property name, property PID, or registry PID"
-                value={searchQuery}
+                value={searchInput}
                 onChange={(event) => {
-                  const next = event.target.value;
-                  const nextParams: Record<string, string> = {};
-                  if (matchStatus !== "all") nextParams.matchStatus = matchStatus;
-                  if (next.trim()) nextParams.q = next.trim();
-                  setSearchParams(nextParams);
+                  setSearchInput(event.target.value);
                 }}
               />
             </div>
@@ -103,14 +201,14 @@ export default function AdminRegistryReviewPage() {
               <Link to="/admin/registry/imports">
                 <Button variant="secondary">Back to imports</Button>
               </Link>
-              {["all", "possible_match", "mismatch", "unmatched", "matched", "ignored"].map((status) => (
+              {REVIEW_STATUSES.map((status) => (
                 <Button
                   key={status}
                   variant={matchStatus === status ? "primary" : "secondary"}
                   onClick={() => {
                     const next: Record<string, string> = {};
                     if (status !== "all") next.matchStatus = status;
-                    if (searchQuery) next.q = searchQuery;
+                    if (searchInput.trim()) next.q = searchInput.trim();
                     setSearchParams(next);
                   }}
                 >
@@ -138,83 +236,27 @@ export default function AdminRegistryReviewPage() {
               {searchQuery ? "No registry records matched this search and filter combination." : "No registry records match this review state."}
             </div>
           ) : null}
+          {loading && !items.length
+            ? Array.from({ length: 3 }).map((_, index) => (
+                <div
+                  key={`skeleton-${index}`}
+                  style={{
+                    border: "1px solid rgba(148,163,184,0.12)",
+                    borderRadius: 16,
+                    padding: 16,
+                    display: "grid",
+                    gap: 10,
+                    background: "linear-gradient(90deg, rgba(248,250,252,0.9), rgba(241,245,249,0.9), rgba(248,250,252,0.9))",
+                  }}
+                >
+                  <div style={{ width: "45%", height: 14, borderRadius: 999, background: "rgba(148,163,184,0.18)" }} />
+                  <div style={{ width: "65%", height: 12, borderRadius: 999, background: "rgba(148,163,184,0.12)" }} />
+                  <div style={{ width: "55%", height: 12, borderRadius: 999, background: "rgba(148,163,184,0.12)" }} />
+                </div>
+              ))
+            : null}
           {items.map((item) => (
-            <div key={item.match.id} style={{ border: "1px solid rgba(148,163,184,0.18)", borderRadius: 16, padding: 16, display: "grid", gap: 8 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-                <div>
-                  <div style={{ fontWeight: 700 }}>{item.normalizedRecord?.addressRaw || item.match.registryRecordId}</div>
-                  <div style={{ color: "#64748b", fontSize: 13 }}>{item.normalizedRecord?.registrationNumber || item.match.registryRecordId}</div>
-                </div>
-                <Pill tone={item.match.matchStatus === "matched" ? "accent" : "muted"}>{item.match.matchStatus}</Pill>
-              </div>
-              <div style={{ color: "#475569", fontSize: 14 }}>
-                Method: {item.match.matchMethod || "--"} · Score: {item.match.matchScore || 0}
-              </div>
-              <div style={{ color: "#475569", fontSize: 14 }}>
-                Property: {item.property?.name || item.property?.addressLine1 || item.match.propertyId || "--"}
-              </div>
-              {item.property ? (
-                <div style={{ color: "#64748b", fontSize: 13 }}>
-                  Property document ID: {item.property.id} · Property PID: {item.property.pid || "--"} · Address:{" "}
-                  {[item.property.addressLine1, item.property.city, item.property.province, item.property.postalCode]
-                    .filter(Boolean)
-                    .join(", ")}
-                </div>
-              ) : null}
-              {item.normalizedRecord ? (
-                <div style={{ color: "#64748b", fontSize: 13 }}>
-                  Registry PID: {item.normalizedRecord.pid || "--"} · Registration number:{" "}
-                  {item.normalizedRecord.registrationNumber || "--"}
-                </div>
-              ) : null}
-              {item.topCandidate ? (
-                <div style={{ color: "#475569", fontSize: 14 }}>
-                  Top candidate: {item.topCandidate.propertyName || item.topCandidate.addressLine1 || item.topCandidate.propertyId}
-                </div>
-              ) : null}
-              {item.topCandidate ? (
-                <div style={{ color: "#64748b", fontSize: 13 }}>
-                  Property document ID: {item.topCandidate.propertyId} · Property PID: {item.topCandidate.pid || "--"} ·
-                  Units: {item.topCandidate.unitCount ?? "--"} · Address:{" "}
-                  {[item.topCandidate.addressLine1, item.topCandidate.city, item.topCandidate.province, item.topCandidate.postalCode]
-                    .filter(Boolean)
-                    .join(", ")}
-                </div>
-              ) : null}
-              {item.match.propertyId ? (
-                <div style={{ color: "#0f172a", fontSize: 13, fontWeight: 600 }}>
-                  Currently linked property is active for this record.
-                </div>
-              ) : null}
-              {item.reasonSummary?.length ? (
-                <div style={{ color: "#92400e", fontSize: 14 }}>
-                  Review notes: {item.reasonSummary.join(" ")}
-                </div>
-              ) : null}
-              {!item.property && item.topCandidate ? (
-                <div style={{ color: "#475569", fontSize: 14 }}>
-                  Candidate score: {item.topCandidate.score}
-                </div>
-              ) : null}
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <Link to={`/admin/registry/records/${encodeURIComponent(item.match.normalizedRecordId)}`}>
-                  <Button variant="secondary">Open record</Button>
-                </Link>
-                {item.match.propertyId ? (
-                  <Link to={`/admin/registry/properties/${encodeURIComponent(item.match.propertyId)}`}>
-                    <Button variant="secondary">Open property review</Button>
-                  </Link>
-                ) : item.topCandidate ? (
-                  <Link
-                    to={`/admin/registry/properties/${encodeURIComponent(item.topCandidate.propertyId)}?normalizedRecordId=${encodeURIComponent(
-                      item.match.normalizedRecordId
-                    )}`}
-                  >
-                    <Button variant="secondary">Open candidate review</Button>
-                  </Link>
-                ) : null}
-              </div>
-            </div>
+            <RegistryReviewQueueRow key={item.match.id} item={item} />
           ))}
           {!loading && hasMore ? (
             <div style={{ display: "flex", justifyContent: "center" }}>

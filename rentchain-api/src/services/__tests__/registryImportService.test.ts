@@ -894,6 +894,67 @@ describe("registryImportService", () => {
     expect(unmatchedResults.items[0]?.match?.id).toBe("halifax_r400_reg-legacy-unmatched");
   });
 
+  it("renders queue rows from stored queue summary fields without fetching detail-heavy docs", async () => {
+    const { listRegistryReviewQueue } = await import("../registry/registryImportService");
+
+    ensureCollection("registryMatches").set("halifax_r400_reg-cached", {
+      id: "halifax_r400_reg-cached",
+      sourceKey: "halifax_r400",
+      registryRecordId: "reg-cached",
+      normalizedRecordId: "record-cached",
+      propertyId: null,
+      landlordId: null,
+      matchMethod: "address_fuzzy",
+      matchScore: 0.92,
+      matchStatus: "possible_match",
+      mismatchReasons: ["manual_confirmation_recommended"],
+      reviewedBy: null,
+      reviewedAt: null,
+      overrideReason: null,
+      createdAt: "2026-04-01T00:00:00.000Z",
+      updatedAt: "2026-04-04T00:00:00.000Z",
+      queueSummary: {
+        displayAddress: "88 Cached Street, Halifax",
+        registrationNumber: "REG-CACHED",
+        registryPid: "8888888",
+        property: null,
+        topCandidate: {
+          propertyId: "prop-cached",
+          propertyName: "Cached Candidate",
+          addressLine1: "88 Cached Street",
+          city: "Halifax",
+          province: "NS",
+          postalCode: "B3H1A1",
+          pid: "8888888",
+          unitCount: 4,
+          score: 0.92,
+        },
+        reasonSummary: ["Manual confirmation is recommended before trusting this match."],
+      },
+      queueSearchTokens: ["88", "cached", "street", "reg-cached", "8888888"],
+    });
+
+    const result = await listRegistryReviewQueue({ matchStatus: "possible_match", search: "cached 8888888" });
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({
+      match: {
+        id: "halifax_r400_reg-cached",
+        matchStatus: "possible_match",
+      },
+      normalizedRecord: {
+        id: "record-cached",
+        registryRecordId: "reg-cached",
+        registrationNumber: "REG-CACHED",
+        pid: "8888888",
+        addressRaw: "88 Cached Street, Halifax",
+      },
+      topCandidate: {
+        propertyId: "prop-cached",
+        propertyName: "Cached Candidate",
+      },
+    });
+  });
+
   it("returns PID enrichment cues for property review when internal PID is missing", async () => {
     const { getPropertyRegistryReview } = await import("../registry/registryImportService");
 
