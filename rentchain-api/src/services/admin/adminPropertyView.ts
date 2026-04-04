@@ -9,6 +9,7 @@ export type AdminPropertyView = {
   city: string | null;
   province: string | null;
   postalCode: string | null;
+  pid: string | null;
   ownerUserId: string | null;
   landlordId: string | null;
   managerUserIds: string[];
@@ -199,6 +200,16 @@ export async function listAdminProperties(
       city: asTrimmedString(raw.city) || null,
       province: asTrimmedString(raw.province) || null,
       postalCode: asTrimmedString(raw.postalCode) || null,
+      pid:
+        asTrimmedString(raw.pid) ||
+        asTrimmedString((raw as any).PID) ||
+        asTrimmedString(raw.propertyPid) ||
+        asTrimmedString(raw.parcelId) ||
+        asTrimmedString(raw.parcelPid) ||
+        asTrimmedString((raw.metadata as any)?.pid) ||
+        asTrimmedString((raw.metadata as any)?.propertyPid) ||
+        asTrimmedString((raw.metadata as any)?.parcelId) ||
+        null,
       ownerUserId: asTrimmedString(raw.ownerUserId) || null,
       landlordId: asTrimmedString(raw.landlordId) || null,
       managerUserIds: safeArray(raw.managerUserIds),

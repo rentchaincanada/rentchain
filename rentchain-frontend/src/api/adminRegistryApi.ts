@@ -83,6 +83,17 @@ export type RegistryReviewItem = {
     city?: string | null;
     province?: string | null;
   } | null;
+  topCandidate?: {
+    propertyId: string;
+    propertyName: string | null;
+    addressLine1: string | null;
+    city: string | null;
+    province: string | null;
+    postalCode: string | null;
+    pid: string | null;
+    score: number;
+  } | null;
+  reasonSummary?: string[];
 };
 
 export type RegistryRecordDetail = {
@@ -102,7 +113,14 @@ export type RegistryRecordDetail = {
     buildingType: string | null;
     addressNormalized: string | null;
     score: number;
+    comparison?: RegistryPropertyComparison | null;
   }>;
+  operatorReview?: {
+    reasonSummary: string[];
+    pidState: RegistryPropertyComparison | null;
+    registryPid: string | null;
+    registryAddressCandidates: string[];
+  };
   auditTrail: Array<{
     id: string;
     actorType: string;
@@ -121,12 +139,44 @@ export type RegistryAttachPropertySearchResult = {
   province: string | null;
   postalCode: string | null;
   landlordId: string | null;
+  pid: string | null;
+  unitCount: number | null;
+};
+
+export type RegistryPropertyComparison = {
+  propertyId: string;
+  propertyName: string | null;
+  propertyAddress: string;
+  propertyPid: string | null;
+  registryRecordId: string | null;
+  registryRegistrationNumber: string | null;
+  registryAddress: string | null;
+  registryPid: string | null;
+  propertyPostalCode: string | null;
+  registryPostalCode: string | null;
+  propertyUnitCount: number | null;
+  registryUnitCount: number | null;
+  propertyBuildingType: string | null;
+  registryBuildingType: string | null;
+  pidStatus: "exact_match" | "missing_internal_pid" | "mismatch" | "missing_registry_pid" | "unavailable";
+  exactAddressMatch: boolean;
+  operatorPrompts: string[];
+  reasonSummary: string[];
 };
 
 export type AdminPropertyRegistryReview = {
   property: any;
   projection: any;
   matches: RegistryReviewItem["match"][];
+  propertyPid: string | null;
+  matchDetails: Array<RegistryReviewItem["match"] & {
+    normalizedRecord: any;
+    comparison: RegistryPropertyComparison;
+    reasonSummary: string[];
+  }>;
+  selectedRecord?: any | null;
+  selectedMatch?: RegistryReviewItem["match"] | null;
+  selectedComparison?: RegistryPropertyComparison | null;
 };
 
 export async function fetchAdminRegistrySources() {
@@ -188,8 +238,11 @@ export async function overrideAdminRegistryRecord(input: {
   });
 }
 
-export async function fetchAdminPropertyRegistryReview(propertyId: string) {
-  return apiFetch<AdminPropertyRegistryReview>(`/admin/registry/properties/${encodeURIComponent(propertyId)}`);
+export async function fetchAdminPropertyRegistryReview(propertyId: string, input?: { normalizedRecordId?: string | null }) {
+  const query = new URLSearchParams();
+  if (input?.normalizedRecordId) query.set("normalizedRecordId", input.normalizedRecordId);
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return apiFetch<AdminPropertyRegistryReview>(`/admin/registry/properties/${encodeURIComponent(propertyId)}${suffix}`);
 }
 
 export async function reEvaluateAdminPropertyRegistry(propertyId: string) {

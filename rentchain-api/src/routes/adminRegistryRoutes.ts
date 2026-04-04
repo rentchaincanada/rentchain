@@ -149,7 +149,8 @@ router.get("/registry/properties/:propertyId", requireAuth, requirePermission("s
   try {
     const propertyId = String(req.params?.propertyId || "").trim();
     if (!propertyId) return res.status(400).json({ ok: false, error: "missing_property_id" });
-    const result = await getPropertyRegistryReview(propertyId);
+    const normalizedRecordId = String(req.query?.normalizedRecordId || "").trim() || null;
+    const result = await getPropertyRegistryReview(propertyId, { normalizedRecordId });
     if (!result) return res.status(404).json({ ok: false, error: "property_not_found" });
     return res.json({ ok: true, ...result });
   } catch (error: any) {
