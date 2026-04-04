@@ -267,10 +267,95 @@ describe("registryImportService", () => {
     expect(newProjection?.registrationNumber).toBe("REG-1");
 
     const auditEvents = Array.from(ensureCollection("registryAuditLog").values());
-    expect(auditEvents.some((event) => event.eventType === "match_overridden" && event.propertyId === "prop-new")).toBe(true);
+    expect(
+      auditEvents.some(
+        (event) =>
+          ["match_overridden", "match_reinstated"].includes(String(event.eventType || "")) &&
+          event.propertyId === "prop-new"
+      )
+    ).toBe(true);
 
     const propertyReview = await getPropertyRegistryReview("prop-new");
     expect(propertyReview?.projection?.registryStatus).toBe("verified");
+  });
+
+  it("detaches a matched record, clears trusted projection state, and audits the detach", async () => {
+    const { applyRegistryMatchOverride } = await import("../registry/registryImportService");
+
+    ensureCollection("properties").set("prop-detach", {
+      id: "prop-detach",
+      landlordId: "landlord-detach",
+      name: "Detach Property",
+      addressLine1: "10 Detach Street",
+      city: "Halifax",
+      province: "NS",
+    });
+    ensureCollection("registryRecordsNormalized").set("record-detach", {
+      id: "record-detach",
+      importBatchId: "import-1",
+      sourceKey: "halifax_r400",
+      jurisdictionCountry: "CA",
+      jurisdictionProvince: "NS",
+      jurisdictionMunicipality: "Halifax",
+      registryCategory: "rental_registry",
+      registryRecordId: "reg-detach",
+      registrationNumber: "REG-DETACH",
+      pid: "1001001",
+      addressRaw: "10 DETACH STREET,HALIFAX",
+      primaryAddressCandidate: "10 detach st halifax ns",
+      addressCandidates: ["10 detach st halifax ns"],
+      addressNormalized: "10 detach st halifax ns",
+      postalCode: null,
+      rentalUnitTypeRaw: null,
+      rentalUnitTypeNormalized: null,
+      buildingTypeRaw: null,
+      buildingTypeNormalized: null,
+      registeredUnits: 1,
+      numberOfFloors: 1,
+      sharedFacilities: null,
+      registrationStatusRaw: "Y",
+      registrationStatusNormalized: "registered",
+      registrationIssuedAt: null,
+      lat: null,
+      lng: null,
+      sourceConfidence: 0.94,
+      internalDiagnostics: { unmatchedReasons: [], pidSourceFieldsChecked: ["pid"], addressCandidateCount: 1 },
+      importedAt: "2026-04-01T00:00:00.000Z",
+      updatedAt: "2026-04-01T00:00:00.000Z",
+    });
+    ensureCollection("registryMatches").set("halifax_r400_reg-detach", {
+      id: "halifax_r400_reg-detach",
+      sourceKey: "halifax_r400",
+      registryRecordId: "reg-detach",
+      normalizedRecordId: "record-detach",
+      propertyId: "prop-detach",
+      landlordId: "landlord-detach",
+      matchMethod: "manual",
+      matchScore: 1,
+      matchStatus: "matched",
+      mismatchReasons: [],
+      reviewedBy: "admin-1",
+      reviewedAt: "2026-04-01T00:00:00.000Z",
+      overrideReason: "seed",
+      createdAt: "2026-04-01T00:00:00.000Z",
+      updatedAt: "2026-04-01T00:00:00.000Z",
+    });
+
+    const result = await applyRegistryMatchOverride({
+      normalizedRecordId: "record-detach",
+      action: "detach",
+      reason: "Wrong property selected",
+      actorId: "admin-7",
+    });
+
+    expect(result.propertyId).toBeNull();
+    expect(result.matchStatus).toBe("unmatched");
+    expect(ensureCollection("propertyRegistryStatus").get("halifax_r400_prop-detach")?.registryStatus).toBe("not_found");
+    expect(
+      Array.from(ensureCollection("registryAuditLog").values()).some(
+        (event) => event.eventType === "match_detached" && event.eventData?.previousPropertyId === "prop-detach"
+      )
+    ).toBe(true);
   });
 
   it("confirms a possible-match style record attach and refreshes projection plus audit state", async () => {
@@ -367,6 +452,265 @@ describe("registryImportService", () => {
           event.eventData?.action === "attach"
       )
     ).toBe(true);
+  });
+
+  it("requires explicit replacement when a property already has another active source match", async () => {
+    const { applyRegistryMatchOverride } = await import("../registry/registryImportService");
+
+    ensureCollection("properties").set("prop-conflict", {
+      id: "prop-conflict",
+      landlordId: "landlord-conflict",
+      name: "Conflict Property",
+      addressLine1: "30 Conflict Street",
+      city: "Halifax",
+      province: "NS",
+    });
+    ensureCollection("registryRecordsNormalized").set("record-existing", {
+      id: "record-existing",
+      importBatchId: "import-1",
+      sourceKey: "halifax_r400",
+      jurisdictionCountry: "CA",
+      jurisdictionProvince: "NS",
+      jurisdictionMunicipality: "Halifax",
+      registryCategory: "rental_registry",
+      registryRecordId: "reg-existing",
+      registrationNumber: "REG-EXISTING",
+      pid: "3003003",
+      addressRaw: "30 CONFLICT STREET,HALIFAX",
+      primaryAddressCandidate: "30 conflict st halifax ns",
+      addressCandidates: ["30 conflict st halifax ns"],
+      addressNormalized: "30 conflict st halifax ns",
+      postalCode: null,
+      rentalUnitTypeRaw: null,
+      rentalUnitTypeNormalized: null,
+      buildingTypeRaw: null,
+      buildingTypeNormalized: null,
+      registeredUnits: 1,
+      numberOfFloors: 1,
+      sharedFacilities: null,
+      registrationStatusRaw: "Y",
+      registrationStatusNormalized: "registered",
+      registrationIssuedAt: null,
+      lat: null,
+      lng: null,
+      sourceConfidence: 0.94,
+      internalDiagnostics: { unmatchedReasons: [], pidSourceFieldsChecked: ["pid"], addressCandidateCount: 1 },
+      importedAt: "2026-04-01T00:00:00.000Z",
+      updatedAt: "2026-04-01T00:00:00.000Z",
+    });
+    ensureCollection("registryRecordsNormalized").set("record-replacement", {
+      id: "record-replacement",
+      importBatchId: "import-1",
+      sourceKey: "halifax_r400",
+      jurisdictionCountry: "CA",
+      jurisdictionProvince: "NS",
+      jurisdictionMunicipality: "Halifax",
+      registryCategory: "rental_registry",
+      registryRecordId: "reg-replacement",
+      registrationNumber: "REG-REPLACEMENT",
+      pid: "3030303",
+      addressRaw: "30 CONFLICT STREET,HALIFAX",
+      primaryAddressCandidate: "30 conflict st halifax ns",
+      addressCandidates: ["30 conflict st halifax ns"],
+      addressNormalized: "30 conflict st halifax ns",
+      postalCode: null,
+      rentalUnitTypeRaw: null,
+      rentalUnitTypeNormalized: null,
+      buildingTypeRaw: null,
+      buildingTypeNormalized: null,
+      registeredUnits: 1,
+      numberOfFloors: 1,
+      sharedFacilities: null,
+      registrationStatusRaw: "Y",
+      registrationStatusNormalized: "registered",
+      registrationIssuedAt: null,
+      lat: null,
+      lng: null,
+      sourceConfidence: 0.94,
+      internalDiagnostics: { unmatchedReasons: [], pidSourceFieldsChecked: ["pid"], addressCandidateCount: 1 },
+      importedAt: "2026-04-01T00:00:00.000Z",
+      updatedAt: "2026-04-01T00:00:00.000Z",
+    });
+    ensureCollection("registryMatches").set("halifax_r400_reg-existing", {
+      id: "halifax_r400_reg-existing",
+      sourceKey: "halifax_r400",
+      registryRecordId: "reg-existing",
+      normalizedRecordId: "record-existing",
+      propertyId: "prop-conflict",
+      landlordId: "landlord-conflict",
+      matchMethod: "manual",
+      matchScore: 1,
+      matchStatus: "matched",
+      mismatchReasons: [],
+      reviewedBy: "admin-0",
+      reviewedAt: "2026-04-01T00:00:00.000Z",
+      overrideReason: "seed",
+      createdAt: "2026-04-01T00:00:00.000Z",
+      updatedAt: "2026-04-01T00:00:00.000Z",
+    });
+    ensureCollection("registryMatches").set("halifax_r400_reg-replacement", {
+      id: "halifax_r400_reg-replacement",
+      sourceKey: "halifax_r400",
+      registryRecordId: "reg-replacement",
+      normalizedRecordId: "record-replacement",
+      propertyId: null,
+      landlordId: null,
+      matchMethod: "address_fuzzy",
+      matchScore: 0.8,
+      matchStatus: "possible_match",
+      mismatchReasons: ["manual_confirmation_recommended"],
+      reviewedBy: null,
+      reviewedAt: null,
+      overrideReason: null,
+      createdAt: "2026-04-01T00:00:00.000Z",
+      updatedAt: "2026-04-01T00:00:00.000Z",
+    });
+
+    await expect(
+      applyRegistryMatchOverride({
+        normalizedRecordId: "record-replacement",
+        action: "attach",
+        propertyId: "prop-conflict",
+        reason: "Replace old record",
+        actorId: "admin-8",
+      })
+    ).rejects.toMatchObject({ code: "existing_property_match_conflict", statusCode: 409 });
+
+    const replaced = await applyRegistryMatchOverride({
+      normalizedRecordId: "record-replacement",
+      action: "attach",
+      propertyId: "prop-conflict",
+      reason: "Replace old record",
+      actorId: "admin-8",
+      replaceExistingMatch: true,
+    });
+
+    expect(replaced.propertyId).toBe("prop-conflict");
+    expect(ensureCollection("registryMatches").get("halifax_r400_reg-existing")?.propertyId).toBeNull();
+    expect(
+      ["possible_match", "unmatched"].includes(
+        String(ensureCollection("registryMatches").get("halifax_r400_reg-existing")?.matchStatus || "")
+      )
+    ).toBe(true);
+  });
+
+  it("filters the review queue by search query alongside status", async () => {
+    const { listRegistryReviewQueue } = await import("../registry/registryImportService");
+
+    ensureCollection("properties").set("prop-search", {
+      id: "prop-search",
+      landlordId: "landlord-search",
+      name: "Harbour View",
+      addressLine1: "91 Search Street",
+      city: "Halifax",
+      province: "NS",
+      pid: "9191919",
+    });
+    ensureCollection("registryRecordsNormalized").set("record-search", {
+      id: "record-search",
+      importBatchId: "import-1",
+      sourceKey: "halifax_r400",
+      jurisdictionCountry: "CA",
+      jurisdictionProvince: "NS",
+      jurisdictionMunicipality: "Halifax",
+      registryCategory: "rental_registry",
+      registryRecordId: "reg-search",
+      registrationNumber: "REG-SEARCH",
+      pid: "9191919",
+      addressRaw: "91 SEARCH STREET,HALIFAX",
+      primaryAddressCandidate: "91 search st halifax ns",
+      addressCandidates: ["91 search st halifax ns"],
+      addressNormalized: "91 search st halifax ns",
+      postalCode: null,
+      rentalUnitTypeRaw: null,
+      rentalUnitTypeNormalized: null,
+      buildingTypeRaw: null,
+      buildingTypeNormalized: null,
+      registeredUnits: 1,
+      numberOfFloors: 1,
+      sharedFacilities: null,
+      registrationStatusRaw: "Y",
+      registrationStatusNormalized: "registered",
+      registrationIssuedAt: null,
+      lat: null,
+      lng: null,
+      sourceConfidence: 0.94,
+      internalDiagnostics: { unmatchedReasons: [], pidSourceFieldsChecked: ["pid"], addressCandidateCount: 1 },
+      importedAt: "2026-04-01T00:00:00.000Z",
+      updatedAt: "2026-04-01T00:00:00.000Z",
+    });
+    ensureCollection("registryMatches").set("halifax_r400_reg-search", {
+      id: "halifax_r400_reg-search",
+      sourceKey: "halifax_r400",
+      registryRecordId: "reg-search",
+      normalizedRecordId: "record-search",
+      propertyId: "prop-search",
+      landlordId: "landlord-search",
+      matchMethod: "manual",
+      matchScore: 1,
+      matchStatus: "matched",
+      mismatchReasons: [],
+      reviewedBy: "admin-1",
+      reviewedAt: "2026-04-01T00:00:00.000Z",
+      overrideReason: "seed",
+      createdAt: "2026-04-01T00:00:00.000Z",
+      updatedAt: "2026-04-01T00:00:00.000Z",
+    });
+    ensureCollection("registryRecordsNormalized").set("record-other", {
+      id: "record-other",
+      importBatchId: "import-1",
+      sourceKey: "halifax_r400",
+      jurisdictionCountry: "CA",
+      jurisdictionProvince: "NS",
+      jurisdictionMunicipality: "Halifax",
+      registryCategory: "rental_registry",
+      registryRecordId: "reg-other",
+      registrationNumber: "REG-OTHER",
+      pid: "0000001",
+      addressRaw: "12 OTHER STREET,HALIFAX",
+      primaryAddressCandidate: "12 other st halifax ns",
+      addressCandidates: ["12 other st halifax ns"],
+      addressNormalized: "12 other st halifax ns",
+      postalCode: null,
+      rentalUnitTypeRaw: null,
+      rentalUnitTypeNormalized: null,
+      buildingTypeRaw: null,
+      buildingTypeNormalized: null,
+      registeredUnits: 1,
+      numberOfFloors: 1,
+      sharedFacilities: null,
+      registrationStatusRaw: "Y",
+      registrationStatusNormalized: "registered",
+      registrationIssuedAt: null,
+      lat: null,
+      lng: null,
+      sourceConfidence: 0.94,
+      internalDiagnostics: { unmatchedReasons: [], pidSourceFieldsChecked: ["pid"], addressCandidateCount: 1 },
+      importedAt: "2026-04-01T00:00:00.000Z",
+      updatedAt: "2026-04-01T00:00:00.000Z",
+    });
+    ensureCollection("registryMatches").set("halifax_r400_reg-other", {
+      id: "halifax_r400_reg-other",
+      sourceKey: "halifax_r400",
+      registryRecordId: "reg-other",
+      normalizedRecordId: "record-other",
+      propertyId: null,
+      landlordId: null,
+      matchMethod: null,
+      matchScore: 0,
+      matchStatus: "unmatched",
+      mismatchReasons: [],
+      reviewedBy: null,
+      reviewedAt: null,
+      overrideReason: null,
+      createdAt: "2026-04-01T00:00:00.000Z",
+      updatedAt: "2026-04-01T00:00:00.000Z",
+    });
+
+    await expect(listRegistryReviewQueue({ matchStatus: "matched", search: "harbour" })).resolves.toHaveLength(1);
+    await expect(listRegistryReviewQueue({ matchStatus: "matched", search: "9191919" })).resolves.toHaveLength(1);
+    await expect(listRegistryReviewQueue({ matchStatus: "matched", search: "REG-SEARCH" })).resolves.toHaveLength(1);
+    await expect(listRegistryReviewQueue({ matchStatus: "matched", search: "other" })).resolves.toHaveLength(0);
   });
 
   it("returns PID enrichment cues for property review when internal PID is missing", async () => {

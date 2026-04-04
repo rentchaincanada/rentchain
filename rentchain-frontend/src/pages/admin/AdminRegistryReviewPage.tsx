@@ -7,6 +7,7 @@ import { fetchAdminRegistryReview, type RegistryReviewItem } from "../../api/adm
 export default function AdminRegistryReviewPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const matchStatus = searchParams.get("matchStatus") || "all";
+  const searchQuery = searchParams.get("q") || "";
   const [items, setItems] = useState<RegistryReviewItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -17,7 +18,7 @@ export default function AdminRegistryReviewPage() {
       try {
         setLoading(true);
         setError(null);
-        const result = await fetchAdminRegistryReview(matchStatus);
+        const result = await fetchAdminRegistryReview(matchStatus, searchQuery);
         if (!active) return;
         setItems(result);
       } catch (err: any) {
@@ -31,7 +32,7 @@ export default function AdminRegistryReviewPage() {
     return () => {
       active = false;
     };
-  }, [matchStatus]);
+  }, [matchStatus, searchQuery]);
 
   return (
     <MacShell title="Admin · Registry Review">
@@ -46,6 +47,17 @@ export default function AdminRegistryReviewPage() {
               <div style={{ color: "#475569", maxWidth: 760 }}>
                 Review unmatched, fuzzy, and mismatched Halifax rows before landlord-facing status is trusted.
               </div>
+              <Input
+                placeholder="Search by registry address, registration number, property name, property PID, or registry PID"
+                value={searchQuery}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  const nextParams: Record<string, string> = {};
+                  if (matchStatus !== "all") nextParams.matchStatus = matchStatus;
+                  if (next.trim()) nextParams.q = next.trim();
+                  setSearchParams(nextParams);
+                }}
+              />
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <Link to="/admin/registry/imports">
@@ -65,6 +77,7 @@ export default function AdminRegistryReviewPage() {
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <Pill tone="muted">Visible items: {items.length}</Pill>
               <Pill tone="muted">Filter: {matchStatus}</Pill>
+              {searchQuery ? <Pill tone="muted">Search: {searchQuery}</Pill> : null}
               {matchStatus === "ignored" ? <Pill tone="muted">Ignored items can be returned to review from record detail.</Pill> : null}
             </div>
           ) : null}
@@ -86,6 +99,39 @@ export default function AdminRegistryReviewPage() {
               <div style={{ color: "#475569", fontSize: 14 }}>
                 Property: {item.property?.name || item.property?.addressLine1 || item.match.propertyId || "--"}
               </div>
+              {item.property ? (
+                <div style={{ color: "#64748b", fontSize: 13 }}>
+                  Property document ID: {item.property.id} · Property PID: {item.property.pid || "--"} · Address:{" "}
+                  {[item.property.addressLine1, item.property.city, item.property.province, item.property.postalCode]
+                    .filter(Boolean)
+                    .join(", ")}
+                </div>
+              ) : null}
+              {item.normalizedRecord ? (
+                <div style={{ color: "#64748b", fontSize: 13 }}>
+                  Registry PID: {item.normalizedRecord.pid || "--"} · Registration number:{" "}
+                  {item.normalizedRecord.registrationNumber || "--"}
+                </div>
+              ) : null}
+              {item.topCandidate ? (
+                <div style={{ color: "#475569", fontSize: 14 }}>
+                  Top candidate: {item.topCandidate.propertyName || item.topCandidate.addressLine1 || item.topCandidate.propertyId}
+                </div>
+              ) : null}
+              {item.topCandidate ? (
+                <div style={{ color: "#64748b", fontSize: 13 }}>
+                  Property document ID: {item.topCandidate.propertyId} · Property PID: {item.topCandidate.pid || "--"} ·
+                  Units: {item.topCandidate.unitCount ?? "--"} · Address:{" "}
+                  {[item.topCandidate.addressLine1, item.topCandidate.city, item.topCandidate.province, item.topCandidate.postalCode]
+                    .filter(Boolean)
+                    .join(", ")}
+                </div>
+              ) : null}
+              {item.match.propertyId ? (
+                <div style={{ color: "#0f172a", fontSize: 13, fontWeight: 600 }}>
+                  Currently linked property is active for this record.
+                </div>
+              ) : null}
               {item.reasonSummary?.length ? (
                 <div style={{ color: "#92400e", fontSize: 14 }}>
                   Review notes: {item.reasonSummary.join(" ")}
@@ -93,8 +139,7 @@ export default function AdminRegistryReviewPage() {
               ) : null}
               {!item.property && item.topCandidate ? (
                 <div style={{ color: "#475569", fontSize: 14 }}>
-                  Top candidate: {item.topCandidate.propertyName || item.topCandidate.addressLine1 || item.topCandidate.propertyId} · Score:{" "}
-                  {item.topCandidate.score}
+                  Candidate score: {item.topCandidate.score}
                 </div>
               ) : null}
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>

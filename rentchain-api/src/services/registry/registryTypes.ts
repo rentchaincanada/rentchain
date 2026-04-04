@@ -167,6 +167,10 @@ export type RegistryAuditEventType =
   | "normalized_row_written"
   | "match_evaluated"
   | "match_overridden"
+  | "match_detached"
+  | "match_returned_to_review"
+  | "match_ignored"
+  | "match_reinstated"
   | "projection_updated"
   | "property_pid_updated_from_registry";
 
