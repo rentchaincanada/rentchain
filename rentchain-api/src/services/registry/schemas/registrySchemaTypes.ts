@@ -124,6 +124,69 @@ export type RegistrySubmissionValidation = {
   exportReady: boolean;
 };
 
+export type RegistryReadinessStatus =
+  | "verified"
+  | "registry_ready"
+  | "manual_review_in_progress"
+  | "possible_mismatch"
+  | "no_public_match"
+  | "incomplete"
+  | "unsupported_jurisdiction";
+
+export type RegistryReadinessAction =
+  | "prepare_registry_submission"
+  | "complete_missing_fields"
+  | "review_possible_match"
+  | "resolve_mismatch"
+  | "export_ready_draft"
+  | "add_pid"
+  | "view_verified_details"
+  | "no_action_needed";
+
+export type RegistryReadinessSummaryItem = {
+  category:
+    | "owner_contact"
+    | "property_identity"
+    | "building_details"
+    | "safety_compliance"
+    | "declarations_consent";
+  headline: string;
+  count: number;
+};
+
+export type PropertyRegistryReadiness = {
+  schemaKey: string;
+  schemaLabel: string;
+  jurisdiction: RegistryJurisdiction;
+  mode: RegistrySchemaMode;
+  readinessStatus: RegistryReadinessStatus;
+  readinessScore: number;
+  completionPercent: number;
+  exportReady: boolean;
+  missingRequiredFields: RegistryValidationItem[];
+  missingConsentItems: RegistryValidationItem[];
+  warnings: string[];
+  topMissingItems: RegistryReadinessSummaryItem[];
+  nextRecommendedAction: RegistryReadinessAction;
+  currentRegistryState: {
+    status:
+      | "verified"
+      | "pending_review"
+      | "possible_mismatch"
+      | "manual_review"
+      | "not_found"
+      | "not_applicable";
+    summary: string;
+    publicRegistryAvailable: boolean;
+  };
+  registryAvailabilityNote: string | null;
+  assistant: {
+    title: string;
+    description: string;
+    ctaLabel: string;
+  };
+};
+
 export type RegistryJurisdiction = {
   country: string;
   province: string | null;

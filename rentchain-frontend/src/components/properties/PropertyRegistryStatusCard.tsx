@@ -1,6 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { Card, Pill } from "../ui/Ui";
-import { fetchPropertyRegistryStatus, type Property, type PropertyRegistryStatus } from "../../api/propertiesApi";
+import {
+  fetchPropertyRegistryStatus,
+  type Property,
+  type PropertyRegistryReadiness,
+  type PropertyRegistryStatus,
+} from "../../api/propertiesApi";
 
 function formatDate(value: string | null | undefined) {
   if (!value) return "--";
@@ -24,24 +29,73 @@ function statusLabel(status: PropertyRegistryStatus["registryStatus"]) {
   }
 }
 
-function resolveSubmissionAssistantCopy(property: Property | null) {
-  const city = String(property?.city || "").trim().toLowerCase();
-  const province = String(property?.province || "").trim().toLowerCase();
-  const isHalifax = (city === "halifax" || city === "dartmouth") && (province === "ns" || province === "nova scotia");
-  if (isHalifax) {
-    return {
-      title: "Halifax submission assistant",
-      description:
-        "Review RentChain-prefilled property and owner data, answer the missing Halifax compliance questions, and export a structured submission-ready payload.",
-      cta: "Prepare Halifax registration",
-    };
+function readinessLabel(status: PropertyRegistryReadiness["readinessStatus"]) {
+  switch (status) {
+    case "verified":
+      return "Verified";
+    case "registry_ready":
+      return "Registry-ready";
+    case "manual_review_in_progress":
+      return "Manual review";
+    case "possible_mismatch":
+      return "Possible mismatch";
+    case "no_public_match":
+      return "No public match";
+    case "unsupported_jurisdiction":
+      return "Unsupported";
+    case "incomplete":
+    default:
+      return "Incomplete";
   }
-  return {
-    title: "Registry-ready compliance assistant",
-    description:
-      "Review RentChain-prefilled property and owner data, complete the missing readiness questions, and export a structured compliance profile for future municipal or provincial use.",
-    cta: "Prepare registry-ready compliance profile",
-  };
+}
+
+function readinessTone(status: PropertyRegistryReadiness["readinessStatus"]) {
+  if (status === "verified" || status === "registry_ready" || status === "possible_mismatch" || status === "manual_review_in_progress") {
+    return "accent";
+  }
+  return "muted";
+}
+
+function nextActionLabel(readiness: PropertyRegistryReadiness) {
+  switch (readiness.nextRecommendedAction) {
+    case "view_verified_details":
+      return "View verified details";
+    case "export_ready_draft":
+      return readiness.mode === "registry_ready_fallback" ? "Export registry-ready draft" : "Export ready draft";
+    case "complete_missing_fields":
+      return readiness.mode === "registry_ready_fallback" ? "Complete registry-ready profile" : "Complete missing data";
+    case "review_possible_match":
+      return "Review discrepancy";
+    case "resolve_mismatch":
+      return "Review match";
+    case "add_pid":
+      return "Add PID";
+    case "prepare_registry_submission":
+      return readiness.assistant.ctaLabel;
+    case "no_action_needed":
+    default:
+      return "No action needed";
+  }
+}
+
+function readinessSummary(readiness: PropertyRegistryReadiness) {
+  switch (readiness.readinessStatus) {
+    case "verified":
+      return "Verified against public registry data.";
+    case "registry_ready":
+      return "Registry-ready draft prepared and ready for export.";
+    case "manual_review_in_progress":
+      return "Manual review is in progress before the registry state can be confirmed.";
+    case "possible_mismatch":
+      return "A possible mismatch was detected and should be reviewed before relying on registry status.";
+    case "no_public_match":
+      return "No public match was found yet. You can still prepare this property for registry or compliance readiness.";
+    case "unsupported_jurisdiction":
+      return "This jurisdiction is not yet connected to a public registry workflow.";
+    case "incomplete":
+    default:
+      return "Required data is still missing before this property is registry-ready.";
+  }
 }
 
 type Props = {
@@ -64,12 +118,11 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
       sourceLabel: string;
       actionable: boolean;
     };
+    readiness: PropertyRegistryReadiness;
   } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
-  const assistantCopy = resolveSubmissionAssistantCopy(property);
-
   useEffect(() => {
     let active = true;
     const propertyId = property?.id;
@@ -119,13 +172,74 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
           <div style={{ fontSize: 12, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.6 }}>
             Compliance / Registry
           </div>
-          <div style={{ fontSize: 18, fontWeight: 700 }}>Registry Intelligence</div>
+          <div style={{ fontSize: 18, fontWeight: 700 }}>Compliance / Registry Readiness</div>
         </div>
-        {data?.status ? <Pill tone={data.status.registryStatus === "verified" || data.status.registryStatus === "pending_review" ? "accent" : "muted"}>{statusLabel(data.status.registryStatus)}</Pill> : null}
+        {data?.readiness ? <Pill tone={readinessTone(data.readiness.readinessStatus)}>{readinessLabel(data.readiness.readinessStatus)}</Pill> : null}
       </div>
-      {loading ? <div style={{ color: "#475569" }}>Checking Halifax registry status…</div> : null}
+      {loading ? <div style={{ color: "#475569" }}>Checking registry and readiness…</div> : null}
       {!loading && error ? <div style={{ color: "#b91c1c" }}>{error}</div> : null}
       {!loading && data && !data.coverage.available ? <div style={{ color: "#475569" }}>{data.coverage.message}</div> : null}
+      {!loading && data?.readiness ? (
+        <div
+          style={{
+            display: "grid",
+            gap: 10,
+            padding: "12px 14px",
+            borderRadius: 12,
+            border: "1px solid rgba(15,23,42,0.08)",
+            background: "rgba(15,23,42,0.03)",
+          }}
+        >
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <Pill tone="muted">{data.readiness.schemaLabel}</Pill>
+            <Pill tone="muted">{data.readiness.completionPercent}% complete</Pill>
+            <Pill tone="muted">Score {data.readiness.readinessScore}</Pill>
+          </div>
+          <div style={{ color: "#475569", lineHeight: 1.5 }}>{readinessSummary(data.readiness)}</div>
+          <div style={{ display: "grid", gap: 6, fontSize: 14 }}>
+            <div>
+              <strong>Jurisdiction:</strong>{" "}
+              {[
+                data.readiness.jurisdiction.municipality,
+                data.readiness.jurisdiction.province,
+                data.readiness.jurisdiction.country,
+              ]
+                .filter(Boolean)
+                .join(", ")}
+            </div>
+            <div>
+              <strong>Registry state:</strong> {data.readiness.currentRegistryState.summary}
+            </div>
+            <div>
+              <strong>Next action:</strong> {nextActionLabel(data.readiness)}
+            </div>
+          </div>
+          {data.readiness.topMissingItems.length ? (
+            <div style={{ display: "grid", gap: 6 }}>
+              <div style={{ fontWeight: 700, color: "#0f172a" }}>Top missing items</div>
+              {data.readiness.topMissingItems.slice(0, 3).map((item) => (
+                <div key={`${item.category}-${item.headline}`} style={{ color: "#475569", fontSize: 14 }}>
+                  • {item.headline}
+                  {item.count > 1 ? ` (${item.count})` : ""}
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {data.readiness.warnings.length ? (
+            <div style={{ display: "grid", gap: 6 }}>
+              <div style={{ fontWeight: 700, color: "#0f172a" }}>Warnings</div>
+              {data.readiness.warnings.slice(0, 2).map((warning, index) => (
+                <div key={`${warning}-${index}`} style={{ color: "#475569", fontSize: 14 }}>
+                  • {warning}
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {data.readiness.registryAvailabilityNote ? (
+            <div style={{ color: "#475569", fontSize: 13 }}>{data.readiness.registryAvailabilityNote}</div>
+          ) : null}
+        </div>
+      ) : null}
       {!loading && data?.pidPrompt.pidPromptEligible ? (
         <div
           style={{
@@ -225,9 +339,9 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
             gap: 8,
           }}
         >
-          <div style={{ fontWeight: 700, color: "#0f172a" }}>{assistantCopy.title}</div>
+          <div style={{ fontWeight: 700, color: "#0f172a" }}>{data?.readiness.assistant.title || "Submission assistant"}</div>
           <div style={{ color: "#475569", fontSize: 14, lineHeight: 1.5 }}>
-            {assistantCopy.description}
+            {data?.readiness.assistant.description || "Review the compliance and registry draft for this property."}
           </div>
           <div>
             <button
@@ -243,7 +357,7 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                 cursor: "pointer",
               }}
             >
-              {assistantCopy.cta}
+              {data?.readiness.assistant.ctaLabel || "Open assistant"}
             </button>
           </div>
         </div>

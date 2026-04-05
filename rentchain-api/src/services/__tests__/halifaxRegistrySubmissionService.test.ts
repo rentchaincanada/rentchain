@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildPropertyRegistryReadiness,
   buildHalifaxRegistrySubmissionExportPayload,
   buildHalifaxRegistrySubmissionPrefill,
   getRegistrySchemaSummaryForProperty,
-  loadPropertyRegistrySubmissionDraft,
   validateHalifaxRegistrySubmissionDraft,
 } from "../registry/halifaxRegistrySubmissionService";
 import { genericCanadaRegistryReadySchema } from "../registry/schemas/genericCanadaRegistryReadySchema";
@@ -290,5 +290,254 @@ describe("halifaxRegistrySubmissionService", () => {
     expect(validation.exportReady).toBe(true);
     expect(String(exportPayload.disclaimer)).toContain("does not indicate that an official registry currently exists");
     expect(exportPayload.mode).toBe("registry_ready_fallback");
+  });
+
+  it("resolves verified Halifax readiness over draft completeness", () => {
+    const prefilled = buildHalifaxRegistrySubmissionPrefill({
+      property,
+      landlordProfile,
+      userAccount: {},
+      persisted: {
+        fieldValues: {
+          moreThanFiveBuildings: false,
+          primaryContactSameAsOwner: true,
+          buildings: [
+            {
+              id: "building-1",
+              primaryAddress: {
+                line1: "12 Wharf Street",
+                line2: null,
+                city: "Halifax",
+                province: "NS",
+                postalCode: "B3H 1A1",
+                country: "Canada",
+              },
+              rentalUnitTypes: ["Apartment(s)"],
+              residentialUnitsRented: 8,
+              shortTermRentalUnits: 0,
+              buildingType: "Apartment building",
+              totalResidentialUnits: 8,
+              hasCommercialUnits: false,
+              amenities: ["Laundry"],
+              fireLifeSafetySystems: ["Smoke alarm(s)"],
+              accessibilityFeatures: [],
+              yearConstructed: 1998,
+            },
+          ],
+        },
+        declarations: {
+          acknowledged: true,
+          maintenancePlanConfirmed: true,
+          ownerDeclarationConfirmed: true,
+          informationAccurateConfirmed: true,
+        },
+        consent: {
+          preparationAuthorized: true,
+          preparationAuthorizedAt: "2026-04-05T00:00:00.000Z",
+          preparationAuthorizedBy: "landlord-1",
+          declarationsConfirmed: true,
+          declarationsConfirmedAt: "2026-04-05T00:05:00.000Z",
+          declarationsConfirmedBy: "landlord-1",
+          finalReviewConfirmed: false,
+          finalReviewConfirmedAt: null,
+        },
+      },
+    });
+    const validation = validateHalifaxRegistrySubmissionDraft(prefilled);
+    const readiness = buildPropertyRegistryReadiness({
+      property,
+      submission: {
+        id: "draft-verified",
+        propertyId: "prop-1",
+        landlordId: "landlord-1",
+        sourceKey: "halifax_rental_registry_form",
+        schemaKey: "halifax_rental_registry_v1",
+        schemaLabel: "Halifax Rental Registry",
+        mode: "official_registry",
+        jurisdiction: {
+          country: "CA",
+          province: "NS",
+          municipality: "Halifax",
+        },
+        status: "ready",
+        fieldValues: prefilled.fieldValues,
+        fieldMeta: prefilled.fieldMeta,
+        declarations: prefilled.declarations,
+        consent: prefilled.consent,
+        validation,
+        exportedAt: null,
+        lastReviewedAt: null,
+        createdAt: "2026-04-05T00:00:00.000Z",
+        updatedAt: "2026-04-05T00:00:00.000Z",
+        updatedBy: "landlord-1",
+      },
+      projection: {
+        registryStatus: "verified",
+        summary: "Verified against Halifax public registry data.",
+      },
+      coverageAvailable: true,
+      coverageMessage: null,
+      propertyPid: "PID-123",
+    });
+
+    expect(readiness.readinessStatus).toBe("verified");
+    expect(readiness.nextRecommendedAction).toBe("view_verified_details");
+  });
+
+  it("resolves generic fallback properties to incomplete or registry-ready without claiming a public match", () => {
+    const prefilled = genericCanadaRegistryReadySchema.buildPrefill({
+      property: {
+        id: "prop-3",
+        name: "Prairie Homes",
+        addressLine1: "10 River Road",
+        city: "Calgary",
+        province: "AB",
+        postalCode: "T2P 1J9",
+        country: "Canada",
+        totalUnits: 2,
+      },
+      landlordProfile,
+      userAccount: {},
+      persisted: null,
+    });
+    const incompleteValidation = genericCanadaRegistryReadySchema.validate(prefilled);
+    const incompleteReadiness = buildPropertyRegistryReadiness({
+      property: {
+        id: "prop-3",
+        city: "Calgary",
+        province: "AB",
+        country: "Canada",
+      },
+      submission: {
+        id: "draft-incomplete",
+        propertyId: "prop-3",
+        landlordId: "landlord-1",
+        sourceKey: "canada_registry_ready_v1",
+        schemaKey: "canada_registry_ready_v1",
+        schemaLabel: "Canada Registry-Ready Compliance Profile",
+        mode: "registry_ready_fallback",
+        jurisdiction: {
+          country: "CA",
+          province: "AB",
+          municipality: "Calgary",
+        },
+        status: "draft",
+        fieldValues: prefilled.fieldValues,
+        fieldMeta: prefilled.fieldMeta,
+        declarations: prefilled.declarations,
+        consent: prefilled.consent,
+        validation: incompleteValidation,
+        exportedAt: null,
+        lastReviewedAt: null,
+        createdAt: "2026-04-05T00:00:00.000Z",
+        updatedAt: "2026-04-05T00:00:00.000Z",
+        updatedBy: "landlord-1",
+      },
+      projection: null,
+      coverageAvailable: false,
+      coverageMessage: "This jurisdiction currently uses RentChain's registry-ready compliance workflow rather than a connected public registry.",
+      propertyPid: null,
+    });
+
+    expect(incompleteReadiness.readinessStatus).toBe("incomplete");
+    expect(incompleteReadiness.currentRegistryState.status).toBe("not_applicable");
+
+    const readyPrefill = genericCanadaRegistryReadySchema.buildPrefill({
+      property: {
+        id: "prop-3",
+        name: "Prairie Homes",
+        addressLine1: "10 River Road",
+        city: "Calgary",
+        province: "AB",
+        postalCode: "T2P 1J9",
+        country: "Canada",
+        totalUnits: 2,
+      },
+      landlordProfile,
+      userAccount: {},
+      persisted: {
+        fieldValues: {
+          primaryContactSameAsOwner: true,
+          buildings: [
+            {
+              id: "building-1",
+              primaryAddress: {
+                line1: "10 River Road",
+                line2: null,
+                city: "Calgary",
+                province: "AB",
+                postalCode: "T2P 1J9",
+                country: "Canada",
+              },
+              residentialUnitsRented: 2,
+              shortTermRentalUnits: 0,
+              buildingType: "House",
+              totalResidentialUnits: 2,
+              amenities: ["Laundry"],
+              fireLifeSafetySystems: ["Smoke alarm(s)"],
+              accessibilityFeatures: [],
+              yearConstructed: 2010,
+            },
+          ],
+        },
+        declarations: {
+          acknowledged: true,
+          maintenancePlanConfirmed: true,
+          ownerDeclarationConfirmed: true,
+          informationAccurateConfirmed: true,
+        },
+        consent: {
+          preparationAuthorized: true,
+          preparationAuthorizedAt: "2026-04-05T00:00:00.000Z",
+          preparationAuthorizedBy: "landlord-1",
+          declarationsConfirmed: true,
+          declarationsConfirmedAt: "2026-04-05T00:05:00.000Z",
+          declarationsConfirmedBy: "landlord-1",
+          finalReviewConfirmed: false,
+          finalReviewConfirmedAt: null,
+        },
+      },
+    });
+    const readyValidation = genericCanadaRegistryReadySchema.validate(readyPrefill);
+    const readyReadiness = buildPropertyRegistryReadiness({
+      property: {
+        id: "prop-3",
+        city: "Calgary",
+        province: "AB",
+        country: "Canada",
+      },
+      submission: {
+        id: "draft-ready",
+        propertyId: "prop-3",
+        landlordId: "landlord-1",
+        sourceKey: "canada_registry_ready_v1",
+        schemaKey: "canada_registry_ready_v1",
+        schemaLabel: "Canada Registry-Ready Compliance Profile",
+        mode: "registry_ready_fallback",
+        jurisdiction: {
+          country: "CA",
+          province: "AB",
+          municipality: "Calgary",
+        },
+        status: "ready",
+        fieldValues: readyPrefill.fieldValues,
+        fieldMeta: readyPrefill.fieldMeta,
+        declarations: readyPrefill.declarations,
+        consent: readyPrefill.consent,
+        validation: readyValidation,
+        exportedAt: null,
+        lastReviewedAt: null,
+        createdAt: "2026-04-05T00:00:00.000Z",
+        updatedAt: "2026-04-05T00:00:00.000Z",
+        updatedBy: "landlord-1",
+      },
+      projection: null,
+      coverageAvailable: false,
+      coverageMessage: "This jurisdiction currently uses RentChain's registry-ready compliance workflow rather than a connected public registry.",
+      propertyPid: null,
+    });
+
+    expect(readyReadiness.readinessStatus).toBe("registry_ready");
+    expect(readyReadiness.nextRecommendedAction).toBe("export_ready_draft");
   });
 });
