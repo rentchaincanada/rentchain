@@ -14,6 +14,18 @@ function formatImportStage(stage: string | null | undefined) {
   return String(stage || "--").replace(/_/g, " ");
 }
 
+function formatDurationMs(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return "--";
+  if (value < 1000) return `${value}ms`;
+  const totalSeconds = Math.round(value / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
+}
+
 function isImportActive(item: RegistryImportView) {
   return item.status === "queued" || item.status === "processing";
 }
@@ -183,6 +195,11 @@ export default function AdminRegistryImportsPage() {
               <div style={{ color: "#64748b", fontSize: 13 }}>
                 Started: {formatDate(item.startedAt)} · Completed: {formatDate(item.completedAt)} · Heartbeat: {formatDate(item.lastHeartbeatAt)}
               </div>
+              {typeof item.timingsMs?.total === "number" ? (
+                <div style={{ color: "#64748b", fontSize: 13 }}>
+                  Duration: {formatDurationMs(item.timingsMs?.total)} · File load: {formatDurationMs(item.timingsMs?.fileLoad)} · Matching: {formatDurationMs(item.timingsMs?.matching)} · Projection: {formatDurationMs(item.timingsMs?.projection)}
+                </div>
+              ) : null}
               {typeof item.retryCount === "number" && item.retryCount > 0 ? (
                 <div style={{ color: "#64748b", fontSize: 13 }}>File-load retries: {item.retryCount}</div>
               ) : null}

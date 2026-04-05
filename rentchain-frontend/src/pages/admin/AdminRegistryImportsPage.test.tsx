@@ -45,6 +45,15 @@ function makeImport(overrides: Record<string, unknown> = {}) {
       rowCount: 10,
       percent: 0,
     },
+    timingsMs: {
+      fileLoad: 1200,
+      parse: 30,
+      rawWrite: 180,
+      normalize: 70,
+      matching: 950,
+      projection: 140,
+      total: 2570,
+    },
     lastHeartbeatAt: "2026-04-04T10:00:00.000Z",
     failureStage: null,
     retryCount: 0,
@@ -138,6 +147,7 @@ describe("AdminRegistryImportsPage", () => {
 
     expect(mocks.fetchAdminRegistryImportsMock).toHaveBeenCalledTimes(3);
     expect(screen.getByText(/Stage: completed/i)).toBeInTheDocument();
+    expect(screen.getByText(/Duration: 3s/i)).toBeInTheDocument();
   });
 
   it("shows clear file-load failure details", async () => {

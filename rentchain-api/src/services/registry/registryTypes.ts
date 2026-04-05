@@ -38,6 +38,16 @@ export type RegistryImportProgress = {
   percent: number;
 };
 
+export type RegistryImportTimingsMs = {
+  fileLoad?: number | null;
+  parse?: number | null;
+  rawWrite?: number | null;
+  normalize?: number | null;
+  matching?: number | null;
+  projection?: number | null;
+  total?: number | null;
+};
+
 export type RegistryImportRecord = {
   id: string;
   sourceKey: RegistrySourceKey;
@@ -56,6 +66,7 @@ export type RegistryImportRecord = {
   status: RegistryImportStatus;
   processingMode?: "sync" | "async";
   progress?: RegistryImportProgress | null;
+  timingsMs?: RegistryImportTimingsMs | null;
   lastHeartbeatAt?: string | null;
   failureStage?: RegistryImportProgressStage | null;
   retryCount?: number;
