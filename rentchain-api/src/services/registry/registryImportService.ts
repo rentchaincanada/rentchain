@@ -2,7 +2,7 @@ import { db } from "../../config/firebase";
 import { commitInBatches } from "../../imports/firestoreBatch";
 import { recordRegistryAuditEvent } from "./registryAuditService";
 import { uploadBufferToGcs } from "../../lib/gcs";
-import { getFileReadStream } from "../../lib/gcsRead";
+import { getFileMetadata, getFileReadStream } from "../../lib/gcsRead";
 import type {
   RegistryImportRecord,
   RegistryImportProgress,
@@ -56,6 +56,9 @@ type RegistryQueueSummary = NonNullable<RegistryMatchRecord["queueSummary"]>;
 const activeRegistryImportJobs = new Map<string, Promise<void>>();
 const REGISTRY_IMPORT_STALE_MS = 2 * 60 * 1000;
 const REGISTRY_IMPORT_MATCH_PROGRESS_BATCH = 50;
+const REGISTRY_IMPORT_FILE_LOAD_MAX_ATTEMPTS = 3;
+const REGISTRY_IMPORT_FILE_LOAD_IDLE_TIMEOUT_MS = 90 * 1000;
+const REGISTRY_IMPORT_FILE_LOAD_RETRY_DELAY_MS = 100;
 
 function getAdapter(sourceKey: RegistrySourceKey): RegistrySourceAdapter {
   if (sourceKey === "halifax_r400") return new HalifaxR400Adapter();
@@ -922,12 +925,86 @@ function isImportHeartbeatStale(lastHeartbeatAt: string | null | undefined) {
   return Date.now() - ts >= REGISTRY_IMPORT_STALE_MS;
 }
 
-async function readStreamToString(stream: NodeJS.ReadableStream) {
-  const chunks: Buffer[] = [];
-  for await (const chunk of stream as AsyncIterable<any>) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  }
-  return Buffer.concat(chunks).toString("utf8");
+function isRetryableFileLoadError(error: unknown) {
+  const message = String((error as any)?.message || "").toLowerCase();
+  const code = String((error as any)?.code || "").toLowerCase();
+  return [
+    "deadline_exceeded",
+    "timed out",
+    "timeout",
+    "econnreset",
+    "etimedout",
+    "socket hang up",
+    "unavailable",
+    "resource exhausted",
+    "internal",
+  ].some((token) => message.includes(token) || code.includes(token));
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function readStreamToString(
+  stream: NodeJS.ReadableStream,
+  options?: { idleTimeoutMs?: number; onProgress?: (loadedBytes: number) => void }
+) {
+  const idleTimeoutMs = Math.max(10_000, Number(options?.idleTimeoutMs || REGISTRY_IMPORT_FILE_LOAD_IDLE_TIMEOUT_MS));
+  return new Promise<string>((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let loadedBytes = 0;
+    let settled = false;
+    let idleTimer: NodeJS.Timeout | null = null;
+
+    const cleanup = () => {
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = null;
+      stream.removeListener("data", onData);
+      stream.removeListener("end", onEnd);
+      stream.removeListener("error", onError);
+    };
+
+    const resetIdleTimer = () => {
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        const timeoutError = new Error(`Registry import file load stalled after ${idleTimeoutMs}ms`);
+        (timeoutError as any).code = "FILE_LOAD_IDLE_TIMEOUT";
+        if (typeof (stream as any).destroy === "function") {
+          (stream as any).destroy(timeoutError);
+        } else {
+          onError(timeoutError);
+        }
+      }, idleTimeoutMs);
+    };
+
+    const onData = (chunk: any) => {
+      if (settled) return;
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      chunks.push(buffer);
+      loadedBytes += buffer.length;
+      options?.onProgress?.(loadedBytes);
+      resetIdleTimer();
+    };
+
+    const onEnd = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(Buffer.concat(chunks).toString("utf8"));
+    };
+
+    const onError = (error: unknown) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+
+    resetIdleTimer();
+    stream.on("data", onData);
+    stream.on("end", onEnd);
+    stream.on("error", onError);
+  });
 }
 
 async function loadRegistryImportCsv(importRecord: RegistryImportRecord) {
@@ -936,7 +1013,99 @@ async function loadRegistryImportCsv(importRecord: RegistryImportRecord) {
   if (!bucket || !path) {
     throw new Error("Registry import source file is unavailable for background processing");
   }
-  return readStreamToString(getFileReadStream({ bucket, path }));
+  let expectedBytes: number | null = null;
+  try {
+    const meta = await getFileMetadata({ bucket, path });
+    const size = Number((meta as any)?.size);
+    expectedBytes = Number.isFinite(size) ? size : null;
+  } catch (error) {
+    console.warn("[registry] import file metadata unavailable", {
+      importId: importRecord.id,
+      bucket,
+      path,
+      message: (error as any)?.message || String(error),
+    });
+  }
+
+  let lastLoadedBytes = 0;
+  for (let attempt = 1; attempt <= REGISTRY_IMPORT_FILE_LOAD_MAX_ATTEMPTS; attempt += 1) {
+    const retryCount = Math.max(0, attempt - 1);
+    await patchImportRecord(importRecord.id, {
+      status: "processing",
+      progress: createImportProgress("file_load", 0, 0, 3 + retryCount),
+      lastHeartbeatAt: nowIso(),
+      failureStage: null,
+      retryCount,
+      errorSummary: null,
+    });
+    console.info("[registry] import file load start", {
+      importId: importRecord.id,
+      sourceKey: importRecord.sourceKey,
+      bucket,
+      path,
+      attempt,
+      maxAttempts: REGISTRY_IMPORT_FILE_LOAD_MAX_ATTEMPTS,
+      expectedBytes,
+    });
+
+    try {
+      const startedAt = Date.now();
+      lastLoadedBytes = 0;
+      const csvText = await readStreamToString(getFileReadStream({ bucket, path, validation: false }), {
+        idleTimeoutMs: REGISTRY_IMPORT_FILE_LOAD_IDLE_TIMEOUT_MS,
+        onProgress: (loadedBytes) => {
+          lastLoadedBytes = loadedBytes;
+        },
+      });
+      await patchImportRecord(importRecord.id, {
+        progress: createImportProgress("file_load", 0, 0, 10),
+        lastHeartbeatAt: nowIso(),
+        retryCount,
+      });
+      console.info("[registry] import file load success", {
+        importId: importRecord.id,
+        sourceKey: importRecord.sourceKey,
+        bucket,
+        path,
+        attempt,
+        bytesLoaded: Buffer.byteLength(csvText, "utf8"),
+        expectedBytes,
+        durationMs: Date.now() - startedAt,
+      });
+      return csvText;
+    } catch (error) {
+      const retryable = isRetryableFileLoadError(error);
+      console.error("[registry] import file load failure", {
+        importId: importRecord.id,
+        sourceKey: importRecord.sourceKey,
+        bucket,
+        path,
+        attempt,
+        maxAttempts: REGISTRY_IMPORT_FILE_LOAD_MAX_ATTEMPTS,
+        bytesLoaded: lastLoadedBytes,
+        expectedBytes,
+        retryable,
+        message: (error as any)?.message || String(error),
+      });
+      if (retryable && attempt < REGISTRY_IMPORT_FILE_LOAD_MAX_ATTEMPTS) {
+        await patchImportRecord(importRecord.id, {
+          retryCount,
+          lastHeartbeatAt: nowIso(),
+        });
+        console.warn("[registry] import file load retry scheduled", {
+          importId: importRecord.id,
+          attempt,
+          nextAttempt: attempt + 1,
+        });
+        await wait(REGISTRY_IMPORT_FILE_LOAD_RETRY_DELAY_MS * attempt);
+        continue;
+      }
+      (error as any).fileLoadRetryCount = retryCount;
+      throw error;
+    }
+  }
+
+  throw new Error("Registry import file load failed");
 }
 
 async function persistRegistryImportCsv(params: {
@@ -1217,12 +1386,13 @@ async function runRegistryImportJob(importId: string) {
   try {
     const { adapter, source } = await ensureRegistrySource(importRecord.sourceKey);
     const csvText = await loadRegistryImportCsv(importRecord);
+    const refreshedImportRecord = (await getRegistryImportRecord(importRecord.id)) || importRecord;
     await processRegistryImportCore({
-      importRecord,
+      importRecord: refreshedImportRecord,
       csvText,
       source,
       adapter,
-      actorId: importRecord.createdBy || null,
+      actorId: refreshedImportRecord.createdBy || null,
     });
   } catch (error: any) {
     const failedImport = normalizeImportRecord({
@@ -1232,7 +1402,13 @@ async function runRegistryImportJob(importId: string) {
       errorSummary: String(error?.message || "Registry import failed"),
       completedAt: nowIso(),
       lastHeartbeatAt: nowIso(),
-      failureStage: "upload",
+      failureStage: "file_load",
+      retryCount:
+        typeof error?.fileLoadRetryCount === "number"
+          ? error.fileLoadRetryCount
+          : typeof importRecord.retryCount === "number"
+            ? importRecord.retryCount
+            : 0,
     });
     await writeImportRecord(failedImport);
     await recordRegistryAuditEvent({
@@ -1243,7 +1419,7 @@ async function runRegistryImportJob(importId: string) {
       eventType: "import_failed",
       eventData: {
         errorSummary: failedImport.errorSummary,
-        failureStage: "upload",
+        failureStage: "file_load",
       },
     });
     throw error;

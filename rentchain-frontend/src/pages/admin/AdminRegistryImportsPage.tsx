@@ -10,6 +10,10 @@ function formatDate(value: string | null | undefined) {
   return Number.isNaN(date.getTime()) ? value : `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
 }
 
+function formatImportStage(stage: string | null | undefined) {
+  return String(stage || "--").replace(/_/g, " ");
+}
+
 function isImportActive(item: RegistryImportView) {
   return item.status === "queued" || item.status === "processing";
 }
@@ -158,7 +162,10 @@ export default function AdminRegistryImportsPage() {
               </div>
               {item.progress ? (
                 <div style={{ color: "#334155", fontSize: 14 }}>
-                  Stage: {item.progress.stage.replace(/_/g, " ")} · Progress: {item.progress.percent}% ({item.progress.rowsProcessed}/{item.progress.rowCount || item.rowCount || 0})
+                  Stage: {formatImportStage(item.progress.stage)} · Progress: {item.progress.percent}%
+                  {item.progress.rowCount || item.progress.rowsProcessed
+                    ? ` (${item.progress.rowsProcessed}/${item.progress.rowCount || item.rowCount || 0})`
+                    : ""}
                 </div>
               ) : null}
               <div style={{ color: "#475569", fontSize: 14 }}>
@@ -176,8 +183,11 @@ export default function AdminRegistryImportsPage() {
               <div style={{ color: "#64748b", fontSize: 13 }}>
                 Started: {formatDate(item.startedAt)} · Completed: {formatDate(item.completedAt)} · Heartbeat: {formatDate(item.lastHeartbeatAt)}
               </div>
+              {typeof item.retryCount === "number" && item.retryCount > 0 ? (
+                <div style={{ color: "#64748b", fontSize: 13 }}>File-load retries: {item.retryCount}</div>
+              ) : null}
               {item.failureStage ? (
-                <div style={{ color: "#991b1b", fontSize: 13 }}>Failure stage: {item.failureStage.replace(/_/g, " ")}</div>
+                <div style={{ color: "#991b1b", fontSize: 13 }}>Failure stage: {formatImportStage(item.failureStage)}</div>
               ) : null}
               {item.errorSummary ? <div style={{ color: "#b91c1c", fontSize: 14 }}>{item.errorSummary}</div> : null}
             </div>

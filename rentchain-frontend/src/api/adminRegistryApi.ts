@@ -36,13 +36,13 @@ export type RegistryImportView = {
   status: "uploaded" | "queued" | "processing" | "completed" | "failed" | "cancelled";
   processingMode?: "sync" | "async";
   progress?: {
-    stage: "queued" | "upload" | "parse" | "raw_write" | "normalize" | "matching" | "projection" | "completed" | "failed";
+    stage: "queued" | "file_load" | "parse" | "raw_write" | "normalize" | "matching" | "projection" | "completed" | "failed";
     rowsProcessed: number;
     rowCount: number;
     percent: number;
   } | null;
   lastHeartbeatAt?: string | null;
-  failureStage?: "queued" | "upload" | "parse" | "raw_write" | "normalize" | "matching" | "projection" | "completed" | "failed" | null;
+  failureStage?: "queued" | "file_load" | "parse" | "raw_write" | "normalize" | "matching" | "projection" | "completed" | "failed" | null;
   retryCount?: number;
   errorSummary: string | null;
   diagnostics: {

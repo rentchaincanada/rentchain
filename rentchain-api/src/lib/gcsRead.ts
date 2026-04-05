@@ -1,9 +1,11 @@
 import admin from "firebase-admin";
 
-export function getFileReadStream(opts: { bucket: string; path: string }) {
+export function getFileReadStream(opts: { bucket: string; path: string; validation?: boolean }) {
   const bucket = admin.storage().bucket(opts.bucket);
   const file = bucket.file(opts.path);
-  return file.createReadStream();
+  return file.createReadStream({
+    validation: opts.validation === false ? false : undefined,
+  });
 }
 
 export async function getFileMetadata(opts: { bucket: string; path: string }) {
