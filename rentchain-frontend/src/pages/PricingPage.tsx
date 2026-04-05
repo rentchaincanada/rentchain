@@ -19,6 +19,16 @@ import { track } from "@/lib/analytics";
 
 type PlanKey = PricingPlanKey;
 
+const pricingCardMotionStyle: React.CSSProperties = {
+  transition: "transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease",
+};
+
+const wrappingTextStyle: React.CSSProperties = {
+  whiteSpace: "normal",
+  overflowWrap: "anywhere",
+  wordBreak: "break-word",
+};
+
 const PLAN_FEATURES: Record<PlanKey, string[]> = Object.fromEntries(
   DEFAULT_PLANS.map((plan) => [plan.key, plan.features])
 ) as Record<PlanKey, string[]>;
@@ -152,36 +162,102 @@ const PricingPage: React.FC = () => {
             </div>
           </Card>
           {PLAN_ORDER.map((plan) => (
-            <Card key={plan} style={{ display: "grid", gap: spacing.sm, alignContent: "start", minWidth: 0 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing.xs, flexWrap: "wrap" }}>
-                <div style={{ fontWeight: 800, fontSize: 18 }}>{CANONICAL_TIER_MATRIX[plan].label}</div>
+            <Card
+              key={plan}
+              elevated={plan === "pro"}
+              style={{
+                display: "grid",
+                gap: 14,
+                alignContent: "start",
+                alignItems: "start",
+                minWidth: 0,
+                minHeight: "100%",
+                padding: 20,
+                border:
+                  plan === "pro" ? "1px solid rgba(37,99,235,0.28)" : "1px solid rgba(15,23,42,0.08)",
+                background:
+                  plan === "pro"
+                    ? "linear-gradient(180deg, rgba(37,99,235,0.06) 0%, #ffffff 28%)"
+                    : "#ffffff",
+                boxShadow:
+                  plan === "pro"
+                    ? "0 16px 34px rgba(37,99,235,0.12)"
+                    : "0 10px 24px rgba(15,23,42,0.06)",
+                ...pricingCardMotionStyle,
+              }}
+              onMouseEnter={(event) => {
+                event.currentTarget.style.transform = "translateY(-3px)";
+                event.currentTarget.style.boxShadow =
+                  plan === "pro"
+                    ? "0 22px 42px rgba(37,99,235,0.16)"
+                    : "0 16px 32px rgba(15,23,42,0.10)";
+              }}
+              onMouseLeave={(event) => {
+                event.currentTarget.style.transform = "translateY(0)";
+                event.currentTarget.style.boxShadow =
+                  plan === "pro"
+                    ? "0 16px 34px rgba(37,99,235,0.12)"
+                    : "0 10px 24px rgba(15,23,42,0.06)";
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: spacing.sm, flexWrap: "wrap" }}>
+                <div style={{ fontWeight: 800, fontSize: 20, lineHeight: 1.15, ...wrappingTextStyle }}>
+                  {CANONICAL_TIER_MATRIX[plan].label}
+                </div>
                 {plan === "pro" ? (
                   <span
                     style={{
-                      border: "1px solid rgba(37,99,235,0.35)",
+                      border: "1px solid rgba(37,99,235,0.4)",
                       borderRadius: 999,
-                      padding: "3px 10px",
+                      padding: "4px 12px",
                       fontSize: 11,
                       fontWeight: 700,
                       color: "#1d4ed8",
-                      background: "rgba(37,99,235,0.08)",
+                      background: "linear-gradient(180deg, rgba(37,99,235,0.14), rgba(37,99,235,0.08))",
                       maxWidth: "100%",
                       overflowWrap: "anywhere",
+                      letterSpacing: 0.2,
+                      boxShadow: "0 8px 20px rgba(37,99,235,0.12)",
                     }}
                   >
                     Most Popular for growing portfolios
                   </span>
                 ) : null}
               </div>
-              <div style={{ fontSize: 22, fontWeight: 800 }}>{renderPrice(plan)}</div>
-              <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.6 }}>{CANONICAL_TIER_MATRIX[plan].tagline}</div>
-              <ul style={{ margin: 0, paddingLeft: "1.1rem", color: text.muted, lineHeight: 1.7, minWidth: 0 }}>
+              <div style={{ fontSize: 26, fontWeight: 800, lineHeight: 1.05, ...wrappingTextStyle }}>{renderPrice(plan)}</div>
+              <div style={{ color: text.muted, fontSize: 14, lineHeight: 1.65, minHeight: 68, ...wrappingTextStyle }}>
+                {CANONICAL_TIER_MATRIX[plan].tagline}
+              </div>
+              <ul
+                style={{
+                  margin: 0,
+                  paddingLeft: "1.1rem",
+                  color: text.muted,
+                  lineHeight: 1.75,
+                  minWidth: 0,
+                  display: "grid",
+                  gap: 8,
+                }}
+              >
                 {PLAN_FEATURES[plan].map((feature) => (
-                  <li key={feature} style={{ overflowWrap: "anywhere" }}>{feature}</li>
+                  <li key={feature} style={{ fontSize: 14, ...wrappingTextStyle }}>
+                    {feature}
+                  </li>
                 ))}
               </ul>
               {plan === "starter" ? (
-                <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.6, overflowWrap: "anywhere" }}>
+                <div
+                  style={{
+                    color: text.muted,
+                    fontSize: 13,
+                    lineHeight: 1.65,
+                    padding: "10px 12px",
+                    borderRadius: 12,
+                    background: "rgba(15,23,42,0.03)",
+                    border: "1px solid rgba(15,23,42,0.06)",
+                    ...wrappingTextStyle,
+                  }}
+                >
                   Free stays usable for setup, manual tracking, and archive support. Starter adds richer applicant and day-to-day workflow tools.
                 </div>
               ) : null}
@@ -191,13 +267,23 @@ const PricingPage: React.FC = () => {
                     border: "1px solid rgba(37,99,235,0.28)",
                     borderRadius: 12,
                     background: "rgba(37,99,235,0.06)",
-                    padding: "10px 12px",
+                    padding: "12px 14px",
                     display: "grid",
-                    gap: 6,
+                    gap: 8,
                   }}
                 >
-                  <div style={{ fontWeight: 800 }}>Built for stronger reporting</div>
-                  <ul style={{ margin: 0, paddingLeft: "1rem", color: text.muted, fontSize: 13, lineHeight: 1.6 }}>
+                  <div style={{ fontWeight: 800, lineHeight: 1.25, ...wrappingTextStyle }}>Built for stronger reporting</div>
+                  <ul
+                    style={{
+                      margin: 0,
+                      paddingLeft: "1rem",
+                      color: text.muted,
+                      fontSize: 13,
+                      lineHeight: 1.65,
+                      display: "grid",
+                      gap: 6,
+                    }}
+                  >
                     <li style={{ overflowWrap: "anywhere" }}>CSV expense import</li>
                     <li style={{ overflowWrap: "anywhere" }}>CSV, spreadsheet, and PDF exports</li>
                     <li style={{ overflowWrap: "anywhere" }}>Compliance reports and screening review summaries</li>
@@ -210,25 +296,25 @@ const PricingPage: React.FC = () => {
                   style={{
                     border: "1px solid rgba(15,23,42,0.12)",
                     borderRadius: 12,
-                    padding: "10px 12px",
+                    padding: "12px 14px",
                     display: "grid",
-                    gap: 6,
+                    gap: 8,
                   }}
                 >
                   {TIER_MATRIX_AREAS.slice(0, 4).map((area) => (
-                    <div key={`${plan}-${area.key}`} style={{ color: text.muted, fontSize: 13, lineHeight: 1.5 }}>
+                    <div key={`${plan}-${area.key}`} style={{ color: text.muted, fontSize: 13, lineHeight: 1.55, ...wrappingTextStyle }}>
                       <strong style={{ color: text.secondary }}>{area.label}:</strong> {CANONICAL_TIER_MATRIX[plan].capabilities[area.key].summary}
                     </div>
                   ))}
                 </div>
               ) : null}
-              <div>
+              <div style={{ marginTop: "auto", paddingTop: 4 }}>
                 {plan === "free" ? (
-                  <Button type="button" variant="secondary" onClick={() => navigate("/dashboard")}>
+                  <Button type="button" variant="secondary" onClick={() => navigate("/dashboard")} style={{ width: "100%" }}>
                     Start Free
                   </Button>
                 ) : (
-                  <Button type="button" onClick={() => void handleUpgrade(plan)}>
+                  <Button type="button" onClick={() => void handleUpgrade(plan)} style={{ width: "100%" }}>
                     {ctaLabel(plan)}
                   </Button>
                 )}

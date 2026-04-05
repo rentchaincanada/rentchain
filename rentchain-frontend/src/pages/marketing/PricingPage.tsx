@@ -23,6 +23,14 @@ const TIMELINE_MARKERS: Record<string, string> = {
   X: "❌",
   check: "✅",
 };
+const pricingCardMotionStyle: React.CSSProperties = {
+  transition: "transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease",
+};
+const wrappingTextStyle: React.CSSProperties = {
+  whiteSpace: "normal",
+  overflowWrap: "anywhere",
+  wordBreak: "break-word",
+};
 
 function normalizePlan(input?: string | null): PlanKey {
   const raw = String(input || "").trim().toLowerCase();
@@ -233,33 +241,87 @@ const PricingPage: React.FC = () => {
           </Card>
 
           {PLAN_ORDER.map((plan) => (
-            <Card key={plan} style={{ display: "grid", gap: spacing.sm, width: "100%", minWidth: 0 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing.xs, flexWrap: "wrap" }}>
-                <div style={{ fontSize: 20, fontWeight: 800 }}>{copy.pricing.tierLabels[plan]}</div>
+            <Card
+              key={plan}
+              elevated={plan === "pro"}
+              style={{
+                display: "grid",
+                gap: 14,
+                width: "100%",
+                minWidth: 0,
+                minHeight: "100%",
+                padding: isMobile ? 18 : 22,
+                border:
+                  plan === "pro" ? "1px solid rgba(37,99,235,0.28)" : "1px solid rgba(15,23,42,0.08)",
+                background:
+                  plan === "pro"
+                    ? "linear-gradient(180deg, rgba(37,99,235,0.06) 0%, #ffffff 28%)"
+                    : "#ffffff",
+                boxShadow:
+                  plan === "pro"
+                    ? "0 16px 34px rgba(37,99,235,0.12)"
+                    : "0 10px 24px rgba(15,23,42,0.06)",
+                ...pricingCardMotionStyle,
+              }}
+              onMouseEnter={(event) => {
+                event.currentTarget.style.transform = "translateY(-3px)";
+                event.currentTarget.style.boxShadow =
+                  plan === "pro"
+                    ? "0 22px 42px rgba(37,99,235,0.16)"
+                    : "0 16px 32px rgba(15,23,42,0.10)";
+              }}
+              onMouseLeave={(event) => {
+                event.currentTarget.style.transform = "translateY(0)";
+                event.currentTarget.style.boxShadow =
+                  plan === "pro"
+                    ? "0 16px 34px rgba(37,99,235,0.12)"
+                    : "0 10px 24px rgba(15,23,42,0.06)";
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: spacing.sm, flexWrap: "wrap" }}>
+                <div style={{ fontSize: 21, fontWeight: 800, lineHeight: 1.15, ...wrappingTextStyle }}>
+                  {copy.pricing.tierLabels[plan]}
+                </div>
                 {copy.pricing.tierBadges[plan] ? (
                   <span
                     style={{
-                      border: "1px solid rgba(15,23,42,0.18)",
+                      border:
+                        plan === "pro" ? "1px solid rgba(37,99,235,0.4)" : "1px solid rgba(15,23,42,0.18)",
                       borderRadius: 999,
-                      padding: "2px 10px",
-                      fontSize: "0.75rem",
+                      padding: "4px 12px",
+                      fontSize: "0.74rem",
                       fontWeight: 700,
-                      color: text.primary,
-                      background: "rgba(15,23,42,0.06)",
-                      whiteSpace: "nowrap",
+                      color: plan === "pro" ? "#1d4ed8" : text.primary,
+                      background:
+                        plan === "pro"
+                          ? "linear-gradient(180deg, rgba(37,99,235,0.14), rgba(37,99,235,0.08))"
+                          : "rgba(15,23,42,0.06)",
+                      ...wrappingTextStyle,
                     }}
                   >
                     {copy.pricing.tierBadges[plan]}
                   </span>
                 ) : null}
               </div>
-              <div style={{ color: text.muted, fontSize: "0.92rem", minHeight: 40 }}>
+              <div style={{ color: text.muted, fontSize: "0.94rem", lineHeight: 1.65, minHeight: isMobile ? "auto" : 62, ...wrappingTextStyle }}>
                 {CANONICAL_TIER_MATRIX[plan].tagline}
               </div>
-              <div style={{ fontSize: 22, fontWeight: 800 }}>{renderPrice(plan)}</div>
-              <ul style={{ margin: 0, paddingLeft: "1.1rem", color: text.muted, lineHeight: 1.7 }}>
+              <div style={{ fontSize: 28, fontWeight: 800, lineHeight: 1.05, ...wrappingTextStyle }}>{renderPrice(plan)}</div>
+              <ul
+                style={{
+                  margin: 0,
+                  paddingLeft: "1.1rem",
+                  color: text.muted,
+                  lineHeight: 1.75,
+                  display: "grid",
+                  gap: 8,
+                  minWidth: 0,
+                }}
+              >
                 {CANONICAL_TIER_MATRIX[plan].features.map((feature) => (
-                  <li key={`${plan}-${feature}`}>{feature}</li>
+                  <li key={`${plan}-${feature}`} style={{ fontSize: "0.92rem", ...wrappingTextStyle }}>
+                    {feature}
+                  </li>
                 ))}
               </ul>
               {plan === "pro" || plan === "elite" ? (
@@ -268,30 +330,48 @@ const PricingPage: React.FC = () => {
                     border: "1px solid rgba(37,99,235,0.28)",
                     borderRadius: 12,
                     background: "rgba(37,99,235,0.06)",
-                    padding: "10px 12px",
+                    padding: "12px 14px",
                     display: "grid",
-                    gap: 6,
+                    gap: 8,
                   }}
                 >
-                  <div style={{ fontWeight: 700, color: text.primary }}>{copy.pricing.timelineSection.title}</div>
-                  <div style={{ color: text.muted, fontSize: "0.88rem" }}>{copy.pricing.timelineSection.description}</div>
-                  <ul style={{ margin: 0, paddingLeft: "1rem", color: text.muted, fontSize: "0.85rem", lineHeight: 1.6 }}>
+                  <div style={{ fontWeight: 700, color: text.primary, lineHeight: 1.25, ...wrappingTextStyle }}>
+                    {copy.pricing.timelineSection.title}
+                  </div>
+                  <div style={{ color: text.muted, fontSize: "0.89rem", lineHeight: 1.6, ...wrappingTextStyle }}>
+                    {copy.pricing.timelineSection.description}
+                  </div>
+                  <ul
+                    style={{
+                      margin: 0,
+                      paddingLeft: "1rem",
+                      color: text.muted,
+                      fontSize: "0.85rem",
+                      lineHeight: 1.65,
+                      display: "grid",
+                      gap: 6,
+                    }}
+                  >
                     {copy.pricing.timelineSection.bullets.map((bullet) => (
-                      <li key={`${plan}-${bullet}`}>{bullet}</li>
+                      <li key={`${plan}-${bullet}`} style={wrappingTextStyle}>
+                        {bullet}
+                      </li>
                     ))}
                   </ul>
                   {plan === "pro" ? (
-                    <div style={{ color: text.muted, fontSize: "0.82rem" }}>{copy.pricing.timelineSection.proofLine}</div>
+                    <div style={{ color: text.muted, fontSize: "0.82rem", lineHeight: 1.55, ...wrappingTextStyle }}>
+                      {copy.pricing.timelineSection.proofLine}
+                    </div>
                   ) : null}
                 </div>
               ) : null}
-              <div style={{ marginTop: spacing.sm }}>
+              <div style={{ marginTop: "auto", paddingTop: spacing.sm }}>
                 {plan === "free" ? (
-                  <Button type="button" onClick={handleStartFree}>
+                  <Button type="button" onClick={handleStartFree} style={{ width: "100%" }}>
                     {copy.pricing.ctaStartFree}
                   </Button>
                 ) : (
-                  <Button type="button" onClick={() => handleUpgrade(plan)}>
+                  <Button type="button" onClick={() => handleUpgrade(plan)} style={{ width: "100%" }}>
                     {copy.pricing.ctaByTier?.[plan] || copy.pricing.ctaUpgrade}
                   </Button>
                 )}
