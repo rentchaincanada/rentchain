@@ -78,6 +78,37 @@ export type HalifaxSubmissionDeclarations = {
   informationAccurateConfirmed: boolean;
 };
 
+export type HalifaxSubmissionConsent = {
+  preparationAuthorized: boolean;
+  preparationAuthorizedAt: string | null;
+  preparationAuthorizedBy: string | null;
+  declarationsConfirmed: boolean;
+  declarationsConfirmedAt: string | null;
+  declarationsConfirmedBy: string | null;
+  finalReviewConfirmed: boolean;
+  finalReviewConfirmedAt: string | null;
+};
+
+export type HalifaxFieldProvenanceStatus =
+  | "prefilled_from_rentchain"
+  | "provided_by_user"
+  | "needs_confirmation"
+  | "missing";
+
+export type HalifaxFieldMetaEntry = {
+  source:
+    | "rentchain_property"
+    | "rentchain_profile"
+    | "rentchain_account"
+    | "derived"
+    | "manual"
+    | "unknown";
+  status: HalifaxFieldProvenanceStatus;
+  confirmed: boolean;
+};
+
+export type HalifaxSubmissionFieldMeta = Record<string, HalifaxFieldMetaEntry>;
+
 export type HalifaxValidationItem = {
   path: string;
   label: string;
@@ -86,9 +117,11 @@ export type HalifaxValidationItem = {
 
 export type HalifaxSubmissionValidation = {
   missingRequiredFields: HalifaxValidationItem[];
+  missingConsentItems: HalifaxValidationItem[];
   warnings: string[];
   readinessScore: number;
   completionPercent: number;
+  exportReady: boolean;
 };
 
 export type HalifaxSubmissionDraft = {
@@ -103,7 +136,9 @@ export type HalifaxSubmissionDraft = {
   };
   status: HalifaxSubmissionStatus;
   fieldValues: HalifaxSubmissionFieldValues;
+  fieldMeta: HalifaxSubmissionFieldMeta;
   declarations: HalifaxSubmissionDeclarations;
+  consent: HalifaxSubmissionConsent;
   validation: HalifaxSubmissionValidation;
   exportedAt: string | null;
   lastReviewedAt: string | null;
@@ -356,7 +391,9 @@ type SaveInput = {
   actorUserId: string | null;
   actorEmail?: string | null;
   fieldValues?: Partial<HalifaxSubmissionFieldValues>;
+  fieldMeta?: Partial<HalifaxSubmissionFieldMeta>;
   declarations?: Partial<HalifaxSubmissionDeclarations>;
+  consent?: Partial<HalifaxSubmissionConsent>;
   status?: HalifaxSubmissionStatus | null;
 };
 
@@ -603,9 +640,157 @@ function buildOwnerPrefill(
   );
 }
 
+function buildInitialConsent(persisted?: Partial<HalifaxSubmissionDraft> | null): HalifaxSubmissionConsent {
+  const consent = (persisted?.consent || {}) as Partial<HalifaxSubmissionConsent>;
+  return {
+    preparationAuthorized: Boolean(consent.preparationAuthorized),
+    preparationAuthorizedAt: asString(consent.preparationAuthorizedAt) || null,
+    preparationAuthorizedBy: asString(consent.preparationAuthorizedBy) || null,
+    declarationsConfirmed: Boolean(consent.declarationsConfirmed),
+    declarationsConfirmedAt: asString(consent.declarationsConfirmedAt) || null,
+    declarationsConfirmedBy: asString(consent.declarationsConfirmedBy) || null,
+    finalReviewConfirmed: Boolean(consent.finalReviewConfirmed),
+    finalReviewConfirmedAt: asString(consent.finalReviewConfirmedAt) || null,
+  };
+}
+
+function deriveFieldMeta(
+  fieldValues: HalifaxSubmissionFieldValues,
+  declarations: HalifaxSubmissionDeclarations,
+  persisted?: Partial<HalifaxSubmissionDraft> | null
+): HalifaxSubmissionFieldMeta {
+  const previous = ((persisted?.fieldMeta as HalifaxSubmissionFieldMeta | undefined) || {}) as HalifaxSubmissionFieldMeta;
+  const next: HalifaxSubmissionFieldMeta = {
+    "fieldValues.siteAddress.line1": {
+      source: fieldValues.siteAddress.line1 ? "rentchain_property" : "unknown",
+      status: fieldValues.siteAddress.line1 ? "needs_confirmation" : "missing",
+      confirmed: Boolean(previous["fieldValues.siteAddress.line1"]?.confirmed),
+    },
+    "fieldValues.owner.name": {
+      source: fieldValues.owner.name ? "rentchain_profile" : "unknown",
+      status: fieldValues.owner.name ? "needs_confirmation" : "missing",
+      confirmed: Boolean(previous["fieldValues.owner.name"]?.confirmed),
+    },
+    "fieldValues.owner.email": {
+      source: fieldValues.owner.email ? "rentchain_profile" : "unknown",
+      status: fieldValues.owner.email ? "needs_confirmation" : "missing",
+      confirmed: Boolean(previous["fieldValues.owner.email"]?.confirmed),
+    },
+    "fieldValues.owner.phone": {
+      source: fieldValues.owner.phone ? "rentchain_profile" : "unknown",
+      status: fieldValues.owner.phone ? "needs_confirmation" : "missing",
+      confirmed: Boolean(previous["fieldValues.owner.phone"]?.confirmed),
+    },
+    "fieldValues.propertyIdentifierPid": {
+      source: fieldValues.propertyIdentifierPid ? "rentchain_property" : "unknown",
+      status: fieldValues.propertyIdentifierPid ? "needs_confirmation" : "missing",
+      confirmed: Boolean(previous["fieldValues.propertyIdentifierPid"]?.confirmed),
+    },
+    "fieldValues.buildings[0].buildingType": {
+      source: fieldValues.buildings[0]?.buildingType ? "manual" : "unknown",
+      status: fieldValues.buildings[0]?.buildingType ? "provided_by_user" : "missing",
+      confirmed: Boolean(previous["fieldValues.buildings[0].buildingType"]?.confirmed) || Boolean(fieldValues.buildings[0]?.buildingType),
+    },
+    "fieldValues.buildings[0].residentialUnitsRented": {
+      source: fieldValues.buildings[0]?.residentialUnitsRented != null ? "manual" : "unknown",
+      status: fieldValues.buildings[0]?.residentialUnitsRented != null ? "provided_by_user" : "missing",
+      confirmed:
+        Boolean(previous["fieldValues.buildings[0].residentialUnitsRented"]?.confirmed) ||
+        fieldValues.buildings[0]?.residentialUnitsRented != null,
+    },
+    "fieldValues.buildings[0].yearConstructed": {
+      source: fieldValues.buildings[0]?.yearConstructed != null ? "manual" : "unknown",
+      status: fieldValues.buildings[0]?.yearConstructed != null ? "provided_by_user" : "missing",
+      confirmed:
+        Boolean(previous["fieldValues.buildings[0].yearConstructed"]?.confirmed) ||
+        fieldValues.buildings[0]?.yearConstructed != null,
+    },
+    "fieldValues.buildings[0].fireLifeSafetySystems": {
+      source: fieldValues.buildings[0]?.fireLifeSafetySystems?.length ? "manual" : "unknown",
+      status: fieldValues.buildings[0]?.fireLifeSafetySystems?.length ? "provided_by_user" : "missing",
+      confirmed:
+        Boolean(previous["fieldValues.buildings[0].fireLifeSafetySystems"]?.confirmed) ||
+        Boolean(fieldValues.buildings[0]?.fireLifeSafetySystems?.length),
+    },
+    "declarations.acknowledged": {
+      source: declarations.acknowledged ? "manual" : previous["declarations.acknowledged"]?.source || "unknown",
+      status: declarations.acknowledged ? "provided_by_user" : "missing",
+      confirmed: Boolean(previous["declarations.acknowledged"]?.confirmed) || declarations.acknowledged,
+    },
+  };
+  return { ...previous, ...next };
+}
+
+function applyFieldMetaOverrides(
+  current: HalifaxSubmissionFieldMeta,
+  overrides?: Partial<HalifaxSubmissionFieldMeta>
+): HalifaxSubmissionFieldMeta {
+  if (!overrides) return current;
+  const next = { ...current };
+  for (const [key, value] of Object.entries(overrides)) {
+    if (!value) continue;
+    next[key] = {
+      source: value.source || current[key]?.source || "unknown",
+      status: value.status || current[key]?.status || "missing",
+      confirmed: value.confirmed ?? current[key]?.confirmed ?? false,
+    };
+  }
+  return next;
+}
+
+function declarationsAllConfirmed(declarations: HalifaxSubmissionDeclarations) {
+  return Boolean(
+    declarations.acknowledged &&
+      declarations.maintenancePlanConfirmed &&
+      declarations.ownerDeclarationConfirmed &&
+      declarations.informationAccurateConfirmed
+  );
+}
+
+function evolveConsent(input: {
+  current: HalifaxSubmissionConsent;
+  incoming?: Partial<HalifaxSubmissionConsent>;
+  declarations: HalifaxSubmissionDeclarations;
+  actor: string | null;
+}): HalifaxSubmissionConsent {
+  const { current, incoming, declarations, actor } = input;
+  const now = nowIso();
+  const nextPreparationAuthorized =
+    incoming?.preparationAuthorized ?? current.preparationAuthorized;
+  const nextDeclarationsConfirmed =
+    declarationsAllConfirmed(declarations) &&
+    (incoming?.declarationsConfirmed ?? current.declarationsConfirmed ?? true);
+
+  return {
+    preparationAuthorized: Boolean(nextPreparationAuthorized),
+    preparationAuthorizedAt:
+      nextPreparationAuthorized
+        ? current.preparationAuthorizedAt || asString(incoming?.preparationAuthorizedAt) || now
+        : null,
+    preparationAuthorizedBy:
+      nextPreparationAuthorized
+        ? current.preparationAuthorizedBy || asString(incoming?.preparationAuthorizedBy) || actor
+        : null,
+    declarationsConfirmed: Boolean(nextDeclarationsConfirmed),
+    declarationsConfirmedAt:
+      nextDeclarationsConfirmed
+        ? current.declarationsConfirmedAt || asString(incoming?.declarationsConfirmedAt) || now
+        : null,
+    declarationsConfirmedBy:
+      nextDeclarationsConfirmed
+        ? current.declarationsConfirmedBy || asString(incoming?.declarationsConfirmedBy) || actor
+        : null,
+    finalReviewConfirmed: Boolean(incoming?.finalReviewConfirmed ?? current.finalReviewConfirmed),
+    finalReviewConfirmedAt:
+      incoming?.finalReviewConfirmed || current.finalReviewConfirmed
+        ? current.finalReviewConfirmedAt || asString(incoming?.finalReviewConfirmedAt) || now
+        : null,
+  };
+}
+
 export function buildHalifaxRegistrySubmissionPrefill(
   context: SubmissionContext
-): Pick<HalifaxSubmissionDraft, "fieldValues" | "declarations"> {
+): Pick<HalifaxSubmissionDraft, "fieldValues" | "declarations" | "fieldMeta" | "consent"> {
   const property = context.property || {};
   const persistedFieldValues = (context.persisted?.fieldValues || {}) as Partial<HalifaxSubmissionFieldValues>;
   const persistedDeclarations = (context.persisted?.declarations || {}) as Partial<HalifaxSubmissionDeclarations>;
@@ -640,27 +825,34 @@ export function buildHalifaxRegistrySubmissionPrefill(
       normalizeBuilding(entry, baseFieldValues.buildings[index] || buildDefaultBuilding(property))
     );
 
+  const fieldValues = {
+    siteAddress: normalizeAddress(persistedFieldValues.siteAddress, baseFieldValues.siteAddress),
+    propertyIdentifierPid:
+      asString(persistedFieldValues.propertyIdentifierPid) || baseFieldValues.propertyIdentifierPid || null,
+    owner: normalizeContact(persistedFieldValues.owner, baseFieldValues.owner),
+    primaryContactSameAsOwner:
+      asBooleanOrNull(persistedFieldValues.primaryContactSameAsOwner) ?? baseFieldValues.primaryContactSameAsOwner,
+    primaryContact: normalizeContact(persistedFieldValues.primaryContact, baseFieldValues.primaryContact),
+    moreThanFiveBuildings:
+      asBooleanOrNull(persistedFieldValues.moreThanFiveBuildings) ?? baseFieldValues.moreThanFiveBuildings,
+    buildings: mergedBuildings.length > 0 ? mergedBuildings : [buildDefaultBuilding(property)],
+    propertyDescription:
+      asString(persistedFieldValues.propertyDescription) || baseFieldValues.propertyDescription || null,
+  };
+  const declarations = normalizeDeclarations(persistedDeclarations, {
+    acknowledged: false,
+    maintenancePlanConfirmed: false,
+    ownerDeclarationConfirmed: false,
+    informationAccurateConfirmed: false,
+  });
+
   return {
     fieldValues: {
-      siteAddress: normalizeAddress(persistedFieldValues.siteAddress, baseFieldValues.siteAddress),
-      propertyIdentifierPid:
-        asString(persistedFieldValues.propertyIdentifierPid) || baseFieldValues.propertyIdentifierPid || null,
-      owner: normalizeContact(persistedFieldValues.owner, baseFieldValues.owner),
-      primaryContactSameAsOwner:
-        asBooleanOrNull(persistedFieldValues.primaryContactSameAsOwner) ?? baseFieldValues.primaryContactSameAsOwner,
-      primaryContact: normalizeContact(persistedFieldValues.primaryContact, baseFieldValues.primaryContact),
-      moreThanFiveBuildings:
-        asBooleanOrNull(persistedFieldValues.moreThanFiveBuildings) ?? baseFieldValues.moreThanFiveBuildings,
-      buildings: mergedBuildings.length > 0 ? mergedBuildings : [buildDefaultBuilding(property)],
-      propertyDescription:
-        asString(persistedFieldValues.propertyDescription) || baseFieldValues.propertyDescription || null,
+      ...fieldValues,
     },
-    declarations: normalizeDeclarations(persistedDeclarations, {
-      acknowledged: false,
-      maintenancePlanConfirmed: false,
-      ownerDeclarationConfirmed: false,
-      informationAccurateConfirmed: false,
-    }),
+    fieldMeta: deriveFieldMeta(fieldValues, declarations, context.persisted),
+    consent: buildInitialConsent(context.persisted),
+    declarations,
   };
 }
 
@@ -680,10 +872,12 @@ function addressMissing(address: HalifaxAddress, requireProvince = false) {
 
 export function validateHalifaxRegistrySubmissionDraft(input: {
   fieldValues: HalifaxSubmissionFieldValues;
+  consent: HalifaxSubmissionConsent;
   declarations: HalifaxSubmissionDeclarations;
 }): HalifaxSubmissionValidation {
-  const { fieldValues, declarations } = input;
+  const { fieldValues, declarations, consent } = input;
   const missingRequiredFields: HalifaxValidationItem[] = [];
+  const missingConsentItems: HalifaxValidationItem[] = [];
 
   pushMissing(
     missingRequiredFields,
@@ -828,6 +1022,13 @@ export function validateHalifaxRegistrySubmissionDraft(input: {
   });
 
   pushMissing(
+    missingConsentItems,
+    "consent.preparationAuthorized",
+    "Preparation consent authorization",
+    "Consent & Use Notice",
+    !consent.preparationAuthorized
+  );
+  pushMissing(
     missingRequiredFields,
     "declarations.acknowledged",
     "Declaration acknowledgement",
@@ -855,6 +1056,13 @@ export function validateHalifaxRegistrySubmissionDraft(input: {
     "Declarations",
     !declarations.informationAccurateConfirmed
   );
+  pushMissing(
+    missingConsentItems,
+    "consent.declarationsConfirmed",
+    "Declaration confirmation",
+    "Declarations",
+    !consent.declarationsConfirmed
+  );
 
   const warnings: string[] = [];
   if (fieldValues.moreThanFiveBuildings === true) {
@@ -873,16 +1081,20 @@ export function validateHalifaxRegistrySubmissionDraft(input: {
     }
   });
 
-  const trackedFields = 8 + (fieldValues.primaryContactSameAsOwner === false ? 4 : 0) + (fieldValues.buildings || []).length * 6 + 4;
-  const completedFields = Math.max(0, trackedFields - missingRequiredFields.length);
+  const trackedFields =
+    8 + (fieldValues.primaryContactSameAsOwner === false ? 4 : 0) + (fieldValues.buildings || []).length * 6 + 6;
+  const completedFields = Math.max(0, trackedFields - missingRequiredFields.length - missingConsentItems.length);
   const completionPercent = trackedFields > 0 ? Math.round((completedFields / trackedFields) * 100) : 0;
-  const readinessScore = missingRequiredFields.length === 0 ? Math.max(80, completionPercent) : completionPercent;
+  const exportReady = missingRequiredFields.length === 0 && missingConsentItems.length === 0;
+  const readinessScore = exportReady ? Math.max(85, completionPercent) : completionPercent;
 
   return {
     missingRequiredFields,
+    missingConsentItems,
     warnings,
     readinessScore,
     completionPercent,
+    exportReady,
   };
 }
 
@@ -890,10 +1102,11 @@ function determineStatus(
   validation: HalifaxSubmissionValidation,
   fieldValues: HalifaxSubmissionFieldValues,
   declarations: HalifaxSubmissionDeclarations,
+  consent: HalifaxSubmissionConsent,
   previousStatus?: HalifaxSubmissionStatus | null
 ): HalifaxSubmissionStatus {
   if (previousStatus === "submitted_external") return "submitted_external";
-  if (previousStatus === "exported" && validation.missingRequiredFields.length === 0) return "exported";
+  if (previousStatus === "exported" && validation.exportReady) return "exported";
   const hasAnyData =
     Boolean(fieldValues.siteAddress.line1) ||
     Boolean(fieldValues.owner.email) ||
@@ -902,9 +1115,10 @@ function determineStatus(
     declarations.acknowledged ||
     declarations.maintenancePlanConfirmed ||
     declarations.ownerDeclarationConfirmed ||
-    declarations.informationAccurateConfirmed;
+    declarations.informationAccurateConfirmed ||
+    consent.preparationAuthorized;
   if (!hasAnyData) return "not_started";
-  if (validation.missingRequiredFields.length === 0) return "ready";
+  if (validation.exportReady) return "ready";
   return validation.warnings.length > 3 ? "needs_review" : "draft";
 }
 
@@ -915,6 +1129,16 @@ export function buildHalifaxRegistrySubmissionExportPayload(input: {
   return {
     sourceKey: HALIFAX_REGISTRY_SUBMISSION_SOURCE_KEY,
     generatedAt: nowIso(),
+    disclaimer:
+      "This file is a preparation draft generated by RentChain from user-provided and stored property/account information. It is intended for review before municipal use and is not a direct Halifax filing.",
+    exportMeta: {
+      preparedBy: "RentChain",
+      preparedAt: nowIso(),
+      propertyId: input.property?.id || input.submission.propertyId,
+      sourceKey: HALIFAX_REGISTRY_SUBMISSION_SOURCE_KEY,
+      consentCapturedAt: input.submission.consent.preparationAuthorizedAt || null,
+      declarationsConfirmedAt: input.submission.consent.declarationsConfirmedAt || null,
+    },
     property: {
       propertyId: input.property?.id || input.submission.propertyId,
       propertyName: firstString(input.property?.name, input.property?.addressLine1) || "Property",
@@ -959,8 +1183,30 @@ export function buildHalifaxRegistrySubmissionExportPayload(input: {
       },
       declarations: input.submission.declarations,
     },
+    consent: input.submission.consent,
+    fieldMeta: input.submission.fieldMeta,
     validation: input.submission.validation,
   };
+}
+
+async function appendSubmissionAuditEvent(input: {
+  propertyId: string;
+  actorUserId: string | null;
+  sourceKey: string;
+  action:
+    | "registry_submission_preparation_authorized"
+    | "registry_submission_draft_saved"
+    | "registry_submission_declarations_confirmed"
+    | "registry_submission_exported";
+}) {
+  await db.collection("propertyRegistrySubmissionAudit").doc().set({
+    propertyId: input.propertyId,
+    actorUserId: input.actorUserId,
+    sourceKey: input.sourceKey,
+    action: input.action,
+    createdAt: nowIso(),
+    createdAtServer: FieldValue.serverTimestamp(),
+  });
 }
 
 export async function loadHalifaxRegistrySubmissionDraft(input: {
@@ -1004,9 +1250,17 @@ export async function loadHalifaxRegistrySubmissionDraft(input: {
       province: "NS",
       municipality: "Halifax",
     },
-    status: determineStatus(validation, prefilled.fieldValues, prefilled.declarations, persisted?.status || null),
+    status: determineStatus(
+      validation,
+      prefilled.fieldValues,
+      prefilled.declarations,
+      prefilled.consent,
+      persisted?.status || null
+    ),
     fieldValues: prefilled.fieldValues,
+    fieldMeta: prefilled.fieldMeta,
     declarations: prefilled.declarations,
+    consent: prefilled.consent,
     validation,
     exportedAt: asString(persisted?.exportedAt) || null,
     lastReviewedAt: asString(persisted?.lastReviewedAt) || null,
@@ -1050,17 +1304,36 @@ export async function saveHalifaxRegistrySubmissionDraft(input: SaveInput): Prom
       asString(input.fieldValues?.propertyDescription) || current.fieldValues.propertyDescription || null,
   };
   const mergedDeclarations = normalizeDeclarations(input.declarations, current.declarations);
+  const mergedFieldMeta = applyFieldMetaOverrides(
+    deriveFieldMeta(
+      mergedFieldValues,
+      mergedDeclarations,
+      { ...current, fieldMeta: current.fieldMeta } as Partial<HalifaxSubmissionDraft>
+    ),
+    input.fieldMeta
+  );
+  const mergedConsent = evolveConsent({
+    current: current.consent,
+    incoming: input.consent,
+    declarations: mergedDeclarations,
+    actor: asString(input.actorUserId || input.actorEmail),
+  });
   const validation = validateHalifaxRegistrySubmissionDraft({
     fieldValues: mergedFieldValues,
+    consent: mergedConsent,
     declarations: mergedDeclarations,
   });
   const updatedAt = nowIso();
   const next: HalifaxSubmissionDraft = {
     ...current,
     fieldValues: mergedFieldValues,
+    fieldMeta: mergedFieldMeta,
     declarations: mergedDeclarations,
+    consent: mergedConsent,
     validation,
-    status: input.status || determineStatus(validation, mergedFieldValues, mergedDeclarations, current.status),
+    status:
+      input.status ||
+      determineStatus(validation, mergedFieldValues, mergedDeclarations, mergedConsent, current.status),
     updatedAt,
     updatedBy: asString(input.actorUserId || input.actorEmail) || null,
     lastReviewedAt: updatedAt,
@@ -1074,7 +1347,9 @@ export async function saveHalifaxRegistrySubmissionDraft(input: SaveInput): Prom
       jurisdiction: current.jurisdiction,
       status: next.status,
       fieldValues: next.fieldValues,
+      fieldMeta: next.fieldMeta,
       declarations: next.declarations,
+      consent: next.consent,
       validation: next.validation,
       exportedAt: next.exportedAt,
       lastReviewedAt: next.lastReviewedAt,
@@ -1085,6 +1360,29 @@ export async function saveHalifaxRegistrySubmissionDraft(input: SaveInput): Prom
     },
     { merge: true }
   );
+
+  if (!current.consent.preparationAuthorized && next.consent.preparationAuthorized) {
+    await appendSubmissionAuditEvent({
+      propertyId: current.propertyId,
+      actorUserId: asString(input.actorUserId),
+      sourceKey: current.sourceKey,
+      action: "registry_submission_preparation_authorized",
+    });
+  }
+  if (!current.consent.declarationsConfirmed && next.consent.declarationsConfirmed) {
+    await appendSubmissionAuditEvent({
+      propertyId: current.propertyId,
+      actorUserId: asString(input.actorUserId),
+      sourceKey: current.sourceKey,
+      action: "registry_submission_declarations_confirmed",
+    });
+  }
+  await appendSubmissionAuditEvent({
+    propertyId: current.propertyId,
+    actorUserId: asString(input.actorUserId),
+    sourceKey: current.sourceKey,
+    action: "registry_submission_draft_saved",
+  });
 
   return next;
 }
@@ -1100,13 +1398,21 @@ export async function markHalifaxRegistrySubmissionExported(input: {
     landlordId: input.landlordId,
   });
   const exportedAt = nowIso();
-  const nextStatus =
-    current.validation.missingRequiredFields.length === 0 ? "exported" : determineStatus(current.validation, current.fieldValues, current.declarations, current.status);
+  if (!current.validation.exportReady) {
+    throw new Error("Halifax submission draft is not ready for export yet.");
+  }
+  const nextStatus: HalifaxSubmissionStatus = "exported";
+  const nextConsent = {
+    ...current.consent,
+    finalReviewConfirmed: true,
+    finalReviewConfirmedAt: current.consent.finalReviewConfirmedAt || exportedAt,
+  };
 
   await db.collection(HALIFAX_REGISTRY_SUBMISSION_COLLECTION).doc(current.id).set(
     {
       exportedAt,
       status: nextStatus,
+      consent: nextConsent,
       updatedAt: exportedAt,
       updatedAtServer: FieldValue.serverTimestamp(),
       updatedBy: asString(input.actorUserId || input.actorEmail) || null,
@@ -1114,9 +1420,17 @@ export async function markHalifaxRegistrySubmissionExported(input: {
     { merge: true }
   );
 
+  await appendSubmissionAuditEvent({
+    propertyId: current.propertyId,
+    actorUserId: asString(input.actorUserId),
+    sourceKey: current.sourceKey,
+    action: "registry_submission_exported",
+  });
+
   return {
     ...current,
     status: nextStatus,
+    consent: nextConsent,
     exportedAt,
     updatedAt: exportedAt,
     updatedBy: asString(input.actorUserId || input.actorEmail) || null,

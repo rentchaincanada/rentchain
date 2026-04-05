@@ -747,7 +747,9 @@ router.put("/:propertyId/registry-submission/halifax", async (req: any, res) => 
       actorUserId: String(req.user?.id || "").trim() || null,
       actorEmail: String(req.user?.email || "").trim() || null,
       fieldValues: req.body?.fieldValues || {},
+      fieldMeta: req.body?.fieldMeta || {},
       declarations: req.body?.declarations || {},
+      consent: req.body?.consent || {},
       status: req.body?.status || null,
     });
 
@@ -800,6 +802,13 @@ router.get("/:propertyId/registry-submission/halifax/export", async (req: any, r
     });
   } catch (err: any) {
     console.error("[GET /api/properties/:propertyId/registry-submission/halifax/export] failed", err);
+    if (String(err?.message || "").toLowerCase().includes("not ready for export")) {
+      return res.status(400).json({
+        ok: false,
+        error: "registry_submission_not_ready",
+        message: err?.message || "Halifax submission draft is not ready for export.",
+      });
+    }
     return res.status(500).json({
       ok: false,
       error: "registry_submission_export_failed",

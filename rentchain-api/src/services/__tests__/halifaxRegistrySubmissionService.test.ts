@@ -64,10 +64,12 @@ describe("halifaxRegistrySubmissionService", () => {
     const validation = validateHalifaxRegistrySubmissionDraft(prefilled);
     expect(validation.missingRequiredFields.some((item) => item.path === "fieldValues.owner.phone")).toBe(true);
     expect(validation.missingRequiredFields.some((item) => item.path === "fieldValues.primaryContactSameAsOwner")).toBe(true);
+    expect(validation.missingConsentItems.some((item) => item.path === "consent.preparationAuthorized")).toBe(true);
+    expect(validation.exportReady).toBe(false);
     expect(validation.warnings.some((warning) => warning.includes("up to five buildings"))).toBe(true);
   });
 
-  it("builds an export payload with grouped Halifax sections", () => {
+  it("builds an export payload with grouped Halifax sections and draft disclaimer", () => {
     const prefilled = buildHalifaxRegistrySubmissionPrefill({
       property,
       landlordProfile,
@@ -106,6 +108,16 @@ describe("halifaxRegistrySubmissionService", () => {
           ownerDeclarationConfirmed: true,
           informationAccurateConfirmed: true,
         },
+        consent: {
+          preparationAuthorized: true,
+          preparationAuthorizedAt: "2026-04-05T00:00:00.000Z",
+          preparationAuthorizedBy: "landlord-1",
+          declarationsConfirmed: true,
+          declarationsConfirmedAt: "2026-04-05T00:05:00.000Z",
+          declarationsConfirmedBy: "landlord-1",
+          finalReviewConfirmed: false,
+          finalReviewConfirmedAt: null,
+        },
       },
     });
     const validation = validateHalifaxRegistrySubmissionDraft(prefilled);
@@ -121,7 +133,9 @@ describe("halifaxRegistrySubmissionService", () => {
       },
       status: "ready" as const,
       fieldValues: prefilled.fieldValues,
+      fieldMeta: prefilled.fieldMeta,
       declarations: prefilled.declarations,
+      consent: prefilled.consent,
       validation,
       exportedAt: null,
       lastReviewedAt: null,
@@ -139,6 +153,22 @@ describe("halifaxRegistrySubmissionService", () => {
     expect(exportPayload.sections.propertyOwner.email).toBe("owner@example.com");
     expect(Array.isArray(exportPayload.sections.buildings)).toBe(true);
     expect(exportPayload.sections.buildings[0].buildingType).toBe("Apartment building");
-    expect(exportPayload.validation.readinessScore).toBeGreaterThan(0);
+    expect(exportPayload.validation.exportReady).toBe(true);
+    expect(String(exportPayload.disclaimer)).toContain("preparation draft");
+    expect(exportPayload.exportMeta.consentCapturedAt).toBe("2026-04-05T00:00:00.000Z");
+    expect(exportPayload.exportMeta.declarationsConfirmedAt).toBe("2026-04-05T00:05:00.000Z");
+  });
+
+  it("tracks provenance for key prefilled fields", () => {
+    const prefilled = buildHalifaxRegistrySubmissionPrefill({
+      property,
+      landlordProfile,
+      userAccount: {},
+      persisted: null,
+    });
+
+    expect(prefilled.fieldMeta["fieldValues.siteAddress.line1"]?.status).toBe("needs_confirmation");
+    expect(prefilled.fieldMeta["fieldValues.owner.email"]?.source).toBe("rentchain_profile");
+    expect(prefilled.fieldMeta["fieldValues.propertyIdentifierPid"]?.status).toBe("needs_confirmation");
   });
 });
