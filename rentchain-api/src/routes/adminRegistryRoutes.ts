@@ -4,6 +4,7 @@ import { requirePermission } from "../middleware/requireAuthz";
 import {
   applyRegistryPidToPropertyFromRecord,
   applyRegistryMatchOverride,
+  getRegistryImport,
   getPropertyRegistryReview,
   getRegistryRecordDetail,
   isRegistryOverrideError,
@@ -11,7 +12,7 @@ import {
   listRegistryReviewQueue,
   listRegistrySources,
   reEvaluatePropertyRegistry,
-  runRegistryImport,
+  startRegistryImportJob,
   searchRegistryAttachProperties,
 } from "../services/registry/registryImportService";
 
@@ -38,6 +39,19 @@ router.get("/registry/imports", requireAuth, requirePermission("system.admin"), 
   }
 });
 
+router.get("/registry/imports/:importId", requireAuth, requirePermission("system.admin"), async (req: any, res) => {
+  try {
+    const importId = String(req.params?.importId || "").trim();
+    if (!importId) return res.status(400).json({ ok: false, error: "missing_import_id" });
+    const item = await getRegistryImport(importId);
+    if (!item) return res.status(404).json({ ok: false, error: "registry_import_not_found" });
+    return res.json({ ok: true, item });
+  } catch (error: any) {
+    console.error("[adminRegistryRoutes] get import failed", error);
+    return res.status(500).json({ ok: false, error: "registry_import_status_failed" });
+  }
+});
+
 router.get("/registry/properties/search", requireAuth, requirePermission("system.admin"), async (req: any, res) => {
   try {
     const q = String(req.query?.q || "").trim();
@@ -55,10 +69,10 @@ router.post("/registry/imports", requireAuth, requirePermission("system.admin"),
     const csvText = String(req.body?.csvText || "");
     const sourceFileName = String(req.body?.sourceFileName || "").trim() || null;
     const sourceFileStoragePath = String(req.body?.sourceFileStoragePath || "").trim() || null;
-    if (!sourceKey || !csvText.trim()) {
+    if (!sourceKey || (!csvText.trim() && !sourceFileStoragePath)) {
       return res.status(400).json({ ok: false, error: "missing_source_or_csv" });
     }
-    const result = await runRegistryImport({
+    const result = await startRegistryImportJob({
       sourceKey,
       csvText,
       sourceFileName,

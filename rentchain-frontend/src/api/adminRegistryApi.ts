@@ -23,6 +23,7 @@ export type RegistryImportView = {
   sourceKey: "halifax_r400";
   sourceFileName: string | null;
   sourceFileStoragePath: string | null;
+  sourceFileStorageBucket?: string | null;
   importBatchId: string;
   rowCount: number;
   parsedRowCount: number;
@@ -32,7 +33,17 @@ export type RegistryImportView = {
   mismatchRowCount: number;
   ignoredRowCount: number;
   skippedRowCount: number;
-  status: "uploaded" | "processing" | "completed" | "failed";
+  status: "uploaded" | "queued" | "processing" | "completed" | "failed" | "cancelled";
+  processingMode?: "sync" | "async";
+  progress?: {
+    stage: "queued" | "upload" | "parse" | "raw_write" | "normalize" | "matching" | "projection" | "completed" | "failed";
+    rowsProcessed: number;
+    rowCount: number;
+    percent: number;
+  } | null;
+  lastHeartbeatAt?: string | null;
+  failureStage?: "queued" | "upload" | "parse" | "raw_write" | "normalize" | "matching" | "projection" | "completed" | "failed" | null;
+  retryCount?: number;
   errorSummary: string | null;
   diagnostics: {
     missingPidCount: number;
@@ -41,7 +52,7 @@ export type RegistryImportView = {
     invalidNumericFieldCount: number;
     duplicateRowHashCount: number;
   };
-  startedAt: string;
+  startedAt: string | null;
   completedAt: string | null;
   createdBy: string | null;
   createdAt: string;
@@ -204,16 +215,24 @@ export async function fetchAdminRegistryImports(sourceKey?: string | null) {
   return response.items;
 }
 
+export async function fetchAdminRegistryImport(importId: string) {
+  const response = await apiFetch<{ ok: true; item: RegistryImportView }>(`/admin/registry/imports/${encodeURIComponent(importId)}`);
+  return response.item;
+}
+
 export async function startAdminRegistryImport(input: {
   sourceKey: "halifax_r400";
   csvText: string;
   sourceFileName?: string | null;
   sourceFileStoragePath?: string | null;
 }) {
-  return apiFetch("/admin/registry/imports", {
+  return apiFetch<{ ok: true; importId: string; status: RegistryImportView["status"]; importRecord: RegistryImportView }>(
+    "/admin/registry/imports",
+    {
     method: "POST",
     body: input,
-  });
+    }
+  );
 }
 
 export async function fetchAdminRegistryReview(matchStatus: string = "all", searchQuery?: string) {
