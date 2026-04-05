@@ -1,3 +1,4 @@
+import { Readable } from "node:stream";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type DocData = Record<string, any>;
@@ -5,11 +6,13 @@ type DocData = Record<string, any>;
 const state = vi.hoisted(() => ({
   collections: new Map<string, Map<string, DocData>>(),
   idCounter: 0,
+  storedCsvByPath: new Map<string, string>(),
 }));
 
 function resetDb() {
   state.collections = new Map();
   state.idCounter = 0;
+  state.storedCsvByPath = new Map();
 }
 
 function ensureCollection(name: string) {
@@ -134,6 +137,24 @@ vi.mock("../../config/firebase", () => ({
   db: dbMock,
 }));
 
+const gcsMocks = vi.hoisted(() => ({
+  uploadBufferToGcsMock: vi.fn(async ({ path, buffer }: { path: string; buffer: Buffer }) => {
+    state.storedCsvByPath.set(path, buffer.toString("utf8"));
+    return { bucket: "test-bucket", path };
+  }),
+  getFileReadStreamMock: vi.fn(({ path }: { path: string }) =>
+    Readable.from([Buffer.from(state.storedCsvByPath.get(path) || "", "utf8")])
+  ),
+}));
+
+vi.mock("../../lib/gcs", () => ({
+  uploadBufferToGcs: gcsMocks.uploadBufferToGcsMock,
+}));
+
+vi.mock("../../lib/gcsRead", () => ({
+  getFileReadStream: gcsMocks.getFileReadStreamMock,
+}));
+
 vi.mock("../../imports/firestoreBatch", () => ({
   commitInBatches: async (ops: Array<(batch: { set: (ref: any, data: any, options?: any) => void }) => void>) => {
     for (const op of ops) {
@@ -154,11 +175,86 @@ describe("registryImportService", () => {
   beforeEach(() => {
     resetDb();
     vi.resetModules();
+    gcsMocks.uploadBufferToGcsMock.mockClear();
+    gcsMocks.getFileReadStreamMock.mockClear();
   });
 
   it("returns a stable empty list for imports when no records exist", async () => {
     const { listRegistryImports } = await import("../registry/registryImportService");
     await expect(listRegistryImports("halifax_r400")).resolves.toEqual([]);
+  });
+
+  it("queues an async registry import, stores the CSV, and exposes status for polling", async () => {
+    const { startRegistryImportJob, getRegistryImport } = await import("../registry/registryImportService");
+
+    const queued = await startRegistryImportJob({
+      sourceKey: "halifax_r400",
+      csvText: "OBJECTID,PID,Address,Registered\n1,1234567,123 Example St,Y",
+      sourceFileName: "halifax.csv",
+      actorId: "admin-async",
+    });
+
+    expect(queued.importId).toBeTruthy();
+    expect(queued.status).toBe("queued");
+    expect(queued.importRecord.processingMode).toBe("async");
+    expect(queued.importRecord.sourceFileStoragePath).toContain("registry-imports/halifax_r400/");
+    expect(gcsMocks.uploadBufferToGcsMock).toHaveBeenCalledTimes(1);
+
+    const stored = await getRegistryImport(queued.importId);
+    expect(stored?.status === "queued" || stored?.status === "processing" || stored?.status === "completed").toBe(true);
+    expect(stored?.progress?.stage).toBeTruthy();
+  });
+
+  it("moves an async registry import from queued to completed while preserving diagnostics", async () => {
+    const { startRegistryImportJob, getRegistryImport } = await import("../registry/registryImportService");
+
+    const queued = await startRegistryImportJob({
+      sourceKey: "halifax_r400",
+      csvText: [
+        "OBJECTID,Registration Number,PID,Address,Registered",
+        "1,REG-101,1234567,101 Example St,Y",
+        "2,REG-102,,102 Example St,N",
+      ].join("\n"),
+      sourceFileName: "halifax-complete.csv",
+      actorId: "admin-complete",
+    });
+
+    let completed = await getRegistryImport(queued.importId);
+    for (let attempt = 0; attempt < 10 && completed?.status !== "completed"; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      completed = await getRegistryImport(queued.importId);
+    }
+
+    expect(completed?.status).toBe("completed");
+    expect(completed?.processingMode).toBe("async");
+    expect(completed?.progress?.stage).toBe("completed");
+    expect(completed?.rowCount).toBe(2);
+    expect(completed?.diagnostics?.missingPidCount).toBe(1);
+  });
+
+  it("marks an async registry import failed when background file loading breaks", async () => {
+    const { startRegistryImportJob, getRegistryImport } = await import("../registry/registryImportService");
+
+    gcsMocks.getFileReadStreamMock.mockImplementationOnce(() => {
+      throw new Error("storage unavailable");
+    });
+
+    const queued = await startRegistryImportJob({
+      sourceKey: "halifax_r400",
+      csvText: "OBJECTID,Registration Number,PID,Address,Registered\n1,REG-201,9999999,201 Example St,Y",
+      sourceFileName: "halifax-fail.csv",
+      actorId: "admin-fail",
+    });
+
+    let failed = await getRegistryImport(queued.importId);
+    for (let attempt = 0; attempt < 10 && failed?.status !== "failed"; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      failed = await getRegistryImport(queued.importId);
+    }
+
+    expect(failed?.status).toBe("failed");
+    expect(failed?.failureStage).toBe("upload");
+    expect(failed?.errorSummary).toContain("storage unavailable");
   });
 
   it("rejects malformed property ids and missing property ids cleanly", async () => {

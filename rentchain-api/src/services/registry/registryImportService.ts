@@ -1,8 +1,12 @@
 import { db } from "../../config/firebase";
 import { commitInBatches } from "../../imports/firestoreBatch";
 import { recordRegistryAuditEvent } from "./registryAuditService";
+import { uploadBufferToGcs } from "../../lib/gcs";
+import { getFileReadStream } from "../../lib/gcsRead";
 import type {
   RegistryImportRecord,
+  RegistryImportProgress,
+  RegistryImportProgressStage,
   RegistryMatchRecord,
   RegistryPropertyCandidate,
   RegistryRecordNormalized,
@@ -48,6 +52,10 @@ type RegistryMatchOverrideErrorCode =
   | "property_not_found";
 
 type RegistryQueueSummary = NonNullable<RegistryMatchRecord["queueSummary"]>;
+
+const activeRegistryImportJobs = new Map<string, Promise<void>>();
+const REGISTRY_IMPORT_STALE_MS = 2 * 60 * 1000;
+const REGISTRY_IMPORT_MATCH_PROGRESS_BATCH = 50;
 
 function getAdapter(sourceKey: RegistrySourceKey): RegistrySourceAdapter {
   if (sourceKey === "halifax_r400") return new HalifaxR400Adapter();
@@ -856,6 +864,417 @@ async function writeImportRecord(input: RegistryImportRecord) {
   await db.collection("registryImports").doc(input.id).set(input, { merge: true });
 }
 
+async function patchImportRecord(importId: string, patch: Partial<RegistryImportRecord>) {
+  await db.collection("registryImports").doc(importId).set(patch, { merge: true });
+}
+
+function createImportProgress(
+  stage: RegistryImportProgressStage,
+  rowsProcessed = 0,
+  rowCount = 0,
+  percent?: number
+): RegistryImportProgress {
+  const safeRowsProcessed = Math.max(0, Math.floor(rowsProcessed));
+  const safeRowCount = Math.max(0, Math.floor(rowCount));
+  const computedPercent =
+    typeof percent === "number"
+      ? percent
+      : safeRowCount > 0
+        ? Math.min(100, Math.round((safeRowsProcessed / safeRowCount) * 100))
+        : stage === "completed"
+          ? 100
+          : 0;
+  return {
+    stage,
+    rowsProcessed: safeRowsProcessed,
+    rowCount: safeRowCount,
+    percent: Math.max(0, Math.min(100, Math.floor(computedPercent))),
+  };
+}
+
+function normalizeImportRecord(record: RegistryImportRecord): RegistryImportRecord {
+  return {
+    ...record,
+    sourceFileStorageBucket: record.sourceFileStorageBucket || null,
+    processingMode: record.processingMode || (record.status === "queued" ? "async" : "sync"),
+    progress: record.progress || null,
+    lastHeartbeatAt: record.lastHeartbeatAt || null,
+    failureStage: record.failureStage || null,
+    retryCount: typeof record.retryCount === "number" ? record.retryCount : 0,
+    startedAt: record.startedAt || null,
+  };
+}
+
+async function getRegistryImportRecord(importId: string) {
+  const snap = await db.collection("registryImports").doc(importId).get();
+  if (!snap.exists) return null;
+  return normalizeImportRecord({ id: snap.id, ...(snap.data() || {}) } as RegistryImportRecord);
+}
+
+function isRegistryImportTerminal(status: RegistryImportRecord["status"] | null | undefined) {
+  return status === "completed" || status === "failed" || status === "cancelled";
+}
+
+function isImportHeartbeatStale(lastHeartbeatAt: string | null | undefined) {
+  if (!lastHeartbeatAt) return true;
+  const ts = Date.parse(lastHeartbeatAt);
+  if (Number.isNaN(ts)) return true;
+  return Date.now() - ts >= REGISTRY_IMPORT_STALE_MS;
+}
+
+async function readStreamToString(stream: NodeJS.ReadableStream) {
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream as AsyncIterable<any>) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+async function loadRegistryImportCsv(importRecord: RegistryImportRecord) {
+  const bucket = importRecord.sourceFileStorageBucket || String(process.env.GCS_UPLOAD_BUCKET || "").trim() || null;
+  const path = String(importRecord.sourceFileStoragePath || "").trim() || null;
+  if (!bucket || !path) {
+    throw new Error("Registry import source file is unavailable for background processing");
+  }
+  return readStreamToString(getFileReadStream({ bucket, path }));
+}
+
+async function persistRegistryImportCsv(params: {
+  importId: string;
+  sourceKey: RegistrySourceKey;
+  csvText: string;
+  sourceFileName?: string | null;
+  actorId?: string | null;
+}) {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const safeName = String(params.sourceFileName || "registry-import.csv")
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    || "registry-import.csv";
+  const path = `registry-imports/${params.sourceKey}/${timestamp}__${params.importId}__${safeName}`;
+  return uploadBufferToGcs({
+    path,
+    contentType: "text/csv; charset=utf-8",
+    buffer: Buffer.from(params.csvText, "utf8"),
+    metadata: {
+      importId: params.importId,
+      sourceKey: params.sourceKey,
+      actorId: params.actorId || "",
+      originalName: params.sourceFileName || "",
+    },
+  });
+}
+
+async function updateRegistryImportProgress(
+  importRecord: RegistryImportRecord,
+  progress: RegistryImportProgress,
+  patch?: Partial<RegistryImportRecord>
+) {
+  await patchImportRecord(importRecord.id, {
+    progress,
+    status: progress.stage === "queued" ? "queued" : progress.stage === "completed" ? "completed" : "processing",
+    lastHeartbeatAt: nowIso(),
+    failureStage: progress.stage === "failed" ? progress.stage : null,
+    ...patch,
+  });
+}
+
+async function processRegistryImportCore(params: {
+  importRecord: RegistryImportRecord;
+  csvText: string;
+  source: RegistrySourceRecord;
+  adapter: RegistrySourceAdapter;
+  actorId?: string | null;
+}) {
+  const importRecord = normalizeImportRecord(params.importRecord);
+  let currentStage: RegistryImportProgressStage = "parse";
+  console.info("[registry] import processing started", {
+    importId: importRecord.id,
+    sourceKey: importRecord.sourceKey,
+    processingMode: importRecord.processingMode || "sync",
+  });
+
+  await updateRegistryImportProgress(
+    importRecord,
+    createImportProgress("parse", 0, 0, 5),
+    {
+      status: "processing",
+      startedAt: importRecord.startedAt || nowIso(),
+      completedAt: null,
+      errorSummary: null,
+      failureStage: null,
+    }
+  );
+
+  try {
+    const parsedRows = params.adapter.parse(params.csvText);
+    await updateRegistryImportProgress(
+      importRecord,
+      createImportProgress("raw_write", parsedRows.length, parsedRows.length, 15),
+      {
+        rowCount: parsedRows.length,
+        parsedRowCount: parsedRows.length,
+      }
+    );
+
+    const importedAt = nowIso();
+    const context = { importRecord, source: params.source, importedAt };
+    const rawRows = parsedRows.map((row, index) => params.adapter.mapRawRow(row, index, context));
+
+    await commitInBatches(
+      rawRows.map((row) => (batch) => {
+        batch.set(db.collection("registryRecordsRaw").doc(row.id), row, { merge: true });
+      })
+    );
+
+    currentStage = "normalize";
+    const normalizedRows = rawRows.map((row) => params.adapter.normalizeRawRow(row, context));
+    await updateRegistryImportProgress(
+      importRecord,
+      createImportProgress("normalize", normalizedRows.length, parsedRows.length, 30),
+      {
+        normalizedRowCount: normalizedRows.length,
+      }
+    );
+
+    await commitInBatches(
+      normalizedRows.map((row) => (batch) => {
+        batch.set(db.collection("registryRecordsNormalized").doc(row.id), row, { merge: true });
+      })
+    );
+
+    currentStage = "matching";
+    await updateRegistryImportProgress(importRecord, createImportProgress("matching", 0, normalizedRows.length, 45));
+
+    const matches: RegistryMatchRecord[] = [];
+    let matchedRowCount = 0;
+    let unmatchedRowCount = 0;
+    let mismatchRowCount = 0;
+
+    for (const [index, row] of normalizedRows.entries()) {
+      const evaluatedBase = await evaluateRegistryMatch({ adapter: params.adapter, record: row });
+      const evaluated = await enrichRegistryMatchForQueue({
+        match: evaluatedBase,
+        normalizedRecord: row,
+        source: params.source,
+        includeTopCandidate: true,
+      });
+      matches.push(evaluated);
+      await db.collection("registryMatches").doc(evaluated.id).set(evaluated, { merge: true });
+
+      if (evaluated.matchStatus === "matched") matchedRowCount += 1;
+      if (evaluated.matchStatus === "unmatched") unmatchedRowCount += 1;
+      if (evaluated.matchStatus === "mismatch") mismatchRowCount += 1;
+
+      await recordRegistryAuditEvent({
+        sourceKey: importRecord.sourceKey,
+        importBatchId: importRecord.importBatchId,
+        registryRecordId: row.registryRecordId,
+        propertyId: evaluated.propertyId,
+        actorType: "system",
+        actorId: null,
+        eventType: "match_evaluated",
+        eventData: {
+          matchStatus: evaluated.matchStatus,
+          matchMethod: evaluated.matchMethod,
+          matchScore: evaluated.matchScore,
+          mismatchReasons: evaluated.mismatchReasons,
+        },
+      });
+
+      if ((index + 1) % REGISTRY_IMPORT_MATCH_PROGRESS_BATCH === 0 || index === normalizedRows.length - 1) {
+        await updateRegistryImportProgress(
+          importRecord,
+          createImportProgress("matching", index + 1, normalizedRows.length, 45 + Math.round(((index + 1) / Math.max(normalizedRows.length, 1)) * 35)),
+          {
+            matchedRowCount,
+            unmatchedRowCount,
+            mismatchRowCount,
+          }
+        );
+      }
+    }
+
+    currentStage = "projection";
+    const matchedPropertyIds = Array.from(new Set(matches.map((item) => String(item.propertyId || "").trim()).filter(Boolean)));
+    await updateRegistryImportProgress(
+      importRecord,
+      createImportProgress("projection", 0, matchedPropertyIds.length, 85),
+      {
+        matchedRowCount,
+        unmatchedRowCount,
+        mismatchRowCount,
+      }
+    );
+
+    for (const [index, propertyId] of matchedPropertyIds.entries()) {
+      await refreshPropertyProjectionFromCurrentMatches({
+        propertyId,
+        source: params.source,
+        importBatchId: importRecord.importBatchId,
+      });
+      if ((index + 1) % 25 === 0 || index === matchedPropertyIds.length - 1) {
+        await updateRegistryImportProgress(
+          importRecord,
+          createImportProgress("projection", index + 1, matchedPropertyIds.length, 85 + Math.round(((index + 1) / Math.max(matchedPropertyIds.length, 1)) * 10))
+        );
+      }
+    }
+
+    const diagnostics = summarizeImportDiagnostics({ rawRows, normalizedRows, matches });
+    const summary = {
+      rowCount: parsedRows.length,
+      parsedRowCount: rawRows.length,
+      normalizedRowCount: normalizedRows.length,
+      matchedRowCount,
+      unmatchedRowCount,
+      mismatchRowCount,
+      ignoredRowCount: diagnostics.ignoredRowCount,
+      skippedRowCount: diagnostics.skippedRowCount,
+      diagnostics: {
+        missingPidCount: diagnostics.missingPidCount,
+        missingAddressCount: diagnostics.missingAddressCount,
+        unsupportedStatusCount: diagnostics.unsupportedStatusCount,
+        invalidNumericFieldCount: diagnostics.invalidNumericFieldCount,
+        duplicateRowHashCount: diagnostics.duplicateRowHashCount,
+      },
+    };
+
+    const completedImport: RegistryImportRecord = normalizeImportRecord({
+      ...importRecord,
+      ...summary,
+      status: "completed",
+      progress: createImportProgress("completed", summary.rowCount, summary.rowCount, 100),
+      completedAt: nowIso(),
+      lastHeartbeatAt: nowIso(),
+      failureStage: null,
+    });
+    await writeImportRecord(completedImport);
+    await db.collection("registrySources").doc(importRecord.sourceKey).set(
+      {
+        latestImportId: importRecord.importBatchId,
+        updatedAt: nowIso(),
+      },
+      { merge: true }
+    );
+    await recordRegistryAuditEvent({
+      sourceKey: importRecord.sourceKey,
+      importBatchId: importRecord.importBatchId,
+      actorType: "admin",
+      actorId: params.actorId || null,
+      eventType: "import_completed",
+      eventData: summary,
+    });
+    console.info("[registry] import completed", {
+      importId: importRecord.id,
+      sourceKey: importRecord.sourceKey,
+      rowCount: summary.rowCount,
+      matchedRowCount: summary.matchedRowCount,
+      unmatchedRowCount: summary.unmatchedRowCount,
+      mismatchRowCount: summary.mismatchRowCount,
+    });
+
+    return {
+      importRecord: completedImport,
+      summary,
+    };
+  } catch (error: any) {
+    const failedImport: RegistryImportRecord = normalizeImportRecord({
+      ...importRecord,
+      status: "failed",
+      progress: createImportProgress("failed", 0, importRecord.rowCount || 0, 100),
+      errorSummary: String(error?.message || "Registry import failed"),
+      completedAt: nowIso(),
+      lastHeartbeatAt: nowIso(),
+      failureStage: currentStage,
+    });
+    await writeImportRecord(failedImport);
+    await recordRegistryAuditEvent({
+      sourceKey: importRecord.sourceKey,
+      importBatchId: importRecord.importBatchId,
+      actorType: "admin",
+      actorId: params.actorId || null,
+      eventType: "import_failed",
+      eventData: {
+        errorSummary: failedImport.errorSummary,
+        failureStage: currentStage,
+      },
+    });
+    console.error("[registry] import failed", {
+      importId: importRecord.id,
+      sourceKey: importRecord.sourceKey,
+      failureStage: currentStage,
+      message: failedImport.errorSummary,
+    });
+    throw error;
+  }
+}
+
+async function runRegistryImportJob(importId: string) {
+  const importRecord = await getRegistryImportRecord(importId);
+  if (!importRecord || isRegistryImportTerminal(importRecord.status)) return;
+
+  try {
+    const { adapter, source } = await ensureRegistrySource(importRecord.sourceKey);
+    const csvText = await loadRegistryImportCsv(importRecord);
+    await processRegistryImportCore({
+      importRecord,
+      csvText,
+      source,
+      adapter,
+      actorId: importRecord.createdBy || null,
+    });
+  } catch (error: any) {
+    const failedImport = normalizeImportRecord({
+      ...importRecord,
+      status: "failed",
+      progress: createImportProgress("failed", 0, importRecord.rowCount || 0, 100),
+      errorSummary: String(error?.message || "Registry import failed"),
+      completedAt: nowIso(),
+      lastHeartbeatAt: nowIso(),
+      failureStage: "upload",
+    });
+    await writeImportRecord(failedImport);
+    await recordRegistryAuditEvent({
+      sourceKey: importRecord.sourceKey,
+      importBatchId: importRecord.importBatchId,
+      actorType: "admin",
+      actorId: importRecord.createdBy || null,
+      eventType: "import_failed",
+      eventData: {
+        errorSummary: failedImport.errorSummary,
+        failureStage: "upload",
+      },
+    });
+    throw error;
+  }
+}
+
+function scheduleRegistryImportJob(importId: string) {
+  if (activeRegistryImportJobs.has(importId)) return activeRegistryImportJobs.get(importId)!;
+  const jobPromise = Promise.resolve()
+    .then(() => runRegistryImportJob(importId))
+    .catch((error) => {
+      console.error("[registry] async import job failed", { importId, message: (error as any)?.message || String(error) });
+    })
+    .finally(() => {
+      activeRegistryImportJobs.delete(importId);
+    });
+  activeRegistryImportJobs.set(importId, jobPromise);
+  return jobPromise;
+}
+
+function maybeScheduleRegistryImportResume(importRecord: RegistryImportRecord | null | undefined) {
+  if (!importRecord || isRegistryImportTerminal(importRecord.status)) return;
+  if (importRecord.status === "queued") {
+    scheduleRegistryImportJob(importRecord.id);
+    return;
+  }
+  if (importRecord.status === "processing" && !activeRegistryImportJobs.has(importRecord.id) && isImportHeartbeatStale(importRecord.lastHeartbeatAt)) {
+    scheduleRegistryImportJob(importRecord.id);
+  }
+}
+
 async function refreshPropertyProjectionFromCurrentMatches(params: {
   propertyId: string;
   source: RegistrySourceRecord;
@@ -908,16 +1327,18 @@ export async function runRegistryImport(params: {
   sourceKey: RegistrySourceKey;
   csvText: string;
   sourceFileName?: string | null;
+  sourceFileStorageBucket?: string | null;
   sourceFileStoragePath?: string | null;
   actorId?: string | null;
 }) {
   const { adapter, source } = await ensureRegistrySource(params.sourceKey);
   const now = nowIso();
   const importBatchId = makeStableId([params.sourceKey, Date.now()]);
-  const importRecord: RegistryImportRecord = {
+  const importRecord = normalizeImportRecord({
     id: importBatchId,
     sourceKey: params.sourceKey,
     sourceFileName: params.sourceFileName || null,
+    sourceFileStorageBucket: params.sourceFileStorageBucket || null,
     sourceFileStoragePath: params.sourceFileStoragePath || null,
     importBatchId,
     rowCount: 0,
@@ -929,6 +1350,11 @@ export async function runRegistryImport(params: {
     ignoredRowCount: 0,
     skippedRowCount: 0,
     status: "processing",
+    processingMode: "sync",
+    progress: createImportProgress("parse", 0, 0, 5),
+    lastHeartbeatAt: now,
+    failureStage: null,
+    retryCount: 0,
     errorSummary: null,
     diagnostics: {
       missingPidCount: 0,
@@ -941,7 +1367,81 @@ export async function runRegistryImport(params: {
     completedAt: null,
     createdBy: params.actorId || null,
     createdAt: now,
-  };
+  });
+
+  await writeImportRecord(importRecord);
+  await recordRegistryAuditEvent({
+    sourceKey: params.sourceKey,
+    importBatchId,
+      actorType: "admin",
+      actorId: params.actorId || null,
+      eventType: "import_started",
+      eventData: { sourceFileName: params.sourceFileName || null, processingMode: "sync" },
+    });
+  return processRegistryImportCore({
+    importRecord,
+    csvText: params.csvText,
+    source,
+    adapter,
+    actorId: params.actorId || null,
+  });
+}
+
+export async function startRegistryImportJob(params: {
+  sourceKey: RegistrySourceKey;
+  csvText: string;
+  sourceFileName?: string | null;
+  sourceFileStoragePath?: string | null;
+  actorId?: string | null;
+}) {
+  await ensureRegistrySource(params.sourceKey);
+  const now = nowIso();
+  const importBatchId = makeStableId([params.sourceKey, Date.now()]);
+  const storedSource =
+    params.sourceFileStoragePath
+      ? { bucket: String(process.env.GCS_UPLOAD_BUCKET || "").trim() || null, path: params.sourceFileStoragePath }
+      : await persistRegistryImportCsv({
+          importId: importBatchId,
+          sourceKey: params.sourceKey,
+          csvText: params.csvText,
+          sourceFileName: params.sourceFileName || null,
+          actorId: params.actorId || null,
+        });
+
+  const importRecord = normalizeImportRecord({
+    id: importBatchId,
+    sourceKey: params.sourceKey,
+    sourceFileName: params.sourceFileName || null,
+    sourceFileStorageBucket: storedSource.bucket || null,
+    sourceFileStoragePath: storedSource.path || null,
+    importBatchId,
+    rowCount: 0,
+    parsedRowCount: 0,
+    normalizedRowCount: 0,
+    matchedRowCount: 0,
+    unmatchedRowCount: 0,
+    mismatchRowCount: 0,
+    ignoredRowCount: 0,
+    skippedRowCount: 0,
+    status: "queued",
+    processingMode: "async",
+    progress: createImportProgress("queued", 0, 0, 0),
+    lastHeartbeatAt: now,
+    failureStage: null,
+    retryCount: 0,
+    errorSummary: null,
+    diagnostics: {
+      missingPidCount: 0,
+      missingAddressCount: 0,
+      unsupportedStatusCount: 0,
+      invalidNumericFieldCount: 0,
+      duplicateRowHashCount: 0,
+    },
+    startedAt: null,
+    completedAt: null,
+    createdBy: params.actorId || null,
+    createdAt: now,
+  });
 
   await writeImportRecord(importRecord);
   await recordRegistryAuditEvent({
@@ -950,127 +1450,24 @@ export async function runRegistryImport(params: {
     actorType: "admin",
     actorId: params.actorId || null,
     eventType: "import_started",
-    eventData: { sourceFileName: params.sourceFileName || null },
+    eventData: {
+      sourceFileName: params.sourceFileName || null,
+      processingMode: "async",
+      sourceFileStoragePath: importRecord.sourceFileStoragePath,
+    },
   });
-
-  try {
-    const parsedRows = adapter.parse(params.csvText);
-    const importedAt = nowIso();
-    const context = { importRecord, source, importedAt };
-    const rawRows = parsedRows.map((row, index) => adapter.mapRawRow(row, index, context));
-    const normalizedRows = rawRows.map((row) => adapter.normalizeRawRow(row, context));
-
-    await commitInBatches(
-      rawRows.map((row) => (batch) => {
-        batch.set(db.collection("registryRecordsRaw").doc(row.id), row, { merge: true });
-      })
-    );
-    await commitInBatches(
-      normalizedRows.map((row) => (batch) => {
-        batch.set(db.collection("registryRecordsNormalized").doc(row.id), row, { merge: true });
-      })
-    );
-
-    const matches: RegistryMatchRecord[] = [];
-    for (const row of normalizedRows) {
-      const evaluatedBase = await evaluateRegistryMatch({ adapter, record: row });
-      const evaluated = await enrichRegistryMatchForQueue({
-        match: evaluatedBase,
-        normalizedRecord: row,
-        source,
-        includeTopCandidate: true,
-      });
-      matches.push(evaluated);
-      await db.collection("registryMatches").doc(evaluated.id).set(evaluated, { merge: true });
-      await recordRegistryAuditEvent({
-        sourceKey: params.sourceKey,
-        importBatchId,
-        registryRecordId: row.registryRecordId,
-        propertyId: evaluated.propertyId,
-        actorType: "system",
-        actorId: null,
-        eventType: "match_evaluated",
-        eventData: {
-          matchStatus: evaluated.matchStatus,
-          matchMethod: evaluated.matchMethod,
-          matchScore: evaluated.matchScore,
-          mismatchReasons: evaluated.mismatchReasons,
-        },
-      });
-    }
-
-    for (const propertyId of Array.from(new Set(matches.map((item) => String(item.propertyId || "").trim()).filter(Boolean)))) {
-      await refreshPropertyProjectionFromCurrentMatches({
-        propertyId,
-        source,
-        importBatchId,
-      });
-    }
-
-    const diagnostics = summarizeImportDiagnostics({ rawRows, normalizedRows, matches });
-    const summary = {
-      rowCount: parsedRows.length,
-      parsedRowCount: rawRows.length,
-      normalizedRowCount: normalizedRows.length,
-      matchedRowCount: matches.filter((item) => item.matchStatus === "matched").length,
-      unmatchedRowCount: matches.filter((item) => item.matchStatus === "unmatched").length,
-      mismatchRowCount: matches.filter((item) => item.matchStatus === "mismatch").length,
-      ignoredRowCount: diagnostics.ignoredRowCount,
-      skippedRowCount: diagnostics.skippedRowCount,
-      diagnostics: {
-        missingPidCount: diagnostics.missingPidCount,
-        missingAddressCount: diagnostics.missingAddressCount,
-        unsupportedStatusCount: diagnostics.unsupportedStatusCount,
-        invalidNumericFieldCount: diagnostics.invalidNumericFieldCount,
-        duplicateRowHashCount: diagnostics.duplicateRowHashCount,
-      },
-    };
-
-    const completedImport: RegistryImportRecord = {
-      ...importRecord,
-      ...summary,
-      status: "completed",
-      completedAt: nowIso(),
-    };
-    await writeImportRecord(completedImport);
-    await db.collection("registrySources").doc(params.sourceKey).set(
-      {
-        latestImportId: importBatchId,
-        updatedAt: nowIso(),
-      },
-      { merge: true }
-    );
-    await recordRegistryAuditEvent({
-      sourceKey: params.sourceKey,
-      importBatchId,
-      actorType: "admin",
-      actorId: params.actorId || null,
-      eventType: "import_completed",
-      eventData: summary,
-    });
-
-    return {
-      importRecord: completedImport,
-      summary,
-    };
-  } catch (error: any) {
-    const failedImport: RegistryImportRecord = {
-      ...importRecord,
-      status: "failed",
-      errorSummary: String(error?.message || "Registry import failed"),
-      completedAt: nowIso(),
-    };
-    await writeImportRecord(failedImport);
-    await recordRegistryAuditEvent({
-      sourceKey: params.sourceKey,
-      importBatchId,
-      actorType: "admin",
-      actorId: params.actorId || null,
-      eventType: "import_failed",
-      eventData: { errorSummary: failedImport.errorSummary },
-    });
-    throw error;
-  }
+  console.info("[registry] import queued", {
+    importId: importBatchId,
+    sourceKey: params.sourceKey,
+    sourceFileName: params.sourceFileName || null,
+    sourceFileStoragePath: importRecord.sourceFileStoragePath,
+  });
+  scheduleRegistryImportJob(importBatchId);
+  return {
+    importId: importBatchId,
+    status: importRecord.status,
+    importRecord,
+  };
 }
 
 export async function listRegistrySources() {
@@ -1086,7 +1483,9 @@ export async function listRegistryImports(sourceKey?: RegistrySourceKey | null) 
   }
   try {
     const snap = await query.get();
-    return (snap.docs || []).map((doc: any) => ({ id: doc.id, ...(doc.data() || {}) }));
+    const items = (snap.docs || []).map((doc: any) => normalizeImportRecord({ id: doc.id, ...(doc.data() || {}) } as RegistryImportRecord));
+    items.forEach((item) => maybeScheduleRegistryImportResume(item));
+    return items;
   } catch (error) {
     if (isMissingIndexError(error)) {
       console.warn("[registry] listRegistryImports missing index", { sourceKey, message: (error as any)?.message });
@@ -1094,6 +1493,13 @@ export async function listRegistryImports(sourceKey?: RegistrySourceKey | null) 
     }
     throw error;
   }
+}
+
+export async function getRegistryImport(importId: string) {
+  const record = await getRegistryImportRecord(importId);
+  if (!record) return null;
+  maybeScheduleRegistryImportResume(record);
+  return record;
 }
 
 export async function listRegistryReviewQueue(input?: {

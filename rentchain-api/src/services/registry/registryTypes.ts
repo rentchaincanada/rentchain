@@ -18,13 +18,32 @@ export type RegistrySourceRecord = {
   updatedAt: string;
 };
 
-export type RegistryImportStatus = "uploaded" | "processing" | "completed" | "failed";
+export type RegistryImportStatus = "uploaded" | "queued" | "processing" | "completed" | "failed" | "cancelled";
+
+export type RegistryImportProgressStage =
+  | "queued"
+  | "upload"
+  | "parse"
+  | "raw_write"
+  | "normalize"
+  | "matching"
+  | "projection"
+  | "completed"
+  | "failed";
+
+export type RegistryImportProgress = {
+  stage: RegistryImportProgressStage;
+  rowsProcessed: number;
+  rowCount: number;
+  percent: number;
+};
 
 export type RegistryImportRecord = {
   id: string;
   sourceKey: RegistrySourceKey;
   sourceFileName: string | null;
   sourceFileStoragePath: string | null;
+  sourceFileStorageBucket?: string | null;
   importBatchId: string;
   rowCount: number;
   parsedRowCount: number;
@@ -35,6 +54,11 @@ export type RegistryImportRecord = {
   ignoredRowCount: number;
   skippedRowCount: number;
   status: RegistryImportStatus;
+  processingMode?: "sync" | "async";
+  progress?: RegistryImportProgress | null;
+  lastHeartbeatAt?: string | null;
+  failureStage?: RegistryImportProgressStage | null;
+  retryCount?: number;
   errorSummary: string | null;
   diagnostics: {
     missingPidCount: number;
@@ -43,7 +67,7 @@ export type RegistryImportRecord = {
     invalidNumericFieldCount: number;
     duplicateRowHashCount: number;
   };
-  startedAt: string;
+  startedAt: string | null;
   completedAt: string | null;
   createdBy: string | null;
   createdAt: string;

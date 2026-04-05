@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { MacShell } from "../../components/layout/MacShell";
 import { Button, Card, Input, Pill, Section } from "../../components/ui/Ui";
@@ -10,32 +10,60 @@ function formatDate(value: string | null | undefined) {
   return Number.isNaN(date.getTime()) ? value : `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
 }
 
+function isImportActive(item: RegistryImportView) {
+  return item.status === "queued" || item.status === "processing";
+}
+
+function getImportStatusTone(status: RegistryImportView["status"]): "accent" | "muted" {
+  return status === "completed" ? "accent" : "muted";
+}
+
+function getImportStatusStyle(status: RegistryImportView["status"]): React.CSSProperties | undefined {
+  if (status === "failed" || status === "cancelled") {
+    return { background: "#fee2e2", color: "#991b1b", border: "1px solid #fecaca" };
+  }
+  if (status === "processing" || status === "queued") {
+    return { background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" };
+  }
+  return undefined;
+}
+
 export default function AdminRegistryImportsPage() {
   const [items, setItems] = useState<RegistryImportView[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [csvText, setCsvText] = useState("");
   const [sourceFileName, setSourceFileName] = useState("");
 
   const totalRows = useMemo(() => items.reduce((sum, item) => sum + (item.rowCount || 0), 0), [items]);
+  const hasActiveImports = useMemo(() => items.some((item) => isImportActive(item)), [items]);
 
-  const load = async () => {
+  const load = useCallback(async (options?: { quiet?: boolean }) => {
     try {
-      setLoading(true);
-      setError(null);
+      if (!options?.quiet) setLoading(true);
       const result = await fetchAdminRegistryImports("halifax_r400");
       setItems(result);
+      if (!options?.quiet) setError(null);
     } catch (err: any) {
       setError(err?.message || "Failed to load registry imports");
     } finally {
-      setLoading(false);
+      if (!options?.quiet) setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [load]);
+
+  useEffect(() => {
+    if (!hasActiveImports) return undefined;
+    const timer = window.setInterval(() => {
+      void load({ quiet: true });
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [hasActiveImports, load]);
 
   const handleFile = async (file: File | null) => {
     if (!file) return;
@@ -48,13 +76,15 @@ export default function AdminRegistryImportsPage() {
     try {
       setUploading(true);
       setError(null);
-      await startAdminRegistryImport({
+      setNotice(null);
+      const result = await startAdminRegistryImport({
         sourceKey: "halifax_r400",
         csvText,
         sourceFileName: sourceFileName || "halifax-registry.csv",
       });
       setCsvText("");
       setSourceFileName("");
+      setNotice(`Import queued: ${result.importId}`);
       await load();
     } catch (err: any) {
       setError(err?.message || "Failed to import Halifax registry file");
@@ -74,7 +104,7 @@ export default function AdminRegistryImportsPage() {
                 <Pill tone="accent">Halifax</Pill>
               </div>
               <div style={{ color: "#475569", maxWidth: 760 }}>
-                Upload Halifax CSV content, run normalization and matching, and track import summaries.
+                Upload Halifax CSV content once, then track the async parse, normalization, matching, projection, and audit stages here.
               </div>
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -101,12 +131,13 @@ export default function AdminRegistryImportsPage() {
           />
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <Button onClick={handleImport} disabled={!csvText.trim() || uploading}>
-              {uploading ? "Importing..." : "Run import"}
+              {uploading ? "Queueing..." : "Queue import"}
             </Button>
             <Button variant="secondary" onClick={() => void load()} disabled={loading}>
               Refresh history
             </Button>
           </div>
+          {notice ? <div style={{ color: "#0f766e" }}>{notice}</div> : null}
           {error ? <div style={{ color: "#b91c1c" }}>{error}</div> : null}
         </Card>
 
@@ -121,8 +152,15 @@ export default function AdminRegistryImportsPage() {
             <div key={item.id} style={{ border: "1px solid rgba(148,163,184,0.2)", borderRadius: 16, padding: 16, display: "grid", gap: 6 }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
                 <div style={{ fontWeight: 700 }}>{item.sourceFileName || item.id}</div>
-                <Pill tone={item.status === "completed" ? "accent" : "muted"}>{item.status}</Pill>
+                <Pill tone={getImportStatusTone(item.status)} style={getImportStatusStyle(item.status)}>
+                  {item.status}
+                </Pill>
               </div>
+              {item.progress ? (
+                <div style={{ color: "#334155", fontSize: 14 }}>
+                  Stage: {item.progress.stage.replace(/_/g, " ")} · Progress: {item.progress.percent}% ({item.progress.rowsProcessed}/{item.progress.rowCount || item.rowCount || 0})
+                </div>
+              ) : null}
               <div style={{ color: "#475569", fontSize: 14 }}>
                 Rows: {item.rowCount} · Parsed: {item.parsedRowCount} · Normalized: {item.normalizedRowCount}
               </div>
@@ -136,8 +174,11 @@ export default function AdminRegistryImportsPage() {
                 Invalid numeric fields: {item.diagnostics?.invalidNumericFieldCount ?? 0} · Duplicate row hash: {item.diagnostics?.duplicateRowHashCount ?? 0}
               </div>
               <div style={{ color: "#64748b", fontSize: 13 }}>
-                Started: {formatDate(item.startedAt)} · Completed: {formatDate(item.completedAt)}
+                Started: {formatDate(item.startedAt)} · Completed: {formatDate(item.completedAt)} · Heartbeat: {formatDate(item.lastHeartbeatAt)}
               </div>
+              {item.failureStage ? (
+                <div style={{ color: "#991b1b", fontSize: 13 }}>Failure stage: {item.failureStage.replace(/_/g, " ")}</div>
+              ) : null}
               {item.errorSummary ? <div style={{ color: "#b91c1c", fontSize: 14 }}>{item.errorSummary}</div> : null}
             </div>
           ))}
