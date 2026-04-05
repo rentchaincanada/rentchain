@@ -7,12 +7,18 @@ const state = vi.hoisted(() => ({
   collections: new Map<string, Map<string, DocData>>(),
   idCounter: 0,
   storedCsvByPath: new Map<string, string>(),
+  queryCounts: new Map<string, number>(),
 }));
 
 function resetDb() {
   state.collections = new Map();
   state.idCounter = 0;
   state.storedCsvByPath = new Map();
+  state.queryCounts = new Map();
+}
+
+function bumpQueryCount(key: string) {
+  state.queryCounts.set(key, (state.queryCounts.get(key) || 0) + 1);
 }
 
 function ensureCollection(name: string) {
@@ -50,6 +56,7 @@ function buildQuery(
       return buildQuery(collectionName, filters, orderByFields, limitCount, values);
     },
     async get() {
+      bumpQueryCount(`${collectionName}:query`);
       const collection = ensureCollection(collectionName);
       let docs = Array.from(collection.entries()).map(([id, data]) => ({
         id,
@@ -102,6 +109,7 @@ const dbMock = {
         return {
           id: docId,
           async get() {
+            bumpQueryCount(`${name}:doc`);
             const data = collection.get(docId);
             return {
               id: docId,
@@ -240,6 +248,49 @@ describe("registryImportService", () => {
     expect(completed?.timingsMs?.matching).toBeGreaterThanOrEqual(0);
     expect(completed?.timingsMs?.projection).toBeGreaterThanOrEqual(0);
     expect(completed?.timingsMs?.total).toBeGreaterThanOrEqual(0);
+  });
+
+  it("builds the property candidate lookup once per import run instead of per registry row", async () => {
+    const { startRegistryImportJob, getRegistryImport } = await import("../registry/registryImportService");
+
+    ensureCollection("properties").set("prop-cache-1", {
+      id: "prop-cache-1",
+      landlordId: "landlord-1",
+      name: "Cache One",
+      addressLine1: "401 Example St",
+      city: "Halifax",
+      province: "NS",
+      pid: "1234567",
+    });
+    ensureCollection("properties").set("prop-cache-2", {
+      id: "prop-cache-2",
+      landlordId: "landlord-2",
+      name: "Cache Two",
+      addressLine1: "402 Example St",
+      city: "Halifax",
+      province: "NS",
+      pid: "7654321",
+    });
+
+    const queued = await startRegistryImportJob({
+      sourceKey: "halifax_r400",
+      csvText: [
+        "OBJECTID,Registration Number,PID,Address,Registered",
+        "1,REG-501,1234567,401 Example St,Y",
+        "2,REG-502,7654321,402 Example St,Y",
+      ].join("\n"),
+      sourceFileName: "halifax-cache.csv",
+      actorId: "admin-cache",
+    });
+
+    let completed = await getRegistryImport(queued.importId);
+    for (let attempt = 0; attempt < 20 && completed?.status !== "completed"; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      completed = await getRegistryImport(queued.importId);
+    }
+
+    expect(completed?.status).toBe("completed");
+    expect(state.queryCounts.get("properties:query")).toBe(1);
   });
 
   it("retries a retryable async file-load failure and continues into parsing", async () => {
