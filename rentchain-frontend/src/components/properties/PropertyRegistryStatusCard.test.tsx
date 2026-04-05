@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PropertyRegistryStatusCard } from "./PropertyRegistryStatusCard";
 
@@ -19,7 +19,7 @@ describe("PropertyRegistryStatusCard", () => {
     mocks.fetchPropertyRegistryStatus.mockReset();
   });
 
-  it("renders readiness summary, top missing items, and schema-aware CTA", async () => {
+  it("renders a compact summary by default and shows full readiness details behind view details", async () => {
     mocks.fetchPropertyRegistryStatus.mockResolvedValue({
       status: {
         id: "projection-1",
@@ -123,13 +123,26 @@ describe("PropertyRegistryStatusCard", () => {
     );
 
     expect(await screen.findByText("Compliance / Registry Readiness")).toBeInTheDocument();
+    expect(screen.getByText("Incomplete")).toBeInTheDocument();
     expect(screen.getByText("Halifax Rental Registry")).toBeInTheDocument();
-    expect(screen.getByText(/Owner or contact details are incomplete/)).toBeInTheDocument();
-    expect(screen.getByText(/Building details are incomplete/)).toBeInTheDocument();
-    expect(screen.getByText(/Complete missing data/)).toBeInTheDocument();
+    expect(screen.getByText(/Missing required data for a registry-ready draft/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Owner or contact details are incomplete/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Building details are incomplete/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Registry state:/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "View details" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Complete Halifax registration draft" })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Complete Halifax registration draft" }));
+    fireEvent.click(screen.getByRole("button", { name: "View details" }));
+    expect(await screen.findByRole("dialog", { name: "Compliance and registry details" })).toBeInTheDocument();
+    expect(screen.getByText(/Owner or contact details are incomplete/)).toBeInTheDocument();
+    expect(screen.getByText(/Building details are incomplete/)).toBeInTheDocument();
+    expect(screen.getByText(/Registry state:/)).toBeInTheDocument();
+
+    fireEvent.click(
+      within(screen.getByRole("dialog", { name: "Compliance and registry details" })).getByRole("button", {
+        name: "Complete Halifax registration draft",
+      })
+    );
     await waitFor(() => {
       expect(onOpenSubmissionAssistant).toHaveBeenCalled();
     });
