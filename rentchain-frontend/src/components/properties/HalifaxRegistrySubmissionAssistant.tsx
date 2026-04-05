@@ -6,6 +6,8 @@ import {
   type HalifaxAddress,
   type HalifaxBuildingDraft,
   type HalifaxFieldMapEntry,
+  type HalifaxFieldMetaEntry,
+  type HalifaxSubmissionConsent,
   type HalifaxSubmissionDeclarations,
   type HalifaxSubmissionDraft,
   type HalifaxSubmissionFieldValues,
@@ -21,6 +23,7 @@ type Props = {
 };
 
 const STEP_TITLES = [
+  "Consent & use notice",
   "Review property + owner",
   "Review building details",
   "Complete compliance fields",
@@ -96,11 +99,12 @@ function downloadJson(filename: string, payload: Record<string, unknown>) {
 }
 
 function stepForPath(path: string): number {
-  if (path.startsWith("fieldValues.siteAddress") || path.startsWith("fieldValues.owner") || path.startsWith("fieldValues.primaryContact")) return 0;
-  if (path.startsWith("fieldValues.buildings") && !path.includes("amenities") && !path.includes("fireLifeSafetySystems") && !path.includes("yearConstructed")) return 1;
-  if (path.startsWith("fieldValues.propertyDescription") || path.includes("amenities") || path.includes("fireLifeSafetySystems") || path.includes("yearConstructed")) return 2;
-  if (path.startsWith("declarations")) return 3;
-  return 4;
+  if (path.startsWith("consent.")) return 0;
+  if (path.startsWith("fieldValues.siteAddress") || path.startsWith("fieldValues.owner") || path.startsWith("fieldValues.primaryContact")) return 1;
+  if (path.startsWith("fieldValues.buildings") && !path.includes("amenities") && !path.includes("fireLifeSafetySystems") && !path.includes("yearConstructed")) return 2;
+  if (path.startsWith("fieldValues.propertyDescription") || path.includes("amenities") || path.includes("fireLifeSafetySystems") || path.includes("yearConstructed")) return 3;
+  if (path.startsWith("declarations")) return 4;
+  return 5;
 }
 
 function MissingFieldSummary({
@@ -121,6 +125,73 @@ function MissingFieldSummary({
         ))}
       </div>
     </Card>
+  );
+}
+
+function badgeStyleForStatus(status: HalifaxFieldMetaEntry["status"]) {
+  if (status === "prefilled_from_rentchain") {
+    return { background: "rgba(37,99,235,0.1)", color: "#1d4ed8", border: "1px solid rgba(37,99,235,0.22)" };
+  }
+  if (status === "provided_by_user") {
+    return { background: "rgba(22,163,74,0.1)", color: "#15803d", border: "1px solid rgba(22,163,74,0.22)" };
+  }
+  if (status === "needs_confirmation") {
+    return { background: "rgba(245,158,11,0.12)", color: "#b45309", border: "1px solid rgba(245,158,11,0.24)" };
+  }
+  return { background: "rgba(239,68,68,0.08)", color: "#b91c1c", border: "1px solid rgba(239,68,68,0.2)" };
+}
+
+function labelForStatus(status: HalifaxFieldMetaEntry["status"]) {
+  switch (status) {
+    case "prefilled_from_rentchain":
+      return "Pre-filled";
+    case "provided_by_user":
+      return "Manual entry";
+    case "needs_confirmation":
+      return "Needs confirmation";
+    case "missing":
+    default:
+      return "Missing required";
+  }
+}
+
+function FieldTrustBadge({ meta }: { meta?: HalifaxFieldMetaEntry | null }) {
+  if (!meta) return null;
+  const style = badgeStyleForStatus(meta.status);
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        padding: "4px 8px",
+        borderRadius: 999,
+        fontSize: 12,
+        fontWeight: 700,
+        ...style,
+      }}
+    >
+      {labelForStatus(meta.status)}
+    </span>
+  );
+}
+
+function SectionHeading({
+  title,
+  meta,
+  note,
+}: {
+  title: string;
+  meta?: HalifaxFieldMetaEntry | null;
+  note?: string | null;
+}) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+      <div style={{ fontWeight: 700, color: "#0f172a" }}>{title}</div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        {note ? <div style={{ color: "#64748b", fontSize: 12 }}>{note}</div> : null}
+        <FieldTrustBadge meta={meta} />
+      </div>
+    </div>
   );
 }
 
@@ -247,12 +318,19 @@ function MultiSelectChips({
 function BuildingEditor({
   building,
   index,
+  fieldMeta,
   onChange,
   onRemove,
   showComplianceOnly,
 }: {
   building: HalifaxBuildingDraft;
   index: number;
+  fieldMeta?: {
+    buildingType?: HalifaxFieldMetaEntry | null;
+    residentialUnitsRented?: HalifaxFieldMetaEntry | null;
+    yearConstructed?: HalifaxFieldMetaEntry | null;
+    fireLifeSafetySystems?: HalifaxFieldMetaEntry | null;
+  };
   onChange: (next: HalifaxBuildingDraft) => void;
   onRemove?: () => void;
   showComplianceOnly?: boolean;
@@ -263,12 +341,14 @@ function BuildingEditor({
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
           <div style={{ fontWeight: 700 }}>Building {index + 1} compliance details</div>
         </div>
+        <SectionHeading title="Amenity / shared-space details" />
         <MultiSelectChips
           label="Amenity / shared-space details"
           options={AMENITY_OPTIONS}
           values={building.amenities}
           onChange={(amenities) => onChange({ ...building, amenities })}
         />
+        <SectionHeading title="Fire / life-safety systems" meta={fieldMeta?.fireLifeSafetySystems} />
         <MultiSelectChips
           label="Fire / life-safety systems"
           options={FIRE_SAFETY_OPTIONS}
@@ -282,6 +362,7 @@ function BuildingEditor({
           onChange={(accessibilityFeatures) => onChange({ ...building, accessibilityFeatures })}
         />
         <label style={{ display: "grid", gap: 6 }}>
+          <SectionHeading title="Year constructed" meta={fieldMeta?.yearConstructed} />
           <span>Year constructed</span>
           <Input
             value={building.yearConstructed == null ? "" : String(building.yearConstructed)}
@@ -323,6 +404,7 @@ function BuildingEditor({
       />
       <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
         <label style={{ display: "grid", gap: 6 }}>
+          <SectionHeading title="Residential units rented" meta={fieldMeta?.residentialUnitsRented} />
           <span>Residential units rented</span>
           <Input
             value={building.residentialUnitsRented == null ? "" : String(building.residentialUnitsRented)}
@@ -351,6 +433,7 @@ function BuildingEditor({
         </label>
       </div>
       <label style={{ display: "grid", gap: 6 }}>
+        <SectionHeading title="Building type" meta={fieldMeta?.buildingType} />
         <span>Building type</span>
         <select
           value={building.buildingType || ""}
@@ -450,11 +533,43 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
     };
   }, [open, propertyId]);
 
-  const missingCount = draft?.validation.missingRequiredFields.length || 0;
+  const updateDraft = (mutator: (current: HalifaxSubmissionDraft) => HalifaxSubmissionDraft) => {
+    setDraft((current) => (current ? mutator(current) : current));
+  };
+
+  const updateFieldMeta = (
+    path: string,
+    meta: Partial<HalifaxFieldMetaEntry>
+  ) => {
+    updateDraft((current) => ({
+      ...current,
+      fieldMeta: {
+        ...current.fieldMeta,
+        [path]: {
+          source: meta.source || current.fieldMeta?.[path]?.source || "manual",
+          status: meta.status || current.fieldMeta?.[path]?.status || "provided_by_user",
+          confirmed: meta.confirmed ?? current.fieldMeta?.[path]?.confirmed ?? true,
+        },
+      },
+    }));
+  };
+
+  const markProvidedByUser = (path: string) =>
+    updateFieldMeta(path, {
+      source: "manual",
+      status: "provided_by_user",
+      confirmed: true,
+    });
+
+  const blockingCount =
+    (draft?.validation.missingRequiredFields.length || 0) +
+    (draft?.validation.missingConsentItems.length || 0);
   const autoFilledCount = useMemo(
     () => fieldMap.filter((entry) => entry.source !== "user_input_required" && entry.source !== "unsupported").length,
     [fieldMap]
   );
+  const canMovePastConsent = Boolean(draft?.consent.preparationAuthorized);
+  const canExport = Boolean(draft?.validation.exportReady);
 
   const persistDraft = async (nextDraft: HalifaxSubmissionDraft, toastMessage?: string) => {
     if (!propertyId) return;
@@ -462,16 +577,18 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
     try {
       const result = await saveHalifaxRegistrySubmission(propertyId, {
         fieldValues: nextDraft.fieldValues,
+        fieldMeta: nextDraft.fieldMeta,
         declarations: nextDraft.declarations,
+        consent: nextDraft.consent,
         status: nextDraft.status,
       });
       setDraft(cloneDraft(result.submission));
       if (toastMessage) {
         showToast({
           message: toastMessage,
-          description: result.submission.validation.missingRequiredFields.length
-            ? `${result.submission.validation.missingRequiredFields.length} required Halifax field(s) still need attention.`
-            : "This property is ready to export for guided Halifax submission.",
+          description: result.submission.validation.exportReady
+            ? "This property is ready to export as a Halifax draft."
+            : "Consent, declaration confirmation, or required Halifax fields still need attention.",
         });
       }
     } catch (err: any) {
@@ -530,6 +647,9 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
             <div style={{ color: "#475569", lineHeight: 1.5, maxWidth: 760 }}>
               Review the data RentChain already knows, answer the missing Halifax compliance questions, and export a submission-ready payload for guided municipal filing.
             </div>
+            <div style={{ color: "#334155", fontSize: 13 }}>
+              This assistant prepares a Halifax registry draft for your review. It does not submit directly to Halifax.
+            </div>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <Pill tone="muted">{property?.name || property?.addressLine1 || "Property"}</Pill>
@@ -544,8 +664,8 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
           <>
             <div style={{ display: "grid", gap: 10 }}>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                <Pill tone={missingCount === 0 ? "accent" : "muted"}>
-                  {missingCount === 0 ? "Ready to export" : `${missingCount} required field${missingCount === 1 ? "" : "s"} missing`}
+                <Pill tone={canExport ? "accent" : "muted"}>
+                  {canExport ? "Ready to export" : `${blockingCount} readiness blocker${blockingCount === 1 ? "" : "s"}`}
                 </Pill>
                 <Pill tone="muted">{draft.validation.completionPercent}% complete</Pill>
                 <Pill tone="muted">{autoFilledCount} fields prefilled from RentChain</Pill>
@@ -555,7 +675,10 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                   <button
                     key={title}
                     type="button"
-                    onClick={() => setStep(index)}
+                    onClick={() => {
+                      if (index > 0 && !canMovePastConsent) return;
+                      setStep(index);
+                    }}
                     style={{
                       padding: "10px 12px",
                       borderRadius: 12,
@@ -578,37 +701,95 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
 
             {step === 0 ? (
               <div style={{ display: "grid", gap: 14 }}>
+                <Card style={{ display: "grid", gap: 10, background: "rgba(37,99,235,0.04)" }}>
+                  <div style={{ fontWeight: 700 }}>Consent & use notice</div>
+                  <div style={{ color: "#475569", fontSize: 14, lineHeight: 1.6 }}>
+                    RentChain can use your stored property and account information, together with any extra details you add here,
+                    to prepare a Halifax rental registry submission draft for this property. This version does not submit
+                    directly to Halifax, and you remain responsible for reviewing the information before municipal use.
+                  </div>
+                  <label
+                    style={{
+                      display: "flex",
+                      gap: 10,
+                      alignItems: "start",
+                      padding: "12px 14px",
+                      borderRadius: 12,
+                      border: "1px solid #dbe4f0",
+                      background: "#fff",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={draft.consent.preparationAuthorized}
+                      onChange={(event) =>
+                        updateDraft((current) => ({
+                          ...current,
+                          consent: {
+                            ...current.consent,
+                            preparationAuthorized: event.target.checked,
+                          } as HalifaxSubmissionConsent,
+                        }))
+                      }
+                    />
+                    <span style={{ lineHeight: 1.5 }}>
+                      I authorize RentChain to use my stored property and account information to prepare a Halifax rental
+                      registry submission draft for this property.
+                    </span>
+                  </label>
+                  {!draft.consent.preparationAuthorized ? (
+                    <div style={{ color: "#92400e", fontSize: 13 }}>
+                      You’ll be able to continue once this authorization is checked.
+                    </div>
+                  ) : null}
+                </Card>
+              </div>
+            ) : null}
+
+            {step === 1 ? (
+              <div style={{ display: "grid", gap: 14 }}>
                 <Card style={{ display: "grid", gap: 8, background: "rgba(37,99,235,0.04)" }}>
                   <div style={{ fontWeight: 700 }}>Prefill overview</div>
                   <div style={{ color: "#475569", fontSize: 14, lineHeight: 1.5 }}>
                     Property address, PID, and any saved landlord contact details were prefilled where available. Review them here before moving on to the Halifax-only questions.
                   </div>
                 </Card>
+                <SectionHeading title="Site / property address" meta={draft.fieldMeta["fieldValues.siteAddress.line1"]} />
                 <AddressFields
                   label="Site / property address"
                   value={draft.fieldValues.siteAddress || emptyAddress()}
-                  onChange={(siteAddress) => setDraft((current) => (current ? { ...current, fieldValues: { ...current.fieldValues, siteAddress } } : current))}
+                  onChange={(siteAddress) => {
+                    updateDraft((current) => ({ ...current, fieldValues: { ...current.fieldValues, siteAddress } }));
+                    markProvidedByUser("fieldValues.siteAddress.line1");
+                  }}
                 />
+                <SectionHeading title="Property Identifier (PID)" meta={draft.fieldMeta["fieldValues.propertyIdentifierPid"]} />
                 <label style={{ display: "grid", gap: 6 }}>
                   <span>Property Identifier (PID)</span>
                   <Input
                     value={draft.fieldValues.propertyIdentifierPid || ""}
-                    onChange={(event) =>
-                      setDraft((current) =>
-                        current
-                          ? { ...current, fieldValues: { ...current.fieldValues, propertyIdentifierPid: event.target.value } }
-                          : current
-                      )
-                    }
+                    onChange={(event) => {
+                      updateDraft((current) => ({
+                        ...current,
+                        fieldValues: { ...current.fieldValues, propertyIdentifierPid: event.target.value },
+                      }));
+                      markProvidedByUser("fieldValues.propertyIdentifierPid");
+                    }}
                   />
                 </label>
+                <SectionHeading title="Property owner" meta={draft.fieldMeta["fieldValues.owner.name"]} note="Name / email / phone are tracked separately below." />
                 <ContactFields
                   label="Property owner"
                   value={draft.fieldValues.owner}
-                  onChange={(owner) => setDraft((current) => (current ? { ...current, fieldValues: { ...current.fieldValues, owner } } : current))}
+                  onChange={(owner) => {
+                    updateDraft((current) => ({ ...current, fieldValues: { ...current.fieldValues, owner } }));
+                    markProvidedByUser("fieldValues.owner.name");
+                    markProvidedByUser("fieldValues.owner.email");
+                    markProvidedByUser("fieldValues.owner.phone");
+                  }}
                 />
                 <Card style={{ display: "grid", gap: 10 }}>
-                  <div style={{ fontWeight: 700 }}>Primary contact</div>
+                  <SectionHeading title="Primary contact" />
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     {[
                       { label: "Same as owner", value: true },
@@ -619,19 +800,16 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                         <button
                           key={option.label}
                           type="button"
-                          onClick={() =>
-                            setDraft((current) =>
-                              current
-                                ? {
-                                    ...current,
-                                    fieldValues: {
-                                      ...current.fieldValues,
-                                      primaryContactSameAsOwner: option.value,
-                                    },
-                                  }
-                                : current
-                            )
-                          }
+                          onClick={() => {
+                            updateDraft((current) => ({
+                              ...current,
+                              fieldValues: {
+                                ...current.fieldValues,
+                                primaryContactSameAsOwner: option.value,
+                              },
+                            }));
+                            markProvidedByUser("fieldValues.primaryContactSameAsOwner");
+                          }}
                           style={{
                             padding: "8px 10px",
                             borderRadius: 999,
@@ -650,16 +828,20 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                     <ContactFields
                       label="Primary contact details"
                       value={draft.fieldValues.primaryContact}
-                      onChange={(primaryContact) =>
-                        setDraft((current) => (current ? { ...current, fieldValues: { ...current.fieldValues, primaryContact } } : current))
-                      }
+                      onChange={(primaryContact) => {
+                        updateDraft((current) => ({
+                          ...current,
+                          fieldValues: { ...current.fieldValues, primaryContact },
+                        }));
+                        markProvidedByUser("fieldValues.primaryContact.name");
+                      }}
                     />
                   ) : null}
                 </Card>
               </div>
             ) : null}
 
-            {step === 1 ? (
+            {step === 2 ? (
               <div style={{ display: "grid", gap: 14 }}>
                 <Card style={{ display: "grid", gap: 8, background: "rgba(15,23,42,0.03)" }}>
                   <div style={{ fontWeight: 700 }}>Building guidance</div>
@@ -679,19 +861,16 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                         <button
                           key={option.label}
                           type="button"
-                          onClick={() =>
-                            setDraft((current) =>
-                              current
-                                ? {
-                                    ...current,
-                                    fieldValues: {
-                                      ...current.fieldValues,
-                                      moreThanFiveBuildings: option.value,
-                                    },
-                                  }
-                                : current
-                            )
-                          }
+                          onClick={() => {
+                            updateDraft((current) => ({
+                              ...current,
+                              fieldValues: {
+                                ...current.fieldValues,
+                                moreThanFiveBuildings: option.value,
+                              },
+                            }));
+                            markProvidedByUser("fieldValues.moreThanFiveBuildings");
+                          }}
                           style={{
                             padding: "8px 10px",
                             borderRadius: 999,
@@ -712,24 +891,34 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                     key={building.id}
                     building={building}
                     index={index}
+                    fieldMeta={{
+                      buildingType: draft.fieldMeta[`fieldValues.buildings[${index}].buildingType`] || draft.fieldMeta["fieldValues.buildings[0].buildingType"],
+                      residentialUnitsRented:
+                        draft.fieldMeta[`fieldValues.buildings[${index}].residentialUnitsRented`] ||
+                        draft.fieldMeta["fieldValues.buildings[0].residentialUnitsRented"],
+                    }}
                     onChange={(nextBuilding) =>
-                      setDraft((current) => {
-                        if (!current) return current;
-                        const buildings = [...current.fieldValues.buildings];
-                        buildings[index] = nextBuilding;
-                        return {
-                          ...current,
-                          fieldValues: {
-                            ...current.fieldValues,
-                            buildings,
-                          },
-                        };
-                      })
+                      {
+                        updateDraft((current) => {
+                          if (!current) return current;
+                          const buildings = [...current.fieldValues.buildings];
+                          buildings[index] = nextBuilding;
+                          return {
+                            ...current,
+                            fieldValues: {
+                              ...current.fieldValues,
+                              buildings,
+                            },
+                          };
+                        });
+                        markProvidedByUser(`fieldValues.buildings[${index}].buildingType`);
+                        markProvidedByUser(`fieldValues.buildings[${index}].residentialUnitsRented`);
+                      }
                     }
                     onRemove={
                       draft.fieldValues.buildings.length > 1
                         ? () =>
-                            setDraft((current) =>
+                            updateDraft((current) =>
                               current
                                 ? {
                                     ...current,
@@ -749,7 +938,7 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                     type="button"
                     variant="secondary"
                     onClick={() =>
-                      setDraft((current) => {
+                      updateDraft((current) => {
                         if (!current) return current;
                         return {
                           ...current,
@@ -786,7 +975,7 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
               </div>
             ) : null}
 
-            {step === 2 ? (
+            {step === 3 ? (
               <div style={{ display: "grid", gap: 14 }}>
                 <Card style={{ display: "grid", gap: 8, background: "rgba(37,99,235,0.04)" }}>
                   <div style={{ fontWeight: 700 }}>Compliance details</div>
@@ -799,11 +988,10 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                   <textarea
                     value={draft.fieldValues.propertyDescription || ""}
                     onChange={(event) =>
-                      setDraft((current) =>
-                        current
-                          ? { ...current, fieldValues: { ...current.fieldValues, propertyDescription: event.target.value } }
-                          : current
-                      )
+                      updateDraft((current) => ({
+                        ...current,
+                        fieldValues: { ...current.fieldValues, propertyDescription: event.target.value },
+                      }))
                     }
                     rows={4}
                     style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #dbe4f0" }}
@@ -815,26 +1003,38 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                     building={building}
                     index={index}
                     showComplianceOnly
+                    fieldMeta={{
+                      yearConstructed:
+                        draft.fieldMeta[`fieldValues.buildings[${index}].yearConstructed`] ||
+                        draft.fieldMeta["fieldValues.buildings[0].yearConstructed"],
+                      fireLifeSafetySystems:
+                        draft.fieldMeta[`fieldValues.buildings[${index}].fireLifeSafetySystems`] ||
+                        draft.fieldMeta["fieldValues.buildings[0].fireLifeSafetySystems"],
+                    }}
                     onChange={(nextBuilding) =>
-                      setDraft((current) => {
-                        if (!current) return current;
-                        const buildings = [...current.fieldValues.buildings];
-                        buildings[index] = nextBuilding;
-                        return {
-                          ...current,
-                          fieldValues: {
-                            ...current.fieldValues,
-                            buildings,
-                          },
-                        };
-                      })
+                      {
+                        updateDraft((current) => {
+                          if (!current) return current;
+                          const buildings = [...current.fieldValues.buildings];
+                          buildings[index] = nextBuilding;
+                          return {
+                            ...current,
+                            fieldValues: {
+                              ...current.fieldValues,
+                              buildings,
+                            },
+                          };
+                        });
+                        markProvidedByUser(`fieldValues.buildings[${index}].yearConstructed`);
+                        markProvidedByUser(`fieldValues.buildings[${index}].fireLifeSafetySystems`);
+                      }
                     }
                   />
                 ))}
               </div>
             ) : null}
 
-            {step === 3 ? (
+            {step === 4 ? (
               <div style={{ display: "grid", gap: 14 }}>
                 <Card style={{ display: "grid", gap: 8, background: "rgba(15,23,42,0.03)" }}>
                   <div style={{ fontWeight: 700 }}>Declarations</div>
@@ -845,7 +1045,7 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                 {[
                   {
                     key: "acknowledged" as const,
-                    label: "I understand this assistant prepares data for Halifax registration and does not submit it directly.",
+                    label: "I understand this draft is prepared by RentChain for review and export and is not automatically submitted to Halifax.",
                   },
                   {
                     key: "maintenancePlanConfirmed" as const,
@@ -853,11 +1053,11 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                   },
                   {
                     key: "ownerDeclarationConfirmed" as const,
-                    label: "I am authorized to make owner or operator declarations for this property.",
+                    label: "I am authorized to make owner or operator declarations for this property, and I understand that municipal registration requirements remain my responsibility.",
                   },
                   {
                     key: "informationAccurateConfirmed" as const,
-                    label: "I confirm the information provided here is accurate to the best of my knowledge.",
+                    label: "I confirm the information in this draft is accurate to the best of my knowledge.",
                   },
                 ].map((item) => (
                   <label
@@ -875,19 +1075,16 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                     <input
                       type="checkbox"
                       checked={draft.declarations[item.key]}
-                      onChange={(event) =>
-                        setDraft((current) =>
-                          current
-                            ? {
-                                ...current,
-                                declarations: {
-                                  ...current.declarations,
-                                  [item.key]: event.target.checked,
-                                } as HalifaxSubmissionDeclarations,
-                              }
-                            : current
-                        )
-                      }
+                      onChange={(event) => {
+                        updateDraft((current) => ({
+                          ...current,
+                          declarations: {
+                            ...current.declarations,
+                            [item.key]: event.target.checked,
+                          } as HalifaxSubmissionDeclarations,
+                        }));
+                        markProvidedByUser("declarations.acknowledged");
+                      }}
                     />
                     <span style={{ lineHeight: 1.5 }}>{item.label}</span>
                   </label>
@@ -895,7 +1092,7 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
               </div>
             ) : null}
 
-            {step === 4 ? (
+            {step === 5 ? (
               <div style={{ display: "grid", gap: 14 }}>
                 <Card style={{ display: "grid", gap: 10 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
@@ -905,10 +1102,20 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                         Readiness score: {draft.validation.readinessScore} / 100
                       </div>
                     </div>
-                    <Pill tone={draft.validation.missingRequiredFields.length === 0 ? "accent" : "muted"}>
-                      {draft.validation.missingRequiredFields.length === 0 ? "Ready to export" : "Needs more detail"}
+                    <Pill tone={draft.validation.exportReady ? "accent" : "muted"}>
+                      {draft.validation.exportReady ? "Ready to export" : "Draft not ready yet"}
                     </Pill>
                   </div>
+                  {draft.validation.missingConsentItems.length ? (
+                    <div style={{ display: "grid", gap: 6 }}>
+                      <div style={{ fontWeight: 700, color: "#92400e" }}>Consent / declaration requirements</div>
+                      {draft.validation.missingConsentItems.map((item) => (
+                        <div key={item.path} style={{ color: "#78350f", fontSize: 14 }}>
+                          • {item.section}: {item.label}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                   {draft.validation.missingRequiredFields.length ? (
                     <div style={{ display: "grid", gap: 6 }}>
                       <div style={{ fontWeight: 700, color: "#92400e" }}>Missing required Halifax fields</div>
@@ -920,7 +1127,7 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                     </div>
                   ) : (
                     <div style={{ color: "#166534", fontSize: 14 }}>
-                      Required fields are complete. You can export a structured Halifax submission payload now.
+                      Required fields, consent, and declarations are complete. You can export a structured Halifax draft payload now.
                     </div>
                   )}
                   {draft.validation.warnings.length ? (
@@ -937,7 +1144,7 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                 <Card style={{ display: "grid", gap: 8, background: "rgba(15,23,42,0.03)" }}>
                   <div style={{ fontWeight: 700 }}>Export contents</div>
                   <div style={{ color: "#475569", fontSize: 14, lineHeight: 1.5 }}>
-                    The JSON export includes Halifax-grouped property, owner, contact, building, declaration, and validation data. It is suitable for guided submission today and future municipal integrations later.
+                    The JSON export includes Halifax-grouped property, owner, contact, building, declaration, validation, consent, and draft-preparation metadata. It is suitable for guided submission today and future municipal integrations later.
                   </div>
                 </Card>
               </div>
@@ -973,7 +1180,7 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                   <Button
                     type="button"
                     onClick={() => setStep((current) => Math.min(STEP_TITLES.length - 1, current + 1))}
-                    disabled={saving || exporting}
+                    disabled={saving || exporting || (step === 0 && !canMovePastConsent)}
                   >
                     Next
                   </Button>
@@ -1011,7 +1218,7 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                         }
                       })();
                     }}
-                    disabled={saving || exporting}
+                    disabled={saving || exporting || !canExport}
                   >
                     {exporting ? "Exporting..." : "Export JSON"}
                   </Button>

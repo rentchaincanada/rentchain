@@ -137,6 +137,37 @@ export interface HalifaxSubmissionDeclarations {
   informationAccurateConfirmed: boolean;
 }
 
+export interface HalifaxSubmissionConsent {
+  preparationAuthorized: boolean;
+  preparationAuthorizedAt: string | null;
+  preparationAuthorizedBy: string | null;
+  declarationsConfirmed: boolean;
+  declarationsConfirmedAt: string | null;
+  declarationsConfirmedBy: string | null;
+  finalReviewConfirmed: boolean;
+  finalReviewConfirmedAt: string | null;
+}
+
+export type HalifaxFieldProvenanceStatus =
+  | "prefilled_from_rentchain"
+  | "provided_by_user"
+  | "needs_confirmation"
+  | "missing";
+
+export interface HalifaxFieldMetaEntry {
+  source:
+    | "rentchain_property"
+    | "rentchain_profile"
+    | "rentchain_account"
+    | "derived"
+    | "manual"
+    | "unknown";
+  status: HalifaxFieldProvenanceStatus;
+  confirmed: boolean;
+}
+
+export type HalifaxSubmissionFieldMeta = Record<string, HalifaxFieldMetaEntry>;
+
 export interface HalifaxValidationItem {
   path: string;
   label: string;
@@ -145,9 +176,11 @@ export interface HalifaxValidationItem {
 
 export interface HalifaxSubmissionValidation {
   missingRequiredFields: HalifaxValidationItem[];
+  missingConsentItems: HalifaxValidationItem[];
   warnings: string[];
   readinessScore: number;
   completionPercent: number;
+  exportReady: boolean;
 }
 
 export interface HalifaxFieldMapEntry {
@@ -178,7 +211,9 @@ export interface HalifaxSubmissionDraft {
   };
   status: HalifaxSubmissionStatus;
   fieldValues: HalifaxSubmissionFieldValues;
+  fieldMeta: HalifaxSubmissionFieldMeta;
   declarations: HalifaxSubmissionDeclarations;
+  consent: HalifaxSubmissionConsent;
   validation: HalifaxSubmissionValidation;
   exportedAt: string | null;
   lastReviewedAt: string | null;
@@ -254,7 +289,9 @@ export async function saveHalifaxRegistrySubmission(
   propertyId: string,
   payload: {
     fieldValues?: Partial<HalifaxSubmissionFieldValues>;
+    fieldMeta?: Partial<HalifaxSubmissionFieldMeta>;
     declarations?: Partial<HalifaxSubmissionDeclarations>;
+    consent?: Partial<HalifaxSubmissionConsent>;
     status?: HalifaxSubmissionStatus | null;
   }
 ): Promise<{

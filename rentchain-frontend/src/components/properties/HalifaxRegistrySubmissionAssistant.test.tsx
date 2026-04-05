@@ -128,14 +128,51 @@ describe("HalifaxRegistrySubmissionAssistant", () => {
         ownerDeclarationConfirmed: false,
         informationAccurateConfirmed: false,
       },
+      consent: {
+        preparationAuthorized: false,
+        preparationAuthorizedAt: null,
+        preparationAuthorizedBy: null,
+        declarationsConfirmed: false,
+        declarationsConfirmedAt: null,
+        declarationsConfirmedBy: null,
+        finalReviewConfirmed: false,
+        finalReviewConfirmedAt: null,
+      },
+      fieldMeta: {
+        "fieldValues.siteAddress.line1": {
+          source: "rentchain_property",
+          status: "needs_confirmation",
+          confirmed: false,
+        },
+        "fieldValues.owner.name": {
+          source: "rentchain_profile",
+          status: "needs_confirmation",
+          confirmed: false,
+        },
+        "fieldValues.owner.email": {
+          source: "rentchain_profile",
+          status: "needs_confirmation",
+          confirmed: false,
+        },
+        "fieldValues.owner.phone": {
+          source: "unknown",
+          status: "missing",
+          confirmed: false,
+        },
+      },
       validation: {
         missingRequiredFields: [
           { path: "fieldValues.owner.phone", label: "Owner phone", section: "Property Owner" },
           { path: "fieldValues.primaryContactSameAsOwner", label: "Primary contact same as owner", section: "Primary Contact" },
         ],
+        missingConsentItems: [
+          { path: "consent.preparationAuthorized", label: "Preparation consent authorization", section: "Consent & Use Notice" },
+          { path: "consent.declarationsConfirmed", label: "Declaration confirmation", section: "Declarations" },
+        ],
         warnings: [],
         readinessScore: 58,
         completionPercent: 58,
+        exportReady: false,
       },
       exportedAt: null,
       lastReviewedAt: null,
@@ -157,21 +194,48 @@ describe("HalifaxRegistrySubmissionAssistant", () => {
       ],
     });
     mocks.saveHalifaxRegistrySubmission.mockImplementation(async (_propertyId: string, payload: any) => ({
-      submission: {
-        ...baseSubmission,
-        fieldValues: {
-          ...baseSubmission.fieldValues,
-          ...(payload.fieldValues || {}),
-        },
-        declarations: { ...baseSubmission.declarations, ...(payload.declarations || {}) },
-        validation: {
-          missingRequiredFields: [],
-          warnings: [],
-          readinessScore: 100,
-          completionPercent: 100,
-        },
-        status: "ready",
-      },
+      submission: (() => {
+        const declarations = { ...baseSubmission.declarations, ...(payload.declarations || {}) };
+        const consent = {
+          ...baseSubmission.consent,
+          ...(payload.consent || {}),
+        };
+        const declarationsConfirmed =
+          Boolean(declarations.acknowledged) &&
+          Boolean(declarations.maintenancePlanConfirmed) &&
+          Boolean(declarations.ownerDeclarationConfirmed) &&
+          Boolean(declarations.informationAccurateConfirmed);
+        const preparationAuthorized = Boolean(consent.preparationAuthorized);
+        const ready = preparationAuthorized && declarationsConfirmed;
+        return {
+          ...baseSubmission,
+          fieldValues: {
+            ...baseSubmission.fieldValues,
+            ...(payload.fieldValues || {}),
+          },
+          declarations,
+          consent: {
+            ...consent,
+            preparationAuthorized,
+            declarationsConfirmed,
+            preparationAuthorizedAt: preparationAuthorized ? "2026-04-05T00:00:00.000Z" : null,
+            declarationsConfirmedAt: declarationsConfirmed ? "2026-04-05T00:05:00.000Z" : null,
+          },
+          fieldMeta: {
+            ...baseSubmission.fieldMeta,
+            ...(payload.fieldMeta || {}),
+          },
+          validation: {
+            missingRequiredFields: ready ? [] : baseSubmission.validation.missingRequiredFields,
+            missingConsentItems: ready ? [] : [{ path: "consent.declarationsConfirmed", label: "Declaration confirmation", section: "Declarations" }],
+            warnings: [],
+            readinessScore: ready ? 100 : 72,
+            completionPercent: ready ? 100 : 72,
+            exportReady: ready,
+          },
+          status: ready ? "ready" : "draft",
+        };
+      })(),
       fieldMap: [],
     }));
     mocks.exportHalifaxRegistrySubmission.mockResolvedValue({
@@ -180,20 +244,32 @@ describe("HalifaxRegistrySubmissionAssistant", () => {
         status: "exported",
         validation: {
           missingRequiredFields: [],
+          missingConsentItems: [],
           warnings: [],
           readinessScore: 100,
           completionPercent: 100,
+          exportReady: true,
+        },
+        consent: {
+          ...baseSubmission.consent,
+          preparationAuthorized: true,
+          preparationAuthorizedAt: "2026-04-05T00:00:00.000Z",
+          declarationsConfirmed: true,
+          declarationsConfirmedAt: "2026-04-05T00:05:00.000Z",
+          finalReviewConfirmed: true,
+          finalReviewConfirmedAt: "2026-04-05T00:10:00.000Z",
         },
       },
       exportPayload: {
         sourceKey: "halifax_rental_registry_form",
+        disclaimer: "This file is a preparation draft generated by RentChain",
       },
     });
     global.URL.createObjectURL = vi.fn(() => "blob:mock");
     global.URL.revokeObjectURL = vi.fn();
   });
 
-  it("loads prefilled data and exports the Halifax payload", async () => {
+  it("requires consent before progression and exports only after declarations are confirmed", async () => {
     render(
       <HalifaxRegistrySubmissionAssistant
         open
@@ -213,9 +289,20 @@ describe("HalifaxRegistrySubmissionAssistant", () => {
     );
 
     expect(await screen.findByText("Prepare Halifax rental registry submission")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("Jordan Harbour")).toBeInTheDocument();
-    expect(screen.getByText(/2 required fields missing/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Consent & use notice/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
 
+    fireEvent.click(
+      screen.getByLabelText(
+        /I authorize RentChain to use my stored property and account information to prepare a Halifax rental registry submission draft/i
+      )
+    );
+    expect(screen.getByRole("button", { name: "Next" })).not.toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByDisplayValue("Jordan Harbour")).toBeInTheDocument();
+    expect(screen.getByText(/4 readiness blockers/i)).toBeInTheDocument();
+    expect(screen.getAllByText("Needs confirmation").length).toBeGreaterThan(0);
     fireEvent.change(screen.getByLabelText("Phone"), { target: { value: "902-555-0101" } });
     fireEvent.click(screen.getByRole("button", { name: "Same as owner" }));
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
@@ -227,7 +314,18 @@ describe("HalifaxRegistrySubmissionAssistant", () => {
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByLabelText(/I understand this draft is prepared by RentChain for review and export/i));
+    fireEvent.click(screen.getByLabelText(/I confirm a maintenance \/ property management plan exists/i));
+    fireEvent.click(screen.getByLabelText(/I am authorized to make owner or operator declarations/i));
+    fireEvent.click(screen.getByLabelText(/I confirm the information in this draft is accurate/i));
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => {
+      expect(mocks.saveHalifaxRegistrySubmission).toHaveBeenCalledTimes(2);
+    });
+
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getAllByText(/Ready to export/i).length).toBeGreaterThan(0);
 
     const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
     fireEvent.click(screen.getByRole("button", { name: "Export JSON" }));
