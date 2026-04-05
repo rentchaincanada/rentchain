@@ -6,6 +6,7 @@ import { normalizeProvince } from "../lib/province";
 import { ensureRegistrySource } from "../services/registry/registryImportService";
 import { getPropertyRegistryProjection, upsertPropertyRegistryProjection } from "../services/registry/registryStatusProjectionService";
 import {
+  buildPropertyRegistryReadiness,
   buildPropertyRegistrySubmissionExportPayload,
   getRegistrySchemaSummaryForProperty,
   HALIFAX_FIELD_MAP,
@@ -604,10 +605,31 @@ router.get("/:propertyId/registry-status", async (req: any, res) => {
     }
 
     const { source } = await ensureRegistrySource("halifax_r400");
+    const submission = await loadPropertyRegistrySubmissionDraft({
+      property: { id: propertyId, ...property },
+      landlordId: ownerLandlordId || landlordId,
+    });
     const propertyProvince = String(property?.province || "").trim().toUpperCase();
-    const coverageAvailable = propertyProvince === source.jurisdictionProvince.toUpperCase();
+    const schema = getRegistrySchemaSummaryForProperty(property);
+    const coverageAvailable =
+      schema.mode !== "registry_ready_fallback" &&
+      propertyProvince === source.jurisdictionProvince.toUpperCase();
+    const coverageMessage =
+      schema.mode === "registry_ready_fallback"
+        ? "This jurisdiction currently uses RentChain's registry-ready compliance workflow rather than a connected public registry."
+        : !coverageAvailable
+          ? "Registry intelligence is currently available for Halifax properties only."
+          : null;
     if (!coverageAvailable) {
       const propertyPid = resolvePropertyPidLikeValue(property);
+      const readiness = buildPropertyRegistryReadiness({
+        property: { id: propertyId, ...property },
+        submission,
+        projection: null,
+        coverageAvailable: false,
+        coverageMessage,
+        propertyPid: propertyPid || null,
+      });
       return res.json({
         ok: true,
         status: null,
@@ -619,7 +641,7 @@ router.get("/:propertyId/registry-status", async (req: any, res) => {
         },
         coverage: {
           available: false,
-          message: "Registry intelligence is currently available for Halifax properties only.",
+          message: coverageMessage,
         },
         pidPrompt: {
           propertyPid: propertyPid || null,
@@ -631,6 +653,7 @@ router.get("/:propertyId/registry-status", async (req: any, res) => {
           sourceLabel: source.sourceLabel,
           actionable: false,
         },
+        readiness,
       });
     }
     let projection = await getPropertyRegistryProjection({ propertyId, source });
@@ -656,6 +679,14 @@ router.get("/:propertyId/registry-status", async (req: any, res) => {
     const pidPromptMessage = pidPromptEligible
       ? "Property PID missing; registry record includes PID. Adding it can improve registry verification and future matching."
       : null;
+    const readiness = buildPropertyRegistryReadiness({
+      property: { id: propertyId, ...property },
+      submission,
+      projection,
+      coverageAvailable: true,
+      coverageMessage: null,
+      propertyPid: propertyPid || null,
+    });
 
     return res.json({
       ok: true,
@@ -680,6 +711,7 @@ router.get("/:propertyId/registry-status", async (req: any, res) => {
         sourceLabel: source.sourceLabel,
         actionable: pidPromptEligible,
       },
+      readiness,
     });
   } catch (err: any) {
     console.error("[GET /api/properties/:propertyId/registry-status] failed", err);
