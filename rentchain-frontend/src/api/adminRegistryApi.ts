@@ -41,6 +41,15 @@ export type RegistryImportView = {
     rowCount: number;
     percent: number;
   } | null;
+  timingsMs?: {
+    fileLoad?: number | null;
+    parse?: number | null;
+    rawWrite?: number | null;
+    normalize?: number | null;
+    matching?: number | null;
+    projection?: number | null;
+    total?: number | null;
+  } | null;
   lastHeartbeatAt?: string | null;
   failureStage?: "queued" | "file_load" | "parse" | "raw_write" | "normalize" | "matching" | "projection" | "completed" | "failed" | null;
   retryCount?: number;

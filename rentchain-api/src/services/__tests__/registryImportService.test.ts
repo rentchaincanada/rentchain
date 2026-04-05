@@ -214,6 +214,34 @@ describe("registryImportService", () => {
     expect(stored?.progress?.stage).toBeTruthy();
   });
 
+  it("sets startedAt when async processing begins and preserves timing summaries through completion", async () => {
+    const { startRegistryImportJob, getRegistryImport } = await import("../registry/registryImportService");
+
+    const queued = await startRegistryImportJob({
+      sourceKey: "halifax_r400",
+      csvText: "OBJECTID,Registration Number,PID,Address,Registered\n1,REG-401,1234567,401 Example St,Y",
+      sourceFileName: "halifax-started-at.csv",
+      actorId: "admin-start",
+    });
+
+    let completed = await getRegistryImport(queued.importId);
+    for (let attempt = 0; attempt < 20 && completed?.status !== "completed"; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      completed = await getRegistryImport(queued.importId);
+    }
+
+    expect(completed?.status).toBe("completed");
+    expect(completed?.startedAt).toBeTruthy();
+    expect(completed?.completedAt).toBeTruthy();
+    expect(completed?.timingsMs?.fileLoad).toBeGreaterThanOrEqual(0);
+    expect(completed?.timingsMs?.parse).toBeGreaterThanOrEqual(0);
+    expect(completed?.timingsMs?.rawWrite).toBeGreaterThanOrEqual(0);
+    expect(completed?.timingsMs?.normalize).toBeGreaterThanOrEqual(0);
+    expect(completed?.timingsMs?.matching).toBeGreaterThanOrEqual(0);
+    expect(completed?.timingsMs?.projection).toBeGreaterThanOrEqual(0);
+    expect(completed?.timingsMs?.total).toBeGreaterThanOrEqual(0);
+  });
+
   it("retries a retryable async file-load failure and continues into parsing", async () => {
     const { startRegistryImportJob, getRegistryImport } = await import("../registry/registryImportService");
     const retryableError = Object.assign(new Error("DEADLINE_EXCEEDED while reading csv"), { code: "DEADLINE_EXCEEDED" });
@@ -239,6 +267,7 @@ describe("registryImportService", () => {
 
     expect(completed?.status).toBe("completed");
     expect(completed?.retryCount).toBe(1);
+    expect(completed?.startedAt).toBeTruthy();
     expect(gcsMocks.getFileReadStreamMock).toHaveBeenCalledTimes(2);
   });
 
@@ -265,6 +294,7 @@ describe("registryImportService", () => {
     expect(completed?.status).toBe("completed");
     expect(completed?.processingMode).toBe("async");
     expect(completed?.progress?.stage).toBe("completed");
+    expect(completed?.startedAt).toBeTruthy();
     expect(completed?.rowCount).toBe(2);
     expect(completed?.diagnostics?.missingPidCount).toBe(1);
   });
@@ -296,6 +326,8 @@ describe("registryImportService", () => {
     expect(failed?.rowCount).toBe(0);
     expect(failed?.parsedRowCount).toBe(0);
     expect(failed?.retryCount).toBe(2);
+    expect(failed?.startedAt).toBeTruthy();
+    expect(failed?.timingsMs?.total).toBeGreaterThanOrEqual(0);
     expect(failed?.errorSummary).toContain("storage unavailable");
   });
 
