@@ -6,6 +6,7 @@ import {
   buildDefaultBuilding,
   determineStatus,
   evolveConsent,
+  firstString,
   normalizeAddress,
   normalizeBuilding,
   normalizeContact,
@@ -14,6 +15,14 @@ import {
 } from "./schemas/registrySchemaCommon";
 import { HALIFAX_FIELD_MAP, HALIFAX_REGISTRY_SUBMISSION_SOURCE_KEY } from "./schemas/halifaxRentalRegistrySchema";
 import { resolveRegistrySchemaForProperty } from "./schemas/registrySchemaResolver";
+import {
+  buildRegistrySubmissionDraftV2,
+  exportRegistrySubmissionDraftV2,
+  hydrateRegistryAssistantUiState,
+  legacyDeclarationsFromDraft,
+  migrateRegistryDraftToV2,
+  validateRegistrySubmissionDraftV2,
+} from "./schemas/registrySubmissionDraftV2";
 import type {
   PropertyRegistryReadiness,
   RegistryAddress,
@@ -85,42 +94,39 @@ function applyResolvedSchemaDraft(input: {
   propertyId: string;
   landlordId: string | null;
   persisted: Partial<RegistrySubmissionDraft> | null;
-  prefilled: Pick<RegistrySubmissionDraft, "fieldValues" | "fieldMeta" | "declarations" | "consent">;
+  prefilled: {
+    fieldValues: RegistrySubmissionFieldValues;
+    fieldMeta: RegistrySubmissionFieldMeta;
+    declarations: RegistrySubmissionDeclarations;
+    consent: RegistrySubmissionConsent;
+  };
+  updatedBy?: string | null;
 }): RegistrySubmissionDraft {
   const { schema, propertyId, landlordId, persisted, prefilled } = input;
+  const migrated = persisted ? migrateRegistryDraftToV2(persisted) : null;
   const validation = schema.validate(prefilled);
-  const createdAt = asString(persisted?.createdAt) || nowIso();
-  const updatedAt = asString(persisted?.updatedAt) || createdAt;
-
-  return {
-    id: resolveDraftId(propertyId, schema),
-    propertyId,
-    landlordId,
-    sourceKey: schema.sourceKey,
-    schemaKey: schema.schemaKey,
-    schemaLabel: schema.label,
-    mode: schema.mode,
-    jurisdiction: {
-      ...schema.jurisdiction,
-    },
-    status: determineStatus({
-      validation,
-      fieldValues: prefilled.fieldValues,
-      declarations: prefilled.declarations,
-      consent: prefilled.consent,
-      previousStatus: persisted?.status || null,
-    }),
+  const status = determineStatus({
+    validation,
     fieldValues: prefilled.fieldValues,
-    fieldMeta: prefilled.fieldMeta,
     declarations: prefilled.declarations,
     consent: prefilled.consent,
-    validation,
-    exportedAt: asString(persisted?.exportedAt) || null,
-    lastReviewedAt: asString(persisted?.lastReviewedAt) || null,
-    createdAt,
-    updatedAt,
-    updatedBy: asString(persisted?.updatedBy) || null,
-  };
+    previousStatus: migrated?.status || null,
+  });
+
+  return buildRegistrySubmissionDraftV2({
+    schema,
+    draftId: resolveDraftId(propertyId, schema),
+    propertyId,
+    landlordId,
+    previous: migrated,
+    fieldValues: prefilled.fieldValues,
+    fieldMeta: prefilled.fieldMeta,
+    consent: prefilled.consent,
+    declarations: prefilled.declarations,
+    status,
+    updatedBy: input.updatedBy || migrated?.actor.updatedBy || null,
+    migratedFromVersion: migrated?.audit.migratedFromVersion ?? null,
+  });
 }
 
 async function loadRegistryProfileContext(landlordId: string | null) {
@@ -154,7 +160,7 @@ export async function loadPropertyRegistrySubmissionDraft(input: {
     loadRegistryProfileContext(landlordId),
   ]);
 
-  const persisted = draftSnap?.exists ? ({ id: draftSnap.id, ...(draftSnap.data() as any) } as Partial<RegistrySubmissionDraft>) : null;
+  const persisted = draftSnap?.exists ? ({ draftId: draftSnap.id, ...(draftSnap.data() as any) } as Partial<RegistrySubmissionDraft>) : null;
   const prefilled = schema.buildPrefill({
     property: input.property,
     landlordProfile: profileContext.landlordProfile,
@@ -179,129 +185,123 @@ export async function savePropertyRegistrySubmissionDraft(
     landlordId: input.landlordId,
   });
   const schema = resolveRegistrySchemaForProperty(input.property);
-
-  const mergedFieldValues: RegistrySubmissionFieldValues = {
-    ...current.fieldValues,
-    ...(input.fieldValues || {}),
-    siteAddress: normalizeAddress(input.fieldValues?.siteAddress, current.fieldValues.siteAddress),
-    owner: normalizeContact(input.fieldValues?.owner, current.fieldValues.owner),
-    primaryContact: normalizeContact(input.fieldValues?.primaryContact, current.fieldValues.primaryContact),
-    buildings: (() => {
-      const nextBuildings = Array.isArray(input.fieldValues?.buildings)
-        ? input.fieldValues?.buildings
-        : current.fieldValues.buildings;
-      return (nextBuildings || [])
-        .slice(0, 5)
-        .map((building, index) =>
-          normalizeBuilding(building, current.fieldValues.buildings[index] || buildDefaultBuilding(input.property))
-        );
-    })(),
-    propertyIdentifierPid: asString(input.fieldValues?.propertyIdentifierPid) || current.fieldValues.propertyIdentifierPid || null,
-    primaryContactSameAsOwner:
-      asBooleanOrNull(input.fieldValues?.primaryContactSameAsOwner) ?? current.fieldValues.primaryContactSameAsOwner,
-    moreThanFiveBuildings:
-      asBooleanOrNull(input.fieldValues?.moreThanFiveBuildings) ?? current.fieldValues.moreThanFiveBuildings,
-    propertyDescription: asString(input.fieldValues?.propertyDescription) || current.fieldValues.propertyDescription || null,
-  };
-  const mergedDeclarations = normalizeDeclarations(input.declarations, current.declarations);
-  const mergedFieldMeta = applyFieldMetaOverrides(
-    schema.buildPrefill({
-      property: input.property,
-      landlordProfile: null,
-      userAccount: null,
-      persisted: {
-        ...current,
-        fieldValues: mergedFieldValues,
-        declarations: mergedDeclarations,
-        fieldMeta: current.fieldMeta,
-      },
-    }).fieldMeta,
-    input.fieldMeta
-  );
-  const mergedConsent = evolveConsent({
-    current: current.consent,
-    incoming: input.consent,
-    declarations: mergedDeclarations,
-    actor: asString(input.actorUserId || input.actorEmail),
-  });
+  const actor = asString(input.actorUserId || input.actorEmail);
+  const incomingDraft = input.draft ? hydrateRegistryAssistantUiState(input.draft) : null;
+  const currentFieldValues = current.form.fieldValues;
+  const nextFieldValues: RegistrySubmissionFieldValues = incomingDraft
+    ? incomingDraft.form.fieldValues
+    : {
+        ...currentFieldValues,
+        ...(input.fieldValues || {}),
+        siteAddress: normalizeAddress(input.fieldValues?.siteAddress, currentFieldValues.siteAddress),
+        owner: normalizeContact(input.fieldValues?.owner, currentFieldValues.owner),
+        primaryContact: normalizeContact(input.fieldValues?.primaryContact, currentFieldValues.primaryContact),
+        buildings: (() => {
+          const nextBuildings = Array.isArray(input.fieldValues?.buildings)
+            ? input.fieldValues?.buildings
+            : currentFieldValues.buildings;
+          return (nextBuildings || [])
+            .slice(0, 5)
+            .map((building, index) =>
+              normalizeBuilding(building, currentFieldValues.buildings[index] || buildDefaultBuilding(input.property))
+            );
+        })(),
+        propertyIdentifierPid:
+          asString(input.fieldValues?.propertyIdentifierPid) || currentFieldValues.propertyIdentifierPid || null,
+        primaryContactSameAsOwner:
+          asBooleanOrNull(input.fieldValues?.primaryContactSameAsOwner) ?? currentFieldValues.primaryContactSameAsOwner,
+        moreThanFiveBuildings:
+          asBooleanOrNull(input.fieldValues?.moreThanFiveBuildings) ?? currentFieldValues.moreThanFiveBuildings,
+        propertyDescription: asString(input.fieldValues?.propertyDescription) || currentFieldValues.propertyDescription || null,
+      };
+  const nextDeclarations = incomingDraft
+    ? legacyDeclarationsFromDraft(incomingDraft)
+    : normalizeDeclarations(input.declarations, legacyDeclarationsFromDraft(current));
+  const nextConsent = incomingDraft
+    ? evolveConsent({
+        current: current.submission.consent,
+        incoming: incomingDraft.submission.consent,
+        declarations: nextDeclarations,
+        actor,
+      })
+    : evolveConsent({
+        current: current.submission.consent,
+        incoming: input.consent,
+        declarations: nextDeclarations,
+        actor,
+      });
+  const nextFieldMeta = incomingDraft
+    ? applyFieldMetaOverrides(current.form.fieldMeta, incomingDraft.form.fieldMeta)
+    : applyFieldMetaOverrides(
+        schema.buildPrefill({
+          property: input.property,
+          landlordProfile: null,
+          userAccount: null,
+          persisted: current,
+        }).fieldMeta,
+        input.fieldMeta
+      );
   const validation = schema.validate({
-    fieldValues: mergedFieldValues,
-    declarations: mergedDeclarations,
-    consent: mergedConsent,
+    fieldValues: nextFieldValues,
+    declarations: nextDeclarations,
+    consent: nextConsent,
   });
-  const updatedAt = nowIso();
-
-  const next: RegistrySubmissionDraft = {
-    ...current,
-    sourceKey: schema.sourceKey,
-    schemaKey: schema.schemaKey,
-    schemaLabel: schema.label,
-    mode: schema.mode,
-    jurisdiction: { ...schema.jurisdiction },
-    fieldValues: mergedFieldValues,
-    fieldMeta: mergedFieldMeta,
-    declarations: mergedDeclarations,
-    consent: mergedConsent,
-    validation,
+  const next = buildRegistrySubmissionDraftV2({
+    schema,
+    draftId: current.draftId,
+    propertyId: current.context.propertyId,
+    landlordId: current.actor.landlordId,
+    previous: current,
+    fieldValues: nextFieldValues,
+    fieldMeta: nextFieldMeta,
+    consent: nextConsent,
+    declarations: nextDeclarations,
     status:
       input.status ||
+      incomingDraft?.status ||
       determineStatus({
         validation,
-        fieldValues: mergedFieldValues,
-        declarations: mergedDeclarations,
-        consent: mergedConsent,
+        fieldValues: nextFieldValues,
+        declarations: nextDeclarations,
+        consent: nextConsent,
         previousStatus: current.status,
       }),
-    updatedAt,
-    updatedBy: asString(input.actorUserId || input.actorEmail) || null,
-    lastReviewedAt: updatedAt,
-  };
+    updatedBy: actor,
+    migratedFromVersion: current.audit.migratedFromVersion,
+  });
 
-  await db.collection(HALIFAX_REGISTRY_SUBMISSION_COLLECTION).doc(current.id).set(
+  await db.collection(HALIFAX_REGISTRY_SUBMISSION_COLLECTION).doc(current.draftId).set(
     {
-      propertyId: current.propertyId,
-      landlordId: current.landlordId,
-      sourceKey: next.sourceKey,
-      schemaKey: next.schemaKey,
-      schemaLabel: next.schemaLabel,
-      mode: next.mode,
-      jurisdiction: next.jurisdiction,
-      status: next.status,
-      fieldValues: next.fieldValues,
-      fieldMeta: next.fieldMeta,
-      declarations: next.declarations,
-      consent: next.consent,
-      validation: next.validation,
-      exportedAt: next.exportedAt,
-      lastReviewedAt: next.lastReviewedAt,
-      createdAt: current.createdAt,
-      updatedAt: next.updatedAt,
+      ...next,
+      review: {
+        ...next.review,
+        validation: validateRegistrySubmissionDraftV2({ draft: next, schema }),
+      },
       updatedAtServer: FieldValue.serverTimestamp(),
-      updatedBy: next.updatedBy,
     },
     { merge: true }
   );
 
-  if (!current.consent.preparationAuthorized && next.consent.preparationAuthorized) {
+  if (!current.submission.consent.preparationAuthorized && next.submission.consent.preparationAuthorized) {
     await appendSubmissionAuditEvent({
-      propertyId: current.propertyId,
+      propertyId: current.context.propertyId,
       actorUserId: asString(input.actorUserId),
-      sourceKey: next.sourceKey,
+      sourceKey: next.context.sourceKey,
       action: "registry_submission_preparation_authorized",
     });
   }
-  if (!current.consent.declarationsConfirmed && next.consent.declarationsConfirmed) {
+  if (!current.submission.consent.declarationsConfirmed && next.submission.consent.declarationsConfirmed) {
     await appendSubmissionAuditEvent({
-      propertyId: current.propertyId,
+      propertyId: current.context.propertyId,
       actorUserId: asString(input.actorUserId),
-      sourceKey: next.sourceKey,
+      sourceKey: next.context.sourceKey,
       action: "registry_submission_declarations_confirmed",
     });
   }
   await appendSubmissionAuditEvent({
-    propertyId: current.propertyId,
+    propertyId: current.context.propertyId,
     actorUserId: asString(input.actorUserId),
-    sourceKey: next.sourceKey,
+    sourceKey: next.context.sourceKey,
     action: "registry_submission_draft_saved",
   });
 
@@ -319,51 +319,55 @@ export async function markPropertyRegistrySubmissionExported(input: {
     landlordId: input.landlordId,
   });
   const exportedAt = nowIso();
-  if (!current.validation.exportReady) {
+  if (!current.review.validation.exportReady) {
     throw new Error("Registry submission draft is not ready for export yet.");
   }
-  const nextStatus: RegistrySubmissionStatus = "exported";
-  const nextConsent = {
-    ...current.consent,
-    finalReviewConfirmed: true,
-    finalReviewConfirmedAt: current.consent.finalReviewConfirmedAt || exportedAt,
-  };
-
-  await db.collection(HALIFAX_REGISTRY_SUBMISSION_COLLECTION).doc(current.id).set(
-    {
+  const next = exportRegistrySubmissionDraftV2({
+    ...current,
+    status: "exported",
+    timestamps: {
+      ...current.timestamps,
       exportedAt,
-      status: nextStatus,
-      consent: nextConsent,
       updatedAt: exportedAt,
-      updatedAtServer: FieldValue.serverTimestamp(),
+      lastReviewedAt: exportedAt,
+    },
+    submission: {
+      ...current.submission,
+      consent: {
+        ...current.submission.consent,
+        finalReviewConfirmed: true,
+        finalReviewConfirmedAt: current.submission.consent.finalReviewConfirmedAt || exportedAt,
+      },
+    },
+    actor: {
+      ...current.actor,
       updatedBy: asString(input.actorUserId || input.actorEmail) || null,
+    },
+  });
+
+  await db.collection(HALIFAX_REGISTRY_SUBMISSION_COLLECTION).doc(current.draftId).set(
+    {
+      ...next,
+      updatedAtServer: FieldValue.serverTimestamp(),
     },
     { merge: true }
   );
 
   await appendSubmissionAuditEvent({
-    propertyId: current.propertyId,
+    propertyId: current.context.propertyId,
     actorUserId: asString(input.actorUserId),
-    sourceKey: current.sourceKey,
+    sourceKey: current.context.sourceKey,
     action: "registry_submission_exported",
   });
 
-  return {
-    ...current,
-    status: nextStatus,
-    consent: nextConsent,
-    exportedAt,
-    updatedAt: exportedAt,
-    updatedBy: asString(input.actorUserId || input.actorEmail) || null,
-  };
+  return next;
 }
 
 export function buildPropertyRegistrySubmissionExportPayload(input: {
   property: Record<string, any>;
   submission: RegistrySubmissionDraft;
 }) {
-  const schema = resolveRegistrySchemaForProperty(input.property);
-  return schema.buildExportPayload(input);
+  return exportRegistrySubmissionDraftV2(input.submission);
 }
 
 export function getRegistrySchemaSummaryForProperty(property: Record<string, any>): RegistrySchemaSummary {
@@ -471,16 +475,16 @@ export function buildPropertyRegistryReadiness(input: {
     readinessStatus = "possible_mismatch";
   } else if (projectionStatus === "manual_review" || projectionStatus === "pending_review") {
     readinessStatus = "manual_review_in_progress";
-  } else if (input.submission.validation.exportReady) {
+  } else if (input.submission.review.validation.exportReady) {
     readinessStatus = "registry_ready";
   } else if (schema.mode === "registry_ready_fallback" && !input.coverageAvailable) {
     readinessStatus = "incomplete";
   } else {
     readinessStatus = "incomplete";
   }
-  if (projectionStatus === "not_found" && input.submission.validation.exportReady) {
+  if (projectionStatus === "not_found" && input.submission.review.validation.exportReady) {
     readinessStatus = "registry_ready";
-  } else if (projectionStatus === "not_found" && !input.submission.validation.exportReady && input.coverageAvailable) {
+  } else if (projectionStatus === "not_found" && !input.submission.review.validation.exportReady && input.coverageAvailable) {
     readinessStatus = "no_public_match";
   }
 
@@ -491,29 +495,32 @@ export function buildPropertyRegistryReadiness(input: {
     nextRecommendedAction = "review_possible_match";
   } else if (readinessStatus === "manual_review_in_progress") {
     nextRecommendedAction = "resolve_mismatch";
-  } else if (input.submission.validation.exportReady) {
+  } else if (input.submission.review.validation.exportReady) {
     nextRecommendedAction = "export_ready_draft";
   } else if (!input.propertyPid) {
     nextRecommendedAction = "add_pid";
-  } else if (input.submission.validation.missingRequiredFields.length || input.submission.validation.missingConsentItems.length) {
+  } else if (
+    input.submission.review.validation.missingRequiredFields.length ||
+    input.submission.review.validation.missingConsentItems.length
+  ) {
     nextRecommendedAction = "complete_missing_fields";
   } else {
     nextRecommendedAction = "prepare_registry_submission";
   }
 
   return {
-    schemaKey: input.submission.schemaKey,
-    schemaLabel: input.submission.schemaLabel,
-    jurisdiction: input.submission.jurisdiction,
-    mode: input.submission.mode,
+    schemaKey: input.submission.context.schemaKey,
+    schemaLabel: input.submission.context.schemaLabel,
+    jurisdiction: input.submission.context.jurisdiction,
+    mode: input.submission.context.mode,
     readinessStatus,
-    readinessScore: input.submission.validation.readinessScore,
-    completionPercent: input.submission.validation.completionPercent,
-    exportReady: input.submission.validation.exportReady,
-    missingRequiredFields: input.submission.validation.missingRequiredFields,
-    missingConsentItems: input.submission.validation.missingConsentItems,
-    warnings: input.submission.validation.warnings,
-    topMissingItems: summarizeMissingItems(input.submission.validation),
+    readinessScore: input.submission.review.validation.readinessScore,
+    completionPercent: input.submission.review.validation.completionPercent,
+    exportReady: input.submission.review.validation.exportReady,
+    missingRequiredFields: input.submission.review.validation.missingRequiredFields,
+    missingConsentItems: input.submission.review.validation.missingConsentItems,
+    warnings: input.submission.review.validation.warnings,
+    topMissingItems: summarizeMissingItems(input.submission.review.validation),
     nextRecommendedAction,
     currentRegistryState: {
       status: projectionStatus,
@@ -549,7 +556,7 @@ export async function markHalifaxRegistrySubmissionExported(input: {
   actorEmail?: string | null;
 }) {
   const next = await markPropertyRegistrySubmissionExported(input);
-  if (next.sourceKey !== HALIFAX_REGISTRY_SUBMISSION_SOURCE_KEY) {
+  if (next.context.sourceKey !== HALIFAX_REGISTRY_SUBMISSION_SOURCE_KEY) {
     throw new Error("Registry submission draft is not a Halifax draft.");
   }
   return next;
@@ -579,3 +586,11 @@ export function validateHalifaxRegistrySubmissionDraft(input: {
   });
   return schema.validate(input);
 }
+
+export {
+  buildRegistrySubmissionDraftV2,
+  exportRegistrySubmissionDraftV2,
+  hydrateRegistryAssistantUiState,
+  migrateRegistryDraftToV2,
+  validateRegistrySubmissionDraftV2,
+};

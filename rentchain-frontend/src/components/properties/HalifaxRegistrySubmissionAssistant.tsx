@@ -1,14 +1,16 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  buildRegistrySubmissionDraftV2,
   exportHalifaxRegistrySubmission,
   fetchHalifaxRegistrySubmission,
+  hydrateRegistryAssistantUiState,
   saveHalifaxRegistrySubmission,
   type HalifaxAddress,
   type HalifaxBuildingDraft,
+  type RegistrySubmissionDeclarationId,
   type HalifaxFieldMapEntry,
   type HalifaxFieldMetaEntry,
   type HalifaxSubmissionConsent,
-  type HalifaxSubmissionDeclarations,
   type HalifaxSubmissionDraft,
   type HalifaxSubmissionFieldValues,
   type RegistrySchemaSummary,
@@ -73,7 +75,7 @@ function emptyAddress(): HalifaxAddress {
 }
 
 function cloneDraft(draft: HalifaxSubmissionDraft): HalifaxSubmissionDraft {
-  return JSON.parse(JSON.stringify(draft)) as HalifaxSubmissionDraft;
+  return hydrateRegistryAssistantUiState(JSON.parse(JSON.stringify(draft)) as HalifaxSubmissionDraft);
 }
 
 function updateAddress(address: HalifaxAddress, patch: Partial<HalifaxAddress>): HalifaxAddress {
@@ -147,6 +149,36 @@ function assistantCopy(schema: RegistrySchemaSummary | null) {
   };
 }
 
+function declarationChecked(
+  draft: HalifaxSubmissionDraft,
+  id: RegistrySubmissionDeclarationId
+) {
+  return draft.declarations.items.find((item) => item.id === id)?.checked || false;
+}
+
+function updateDeclarationState(
+  draft: HalifaxSubmissionDraft,
+  id: RegistrySubmissionDeclarationId,
+  checked: boolean
+): HalifaxSubmissionDraft {
+  return buildRegistrySubmissionDraftV2({
+    ...draft,
+    declarations: {
+      ...draft.declarations,
+      items: draft.declarations.items.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              checked,
+              checkedAt: checked ? item.checkedAt || new Date().toISOString() : null,
+            }
+          : item
+      ),
+      acceptedIds: draft.declarations.acceptedIds,
+    },
+  });
+}
+
 function stepForPath(path: string): number {
   if (path.startsWith("consent.")) return 0;
   if (path.startsWith("fieldValues.siteAddress") || path.startsWith("fieldValues.owner") || path.startsWith("fieldValues.primaryContact")) return 1;
@@ -160,7 +192,7 @@ function MissingFieldSummary({
   missingPaths,
   currentStep,
 }: {
-  missingPaths: HalifaxSubmissionDraft["validation"]["missingRequiredFields"];
+  missingPaths: HalifaxSubmissionDraft["review"]["validation"]["missingRequiredFields"];
   currentStep: number;
 }) {
   const relevant = missingPaths.filter((item) => stepForPath(item.path) === currentStep);
@@ -592,17 +624,24 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
     path: string,
     meta: Partial<HalifaxFieldMetaEntry>
   ) => {
-    updateDraft((current) => ({
-      ...current,
-      fieldMeta: {
-        ...current.fieldMeta,
-        [path]: {
-          source: meta.source || current.fieldMeta?.[path]?.source || "manual",
-          status: meta.status || current.fieldMeta?.[path]?.status || "provided_by_user",
-          confirmed: meta.confirmed ?? current.fieldMeta?.[path]?.confirmed ?? true,
-        },
-      },
-    }));
+    updateDraft((current) =>
+      current
+        ? buildRegistrySubmissionDraftV2({
+            ...current,
+            form: {
+              ...current.form,
+              fieldMeta: {
+                ...current.form.fieldMeta,
+                [path]: {
+                  source: meta.source || current.form.fieldMeta?.[path]?.source || "manual",
+                  status: meta.status || current.form.fieldMeta?.[path]?.status || "provided_by_user",
+                  confirmed: meta.confirmed ?? current.form.fieldMeta?.[path]?.confirmed ?? true,
+                },
+              },
+            },
+          })
+        : current
+    );
   };
 
   const markProvidedByUser = (path: string) =>
@@ -613,26 +652,24 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
     });
 
   const blockingCount =
-    (draft?.validation.missingRequiredFields.length || 0) +
-    (draft?.validation.missingConsentItems.length || 0);
+    (draft?.review.validation.missingRequiredFields.length || 0) +
+    (draft?.review.validation.missingConsentItems.length || 0);
   const autoFilledCount = useMemo(
     () => fieldMap.filter((entry) => entry.source !== "user_input_required" && entry.source !== "unsupported").length,
     [fieldMap]
   );
-  const canMovePastConsent = Boolean(draft?.consent.preparationAuthorized);
-  const canExport = Boolean(draft?.validation.exportReady);
+  const canMovePastConsent = Boolean(draft?.submission.consent.preparationAuthorized);
+  const canExport = Boolean(draft?.review.validation.exportReady);
   const copy = useMemo(() => assistantCopy(schema), [schema]);
 
   const persistDraft = async (nextDraft: HalifaxSubmissionDraft, toastMessage?: string) => {
     if (!propertyId) return;
     setSaving(true);
     try {
+      const canonicalDraft = buildRegistrySubmissionDraftV2(nextDraft);
       const result = await saveHalifaxRegistrySubmission(propertyId, {
-        fieldValues: nextDraft.fieldValues,
-        fieldMeta: nextDraft.fieldMeta,
-        declarations: nextDraft.declarations,
-        consent: nextDraft.consent,
-        status: nextDraft.status,
+        draft: canonicalDraft,
+        status: canonicalDraft.status,
       });
       setDraft(cloneDraft(result.submission));
       setFieldMap(result.fieldMap || []);
@@ -640,7 +677,7 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
       if (toastMessage) {
         showToast({
           message: toastMessage,
-          description: result.submission.validation.exportReady
+          description: result.submission.review.validation.exportReady
             ? copy.saveToastReady
             : "Consent, declaration confirmation, or required Halifax fields still need attention.",
         });
@@ -721,7 +758,7 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                 <Pill tone={canExport ? "accent" : "muted"}>
                   {canExport ? "Ready to export" : `${blockingCount} readiness blocker${blockingCount === 1 ? "" : "s"}`}
                 </Pill>
-                <Pill tone="muted">{draft.validation.completionPercent}% complete</Pill>
+                <Pill tone="muted">{draft.review.validation.completionPercent}% complete</Pill>
                 <Pill tone="muted">{autoFilledCount} fields prefilled from RentChain</Pill>
               </div>
               <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
@@ -751,7 +788,7 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
               </div>
             </div>
 
-            <MissingFieldSummary missingPaths={draft.validation.missingRequiredFields} currentStep={step} />
+            <MissingFieldSummary missingPaths={draft.review.validation.missingRequiredFields} currentStep={step} />
 
             {step === 0 ? (
               <div style={{ display: "grid", gap: 14 }}>
@@ -773,22 +810,29 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                   >
                     <input
                       type="checkbox"
-                      checked={draft.consent.preparationAuthorized}
+                      checked={draft.submission.consent.preparationAuthorized}
                       onChange={(event) =>
-                        updateDraft((current) => ({
-                          ...current,
-                          consent: {
-                            ...current.consent,
-                            preparationAuthorized: event.target.checked,
-                          } as HalifaxSubmissionConsent,
-                        }))
+                        updateDraft((current) =>
+                          current
+                            ? buildRegistrySubmissionDraftV2({
+                                ...current,
+                                submission: {
+                                  ...current.submission,
+                                  consent: {
+                                    ...current.submission.consent,
+                                    preparationAuthorized: event.target.checked,
+                                  } as HalifaxSubmissionConsent,
+                                },
+                              })
+                            : current
+                        )
                       }
                     />
                     <span style={{ lineHeight: 1.5 }}>
                       {copy.consentCheckbox}
                     </span>
                   </label>
-                  {!draft.consent.preparationAuthorized ? (
+                  {!draft.submission.consent.preparationAuthorized ? (
                     <div style={{ color: "#92400e", fontSize: 13 }}>
                       You’ll be able to continue once this authorization is checked.
                     </div>
@@ -805,35 +849,78 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                     {copy.prefillOverview}
                   </div>
                 </Card>
-                <SectionHeading title="Site / property address" meta={draft.fieldMeta["fieldValues.siteAddress.line1"]} />
+                <SectionHeading title="Site / property address" meta={draft.form.fieldMeta["fieldValues.siteAddress.line1"]} />
                 <AddressFields
                   label="Site / property address"
-                  value={draft.fieldValues.siteAddress || emptyAddress()}
+                  value={draft.form.fieldValues.siteAddress || emptyAddress()}
                   onChange={(siteAddress) => {
-                    updateDraft((current) => ({ ...current, fieldValues: { ...current.fieldValues, siteAddress } }));
+                    updateDraft((current) =>
+                      current
+                        ? buildRegistrySubmissionDraftV2({
+                            ...current,
+                            form: {
+                              ...current.form,
+                              fieldValues: { ...current.form.fieldValues, siteAddress },
+                            },
+                            entity: {
+                              ...current.entity,
+                              siteAddress,
+                            },
+                          })
+                        : current
+                    );
                     markProvidedByUser("fieldValues.siteAddress.line1");
                   }}
                 />
-                <SectionHeading title="Property Identifier (PID)" meta={draft.fieldMeta["fieldValues.propertyIdentifierPid"]} />
+                <SectionHeading title="Property Identifier (PID)" meta={draft.form.fieldMeta["fieldValues.propertyIdentifierPid"]} />
                 <label style={{ display: "grid", gap: 6 }}>
                   <span>Property Identifier (PID)</span>
                   <Input
-                    value={draft.fieldValues.propertyIdentifierPid || ""}
+                    value={draft.form.fieldValues.propertyIdentifierPid || ""}
                     onChange={(event) => {
-                      updateDraft((current) => ({
-                        ...current,
-                        fieldValues: { ...current.fieldValues, propertyIdentifierPid: event.target.value },
-                      }));
+                      updateDraft((current) =>
+                        current
+                          ? buildRegistrySubmissionDraftV2({
+                              ...current,
+                              form: {
+                                ...current.form,
+                                fieldValues: { ...current.form.fieldValues, propertyIdentifierPid: event.target.value },
+                              },
+                              entity: {
+                                ...current.entity,
+                                propertyIdentifierPid: event.target.value,
+                              },
+                            })
+                          : current
+                      );
                       markProvidedByUser("fieldValues.propertyIdentifierPid");
                     }}
                   />
                 </label>
-                <SectionHeading title="Property owner" meta={draft.fieldMeta["fieldValues.owner.name"]} note="Name / email / phone are tracked separately below." />
+                <SectionHeading title="Property owner" meta={draft.form.fieldMeta["fieldValues.owner.name"]} note="Name / email / phone are tracked separately below." />
                 <ContactFields
                   label="Property owner"
-                  value={draft.fieldValues.owner}
+                  value={draft.form.fieldValues.owner}
                   onChange={(owner) => {
-                    updateDraft((current) => ({ ...current, fieldValues: { ...current.fieldValues, owner } }));
+                    updateDraft((current) =>
+                      current
+                        ? buildRegistrySubmissionDraftV2({
+                            ...current,
+                            form: {
+                              ...current.form,
+                              fieldValues: { ...current.form.fieldValues, owner },
+                            },
+                            contact: {
+                              ...current.contact,
+                              owner,
+                            },
+                            people: {
+                              ...current.people,
+                              owner,
+                            },
+                          })
+                        : current
+                    );
                     markProvidedByUser("fieldValues.owner.name");
                     markProvidedByUser("fieldValues.owner.email");
                     markProvidedByUser("fieldValues.owner.phone");
@@ -846,19 +933,30 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                       { label: "Same as owner", value: true },
                       { label: "Different contact", value: false },
                     ].map((option) => {
-                      const active = draft.fieldValues.primaryContactSameAsOwner === option.value;
+                      const active = draft.form.fieldValues.primaryContactSameAsOwner === option.value;
                       return (
                         <button
                           key={option.label}
                           type="button"
                           onClick={() => {
-                            updateDraft((current) => ({
-                              ...current,
-                              fieldValues: {
-                                ...current.fieldValues,
-                                primaryContactSameAsOwner: option.value,
-                              },
-                            }));
+                            updateDraft((current) =>
+                              current
+                                ? buildRegistrySubmissionDraftV2({
+                                    ...current,
+                                    form: {
+                                      ...current.form,
+                                      fieldValues: {
+                                        ...current.form.fieldValues,
+                                        primaryContactSameAsOwner: option.value,
+                                      },
+                                    },
+                                    contact: {
+                                      ...current.contact,
+                                      primaryContactSameAsOwner: option.value,
+                                    },
+                                  })
+                                : current
+                            );
                             markProvidedByUser("fieldValues.primaryContactSameAsOwner");
                           }}
                           style={{
@@ -875,15 +973,30 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                       );
                     })}
                   </div>
-                  {draft.fieldValues.primaryContactSameAsOwner === false ? (
+                  {draft.form.fieldValues.primaryContactSameAsOwner === false ? (
                     <ContactFields
                       label="Primary contact details"
-                      value={draft.fieldValues.primaryContact}
+                      value={draft.form.fieldValues.primaryContact}
                       onChange={(primaryContact) => {
-                        updateDraft((current) => ({
-                          ...current,
-                          fieldValues: { ...current.fieldValues, primaryContact },
-                        }));
+                        updateDraft((current) =>
+                          current
+                            ? buildRegistrySubmissionDraftV2({
+                                ...current,
+                                form: {
+                                  ...current.form,
+                                  fieldValues: { ...current.form.fieldValues, primaryContact },
+                                },
+                                contact: {
+                                  ...current.contact,
+                                  primaryContact,
+                                },
+                                people: {
+                                  ...current.people,
+                                  primaryContact,
+                                },
+                              })
+                            : current
+                        );
                         markProvidedByUser("fieldValues.primaryContact.name");
                       }}
                     />
@@ -907,19 +1020,30 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                       { label: "Yes", value: true },
                       { label: "No", value: false },
                     ].map((option) => {
-                      const active = draft.fieldValues.moreThanFiveBuildings === option.value;
+                      const active = draft.form.fieldValues.moreThanFiveBuildings === option.value;
                       return (
                         <button
                           key={option.label}
                           type="button"
                           onClick={() => {
-                            updateDraft((current) => ({
-                              ...current,
-                              fieldValues: {
-                                ...current.fieldValues,
-                                moreThanFiveBuildings: option.value,
-                              },
-                            }));
+                            updateDraft((current) =>
+                              current
+                                ? buildRegistrySubmissionDraftV2({
+                                    ...current,
+                                    form: {
+                                      ...current.form,
+                                      fieldValues: {
+                                        ...current.form.fieldValues,
+                                        moreThanFiveBuildings: option.value,
+                                      },
+                                    },
+                                    entity: {
+                                      ...current.entity,
+                                      moreThanFiveBuildings: option.value,
+                                    },
+                                  })
+                                : current
+                            );
                             markProvidedByUser("fieldValues.moreThanFiveBuildings");
                           }}
                           style={{
@@ -937,86 +1061,110 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                     })}
                   </div>
                 </div>
-                {draft.fieldValues.buildings.map((building, index) => (
+                {draft.form.fieldValues.buildings.map((building, index) => (
                   <BuildingEditor
                     key={building.id}
                     building={building}
                     index={index}
                     fieldMeta={{
-                      buildingType: draft.fieldMeta[`fieldValues.buildings[${index}].buildingType`] || draft.fieldMeta["fieldValues.buildings[0].buildingType"],
+                      buildingType:
+                        draft.form.fieldMeta[`fieldValues.buildings[${index}].buildingType`] ||
+                        draft.form.fieldMeta["fieldValues.buildings[0].buildingType"],
                       residentialUnitsRented:
-                        draft.fieldMeta[`fieldValues.buildings[${index}].residentialUnitsRented`] ||
-                        draft.fieldMeta["fieldValues.buildings[0].residentialUnitsRented"],
+                        draft.form.fieldMeta[`fieldValues.buildings[${index}].residentialUnitsRented`] ||
+                        draft.form.fieldMeta["fieldValues.buildings[0].residentialUnitsRented"],
                     }}
                     onChange={(nextBuilding) =>
                       {
                         updateDraft((current) => {
                           if (!current) return current;
-                          const buildings = [...current.fieldValues.buildings];
+                          const buildings = [...current.form.fieldValues.buildings];
                           buildings[index] = nextBuilding;
-                          return {
+                          return buildRegistrySubmissionDraftV2({
                             ...current,
-                            fieldValues: {
-                              ...current.fieldValues,
+                            form: {
+                              ...current.form,
+                              fieldValues: {
+                                ...current.form.fieldValues,
+                                buildings,
+                              },
+                            },
+                            entity: {
+                              ...current.entity,
                               buildings,
                             },
-                          };
+                          });
                         });
                         markProvidedByUser(`fieldValues.buildings[${index}].buildingType`);
                         markProvidedByUser(`fieldValues.buildings[${index}].residentialUnitsRented`);
                       }
                     }
                     onRemove={
-                      draft.fieldValues.buildings.length > 1
+                      draft.form.fieldValues.buildings.length > 1
                         ? () =>
                             updateDraft((current) =>
                               current
-                                ? {
+                                ? buildRegistrySubmissionDraftV2({
                                     ...current,
-                                    fieldValues: {
-                                      ...current.fieldValues,
-                                      buildings: current.fieldValues.buildings.filter((_, buildingIndex) => buildingIndex !== index),
+                                    form: {
+                                      ...current.form,
+                                      fieldValues: {
+                                        ...current.form.fieldValues,
+                                        buildings: current.form.fieldValues.buildings.filter((_, buildingIndex) => buildingIndex !== index),
+                                      },
                                     },
-                                  }
+                                    entity: {
+                                      ...current.entity,
+                                      buildings: current.form.fieldValues.buildings.filter((_, buildingIndex) => buildingIndex !== index),
+                                    },
+                                  })
                                 : current
                             )
                         : undefined
                     }
                   />
                 ))}
-                {draft.fieldValues.buildings.length < 5 ? (
+                {draft.form.fieldValues.buildings.length < 5 ? (
                   <Button
                     type="button"
                     variant="secondary"
                     onClick={() =>
                       updateDraft((current) => {
                         if (!current) return current;
-                        return {
-                          ...current,
-                          fieldValues: {
-                            ...current.fieldValues,
-                            buildings: [
-                              ...current.fieldValues.buildings,
-                              {
-                                ...current.fieldValues.buildings[0],
-                                id: `building-${current.fieldValues.buildings.length + 1}`,
-                                primaryAddress: { ...current.fieldValues.siteAddress },
-                                rentalUnitTypes: [],
-                                buildingType: null,
-                                otherBuildingType: null,
-                                residentialUnitsRented: null,
-                                shortTermRentalUnits: null,
-                                totalResidentialUnits: null,
-                                hasCommercialUnits: null,
-                                amenities: [],
-                                fireLifeSafetySystems: [],
-                                accessibilityFeatures: [],
-                                yearConstructed: null,
-                                notes: null,
-                              },
-                            ],
+                        const buildings = [
+                          ...current.form.fieldValues.buildings,
+                          {
+                            ...current.form.fieldValues.buildings[0],
+                            id: `building-${current.form.fieldValues.buildings.length + 1}`,
+                            primaryAddress: { ...current.form.fieldValues.siteAddress },
+                            rentalUnitTypes: [],
+                            buildingType: null,
+                            otherBuildingType: null,
+                            residentialUnitsRented: null,
+                            shortTermRentalUnits: null,
+                            totalResidentialUnits: null,
+                            hasCommercialUnits: null,
+                            amenities: [],
+                            fireLifeSafetySystems: [],
+                            accessibilityFeatures: [],
+                            yearConstructed: null,
+                            notes: null,
                           },
-                        };
+                        ];
+                        return buildRegistrySubmissionDraftV2({
+                          ...current,
+                          form: {
+                            ...current.form,
+                            fieldValues: {
+                              ...current.form.fieldValues,
+                              buildings,
+                            },
+                          },
+                          entity: {
+                            ...current.entity,
+                            buildings,
+                          },
+                        });
                       })
                     }
                   >
@@ -1037,18 +1185,29 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                 <label style={{ display: "grid", gap: 6 }}>
                   <span>Property notes / description</span>
                   <textarea
-                    value={draft.fieldValues.propertyDescription || ""}
+                    value={draft.form.fieldValues.propertyDescription || ""}
                     onChange={(event) =>
-                      updateDraft((current) => ({
-                        ...current,
-                        fieldValues: { ...current.fieldValues, propertyDescription: event.target.value },
-                      }))
+                      updateDraft((current) =>
+                        current
+                          ? buildRegistrySubmissionDraftV2({
+                              ...current,
+                              form: {
+                                ...current.form,
+                                fieldValues: { ...current.form.fieldValues, propertyDescription: event.target.value },
+                              },
+                              entity: {
+                                ...current.entity,
+                                propertyDescription: event.target.value,
+                              },
+                            })
+                          : current
+                      )
                     }
                     rows={4}
                     style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #dbe4f0" }}
                   />
                 </label>
-                {draft.fieldValues.buildings.map((building, index) => (
+                {draft.form.fieldValues.buildings.map((building, index) => (
                   <BuildingEditor
                     key={`${building.id}-compliance`}
                     building={building}
@@ -1056,25 +1215,32 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                     showComplianceOnly
                     fieldMeta={{
                       yearConstructed:
-                        draft.fieldMeta[`fieldValues.buildings[${index}].yearConstructed`] ||
-                        draft.fieldMeta["fieldValues.buildings[0].yearConstructed"],
+                        draft.form.fieldMeta[`fieldValues.buildings[${index}].yearConstructed`] ||
+                        draft.form.fieldMeta["fieldValues.buildings[0].yearConstructed"],
                       fireLifeSafetySystems:
-                        draft.fieldMeta[`fieldValues.buildings[${index}].fireLifeSafetySystems`] ||
-                        draft.fieldMeta["fieldValues.buildings[0].fireLifeSafetySystems"],
+                        draft.form.fieldMeta[`fieldValues.buildings[${index}].fireLifeSafetySystems`] ||
+                        draft.form.fieldMeta["fieldValues.buildings[0].fireLifeSafetySystems"],
                     }}
                     onChange={(nextBuilding) =>
                       {
                         updateDraft((current) => {
                           if (!current) return current;
-                          const buildings = [...current.fieldValues.buildings];
+                          const buildings = [...current.form.fieldValues.buildings];
                           buildings[index] = nextBuilding;
-                          return {
+                          return buildRegistrySubmissionDraftV2({
                             ...current,
-                            fieldValues: {
-                              ...current.fieldValues,
+                            form: {
+                              ...current.form,
+                              fieldValues: {
+                                ...current.form.fieldValues,
+                                buildings,
+                              },
+                            },
+                            entity: {
+                              ...current.entity,
                               buildings,
                             },
-                          };
+                          });
                         });
                         markProvidedByUser(`fieldValues.buildings[${index}].yearConstructed`);
                         markProvidedByUser(`fieldValues.buildings[${index}].fireLifeSafetySystems`);
@@ -1125,15 +1291,11 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                   >
                     <input
                       type="checkbox"
-                      checked={draft.declarations[item.key]}
+                      checked={declarationChecked(draft, item.key)}
                       onChange={(event) => {
-                        updateDraft((current) => ({
-                          ...current,
-                          declarations: {
-                            ...current.declarations,
-                            [item.key]: event.target.checked,
-                          } as HalifaxSubmissionDeclarations,
-                        }));
+                        updateDraft((current) =>
+                          current ? updateDeclarationState(current, item.key, event.target.checked) : current
+                        );
                         markProvidedByUser("declarations.acknowledged");
                       }}
                     />
@@ -1150,27 +1312,27 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                     <div>
                       <div style={{ fontWeight: 700 }}>Validation summary</div>
                       <div style={{ color: "#475569", fontSize: 14 }}>
-                        Readiness score: {draft.validation.readinessScore} / 100
+                        Readiness score: {draft.review.validation.readinessScore} / 100
                       </div>
                     </div>
-                    <Pill tone={draft.validation.exportReady ? "accent" : "muted"}>
-                      {draft.validation.exportReady ? "Ready to export" : "Draft not ready yet"}
+                    <Pill tone={draft.review.validation.exportReady ? "accent" : "muted"}>
+                      {draft.review.validation.exportReady ? "Ready to export" : "Draft not ready yet"}
                     </Pill>
                   </div>
-                  {draft.validation.missingConsentItems.length ? (
+                  {draft.review.validation.missingConsentItems.length ? (
                     <div style={{ display: "grid", gap: 6 }}>
                       <div style={{ fontWeight: 700, color: "#92400e" }}>Consent / declaration requirements</div>
-                      {draft.validation.missingConsentItems.map((item) => (
+                      {draft.review.validation.missingConsentItems.map((item) => (
                         <div key={item.path} style={{ color: "#78350f", fontSize: 14 }}>
                           • {item.section}: {item.label}
                         </div>
                       ))}
                     </div>
                   ) : null}
-                  {draft.validation.missingRequiredFields.length ? (
+                  {draft.review.validation.missingRequiredFields.length ? (
                     <div style={{ display: "grid", gap: 6 }}>
                       <div style={{ fontWeight: 700, color: "#92400e" }}>{copy.missingFieldsHeading}</div>
-                      {draft.validation.missingRequiredFields.map((item) => (
+                      {draft.review.validation.missingRequiredFields.map((item) => (
                         <div key={item.path} style={{ color: "#78350f", fontSize: 14 }}>
                           • {item.section}: {item.label}
                         </div>
@@ -1181,10 +1343,10 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                       {copy.readyCopy}
                     </div>
                   )}
-                  {draft.validation.warnings.length ? (
+                  {draft.review.validation.warnings.length ? (
                     <div style={{ display: "grid", gap: 6 }}>
                       <div style={{ fontWeight: 700, color: "#334155" }}>Warnings / review items</div>
-                      {draft.validation.warnings.map((warning, index) => (
+                      {draft.review.validation.warnings.map((warning, index) => (
                         <div key={`${warning}-${index}`} style={{ color: "#475569", fontSize: 14 }}>
                           • {warning}
                         </div>
@@ -1254,7 +1416,7 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                           showToast({
                             message: copy.exportToastTitle,
                             description:
-                              result.submission.validation.missingRequiredFields.length === 0
+                              result.submission.review.validation.missingRequiredFields.length === 0
                                 ? "Submission-ready JSON export downloaded."
                                 : "Draft export downloaded with validation warnings for follow-up.",
                           });

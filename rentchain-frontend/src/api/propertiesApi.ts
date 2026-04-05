@@ -164,7 +164,26 @@ export interface RegistrySubmissionDeclarations {
   informationAccurateConfirmed: boolean;
 }
 
-export type HalifaxSubmissionDeclarations = RegistrySubmissionDeclarations;
+export type RegistrySubmissionDeclarationId =
+  | "acknowledged"
+  | "maintenancePlanConfirmed"
+  | "ownerDeclarationConfirmed"
+  | "informationAccurateConfirmed";
+
+export interface RegistrySubmissionDeclarationItem {
+  id: RegistrySubmissionDeclarationId;
+  label: string;
+  required: boolean;
+  checked: boolean;
+  checkedAt: string | null;
+}
+
+export interface RegistrySubmissionDeclarationState {
+  items: RegistrySubmissionDeclarationItem[];
+  acceptedIds: RegistrySubmissionDeclarationId[];
+}
+
+export type HalifaxSubmissionDeclarations = RegistrySubmissionDeclarationState;
 
 export interface RegistrySubmissionConsent {
   preparationAuthorized: boolean;
@@ -218,6 +237,7 @@ export interface RegistrySubmissionValidation {
   readinessScore: number;
   completionPercent: number;
   exportReady: boolean;
+  errors?: RegistryValidationItem[];
 }
 
 export type RegistryReadinessStatus =
@@ -303,29 +323,118 @@ export interface RegistryFieldMapEntry {
 
 export type HalifaxFieldMapEntry = RegistryFieldMapEntry;
 
-export interface RegistrySubmissionDraft {
-  id: string;
-  propertyId: string;
-  landlordId: string | null;
-  sourceKey: string;
-  schemaKey: string;
-  schemaLabel: string;
-  mode: RegistrySchemaMode;
-  jurisdiction: RegistrySchemaSummary["jurisdiction"];
+export interface RegistrySubmissionDraftV2 {
+  schemaVersion: 2;
+  draftId: string;
+  assistantType:
+    | "halifax_registry_submission_assistant"
+    | "registry_ready_compliance_assistant";
   status: RegistrySubmissionStatus;
-  fieldValues: RegistrySubmissionFieldValues;
-  fieldMeta: RegistrySubmissionFieldMeta;
-  declarations: RegistrySubmissionDeclarations;
-  consent: RegistrySubmissionConsent;
-  validation: RegistrySubmissionValidation;
-  exportedAt: string | null;
-  lastReviewedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-  updatedBy: string | null;
+  timestamps: {
+    createdAt: string;
+    updatedAt: string;
+    exportedAt: string | null;
+    lastReviewedAt: string | null;
+  };
+  actor: {
+    landlordId: string | null;
+    updatedBy: string | null;
+  };
+  context: {
+    propertyId: string;
+    sourceKey: string;
+    schemaKey: string;
+    schemaLabel: string;
+    mode: RegistrySchemaMode;
+    jurisdiction: RegistrySchemaSummary["jurisdiction"];
+  };
+  entity: {
+    siteAddress: RegistrySubmissionAddress;
+    propertyIdentifierPid: string | null;
+    moreThanFiveBuildings: boolean | null;
+    propertyDescription: string | null;
+    buildings: RegistrySubmissionBuildingDraft[];
+  };
+  contact: {
+    owner: RegistrySubmissionContact;
+    primaryContactSameAsOwner: boolean | null;
+    primaryContact: RegistrySubmissionContact;
+  };
+  people: {
+    owner: RegistrySubmissionContact;
+    primaryContact: RegistrySubmissionContact;
+  };
+  declarations: RegistrySubmissionDeclarationState;
+  attachments: Array<{
+    id: string;
+    name: string;
+    type: string;
+    url: string | null;
+  }>;
+  form: {
+    fieldValues: RegistrySubmissionFieldValues;
+    fieldMeta: RegistrySubmissionFieldMeta;
+  };
+  review: {
+    validation: RegistrySubmissionValidation;
+  };
+  submission: {
+    consent: RegistrySubmissionConsent;
+  };
+  audit: {
+    migratedFromVersion: number | string | null;
+  };
+  meta: {
+    disclaimer: string | null;
+    exportPreparedAt: string | null;
+  };
 }
 
-export type HalifaxSubmissionDraft = RegistrySubmissionDraft;
+export type RegistrySubmissionDraft = RegistrySubmissionDraftV2;
+export type HalifaxSubmissionDraft = RegistrySubmissionDraftV2;
+
+export function buildRegistrySubmissionDraftV2(
+  draft: RegistrySubmissionDraftV2
+): RegistrySubmissionDraftV2 {
+  const items = (draft.declarations.items || []).map((item) => ({
+    ...item,
+    checkedAt: item.checked ? item.checkedAt || new Date().toISOString() : null,
+  }));
+  return {
+    ...draft,
+    declarations: {
+      items,
+      acceptedIds: items.filter((item) => item.checked).map((item) => item.id),
+    },
+    review: {
+      ...draft.review,
+      validation: {
+        ...draft.review.validation,
+        errors:
+          draft.review.validation.errors ||
+          [...draft.review.validation.missingRequiredFields, ...draft.review.validation.missingConsentItems],
+      },
+    },
+  };
+}
+
+export function hydrateRegistryAssistantUiState(
+  draft: RegistrySubmissionDraftV2
+): RegistrySubmissionDraftV2 {
+  return buildRegistrySubmissionDraftV2(draft);
+}
+
+export function exportRegistrySubmissionDraftV2(
+  draft: RegistrySubmissionDraftV2
+): RegistrySubmissionDraftV2 {
+  return {
+    ...buildRegistrySubmissionDraftV2(draft),
+    meta: {
+      ...draft.meta,
+      exportPreparedAt: new Date().toISOString(),
+    },
+  };
+}
 
 export async function createProperty(
   payload: PropertyInput
@@ -399,6 +508,7 @@ export async function fetchHalifaxRegistrySubmission(propertyId: string) {
 export async function savePropertyRegistrySubmission(
   propertyId: string,
   payload: {
+    draft?: RegistrySubmissionDraft;
     fieldValues?: Partial<RegistrySubmissionFieldValues>;
     fieldMeta?: Partial<RegistrySubmissionFieldMeta>;
     declarations?: Partial<RegistrySubmissionDeclarations>;
@@ -420,7 +530,7 @@ export async function saveHalifaxRegistrySubmission(propertyId: string, payload:
 
 export async function exportPropertyRegistrySubmission(propertyId: string): Promise<{
   submission: RegistrySubmissionDraft;
-  exportPayload: Record<string, unknown>;
+  exportPayload: RegistrySubmissionDraft;
   schema: RegistrySchemaSummary;
 }> {
   const res = await api.get(`/properties/${encodeURIComponent(propertyId)}/registry-submission/export`);

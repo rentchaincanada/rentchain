@@ -78,6 +78,25 @@ export type RegistrySubmissionDeclarations = {
   informationAccurateConfirmed: boolean;
 };
 
+export type RegistrySubmissionDeclarationId =
+  | "acknowledged"
+  | "maintenancePlanConfirmed"
+  | "ownerDeclarationConfirmed"
+  | "informationAccurateConfirmed";
+
+export type RegistrySubmissionDeclarationItem = {
+  id: RegistrySubmissionDeclarationId;
+  label: string;
+  required: boolean;
+  checked: boolean;
+  checkedAt: string | null;
+};
+
+export type RegistrySubmissionDeclarationState = {
+  items: RegistrySubmissionDeclarationItem[];
+  acceptedIds: RegistrySubmissionDeclarationId[];
+};
+
 export type RegistrySubmissionConsent = {
   preparationAuthorized: boolean;
   preparationAuthorizedAt: string | null;
@@ -122,6 +141,7 @@ export type RegistrySubmissionValidation = {
   readinessScore: number;
   completionPercent: number;
   exportReady: boolean;
+  errors?: RegistryValidationItem[];
 };
 
 export type RegistryReadinessStatus =
@@ -211,27 +231,74 @@ export type RegistrySchemaSummary = {
   jurisdiction: RegistryJurisdiction;
 };
 
-export type RegistrySubmissionDraft = {
-  id: string;
-  propertyId: string;
-  landlordId: string | null;
-  sourceKey: string;
-  schemaKey: string;
-  schemaLabel: string;
-  mode: RegistrySchemaMode;
-  jurisdiction: RegistryJurisdiction;
+export type RegistrySubmissionDraftV2 = {
+  schemaVersion: 2;
+  draftId: string;
+  assistantType:
+    | "halifax_registry_submission_assistant"
+    | "registry_ready_compliance_assistant";
   status: RegistrySubmissionStatus;
-  fieldValues: RegistrySubmissionFieldValues;
-  fieldMeta: RegistrySubmissionFieldMeta;
-  declarations: RegistrySubmissionDeclarations;
-  consent: RegistrySubmissionConsent;
-  validation: RegistrySubmissionValidation;
-  exportedAt: string | null;
-  lastReviewedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-  updatedBy: string | null;
+  timestamps: {
+    createdAt: string;
+    updatedAt: string;
+    exportedAt: string | null;
+    lastReviewedAt: string | null;
+  };
+  actor: {
+    landlordId: string | null;
+    updatedBy: string | null;
+  };
+  context: {
+    propertyId: string;
+    sourceKey: string;
+    schemaKey: string;
+    schemaLabel: string;
+    mode: RegistrySchemaMode;
+    jurisdiction: RegistryJurisdiction;
+  };
+  entity: {
+    siteAddress: RegistryAddress;
+    propertyIdentifierPid: string | null;
+    moreThanFiveBuildings: boolean | null;
+    propertyDescription: string | null;
+    buildings: RegistryBuildingDraft[];
+  };
+  contact: {
+    owner: RegistryContact;
+    primaryContactSameAsOwner: boolean | null;
+    primaryContact: RegistryContact;
+  };
+  people: {
+    owner: RegistryContact;
+    primaryContact: RegistryContact;
+  };
+  declarations: RegistrySubmissionDeclarationState;
+  attachments: Array<{
+    id: string;
+    name: string;
+    type: string;
+    url: string | null;
+  }>;
+  form: {
+    fieldValues: RegistrySubmissionFieldValues;
+    fieldMeta: RegistrySubmissionFieldMeta;
+  };
+  review: {
+    validation: RegistrySubmissionValidation;
+  };
+  submission: {
+    consent: RegistrySubmissionConsent;
+  };
+  audit: {
+    migratedFromVersion: number | string | null;
+  };
+  meta: {
+    disclaimer: string | null;
+    exportPreparedAt: string | null;
+  };
 };
+
+export type RegistrySubmissionDraft = RegistrySubmissionDraftV2;
 
 export type RegistrySubmissionBuildContext = {
   property: Record<string, any>;
@@ -245,6 +312,7 @@ export type RegistrySubmissionSaveInput = {
   landlordId: string | null;
   actorUserId: string | null;
   actorEmail?: string | null;
+  draft?: Partial<RegistrySubmissionDraft> | null;
   fieldValues?: Partial<RegistrySubmissionFieldValues>;
   fieldMeta?: Partial<RegistrySubmissionFieldMeta>;
   declarations?: Partial<RegistrySubmissionDeclarations>;
@@ -254,16 +322,15 @@ export type RegistrySubmissionSaveInput = {
 
 export type RegistrySchemaDefinition = RegistrySchemaSummary & {
   fieldMap: RegistryFieldMapEntry[];
-  buildPrefill: (
-    context: RegistrySubmissionBuildContext
-  ) => Pick<RegistrySubmissionDraft, "fieldValues" | "fieldMeta" | "declarations" | "consent">;
+  buildPrefill: (context: RegistrySubmissionBuildContext) => {
+    fieldValues: RegistrySubmissionFieldValues;
+    fieldMeta: RegistrySubmissionFieldMeta;
+    declarations: RegistrySubmissionDeclarations;
+    consent: RegistrySubmissionConsent;
+  };
   validate: (input: {
     fieldValues: RegistrySubmissionFieldValues;
     declarations: RegistrySubmissionDeclarations;
     consent: RegistrySubmissionConsent;
   }) => RegistrySubmissionValidation;
-  buildExportPayload: (input: {
-    property: Record<string, any>;
-    submission: RegistrySubmissionDraft;
-  }) => Record<string, unknown>;
 };
