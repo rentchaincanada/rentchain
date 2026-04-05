@@ -26,9 +26,10 @@ function statusLabel(status: PropertyRegistryStatus["registryStatus"]) {
 
 type Props = {
   property: Property | null;
+  onOpenSubmissionAssistant?: () => void;
 };
 
-export const PropertyRegistryStatusCard: React.FC<Props> = ({ property }) => {
+export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSubmissionAssistant }) => {
   const [data, setData] = useState<{
     status: PropertyRegistryStatus | null;
     source: { sourceLabel: string };
@@ -189,6 +190,40 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property }) => {
             <div>
               <strong>Recommended action:</strong> {data.status.recommendedAction}
             </div>
+          </div>
+        </div>
+      ) : null}
+      {!loading && onOpenSubmissionAssistant ? (
+        <div
+          style={{
+            borderRadius: 12,
+            border: "1px solid rgba(15,23,42,0.08)",
+            background: "rgba(15,23,42,0.03)",
+            padding: "12px 14px",
+            display: "grid",
+            gap: 8,
+          }}
+        >
+          <div style={{ fontWeight: 700, color: "#0f172a" }}>Halifax submission assistant</div>
+          <div style={{ color: "#475569", fontSize: 14, lineHeight: 1.5 }}>
+            Review RentChain-prefilled property and owner data, answer the missing Halifax compliance questions, and export a structured submission-ready payload.
+          </div>
+          <div>
+            <button
+              type="button"
+              onClick={onOpenSubmissionAssistant}
+              style={{
+                padding: "8px 12px",
+                borderRadius: 10,
+                border: "1px solid rgba(37,99,235,0.22)",
+                background: "#2563eb",
+                color: "#fff",
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              Prepare Halifax registration
+            </button>
           </div>
         </div>
       ) : null}

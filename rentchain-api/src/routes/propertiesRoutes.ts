@@ -5,6 +5,13 @@ import { db, FieldValue } from "../config/firebase";
 import { normalizeProvince } from "../lib/province";
 import { ensureRegistrySource } from "../services/registry/registryImportService";
 import { getPropertyRegistryProjection, upsertPropertyRegistryProjection } from "../services/registry/registryStatusProjectionService";
+import {
+  buildHalifaxRegistrySubmissionExportPayload,
+  HALIFAX_FIELD_MAP,
+  loadHalifaxRegistrySubmissionDraft,
+  markHalifaxRegistrySubmissionExported,
+  saveHalifaxRegistrySubmissionDraft,
+} from "../services/registry/halifaxRegistrySubmissionService";
 import { normalizePid } from "../services/registry/registryUtils";
 
 const router = Router();
@@ -678,6 +685,125 @@ router.get("/:propertyId/registry-status", async (req: any, res) => {
       ok: false,
       error: "registry_status_failed",
       message: err?.message || "Failed to load property registry status",
+    });
+  }
+});
+
+router.get("/:propertyId/registry-submission/halifax", async (req: any, res) => {
+  const roleAdmin = isAdminRole(req);
+  const landlordId = resolveLandlordId(req);
+  const propertyId = String(req.params?.propertyId || "").trim();
+
+  if (!propertyId) return res.status(400).json({ ok: false, error: "property_id_required" });
+  if (!roleAdmin && !landlordId) return res.status(401).json({ ok: false, error: "unauthorized" });
+
+  try {
+    const property = await loadPropertyOr404(propertyId);
+    if (!property) return res.status(404).json({ ok: false, error: "not_found" });
+    const ownership = ensurePropertyOwnership({ req, property, landlordId, roleAdmin });
+    if (!ownership.ok) {
+      return res.status(403).json({ ok: false, error: "forbidden" });
+    }
+
+    const submission = await loadHalifaxRegistrySubmissionDraft({
+      property: { id: propertyId, ...property },
+      landlordId: ownership.ownerLandlordId || landlordId,
+    });
+
+    return res.json({
+      ok: true,
+      submission,
+      fieldMap: HALIFAX_FIELD_MAP,
+    });
+  } catch (err: any) {
+    console.error("[GET /api/properties/:propertyId/registry-submission/halifax] failed", err);
+    return res.status(500).json({
+      ok: false,
+      error: "registry_submission_failed",
+      message: err?.message || "Failed to load Halifax registry submission assistant",
+    });
+  }
+});
+
+router.put("/:propertyId/registry-submission/halifax", async (req: any, res) => {
+  const roleAdmin = isAdminRole(req);
+  const landlordId = resolveLandlordId(req);
+  const propertyId = String(req.params?.propertyId || "").trim();
+
+  if (!propertyId) return res.status(400).json({ ok: false, error: "property_id_required" });
+  if (!roleAdmin && !landlordId) return res.status(401).json({ ok: false, error: "unauthorized" });
+
+  try {
+    const property = await loadPropertyOr404(propertyId);
+    if (!property) return res.status(404).json({ ok: false, error: "not_found" });
+    const ownership = ensurePropertyOwnership({ req, property, landlordId, roleAdmin });
+    if (!ownership.ok) {
+      return res.status(403).json({ ok: false, error: "forbidden" });
+    }
+
+    const submission = await saveHalifaxRegistrySubmissionDraft({
+      property: { id: propertyId, ...property },
+      landlordId: ownership.ownerLandlordId || landlordId,
+      actorUserId: String(req.user?.id || "").trim() || null,
+      actorEmail: String(req.user?.email || "").trim() || null,
+      fieldValues: req.body?.fieldValues || {},
+      declarations: req.body?.declarations || {},
+      status: req.body?.status || null,
+    });
+
+    return res.json({
+      ok: true,
+      submission,
+      fieldMap: HALIFAX_FIELD_MAP,
+    });
+  } catch (err: any) {
+    console.error("[PUT /api/properties/:propertyId/registry-submission/halifax] failed", err);
+    return res.status(500).json({
+      ok: false,
+      error: "registry_submission_save_failed",
+      message: err?.message || "Failed to save Halifax registry submission assistant",
+    });
+  }
+});
+
+router.get("/:propertyId/registry-submission/halifax/export", async (req: any, res) => {
+  const roleAdmin = isAdminRole(req);
+  const landlordId = resolveLandlordId(req);
+  const propertyId = String(req.params?.propertyId || "").trim();
+
+  if (!propertyId) return res.status(400).json({ ok: false, error: "property_id_required" });
+  if (!roleAdmin && !landlordId) return res.status(401).json({ ok: false, error: "unauthorized" });
+
+  try {
+    const property = await loadPropertyOr404(propertyId);
+    if (!property) return res.status(404).json({ ok: false, error: "not_found" });
+    const ownership = ensurePropertyOwnership({ req, property, landlordId, roleAdmin });
+    if (!ownership.ok) {
+      return res.status(403).json({ ok: false, error: "forbidden" });
+    }
+
+    const submission = await markHalifaxRegistrySubmissionExported({
+      property: { id: propertyId, ...property },
+      landlordId: ownership.ownerLandlordId || landlordId,
+      actorUserId: String(req.user?.id || "").trim() || null,
+      actorEmail: String(req.user?.email || "").trim() || null,
+    });
+    const exportPayload = buildHalifaxRegistrySubmissionExportPayload({
+      property: { id: propertyId, ...property },
+      submission,
+    });
+
+    return res.json({
+      ok: true,
+      submission,
+      exportPayload,
+    });
+  } catch (err: any) {
+    console.error("[GET /api/properties/:propertyId/registry-submission/halifax/export] failed", err);
+    return res.status(500).json({
+      ok: false,
+      error: "registry_submission_export_failed",
+      message: err?.message || "Failed to export Halifax registry submission data",
     });
   }
 });
