@@ -76,7 +76,10 @@ describe("AdminRegistryImportsPage", () => {
   });
 
   it("queues an import quickly and polls while active imports remain", async () => {
-    const queuedImport = makeImport();
+    const queuedImport = makeImport({
+      progress: { stage: "file_load", rowsProcessed: 0, rowCount: 0, percent: 4 },
+      retryCount: 1,
+    });
     const completedImport = makeImport({
       status: "completed",
       progress: { stage: "completed", rowsProcessed: 10, rowCount: 10, percent: 100 },
@@ -124,7 +127,8 @@ describe("AdminRegistryImportsPage", () => {
     expect(mocks.startAdminRegistryImportMock).toHaveBeenCalledTimes(1);
     expect(screen.getByText("Import queued: import-1")).toBeInTheDocument();
     expect(mocks.fetchAdminRegistryImportsMock).toHaveBeenCalledTimes(2);
-    expect(screen.getByText(/Stage: queued/i)).toBeInTheDocument();
+    expect(screen.getByText(/Stage: file load/i)).toBeInTheDocument();
+    expect(screen.getByText(/File-load retries: 1/i)).toBeInTheDocument();
 
     await act(async () => {
       vi.advanceTimersByTime(3000);
@@ -134,5 +138,34 @@ describe("AdminRegistryImportsPage", () => {
 
     expect(mocks.fetchAdminRegistryImportsMock).toHaveBeenCalledTimes(3);
     expect(screen.getByText(/Stage: completed/i)).toBeInTheDocument();
+  });
+
+  it("shows clear file-load failure details", async () => {
+    mocks.fetchAdminRegistryImportsMock.mockResolvedValue([
+      makeImport({
+        status: "failed",
+        progress: { stage: "failed", rowsProcessed: 0, rowCount: 0, percent: 100 },
+        failureStage: "file_load",
+        errorSummary: "DEADLINE_EXCEEDED while reading csv",
+        retryCount: 2,
+      }),
+    ]);
+
+    render(
+      <MemoryRouter initialEntries={["/admin/registry/imports"]}>
+        <Routes>
+          <Route path="/admin/registry/imports" element={<AdminRegistryImportsPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText(/Failure stage: file load/i)).toBeInTheDocument();
+    expect(screen.getByText(/DEADLINE_EXCEEDED while reading csv/i)).toBeInTheDocument();
+    expect(screen.getByText(/File-load retries: 2/i)).toBeInTheDocument();
   });
 });

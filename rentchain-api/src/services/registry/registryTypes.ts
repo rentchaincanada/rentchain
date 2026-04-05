@@ -22,7 +22,7 @@ export type RegistryImportStatus = "uploaded" | "queued" | "processing" | "compl
 
 export type RegistryImportProgressStage =
   | "queued"
-  | "upload"
+  | "file_load"
   | "parse"
   | "raw_write"
   | "normalize"

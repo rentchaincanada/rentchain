@@ -142,6 +142,9 @@ const gcsMocks = vi.hoisted(() => ({
     state.storedCsvByPath.set(path, buffer.toString("utf8"));
     return { bucket: "test-bucket", path };
   }),
+  getFileMetadataMock: vi.fn(async ({ path }: { path: string }) => ({
+    size: Buffer.byteLength(state.storedCsvByPath.get(path) || "", "utf8"),
+  })),
   getFileReadStreamMock: vi.fn(({ path }: { path: string }) =>
     Readable.from([Buffer.from(state.storedCsvByPath.get(path) || "", "utf8")])
   ),
@@ -152,6 +155,7 @@ vi.mock("../../lib/gcs", () => ({
 }));
 
 vi.mock("../../lib/gcsRead", () => ({
+  getFileMetadata: gcsMocks.getFileMetadataMock,
   getFileReadStream: gcsMocks.getFileReadStreamMock,
 }));
 
@@ -176,6 +180,7 @@ describe("registryImportService", () => {
     resetDb();
     vi.resetModules();
     gcsMocks.uploadBufferToGcsMock.mockClear();
+    gcsMocks.getFileMetadataMock.mockClear();
     gcsMocks.getFileReadStreamMock.mockClear();
   });
 
@@ -200,9 +205,41 @@ describe("registryImportService", () => {
     expect(queued.importRecord.sourceFileStoragePath).toContain("registry-imports/halifax_r400/");
     expect(gcsMocks.uploadBufferToGcsMock).toHaveBeenCalledTimes(1);
 
-    const stored = await getRegistryImport(queued.importId);
+    let stored = await getRegistryImport(queued.importId);
+    for (let attempt = 0; attempt < 20 && stored?.status !== "completed"; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      stored = await getRegistryImport(queued.importId);
+    }
     expect(stored?.status === "queued" || stored?.status === "processing" || stored?.status === "completed").toBe(true);
     expect(stored?.progress?.stage).toBeTruthy();
+  });
+
+  it("retries a retryable async file-load failure and continues into parsing", async () => {
+    const { startRegistryImportJob, getRegistryImport } = await import("../registry/registryImportService");
+    const retryableError = Object.assign(new Error("DEADLINE_EXCEEDED while reading csv"), { code: "DEADLINE_EXCEEDED" });
+
+    gcsMocks.getFileReadStreamMock
+      .mockImplementationOnce(() => {
+        throw retryableError;
+      })
+      .mockImplementation(({ path }: { path: string }) => Readable.from([Buffer.from(state.storedCsvByPath.get(path) || "", "utf8")]));
+
+    const queued = await startRegistryImportJob({
+      sourceKey: "halifax_r400",
+      csvText: "OBJECTID,Registration Number,PID,Address,Registered\n1,REG-301,1234567,301 Example St,Y",
+      sourceFileName: "halifax-retry.csv",
+      actorId: "admin-retry",
+    });
+
+    let completed = await getRegistryImport(queued.importId);
+    for (let attempt = 0; attempt < 20 && completed?.status !== "completed"; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      completed = await getRegistryImport(queued.importId);
+    }
+
+    expect(completed?.status).toBe("completed");
+    expect(completed?.retryCount).toBe(1);
+    expect(gcsMocks.getFileReadStreamMock).toHaveBeenCalledTimes(2);
   });
 
   it("moves an async registry import from queued to completed while preserving diagnostics", async () => {
@@ -220,8 +257,8 @@ describe("registryImportService", () => {
     });
 
     let completed = await getRegistryImport(queued.importId);
-    for (let attempt = 0; attempt < 10 && completed?.status !== "completed"; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 0));
+    for (let attempt = 0; attempt < 20 && completed?.status !== "completed"; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
       completed = await getRegistryImport(queued.importId);
     }
 
@@ -235,8 +272,10 @@ describe("registryImportService", () => {
   it("marks an async registry import failed when background file loading breaks", async () => {
     const { startRegistryImportJob, getRegistryImport } = await import("../registry/registryImportService");
 
-    gcsMocks.getFileReadStreamMock.mockImplementationOnce(() => {
-      throw new Error("storage unavailable");
+    gcsMocks.getFileReadStreamMock.mockImplementation(() => {
+      const error = new Error("DEADLINE_EXCEEDED storage unavailable");
+      (error as any).code = "DEADLINE_EXCEEDED";
+      throw error;
     });
 
     const queued = await startRegistryImportJob({
@@ -247,13 +286,16 @@ describe("registryImportService", () => {
     });
 
     let failed = await getRegistryImport(queued.importId);
-    for (let attempt = 0; attempt < 10 && failed?.status !== "failed"; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 0));
+    for (let attempt = 0; attempt < 20 && failed?.status !== "failed"; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
       failed = await getRegistryImport(queued.importId);
     }
 
     expect(failed?.status).toBe("failed");
-    expect(failed?.failureStage).toBe("upload");
+    expect(failed?.failureStage).toBe("file_load");
+    expect(failed?.rowCount).toBe(0);
+    expect(failed?.parsedRowCount).toBe(0);
+    expect(failed?.retryCount).toBe(2);
     expect(failed?.errorSummary).toContain("storage unavailable");
   });
 
