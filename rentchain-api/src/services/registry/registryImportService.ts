@@ -14,7 +14,7 @@ import type {
   RegistrySourceKey,
   RegistrySourceRecord,
 } from "./registryTypes";
-import { compactObject, makeStableId, normalizePid, nowIso } from "./registryUtils";
+import { compactObject, makeStableId, normalizePid, nowIso, scoreAddressSimilarity } from "./registryUtils";
 import { HalifaxR400Adapter } from "./adapters/HalifaxR400Adapter";
 import type { RegistrySourceAdapter } from "./adapters/RegistrySourceAdapter";
 import { evaluateRegistryMatch, findRegistryCandidatesForRecord, reEvaluatePropertyAgainstRegistry } from "./registryMatchingService";
@@ -53,6 +53,12 @@ type RegistryMatchOverrideErrorCode =
   | "property_not_found";
 
 type RegistryQueueSummary = NonNullable<RegistryMatchRecord["queueSummary"]>;
+type RegistryImportPropertyIndex = {
+  candidates: RegistryPropertyCandidate[];
+  byPid: Map<string, RegistryPropertyCandidate[]>;
+  byAddress: Map<string, RegistryPropertyCandidate[]>;
+  byPropertyId: Map<string, RegistryPropertyCandidate>;
+};
 
 const activeRegistryImportJobs = new Map<string, Promise<void>>();
 const REGISTRY_IMPORT_STALE_MS = 2 * 60 * 1000;
@@ -353,7 +359,12 @@ async function buildRegistryReviewQueueSummary(params: {
   normalizedRecord: RegistryRecordNormalized | null;
   property?: Record<string, any> | null;
   includeTopCandidate?: boolean;
+  propertyIndex?: RegistryImportPropertyIndex | null;
 }) {
+  const matchedCandidate =
+    !params.property && params.match.propertyId && params.propertyIndex
+      ? params.propertyIndex.byPropertyId.get(String(params.match.propertyId || ""))
+      : null;
   const propertySummary = params.property
     ? {
         id: String(params.property.id || params.match.propertyId || ""),
@@ -364,14 +375,31 @@ async function buildRegistryReviewQueueSummary(params: {
         postalCode: String(params.property.postalCode || "").trim() || null,
         pid: resolvePropertyPidLikeValue(params.property),
       }
-    : null;
+    : matchedCandidate
+      ? {
+          id: matchedCandidate.propertyId,
+          name: matchedCandidate.propertyName,
+          addressLine1: matchedCandidate.addressLine1,
+          city: matchedCandidate.city,
+          province: matchedCandidate.province,
+          postalCode: matchedCandidate.postalCode,
+          pid: matchedCandidate.pid,
+        }
+      : null;
 
   let topCandidate: NonNullable<NonNullable<RegistryMatchRecord["queueSummary"]>["topCandidate"]> | null = null;
   if (params.includeTopCandidate && params.normalizedRecord && !params.match.propertyId) {
-    const candidate = (await findRegistryCandidatesForRecord({
-      adapter: params.adapter,
-      record: params.normalizedRecord,
-    }))[0];
+    const candidate = params.propertyIndex
+      ? findRegistryTopCandidatesFromIndex({
+          record: params.normalizedRecord,
+          propertyIndex: params.propertyIndex,
+        })[0]
+      : (
+          await findRegistryCandidatesForRecord({
+            adapter: params.adapter,
+            record: params.normalizedRecord,
+          })
+        )[0];
     if (candidate) {
       topCandidate = {
         propertyId: candidate.propertyId,
@@ -411,6 +439,7 @@ async function enrichRegistryMatchForQueue(params: {
   normalizedRecord?: RegistryRecordNormalized | null;
   source?: RegistrySourceRecord | null;
   includeTopCandidate?: boolean;
+  propertyIndex?: RegistryImportPropertyIndex | null;
 }): Promise<RegistryMatchRecord> {
   const includeTopCandidate = params.includeTopCandidate !== false;
   if (params.match.queueSummary && (!Array.isArray(params.match.queueSearchTokens) || !params.match.queueSearchTokens.length)) {
@@ -460,6 +489,7 @@ async function enrichRegistryMatchForQueue(params: {
     normalizedRecord: normalizedResolved,
     property,
     includeTopCandidate,
+    propertyIndex: params.propertyIndex || null,
   });
   const enriched = {
     ...params.match,
@@ -990,6 +1020,237 @@ function buildRegistryAuditLogDoc(input: Parameters<typeof recordRegistryAuditEv
   };
 }
 
+function compareBuildingTypes(a: string | null | undefined, b: string | null | undefined) {
+  const left = String(a || "").trim().toLowerCase();
+  const right = String(b || "").trim().toLowerCase();
+  if (!left || !right) return false;
+  return left !== right;
+}
+
+function getRecordAddressCandidates(record: RegistryRecordNormalized) {
+  const candidates = Array.isArray(record.addressCandidates) ? record.addressCandidates.filter(Boolean) : [];
+  if (record.addressNormalized && !candidates.includes(record.addressNormalized)) {
+    candidates.unshift(record.addressNormalized);
+  }
+  return Array.from(new Set(candidates));
+}
+
+function getMismatchReasons(record: RegistryRecordNormalized, property: RegistryPropertyCandidate): string[] {
+  const reasons: string[] = [];
+  if (
+    record.registeredUnits != null &&
+    property.unitCount != null &&
+    Math.abs(record.registeredUnits - property.unitCount) >= 2
+  ) {
+    reasons.push("unit_count_conflict");
+  }
+  if (compareBuildingTypes(record.buildingTypeNormalized, property.buildingType)) {
+    reasons.push("building_type_conflict");
+  }
+  return reasons;
+}
+
+function bestAddressScore(record: RegistryRecordNormalized, property: RegistryPropertyCandidate) {
+  const recordCandidates = getRecordAddressCandidates(record);
+  const propertyCandidates = getPropertyAddressCandidates(property);
+  let best = 0;
+  for (const left of recordCandidates) {
+    for (const right of propertyCandidates) {
+      best = Math.max(best, scoreAddressSimilarity(left, right));
+    }
+  }
+  return best;
+}
+
+function hasExactAddressCandidateMatch(record: RegistryRecordNormalized, property: RegistryPropertyCandidate) {
+  const propertyCandidates = new Set(getPropertyAddressCandidates(property));
+  return getRecordAddressCandidates(record).find((candidate) => propertyCandidates.has(candidate)) || null;
+}
+
+async function buildRegistryImportPropertyIndex(adapter: RegistrySourceAdapter, source: RegistrySourceRecord) {
+  const propertiesSnap = await db.collection("properties").where("province", "==", source.jurisdictionProvince).get();
+  const candidates = (propertiesSnap.docs || [])
+    .map((doc: any) => adapter.buildPropertyAddressCandidate({ id: doc.id, ...(doc.data() || {}) }))
+    .filter((candidate) => candidate.propertyId);
+
+  const byPid = new Map<string, RegistryPropertyCandidate[]>();
+  const byAddress = new Map<string, RegistryPropertyCandidate[]>();
+  const byPropertyId = new Map<string, RegistryPropertyCandidate>();
+
+  for (const candidate of candidates) {
+    byPropertyId.set(candidate.propertyId, candidate);
+    if (candidate.pid) {
+      byPid.set(candidate.pid, [...(byPid.get(candidate.pid) || []), candidate]);
+    }
+    for (const address of getPropertyAddressCandidates(candidate)) {
+      byAddress.set(address, [...(byAddress.get(address) || []), candidate]);
+    }
+  }
+
+  return { candidates, byPid, byAddress, byPropertyId } satisfies RegistryImportPropertyIndex;
+}
+
+function buildBaseRegistryMatch(record: RegistryRecordNormalized): RegistryMatchRecord {
+  const now = nowIso();
+  return {
+    id: makeStableId([record.sourceKey, record.registryRecordId]),
+    sourceKey: record.sourceKey,
+    registryRecordId: record.registryRecordId,
+    normalizedRecordId: record.id,
+    propertyId: null,
+    landlordId: null,
+    matchMethod: null,
+    matchScore: 0,
+    matchStatus: "unmatched",
+    mismatchReasons: [],
+    reviewedBy: null,
+    reviewedAt: null,
+    overrideReason: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function evaluateRegistryMatchFromIndex(params: {
+  record: RegistryRecordNormalized;
+  propertyIndex: RegistryImportPropertyIndex;
+}) {
+  const record = params.record;
+  const { candidates, byPid, byAddress } = params.propertyIndex;
+  const base = buildBaseRegistryMatch(record);
+  const addressCandidates = getRecordAddressCandidates(record);
+
+  if (record.pid) {
+    const pidMatches = byPid.get(record.pid) || [];
+    if (pidMatches.length === 1) {
+      const property = pidMatches[0];
+      const mismatchReasons = getMismatchReasons(record, property);
+      return {
+        ...base,
+        propertyId: property.propertyId,
+        landlordId: property.landlordId,
+        matchMethod: "pid_exact" as const,
+        matchScore: 0.99,
+        matchStatus: mismatchReasons.length ? ("mismatch" as const) : ("matched" as const),
+        mismatchReasons,
+      };
+    }
+    if (pidMatches.length > 1) {
+      return {
+        ...base,
+        matchMethod: "pid_exact" as const,
+        matchScore: 0.65,
+        matchStatus: "possible_match" as const,
+        mismatchReasons: ["pid_ambiguous"],
+      };
+    }
+  }
+
+  const exactMatches = Array.from(
+    new Map(
+      addressCandidates.flatMap((address) =>
+        (byAddress.get(address) || []).map((property) => [property.propertyId, property] as const)
+      )
+    ).values()
+  );
+
+  if (exactMatches.length === 1) {
+    const property = exactMatches[0];
+    const mismatchReasons = getMismatchReasons(record, property);
+    const exactCandidate = hasExactAddressCandidateMatch(record, property);
+    return {
+      ...base,
+      propertyId: property.propertyId,
+      landlordId: property.landlordId,
+      matchMethod: "address_exact" as const,
+      matchScore: addressCandidates.length > 1 ? 0.91 : 0.93,
+      matchStatus: mismatchReasons.length ? ("mismatch" as const) : ("matched" as const),
+      mismatchReasons:
+        exactCandidate && addressCandidates.length > 1
+          ? Array.from(new Set([...mismatchReasons, "multi_address_candidate_match"]))
+          : mismatchReasons,
+    };
+  }
+
+  if (exactMatches.length > 1) {
+    return {
+      ...base,
+      matchMethod: "address_exact" as const,
+      matchScore: 0.68,
+      matchStatus: "possible_match" as const,
+      mismatchReasons: [addressCandidates.length > 1 ? "ambiguous_multi_address" : "address_ambiguous"],
+    };
+  }
+
+  const fuzzy = candidates
+    .map((candidate) => ({
+      candidate,
+      score: bestAddressScore(record, candidate),
+      exactCandidate: hasExactAddressCandidateMatch(record, candidate),
+    }))
+    .filter((item) => item.score >= 0.72)
+    .sort((a, b) => b.score - a.score);
+
+  if (fuzzy.length) {
+    const top = fuzzy[0];
+    const mismatchReasons = getMismatchReasons(record, top.candidate);
+    const matchedSafely = top.score >= 0.88 && top.exactCandidate && fuzzy.length === 1;
+    return {
+      ...base,
+      propertyId: top.candidate.propertyId,
+      landlordId: top.candidate.landlordId,
+      matchMethod: matchedSafely ? ("address_exact" as const) : ("address_fuzzy" as const),
+      matchScore: Number(top.score.toFixed(2)),
+      matchStatus: matchedSafely ? (mismatchReasons.length ? ("mismatch" as const) : ("matched" as const)) : ("possible_match" as const),
+      mismatchReasons: Array.from(
+        new Set([
+          ...mismatchReasons,
+          addressCandidates.length > 1 ? "multi_address_candidate_match" : "manual_confirmation_recommended",
+          fuzzy.length > 1 ? "address_ambiguous" : null,
+        ].filter(Boolean) as string[])
+      ),
+    };
+  }
+
+  const unmatchedReasons: string[] = [];
+  if (record.pid) {
+    unmatchedReasons.push("no_pid_match");
+    if (candidates.length && !candidates.some((candidate) => candidate.pid)) {
+      unmatchedReasons.push("missing_internal_property_pid");
+    }
+  }
+  if (record.addressNormalized) {
+    unmatchedReasons.push("no_exact_address_match");
+  }
+  if (addressCandidates.length > 1) {
+    unmatchedReasons.push("no_candidate_address_match");
+    unmatchedReasons.push("ambiguous_multi_address");
+  }
+
+  return {
+    ...base,
+    mismatchReasons: Array.from(new Set(unmatchedReasons)),
+  };
+}
+
+function findRegistryTopCandidatesFromIndex(params: {
+  record: RegistryRecordNormalized;
+  propertyIndex: RegistryImportPropertyIndex;
+}) {
+  return params.propertyIndex.candidates
+    .map((candidate) => ({
+      ...candidate,
+      score: Number(bestAddressScore(params.record, candidate).toFixed(2)),
+    }))
+    .filter((item) => item.score >= 0.55 || (params.record.pid && item.pid === params.record.pid))
+    .sort((a, b) => {
+      if (params.record.pid && a.pid === params.record.pid && b.pid !== params.record.pid) return -1;
+      if (params.record.pid && b.pid === params.record.pid && a.pid !== params.record.pid) return 1;
+      return b.score - a.score;
+    })
+    .slice(0, 8);
+}
+
 async function getRegistryImportRecord(importId: string) {
   const snap = await db.collection("registryImports").doc(importId).get();
   if (!snap.exists) return null;
@@ -1291,6 +1552,13 @@ async function processRegistryImportCore(params: {
   let importRecord = normalizeImportRecord(params.importRecord);
   let currentStage: RegistryImportProgressStage = "parse";
   const stageTimer = createStageTimer();
+  const matchingDiagnostics = {
+    propertyIndexBuildMs: 0,
+    matchDecisionMs: 0,
+    matchWriteMs: 0,
+    matchAuditWriteMs: 0,
+    projectionRefreshScheduleMs: 0,
+  };
   console.info("[registry] import processing started", {
     importId: importRecord.id,
     sourceKey: importRecord.sourceKey,
@@ -1409,6 +1677,9 @@ async function processRegistryImportCore(params: {
       stage: "matching",
       rowCount: normalizedRows.length,
     });
+    const propertyIndexStartedAt = Date.now();
+    const propertyIndex = await buildRegistryImportPropertyIndex(params.adapter, params.source);
+    matchingDiagnostics.propertyIndexBuildMs = Date.now() - propertyIndexStartedAt;
     importRecord = await updateRegistryImportProgress(importRecord, createImportProgress("matching", 0, normalizedRows.length, 45), {
       timingsMs: createImportTimings({
         ...(importRecord.timingsMs || {}),
@@ -1425,26 +1696,48 @@ async function processRegistryImportCore(params: {
     let lastMatchingProgressRows = 0;
     let lastMatchingProgressAt = Date.now();
     let bufferedMatchOps: Array<(batch: FirebaseFirestore.WriteBatch) => void> = [];
+    let bufferedMatchDocWrites = 0;
+    let bufferedMatchAuditWrites = 0;
 
     const flushMatchingWrites = async () => {
       if (!bufferedMatchOps.length) return;
       const pendingOps = bufferedMatchOps;
+      const matchDocWrites = bufferedMatchDocWrites;
+      const matchAuditWrites = bufferedMatchAuditWrites;
       bufferedMatchOps = [];
+      bufferedMatchDocWrites = 0;
+      bufferedMatchAuditWrites = 0;
+      const writeStartedAt = Date.now();
       await commitInBatches(pendingOps);
+      const durationMs = Date.now() - writeStartedAt;
+      matchingDiagnostics.matchWriteMs += durationMs;
+      matchingDiagnostics.matchAuditWriteMs += durationMs;
+      console.info("[registry] import matching batch flush", {
+        importId: importRecord.id,
+        sourceKey: importRecord.sourceKey,
+        pendingOps: pendingOps.length,
+        matchDocWrites,
+        matchAuditWrites,
+        durationMs,
+      });
     };
 
     for (const [index, row] of normalizedRows.entries()) {
-      const evaluatedBase = await evaluateRegistryMatch({ adapter: params.adapter, record: row });
+      const decisionStartedAt = Date.now();
+      const evaluatedBase = evaluateRegistryMatchFromIndex({ record: row, propertyIndex });
       const evaluated = await enrichRegistryMatchForQueue({
         match: evaluatedBase,
         normalizedRecord: row,
         source: params.source,
         includeTopCandidate: true,
+        propertyIndex,
       });
+      matchingDiagnostics.matchDecisionMs += Date.now() - decisionStartedAt;
       matches.push(evaluated);
       bufferedMatchOps.push((batch) => {
         batch.set(db.collection("registryMatches").doc(evaluated.id), evaluated, { merge: true });
       });
+      bufferedMatchDocWrites += 1;
 
       if (evaluated.matchStatus === "matched") matchedRowCount += 1;
       if (evaluated.matchStatus === "unmatched") unmatchedRowCount += 1;
@@ -1468,6 +1761,7 @@ async function processRegistryImportCore(params: {
       bufferedMatchOps.push((batch) => {
         batch.set(db.collection("registryAuditLog").doc(), auditDoc);
       });
+      bufferedMatchAuditWrites += 1;
 
       const rowsProcessed = index + 1;
       if (bufferedMatchOps.length >= REGISTRY_IMPORT_MATCH_PROGRESS_BATCH * 2) {
@@ -1510,6 +1804,7 @@ async function processRegistryImportCore(params: {
       stage: "matching",
       durationMs: matchingMs,
       rowCount: normalizedRows.length,
+      matchingBreakdownMs: matchingDiagnostics,
     });
 
     currentStage = "projection";
@@ -1540,6 +1835,7 @@ async function processRegistryImportCore(params: {
 
     let lastProjectionProgressRows = 0;
     let lastProjectionProgressAt = Date.now();
+    const projectionScheduleStartedAt = Date.now();
     for (const [index, propertyId] of matchedPropertyIds.entries()) {
       await refreshPropertyProjectionFromCurrentMatches({
         propertyId,
@@ -1564,6 +1860,7 @@ async function processRegistryImportCore(params: {
         lastProjectionProgressAt = Date.now();
       }
     }
+    matchingDiagnostics.projectionRefreshScheduleMs = Date.now() - projectionScheduleStartedAt;
     const projectionMs = stageTimer.end("projection");
     console.info("[registry] import stage end", {
       importId: importRecord.id,
