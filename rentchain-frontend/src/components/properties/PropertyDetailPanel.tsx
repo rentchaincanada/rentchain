@@ -33,6 +33,7 @@ import { dispatchUpgradePrompt } from "@/lib/upgradePrompt";
 import { RiskScoreBadge } from "@/components/leases/RiskScoreBadge";
 import { PropertyCredibilitySummaryCard } from "@/components/properties/PropertyCredibilitySummaryCard";
 import { PropertyRegistryStatusCard } from "@/components/properties/PropertyRegistryStatusCard";
+import { HalifaxRegistrySubmissionAssistant } from "@/components/properties/HalifaxRegistrySubmissionAssistant";
 import type { PropertyCredibilitySummary } from "@/types/credibilitySummary";
 import { calculateConfiguredUnitRentTotal, resolveConfiguredUnitRent } from "@/lib/propertyRentSummary";
 import { getUnitsNeedingOccupancySetup } from "./occupancyPrompt";
@@ -148,6 +149,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   const [highlightedUnitKey, setHighlightedUnitKey] = useState<string | null>(null);
   const [occupancyPromptDismissed, setOccupancyPromptDismissed] = useState(false);
   const [editComplianceExpanded, setEditComplianceExpanded] = useState(false);
+  const [submissionAssistantOpen, setSubmissionAssistantOpen] = useState(false);
   const unitRowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
   const unitCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
@@ -1122,7 +1124,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
       )}
 
       <PropertyCredibilitySummaryCard summary={credibilitySummary} />
-      <PropertyRegistryStatusCard property={property} />
+      <PropertyRegistryStatusCard property={property} onOpenSubmissionAssistant={() => setSubmissionAssistantOpen(true)} />
 
       {activeLeases.length > 0 && (
         <div
@@ -1673,6 +1675,11 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
         }}
         unit={sendAppUnit}
         onClose={() => setSendAppUnit(null)}
+      />
+      <HalifaxRegistrySubmissionAssistant
+        open={submissionAssistantOpen}
+        property={property}
+        onClose={() => setSubmissionAssistantOpen(false)}
       />
       {editPropertyOpen ? (
         <div

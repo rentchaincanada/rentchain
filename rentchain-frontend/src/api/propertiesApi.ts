@@ -72,6 +72,121 @@ export interface PropertyRegistryStatus {
   updatedAt: string;
 }
 
+export type HalifaxSubmissionStatus =
+  | "not_started"
+  | "draft"
+  | "ready"
+  | "exported"
+  | "submitted_external"
+  | "needs_review";
+
+export interface HalifaxAddress {
+  line1: string | null;
+  line2: string | null;
+  city: string | null;
+  province: string | null;
+  postalCode: string | null;
+  country: string | null;
+}
+
+export interface HalifaxContact {
+  name: string | null;
+  company: string | null;
+  email: string | null;
+  phone: string | null;
+  address: HalifaxAddress;
+}
+
+export interface HalifaxBuildingDraft {
+  id: string;
+  primaryAddress: HalifaxAddress;
+  hasAlternateContact: boolean | null;
+  alternateContact: HalifaxContact;
+  hasAdditionalCivicAddress: boolean | null;
+  additionalCivicAddress: string | null;
+  rentalUnitTypes: string[];
+  otherRentalUnitType: string | null;
+  residentialUnitsRented: number | null;
+  shortTermRentalUnits: number | null;
+  buildingType: string | null;
+  otherBuildingType: string | null;
+  totalResidentialUnits: number | null;
+  hasCommercialUnits: boolean | null;
+  amenities: string[];
+  fireLifeSafetySystems: string[];
+  accessibilityFeatures: string[];
+  yearConstructed: number | null;
+  notes: string | null;
+}
+
+export interface HalifaxSubmissionFieldValues {
+  siteAddress: HalifaxAddress;
+  propertyIdentifierPid: string | null;
+  owner: HalifaxContact;
+  primaryContactSameAsOwner: boolean | null;
+  primaryContact: HalifaxContact;
+  moreThanFiveBuildings: boolean | null;
+  buildings: HalifaxBuildingDraft[];
+  propertyDescription: string | null;
+}
+
+export interface HalifaxSubmissionDeclarations {
+  acknowledged: boolean;
+  maintenancePlanConfirmed: boolean;
+  ownerDeclarationConfirmed: boolean;
+  informationAccurateConfirmed: boolean;
+}
+
+export interface HalifaxValidationItem {
+  path: string;
+  label: string;
+  section: string;
+}
+
+export interface HalifaxSubmissionValidation {
+  missingRequiredFields: HalifaxValidationItem[];
+  warnings: string[];
+  readinessScore: number;
+  completionPercent: number;
+}
+
+export interface HalifaxFieldMapEntry {
+  path: string;
+  label: string;
+  section: string;
+  required: boolean;
+  source:
+    | "property"
+    | "landlord_profile"
+    | "user_account"
+    | "derived"
+    | "user_input_required"
+    | "unsupported";
+  confidence: "high" | "medium" | "low";
+  notes?: string;
+}
+
+export interface HalifaxSubmissionDraft {
+  id: string;
+  propertyId: string;
+  landlordId: string | null;
+  sourceKey: "halifax_rental_registry_form";
+  jurisdiction: {
+    country: "CA";
+    province: "NS";
+    municipality: "Halifax";
+  };
+  status: HalifaxSubmissionStatus;
+  fieldValues: HalifaxSubmissionFieldValues;
+  declarations: HalifaxSubmissionDeclarations;
+  validation: HalifaxSubmissionValidation;
+  exportedAt: string | null;
+  lastReviewedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  updatedBy: string | null;
+}
+
 export async function createProperty(
   payload: PropertyInput
 ): Promise<{ property: Property }> {
@@ -124,6 +239,37 @@ export async function fetchPropertyRegistryStatus(propertyId: string): Promise<{
   };
 }> {
   const res = await api.get(`/properties/${encodeURIComponent(propertyId)}/registry-status`);
+  return res.data;
+}
+
+export async function fetchHalifaxRegistrySubmission(propertyId: string): Promise<{
+  submission: HalifaxSubmissionDraft;
+  fieldMap: HalifaxFieldMapEntry[];
+}> {
+  const res = await api.get(`/properties/${encodeURIComponent(propertyId)}/registry-submission/halifax`);
+  return res.data;
+}
+
+export async function saveHalifaxRegistrySubmission(
+  propertyId: string,
+  payload: {
+    fieldValues?: Partial<HalifaxSubmissionFieldValues>;
+    declarations?: Partial<HalifaxSubmissionDeclarations>;
+    status?: HalifaxSubmissionStatus | null;
+  }
+): Promise<{
+  submission: HalifaxSubmissionDraft;
+  fieldMap: HalifaxFieldMapEntry[];
+}> {
+  const res = await api.put(`/properties/${encodeURIComponent(propertyId)}/registry-submission/halifax`, payload);
+  return res.data;
+}
+
+export async function exportHalifaxRegistrySubmission(propertyId: string): Promise<{
+  submission: HalifaxSubmissionDraft;
+  exportPayload: Record<string, unknown>;
+}> {
+  const res = await api.get(`/properties/${encodeURIComponent(propertyId)}/registry-submission/halifax/export`);
   return res.data;
 }
 

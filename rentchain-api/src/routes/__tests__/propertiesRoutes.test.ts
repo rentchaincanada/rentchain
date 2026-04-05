@@ -637,4 +637,97 @@ describe("properties routes publish + defaults", () => {
       pidPromptEligible: false,
     });
   });
+
+  it("loads Halifax submission assistant data with property and owner prefills", async () => {
+    seedDoc("properties", "prop-submission", {
+      landlordId: "landlord-1",
+      ownerUserId: "landlord-1",
+      name: "Harbour View",
+      pid: "PID-123",
+      addressLine1: "12 Wharf Street",
+      city: "Halifax",
+      province: "NS",
+      postalCode: "B3H 1A1",
+      country: "Canada",
+      totalUnits: 8,
+      createdAt: "2026-04-05T00:00:00.000Z",
+    });
+    seedDoc("landlords", "landlord-1", {
+      email: "owner@example.com",
+      contactName: "Jordan Harbour",
+      phone: "902-555-0101",
+    });
+
+    const app = await createApp();
+    const res = await request(app).get("/api/properties/prop-submission/registry-submission/halifax");
+
+    expect(res.status).toBe(200);
+    expect(res.body?.submission?.fieldValues?.siteAddress?.line1).toBe("12 Wharf Street");
+    expect(res.body?.submission?.fieldValues?.propertyIdentifierPid).toBe("PID-123");
+    expect(res.body?.submission?.fieldValues?.owner?.email).toBe("owner@example.com");
+    expect(Array.isArray(res.body?.fieldMap)).toBe(true);
+  });
+
+  it("saves Halifax submission assistant answers and returns readiness", async () => {
+    seedDoc("properties", "prop-submission-save", {
+      landlordId: "landlord-1",
+      ownerUserId: "landlord-1",
+      name: "Harbour View",
+      addressLine1: "12 Wharf Street",
+      city: "Halifax",
+      province: "NS",
+      postalCode: "B3H 1A1",
+      country: "Canada",
+      totalUnits: 8,
+      createdAt: "2026-04-05T00:00:00.000Z",
+    });
+    seedDoc("landlords", "landlord-1", {
+      email: "owner@example.com",
+      contactName: "Jordan Harbour",
+      phone: "902-555-0101",
+      mailingAddressLine1: "55 Owner Lane",
+      mailingCity: "Halifax",
+      mailingProvince: "NS",
+      mailingPostalCode: "B3H 2B2",
+      mailingCountry: "Canada",
+    });
+
+    const app = await createApp();
+    const res = await request(app).put("/api/properties/prop-submission-save/registry-submission/halifax").send({
+      fieldValues: {
+        primaryContactSameAsOwner: true,
+        moreThanFiveBuildings: false,
+        buildings: [
+          {
+            id: "building-1",
+            primaryAddress: {
+              line1: "12 Wharf Street",
+              line2: "",
+              city: "Halifax",
+              province: "NS",
+              postalCode: "B3H 1A1",
+              country: "Canada",
+            },
+            rentalUnitTypes: ["Apartment(s)"],
+            residentialUnitsRented: 8,
+            shortTermRentalUnits: 0,
+            buildingType: "Apartment building",
+            totalResidentialUnits: 8,
+            hasCommercialUnits: false,
+          },
+        ],
+      },
+      declarations: {
+        acknowledged: true,
+        maintenancePlanConfirmed: true,
+        ownerDeclarationConfirmed: true,
+        informationAccurateConfirmed: true,
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.submission?.declarations?.acknowledged).toBe(true);
+    expect(res.body?.submission?.fieldValues?.buildings?.[0]?.buildingType).toBe("Apartment building");
+    expect(typeof res.body?.submission?.validation?.readinessScore).toBe("number");
+  });
 });
