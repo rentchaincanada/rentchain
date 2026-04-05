@@ -260,7 +260,7 @@ export function buildOwnerPrefill(
 export function buildInitialConsent(
   persisted?: Partial<RegistrySubmissionDraft> | null
 ): RegistrySubmissionConsent {
-  const consent = (persisted?.consent || {}) as Partial<RegistrySubmissionConsent>;
+  const consent = (((persisted as any)?.submission?.consent || (persisted as any)?.consent || {}) as Partial<RegistrySubmissionConsent>);
   return {
     preparationAuthorized: Boolean(consent.preparationAuthorized),
     preparationAuthorizedAt: asString(consent.preparationAuthorizedAt) || null,
@@ -278,7 +278,7 @@ export function deriveFieldMeta(
   declarations: RegistrySubmissionDeclarations,
   persisted?: Partial<RegistrySubmissionDraft> | null
 ): RegistrySubmissionFieldMeta {
-  const previous = ((persisted?.fieldMeta as RegistrySubmissionFieldMeta | undefined) || {}) as RegistrySubmissionFieldMeta;
+  const previous = ((((persisted as any)?.form?.fieldMeta || (persisted as any)?.fieldMeta) as RegistrySubmissionFieldMeta | undefined) || {}) as RegistrySubmissionFieldMeta;
   const next: RegistrySubmissionFieldMeta = {
     "fieldValues.siteAddress.line1": {
       source: fieldValues.siteAddress.line1 ? "rentchain_property" : "unknown",
@@ -406,10 +406,35 @@ export function evolveConsent(input: {
 
 export function buildBaseSubmissionPrefill(
   context: RegistrySubmissionBuildContext
-): Pick<RegistrySubmissionDraft, "fieldValues" | "fieldMeta" | "declarations" | "consent"> {
+): {
+  fieldValues: RegistrySubmissionFieldValues;
+  fieldMeta: RegistrySubmissionFieldMeta;
+  declarations: RegistrySubmissionDeclarations;
+  consent: RegistrySubmissionConsent;
+} {
   const property = context.property || {};
-  const persistedFieldValues = (context.persisted?.fieldValues || {}) as Partial<RegistrySubmissionFieldValues>;
-  const persistedDeclarations = (context.persisted?.declarations || {}) as Partial<RegistrySubmissionDeclarations>;
+  const persisted = (context.persisted || null) as any;
+  const persistedFieldValues = (((persisted?.form?.fieldValues || persisted?.fieldValues) || {}) as Partial<RegistrySubmissionFieldValues>);
+  const declarationState = persisted?.declarations || {};
+  const persistedDeclarations: RegistrySubmissionDeclarations = Array.isArray(declarationState?.items)
+    ? {
+        acknowledged: declarationState.items.some((item: any) => item?.id === "acknowledged" && item?.checked),
+        maintenancePlanConfirmed: declarationState.items.some(
+          (item: any) => item?.id === "maintenancePlanConfirmed" && item?.checked
+        ),
+        ownerDeclarationConfirmed: declarationState.items.some(
+          (item: any) => item?.id === "ownerDeclarationConfirmed" && item?.checked
+        ),
+        informationAccurateConfirmed: declarationState.items.some(
+          (item: any) => item?.id === "informationAccurateConfirmed" && item?.checked
+        ),
+      }
+    : normalizeDeclarations(declarationState, {
+        acknowledged: false,
+        maintenancePlanConfirmed: false,
+        ownerDeclarationConfirmed: false,
+        informationAccurateConfirmed: false,
+      });
 
   const ownerPrefill = buildOwnerPrefill(context.landlordProfile, context.userAccount);
   const baseFieldValues: RegistrySubmissionFieldValues = {
@@ -464,8 +489,8 @@ export function buildBaseSubmissionPrefill(
 
   return {
     fieldValues,
-    fieldMeta: deriveFieldMeta(fieldValues, declarations, context.persisted),
-    consent: buildInitialConsent(context.persisted),
+    fieldMeta: deriveFieldMeta(fieldValues, declarations, persisted),
+    consent: buildInitialConsent(persisted),
     declarations,
   };
 }
@@ -485,7 +510,7 @@ export function addressMissing(address: RegistryAddress, requireProvince = false
 }
 
 export function determineStatus(input: {
-  validation: RegistrySubmissionDraft["validation"];
+  validation: RegistrySubmissionDraft["review"]["validation"];
   fieldValues: RegistrySubmissionFieldValues;
   declarations: RegistrySubmissionDeclarations;
   consent: RegistrySubmissionConsent;

@@ -782,6 +782,7 @@ async function saveRegistrySubmissionResponse(req: any, res: any) {
       landlordId: ownership.ownerLandlordId || landlordId,
       actorUserId: String(req.user?.id || "").trim() || null,
       actorEmail: String(req.user?.email || "").trim() || null,
+      draft: req.body?.draft || null,
       fieldValues: req.body?.fieldValues || {},
       fieldMeta: req.body?.fieldMeta || {},
       declarations: req.body?.declarations || {},
