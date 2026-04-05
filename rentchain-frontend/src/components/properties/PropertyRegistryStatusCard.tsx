@@ -24,6 +24,26 @@ function statusLabel(status: PropertyRegistryStatus["registryStatus"]) {
   }
 }
 
+function resolveSubmissionAssistantCopy(property: Property | null) {
+  const city = String(property?.city || "").trim().toLowerCase();
+  const province = String(property?.province || "").trim().toLowerCase();
+  const isHalifax = (city === "halifax" || city === "dartmouth") && (province === "ns" || province === "nova scotia");
+  if (isHalifax) {
+    return {
+      title: "Halifax submission assistant",
+      description:
+        "Review RentChain-prefilled property and owner data, answer the missing Halifax compliance questions, and export a structured submission-ready payload.",
+      cta: "Prepare Halifax registration",
+    };
+  }
+  return {
+    title: "Registry-ready compliance assistant",
+    description:
+      "Review RentChain-prefilled property and owner data, complete the missing readiness questions, and export a structured compliance profile for future municipal or provincial use.",
+    cta: "Prepare registry-ready compliance profile",
+  };
+}
+
 type Props = {
   property: Property | null;
   onOpenSubmissionAssistant?: () => void;
@@ -48,6 +68,7 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const assistantCopy = resolveSubmissionAssistantCopy(property);
 
   useEffect(() => {
     let active = true;
@@ -204,9 +225,9 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
             gap: 8,
           }}
         >
-          <div style={{ fontWeight: 700, color: "#0f172a" }}>Halifax submission assistant</div>
+          <div style={{ fontWeight: 700, color: "#0f172a" }}>{assistantCopy.title}</div>
           <div style={{ color: "#475569", fontSize: 14, lineHeight: 1.5 }}>
-            Review RentChain-prefilled property and owner data, answer the missing Halifax compliance questions, and export a structured submission-ready payload.
+            {assistantCopy.description}
           </div>
           <div>
             <button
@@ -222,7 +243,7 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                 cursor: "pointer",
               }}
             >
-              Prepare Halifax registration
+              {assistantCopy.cta}
             </button>
           </div>
         </div>

@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   buildHalifaxRegistrySubmissionExportPayload,
   buildHalifaxRegistrySubmissionPrefill,
+  getRegistrySchemaSummaryForProperty,
+  loadPropertyRegistrySubmissionDraft,
   validateHalifaxRegistrySubmissionDraft,
 } from "../registry/halifaxRegistrySubmissionService";
+import { genericCanadaRegistryReadySchema } from "../registry/schemas/genericCanadaRegistryReadySchema";
 
 describe("halifaxRegistrySubmissionService", () => {
   const property = {
@@ -170,5 +173,122 @@ describe("halifaxRegistrySubmissionService", () => {
     expect(prefilled.fieldMeta["fieldValues.siteAddress.line1"]?.status).toBe("needs_confirmation");
     expect(prefilled.fieldMeta["fieldValues.owner.email"]?.source).toBe("rentchain_profile");
     expect(prefilled.fieldMeta["fieldValues.propertyIdentifierPid"]?.status).toBe("needs_confirmation");
+  });
+
+  it("resolves Halifax and generic fallback schemas deterministically", () => {
+    expect(
+      getRegistrySchemaSummaryForProperty({
+        country: "Canada",
+        province: "NS",
+        city: "Halifax",
+      }).schemaKey
+    ).toBe("halifax_rental_registry_v1");
+
+    const generic = getRegistrySchemaSummaryForProperty({
+      country: "Canada",
+      province: "ON",
+      city: "Ottawa",
+    });
+    expect(generic.schemaKey).toBe("canada_registry_ready_v1");
+    expect(generic.mode).toBe("registry_ready_fallback");
+  });
+
+  it("builds a generic registry-ready export without claiming official registration", () => {
+    const prefilled = genericCanadaRegistryReadySchema.buildPrefill({
+      property: {
+        id: "prop-2",
+        name: "Market Street Homes",
+        addressLine1: "88 Market Street",
+        city: "Ottawa",
+        province: "ON",
+        postalCode: "K1A 0A1",
+        country: "Canada",
+        totalUnits: 3,
+      },
+      landlordProfile,
+      userAccount: {},
+      persisted: {
+        fieldValues: {
+          primaryContactSameAsOwner: true,
+          buildings: [
+            {
+              id: "building-1",
+              primaryAddress: {
+                line1: "88 Market Street",
+                line2: null,
+                city: "Ottawa",
+                province: "ON",
+                postalCode: "K1A 0A1",
+                country: "Canada",
+              },
+              rentalUnitTypes: ["Entire house"],
+              residentialUnitsRented: 3,
+              shortTermRentalUnits: 0,
+              buildingType: "House",
+              totalResidentialUnits: 3,
+              hasCommercialUnits: false,
+              amenities: ["Laundry"],
+              fireLifeSafetySystems: ["Smoke alarm(s)"],
+              accessibilityFeatures: [],
+              yearConstructed: 2002,
+            },
+          ],
+        },
+        declarations: {
+          acknowledged: true,
+          maintenancePlanConfirmed: true,
+          ownerDeclarationConfirmed: true,
+          informationAccurateConfirmed: true,
+        },
+        consent: {
+          preparationAuthorized: true,
+          preparationAuthorizedAt: "2026-04-05T00:00:00.000Z",
+          preparationAuthorizedBy: "landlord-1",
+          declarationsConfirmed: true,
+          declarationsConfirmedAt: "2026-04-05T00:05:00.000Z",
+          declarationsConfirmedBy: "landlord-1",
+          finalReviewConfirmed: false,
+          finalReviewConfirmedAt: null,
+        },
+      },
+    });
+
+    const validation = genericCanadaRegistryReadySchema.validate(prefilled);
+    const exportPayload = genericCanadaRegistryReadySchema.buildExportPayload({
+      property: {
+        id: "prop-2",
+        name: "Market Street Homes",
+        addressLine1: "88 Market Street",
+      },
+      submission: {
+        id: "draft-2",
+        propertyId: "prop-2",
+        landlordId: "landlord-1",
+        sourceKey: genericCanadaRegistryReadySchema.sourceKey,
+        schemaKey: genericCanadaRegistryReadySchema.schemaKey,
+        schemaLabel: genericCanadaRegistryReadySchema.label,
+        mode: genericCanadaRegistryReadySchema.mode,
+        jurisdiction: {
+          country: "CA",
+          province: "ON",
+          municipality: "Ottawa",
+        },
+        status: "ready",
+        fieldValues: prefilled.fieldValues,
+        fieldMeta: prefilled.fieldMeta,
+        declarations: prefilled.declarations,
+        consent: prefilled.consent,
+        validation,
+        exportedAt: null,
+        lastReviewedAt: null,
+        createdAt: "2026-04-05T00:00:00.000Z",
+        updatedAt: "2026-04-05T00:00:00.000Z",
+        updatedBy: "landlord-1",
+      },
+    });
+
+    expect(validation.exportReady).toBe(true);
+    expect(String(exportPayload.disclaimer)).toContain("does not indicate that an official registry currently exists");
+    expect(exportPayload.mode).toBe("registry_ready_fallback");
   });
 });

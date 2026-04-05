@@ -11,6 +11,7 @@ import {
   type HalifaxSubmissionDeclarations,
   type HalifaxSubmissionDraft,
   type HalifaxSubmissionFieldValues,
+  type RegistrySchemaSummary,
   type Property,
 } from "../../api/propertiesApi";
 import { Button, Card, Input, Pill } from "../ui/Ui";
@@ -21,15 +22,6 @@ type Props = {
   property: Property | null;
   onClose: () => void;
 };
-
-const STEP_TITLES = [
-  "Consent & use notice",
-  "Review property + owner",
-  "Review building details",
-  "Complete compliance fields",
-  "Confirm declarations",
-  "Validate + export",
-] as const;
 
 const RENTAL_UNIT_TYPES = [
   "Apartment(s)",
@@ -96,6 +88,63 @@ function downloadJson(filename: string, payload: Record<string, unknown>) {
   anchor.download = filename;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+function assistantCopy(schema: RegistrySchemaSummary | null) {
+  const fallback = schema?.mode === "registry_ready_fallback";
+  const jurisdictionLabel =
+    schema?.mode === "official_registry"
+      ? "Halifax"
+      : schema?.jurisdiction.municipality || schema?.jurisdiction.province || "Canada";
+
+  return {
+    stepTitles: [
+      "Consent & use notice",
+      "Review property + owner",
+      "Review building details",
+      "Complete compliance fields",
+      "Confirm declarations",
+      "Validate + export",
+    ],
+    modalTitle: fallback ? "Prepare registry-ready compliance profile" : "Prepare Halifax rental registry submission",
+    modalDescription: fallback
+      ? "Review the data RentChain already knows, complete the missing readiness and compliance details, and export a structured draft for future municipal or provincial use."
+      : "Review the data RentChain already knows, answer the missing Halifax compliance questions, and export a submission-ready payload for guided municipal filing.",
+    draftNote: fallback
+      ? "This assistant prepares a registry-ready compliance draft for your review. It does not submit directly to a municipality."
+      : "This assistant prepares a Halifax registry draft for your review. It does not submit directly to Halifax.",
+    loadingLabel: fallback ? "Loading registry-ready compliance assistant…" : "Loading Halifax submission assistant…",
+    prefillOverview: fallback
+      ? "Property address, PID, and any saved landlord contact details were prefilled where available. Review them here before moving on to the readiness questions for this property."
+      : "Property address, PID, and any saved landlord contact details were prefilled where available. Review them here before moving on to the Halifax-only questions.",
+    buildingGuidance: fallback
+      ? "Use this step to confirm the building and unit structure RentChain should carry forward into a registry-ready compliance profile."
+      : "Halifax supports up to five buildings on the same property in this flow. If you have more than five, mark that below so the export stays honest and reviewable.",
+    complianceIntro: fallback
+      ? "These fields help keep the property registry-ready even where a formal municipal registry is not yet available."
+      : "These fields are usually not already in RentChain. Add them here so the export is submission-ready and easier to review before municipal filing.",
+    declarationIntro: fallback
+      ? "This assistant prepares a registry-ready export for future municipal or provincial use. It does not file directly with a government body in this v1 flow."
+      : "This assistant prepares a Halifax submission-ready export. It does not file directly with Halifax in this v1 flow.",
+    declarationPrimary: fallback
+      ? "I understand this draft is prepared by RentChain for review and export and is not automatically submitted to a municipality."
+      : "I understand this draft is prepared by RentChain for review and export and is not automatically submitted to Halifax.",
+    missingFieldsHeading: fallback ? "Missing required registry-ready fields" : "Missing required Halifax fields",
+    readyCopy: fallback
+      ? "Required fields, consent, and declarations are complete. You can export a structured registry-ready draft payload now."
+      : "Required fields, consent, and declarations are complete. You can export a structured Halifax draft payload now.",
+    exportContents: fallback
+      ? "The JSON export includes schema-grouped property, owner, contact, building, declaration, validation, consent, and draft-preparation metadata. It is suitable for future registry-ready workflows and later municipal integrations."
+      : "The JSON export includes Halifax-grouped property, owner, contact, building, declaration, validation, consent, and draft-preparation metadata. It is suitable for guided submission today and future municipal integrations later.",
+    saveToastReady: fallback
+      ? "This property is ready to export as a registry-ready draft."
+      : "This property is ready to export as a Halifax draft.",
+    saveButtonLabel: fallback ? "Registry-ready draft saved" : "Halifax draft saved",
+    exportFilePrefix: fallback ? "registry-ready-compliance-profile" : "halifax-registry-submission",
+    exportToastTitle: fallback ? "Registry-ready export ready" : "Halifax export ready",
+    consentNotice: `RentChain can use your stored property and account information, together with any extra details you add here, to prepare a ${fallback ? "registry-ready compliance draft" : `${jurisdictionLabel} rental registry submission draft`} for this property. This version does not submit directly to ${fallback ? "a municipality" : jurisdictionLabel}, and you remain responsible for reviewing the information before municipal use.`,
+    consentCheckbox: `I authorize RentChain to use my stored property and account information to prepare a ${fallback ? "registry-ready compliance profile" : "Halifax rental registry submission draft"} for this property.`,
+  };
 }
 
 function stepForPath(path: string): number {
@@ -502,6 +551,7 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
   const { showToast } = useToast();
   const [draft, setDraft] = useState<HalifaxSubmissionDraft | null>(null);
   const [fieldMap, setFieldMap] = useState<HalifaxFieldMapEntry[]>([]);
+  const [schema, setSchema] = useState<RegistrySchemaSummary | null>(null);
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -519,6 +569,7 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
         if (!active) return;
         setDraft(cloneDraft(result.submission));
         setFieldMap(result.fieldMap || []);
+        setSchema(result.schema || null);
         setStep(0);
       } catch (err: any) {
         if (!active) return;
@@ -570,6 +621,7 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
   );
   const canMovePastConsent = Boolean(draft?.consent.preparationAuthorized);
   const canExport = Boolean(draft?.validation.exportReady);
+  const copy = useMemo(() => assistantCopy(schema), [schema]);
 
   const persistDraft = async (nextDraft: HalifaxSubmissionDraft, toastMessage?: string) => {
     if (!propertyId) return;
@@ -583,11 +635,13 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
         status: nextDraft.status,
       });
       setDraft(cloneDraft(result.submission));
+      setFieldMap(result.fieldMap || []);
+      setSchema(result.schema || null);
       if (toastMessage) {
         showToast({
           message: toastMessage,
           description: result.submission.validation.exportReady
-            ? "This property is ready to export as a Halifax draft."
+            ? copy.saveToastReady
             : "Consent, declaration confirmation, or required Halifax fields still need attention.",
         });
       }
@@ -609,7 +663,7 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Halifax Registry Submission Assistant"
+      aria-label={copy.modalTitle}
       onMouseDown={() => {
         if (!saving && !exporting) onClose();
       }}
@@ -643,12 +697,12 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
             <div style={{ fontSize: 12, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.7 }}>
               Compliance / Registry
             </div>
-            <div style={{ fontSize: 24, fontWeight: 800, color: "#0f172a" }}>Prepare Halifax rental registry submission</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: "#0f172a" }}>{copy.modalTitle}</div>
             <div style={{ color: "#475569", lineHeight: 1.5, maxWidth: 760 }}>
-              Review the data RentChain already knows, answer the missing Halifax compliance questions, and export a submission-ready payload for guided municipal filing.
+              {copy.modalDescription}
             </div>
             <div style={{ color: "#334155", fontSize: 13 }}>
-              This assistant prepares a Halifax registry draft for your review. It does not submit directly to Halifax.
+              {copy.draftNote}
             </div>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -657,7 +711,7 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
           </div>
         </div>
 
-        {loading ? <Card>Loading Halifax submission assistant…</Card> : null}
+        {loading ? <Card>{copy.loadingLabel}</Card> : null}
         {!loading && error ? <Card style={{ color: "#b91c1c" }}>{error}</Card> : null}
 
         {!loading && draft ? (
@@ -671,7 +725,7 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                 <Pill tone="muted">{autoFilledCount} fields prefilled from RentChain</Pill>
               </div>
               <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
-                {STEP_TITLES.map((title, index) => (
+                {copy.stepTitles.map((title, index) => (
                   <button
                     key={title}
                     type="button"
@@ -704,9 +758,7 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                 <Card style={{ display: "grid", gap: 10, background: "rgba(37,99,235,0.04)" }}>
                   <div style={{ fontWeight: 700 }}>Consent & use notice</div>
                   <div style={{ color: "#475569", fontSize: 14, lineHeight: 1.6 }}>
-                    RentChain can use your stored property and account information, together with any extra details you add here,
-                    to prepare a Halifax rental registry submission draft for this property. This version does not submit
-                    directly to Halifax, and you remain responsible for reviewing the information before municipal use.
+                    {copy.consentNotice}
                   </div>
                   <label
                     style={{
@@ -733,8 +785,7 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                       }
                     />
                     <span style={{ lineHeight: 1.5 }}>
-                      I authorize RentChain to use my stored property and account information to prepare a Halifax rental
-                      registry submission draft for this property.
+                      {copy.consentCheckbox}
                     </span>
                   </label>
                   {!draft.consent.preparationAuthorized ? (
@@ -751,7 +802,7 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                 <Card style={{ display: "grid", gap: 8, background: "rgba(37,99,235,0.04)" }}>
                   <div style={{ fontWeight: 700 }}>Prefill overview</div>
                   <div style={{ color: "#475569", fontSize: 14, lineHeight: 1.5 }}>
-                    Property address, PID, and any saved landlord contact details were prefilled where available. Review them here before moving on to the Halifax-only questions.
+                    {copy.prefillOverview}
                   </div>
                 </Card>
                 <SectionHeading title="Site / property address" meta={draft.fieldMeta["fieldValues.siteAddress.line1"]} />
@@ -846,7 +897,7 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                 <Card style={{ display: "grid", gap: 8, background: "rgba(15,23,42,0.03)" }}>
                   <div style={{ fontWeight: 700 }}>Building guidance</div>
                   <div style={{ color: "#475569", fontSize: 14, lineHeight: 1.5 }}>
-                    Halifax supports up to five buildings on the same property in this flow. If you have more than five, mark that below so the export stays honest and reviewable.
+                    {copy.buildingGuidance}
                   </div>
                 </Card>
                 <div style={{ display: "grid", gap: 8 }}>
@@ -980,7 +1031,7 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                 <Card style={{ display: "grid", gap: 8, background: "rgba(37,99,235,0.04)" }}>
                   <div style={{ fontWeight: 700 }}>Compliance details</div>
                   <div style={{ color: "#475569", fontSize: 14, lineHeight: 1.5 }}>
-                    These fields are usually not already in RentChain. Add them here so the export is submission-ready and easier to review before municipal filing.
+                    {copy.complianceIntro}
                   </div>
                 </Card>
                 <label style={{ display: "grid", gap: 6 }}>
@@ -1039,13 +1090,13 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                 <Card style={{ display: "grid", gap: 8, background: "rgba(15,23,42,0.03)" }}>
                   <div style={{ fontWeight: 700 }}>Declarations</div>
                   <div style={{ color: "#475569", fontSize: 14, lineHeight: 1.5 }}>
-                    This assistant prepares a Halifax submission-ready export. It does not file directly with Halifax in this v1 flow.
+                    {copy.declarationIntro}
                   </div>
                 </Card>
                 {[
                   {
                     key: "acknowledged" as const,
-                    label: "I understand this draft is prepared by RentChain for review and export and is not automatically submitted to Halifax.",
+                    label: copy.declarationPrimary,
                   },
                   {
                     key: "maintenancePlanConfirmed" as const,
@@ -1118,7 +1169,7 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                   ) : null}
                   {draft.validation.missingRequiredFields.length ? (
                     <div style={{ display: "grid", gap: 6 }}>
-                      <div style={{ fontWeight: 700, color: "#92400e" }}>Missing required Halifax fields</div>
+                      <div style={{ fontWeight: 700, color: "#92400e" }}>{copy.missingFieldsHeading}</div>
                       {draft.validation.missingRequiredFields.map((item) => (
                         <div key={item.path} style={{ color: "#78350f", fontSize: 14 }}>
                           • {item.section}: {item.label}
@@ -1127,7 +1178,7 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                     </div>
                   ) : (
                     <div style={{ color: "#166534", fontSize: 14 }}>
-                      Required fields, consent, and declarations are complete. You can export a structured Halifax draft payload now.
+                      {copy.readyCopy}
                     </div>
                   )}
                   {draft.validation.warnings.length ? (
@@ -1144,7 +1195,7 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                 <Card style={{ display: "grid", gap: 8, background: "rgba(15,23,42,0.03)" }}>
                   <div style={{ fontWeight: 700 }}>Export contents</div>
                   <div style={{ color: "#475569", fontSize: 14, lineHeight: 1.5 }}>
-                    The JSON export includes Halifax-grouped property, owner, contact, building, declaration, validation, consent, and draft-preparation metadata. It is suitable for guided submission today and future municipal integrations later.
+                    {copy.exportContents}
                   </div>
                 </Card>
               </div>
@@ -1160,7 +1211,7 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                   variant="secondary"
                   onClick={() => {
                     if (!draft) return;
-                    void persistDraft(draft, "Halifax draft saved");
+                    void persistDraft(draft, copy.saveButtonLabel);
                   }}
                   disabled={saving || exporting}
                 >
@@ -1176,10 +1227,10 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                 >
                   Back
                 </Button>
-                {step < STEP_TITLES.length - 1 ? (
+                {step < copy.stepTitles.length - 1 ? (
                   <Button
                     type="button"
-                    onClick={() => setStep((current) => Math.min(STEP_TITLES.length - 1, current + 1))}
+                    onClick={() => setStep((current) => Math.min(copy.stepTitles.length - 1, current + 1))}
                     disabled={saving || exporting || (step === 0 && !canMovePastConsent)}
                   >
                     Next
@@ -1195,22 +1246,23 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
                         try {
                           const result = await exportHalifaxRegistrySubmission(propertyId);
                           downloadJson(
-                            `halifax-registry-submission-${propertyId}.json`,
+                            `${copy.exportFilePrefix}-${propertyId}.json`,
                             result.exportPayload
                           );
                           setDraft(cloneDraft(result.submission));
+                          setSchema(result.schema || null);
                           showToast({
-                            message: "Halifax export ready",
+                            message: copy.exportToastTitle,
                             description:
                               result.submission.validation.missingRequiredFields.length === 0
                                 ? "Submission-ready JSON export downloaded."
                                 : "Draft export downloaded with validation warnings for follow-up.",
                           });
                         } catch (err: any) {
-                          setError(err?.message || "Failed to export Halifax submission payload.");
+                          setError(err?.message || "Failed to export registry submission payload.");
                           showToast({
                             message: "Export failed",
-                            description: err?.message || "Failed to export Halifax submission payload.",
+                            description: err?.message || "Failed to export registry submission payload.",
                             variant: "error",
                           });
                         } finally {

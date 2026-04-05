@@ -6,12 +6,14 @@ import { normalizeProvince } from "../lib/province";
 import { ensureRegistrySource } from "../services/registry/registryImportService";
 import { getPropertyRegistryProjection, upsertPropertyRegistryProjection } from "../services/registry/registryStatusProjectionService";
 import {
-  buildHalifaxRegistrySubmissionExportPayload,
+  buildPropertyRegistrySubmissionExportPayload,
+  getRegistrySchemaSummaryForProperty,
   HALIFAX_FIELD_MAP,
-  loadHalifaxRegistrySubmissionDraft,
-  markHalifaxRegistrySubmissionExported,
-  saveHalifaxRegistrySubmissionDraft,
+  loadPropertyRegistrySubmissionDraft,
+  markPropertyRegistrySubmissionExported,
+  savePropertyRegistrySubmissionDraft,
 } from "../services/registry/halifaxRegistrySubmissionService";
+import { GENERIC_CANADA_FIELD_MAP } from "../services/registry/schemas/genericCanadaRegistryReadySchema";
 import { normalizePid } from "../services/registry/registryUtils";
 
 const router = Router();
@@ -689,7 +691,7 @@ router.get("/:propertyId/registry-status", async (req: any, res) => {
   }
 });
 
-router.get("/:propertyId/registry-submission/halifax", async (req: any, res) => {
+async function loadRegistrySubmissionResponse(req: any, res: any) {
   const roleAdmin = isAdminRole(req);
   const landlordId = resolveLandlordId(req);
   const propertyId = String(req.params?.propertyId || "").trim();
@@ -705,27 +707,29 @@ router.get("/:propertyId/registry-submission/halifax", async (req: any, res) => 
       return res.status(403).json({ ok: false, error: "forbidden" });
     }
 
-    const submission = await loadHalifaxRegistrySubmissionDraft({
+    const submission = await loadPropertyRegistrySubmissionDraft({
       property: { id: propertyId, ...property },
       landlordId: ownership.ownerLandlordId || landlordId,
     });
+    const schema = getRegistrySchemaSummaryForProperty(property);
 
     return res.json({
       ok: true,
       submission,
-      fieldMap: HALIFAX_FIELD_MAP,
+      fieldMap: resolveRegistrySchemaFieldMap(property),
+      schema,
     });
   } catch (err: any) {
-    console.error("[GET /api/properties/:propertyId/registry-submission/halifax] failed", err);
+    console.error("[GET /api/properties/:propertyId/registry-submission] failed", err);
     return res.status(500).json({
       ok: false,
       error: "registry_submission_failed",
-      message: err?.message || "Failed to load Halifax registry submission assistant",
+      message: err?.message || "Failed to load registry submission assistant",
     });
   }
-});
+}
 
-router.put("/:propertyId/registry-submission/halifax", async (req: any, res) => {
+async function saveRegistrySubmissionResponse(req: any, res: any) {
   const roleAdmin = isAdminRole(req);
   const landlordId = resolveLandlordId(req);
   const propertyId = String(req.params?.propertyId || "").trim();
@@ -741,7 +745,7 @@ router.put("/:propertyId/registry-submission/halifax", async (req: any, res) => 
       return res.status(403).json({ ok: false, error: "forbidden" });
     }
 
-    const submission = await saveHalifaxRegistrySubmissionDraft({
+    const submission = await savePropertyRegistrySubmissionDraft({
       property: { id: propertyId, ...property },
       landlordId: ownership.ownerLandlordId || landlordId,
       actorUserId: String(req.user?.id || "").trim() || null,
@@ -752,23 +756,25 @@ router.put("/:propertyId/registry-submission/halifax", async (req: any, res) => 
       consent: req.body?.consent || {},
       status: req.body?.status || null,
     });
+    const schema = getRegistrySchemaSummaryForProperty(property);
 
     return res.json({
       ok: true,
       submission,
-      fieldMap: HALIFAX_FIELD_MAP,
+      fieldMap: resolveRegistrySchemaFieldMap(property),
+      schema,
     });
   } catch (err: any) {
-    console.error("[PUT /api/properties/:propertyId/registry-submission/halifax] failed", err);
+    console.error("[PUT /api/properties/:propertyId/registry-submission] failed", err);
     return res.status(500).json({
       ok: false,
       error: "registry_submission_save_failed",
-      message: err?.message || "Failed to save Halifax registry submission assistant",
+      message: err?.message || "Failed to save registry submission assistant",
     });
   }
-});
+}
 
-router.get("/:propertyId/registry-submission/halifax/export", async (req: any, res) => {
+async function exportRegistrySubmissionResponse(req: any, res: any) {
   const roleAdmin = isAdminRole(req);
   const landlordId = resolveLandlordId(req);
   const propertyId = String(req.params?.propertyId || "").trim();
@@ -784,38 +790,56 @@ router.get("/:propertyId/registry-submission/halifax/export", async (req: any, r
       return res.status(403).json({ ok: false, error: "forbidden" });
     }
 
-    const submission = await markHalifaxRegistrySubmissionExported({
+    const submission = await markPropertyRegistrySubmissionExported({
       property: { id: propertyId, ...property },
       landlordId: ownership.ownerLandlordId || landlordId,
       actorUserId: String(req.user?.id || "").trim() || null,
       actorEmail: String(req.user?.email || "").trim() || null,
     });
-    const exportPayload = buildHalifaxRegistrySubmissionExportPayload({
+    const exportPayload = buildPropertyRegistrySubmissionExportPayload({
       property: { id: propertyId, ...property },
       submission,
     });
+    const schema = getRegistrySchemaSummaryForProperty(property);
 
     return res.json({
       ok: true,
       submission,
       exportPayload,
+      schema,
     });
   } catch (err: any) {
-    console.error("[GET /api/properties/:propertyId/registry-submission/halifax/export] failed", err);
+    console.error("[GET /api/properties/:propertyId/registry-submission/export] failed", err);
     if (String(err?.message || "").toLowerCase().includes("not ready for export")) {
       return res.status(400).json({
         ok: false,
         error: "registry_submission_not_ready",
-        message: err?.message || "Halifax submission draft is not ready for export.",
+        message: err?.message || "Registry submission draft is not ready for export.",
       });
     }
     return res.status(500).json({
       ok: false,
       error: "registry_submission_export_failed",
-      message: err?.message || "Failed to export Halifax registry submission data",
+      message: err?.message || "Failed to export registry submission data",
     });
   }
-});
+}
+
+function resolveRegistrySchemaFieldMap(property: Record<string, any>) {
+  const schema = getRegistrySchemaSummaryForProperty(property);
+  if (schema.schemaKey === "halifax_rental_registry_v1") {
+    return HALIFAX_FIELD_MAP;
+  }
+  return GENERIC_CANADA_FIELD_MAP;
+}
+
+router.get("/:propertyId/registry-submission", loadRegistrySubmissionResponse);
+router.put("/:propertyId/registry-submission", saveRegistrySubmissionResponse);
+router.get("/:propertyId/registry-submission/export", exportRegistrySubmissionResponse);
+
+router.get("/:propertyId/registry-submission/halifax", loadRegistrySubmissionResponse);
+router.put("/:propertyId/registry-submission/halifax", saveRegistrySubmissionResponse);
+router.get("/:propertyId/registry-submission/halifax/export", exportRegistrySubmissionResponse);
 
 /**
  * POST /api/properties/:propertyId/publish
