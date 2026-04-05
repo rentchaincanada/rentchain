@@ -179,6 +179,38 @@ function updateDeclarationState(
   });
 }
 
+function buildCanonicalReviewSummary(draft: HalifaxSubmissionDraft) {
+  const fieldValues = draft.form.fieldValues;
+  const consent = draft.submission.consent;
+  const checkedDeclarations = draft.declarations.items.filter((item) => item.checked);
+
+  return {
+    property: [
+      `Civic address: ${fieldValues.siteAddress.line1 || "Missing"}, ${fieldValues.siteAddress.city || "Missing"}`,
+      `PID: ${fieldValues.propertyIdentifierPid || "Not provided"}`,
+      `Buildings in draft: ${fieldValues.buildings.length}`,
+    ],
+    contact: [
+      `Owner: ${fieldValues.owner.name || "Missing"}`,
+      `Owner email: ${fieldValues.owner.email || "Missing"}`,
+      `Primary contact: ${
+        fieldValues.primaryContactSameAsOwner === true
+          ? "Same as owner"
+          : fieldValues.primaryContactSameAsOwner === false
+          ? fieldValues.primaryContact.name || "Missing"
+          : "Not confirmed"
+      }`,
+    ],
+    declarations: checkedDeclarations.length
+      ? checkedDeclarations.map((item) => item.label)
+      : ["No declarations confirmed yet"],
+    consent: [
+      consent.preparationAuthorized ? "Preparation consent captured" : "Preparation consent missing",
+      consent.declarationsConfirmed ? "Declaration confirmation captured" : "Declaration confirmation missing",
+    ],
+  };
+}
+
 function stepForPath(path: string): number {
   if (path.startsWith("consent.")) return 0;
   if (path.startsWith("fieldValues.siteAddress") || path.startsWith("fieldValues.owner") || path.startsWith("fieldValues.primaryContact")) return 1;
@@ -661,6 +693,10 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
   const canMovePastConsent = Boolean(draft?.submission.consent.preparationAuthorized);
   const canExport = Boolean(draft?.review.validation.exportReady);
   const copy = useMemo(() => assistantCopy(schema), [schema]);
+  const reviewSummary = useMemo(
+    () => (draft ? buildCanonicalReviewSummary(draft) : null),
+    [draft]
+  );
 
   const persistDraft = async (nextDraft: HalifaxSubmissionDraft, toastMessage?: string) => {
     if (!propertyId) return;
@@ -1307,6 +1343,48 @@ export function HalifaxRegistrySubmissionAssistant({ open, property, onClose }: 
 
             {step === 5 ? (
               <div style={{ display: "grid", gap: 14 }}>
+                {reviewSummary ? (
+                  <Card style={{ display: "grid", gap: 12 }}>
+                    <div style={{ fontWeight: 700 }}>Review the canonical draft</div>
+                    <div style={{ color: "#475569", fontSize: 14, lineHeight: 1.5 }}>
+                      This screen reflects the current canonical draft snapshot that save, export, and submission all use.
+                    </div>
+                    <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
+                      <div style={{ display: "grid", gap: 6 }}>
+                        <div style={{ fontWeight: 700, color: "#0f172a" }}>Property</div>
+                        {reviewSummary.property.map((line) => (
+                          <div key={line} style={{ color: "#475569", fontSize: 14 }}>
+                            • {line}
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ display: "grid", gap: 6 }}>
+                        <div style={{ fontWeight: 700, color: "#0f172a" }}>Contacts</div>
+                        {reviewSummary.contact.map((line) => (
+                          <div key={line} style={{ color: "#475569", fontSize: 14 }}>
+                            • {line}
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ display: "grid", gap: 6 }}>
+                        <div style={{ fontWeight: 700, color: "#0f172a" }}>Declarations</div>
+                        {reviewSummary.declarations.map((line) => (
+                          <div key={line} style={{ color: "#475569", fontSize: 14 }}>
+                            • {line}
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ display: "grid", gap: 6 }}>
+                        <div style={{ fontWeight: 700, color: "#0f172a" }}>Consent</div>
+                        {reviewSummary.consent.map((line) => (
+                          <div key={line} style={{ color: "#475569", fontSize: 14 }}>
+                            • {line}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </Card>
+                ) : null}
                 <Card style={{ display: "grid", gap: 10 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
                     <div>

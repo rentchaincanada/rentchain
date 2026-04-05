@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HalifaxRegistrySubmissionAssistant } from "./HalifaxRegistrySubmissionAssistant";
 
 const mocks = vi.hoisted(() => ({
@@ -511,6 +511,10 @@ describe("HalifaxRegistrySubmissionAssistant", () => {
     global.URL.revokeObjectURL = vi.fn();
   });
 
+  afterEach(() => {
+    cleanup();
+  });
+
   it("persists declaration selections through save and reload", async () => {
     render(
       <HalifaxRegistrySubmissionAssistant
@@ -560,6 +564,15 @@ describe("HalifaxRegistrySubmissionAssistant", () => {
       "informationAccurateConfirmed",
     ]);
     expect(savedPayload.declarations.items.every((item: any) => item.checked)).toBe(true);
+
+    clickLastButton("Next");
+    expect(screen.getAllByText("Review the canonical draft").length).toBeGreaterThan(0);
+    expect(screen.getByText(/Owner: Jordan Harbour/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /I confirm the information in this draft is accurate to the best of my knowledge/i
+      )
+    ).toBeInTheDocument();
   });
 
   it("exports JSON with the same checked declarations shown in the UI", async () => {
@@ -606,7 +619,7 @@ describe("HalifaxRegistrySubmissionAssistant", () => {
     clickLastButton("Next");
 
     const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
-    fireEvent.click(screen.getByRole("button", { name: "Export JSON" }));
+    clickLastButton("Export JSON");
 
     await waitFor(() => {
       expect(mocks.exportHalifaxRegistrySubmission).toHaveBeenCalledWith("prop-1");
@@ -679,5 +692,123 @@ describe("HalifaxRegistrySubmissionAssistant", () => {
 
     expect(await screen.findByText("Prepare registry-ready compliance profile")).toBeInTheDocument();
     expect(screen.getByText(/It does not submit directly to a municipality/i)).toBeInTheDocument();
+  });
+
+  it("renders the review step from migrated canonical draft data", async () => {
+    mocks.fetchHalifaxRegistrySubmission.mockResolvedValueOnce({
+      submission: buildDraft({
+        audit: {
+          migratedFromVersion: 1,
+        },
+        declarations: {
+          items: [
+            {
+              id: "acknowledged",
+              label:
+                "I understand this draft is prepared by RentChain for review and export and is not automatically submitted to Halifax.",
+              required: true,
+              checked: true,
+              checkedAt: "2026-04-05T00:05:00.000Z",
+            },
+            {
+              id: "maintenancePlanConfirmed",
+              label:
+                "I confirm a maintenance / property management plan exists or will be maintained as required.",
+              required: true,
+              checked: false,
+              checkedAt: null,
+            },
+            {
+              id: "ownerDeclarationConfirmed",
+              label:
+                "I am authorized to make owner or operator declarations for this property, and I understand that municipal registration requirements remain my responsibility.",
+              required: true,
+              checked: true,
+              checkedAt: "2026-04-05T00:05:00.000Z",
+            },
+            {
+              id: "informationAccurateConfirmed",
+              label:
+                "I confirm the information in this draft is accurate to the best of my knowledge.",
+              required: true,
+              checked: false,
+              checkedAt: null,
+            },
+          ],
+          acceptedIds: ["acknowledged", "ownerDeclarationConfirmed"],
+        },
+        submission: {
+          consent: {
+            preparationAuthorized: true,
+            preparationAuthorizedAt: "2026-04-05T00:00:00.000Z",
+            preparationAuthorizedBy: "landlord-1",
+            declarationsConfirmed: false,
+            declarationsConfirmedAt: null,
+            declarationsConfirmedBy: null,
+            finalReviewConfirmed: false,
+            finalReviewConfirmedAt: null,
+          },
+        },
+        review: {
+          validation: {
+            missingRequiredFields: [],
+            missingConsentItems: [
+              { path: "consent.declarationsConfirmed", label: "Declaration confirmation", section: "Declarations" },
+            ],
+            warnings: [],
+            readinessScore: 78,
+            completionPercent: 78,
+            exportReady: false,
+            errors: [],
+          },
+        },
+      }),
+      schema: {
+        schemaKey: "halifax_rental_registry_v1",
+        sourceKey: "halifax_rental_registry_form",
+        label: "Halifax Rental Registry",
+        mode: "official_registry",
+        jurisdiction: {
+          country: "CA",
+          province: "NS",
+          municipality: "Halifax",
+        },
+      },
+      fieldMap: [],
+    });
+
+    render(
+      <HalifaxRegistrySubmissionAssistant
+        open
+        property={{
+          id: "prop-1",
+          name: "Harbour View",
+          addressLine1: "12 Wharf Street",
+          city: "Halifax",
+          province: "NS",
+          postalCode: "B3H 1A1",
+          totalUnits: 8,
+          units: [],
+          createdAt: "2026-04-05T00:00:00.000Z",
+        }}
+        onClose={() => undefined}
+      />
+    );
+
+    expect((await screen.findAllByText("Prepare Halifax rental registry submission")).length).toBeGreaterThan(0);
+    clickLastButton("Next");
+    clickLastButton("Next");
+    clickLastButton("Next");
+    clickLastButton("Next");
+    clickLastButton("Next");
+
+    expect(screen.getAllByText("Review the canonical draft").length).toBeGreaterThan(0);
+    expect(screen.getByText(/Owner: Jordan Harbour/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /I am authorized to make owner or operator declarations for this property/i
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/I confirm the information in this draft is accurate to the best of my knowledge/i)).not.toBeInTheDocument();
   });
 });
