@@ -56,6 +56,51 @@ function pricingCardShadow(plan: PlanKey, hovered: boolean) {
   return hovered ? "0 16px 32px rgba(15,23,42,0.10)" : "0 10px 24px rgba(15,23,42,0.06)";
 }
 
+const PLAN_AUDIENCE_COPY: Record<PlanKey, string> = {
+  free: "For landlords getting started and wanting to try the basics with one property.",
+  starter: "For landlords running day-to-day rental operations across active units.",
+  pro: "For growing operators who want stronger tools, clearer visibility, and more control.",
+  elite: "For portfolios that need deeper oversight, reporting, and portfolio-level visibility.",
+};
+
+const PLAN_SUPPORT_COPY: Partial<Record<PlanKey, string>> = {
+  starter: "Free helps you get started. Starter is where RentChain becomes your everyday operating system for rental work.",
+};
+
+const PLAN_CALLOUT_COPY: Partial<
+  Record<
+    PlanKey,
+    {
+      title: string;
+      description: string;
+      bullets: string[];
+      proofLine?: string;
+    }
+  >
+> = {
+  pro: {
+    title: "Built for landlords handling more moving parts",
+    description:
+      "Pro gives growing landlords better visibility, stronger follow-through, and cleaner records as the business gets busier.",
+    bullets: [
+      "Keep property, tenant, and screening work easier to review",
+      "Stay on top of filing and compliance tasks when they matter",
+      "Share clearer reports with partners, owners, or accountants",
+    ],
+    proofLine: "A strong fit when simple tools are no longer enough but full portfolio overhead still feels excessive.",
+  },
+  elite: {
+    title: "For teams that need deeper oversight",
+    description:
+      "Elite is for portfolio operators who want a higher level view of what is happening across properties, records, and workflows.",
+    bullets: [
+      "See more across the portfolio instead of property by property",
+      "Keep leadership reporting and oversight cleaner",
+      "Support more complex rental operations with stronger visibility",
+    ],
+  },
+};
+
 const PricingPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -207,7 +252,7 @@ const PricingPage: React.FC = () => {
             {copy.pricing.subheadline}
           </p>
           <p style={{ margin: `${spacing.xs} 0 0`, color: text.muted, fontSize: "0.92rem" }}>
-            Published plan prices follow the current checkout pricing when billing is available. Activation setup stays available on Free, while paid plans unlock extra workflow and reporting.
+            Start on Free to try the basics, move to Starter for daily rental work, step up to Pro for stronger control, and use Elite for deeper portfolio oversight.
           </p>
         </div>
 
@@ -310,7 +355,7 @@ const PricingPage: React.FC = () => {
                 ) : null}
               </div>
               <div style={{ color: text.muted, fontSize: "0.94rem", lineHeight: 1.65, minHeight: isMobile ? "auto" : 62, ...wrappingTextStyle }}>
-                {CANONICAL_TIER_MATRIX[plan].tagline}
+                {PLAN_AUDIENCE_COPY[plan]}
               </div>
               <div style={{ fontSize: 28, fontWeight: 800, lineHeight: 1.05, ...wrappingTextStyle }}>{renderPrice(plan)}</div>
               <ul
@@ -345,10 +390,10 @@ const PricingPage: React.FC = () => {
                   }}
                 >
                   <div style={{ fontWeight: 700, color: text.primary, lineHeight: 1.25, ...wrappingTextStyle }}>
-                    {copy.pricing.timelineSection.title}
+                    {PLAN_CALLOUT_COPY[plan]?.title || copy.pricing.timelineSection.title}
                   </div>
                   <div style={{ color: text.muted, fontSize: "0.89rem", lineHeight: 1.6, ...wrappingTextStyle }}>
-                    {copy.pricing.timelineSection.description}
+                    {PLAN_CALLOUT_COPY[plan]?.description || copy.pricing.timelineSection.description}
                   </div>
                   <ul
                     style={{
@@ -361,7 +406,7 @@ const PricingPage: React.FC = () => {
                       gap: 6,
                     }}
                   >
-                    {copy.pricing.timelineSection.bullets.map((bullet) => (
+                    {(PLAN_CALLOUT_COPY[plan]?.bullets || copy.pricing.timelineSection.bullets).map((bullet) => (
                       <li key={`${plan}-${bullet}`} style={wrappingTextStyle}>
                         {bullet}
                       </li>
@@ -369,9 +414,25 @@ const PricingPage: React.FC = () => {
                   </ul>
                   {plan === "pro" ? (
                     <div style={{ color: text.muted, fontSize: "0.82rem", lineHeight: 1.55, ...wrappingTextStyle }}>
-                      {copy.pricing.timelineSection.proofLine}
+                      {PLAN_CALLOUT_COPY[plan]?.proofLine || copy.pricing.timelineSection.proofLine}
                     </div>
                   ) : null}
+                </div>
+              ) : null}
+              {plan === "starter" && PLAN_SUPPORT_COPY[plan] ? (
+                <div
+                  style={{
+                    color: text.muted,
+                    fontSize: "0.89rem",
+                    lineHeight: 1.65,
+                    padding: "12px 14px",
+                    borderRadius: 12,
+                    background: "rgba(15,23,42,0.03)",
+                    border: "1px solid rgba(15,23,42,0.06)",
+                    ...wrappingTextStyle,
+                  }}
+                >
+                  {PLAN_SUPPORT_COPY[plan]}
                 </div>
               ) : null}
               <div style={{ marginTop: "auto", paddingTop: spacing.sm, width: "100%" }}>

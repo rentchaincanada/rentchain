@@ -14,16 +14,16 @@ type HowItWorksStep = {
 
 const HOW_IT_WORKS: HowItWorksStep[] = [
   {
-    title: "Prepare your draft",
-    body: "Add a property, review prefilled owner details, and build a filing-ready record without leaving the product.",
+    title: "Set up your property",
+    body: "Add a property, keep the important details together, and stop chasing information across different tools.",
   },
   {
-    title: "See readiness clearly",
-    body: "Spot missing fields, declarations, and compliance gaps before you try to file anything.",
+    title: "See what needs attention",
+    body: "Catch missing details early so everyday tasks, tenant work, and filing steps are easier to finish cleanly.",
   },
   {
-    title: "Unlock filing workflow when ready",
-    body: "Paid plans add tracked filing steps, retry safety, and attempts history once you move beyond draft prep.",
+    title: "Add deeper support when you need it",
+    body: "Paid plans give growing landlords stronger workflow support, clearer records, and guided filing help when things get more complex.",
   },
 ];
 
@@ -31,17 +31,17 @@ const FAQ_ITEMS = [
   {
     question: "What can I use for free?",
     answer:
-      "Free includes draft preparation, readiness checks, JSON export, and ready-package preparation so you can understand your filing position before paying.",
+      "Free lets you organize a property, see what is missing, and try the core workflow before deciding whether you need more support.",
   },
   {
     question: "What unlocks on paid plans?",
     answer:
-      "Paid plans unlock the filing workflow, lifecycle tracking, retry safety, and attempts history so you can manage submissions instead of juggling notes and spreadsheets.",
+      "Paid plans unlock stronger day-to-day tools, clearer filing support, safer follow-through, and a better record of what happened over time.",
   },
   {
     question: "Is this only for Halifax?",
     answer:
-      "Halifax is the first live municipal workflow. Other Canadian properties can still use the registry-ready profile and compliance draft experience today.",
+      "Halifax is the first live municipal filing workflow. Other Canadian properties can still use RentChain to stay organized, prepare records, and see what needs attention.",
   },
 ];
 
@@ -75,7 +75,7 @@ const LandingPage: React.FC = () => {
   }, [location.search]);
 
   useEffect(() => {
-    document.title = "RentChain - Check your property readiness";
+    document.title = "RentChain - Keep your rentals organized";
   }, []);
 
   const handlePrimaryCta = () => {
@@ -147,7 +147,7 @@ const LandingPage: React.FC = () => {
                   textTransform: "uppercase",
                 }}
               >
-                Halifax and Nova Scotia readiness
+                Built for everyday landlords
               </div>
               <div style={{ display: "grid", gap: spacing.sm }}>
                 <h1
@@ -159,7 +159,7 @@ const LandingPage: React.FC = () => {
                     maxWidth: 760,
                   }}
                 >
-                  Check whether your property is registry-ready before you file.
+                  Keep your properties, tenants, and to-dos organized in one place.
                 </h1>
                 <p
                   style={{
@@ -170,17 +170,17 @@ const LandingPage: React.FC = () => {
                     maxWidth: 720,
                   }}
                 >
-                  Build a free registry draft, see what is missing, and export a clean readiness package.
-                  When you are ready to move into tracked filing, paid plans unlock the workflow, retry
-                  safety, and attempts history.
+                  RentChain helps landlords stay on top of property details, tenant activity, maintenance,
+                  and the tasks that tend to fall through the cracks. When you need deeper filing and
+                  compliance help, those tools are there further down the workflow.
                 </p>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: spacing.sm, alignItems: "center" }}>
                 <Button type="button" onClick={handlePrimaryCta}>
-                  Check your property readiness
+                  Get started with a property
                 </Button>
                 <div style={{ color: text.secondary, fontSize: "0.93rem", fontWeight: 600 }}>
-                  Free to prepare. Upgrade only when you need filing workflow.
+                  Free to try. Upgrade only when you need deeper support.
                 </div>
               </div>
               <div
@@ -192,9 +192,9 @@ const LandingPage: React.FC = () => {
                 }}
               >
                 {[
-                  "Free draft + readiness + export",
-                  "Halifax filing workflow on paid plans",
-                  "Retry safety and attempts history",
+                  "Organize a property and try the basics",
+                  "See what is missing before it becomes a problem",
+                  "Unlock guided filing support when you need it",
                 ].map((item) => (
                   <div
                     key={item}
@@ -230,18 +230,18 @@ const LandingPage: React.FC = () => {
               </div>
               <div style={{ display: "grid", gap: spacing.sm }}>
                 <div style={{ fontSize: "1.2rem", fontWeight: 800, lineHeight: 1.25 }}>
-                  Turn a prepared draft into a tracked filing workflow.
+                  Get more help as your rental operations get busier.
                 </div>
                 <p style={{ margin: 0, color: "rgba(255,255,255,0.8)", lineHeight: 1.7 }}>
-                  Paid workflow keeps submission status, preserves attempt history, and gives you a safer
-                  recovery path when a filing needs follow-up or correction.
+                  Paid plans are for landlords who want cleaner day-to-day control, clearer records, and
+                  stronger support when a property task needs follow-through.
                 </p>
               </div>
               <div style={{ display: "grid", gap: 10 }}>
                 {[
-                  "Create and manage filing attempts without losing audit history",
-                  "Track filed, confirmed, rejected, failed, or cancelled outcomes clearly",
-                  "Retry safely when a filing needs to be re-opened or corrected",
+                  "Keep property tasks, notes, and next steps easier to follow",
+                  "Get clearer filing support when a jurisdiction requires extra work",
+                  "Keep a better record of what was done and what happens next",
                 ].map((item) => (
                   <div
                     key={item}
@@ -314,10 +314,10 @@ const LandingPage: React.FC = () => {
             <div style={{ display: "grid", gap: spacing.sm }}>
               <h2 style={sectionHeadingStyle}>What stays free</h2>
               <ul style={{ margin: 0, paddingLeft: "1.1rem", color: text.muted, lineHeight: 1.8 }}>
-                <li>Draft preparation with property and contact details</li>
-                <li>Readiness summary with missing fields and warnings</li>
-                <li>Canonical JSON export for your own records</li>
-                <li>Ready-package preparation before you decide to upgrade</li>
+                <li>Set up a property and keep the important details together</li>
+                <li>See missing information before a task turns messy</li>
+                <li>Use the platform to get organized before paying</li>
+                <li>Try the workflow before deciding whether you need more support</li>
               </ul>
             </div>
           </Card>
@@ -325,10 +325,10 @@ const LandingPage: React.FC = () => {
             <div style={{ display: "grid", gap: spacing.sm }}>
               <h2 style={sectionHeadingStyle}>Why landlords upgrade</h2>
               <ul style={{ margin: 0, paddingLeft: "1.1rem", color: text.muted, lineHeight: 1.8 }}>
-                <li>Tracked filing workflow instead of manual notes</li>
-                <li>Retry safety when a filing is rejected, failed, or cancelled</li>
-                <li>Attempts history and audit trail for operator confidence</li>
-                <li>Clear submission lifecycle visibility after filing starts</li>
+                <li>Run day-to-day rental work with stronger tools and less friction</li>
+                <li>Keep better oversight as you manage more units or properties</li>
+                <li>Get clearer filing and compliance support when you need it</li>
+                <li>Keep a cleaner record of what was done and what happens next</li>
               </ul>
             </div>
           </Card>
@@ -391,7 +391,7 @@ const LandingPage: React.FC = () => {
                   color: text.secondary,
                 }}
               >
-                Start with the free workflow
+                Start with the free basics
               </div>
               <div
                 style={{
@@ -401,15 +401,16 @@ const LandingPage: React.FC = () => {
                   fontFamily: typography.fontFamily,
                 }}
               >
-                See what is missing before you file.
+                Start simple, then grow into the tools you need.
               </div>
               <p style={{ margin: 0, color: text.muted, lineHeight: 1.75, maxWidth: 760 }}>
-                RentChain is most useful when the workflow starts in the product, not in a generic lead form.
-                Add a property, prepare the draft, and let readiness drive the next step.
+                Add a property, get organized, and see how the workflow feels in practice. Filing and
+                compliance support are there when you need them, but you do not have to learn the whole
+                system to get value on day one.
               </p>
             </div>
             <Button type="button" onClick={handlePrimaryCta}>
-              Check your property readiness
+              Get started with a property
             </Button>
           </div>
         </Card>
