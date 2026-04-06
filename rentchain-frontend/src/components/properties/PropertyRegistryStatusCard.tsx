@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Button, Card, Input, Pill } from "../ui/Ui";
 import { fetchBillingPricing, type BillingPricingResponse } from "../../api/billingApi";
+import { track } from "../../lib/analytics";
 import {
   attachFilingReferenceAndNotes,
   createReadyFromDraft,
@@ -18,6 +19,7 @@ import {
   type RegistrySubmissionLifecycleStatus,
   type RegistrySubmissionNormalizedSectionV3,
 } from "../../api/propertiesApi";
+import { useAuth } from "../../context/useAuth";
 import { useEntitlements } from "../../hooks/useEntitlements";
 
 type RegistryStatusPayload = Awaited<ReturnType<typeof fetchPropertyRegistryStatus>>;
@@ -27,7 +29,53 @@ type RegistryUpgradeState = {
   capability: string;
   message: string;
   requiredPlan: string;
+  location: string;
+  paidUnlocks: string[];
+  freeIncludes: string[];
 };
+
+type RegistryUpgradeVariantKey = "A" | "B" | "C";
+
+type RegistryUpgradeVariant = {
+  key: RegistryUpgradeVariantKey;
+  headline: string;
+  body: string;
+  ctaLabel: string;
+};
+
+const REGISTRY_UPGRADE_VARIANTS: RegistryUpgradeVariant[] = [
+  {
+    key: "A",
+    headline: "Upgrade to file and track submissions",
+    body: "Unlock the filing workflow, retry safety, and audit tracking when you are ready to move beyond draft prep.",
+    ctaLabel: "Upgrade to file",
+  },
+  {
+    key: "B",
+    headline: "Your filing is ready — unlock submission and tracking",
+    body: "Turn a ready draft into a trackable filing workflow with lifecycle updates, attempts history, and status visibility.",
+    ctaLabel: "Unlock submission workflow",
+  },
+  {
+    key: "C",
+    headline: "Avoid errors. File with retry and audit tracking",
+    body: "Keep retry safety, attempt history, and a cleaner audit trail when a filing needs follow-up or correction.",
+    ctaLabel: "Upgrade with retry safety",
+  },
+];
+
+function hashVariantSeed(value: string) {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  }
+  return hash;
+}
+
+function selectRegistryUpgradeVariant(seed: string): RegistryUpgradeVariant {
+  const index = hashVariantSeed(seed) % REGISTRY_UPGRADE_VARIANTS.length;
+  return REGISTRY_UPGRADE_VARIANTS[index];
+}
 
 function formatDate(value: string | null | undefined) {
   if (!value) return "--";
@@ -306,6 +354,7 @@ type Props = {
 };
 
 export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSubmissionAssistant }) => {
+  const { user } = useAuth();
   const entitlements = useEntitlements();
   const [data, setData] = useState<RegistryStatusPayload | null>(null);
   const [submissionData, setSubmissionData] = useState<RegistrySubmissionPayload | null>(null);
@@ -322,6 +371,9 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
     notes: "",
     evidenceReference: "",
   });
+  const viewedPromptKeysRef = React.useRef<Set<string>>(new Set());
+  const lastPlanRef = React.useRef<string | null>(null);
+  const conversionTrackedRef = React.useRef(false);
 
   const propertyId = property?.id || null;
 
@@ -394,36 +446,10 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
     }
   };
 
-  const runWorkflowAction = useCallback(
-    async (runner: () => Promise<unknown>) => {
-      try {
-        setActionLoading(true);
-        setActionError(null);
-        setUpgradeState(null);
-        await runner();
-        setWorkflowForm({ referenceNumber: "", notes: "", evidenceReference: "" });
-        await loadData();
-      } catch (err: any) {
-        const upgradeRequired = extractRegistryUpgradeRequired(err);
-        if (upgradeRequired) {
-          setUpgradeState({
-            capability: upgradeRequired.requiredCapability || upgradeRequired.capability,
-            message: upgradeRequired.message || "Upgrade to unlock filing workflow.",
-            requiredPlan: upgradeRequired.requiredPlan || "pro",
-          });
-          setActionError(upgradeRequired.message || "Upgrade to unlock filing workflow.");
-        } else {
-          setActionError(err?.message || "Unable to update the filing workflow right now.");
-        }
-      } finally {
-        setActionLoading(false);
-      }
-    },
-    [loadData]
-  );
-
   const filing = data?.filing || null;
   const submission = submissionData?.submission || null;
+  const userId = String(user?.id || "");
+  const plan = String(entitlements.plan || user?.plan || "free");
   const hasRegistryFilingAccess = entitlements.isAdmin || entitlements.hasCapability("registry_filing_access");
   const hasRegistryAttemptsHistory =
     entitlements.isAdmin || entitlements.hasCapability("registry_attempts_history");
@@ -453,12 +479,96 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
     filing?.result?.referenceNumbers?.[0]?.value ||
     filing?.request?.referenceNumbers?.[0]?.value ||
     null;
+  const registryUpgradeVariant = useMemo(
+    () => selectRegistryUpgradeVariant(`${userId || "anonymous"}:${propertyId || "registry"}`),
+    [propertyId, userId]
+  );
 
-  const openRegistryUpgrade = useCallback(() => {
+  const trackRegistryEvent = useCallback(
+    (eventName: string, location: string, extra: Record<string, unknown> = {}) => {
+      if (typeof window !== "undefined" && import.meta.env?.MODE !== "production") {
+        console.info("[registry-pricing-event]", eventName, {
+          propertyId,
+          userId: userId || undefined,
+          plan,
+          location,
+          variant: registryUpgradeVariant.key,
+          ...extra,
+        });
+      }
+      track(eventName, {
+        propertyId,
+        userId: userId || undefined,
+        plan,
+        location,
+        variant: registryUpgradeVariant.key,
+        timestamp: new Date().toISOString(),
+        ...extra,
+      });
+    },
+    [plan, propertyId, registryUpgradeVariant.key, userId]
+  );
+
+  const runWorkflowAction = useCallback(
+    async (runner: () => Promise<unknown>, meta?: { successEvent?: string; location?: string }) => {
+      try {
+        setActionLoading(true);
+        setActionError(null);
+        setUpgradeState(null);
+        await runner();
+        if (meta?.successEvent && meta.location) {
+          trackRegistryEvent(meta.successEvent, meta.location);
+        }
+        setWorkflowForm({ referenceNumber: "", notes: "", evidenceReference: "" });
+        await loadData();
+      } catch (err: any) {
+        const upgradeRequired = extractRegistryUpgradeRequired(err);
+        if (upgradeRequired) {
+          const paidUnlocks = upgradeRequired.monetization?.paidUnlocks || [];
+          const freeIncludes = upgradeRequired.monetization?.freeIncludes || [];
+          setUpgradeState({
+            capability: upgradeRequired.requiredCapability || upgradeRequired.capability,
+            message: upgradeRequired.message || "Upgrade to unlock filing workflow.",
+            requiredPlan: upgradeRequired.requiredPlan || "pro",
+            location: meta?.location || "action_panel",
+            paidUnlocks,
+            freeIncludes,
+          });
+          trackRegistryEvent(
+            upgradeRequired.requiredCapability === "registry_attempts_history"
+              ? "registry_attempts_history_gate_hit"
+              : meta?.location === "retry_button"
+                ? "registry_retry_gate_hit"
+                : "registry_filing_gate_hit",
+            meta?.location || "action_panel",
+            {
+              capability: upgradeRequired.requiredCapability || upgradeRequired.capability,
+              requiredPlan: upgradeRequired.requiredPlan || "pro",
+            }
+          );
+          setActionError(upgradeRequired.message || "Upgrade to unlock filing workflow.");
+        } else {
+          setActionError(err?.message || "Unable to update the filing workflow right now.");
+        }
+      } finally {
+        setActionLoading(false);
+      }
+    },
+    [loadData, trackRegistryEvent]
+  );
+
+  const openRegistryUpgrade = useCallback((override?: Partial<RegistryUpgradeState>) => {
+    const payload = override || upgradeState;
+    if (payload?.capability && payload?.location) {
+      trackRegistryEvent("registry_upgrade_clicked", payload.location, {
+        capability: payload.capability,
+        requiredPlan: payload.requiredPlan || "pro",
+      });
+    }
     if (typeof window !== "undefined") {
       window.location.assign("/pricing?feature=registry_filing_access");
     }
-  }, []);
+  }, [trackRegistryEvent, upgradeState]);
 
   const showFilingWorkflowUpgrade =
     !hasRegistryFilingAccess &&
@@ -467,6 +577,67 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
       workflowStatus === "rejected" ||
       workflowStatus === "failed" ||
       workflowStatus === "cancelled");
+  const showAttemptsHistoryUpgrade = !hasRegistryAttemptsHistory;
+
+  useEffect(() => {
+    if (showFilingWorkflowUpgrade) {
+      const key = `filing:${propertyId}:${registryUpgradeVariant.key}:${workflowStatus}`;
+      if (!viewedPromptKeysRef.current.has(key)) {
+        viewedPromptKeysRef.current.add(key);
+        trackRegistryEvent("registry_upgrade_prompt_viewed", "action_panel", {
+          capability: upgradeState?.capability || "registry_filing_access",
+          promptType: "filing_workflow",
+          workflowStatus,
+        });
+      }
+    }
+  }, [propertyId, registryUpgradeVariant.key, showFilingWorkflowUpgrade, trackRegistryEvent, upgradeState?.capability, workflowStatus]);
+
+  useEffect(() => {
+    if (detailsOpen && showAttemptsHistoryUpgrade) {
+      const key = `history:${propertyId}:${registryUpgradeVariant.key}`;
+      if (!viewedPromptKeysRef.current.has(key)) {
+        viewedPromptKeysRef.current.add(key);
+        trackRegistryEvent("registry_attempts_history_gate_hit", "history_panel", {
+          capability: "registry_attempts_history",
+        });
+        trackRegistryEvent("registry_upgrade_prompt_viewed", "history_panel", {
+          capability: "registry_attempts_history",
+          promptType: "attempts_history",
+        });
+      }
+    }
+  }, [detailsOpen, propertyId, registryUpgradeVariant.key, showAttemptsHistoryUpgrade, trackRegistryEvent]);
+
+  useEffect(() => {
+    const previousPlan = lastPlanRef.current;
+    if (
+      previousPlan &&
+      previousPlan !== plan &&
+      hasRegistryFilingAccess &&
+      viewedPromptKeysRef.current.size > 0 &&
+      !conversionTrackedRef.current
+    ) {
+      conversionTrackedRef.current = true;
+      trackRegistryEvent("registry_upgrade_converted", "status_card", {
+        previousPlan,
+      });
+    }
+    lastPlanRef.current = plan;
+  }, [hasRegistryFilingAccess, plan, trackRegistryEvent]);
+
+  const dismissUpgradePrompt = useCallback(
+    (location: string) => {
+      if (showFilingWorkflowUpgrade || showAttemptsHistoryUpgrade || upgradeState) {
+        trackRegistryEvent("registry_upgrade_dismissed", location, {
+          capability:
+            upgradeState?.capability ||
+            (showAttemptsHistoryUpgrade ? "registry_attempts_history" : "registry_filing_access"),
+        });
+      }
+    },
+    [showFilingWorkflowUpgrade, showAttemptsHistoryUpgrade, trackRegistryEvent, upgradeState]
+  );
 
   return (
     <Card style={{ display: "grid", gap: 12 }}>
@@ -514,7 +685,10 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
           role="dialog"
           aria-modal="true"
           aria-label="Compliance and registry details"
-          onMouseDown={() => setDetailsOpen(false)}
+          onMouseDown={() => {
+            dismissUpgradePrompt("status_card");
+            setDetailsOpen(false);
+          }}
           style={{
             position: "fixed",
             inset: 0,
@@ -553,7 +727,14 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                 {filingStatusLabel(workflowStatus) ? (
                   <Pill tone={filingStatusTone(workflowStatus)}>{filingStatusLabel(workflowStatus)}</Pill>
                 ) : null}
-                <Button type="button" variant="secondary" onClick={() => setDetailsOpen(false)}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    dismissUpgradePrompt("status_card");
+                    setDetailsOpen(false);
+                  }}
+                >
                   Close
                 </Button>
               </div>
@@ -576,7 +757,15 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                 </div>
                 {(workflowStatus === "draft" || workflowStatus === "in_review" || workflowStatus === "ready_to_file") && (
                   <div>
-                    <Button type="button" onClick={() => void runWorkflowAction(() => createReadyFromDraft(String(propertyId)))}>
+                    <Button
+                      type="button"
+                      onClick={() =>
+                        void runWorkflowAction(() => createReadyFromDraft(String(propertyId)), {
+                          successEvent: "registry_ready_created",
+                          location: "status_card",
+                        })
+                      }
+                    >
                       Regenerate filing package
                     </Button>
                   </div>
@@ -741,15 +930,23 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                   >
                     <div style={{ fontWeight: 700, color: "#0f172a" }}>Unlock filing workflow</div>
                     <div style={{ color: "#475569", fontSize: 14, lineHeight: 1.5 }}>
-                      {upgradeState?.message || "Upgrade to file and track submissions through RentChain."}
+                      {registryUpgradeVariant.headline}
                     </div>
                     <div style={{ color: "#475569", fontSize: 13 }}>
-                      Free includes draft prep, readiness checks, and export. Paid filing adds retry safety, audit trail,
-                      and attempts history. {registryUpgradeLabel}
+                      {upgradeState?.message || registryUpgradeVariant.body} Free includes{" "}
+                      {(upgradeState?.freeIncludes || registryPricing?.freeIncludes || ["draft", "readiness", "export"]).join(", ")}.
+                      Paid filing adds{" "}
+                      {(upgradeState?.paidUnlocks || registryPricing?.paidUnlocks || [
+                        "filing workflow",
+                        "retry safety",
+                        "attempt history",
+                        "audit tracking",
+                      ]).join(", ")}
+                      . {registryUpgradeLabel}
                     </div>
                     <div>
                       <Button type="button" onClick={openRegistryUpgrade}>
-                        Upgrade to file
+                        {registryUpgradeVariant.ctaLabel}
                       </Button>
                     </div>
                   </div>
@@ -760,7 +957,12 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                     <Button
                       type="button"
                       disabled={actionLoading}
-                      onClick={() => void runWorkflowAction(() => createReadyFromDraft(String(propertyId)))}
+                      onClick={() =>
+                        void runWorkflowAction(() => createReadyFromDraft(String(propertyId)), {
+                          successEvent: "registry_ready_created",
+                          location: "action_panel",
+                        })
+                      }
                     >
                       Prepare filing package
                     </Button>
@@ -770,12 +972,37 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                       <Button
                         type="button"
                         disabled={actionLoading || draftChangedSinceReady}
-                        onClick={() => void runWorkflowAction(() => createRegistryFilingRequest(String(propertyId)))}
+                        onClick={() =>
+                          void runWorkflowAction(() => createRegistryFilingRequest(String(propertyId)), {
+                            location: "action_panel",
+                          })
+                        }
                       >
                         Open filing checklist
                       </Button>
                     ) : (
-                      <Button type="button" variant="secondary" onClick={openRegistryUpgrade}>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => {
+                          trackRegistryEvent("registry_filing_gate_hit", "action_panel", {
+                            capability: "registry_filing_access",
+                          });
+                          setUpgradeState({
+                            capability: "registry_filing_access",
+                            message: "Upgrade to unlock the filing workflow once your draft is ready.",
+                            requiredPlan: "pro",
+                            location: "action_panel",
+                            paidUnlocks: registryPricing?.paidUnlocks || [],
+                            freeIncludes: registryPricing?.freeIncludes || [],
+                          });
+                          openRegistryUpgrade({
+                            capability: "registry_filing_access",
+                            requiredPlan: "pro",
+                            location: "action_panel",
+                          });
+                        }}
+                      >
                         Unlock filing workflow
                       </Button>
                     )
@@ -810,14 +1037,36 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                                     },
                                   ]
                                 : [],
-                            })
+                            }),
+                            { location: "action_panel" }
                           )
                         }
                       >
                         Mark as Filed
                       </Button>
                     ) : (
-                      <Button type="button" variant="secondary" onClick={openRegistryUpgrade}>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => {
+                          trackRegistryEvent("registry_filing_gate_hit", "action_panel", {
+                            capability: "registry_filing_access",
+                          });
+                          setUpgradeState({
+                            capability: "registry_filing_access",
+                            message: "Upgrade to mark filings, track outcomes, and keep an audit trail.",
+                            requiredPlan: "pro",
+                            location: "action_panel",
+                            paidUnlocks: registryPricing?.paidUnlocks || [],
+                            freeIncludes: registryPricing?.freeIncludes || [],
+                          });
+                          openRegistryUpgrade({
+                            capability: "registry_filing_access",
+                            requiredPlan: "pro",
+                            location: "action_panel",
+                          });
+                        }}
+                      >
                         Upgrade to file
                       </Button>
                     )
@@ -837,7 +1086,8 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                               note: workflowForm.notes,
                               referenceNumber: workflowForm.referenceNumber,
                               evidenceReference: workflowForm.evidenceReference,
-                            })
+                            }),
+                            { location: "action_panel" }
                           )
                         }
                       >
@@ -871,7 +1121,8 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                                     },
                                   ]
                                 : [],
-                            })
+                            }),
+                            { location: "action_panel" }
                           )
                         }
                       >
@@ -906,7 +1157,8 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                                     },
                                   ]
                                 : [],
-                            })
+                            }),
+                            { location: "action_panel" }
                           )
                         }
                       >
@@ -941,7 +1193,8 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                                     },
                                   ]
                                 : [],
-                            })
+                            }),
+                            { location: "action_panel" }
                           )
                         }
                       >
@@ -949,7 +1202,28 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                       </Button>
                     </>
                     ) : (
-                      <Button type="button" variant="secondary" onClick={openRegistryUpgrade}>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => {
+                          trackRegistryEvent("registry_filing_gate_hit", "action_panel", {
+                            capability: "registry_filing_access",
+                          });
+                          setUpgradeState({
+                            capability: "registry_filing_access",
+                            message: "Upgrade to update filing status and keep the workflow moving.",
+                            requiredPlan: "pro",
+                            location: "action_panel",
+                            paidUnlocks: registryPricing?.paidUnlocks || [],
+                            freeIncludes: registryPricing?.freeIncludes || [],
+                          });
+                          openRegistryUpgrade({
+                            capability: "registry_filing_access",
+                            requiredPlan: "pro",
+                            location: "action_panel",
+                          });
+                        }}
+                      >
                         Upgrade to file
                       </Button>
                     )
@@ -964,14 +1238,36 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                           void runWorkflowAction(() =>
                             retryRegistryFilingAttempt(String(propertyId), {
                               attemptId: latestAttempt.attemptId,
-                            })
+                            }),
+                            { location: "retry_button" }
                           )
                         }
                       >
                         Retry filing attempt
                       </Button>
                     ) : (
-                      <Button type="button" variant="secondary" onClick={openRegistryUpgrade}>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => {
+                          trackRegistryEvent("registry_retry_gate_hit", "retry_button", {
+                            capability: "registry_filing_access",
+                          });
+                          setUpgradeState({
+                            capability: "registry_filing_access",
+                            message: "Upgrade to retry filings safely and preserve prior attempts as audit history.",
+                            requiredPlan: "pro",
+                            location: "retry_button",
+                            paidUnlocks: registryPricing?.paidUnlocks || [],
+                            freeIncludes: registryPricing?.freeIncludes || [],
+                          });
+                          openRegistryUpgrade({
+                            capability: "registry_filing_access",
+                            requiredPlan: "pro",
+                            location: "retry_button",
+                          });
+                        }}
+                      >
                         Unlock retry workflow
                       </Button>
                     )
@@ -1120,7 +1416,28 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                     </div>
                     <div style={{ color: "#475569", fontSize: 13 }}>{registryUpgradeLabel}</div>
                     <div>
-                      <Button type="button" variant="secondary" onClick={openRegistryUpgrade}>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => {
+                          trackRegistryEvent("registry_attempts_history_gate_hit", "history_panel", {
+                            capability: "registry_attempts_history",
+                          });
+                          setUpgradeState({
+                            capability: "registry_attempts_history",
+                            message: "Upgrade to keep a history of filing attempts, notes, and references.",
+                            requiredPlan: "pro",
+                            location: "history_panel",
+                            paidUnlocks: registryPricing?.paidUnlocks || [],
+                            freeIncludes: registryPricing?.freeIncludes || [],
+                          });
+                          openRegistryUpgrade({
+                            capability: "registry_attempts_history",
+                            requiredPlan: "pro",
+                            location: "history_panel",
+                          });
+                        }}
+                      >
                         Unlock filing history
                       </Button>
                     </div>
