@@ -1,6 +1,8 @@
 import api from "./client";
 import type { PropertyLedgerEntry } from "../types/ledger";
 
+const REGISTRY_ACQUISITION_ATTRIBUTION_KEY = "rentchain:registryAcquisitionAttribution";
+
 export interface UnitInput {
   unitNumber: string;
   rent: number;
@@ -45,6 +47,15 @@ export interface Property extends PropertyInput {
   unitCount?: number;
   occupiedCount?: number;
   occupancyRate?: number;
+}
+
+export interface RegistryAcquisitionAttribution {
+  source: string | null;
+  medium: string | null;
+  campaign: string | null;
+  variant: string | null;
+  landingPath: string | null;
+  capturedAt: string;
 }
 
 export interface PropertyRegistryStatus {
@@ -492,6 +503,53 @@ export interface RegistrySubmissionFilingSummaryV3 {
   currentStatus: RegistrySubmissionLifecycleStatus | null;
 }
 
+export interface RegistryFunnelCounts {
+  landingEntries: number;
+  readinessCreated: number;
+  filingGateHits: number;
+  upgradePromptViews: number;
+  upgradeClicks: number;
+  upgradeConversions: number;
+}
+
+export interface RegistryFunnelSourceBreakdown {
+  source: string;
+  medium: string | null;
+  campaign: string | null;
+  counts: RegistryFunnelCounts;
+}
+
+export interface RegistryFunnelVariantBreakdown {
+  variant: string;
+  promptViews: number;
+  clicks: number;
+  conversions: number;
+  clickThroughRate: number;
+  conversionRateFromClick: number | null;
+}
+
+export interface RegistryFunnelDailyBreakdown {
+  date: string;
+  counts: RegistryFunnelCounts;
+}
+
+export interface RegistryFunnelReport {
+  range: {
+    from: string;
+    to: string;
+  };
+  totals: RegistryFunnelCounts;
+  stepConversion: {
+    readinessFromLanding: number | null;
+    filingGateFromReadiness: number | null;
+    clickFromPromptView: number | null;
+    conversionFromClick: number | null;
+  };
+  byDate: RegistryFunnelDailyBreakdown[];
+  bySource: RegistryFunnelSourceBreakdown[];
+  byVariant: RegistryFunnelVariantBreakdown[];
+}
+
 export type HalifaxSubmissionValidation = RegistrySubmissionValidation;
 
 export interface RegistryFieldMapEntry {
@@ -877,6 +935,70 @@ export function extractRegistryUpgradeRequired(error: any): RegistryUpgradeRequi
     paidUnlocks: payload?.monetization?.paidUnlocks || [],
     monetization: payload?.monetization,
   };
+}
+
+function sanitizeRegistryAcquisitionField(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed.slice(0, 120) : null;
+}
+
+export function saveRegistryAcquisitionAttribution(input: {
+  source?: string | null;
+  medium?: string | null;
+  campaign?: string | null;
+  variant?: string | null;
+  landingPath?: string | null;
+}) {
+  if (typeof window === "undefined") return;
+  const payload: RegistryAcquisitionAttribution = {
+    source: sanitizeRegistryAcquisitionField(input.source),
+    medium: sanitizeRegistryAcquisitionField(input.medium),
+    campaign: sanitizeRegistryAcquisitionField(input.campaign),
+    variant: sanitizeRegistryAcquisitionField(input.variant),
+    landingPath: sanitizeRegistryAcquisitionField(input.landingPath),
+    capturedAt: new Date().toISOString(),
+  };
+  window.localStorage.setItem(REGISTRY_ACQUISITION_ATTRIBUTION_KEY, JSON.stringify(payload));
+}
+
+export function readRegistryAcquisitionAttribution(maxAgeDays = 30): RegistryAcquisitionAttribution | null {
+  if (typeof window === "undefined") return null;
+  const raw = window.localStorage.getItem(REGISTRY_ACQUISITION_ATTRIBUTION_KEY);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<RegistryAcquisitionAttribution>;
+    const capturedAt = typeof parsed.capturedAt === "string" ? parsed.capturedAt : null;
+    if (!capturedAt) return null;
+    const ageMs = Date.now() - Date.parse(capturedAt);
+    if (!Number.isFinite(ageMs) || ageMs > maxAgeDays * 24 * 60 * 60 * 1000) {
+      window.localStorage.removeItem(REGISTRY_ACQUISITION_ATTRIBUTION_KEY);
+      return null;
+    }
+    return {
+      source: sanitizeRegistryAcquisitionField(parsed.source),
+      medium: sanitizeRegistryAcquisitionField(parsed.medium),
+      campaign: sanitizeRegistryAcquisitionField(parsed.campaign),
+      variant: sanitizeRegistryAcquisitionField(parsed.variant),
+      landingPath: sanitizeRegistryAcquisitionField(parsed.landingPath),
+      capturedAt,
+    };
+  } catch {
+    window.localStorage.removeItem(REGISTRY_ACQUISITION_ATTRIBUTION_KEY);
+    return null;
+  }
+}
+
+export async function fetchRegistryFunnelReport(params?: {
+  from?: string;
+  to?: string;
+}): Promise<RegistryFunnelReport> {
+  const search = new URLSearchParams();
+  if (params?.from) search.set("from", params.from);
+  if (params?.to) search.set("to", params.to);
+  const path = search.toString() ? `/events/registry-funnel-report?${search.toString()}` : "/events/registry-funnel-report";
+  const res = await api.get(path);
+  return res.data;
 }
 
 export {

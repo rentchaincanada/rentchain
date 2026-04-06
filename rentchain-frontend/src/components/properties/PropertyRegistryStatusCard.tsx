@@ -9,6 +9,7 @@ import {
   extractRegistryUpgradeRequired,
   fetchPropertyRegistryStatus,
   fetchPropertyRegistrySubmission,
+  readRegistryAcquisitionAttribution,
   retryRegistryFilingAttempt,
   updateRegistryFilingStatus,
   type Property,
@@ -483,6 +484,7 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
     () => selectRegistryUpgradeVariant(`${userId || "anonymous"}:${propertyId || "registry"}`),
     [propertyId, userId]
   );
+  const acquisitionAttribution = useMemo(() => readRegistryAcquisitionAttribution(), []);
 
   const trackRegistryEvent = useCallback(
     (eventName: string, location: string, extra: Record<string, unknown> = {}) => {
@@ -493,6 +495,10 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
           plan,
           location,
           variant: registryUpgradeVariant.key,
+          source: acquisitionAttribution?.source || undefined,
+          medium: acquisitionAttribution?.medium || undefined,
+          campaign: acquisitionAttribution?.campaign || undefined,
+          acquisitionVariant: acquisitionAttribution?.variant || undefined,
           ...extra,
         });
       }
@@ -502,11 +508,16 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
         plan,
         location,
         variant: registryUpgradeVariant.key,
+        source: acquisitionAttribution?.source || undefined,
+        medium: acquisitionAttribution?.medium || undefined,
+        campaign: acquisitionAttribution?.campaign || undefined,
+        acquisitionVariant: acquisitionAttribution?.variant || undefined,
+        landingPath: acquisitionAttribution?.landingPath || undefined,
         timestamp: new Date().toISOString(),
         ...extra,
       });
     },
-    [plan, propertyId, registryUpgradeVariant.key, userId]
+    [acquisitionAttribution?.campaign, acquisitionAttribution?.landingPath, acquisitionAttribution?.medium, acquisitionAttribution?.source, acquisitionAttribution?.variant, plan, propertyId, registryUpgradeVariant.key, userId]
   );
 
   const runWorkflowAction = useCallback(
