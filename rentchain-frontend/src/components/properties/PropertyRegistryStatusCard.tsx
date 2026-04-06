@@ -422,7 +422,7 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
 {filingStatusLabel(workflowStatus) ? (
   <Pill tone={filingStatusTone(workflowStatus)}>{filingStatusLabel(workflowStatus)}</Pill>
 ) : null}
-            ) : null}
+          
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <Button type="button" variant="secondary" onClick={() => setDetailsOpen(true)}>
