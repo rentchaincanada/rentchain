@@ -210,7 +210,8 @@ const PricingPage: React.FC = () => {
                 flexDirection: "column",
                 gap: 16,
                 minWidth: 0,
-                minHeight: "100%",
+                minHeight: "unset",
+                height: "100%",
                 padding: 20,
                 position: "relative",
                 zIndex: hoveredPlan === plan ? 2 : 1,
@@ -224,6 +225,7 @@ const PricingPage: React.FC = () => {
                     ? "linear-gradient(180deg, rgba(37,99,235,0.06) 0%, #ffffff 28%)"
                     : "#ffffff",
                 boxShadow: pricingCardShadow(plan, hoveredPlan === plan),
+                justifySelf: "stretch",
                 ...(plan === "pro"
                   ? {
                       padding: 22,
@@ -354,7 +356,7 @@ const PricingPage: React.FC = () => {
                   ))}
                 </div>
               ) : null}
-              <div style={{ marginTop: "auto", paddingTop: 8, width: "100%" }}>
+              <div style={{ marginTop: 12, paddingTop: 8, width: "100%" }}>
                 {plan === "free" ? (
                   <Button type="button" variant="secondary" onClick={() => navigate("/dashboard")} style={{ width: "100%" }}>
                     Start Free

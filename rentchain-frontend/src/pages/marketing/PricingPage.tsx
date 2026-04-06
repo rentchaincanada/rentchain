@@ -309,7 +309,8 @@ const PricingPage: React.FC = () => {
                 gap: 16,
                 width: "100%",
                 minWidth: 0,
-                minHeight: "100%",
+                minHeight: isMobile ? "unset" : "100%",
+                height: isMobile ? "auto" : "100%",
                 padding: isMobile ? 18 : 22,
                 position: "relative",
                 isolation: "isolate",
@@ -323,6 +324,7 @@ const PricingPage: React.FC = () => {
                     ? "linear-gradient(180deg, rgba(37,99,235,0.06) 0%, #ffffff 28%)"
                     : "#ffffff",
                 boxShadow: pricingCardShadow(plan, !isMobile && hoveredPlan === plan),
+                justifySelf: "stretch",
                 ...(plan === "pro"
                   ? {
                       padding: isMobile ? 18 : 24,
@@ -441,7 +443,7 @@ const PricingPage: React.FC = () => {
                   {PLAN_SUPPORT_COPY[plan]}
                 </div>
               ) : null}
-              <div style={{ marginTop: "auto", paddingTop: spacing.sm, width: "100%" }}>
+              <div style={{ marginTop: isMobile ? spacing.sm : "auto", paddingTop: spacing.sm, width: "100%" }}>
                 {plan === "free" ? (
                   <Button type="button" onClick={handleStartFree} style={{ width: "100%" }}>
                     {copy.pricing.ctaStartFree}
