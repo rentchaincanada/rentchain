@@ -6,7 +6,7 @@ function normalizeToken(value: any): string {
   return String(value || "").trim().toLowerCase();
 }
 
-function isHalifaxProperty(property: Record<string, any>): boolean {
+function matchesHalifaxJurisdiction(property: Record<string, any>): boolean {
   const country = normalizeToken(property?.country);
   const province = normalizeToken(property?.province);
   const city = normalizeToken(property?.city);
@@ -23,7 +23,7 @@ function isHalifaxProperty(property: Record<string, any>): boolean {
 }
 
 export function resolveRegistrySchemaForProperty(property: Record<string, any>): RegistrySchemaDefinition {
-  if (isHalifaxProperty(property)) {
+  if (matchesHalifaxJurisdiction(property)) {
     return halifaxRentalRegistrySchema;
   }
   return {

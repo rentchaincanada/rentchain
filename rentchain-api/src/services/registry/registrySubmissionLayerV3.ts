@@ -1,6 +1,6 @@
 import { db, FieldValue } from "../../config/firebase";
 import { halifaxRentalRegistryManualPortalAdapter } from "./adapters/halifaxRentalRegistryManualPortalAdapter";
-import { HALIFAX_REGISTRY_SUBMISSION_COLLECTION, loadPropertyRegistrySubmissionDraft } from "./halifaxRegistrySubmissionService";
+import { loadRegistrySubmissionDraft, REGISTRY_SUBMISSION_DRAFT_COLLECTION } from "./halifaxRegistrySubmissionService";
 import { nowIso } from "./schemas/registrySchemaCommon";
 import { resolveRegistrySchemaForProperty, resolveRegistrySchemaSummaryByKey } from "./schemas/registrySchemaResolver";
 import { validateRegistrySubmissionDraftV2 } from "./schemas/registrySubmissionDraftV2";
@@ -23,6 +23,7 @@ export const REGISTRY_SUBMISSION_READY_COLLECTION = "propertyRegistrySubmissionR
 export const REGISTRY_SUBMISSION_ATTEMPT_COLLECTION = "propertyRegistrySubmissionAttemptsV3";
 export const REGISTRY_SUBMISSION_REQUEST_COLLECTION = "propertyRegistrySubmissionRequestsV3";
 export const REGISTRY_SUBMISSION_RESULT_COLLECTION = "propertyRegistrySubmissionResultsV3";
+// Filing-layer records are derived from the canonical v2 draft and must never become editable draft state.
 
 type FilingTerminalStatus = Extract<
   RegistrySubmissionLifecycleStatus,
@@ -275,7 +276,7 @@ async function loadDoc<T>(collection: string, id: string): Promise<T | null> {
 }
 
 async function loadPersistedDraftUpdatedAt(draftId: string): Promise<string | null> {
-  const stored = await loadDoc<any>(HALIFAX_REGISTRY_SUBMISSION_COLLECTION, draftId);
+  const stored = await loadDoc<any>(REGISTRY_SUBMISSION_DRAFT_COLLECTION, draftId);
   const persistedUpdatedAt =
     (stored?.timestamps && typeof stored.timestamps === "object" ? stored.timestamps.updatedAt : null) ||
     stored?.updatedAt ||
@@ -502,17 +503,17 @@ async function buildFilingSummary(draftId: string): Promise<RegistrySubmissionFi
   };
 }
 
-export async function loadRegistrySubmissionFilingSummaryByDraftId(
+export async function loadRegistryFilingSummaryByDraftId(
   draftId: string
 ): Promise<RegistrySubmissionFilingSummaryV3> {
   return buildFilingSummary(draftId);
 }
 
-export async function listRegistrySubmissionAttempts(input: {
+export async function listRegistryFilingAttempts(input: {
   property: Record<string, any>;
   landlordId: string | null;
 }) {
-  const draft = await loadPropertyRegistrySubmissionDraft(input);
+  const draft = await loadRegistrySubmissionDraft(input);
   const attempts = await listAttemptsByDraftId(draft.draftId);
   return {
     sourceDraftId: draft.draftId,
@@ -521,20 +522,20 @@ export async function listRegistrySubmissionAttempts(input: {
   };
 }
 
-export async function getLatestRegistrySubmissionAttempt(input: {
+export async function getLatestRegistryFilingAttempt(input: {
   property: Record<string, any>;
   landlordId: string | null;
 }) {
-  const draft = await loadPropertyRegistrySubmissionDraft(input);
+  const draft = await loadRegistrySubmissionDraft(input);
   return loadLatestAttemptByDraftId(draft.draftId);
 }
 
-export async function createRegistrySubmissionReadyPackage(input: {
+export async function createRegistryFilingReadyPackage(input: {
   property: Record<string, any>;
   landlordId: string | null;
   actorId: string | null;
 }): Promise<RegistrySubmissionReadyV3> {
-  const draft = await loadPropertyRegistrySubmissionDraft(input);
+  const draft = await loadRegistrySubmissionDraft(input);
   const ready = buildRegistrySubmissionReadyV3FromDraft(draft);
   await db.collection(REGISTRY_SUBMISSION_READY_COLLECTION).doc(draft.draftId).set(
     {
@@ -556,11 +557,11 @@ export async function createRegistrySubmissionReadyPackage(input: {
   };
 }
 
-export async function loadRegistrySubmissionReadyPackage(input: {
+export async function loadRegistryFilingReadyPackage(input: {
   property: Record<string, any>;
   landlordId: string | null;
 }): Promise<RegistrySubmissionReadyV3 | null> {
-  const draft = await loadPropertyRegistrySubmissionDraft(input);
+  const draft = await loadRegistrySubmissionDraft(input);
   return loadDoc<RegistrySubmissionReadyV3>(REGISTRY_SUBMISSION_READY_COLLECTION, draft.draftId);
 }
 
@@ -610,15 +611,15 @@ export async function createAttemptFromReady(input: {
   return { attempt, request: nextRequest };
 }
 
-export async function createRegistrySubmissionFilingRequest(input: {
+export async function createRegistryFilingRequest(input: {
   property: Record<string, any>;
   landlordId: string | null;
   actorId: string | null;
 }): Promise<RegistrySubmissionRequestV3> {
-  const draft = await loadPropertyRegistrySubmissionDraft(input);
+  const draft = await loadRegistrySubmissionDraft(input);
   const ready =
     (await loadDoc<RegistrySubmissionReadyV3>(REGISTRY_SUBMISSION_READY_COLLECTION, draft.draftId)) ||
-    (await createRegistrySubmissionReadyPackage(input));
+    (await createRegistryFilingReadyPackage(input));
   if (await isReadyPackageStale(draft.draftId, ready)) {
     throw new Error("Draft has changed since this ready package was prepared. Regenerate the ready package before filing.");
   }
@@ -636,13 +637,13 @@ export async function createRegistrySubmissionFilingRequest(input: {
   return created.request;
 }
 
-export async function retryRegistrySubmissionAttempt(input: {
+export async function retryRegistryFilingAttempt(input: {
   property: Record<string, any>;
   landlordId: string | null;
   actorId: string | null;
   attemptId?: string | null;
 }): Promise<{ attempt: RegistrySubmissionAttemptV3; request: RegistrySubmissionRequestV3; ready: RegistrySubmissionReadyV3 }> {
-  const draft = await loadPropertyRegistrySubmissionDraft(input);
+  const draft = await loadRegistrySubmissionDraft(input);
   const ready = await loadDoc<RegistrySubmissionReadyV3>(REGISTRY_SUBMISSION_READY_COLLECTION, draft.draftId);
   if (!ready) {
     throw new Error("A filing package does not exist yet. Prepare a ready package before retrying.");
@@ -676,7 +677,7 @@ export async function retryRegistrySubmissionAttempt(input: {
   }));
 }
 
-export async function updateAttemptLifecycle(input: {
+export async function updateRegistryFilingAttemptLifecycle(input: {
   property: Record<string, any>;
   landlordId: string | null;
   actorId: string | null;
@@ -686,7 +687,7 @@ export async function updateAttemptLifecycle(input: {
   referenceNumbers?: Array<Partial<RegistrySubmissionReferenceNumberV3>> | null;
   evidence?: Array<Partial<RegistrySubmissionEvidenceV3>> | null;
 }): Promise<RegistrySubmissionAttemptV3> {
-  const draft = await loadPropertyRegistrySubmissionDraft(input);
+  const draft = await loadRegistrySubmissionDraft(input);
   const attempt =
     (input.attemptId ? await loadAttemptById(String(input.attemptId)) : await loadLatestAttemptByDraftId(draft.draftId)) || null;
   if (!attempt || attempt.sourceDraftId !== draft.draftId) {
@@ -835,7 +836,7 @@ export async function updateAttemptLifecycle(input: {
   return nextAttempt;
 }
 
-export async function updateRegistrySubmissionFilingLifecycle(input: {
+export async function updateRegistryFilingLifecycle(input: {
   property: Record<string, any>;
   landlordId: string | null;
   actorId: string | null;
@@ -845,6 +846,18 @@ export async function updateRegistrySubmissionFilingLifecycle(input: {
   referenceNumbers?: Array<Partial<RegistrySubmissionReferenceNumberV3>> | null;
   evidence?: Array<Partial<RegistrySubmissionEvidenceV3>> | null;
 }): Promise<RegistrySubmissionFilingSummaryV3> {
-  const attempt = await updateAttemptLifecycle(input);
+  const attempt = await updateRegistryFilingAttemptLifecycle(input);
   return buildFilingSummary(attempt.sourceDraftId);
 }
+
+export {
+  createRegistryFilingReadyPackage as createRegistrySubmissionReadyPackage,
+  loadRegistryFilingReadyPackage as loadRegistrySubmissionReadyPackage,
+  createRegistryFilingRequest as createRegistrySubmissionFilingRequest,
+  listRegistryFilingAttempts as listRegistrySubmissionAttempts,
+  getLatestRegistryFilingAttempt as getLatestRegistrySubmissionAttempt,
+  retryRegistryFilingAttempt as retryRegistrySubmissionAttempt,
+  updateRegistryFilingAttemptLifecycle as updateAttemptLifecycle,
+  updateRegistryFilingLifecycle as updateRegistrySubmissionFilingLifecycle,
+  loadRegistryFilingSummaryByDraftId as loadRegistrySubmissionFilingSummaryByDraftId,
+};

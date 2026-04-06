@@ -189,6 +189,7 @@ export type RegistrySubmissionFilingSummaryV3 = {
   currentStatus: RegistrySubmissionLifecycleStatus | null;
 };
 
+// Adapters translate canonical draft/ready data into channel-specific filing packages.
 export interface RegistryFilingAdapter {
   adapterKey: string;
   schemaKey: string;

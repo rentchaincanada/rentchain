@@ -43,7 +43,9 @@ import type {
   RegistryValidationItem,
 } from "./schemas/registrySchemaTypes";
 
-export const HALIFAX_REGISTRY_SUBMISSION_COLLECTION = "propertyRegistrySubmissions";
+// Canonical persisted draft store for the schema-driven submission assistant.
+export const REGISTRY_SUBMISSION_DRAFT_COLLECTION = "propertyRegistrySubmissions";
+export const HALIFAX_REGISTRY_SUBMISSION_COLLECTION = REGISTRY_SUBMISSION_DRAFT_COLLECTION;
 
 export type HalifaxSubmissionStatus = RegistrySubmissionStatus;
 export type HalifaxAddress = RegistryAddress;
@@ -60,12 +62,9 @@ export type HalifaxFieldMapEntry = RegistryFieldMapEntry;
 export type HalifaxSubmissionDraft = RegistrySubmissionDraft;
 export type RegistryReadinessView = PropertyRegistryReadiness;
 
-export const HALIFAX_FIELD_MAP_COMPAT = HALIFAX_FIELD_MAP;
-export const HALIFAX_FIELD_MAP_ALIAS = HALIFAX_FIELD_MAP;
-export const HALIFAX_FIELD_MAP_EXPORT = HALIFAX_FIELD_MAP;
 export { HALIFAX_FIELD_MAP };
 
-async function appendSubmissionAuditEvent(input: {
+async function appendRegistryDraftAuditEvent(input: {
   propertyId: string;
   actorUserId: string | null;
   sourceKey: string;
@@ -85,11 +84,11 @@ async function appendSubmissionAuditEvent(input: {
   });
 }
 
-function resolveDraftId(propertyId: string, schema: RegistrySchemaDefinition) {
+function resolveRegistryDraftId(propertyId: string, schema: RegistrySchemaDefinition) {
   return `${propertyId}__${schema.sourceKey}`;
 }
 
-function applyResolvedSchemaDraft(input: {
+function buildResolvedRegistryDraft(input: {
   schema: RegistrySchemaDefinition;
   propertyId: string;
   landlordId: string | null;
@@ -115,7 +114,7 @@ function applyResolvedSchemaDraft(input: {
 
   return buildRegistrySubmissionDraftV2({
     schema,
-    draftId: resolveDraftId(propertyId, schema),
+    draftId: resolveRegistryDraftId(propertyId, schema),
     propertyId,
     landlordId,
     previous: migrated,
@@ -129,7 +128,7 @@ function applyResolvedSchemaDraft(input: {
   });
 }
 
-async function loadRegistryProfileContext(landlordId: string | null) {
+async function loadRegistryDraftProfileContext(landlordId: string | null) {
   const normalizedLandlordId = asString(landlordId);
   const [landlordSnap, userSnap, accountSnap] = await Promise.all([
     normalizedLandlordId ? db.collection("landlords").doc(normalizedLandlordId).get() : Promise.resolve(null as any),
@@ -146,18 +145,18 @@ async function loadRegistryProfileContext(landlordId: string | null) {
   };
 }
 
-export async function loadPropertyRegistrySubmissionDraft(input: {
+export async function loadRegistrySubmissionDraft(input: {
   property: Record<string, any>;
   landlordId: string | null;
 }): Promise<RegistrySubmissionDraft> {
   const propertyId = String(input.property?.id || "").trim();
   const landlordId = asString(input.landlordId);
   const schema = resolveRegistrySchemaForProperty(input.property);
-  const docId = resolveDraftId(propertyId, schema);
+  const docId = resolveRegistryDraftId(propertyId, schema);
 
   const [draftSnap, profileContext] = await Promise.all([
-    db.collection(HALIFAX_REGISTRY_SUBMISSION_COLLECTION).doc(docId).get(),
-    loadRegistryProfileContext(landlordId),
+    db.collection(REGISTRY_SUBMISSION_DRAFT_COLLECTION).doc(docId).get(),
+    loadRegistryDraftProfileContext(landlordId),
   ]);
 
   const persisted = draftSnap?.exists ? ({ draftId: draftSnap.id, ...(draftSnap.data() as any) } as Partial<RegistrySubmissionDraft>) : null;
@@ -168,7 +167,7 @@ export async function loadPropertyRegistrySubmissionDraft(input: {
     persisted,
   });
 
-  return applyResolvedSchemaDraft({
+  return buildResolvedRegistryDraft({
     schema,
     propertyId,
     landlordId,
@@ -177,10 +176,10 @@ export async function loadPropertyRegistrySubmissionDraft(input: {
   });
 }
 
-export async function savePropertyRegistrySubmissionDraft(
+export async function saveRegistrySubmissionDraft(
   input: RegistrySubmissionSaveInput
 ): Promise<RegistrySubmissionDraft> {
-  const current = await loadPropertyRegistrySubmissionDraft({
+  const current = await loadRegistrySubmissionDraft({
     property: input.property,
     landlordId: input.landlordId,
   });
@@ -270,7 +269,7 @@ export async function savePropertyRegistrySubmissionDraft(
     migratedFromVersion: current.audit.migratedFromVersion,
   });
 
-  await db.collection(HALIFAX_REGISTRY_SUBMISSION_COLLECTION).doc(current.draftId).set(
+  await db.collection(REGISTRY_SUBMISSION_DRAFT_COLLECTION).doc(current.draftId).set(
     {
       ...next,
       review: {
@@ -283,7 +282,7 @@ export async function savePropertyRegistrySubmissionDraft(
   );
 
   if (!current.submission.consent.preparationAuthorized && next.submission.consent.preparationAuthorized) {
-    await appendSubmissionAuditEvent({
+    await appendRegistryDraftAuditEvent({
       propertyId: current.context.propertyId,
       actorUserId: asString(input.actorUserId),
       sourceKey: next.context.sourceKey,
@@ -291,14 +290,14 @@ export async function savePropertyRegistrySubmissionDraft(
     });
   }
   if (!current.submission.consent.declarationsConfirmed && next.submission.consent.declarationsConfirmed) {
-    await appendSubmissionAuditEvent({
+    await appendRegistryDraftAuditEvent({
       propertyId: current.context.propertyId,
       actorUserId: asString(input.actorUserId),
       sourceKey: next.context.sourceKey,
       action: "registry_submission_declarations_confirmed",
     });
   }
-  await appendSubmissionAuditEvent({
+  await appendRegistryDraftAuditEvent({
     propertyId: current.context.propertyId,
     actorUserId: asString(input.actorUserId),
     sourceKey: next.context.sourceKey,
@@ -308,13 +307,13 @@ export async function savePropertyRegistrySubmissionDraft(
   return next;
 }
 
-export async function markPropertyRegistrySubmissionExported(input: {
+export async function markRegistrySubmissionDraftExported(input: {
   property: Record<string, any>;
   landlordId: string | null;
   actorUserId: string | null;
   actorEmail?: string | null;
 }) {
-  const current = await loadPropertyRegistrySubmissionDraft({
+  const current = await loadRegistrySubmissionDraft({
     property: input.property,
     landlordId: input.landlordId,
   });
@@ -345,7 +344,7 @@ export async function markPropertyRegistrySubmissionExported(input: {
     },
   });
 
-  await db.collection(HALIFAX_REGISTRY_SUBMISSION_COLLECTION).doc(current.draftId).set(
+  await db.collection(REGISTRY_SUBMISSION_DRAFT_COLLECTION).doc(current.draftId).set(
     {
       ...next,
       updatedAtServer: FieldValue.serverTimestamp(),
@@ -353,7 +352,7 @@ export async function markPropertyRegistrySubmissionExported(input: {
     { merge: true }
   );
 
-  await appendSubmissionAuditEvent({
+  await appendRegistryDraftAuditEvent({
     propertyId: current.context.propertyId,
     actorUserId: asString(input.actorUserId),
     sourceKey: current.context.sourceKey,
@@ -363,7 +362,7 @@ export async function markPropertyRegistrySubmissionExported(input: {
   return next;
 }
 
-export function buildPropertyRegistrySubmissionExportPayload(input: {
+export function buildRegistrySubmissionExportPayload(input: {
   property: Record<string, any>;
   submission: RegistrySubmissionDraft;
 }) {
@@ -453,7 +452,7 @@ function assistantCopyForSchema(input: { schema: RegistrySchemaSummary; readines
   };
 }
 
-export function buildPropertyRegistryReadiness(input: {
+export function buildRegistryReadinessSummary(input: {
   property: Record<string, any>;
   submission: RegistrySubmissionDraft;
   projection: {
@@ -540,13 +539,13 @@ export async function loadHalifaxRegistrySubmissionDraft(input: {
   property: Record<string, any>;
   landlordId: string | null;
 }): Promise<HalifaxSubmissionDraft> {
-  return loadPropertyRegistrySubmissionDraft(input);
+  return loadRegistrySubmissionDraft(input);
 }
 
 export async function saveHalifaxRegistrySubmissionDraft(
   input: RegistrySubmissionSaveInput
 ): Promise<HalifaxSubmissionDraft> {
-  return savePropertyRegistrySubmissionDraft(input);
+  return saveRegistrySubmissionDraft(input);
 }
 
 export async function markHalifaxRegistrySubmissionExported(input: {
@@ -555,7 +554,7 @@ export async function markHalifaxRegistrySubmissionExported(input: {
   actorUserId: string | null;
   actorEmail?: string | null;
 }) {
-  const next = await markPropertyRegistrySubmissionExported(input);
+  const next = await markRegistrySubmissionDraftExported(input);
   if (next.context.sourceKey !== HALIFAX_REGISTRY_SUBMISSION_SOURCE_KEY) {
     throw new Error("Registry submission draft is not a Halifax draft.");
   }
@@ -566,7 +565,7 @@ export function buildHalifaxRegistrySubmissionExportPayload(input: {
   property: Record<string, any>;
   submission: HalifaxSubmissionDraft;
 }) {
-  return buildPropertyRegistrySubmissionExportPayload(input);
+  return buildRegistrySubmissionExportPayload(input);
 }
 
 export function buildHalifaxRegistrySubmissionPrefill(input: Parameters<RegistrySchemaDefinition["buildPrefill"]>[0]) {
@@ -588,9 +587,14 @@ export function validateHalifaxRegistrySubmissionDraft(input: {
 }
 
 export {
+  buildRegistryReadinessSummary as buildPropertyRegistryReadiness,
   buildRegistrySubmissionDraftV2,
+  buildRegistrySubmissionExportPayload as buildPropertyRegistrySubmissionExportPayload,
   exportRegistrySubmissionDraftV2,
   hydrateRegistryAssistantUiState,
+  loadRegistrySubmissionDraft as loadPropertyRegistrySubmissionDraft,
   migrateRegistryDraftToV2,
+  markRegistrySubmissionDraftExported as markPropertyRegistrySubmissionExported,
+  saveRegistrySubmissionDraft as savePropertyRegistrySubmissionDraft,
   validateRegistrySubmissionDraftV2,
 };

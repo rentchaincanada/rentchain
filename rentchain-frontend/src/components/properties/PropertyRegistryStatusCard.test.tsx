@@ -6,9 +6,9 @@ const mocks = vi.hoisted(() => ({
   fetchPropertyRegistryStatus: vi.fn(),
   fetchPropertyRegistrySubmission: vi.fn(),
   createReadyFromDraft: vi.fn(),
-  createRegistrySubmissionFilingRequest: vi.fn(),
-  retryRegistrySubmissionAttempt: vi.fn(),
-  updateRegistrySubmissionFilingStatus: vi.fn(),
+  createRegistryFilingRequest: vi.fn(),
+  retryRegistryFilingAttempt: vi.fn(),
+  updateRegistryFilingStatus: vi.fn(),
   attachFilingReferenceAndNotes: vi.fn(),
 }));
 
@@ -19,9 +19,9 @@ vi.mock("../../api/propertiesApi", async () => {
     fetchPropertyRegistryStatus: mocks.fetchPropertyRegistryStatus,
     fetchPropertyRegistrySubmission: mocks.fetchPropertyRegistrySubmission,
     createReadyFromDraft: mocks.createReadyFromDraft,
-    createRegistrySubmissionFilingRequest: mocks.createRegistrySubmissionFilingRequest,
-    retryRegistrySubmissionAttempt: mocks.retryRegistrySubmissionAttempt,
-    updateRegistrySubmissionFilingStatus: mocks.updateRegistrySubmissionFilingStatus,
+    createRegistryFilingRequest: mocks.createRegistryFilingRequest,
+    retryRegistryFilingAttempt: mocks.retryRegistryFilingAttempt,
+    updateRegistryFilingStatus: mocks.updateRegistryFilingStatus,
     attachFilingReferenceAndNotes: mocks.attachFilingReferenceAndNotes,
   };
 });
@@ -332,9 +332,9 @@ describe("PropertyRegistryStatusCard", () => {
     mocks.fetchPropertyRegistryStatus.mockReset();
     mocks.fetchPropertyRegistrySubmission.mockReset();
     mocks.createReadyFromDraft.mockReset();
-    mocks.createRegistrySubmissionFilingRequest.mockReset();
-    mocks.retryRegistrySubmissionAttempt.mockReset();
-    mocks.updateRegistrySubmissionFilingStatus.mockReset();
+    mocks.createRegistryFilingRequest.mockReset();
+    mocks.retryRegistryFilingAttempt.mockReset();
+    mocks.updateRegistryFilingStatus.mockReset();
     mocks.attachFilingReferenceAndNotes.mockReset();
   });
 
@@ -617,7 +617,7 @@ expect(screen.getByRole("button", { name: "View details" })).toBeInTheDocument()
         })
       );
     mocks.fetchPropertyRegistrySubmission.mockResolvedValue(buildSubmission());
-    mocks.updateRegistrySubmissionFilingStatus.mockResolvedValue({
+    mocks.updateRegistryFilingStatus.mockResolvedValue({
       filing: { currentStatus: "filed_confirmed" },
     });
     mocks.attachFilingReferenceAndNotes.mockResolvedValue({
@@ -652,7 +652,7 @@ expect(screen.getByRole("button", { name: "View details" })).toBeInTheDocument()
     fireEvent.click(within(dialog).getByRole("button", { name: "Mark as Confirmed" }));
 
     await waitFor(() => {
-      expect(mocks.updateRegistrySubmissionFilingStatus).toHaveBeenCalledWith(
+      expect(mocks.updateRegistryFilingStatus).toHaveBeenCalledWith(
         "prop-1",
         expect.objectContaining({
           status: "filed_confirmed",
@@ -973,7 +973,7 @@ expect(screen.getByRole("button", { name: "View details" })).toBeInTheDocument()
         })
       );
     mocks.fetchPropertyRegistrySubmission.mockResolvedValue(buildSubmission());
-    mocks.retryRegistrySubmissionAttempt.mockResolvedValue({
+    mocks.retryRegistryFilingAttempt.mockResolvedValue({
       ready: { readyId: "ready-2" },
       attempt: { attemptId: "prop-1__attempt_3" },
       request: { requestId: "prop-1__attempt_3__request" },
@@ -1007,7 +1007,7 @@ expect(screen.getByRole("button", { name: "View details" })).toBeInTheDocument()
     fireEvent.click(within(dialog).getByRole("button", { name: "Retry filing attempt" }));
 
     await waitFor(() => {
-      expect(mocks.retryRegistrySubmissionAttempt).toHaveBeenCalledWith("prop-1", {
+      expect(mocks.retryRegistryFilingAttempt).toHaveBeenCalledWith("prop-1", {
         attemptId: "prop-1__attempt_2",
       });
     });
