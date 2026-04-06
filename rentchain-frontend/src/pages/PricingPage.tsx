@@ -24,6 +24,8 @@ const pricingCardMotionStyle: React.CSSProperties = {
   willChange: "transform, box-shadow",
 };
 
+const desktopPricingGap = "22px";
+
 const wrappingTextStyle: React.CSSProperties = {
   whiteSpace: "normal",
   overflowWrap: "anywhere",
@@ -142,7 +144,16 @@ const PricingPage: React.FC = () => {
 
   return (
     <MacShell title="RentChain · Pricing" showTopNav={false}>
-      <Section style={{ maxWidth: 980, margin: "0 auto", display: "grid", gap: spacing.lg, paddingTop: `calc(${spacing.md} + 8px)`, paddingBottom: `calc(${spacing.md} + 8px)` }}>
+      <Section
+        style={{
+          maxWidth: 1060,
+          margin: "0 auto",
+          display: "grid",
+          gap: spacing.lg,
+          paddingTop: "calc(1rem + 12px)",
+          paddingBottom: "calc(1rem + 12px)",
+        }}
+      >
         <Card elevated>
           <h1 style={{ margin: 0, fontSize: "1.5rem", fontWeight: 800 }}>Pricing</h1>
           <p style={{ marginTop: spacing.sm, color: text.muted, maxWidth: 760, lineHeight: 1.65 }}>
@@ -159,12 +170,12 @@ const PricingPage: React.FC = () => {
         <div
           style={{
             display: "grid",
-            gap: `calc(${spacing.lg} + 8px)`,
-            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gap: desktopPricingGap,
+            gridTemplateColumns: "repeat(auto-fit, minmax(228px, 1fr))",
             alignItems: "stretch",
             overflow: "visible",
-            padding: "6px",
-            margin: "-6px",
+            padding: "10px 14px",
+            margin: "-10px -14px",
           }}
         >
           <Card style={{ gridColumn: "1 / -1" }}>
@@ -210,6 +221,11 @@ const PricingPage: React.FC = () => {
                     ? "linear-gradient(180deg, rgba(37,99,235,0.06) 0%, #ffffff 28%)"
                     : "#ffffff",
                 boxShadow: pricingCardShadow(plan, hoveredPlan === plan),
+                ...(plan === "pro"
+                  ? {
+                      padding: 22,
+                    }
+                  : null),
                 ...pricingCardMotionStyle,
               }}
               onMouseEnter={() => setHoveredPlan(plan)}
@@ -311,6 +327,9 @@ const PricingPage: React.FC = () => {
                     <li style={{ overflowWrap: "anywhere" }}>Get stronger visibility into screening and compliance work</li>
                     <li style={{ overflowWrap: "anywhere" }}>Spend less time piecing together month-end information</li>
                   </ul>
+                  <div style={{ color: text.muted, fontSize: 12, lineHeight: 1.55, ...wrappingTextStyle }}>
+                    A strong fit when simple tools are no longer enough, but you still want RentChain to feel calm and easy to run.
+                  </div>
                 </div>
               ) : null}
               {plan !== "free" ? (

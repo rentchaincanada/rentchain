@@ -27,6 +27,7 @@ const pricingCardMotionStyle: React.CSSProperties = {
   transition: "transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease",
   willChange: "transform, box-shadow",
 };
+const desktopPricingGap = "22px";
 const wrappingTextStyle: React.CSSProperties = {
   whiteSpace: "normal",
   overflowWrap: "anywhere",
@@ -227,12 +228,12 @@ const PricingPage: React.FC = () => {
       <div
         style={{
           width: "100%",
-          maxWidth: 1180,
+          maxWidth: 1240,
           margin: "0 auto",
           display: "grid",
-          gap: isMobile ? spacing.md : `calc(${spacing.lg} + 8px)`,
+          gap: isMobile ? spacing.md : "28px",
           overflowX: "hidden",
-          padding: isMobile ? `0 ${spacing.md}px ${spacing.lg}px` : `${spacing.sm} 0 calc(${spacing.lg} + 8px)`,
+          padding: isMobile ? `0 ${spacing.md}px ${spacing.lg}px` : `${spacing.md} 10px calc(${spacing.lg} + 12px)`,
           boxSizing: "border-box",
         }}
       >
@@ -260,13 +261,13 @@ const PricingPage: React.FC = () => {
           className="rc-pricing-grid"
           style={{
             display: "grid",
-            gap: isMobile ? spacing.md : `calc(${spacing.lg} + 8px)`,
+            gap: isMobile ? spacing.md : desktopPricingGap,
             ...mobileSectionStyle,
-            gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(250px, 1fr))",
+            gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(240px, 1fr))",
             alignItems: "stretch",
             overflow: "visible",
-            padding: isMobile ? 0 : "6px",
-            margin: isMobile ? 0 : "-6px",
+            padding: isMobile ? 0 : "10px 14px",
+            margin: isMobile ? 0 : "-10px -14px",
           }}
         >
           <Card style={{ gridColumn: "1 / -1" }}>
@@ -322,6 +323,11 @@ const PricingPage: React.FC = () => {
                     ? "linear-gradient(180deg, rgba(37,99,235,0.06) 0%, #ffffff 28%)"
                     : "#ffffff",
                 boxShadow: pricingCardShadow(plan, !isMobile && hoveredPlan === plan),
+                ...(plan === "pro"
+                  ? {
+                      padding: isMobile ? 18 : 24,
+                    }
+                  : null),
                 ...pricingCardMotionStyle,
               }}
               onMouseEnter={() => !isMobile && setHoveredPlan(plan)}
