@@ -355,6 +355,7 @@ const REGISTRY_VARIANT_HEADLINES = [
 
 describe("PropertyRegistryStatusCard", () => {
   beforeEach(() => {
+    window.localStorage.clear();
     mocks.fetchPropertyRegistryStatus.mockReset();
     mocks.fetchPropertyRegistrySubmission.mockReset();
     mocks.createReadyFromDraft.mockReset();
@@ -393,6 +394,7 @@ describe("PropertyRegistryStatusCard", () => {
   });
 
   afterEach(() => {
+    window.localStorage.clear();
     cleanup();
   });
 
@@ -1068,6 +1070,18 @@ expect(screen.getByRole("button", { name: "View details" })).toBeInTheDocument()
   });
 
   it("shows upgrade prompts for filing workflow and history when the user lacks registry filing entitlements", async () => {
+    window.localStorage.setItem(
+      "rentchain:registryAcquisitionAttribution",
+      JSON.stringify({
+        source: "google",
+        medium: "cpc",
+        campaign: "halifax-readiness",
+        variant: "spring-a",
+        landingPath: "/?utm_source=google",
+        capturedAt: "2026-04-05T12:00:00.000Z",
+      })
+    );
+
     mocks.useEntitlements.mockReturnValue({
       isAdmin: false,
       plan: "free",
@@ -1211,6 +1225,10 @@ expect(screen.getByRole("button", { name: "View details" })).toBeInTheDocument()
         userId: "user-1",
         plan: "free",
         variant: expect.any(String),
+        source: "google",
+        medium: "cpc",
+        campaign: "halifax-readiness",
+        acquisitionVariant: "spring-a",
       })
     );
 
