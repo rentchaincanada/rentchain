@@ -29,6 +29,47 @@ const wrappingTextStyle: React.CSSProperties = {
   wordBreak: "break-word",
 };
 
+const priceCardStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 18,
+  alignContent: "start",
+  alignItems: "start",
+  minWidth: 0,
+  minHeight: "100%",
+  padding: 22,
+};
+
+const planHeaderStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 10,
+  minWidth: 0,
+};
+
+const planListStyle: React.CSSProperties = {
+  margin: 0,
+  paddingLeft: "1.2rem",
+  color: text.muted,
+  lineHeight: 1.75,
+  minWidth: 0,
+  display: "grid",
+  gap: 10,
+};
+
+const detailBoxStyle: React.CSSProperties = {
+  borderRadius: 14,
+  padding: "14px 16px",
+  display: "grid",
+  gap: 10,
+  minWidth: 0,
+};
+
+const anchoredCtaStyle: React.CSSProperties = {
+  marginTop: "auto",
+  paddingTop: 10,
+  alignSelf: "end",
+  width: "100%",
+};
+
 const PLAN_FEATURES: Record<PlanKey, string[]> = Object.fromEntries(
   DEFAULT_PLANS.map((plan) => [plan.key, plan.features])
 ) as Record<PlanKey, string[]>;
@@ -141,8 +182,17 @@ const PricingPage: React.FC = () => {
         </Card>
 
         <div style={{ display: "grid", gap: spacing.sm, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
-          <Card style={{ gridColumn: "1 / -1" }}>
-            <div style={{ display: "inline-flex", gap: 8, border: "1px solid rgba(15,23,42,0.12)", borderRadius: 999, padding: 4 }}>
+          <Card style={{ gridColumn: "1 / -1", padding: "16px 18px" }}>
+            <div
+              style={{
+                display: "inline-flex",
+                gap: 8,
+                border: "1px solid rgba(15,23,42,0.12)",
+                borderRadius: 999,
+                padding: 4,
+                flexWrap: "wrap",
+              }}
+            >
               <Button
                 type="button"
                 variant={interval === "monthly" ? "primary" : "ghost"}
@@ -166,13 +216,7 @@ const PricingPage: React.FC = () => {
               key={plan}
               elevated={plan === "pro"}
               style={{
-                display: "grid",
-                gap: 14,
-                alignContent: "start",
-                alignItems: "start",
-                minWidth: 0,
-                minHeight: "100%",
-                padding: 20,
+                ...priceCardStyle,
                 border:
                   plan === "pro" ? "1px solid rgba(37,99,235,0.28)" : "1px solid rgba(15,23,42,0.08)",
                 background:
@@ -201,8 +245,13 @@ const PricingPage: React.FC = () => {
               }}
             >
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: spacing.sm, flexWrap: "wrap" }}>
-                <div style={{ fontWeight: 800, fontSize: 20, lineHeight: 1.15, ...wrappingTextStyle }}>
-                  {CANONICAL_TIER_MATRIX[plan].label}
+                <div style={planHeaderStyle}>
+                  <div style={{ fontWeight: 800, fontSize: 20, lineHeight: 1.12, ...wrappingTextStyle }}>
+                    {CANONICAL_TIER_MATRIX[plan].label}
+                  </div>
+                  <div style={{ color: text.muted, fontSize: 14, lineHeight: 1.7, maxWidth: 34 * 16, ...wrappingTextStyle }}>
+                    {CANONICAL_TIER_MATRIX[plan].tagline}
+                  </div>
                 </div>
                 {plan === "pro" ? (
                   <span
@@ -218,29 +267,27 @@ const PricingPage: React.FC = () => {
                       overflowWrap: "anywhere",
                       letterSpacing: 0.2,
                       boxShadow: "0 8px 20px rgba(37,99,235,0.12)",
+                      alignSelf: "flex-start",
                     }}
                   >
                     Most Popular for growing portfolios
                   </span>
                 ) : null}
               </div>
-              <div style={{ fontSize: 26, fontWeight: 800, lineHeight: 1.05, ...wrappingTextStyle }}>{renderPrice(plan)}</div>
-              <div style={{ color: text.muted, fontSize: 14, lineHeight: 1.65, minHeight: 68, ...wrappingTextStyle }}>
-                {CANONICAL_TIER_MATRIX[plan].tagline}
-              </div>
-              <ul
+              <div
                 style={{
-                  margin: 0,
-                  paddingLeft: "1.1rem",
-                  color: text.muted,
-                  lineHeight: 1.75,
-                  minWidth: 0,
                   display: "grid",
-                  gap: 8,
+                  gap: 4,
+                  paddingBottom: 2,
                 }}
               >
+                <div style={{ fontSize: 28, fontWeight: 800, lineHeight: 1.02, ...wrappingTextStyle }}>{renderPrice(plan)}</div>
+              </div>
+              <ul
+                style={planListStyle}
+              >
                 {PLAN_FEATURES[plan].map((feature) => (
-                  <li key={feature} style={{ fontSize: 14, ...wrappingTextStyle }}>
+                  <li key={feature} style={{ fontSize: 14, paddingLeft: 2, ...wrappingTextStyle }}>
                     {feature}
                   </li>
                 ))}
@@ -248,11 +295,10 @@ const PricingPage: React.FC = () => {
               {plan === "starter" ? (
                 <div
                   style={{
+                    ...detailBoxStyle,
                     color: text.muted,
                     fontSize: 13,
                     lineHeight: 1.65,
-                    padding: "10px 12px",
-                    borderRadius: 12,
                     background: "rgba(15,23,42,0.03)",
                     border: "1px solid rgba(15,23,42,0.06)",
                     ...wrappingTextStyle,
@@ -264,51 +310,46 @@ const PricingPage: React.FC = () => {
               {plan === "pro" ? (
                 <div
                   style={{
+                    ...detailBoxStyle,
                     border: "1px solid rgba(37,99,235,0.28)",
-                    borderRadius: 12,
                     background: "rgba(37,99,235,0.06)",
-                    padding: "12px 14px",
-                    display: "grid",
-                    gap: 8,
                   }}
                 >
                   <div style={{ fontWeight: 800, lineHeight: 1.25, ...wrappingTextStyle }}>Built for stronger reporting</div>
                   <ul
                     style={{
                       margin: 0,
-                      paddingLeft: "1rem",
+                      paddingLeft: "1.1rem",
                       color: text.muted,
                       fontSize: 13,
                       lineHeight: 1.65,
                       display: "grid",
-                      gap: 6,
+                      gap: 8,
                     }}
                   >
-                    <li style={{ overflowWrap: "anywhere" }}>CSV expense import</li>
-                    <li style={{ overflowWrap: "anywhere" }}>CSV, spreadsheet, and PDF exports</li>
-                    <li style={{ overflowWrap: "anywhere" }}>Compliance reports and screening review summaries</li>
-                    <li style={{ overflowWrap: "anywhere" }}>Cleaner month-end and accountant handoff</li>
+                    <li style={{ paddingLeft: 2, overflowWrap: "anywhere" }}>CSV expense import</li>
+                    <li style={{ paddingLeft: 2, overflowWrap: "anywhere" }}>CSV, spreadsheet, and PDF exports</li>
+                    <li style={{ paddingLeft: 2, overflowWrap: "anywhere" }}>Compliance reports and screening review summaries</li>
+                    <li style={{ paddingLeft: 2, overflowWrap: "anywhere" }}>Cleaner month-end and accountant handoff</li>
                   </ul>
                 </div>
               ) : null}
               {plan !== "free" ? (
                 <div
                   style={{
+                    ...detailBoxStyle,
                     border: "1px solid rgba(15,23,42,0.12)",
-                    borderRadius: 12,
-                    padding: "12px 14px",
-                    display: "grid",
-                    gap: 8,
+                    background: "rgba(248,250,252,0.92)",
                   }}
                 >
                   {TIER_MATRIX_AREAS.slice(0, 4).map((area) => (
-                    <div key={`${plan}-${area.key}`} style={{ color: text.muted, fontSize: 13, lineHeight: 1.55, ...wrappingTextStyle }}>
+                    <div key={`${plan}-${area.key}`} style={{ color: text.muted, fontSize: 13, lineHeight: 1.65, ...wrappingTextStyle }}>
                       <strong style={{ color: text.secondary }}>{area.label}:</strong> {CANONICAL_TIER_MATRIX[plan].capabilities[area.key].summary}
                     </div>
                   ))}
                 </div>
               ) : null}
-              <div style={{ marginTop: "auto", paddingTop: 4 }}>
+              <div style={anchoredCtaStyle}>
                 {plan === "free" ? (
                   <Button type="button" variant="secondary" onClick={() => navigate("/dashboard")} style={{ width: "100%" }}>
                     Start Free

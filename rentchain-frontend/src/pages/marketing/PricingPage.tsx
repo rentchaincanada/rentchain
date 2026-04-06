@@ -32,6 +32,34 @@ const wrappingTextStyle: React.CSSProperties = {
   wordBreak: "break-word",
 };
 
+const marketingCardBaseStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 18,
+  width: "100%",
+  minWidth: 0,
+  minHeight: "100%",
+  alignContent: "start",
+  alignItems: "start",
+};
+
+const pricingListStyle: React.CSSProperties = {
+  margin: 0,
+  paddingLeft: "1.2rem",
+  color: text.muted,
+  lineHeight: 1.75,
+  display: "grid",
+  gap: 10,
+  minWidth: 0,
+};
+
+const pricingCalloutStyle: React.CSSProperties = {
+  borderRadius: 14,
+  padding: "14px 16px",
+  display: "grid",
+  gap: 10,
+  minWidth: 0,
+};
+
 function normalizePlan(input?: string | null): PlanKey {
   const raw = String(input || "").trim().toLowerCase();
   if (raw === "starter" || raw === "core") return "starter";
@@ -206,12 +234,12 @@ const PricingPage: React.FC = () => {
           className="rc-pricing-grid"
           style={{
             display: "grid",
-            gap: spacing.md,
+            gap: isMobile ? spacing.md : spacing.lg,
             ...mobileSectionStyle,
             gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(250px, 1fr))",
           }}
         >
-          <Card style={{ gridColumn: "1 / -1" }}>
+          <Card style={{ gridColumn: "1 / -1", padding: isMobile ? "16px 18px" : "18px 20px" }}>
             <div
               style={{
                 display: "inline-flex",
@@ -219,6 +247,7 @@ const PricingPage: React.FC = () => {
                 border: "1px solid rgba(15,23,42,0.12)",
                 borderRadius: 999,
                 padding: 4,
+                flexWrap: "wrap",
               }}
             >
               <Button
@@ -245,11 +274,7 @@ const PricingPage: React.FC = () => {
               key={plan}
               elevated={plan === "pro"}
               style={{
-                display: "grid",
-                gap: 14,
-                width: "100%",
-                minWidth: 0,
-                minHeight: "100%",
+                ...marketingCardBaseStyle,
                 padding: isMobile ? 18 : 22,
                 border:
                   plan === "pro" ? "1px solid rgba(37,99,235,0.28)" : "1px solid rgba(15,23,42,0.08)",
@@ -279,8 +304,22 @@ const PricingPage: React.FC = () => {
               }}
             >
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: spacing.sm, flexWrap: "wrap" }}>
-                <div style={{ fontSize: 21, fontWeight: 800, lineHeight: 1.15, ...wrappingTextStyle }}>
-                  {copy.pricing.tierLabels[plan]}
+                <div style={{ display: "grid", gap: 10, minWidth: 0 }}>
+                  <div style={{ fontSize: 21, fontWeight: 800, lineHeight: 1.12, ...wrappingTextStyle }}>
+                    {copy.pricing.tierLabels[plan]}
+                  </div>
+                  <div
+                    style={{
+                      color: text.muted,
+                      fontSize: "0.94rem",
+                      lineHeight: 1.72,
+                      minHeight: isMobile ? "auto" : 62,
+                      maxWidth: 34 * 16,
+                      ...wrappingTextStyle,
+                    }}
+                  >
+                    {CANONICAL_TIER_MATRIX[plan].tagline}
+                  </div>
                 </div>
                 {copy.pricing.tierBadges[plan] ? (
                   <span
@@ -297,29 +336,21 @@ const PricingPage: React.FC = () => {
                           ? "linear-gradient(180deg, rgba(37,99,235,0.14), rgba(37,99,235,0.08))"
                           : "rgba(15,23,42,0.06)",
                       ...wrappingTextStyle,
+                      alignSelf: "flex-start",
                     }}
                   >
                     {copy.pricing.tierBadges[plan]}
                   </span>
                 ) : null}
               </div>
-              <div style={{ color: text.muted, fontSize: "0.94rem", lineHeight: 1.65, minHeight: isMobile ? "auto" : 62, ...wrappingTextStyle }}>
-                {CANONICAL_TIER_MATRIX[plan].tagline}
+              <div style={{ fontSize: 28, fontWeight: 800, lineHeight: 1.02, paddingBottom: 2, ...wrappingTextStyle }}>
+                {renderPrice(plan)}
               </div>
-              <div style={{ fontSize: 28, fontWeight: 800, lineHeight: 1.05, ...wrappingTextStyle }}>{renderPrice(plan)}</div>
               <ul
-                style={{
-                  margin: 0,
-                  paddingLeft: "1.1rem",
-                  color: text.muted,
-                  lineHeight: 1.75,
-                  display: "grid",
-                  gap: 8,
-                  minWidth: 0,
-                }}
+                style={pricingListStyle}
               >
                 {CANONICAL_TIER_MATRIX[plan].features.map((feature) => (
-                  <li key={`${plan}-${feature}`} style={{ fontSize: "0.92rem", ...wrappingTextStyle }}>
+                  <li key={`${plan}-${feature}`} style={{ fontSize: "0.92rem", paddingLeft: 2, ...wrappingTextStyle }}>
                     {feature}
                   </li>
                 ))}
@@ -327,12 +358,9 @@ const PricingPage: React.FC = () => {
               {plan === "pro" || plan === "elite" ? (
                 <div
                   style={{
+                    ...pricingCalloutStyle,
                     border: "1px solid rgba(37,99,235,0.28)",
-                    borderRadius: 12,
                     background: "rgba(37,99,235,0.06)",
-                    padding: "12px 14px",
-                    display: "grid",
-                    gap: 8,
                   }}
                 >
                   <div style={{ fontWeight: 700, color: text.primary, lineHeight: 1.25, ...wrappingTextStyle }}>
@@ -344,16 +372,16 @@ const PricingPage: React.FC = () => {
                   <ul
                     style={{
                       margin: 0,
-                      paddingLeft: "1rem",
+                      paddingLeft: "1.1rem",
                       color: text.muted,
                       fontSize: "0.85rem",
                       lineHeight: 1.65,
                       display: "grid",
-                      gap: 6,
+                      gap: 8,
                     }}
                   >
                     {copy.pricing.timelineSection.bullets.map((bullet) => (
-                      <li key={`${plan}-${bullet}`} style={wrappingTextStyle}>
+                      <li key={`${plan}-${bullet}`} style={{ paddingLeft: 2, ...wrappingTextStyle }}>
                         {bullet}
                       </li>
                     ))}
@@ -365,7 +393,7 @@ const PricingPage: React.FC = () => {
                   ) : null}
                 </div>
               ) : null}
-              <div style={{ marginTop: "auto", paddingTop: spacing.sm }}>
+              <div style={{ marginTop: "auto", paddingTop: spacing.md, width: "100%", alignSelf: "end" }}>
                 {plan === "free" ? (
                   <Button type="button" onClick={handleStartFree} style={{ width: "100%" }}>
                     {copy.pricing.ctaStartFree}
