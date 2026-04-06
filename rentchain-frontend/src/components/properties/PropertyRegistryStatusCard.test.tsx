@@ -468,8 +468,11 @@ describe("PropertyRegistryStatusCard", () => {
     );
 
     expect(await screen.findByText("Compliance / Registry Readiness")).toBeInTheDocument();
-    expect(screen.getByText("Ready to file")).toBeInTheDocument();
-    expect(screen.queryByText("Filing timeline")).not.toBeInTheDocument();
+expect(await screen.findByText("Compliance / Registry Readiness")).toBeInTheDocument();
+expect(screen.getByText("Ready to file")).toBeInTheDocument();
+expect(screen.getByText("Halifax Rental Registry")).toBeInTheDocument();
+expect(screen.queryByText("Filing timeline")).not.toBeInTheDocument();
+expect(screen.getByRole("button", { name: "View details" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "View details" }));
     expect(await screen.findByText("Filing timeline")).toBeInTheDocument();

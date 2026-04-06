@@ -8,6 +8,7 @@ import {
   fetchPropertyRegistrySubmission,
   updateRegistrySubmissionFilingStatus,
   type Property,
+  type RegistrySubmissionFilingSummaryV3,
   type PropertyRegistryReadiness,
   type PropertyRegistryStatus,
   type RegistrySubmissionDraft,
@@ -418,9 +419,10 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
             {data.readiness.readinessStatus !== "verified" ? (
               <Pill tone="muted">{data.readiness.completionPercent}% complete</Pill>
             ) : null}
-            {filingStatusLabel(workflowStatus) ? (
-              <Pill tone={filingStatusTone(workflowStatus)}>{filingStatusLabel(workflowStatus)}</Pill>
-            ) : null}
+{filingStatusLabel(workflowStatus) ? (
+  <Pill tone={filingStatusTone(workflowStatus)}>{filingStatusLabel(workflowStatus)}</Pill>
+) : null}
+          
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <Button type="button" variant="secondary" onClick={() => setDetailsOpen(true)}>
@@ -538,6 +540,11 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                 <div>
                   <strong>Next action:</strong> {nextActionLabel(data.readiness)}
                 </div>
+                {filingStatusLabel(data.filing?.currentStatus) ? (
+                  <div>
+                    <strong>Filing status:</strong> {filingStatusLabel(data.filing.currentStatus)}
+                  </div>
+                ) : null}
               </div>
               {data.readiness.topMissingItems.length ? (
                 <div style={{ display: "grid", gap: 6 }}>

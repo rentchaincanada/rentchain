@@ -706,14 +706,14 @@ export async function exportHalifaxRegistrySubmission(propertyId: string) {
 }
 
 export async function createRegistrySubmissionReady(
-  propertyId: string
+propertyId: string
 ): Promise<{ ready: RegistrySubmissionReadyV3 | null }> {
   const res = await api.post(`/properties/${encodeURIComponent(propertyId)}/registry-submission/ready`, {});
   return res.data;
 }
 
 export async function fetchRegistrySubmissionReady(
-  propertyId: string
+propertyId: string
 ): Promise<{ ready: RegistrySubmissionReadyV3 | null }> {
   const res = await api.get(`/properties/${encodeURIComponent(propertyId)}/registry-submission/ready`);
   return res.data;

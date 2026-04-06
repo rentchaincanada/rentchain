@@ -42,3 +42,7 @@ export function resolveRegistrySchemaForProperty(property: Record<string, any>):
 export function listSupportedRegistrySchemas(): RegistrySchemaDefinition[] {
   return [halifaxRentalRegistrySchema, genericCanadaRegistryReadySchema];
 }
+
+export function resolveRegistrySchemaSummaryByKey(schemaKey: string): RegistrySchemaDefinition | null {
+  return listSupportedRegistrySchemas().find((schema) => schema.schemaKey === schemaKey) || null;
+}
