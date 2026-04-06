@@ -142,7 +142,7 @@ const PricingPage: React.FC = () => {
 
   return (
     <MacShell title="RentChain · Pricing" showTopNav={false}>
-      <Section style={{ maxWidth: 980, margin: "0 auto", display: "grid", gap: spacing.md }}>
+      <Section style={{ maxWidth: 980, margin: "0 auto", display: "grid", gap: spacing.lg, paddingTop: `calc(${spacing.md} + 8px)`, paddingBottom: `calc(${spacing.md} + 8px)` }}>
         <Card elevated>
           <h1 style={{ margin: 0, fontSize: "1.5rem", fontWeight: 800 }}>Pricing</h1>
           <p style={{ marginTop: spacing.sm, color: text.muted, maxWidth: 760, lineHeight: 1.65 }}>
@@ -159,12 +159,12 @@ const PricingPage: React.FC = () => {
         <div
           style={{
             display: "grid",
-            gap: spacing.lg,
+            gap: `calc(${spacing.lg} + 8px)`,
             gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
             alignItems: "stretch",
             overflow: "visible",
-            padding: "4px",
-            margin: "-4px",
+            padding: "6px",
+            margin: "-6px",
           }}
         >
           <Card style={{ gridColumn: "1 / -1" }}>
