@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   attachFilingReferenceAndNotes: vi.fn(),
   fetchBillingPricing: vi.fn(),
   useEntitlements: vi.fn(),
+  useAuth: vi.fn(),
+  track: vi.fn(),
 }));
 
 vi.mock("../../api/billingApi", () => ({
@@ -20,6 +22,14 @@ vi.mock("../../api/billingApi", () => ({
 
 vi.mock("../../hooks/useEntitlements", () => ({
   useEntitlements: mocks.useEntitlements,
+}));
+
+vi.mock("../../context/useAuth", () => ({
+  useAuth: mocks.useAuth,
+}));
+
+vi.mock("../../lib/analytics", () => ({
+  track: mocks.track,
 }));
 
 vi.mock("../../api/propertiesApi", async () => {
@@ -337,6 +347,12 @@ function buildSubmission(overrides: Record<string, any> = {}) {
   };
 }
 
+const REGISTRY_VARIANT_HEADLINES = [
+  "Upgrade to file and track submissions",
+  "Your filing is ready — unlock submission and tracking",
+  "Avoid errors. File with retry and audit tracking",
+];
+
 describe("PropertyRegistryStatusCard", () => {
   beforeEach(() => {
     mocks.fetchPropertyRegistryStatus.mockReset();
@@ -348,6 +364,8 @@ describe("PropertyRegistryStatusCard", () => {
     mocks.attachFilingReferenceAndNotes.mockReset();
     mocks.fetchBillingPricing.mockReset();
     mocks.useEntitlements.mockReset();
+    mocks.useAuth.mockReset();
+    mocks.track.mockReset();
     mocks.fetchBillingPricing.mockResolvedValue({
       ok: true,
       plans: [],
@@ -365,8 +383,12 @@ describe("PropertyRegistryStatusCard", () => {
     });
     mocks.useEntitlements.mockReturnValue({
       isAdmin: false,
+      plan: "pro",
       hasCapability: (key: string) =>
         key === "registry_filing_access" || key === "registry_attempts_history",
+    });
+    mocks.useAuth.mockReturnValue({
+      user: { id: "user-1", plan: "pro", role: "landlord" },
     });
   });
 
@@ -1048,6 +1070,7 @@ expect(screen.getByRole("button", { name: "View details" })).toBeInTheDocument()
   it("shows upgrade prompts for filing workflow and history when the user lacks registry filing entitlements", async () => {
     mocks.useEntitlements.mockReturnValue({
       isAdmin: false,
+      plan: "free",
       hasCapability: () => false,
     });
     mocks.fetchPropertyRegistryStatus.mockResolvedValue(
@@ -1176,9 +1199,42 @@ expect(screen.getByRole("button", { name: "View details" })).toBeInTheDocument()
     fireEvent.click(await screen.findByRole("button", { name: "View details" }));
     const dialog = await screen.findByRole("dialog", { name: "Compliance and registry details" });
 
-    expect(within(dialog).getByText("Unlock filing workflow")).toBeInTheDocument();
-    expect(within(dialog).getAllByRole("button", { name: "Upgrade to file" }).length).toBeGreaterThan(0);
+    expect(
+      REGISTRY_VARIANT_HEADLINES.some((headline) => within(dialog).queryByText(headline))
+    ).toBe(true);
     expect(within(dialog).queryByRole("button", { name: "Mark as Filed" })).not.toBeInTheDocument();
     expect(within(dialog).getByText("Unlock attempts history")).toBeInTheDocument();
+    expect(mocks.track).toHaveBeenCalledWith(
+      "registry_upgrade_prompt_viewed",
+      expect.objectContaining({
+        propertyId: "prop-1",
+        userId: "user-1",
+        plan: "free",
+        variant: expect.any(String),
+      })
+    );
+
+    const historyButton = within(dialog).getByRole("button", { name: "Unlock filing history" });
+    fireEvent.click(historyButton);
+
+    expect(mocks.track).toHaveBeenCalledWith(
+      "registry_attempts_history_gate_hit",
+      expect.objectContaining({
+        propertyId: "prop-1",
+        userId: "user-1",
+        plan: "free",
+        location: "history_panel",
+        variant: expect.any(String),
+      })
+    );
+    expect(mocks.track).toHaveBeenCalledWith(
+      "registry_upgrade_clicked",
+      expect.objectContaining({
+        propertyId: "prop-1",
+        location: "history_panel",
+        requiredPlan: "pro",
+        variant: expect.any(String),
+      })
+    );
   });
 });

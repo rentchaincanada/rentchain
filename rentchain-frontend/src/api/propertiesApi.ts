@@ -852,6 +852,8 @@ export type RegistryUpgradeRequired = {
   requiredPlan?: string;
   upgradePath?: string;
   message?: string;
+  freeIncludes?: string[];
+  paidUnlocks?: string[];
   monetization?: {
     freeIncludes?: string[];
     paidUnlocks?: string[];
@@ -871,6 +873,8 @@ export function extractRegistryUpgradeRequired(error: any): RegistryUpgradeRequi
     requiredPlan: payload?.requiredPlan,
     upgradePath: payload?.upgradePath,
     message: payload?.message,
+    freeIncludes: payload?.monetization?.freeIncludes || [],
+    paidUnlocks: payload?.monetization?.paidUnlocks || [],
     monetization: payload?.monetization,
   };
 }
