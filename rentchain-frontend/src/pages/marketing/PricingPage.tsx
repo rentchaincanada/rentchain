@@ -228,12 +228,12 @@ const PricingPage: React.FC = () => {
       <div
         style={{
           width: "100%",
-          maxWidth: 1240,
+          maxWidth: 1320,
           margin: "0 auto",
           display: "grid",
           gap: isMobile ? spacing.md : "28px",
-          overflowX: "hidden",
-          padding: isMobile ? `0 ${spacing.md}px ${spacing.lg}px` : `${spacing.md} 10px calc(${spacing.lg} + 12px)`,
+          overflow: "visible",
+          padding: isMobile ? `0 ${spacing.md}px ${spacing.lg}px` : `${spacing.md} 24px calc(${spacing.lg} + 12px)`,
           boxSizing: "border-box",
         }}
       >
@@ -261,13 +261,13 @@ const PricingPage: React.FC = () => {
           className="rc-pricing-grid"
           style={{
             display: "grid",
-            gap: isMobile ? spacing.md : desktopPricingGap,
+            gap: isMobile ? spacing.md : "24px",
             ...mobileSectionStyle,
-            gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(240px, 1fr))",
+            gridTemplateColumns: isMobile ? "1fr" : "repeat(4, minmax(0, 1fr))",
             alignItems: "stretch",
             overflow: "visible",
-            padding: isMobile ? 0 : "10px 14px",
-            margin: isMobile ? 0 : "-10px -14px",
+            padding: isMobile ? 0 : "8px",
+            margin: isMobile ? 0 : "-8px",
           }}
         >
           <Card style={{ gridColumn: "1 / -1" }}>
