@@ -3,11 +3,11 @@ import { Button, Card, Input, Pill } from "../ui/Ui";
 import {
   attachFilingReferenceAndNotes,
   createReadyFromDraft,
-  createRegistrySubmissionFilingRequest,
+  createRegistryFilingRequest,
   fetchPropertyRegistryStatus,
   fetchPropertyRegistrySubmission,
-  retryRegistrySubmissionAttempt,
-  updateRegistrySubmissionFilingStatus,
+  retryRegistryFilingAttempt,
+  updateRegistryFilingStatus,
   type Property,
   type PropertyRegistryReadiness,
   type PropertyRegistryStatus,
@@ -142,6 +142,7 @@ function compactSupportingLine(readiness: PropertyRegistryReadiness) {
   }
 }
 
+// This card renders the registry readiness summary plus the latest filing workflow state.
 function shouldShowCompactAssistantCta(readiness: PropertyRegistryReadiness) {
   return (
     readiness.nextRecommendedAction === "prepare_registry_submission" ||
@@ -676,7 +677,7 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                     <Button
                       type="button"
                       disabled={actionLoading || draftChangedSinceReady}
-                      onClick={() => void runWorkflowAction(() => createRegistrySubmissionFilingRequest(String(propertyId)))}
+                      onClick={() => void runWorkflowAction(() => createRegistryFilingRequest(String(propertyId)))}
                     >
                       Open filing checklist
                     </Button>
@@ -687,7 +688,7 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                       disabled={actionLoading || draftChangedSinceReady}
                       onClick={() =>
                         void runWorkflowAction(() =>
-                          updateRegistrySubmissionFilingStatus(String(propertyId), {
+                          updateRegistryFilingStatus(String(propertyId), {
                             attemptId: latestAttempt?.attemptId || null,
                             status: "filed_pending_confirmation",
                             note: workflowForm.notes || "Marked as filed through the Halifax manual portal workflow.",
@@ -742,7 +743,7 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                         disabled={actionLoading}
                         onClick={() =>
                           void runWorkflowAction(() =>
-                            updateRegistrySubmissionFilingStatus(String(propertyId), {
+                            updateRegistryFilingStatus(String(propertyId), {
                               attemptId: latestAttempt?.attemptId || null,
                               status: "filed_confirmed",
                               note: workflowForm.notes || "Filing confirmed.",
@@ -777,7 +778,7 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                         disabled={actionLoading}
                         onClick={() =>
                           void runWorkflowAction(() =>
-                            updateRegistrySubmissionFilingStatus(String(propertyId), {
+                            updateRegistryFilingStatus(String(propertyId), {
                               attemptId: latestAttempt?.attemptId || null,
                               status: "rejected",
                               note: workflowForm.notes || "Filing rejected.",
@@ -812,7 +813,7 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                         disabled={actionLoading}
                         onClick={() =>
                           void runWorkflowAction(() =>
-                            updateRegistrySubmissionFilingStatus(String(propertyId), {
+                            updateRegistryFilingStatus(String(propertyId), {
                               attemptId: latestAttempt?.attemptId || null,
                               status: "failed",
                               note: workflowForm.notes || "Filing failed before confirmation.",
@@ -850,7 +851,7 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                       disabled={actionLoading || draftChangedSinceReady}
                       onClick={() =>
                         void runWorkflowAction(() =>
-                          retryRegistrySubmissionAttempt(String(propertyId), {
+                          retryRegistryFilingAttempt(String(propertyId), {
                             attemptId: latestAttempt.attemptId,
                           })
                         )

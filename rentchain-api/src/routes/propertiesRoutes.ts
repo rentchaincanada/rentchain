@@ -6,23 +6,23 @@ import { normalizeProvince } from "../lib/province";
 import { ensureRegistrySource } from "../services/registry/registryImportService";
 import { getPropertyRegistryProjection, upsertPropertyRegistryProjection } from "../services/registry/registryStatusProjectionService";
 import {
-  buildPropertyRegistryReadiness,
-  buildPropertyRegistrySubmissionExportPayload,
+  buildRegistryReadinessSummary,
+  buildRegistrySubmissionExportPayload,
   getRegistrySchemaSummaryForProperty,
   HALIFAX_FIELD_MAP,
-  loadPropertyRegistrySubmissionDraft,
-  markPropertyRegistrySubmissionExported,
-  savePropertyRegistrySubmissionDraft,
+  loadRegistrySubmissionDraft,
+  markRegistrySubmissionDraftExported,
+  saveRegistrySubmissionDraft,
 } from "../services/registry/halifaxRegistrySubmissionService";
 import {
-  createRegistrySubmissionFilingRequest,
-  createRegistrySubmissionReadyPackage,
-  getLatestRegistrySubmissionAttempt,
-  listRegistrySubmissionAttempts,
-  loadRegistrySubmissionFilingSummaryByDraftId,
-  loadRegistrySubmissionReadyPackage,
-  retryRegistrySubmissionAttempt,
-  updateRegistrySubmissionFilingLifecycle,
+  createRegistryFilingRequest,
+  createRegistryFilingReadyPackage,
+  getLatestRegistryFilingAttempt,
+  listRegistryFilingAttempts,
+  loadRegistryFilingSummaryByDraftId,
+  loadRegistryFilingReadyPackage,
+  retryRegistryFilingAttempt,
+  updateRegistryFilingLifecycle,
 } from "../services/registry/registrySubmissionLayerV3";
 import { GENERIC_CANADA_FIELD_MAP } from "../services/registry/schemas/genericCanadaRegistryReadySchema";
 import { normalizePid } from "../services/registry/registryUtils";
@@ -615,7 +615,7 @@ router.get("/:propertyId/registry-status", async (req: any, res) => {
     }
 
     const { source } = await ensureRegistrySource("halifax_r400");
-    const submission = await loadPropertyRegistrySubmissionDraft({
+    const submission = await loadRegistrySubmissionDraft({
       property: { id: propertyId, ...property },
       landlordId: ownerLandlordId || landlordId,
     });
@@ -632,7 +632,7 @@ router.get("/:propertyId/registry-status", async (req: any, res) => {
           : null;
     if (!coverageAvailable) {
       const propertyPid = resolvePropertyPidLikeValue(property);
-      const readiness = buildPropertyRegistryReadiness({
+      const readiness = buildRegistryReadinessSummary({
         property: { id: propertyId, ...property },
         submission,
         projection: null,
@@ -664,7 +664,7 @@ router.get("/:propertyId/registry-status", async (req: any, res) => {
           actionable: false,
         },
         readiness,
-        filing: await loadRegistrySubmissionFilingSummaryByDraftId(submission.draftId),
+        filing: await loadRegistryFilingSummaryByDraftId(submission.draftId),
       });
     }
     let projection = await getPropertyRegistryProjection({ propertyId, source });
@@ -690,7 +690,7 @@ router.get("/:propertyId/registry-status", async (req: any, res) => {
     const pidPromptMessage = pidPromptEligible
       ? "Property PID missing; registry record includes PID. Adding it can improve registry verification and future matching."
       : null;
-    const readiness = buildPropertyRegistryReadiness({
+    const readiness = buildRegistryReadinessSummary({
       property: { id: propertyId, ...property },
       submission,
       projection,
@@ -723,7 +723,7 @@ router.get("/:propertyId/registry-status", async (req: any, res) => {
         actionable: pidPromptEligible,
       },
       readiness,
-      filing: await loadRegistrySubmissionFilingSummaryByDraftId(submission.draftId),
+      filing: await loadRegistryFilingSummaryByDraftId(submission.draftId),
     });
   } catch (err: any) {
     console.error("[GET /api/properties/:propertyId/registry-status] failed", err);
@@ -751,7 +751,7 @@ async function loadRegistrySubmissionResponse(req: any, res: any) {
       return res.status(403).json({ ok: false, error: "forbidden" });
     }
 
-    const submission = await loadPropertyRegistrySubmissionDraft({
+    const submission = await loadRegistrySubmissionDraft({
       property: { id: propertyId, ...property },
       landlordId: ownership.ownerLandlordId || landlordId,
     });
@@ -762,7 +762,7 @@ async function loadRegistrySubmissionResponse(req: any, res: any) {
       submission,
       fieldMap: resolveRegistrySchemaFieldMap(property),
       schema,
-      filing: await loadRegistrySubmissionFilingSummaryByDraftId(submission.draftId),
+      filing: await loadRegistryFilingSummaryByDraftId(submission.draftId),
     });
   } catch (err: any) {
     console.error("[GET /api/properties/:propertyId/registry-submission] failed", err);
@@ -790,7 +790,7 @@ async function saveRegistrySubmissionResponse(req: any, res: any) {
       return res.status(403).json({ ok: false, error: "forbidden" });
     }
 
-    const submission = await savePropertyRegistrySubmissionDraft({
+    const submission = await saveRegistrySubmissionDraft({
       property: { id: propertyId, ...property },
       landlordId: ownership.ownerLandlordId || landlordId,
       actorUserId: String(req.user?.id || "").trim() || null,
@@ -809,7 +809,7 @@ async function saveRegistrySubmissionResponse(req: any, res: any) {
       submission,
       fieldMap: resolveRegistrySchemaFieldMap(property),
       schema,
-      filing: await loadRegistrySubmissionFilingSummaryByDraftId(submission.draftId),
+      filing: await loadRegistryFilingSummaryByDraftId(submission.draftId),
     });
   } catch (err: any) {
     console.error("[PUT /api/properties/:propertyId/registry-submission] failed", err);
@@ -837,13 +837,13 @@ async function exportRegistrySubmissionResponse(req: any, res: any) {
       return res.status(403).json({ ok: false, error: "forbidden" });
     }
 
-    const submission = await markPropertyRegistrySubmissionExported({
+    const submission = await markRegistrySubmissionDraftExported({
       property: { id: propertyId, ...property },
       landlordId: ownership.ownerLandlordId || landlordId,
       actorUserId: String(req.user?.id || "").trim() || null,
       actorEmail: String(req.user?.email || "").trim() || null,
     });
-    const exportPayload = buildPropertyRegistrySubmissionExportPayload({
+    const exportPayload = buildRegistrySubmissionExportPayload({
       property: { id: propertyId, ...property },
       submission,
     });
@@ -888,7 +888,7 @@ async function createRegistrySubmissionReadyResponse(req: any, res: any) {
       return res.status(403).json({ ok: false, error: "forbidden" });
     }
 
-    const ready = await createRegistrySubmissionReadyPackage({
+    const ready = await createRegistryFilingReadyPackage({
       property: { id: propertyId, ...property },
       landlordId: ownership.ownerLandlordId || landlordId,
       actorId: String(req.user?.id || "").trim() || null,
@@ -921,7 +921,7 @@ async function fetchRegistrySubmissionReadyResponse(req: any, res: any) {
       return res.status(403).json({ ok: false, error: "forbidden" });
     }
 
-    const ready = await loadRegistrySubmissionReadyPackage({
+    const ready = await loadRegistryFilingReadyPackage({
       property: { id: propertyId, ...property },
       landlordId: ownership.ownerLandlordId || landlordId,
     });
@@ -953,7 +953,7 @@ async function createRegistrySubmissionFilingRequestResponse(req: any, res: any)
       return res.status(403).json({ ok: false, error: "forbidden" });
     }
 
-    const requestRecord = await createRegistrySubmissionFilingRequest({
+    const requestRecord = await createRegistryFilingRequest({
       property: { id: propertyId, ...property },
       landlordId: ownership.ownerLandlordId || landlordId,
       actorId: String(req.user?.id || "").trim() || null,
@@ -987,7 +987,7 @@ async function listRegistrySubmissionAttemptsResponse(req: any, res: any) {
       return res.status(403).json({ ok: false, error: "forbidden" });
     }
 
-    const attempts = await listRegistrySubmissionAttempts({
+    const attempts = await listRegistryFilingAttempts({
       property: { id: propertyId, ...property },
       landlordId: ownership.ownerLandlordId || landlordId,
     });
@@ -1019,7 +1019,7 @@ async function fetchLatestRegistrySubmissionAttemptResponse(req: any, res: any) 
       return res.status(403).json({ ok: false, error: "forbidden" });
     }
 
-    const latestAttempt = await getLatestRegistrySubmissionAttempt({
+    const latestAttempt = await getLatestRegistryFilingAttempt({
       property: { id: propertyId, ...property },
       landlordId: ownership.ownerLandlordId || landlordId,
     });
@@ -1051,7 +1051,7 @@ async function retryRegistrySubmissionAttemptResponse(req: any, res: any) {
       return res.status(403).json({ ok: false, error: "forbidden" });
     }
 
-    const retried = await retryRegistrySubmissionAttempt({
+    const retried = await retryRegistryFilingAttempt({
       property: { id: propertyId, ...property },
       landlordId: ownership.ownerLandlordId || landlordId,
       actorId: String(req.user?.id || "").trim() || null,
@@ -1063,7 +1063,7 @@ async function retryRegistrySubmissionAttemptResponse(req: any, res: any) {
       ready: retried.ready,
       attempt: retried.attempt,
       request: retried.request,
-      filing: await loadRegistrySubmissionFilingSummaryByDraftId(retried.ready.sourceDraftId),
+      filing: await loadRegistryFilingSummaryByDraftId(retried.ready.sourceDraftId),
     });
   } catch (err: any) {
     console.error("[POST /api/properties/:propertyId/registry-submission/filing-attempts/retry] failed", err);
@@ -1096,7 +1096,7 @@ async function updateRegistrySubmissionFilingStatusResponse(req: any, res: any) 
       return res.status(403).json({ ok: false, error: "forbidden" });
     }
 
-    const filing = await updateRegistrySubmissionFilingLifecycle({
+    const filing = await updateRegistryFilingLifecycle({
       property: { id: propertyId, ...property },
       landlordId: ownership.ownerLandlordId || landlordId,
       actorId: String(req.user?.id || "").trim() || null,

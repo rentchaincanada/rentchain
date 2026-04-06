@@ -692,6 +692,7 @@ export async function fetchPropertyRegistrySubmission(propertyId: string): Promi
   return res.data;
 }
 
+// Halifax-specific helpers are kept as compatibility wrappers for the existing assistant component.
 export async function fetchHalifaxRegistrySubmission(propertyId: string) {
   return fetchPropertyRegistrySubmission(propertyId);
 }
@@ -733,28 +734,28 @@ export async function exportHalifaxRegistrySubmission(propertyId: string) {
   return exportPropertyRegistrySubmission(propertyId);
 }
 
-export async function createRegistrySubmissionReady(
+export async function createRegistryFilingReadyPackage(
 propertyId: string
 ): Promise<{ ready: RegistrySubmissionReadyV3 | null }> {
   const res = await api.post(`/properties/${encodeURIComponent(propertyId)}/registry-submission/ready`, {});
   return res.data;
 }
 
-export async function fetchRegistrySubmissionReady(
+export async function fetchRegistryFilingReadyPackage(
 propertyId: string
 ): Promise<{ ready: RegistrySubmissionReadyV3 | null }> {
   const res = await api.get(`/properties/${encodeURIComponent(propertyId)}/registry-submission/ready`);
   return res.data;
 }
 
-export async function createRegistrySubmissionFilingRequest(
+export async function createRegistryFilingRequest(
   propertyId: string
 ): Promise<{ request: RegistrySubmissionRequestV3 }> {
   const res = await api.post(`/properties/${encodeURIComponent(propertyId)}/registry-submission/filing-request`, {});
   return res.data;
 }
 
-export async function updateRegistrySubmissionFilingStatus(
+export async function updateRegistryFilingStatus(
   propertyId: string,
   payload: {
     status: Extract<
@@ -772,11 +773,11 @@ export async function updateRegistrySubmissionFilingStatus(
 }
 
 export async function createReadyFromDraft(propertyId: string) {
-  return createRegistrySubmissionReady(propertyId);
+  return createRegistryFilingReadyPackage(propertyId);
 }
 
 export async function getReady(propertyId: string) {
-  return fetchRegistrySubmissionReady(propertyId);
+  return fetchRegistryFilingReadyPackage(propertyId);
 }
 
 export async function attachFilingReferenceAndNotes(
@@ -789,7 +790,7 @@ export async function attachFilingReferenceAndNotes(
     evidenceReference?: string | null;
   }
 ) {
-  return updateRegistrySubmissionFilingStatus(propertyId, {
+  return updateRegistryFilingStatus(propertyId, {
     status: payload.status || "filed_pending_confirmation",
     attemptId: payload.attemptId || null,
     note: payload.note || null,
@@ -815,7 +816,7 @@ export async function attachFilingReferenceAndNotes(
   });
 }
 
-export async function fetchRegistrySubmissionAttempts(propertyId: string): Promise<{
+export async function fetchRegistryFilingAttempts(propertyId: string): Promise<{
   sourceDraftId: string;
   latestAttempt: RegistrySubmissionAttemptV3 | null;
   attempts: RegistrySubmissionAttemptV3[];
@@ -824,14 +825,14 @@ export async function fetchRegistrySubmissionAttempts(propertyId: string): Promi
   return res.data;
 }
 
-export async function fetchLatestRegistrySubmissionAttempt(propertyId: string): Promise<{
+export async function fetchLatestRegistryFilingAttempt(propertyId: string): Promise<{
   latestAttempt: RegistrySubmissionAttemptV3 | null;
 }> {
   const res = await api.get(`/properties/${encodeURIComponent(propertyId)}/registry-submission/filing-attempts/latest`);
   return res.data;
 }
 
-export async function retryRegistrySubmissionAttempt(
+export async function retryRegistryFilingAttempt(
   propertyId: string,
   payload?: { attemptId?: string | null }
 ): Promise<{
@@ -843,6 +844,16 @@ export async function retryRegistrySubmissionAttempt(
   const res = await api.post(`/properties/${encodeURIComponent(propertyId)}/registry-submission/filing-attempts/retry`, payload || {});
   return res.data;
 }
+
+export {
+  createRegistryFilingReadyPackage as createRegistrySubmissionReady,
+  fetchRegistryFilingReadyPackage as fetchRegistrySubmissionReady,
+  createRegistryFilingRequest as createRegistrySubmissionFilingRequest,
+  updateRegistryFilingStatus as updateRegistrySubmissionFilingStatus,
+  fetchRegistryFilingAttempts as fetchRegistrySubmissionAttempts,
+  fetchLatestRegistryFilingAttempt as fetchLatestRegistrySubmissionAttempt,
+  retryRegistryFilingAttempt as retryRegistrySubmissionAttempt,
+};
 
 export async function updateProperty(
   propertyId: string,
