@@ -152,10 +152,12 @@ const PricingPage: React.FC = () => {
         <div
           style={{
             display: "grid",
-            gap: spacing.md,
+            gap: spacing.lg,
             gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
             alignItems: "stretch",
             overflow: "visible",
+            padding: "4px",
+            margin: "-4px",
           }}
         >
           <Card style={{ gridColumn: "1 / -1" }}>

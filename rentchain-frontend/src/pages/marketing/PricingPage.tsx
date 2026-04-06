@@ -215,11 +215,13 @@ const PricingPage: React.FC = () => {
           className="rc-pricing-grid"
           style={{
             display: "grid",
-            gap: spacing.md,
+            gap: isMobile ? spacing.md : spacing.lg,
             ...mobileSectionStyle,
             gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(250px, 1fr))",
             alignItems: "stretch",
             overflow: "visible",
+            padding: isMobile ? 0 : "4px",
+            margin: isMobile ? 0 : "-4px",
           }}
         >
           <Card style={{ gridColumn: "1 / -1" }}>
