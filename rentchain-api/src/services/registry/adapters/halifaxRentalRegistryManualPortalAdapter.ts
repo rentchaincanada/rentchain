@@ -72,6 +72,7 @@ export const halifaxRentalRegistryManualPortalAdapter: RegistryFilingAdapter = {
     return {
       schemaVersion: 3,
       requestId: `${ready.sourceDraftId}__manual_portal`,
+      attemptId: `${ready.sourceDraftId}__attempt_1`,
       readyId: ready.readyId,
       sourceDraftId: ready.sourceDraftId,
       propertyId: ready.propertyId,

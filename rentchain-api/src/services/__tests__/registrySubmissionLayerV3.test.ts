@@ -151,6 +151,7 @@ describe("registrySubmissionLayerV3", () => {
     const request = buildRegistrySubmissionFilingRequestFromReady(ready, "operator-1");
 
     expect(request.schemaVersion).toBe(3);
+    expect(request.attemptId).toContain("__attempt_");
     expect(request.adapterKey).toBe(halifaxRentalRegistryManualPortalAdapter.adapterKey);
     expect(request.filingChannel).toBe("manual_portal");
     expect(request.status).toBe("ready_to_file");

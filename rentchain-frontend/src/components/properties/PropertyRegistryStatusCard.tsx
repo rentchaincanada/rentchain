@@ -6,9 +6,9 @@ import {
   createRegistrySubmissionFilingRequest,
   fetchPropertyRegistryStatus,
   fetchPropertyRegistrySubmission,
+  retryRegistrySubmissionAttempt,
   updateRegistrySubmissionFilingStatus,
   type Property,
-  type RegistrySubmissionFilingSummaryV3,
   type PropertyRegistryReadiness,
   type PropertyRegistryStatus,
   type RegistrySubmissionDraft,
@@ -209,9 +209,20 @@ function buildTimeline(
     "failed",
     "cancelled",
   ];
-  const currentIndex = order.indexOf(current);
+  const completeKeys =
+    current === "filed_confirmed"
+      ? new Set<TimelineStep["key"]>(["draft", "ready_to_file", "filed_pending_confirmation"])
+      : current === "rejected" || current === "failed" || current === "cancelled"
+        ? new Set<TimelineStep["key"]>(["draft", "ready_to_file", "filed_pending_confirmation"])
+        : current === "filed_pending_confirmation"
+          ? new Set<TimelineStep["key"]>(["draft", "ready_to_file"])
+          : current === "ready_to_file"
+            ? new Set<TimelineStep["key"]>(["draft"])
+            : current === "draft"
+              ? new Set<TimelineStep["key"]>([])
+              : new Set<TimelineStep["key"]>([]);
 
-  return order.map((key, index) => {
+  return order.map((key) => {
     let timestamp: string | null = null;
     let actor: string | null = null;
 
@@ -242,12 +253,7 @@ function buildTimeline(
       key,
       label: filingStatusLabel(key)!,
       active: current === key,
-      complete:
-        current === key
-          ? Boolean(timestamp)
-          : currentIndex > -1 && index < currentIndex && key !== "draft"
-            ? true
-            : key === "draft" && Boolean(timestamp),
+      complete: current === key ? Boolean(timestamp) : completeKeys.has(key) || (key === "draft" && Boolean(timestamp)),
       timestamp,
       actor,
     };
@@ -261,20 +267,15 @@ function renderFieldValue(value: RegistrySubmissionNormalizedSectionV3["fields"]
 }
 
 function collectHistoryItems(filing: RegistrySubmissionFilingSummaryV3 | null | undefined) {
-  if (!filing?.request && !filing?.result) return [];
-  return [
-    {
-      label: "Latest filing attempt",
-      status: filingStatusLabel(filing.currentStatus),
-      timestamp:
-        filing.result?.updatedAt ||
-        filing.result?.submittedAt ||
-        filing.request?.updatedAt ||
-        filing.ready?.updatedAt ||
-        null,
-      referenceNumber: filing.result?.referenceNumbers?.[0]?.value || filing.request?.referenceNumbers?.[0]?.value || null,
-    },
-  ];
+  return (filing?.attempts || []).map((attempt, index) => ({
+    key: attempt.attemptId,
+    label: index === 0 ? `Latest filing attempt (#${attempt.attemptNumber})` : `Attempt #${attempt.attemptNumber}`,
+    status: filingStatusLabel(attempt.status),
+    timestamp: attempt.updatedAt || attempt.createdAt || null,
+    referenceNumber: attempt.referenceNumbers?.[0]?.value || null,
+    operatorNotes: attempt.operatorNotes || null,
+    isLatest: index === 0,
+  }));
 }
 
 function copyChecklistToClipboard(checklist: { steps: string[]; notes: string[]; portalUrl: string | null }) {
@@ -381,6 +382,7 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
   const filing = data?.filing || null;
   const submission = submissionData?.submission || null;
   const workflowStatus = resolvedWorkflowStatus(filing);
+  const latestAttempt = filing?.latestAttempt || null;
   const timeline = useMemo(() => buildTimeline(submission, filing), [submission, filing]);
   const canOpenAdminReview =
     typeof window !== "undefined" && window.location.pathname.startsWith("/admin") && Boolean(property?.id);
@@ -394,7 +396,10 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
   const checklistAvailable = Boolean(filing?.request?.checklist?.steps?.length);
   const filingHistory = collectHistoryItems(filing);
   const latestReference =
-    filing?.result?.referenceNumbers?.[0]?.value || filing?.request?.referenceNumbers?.[0]?.value || null;
+    latestAttempt?.referenceNumbers?.[0]?.value ||
+    filing?.result?.referenceNumbers?.[0]?.value ||
+    filing?.request?.referenceNumbers?.[0]?.value ||
+    null;
 
   return (
     <Card style={{ display: "grid", gap: 12 }}>
@@ -683,6 +688,7 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                       onClick={() =>
                         void runWorkflowAction(() =>
                           updateRegistrySubmissionFilingStatus(String(propertyId), {
+                            attemptId: latestAttempt?.attemptId || null,
                             status: "filed_pending_confirmation",
                             note: workflowForm.notes || "Marked as filed through the Halifax manual portal workflow.",
                             referenceNumbers: workflowForm.referenceNumber
@@ -721,6 +727,7 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                           void runWorkflowAction(() =>
                             attachFilingReferenceAndNotes(String(propertyId), {
                               status: "filed_pending_confirmation",
+                              attemptId: latestAttempt?.attemptId || null,
                               note: workflowForm.notes,
                               referenceNumber: workflowForm.referenceNumber,
                               evidenceReference: workflowForm.evidenceReference,
@@ -736,6 +743,7 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                         onClick={() =>
                           void runWorkflowAction(() =>
                             updateRegistrySubmissionFilingStatus(String(propertyId), {
+                              attemptId: latestAttempt?.attemptId || null,
                               status: "filed_confirmed",
                               note: workflowForm.notes || "Filing confirmed.",
                               referenceNumbers: workflowForm.referenceNumber
@@ -770,6 +778,7 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                         onClick={() =>
                           void runWorkflowAction(() =>
                             updateRegistrySubmissionFilingStatus(String(propertyId), {
+                              attemptId: latestAttempt?.attemptId || null,
                               status: "rejected",
                               note: workflowForm.notes || "Filing rejected.",
                               referenceNumbers: workflowForm.referenceNumber
@@ -804,6 +813,7 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                         onClick={() =>
                           void runWorkflowAction(() =>
                             updateRegistrySubmissionFilingStatus(String(propertyId), {
+                              attemptId: latestAttempt?.attemptId || null,
                               status: "failed",
                               note: workflowForm.notes || "Filing failed before confirmation.",
                               referenceNumbers: workflowForm.referenceNumber
@@ -833,11 +843,28 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                       </Button>
                     </>
                   )}
-                  {draftChangedSinceReady && (workflowStatus === "ready_to_file" || workflowStatus === "in_review") ? null : null}
+                  {(workflowStatus === "rejected" || workflowStatus === "failed" || workflowStatus === "cancelled") &&
+                  latestAttempt ? (
+                    <Button
+                      type="button"
+                      disabled={actionLoading || draftChangedSinceReady}
+                      onClick={() =>
+                        void runWorkflowAction(() =>
+                          retryRegistrySubmissionAttempt(String(propertyId), {
+                            attemptId: latestAttempt.attemptId,
+                          })
+                        )
+                      }
+                    >
+                      Retry filing attempt
+                    </Button>
+                  ) : null}
                 </div>
                 {(workflowStatus === "rejected" || workflowStatus === "failed" || workflowStatus === "cancelled") && (
                   <div style={{ color: "#475569", fontSize: 13 }}>
-                    Re-open is not available yet without backend attempt-history support. Regenerate the filing package after fixing the draft if you need a fresh attempt.
+                    {draftChangedSinceReady
+                      ? "This draft changed after the latest ready package was created. Regenerate the filing package before retrying."
+                      : "Retry creates a new filing attempt and preserves the prior attempts as audit history."}
                   </div>
                 )}
               </Card>
@@ -863,6 +890,11 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                   <div>
                     <strong>Latest reference:</strong> {latestReference || "--"}
                   </div>
+                  {latestAttempt ? (
+                    <div>
+                      <strong>Latest attempt:</strong> #{latestAttempt.attemptNumber} · {filingStatusLabel(latestAttempt.status)}
+                    </div>
+                  ) : null}
                 </div>
                 {filing?.ready?.normalizedSubmission.sections.length ? (
                   <div style={{ display: "grid", gap: 10 }}>
@@ -957,7 +989,7 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                 {filingHistory.length ? (
                   filingHistory.map((entry) => (
                     <div
-                      key={`${entry.label}-${entry.timestamp}`}
+                      key={entry.key}
                       style={{
                         display: "grid",
                         gap: 4,
@@ -966,7 +998,10 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                         border: "1px solid rgba(15,23,42,0.08)",
                       }}
                     >
-                      <div style={{ fontWeight: 700, color: "#0f172a" }}>{entry.label}</div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                        <div style={{ fontWeight: 700, color: "#0f172a" }}>{entry.label}</div>
+                        {entry.isLatest ? <Pill tone="accent">Latest</Pill> : null}
+                      </div>
                       <div style={{ color: "#475569", fontSize: 14 }}>
                         <strong>Status:</strong> {entry.status || "--"}
                       </div>
@@ -976,6 +1011,11 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                       <div style={{ color: "#475569", fontSize: 14 }}>
                         <strong>Reference number:</strong> {entry.referenceNumber || "--"}
                       </div>
+                      {entry.operatorNotes ? (
+                        <div style={{ color: "#475569", fontSize: 14 }}>
+                          <strong>Notes:</strong> {entry.operatorNotes}
+                        </div>
+                      ) : null}
                     </div>
                   ))
                 ) : (
