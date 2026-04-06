@@ -179,11 +179,6 @@ function filingStatusTone(status: RegistrySubmissionLifecycleStatus | "draft" | 
   }
   return "muted";
 }
-  if (status === "ready_to_file" || status === "filed_pending_confirmation" || status === "filed_confirmed") {
-    return "accent";
-  }
-  return "muted";
-}
 
 function resolvedWorkflowStatus(
   filing: RegistrySubmissionFilingSummaryV3 | null | undefined
