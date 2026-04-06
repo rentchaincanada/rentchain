@@ -74,7 +74,19 @@ router.get("/pricing", (_req, res) => {
     currency: "cad",
   };
 
-  res.json({ ok: true, plans, screening, env: getStripeEnv() });
+  const registry = {
+    filingWorkflow: {
+      capability: "registry_filing_access",
+      attemptsHistoryCapability: "registry_attempts_history",
+      includedPlanKeys: ["pro", "elite"],
+      freeIncludes: ["draft", "readiness", "export"],
+      paidUnlocks: ["filing_workflow", "retry_safety", "attempt_history", "audit_tracking"],
+      perFilingAmountCents: null,
+      currency: "cad",
+    },
+  };
+
+  res.json({ ok: true, plans, screening, registry, env: getStripeEnv() });
 });
 
 type BillingTier = BillingPlanKey;

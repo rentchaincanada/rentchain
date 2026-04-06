@@ -37,6 +37,8 @@ const PLAN_ADDITIONS: Record<Plan, string[]> = {
     "portfolio_dashboard",
     "team.invites",
     "exports",
+    "registry_filing_access",
+    "registry_attempts_history",
   ],
   elite: [
     "ai_summaries",

@@ -108,6 +108,17 @@ export type BillingPricingResponse = {
     expeditedCents: number;
     currency: string;
   };
+  registry?: {
+    filingWorkflow: {
+      capability: string;
+      attemptsHistoryCapability: string;
+      includedPlanKeys: Array<"starter" | "pro" | "elite" | "free">;
+      freeIncludes: string[];
+      paidUnlocks: string[];
+      perFilingAmountCents: number | null;
+      currency: string;
+    };
+  };
   env?: "live" | "test";
 };
 

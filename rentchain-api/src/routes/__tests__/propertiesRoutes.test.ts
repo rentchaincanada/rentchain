@@ -179,7 +179,13 @@ async function createApp() {
   const app = express();
   app.use(express.json());
   app.use((req: any, _res: any, next: any) => {
-    req.user = { id: "landlord-1", landlordId: "landlord-1", role: "landlord" };
+    req.user = {
+      id: "landlord-1",
+      landlordId: "landlord-1",
+      role: "landlord",
+      plan: "pro",
+      capabilities: ["registry_filing_access", "registry_attempts_history"],
+    };
     next();
   });
   app.use("/api/properties", router);
@@ -878,6 +884,91 @@ describe("properties routes publish + defaults", () => {
     expect(requestRes.status).toBe(200);
     expect(requestRes.body.request.adapterKey).toBe("halifax_rental_registry_manual_portal_v1");
     expect(requestRes.body.request.status).toBe("ready_to_file");
+  });
+
+  it("blocks filing workflow actions for free-tier users while leaving draft prep available", async () => {
+    seedDoc("properties", "prop-free", {
+      landlordId: "landlord-1",
+      addressLine1: "12 Wharf Street",
+      city: "Halifax",
+      province: "NS",
+      postalCode: "B3H 1A1",
+      country: "Canada",
+      pid: "PID-123",
+      createdAt: "2026-04-05T00:00:00.000Z",
+      updatedAt: "2026-04-05T00:00:00.000Z",
+    });
+
+    const submission = buildSubmissionDraft({
+      id: "prop-free",
+      addressLine1: "12 Wharf Street",
+      city: "Halifax",
+      province: "NS",
+      postalCode: "B3H 1A1",
+      country: "Canada",
+    });
+    seedDoc("propertyRegistrySubmissions", submission.draftId, submission);
+
+    const app = await createAppForUser({
+      id: "landlord-1",
+      landlordId: "landlord-1",
+      role: "landlord",
+      plan: "free",
+      capabilities: [],
+    });
+
+    const exportRes = await request(app).get("/api/properties/prop-free/registry-submission/export");
+    expect(exportRes.status).toBe(200);
+
+    const readyRes = await request(app).post("/api/properties/prop-free/registry-submission/ready").send({});
+    expect(readyRes.status).toBe(200);
+
+    const requestRes = await request(app).post("/api/properties/prop-free/registry-submission/filing-request").send({});
+    expect(requestRes.status).toBe(403);
+    expect(requestRes.body).toMatchObject({
+      error: "upgrade_required",
+      requiredCapability: "registry_filing_access",
+      requiredPlan: "pro",
+    });
+  });
+
+  it("blocks filing attempts history for users without the history capability", async () => {
+    seedDoc("properties", "prop-history", {
+      landlordId: "landlord-1",
+      addressLine1: "12 Wharf Street",
+      city: "Halifax",
+      province: "NS",
+      postalCode: "B3H 1A1",
+      country: "Canada",
+      pid: "PID-123",
+      createdAt: "2026-04-05T00:00:00.000Z",
+      updatedAt: "2026-04-05T00:00:00.000Z",
+    });
+
+    const submission = buildSubmissionDraft({
+      id: "prop-history",
+      addressLine1: "12 Wharf Street",
+      city: "Halifax",
+      province: "NS",
+      postalCode: "B3H 1A1",
+      country: "Canada",
+    });
+    seedDoc("propertyRegistrySubmissions", submission.draftId, submission);
+
+    const app = await createAppForUser({
+      id: "landlord-1",
+      landlordId: "landlord-1",
+      role: "landlord",
+      plan: "starter",
+      capabilities: [],
+    });
+
+    const res = await request(app).get("/api/properties/prop-history/registry-submission/filing-attempts");
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({
+      error: "upgrade_required",
+      requiredCapability: "registry_attempts_history",
+    });
   });
 
   it("persists filing lifecycle transitions and exposes filing status in registry-status", async () => {

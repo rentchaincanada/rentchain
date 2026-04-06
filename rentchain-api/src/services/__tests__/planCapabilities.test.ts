@@ -13,5 +13,7 @@ describe("planCapabilities entitlement aliases", () => {
     expect(pro).toContain("pdf_export");
     expect(pro).toContain("review_summary");
     expect(pro).toContain("screening");
+    expect(pro).toContain("registry_filing_access");
+    expect(pro).toContain("registry_attempts_history");
   });
 });
