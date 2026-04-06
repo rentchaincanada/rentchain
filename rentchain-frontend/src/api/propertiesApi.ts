@@ -303,6 +303,167 @@ export interface PropertyRegistryReadiness {
   };
 }
 
+export type RegistrySubmissionLifecycleStatus =
+  | "in_review"
+  | "ready_to_file"
+  | "filed_pending_confirmation"
+  | "filed_confirmed"
+  | "rejected"
+  | "failed"
+  | "cancelled";
+
+export type RegistryFilingChannel = "manual_portal" | "assisted_filing" | "api_upload";
+
+export interface RegistrySubmissionAuditEventV3 {
+  at: string;
+  actorId: string | null;
+  type: string;
+  status: RegistrySubmissionLifecycleStatus | null;
+  note: string | null;
+}
+
+export interface RegistrySubmissionReferenceNumberV3 {
+  type: "submission_id" | "receipt" | "registry_number" | "external_reference";
+  value: string;
+  label: string | null;
+  recordedAt: string;
+  recordedBy: string | null;
+}
+
+export interface RegistrySubmissionEvidenceV3 {
+  id: string;
+  type: "pdf" | "html_snapshot" | "email" | "screenshot" | "other";
+  label: string;
+  url: string | null;
+  note: string | null;
+  recordedAt: string;
+  recordedBy: string | null;
+}
+
+export interface RegistrySubmissionNormalizedFieldV3 {
+  id: string;
+  label: string;
+  value: string | number | boolean | null;
+  required: boolean;
+}
+
+export interface RegistrySubmissionNormalizedSectionV3 {
+  id: string;
+  label: string;
+  fields: RegistrySubmissionNormalizedFieldV3[];
+}
+
+export interface RegistrySubmissionReadyV3 {
+  schemaVersion: 3;
+  readyId: string;
+  sourceDraftId: string;
+  sourceDraftVersion: 2;
+  propertyId: string;
+  sourceKey: string;
+  schemaKey: string;
+  schemaLabel: string;
+  assistantType: RegistrySubmissionDraftV2["assistantType"];
+  filingChannel: RegistryFilingChannel;
+  status: "in_review" | "ready_to_file";
+  createdAt: string;
+  updatedAt: string;
+  actor: {
+    landlordId: string | null;
+    updatedBy: string | null;
+  };
+  jurisdiction: RegistrySchemaSummary["jurisdiction"];
+  validation: RegistrySubmissionValidation;
+  consentLock: RegistrySubmissionConsent;
+  declarationsLock: RegistrySubmissionDeclarationState;
+  normalizedSubmission: {
+    sections: RegistrySubmissionNormalizedSectionV3[];
+    attachments: RegistrySubmissionDraftV2["attachments"];
+    disclaimer: string | null;
+  };
+  audit: {
+    sourceDraftUpdatedAt: string;
+    events: RegistrySubmissionAuditEventV3[];
+  };
+}
+
+export interface RegistrySubmissionRequestV3 {
+  schemaVersion: 3;
+  requestId: string;
+  readyId: string;
+  sourceDraftId: string;
+  propertyId: string;
+  sourceKey: string;
+  schemaKey: string;
+  schemaLabel: string;
+  filingChannel: RegistryFilingChannel;
+  adapterKey: string;
+  status: RegistrySubmissionLifecycleStatus;
+  createdAt: string;
+  updatedAt: string;
+  actor: {
+    requestedBy: string | null;
+    updatedBy: string | null;
+  };
+  checklist: {
+    portalUrl: string | null;
+    steps: string[];
+    notes: string[];
+  };
+  payload: {
+    sections: RegistrySubmissionNormalizedSectionV3[];
+    disclaimer: string | null;
+  };
+  referenceNumbers: RegistrySubmissionReferenceNumberV3[];
+  operatorNotes: string | null;
+  evidence: RegistrySubmissionEvidenceV3[];
+  audit: {
+    events: RegistrySubmissionAuditEventV3[];
+  };
+}
+
+export interface RegistrySubmissionResultV3 {
+  schemaVersion: 3;
+  resultId: string;
+  requestId: string;
+  readyId: string;
+  sourceDraftId: string;
+  propertyId: string;
+  sourceKey: string;
+  schemaKey: string;
+  filingChannel: RegistryFilingChannel;
+  adapterKey: string;
+  status: Extract<
+    RegistrySubmissionLifecycleStatus,
+    "filed_pending_confirmation" | "filed_confirmed" | "rejected" | "failed" | "cancelled"
+  >;
+  createdAt: string;
+  updatedAt: string;
+  submittedAt: string | null;
+  confirmedAt: string | null;
+  rejectedAt: string | null;
+  failedAt: string | null;
+  cancelledAt: string | null;
+  actor: {
+    updatedBy: string | null;
+  };
+  referenceNumbers: RegistrySubmissionReferenceNumberV3[];
+  operatorNotes: string | null;
+  evidence: RegistrySubmissionEvidenceV3[];
+  outcome: {
+    message: string | null;
+  };
+  audit: {
+    events: RegistrySubmissionAuditEventV3[];
+  };
+}
+
+export interface RegistrySubmissionFilingSummaryV3 {
+  ready: RegistrySubmissionReadyV3 | null;
+  request: RegistrySubmissionRequestV3 | null;
+  result: RegistrySubmissionResultV3 | null;
+  currentStatus: RegistrySubmissionLifecycleStatus | null;
+}
+
 export type HalifaxSubmissionValidation = RegistrySubmissionValidation;
 
 export interface RegistryFieldMapEntry {
@@ -487,6 +648,7 @@ export async function fetchPropertyRegistryStatus(propertyId: string): Promise<{
     actionable: boolean;
   };
   readiness: PropertyRegistryReadiness;
+  filing: RegistrySubmissionFilingSummaryV3;
 }> {
   const res = await api.get(`/properties/${encodeURIComponent(propertyId)}/registry-status`);
   return res.data;
@@ -496,6 +658,7 @@ export async function fetchPropertyRegistrySubmission(propertyId: string): Promi
   submission: RegistrySubmissionDraft;
   fieldMap: RegistryFieldMapEntry[];
   schema: RegistrySchemaSummary;
+  filing: RegistrySubmissionFilingSummaryV3;
 }> {
   const res = await api.get(`/properties/${encodeURIComponent(propertyId)}/registry-submission`);
   return res.data;
@@ -519,6 +682,7 @@ export async function savePropertyRegistrySubmission(
   submission: RegistrySubmissionDraft;
   fieldMap: RegistryFieldMapEntry[];
   schema: RegistrySchemaSummary;
+  filing: RegistrySubmissionFilingSummaryV3;
 }> {
   const res = await api.put(`/properties/${encodeURIComponent(propertyId)}/registry-submission`, payload);
   return res.data;
@@ -539,6 +703,39 @@ export async function exportPropertyRegistrySubmission(propertyId: string): Prom
 
 export async function exportHalifaxRegistrySubmission(propertyId: string) {
   return exportPropertyRegistrySubmission(propertyId);
+}
+
+export async function createRegistrySubmissionReady(propertyId: string): Promise<{ ready: RegistrySubmissionReadyV3 | null }> {
+  const res = await api.post(`/properties/${encodeURIComponent(propertyId)}/registry-submission/ready`, {});
+  return res.data;
+}
+
+export async function fetchRegistrySubmissionReady(propertyId: string): Promise<{ ready: RegistrySubmissionReadyV3 | null }> {
+  const res = await api.get(`/properties/${encodeURIComponent(propertyId)}/registry-submission/ready`);
+  return res.data;
+}
+
+export async function createRegistrySubmissionFilingRequest(
+  propertyId: string
+): Promise<{ request: RegistrySubmissionRequestV3 }> {
+  const res = await api.post(`/properties/${encodeURIComponent(propertyId)}/registry-submission/filing-request`, {});
+  return res.data;
+}
+
+export async function updateRegistrySubmissionFilingStatus(
+  propertyId: string,
+  payload: {
+    status: Extract<
+      RegistrySubmissionLifecycleStatus,
+      "filed_pending_confirmation" | "filed_confirmed" | "rejected" | "failed" | "cancelled"
+    >;
+    note?: string | null;
+    referenceNumbers?: Array<Partial<RegistrySubmissionReferenceNumberV3>>;
+    evidence?: Array<Partial<RegistrySubmissionEvidenceV3>>;
+  }
+): Promise<{ filing: RegistrySubmissionFilingSummaryV3 }> {
+  const res = await api.patch(`/properties/${encodeURIComponent(propertyId)}/registry-submission/filing-request`, payload);
+  return res.data;
 }
 
 export async function updateProperty(

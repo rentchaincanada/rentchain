@@ -3,6 +3,7 @@ import { Button, Card, Pill } from "../ui/Ui";
 import {
   fetchPropertyRegistryStatus,
   type Property,
+  type RegistrySubmissionFilingSummaryV3,
   type PropertyRegistryReadiness,
   type PropertyRegistryStatus,
 } from "../../api/propertiesApi";
@@ -126,6 +127,34 @@ function shouldShowCompactAssistantCta(readiness: PropertyRegistryReadiness) {
   );
 }
 
+function filingStatusLabel(status: RegistrySubmissionFilingSummaryV3["currentStatus"]) {
+  switch (status) {
+    case "ready_to_file":
+      return "Ready to file";
+    case "filed_pending_confirmation":
+      return "Filed pending confirmation";
+    case "filed_confirmed":
+      return "Filed confirmed";
+    case "rejected":
+      return "Rejected";
+    case "failed":
+      return "Failed";
+    case "cancelled":
+      return "Cancelled";
+    case "in_review":
+      return "In review";
+    default:
+      return null;
+  }
+}
+
+function filingStatusTone(status: RegistrySubmissionFilingSummaryV3["currentStatus"]): "accent" | "muted" {
+  if (status === "ready_to_file" || status === "filed_pending_confirmation" || status === "filed_confirmed") {
+    return "accent";
+  }
+  return "muted";
+}
+
 type Props = {
   property: Property | null;
   onOpenSubmissionAssistant?: () => void;
@@ -147,6 +176,7 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
       actionable: boolean;
     };
     readiness: PropertyRegistryReadiness;
+    filing: RegistrySubmissionFilingSummaryV3;
   } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -214,6 +244,9 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
             <Pill tone="muted">{data.readiness.schemaLabel}</Pill>
             {data.readiness.readinessStatus !== "verified" ? (
               <Pill tone="muted">{data.readiness.completionPercent}% complete</Pill>
+            ) : null}
+            {filingStatusLabel(data.filing?.currentStatus) ? (
+              <Pill tone={filingStatusTone(data.filing.currentStatus)}>{filingStatusLabel(data.filing.currentStatus)}</Pill>
             ) : null}
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -307,6 +340,11 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                 <div>
                   <strong>Next action:</strong> {nextActionLabel(data.readiness)}
                 </div>
+                {filingStatusLabel(data.filing?.currentStatus) ? (
+                  <div>
+                    <strong>Filing status:</strong> {filingStatusLabel(data.filing.currentStatus)}
+                  </div>
+                ) : null}
               </div>
               {data.readiness.topMissingItems.length ? (
                 <div style={{ display: "grid", gap: 6 }}>

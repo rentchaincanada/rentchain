@@ -101,6 +101,12 @@ describe("PropertyRegistryStatusCard", () => {
           ctaLabel: "Complete Halifax registration draft",
         },
       },
+      filing: {
+        ready: null,
+        request: null,
+        result: null,
+        currentStatus: "ready_to_file",
+      },
     });
 
     const onOpenSubmissionAssistant = vi.fn();
@@ -125,6 +131,7 @@ describe("PropertyRegistryStatusCard", () => {
     expect(await screen.findByText("Compliance / Registry Readiness")).toBeInTheDocument();
     expect(screen.getByText("Incomplete")).toBeInTheDocument();
     expect(screen.getByText("Halifax Rental Registry")).toBeInTheDocument();
+    expect(screen.getByText("Ready to file")).toBeInTheDocument();
     expect(screen.getByText(/Missing required data for a registry-ready draft/i)).toBeInTheDocument();
     expect(screen.queryByText(/Owner or contact details are incomplete/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Building details are incomplete/)).not.toBeInTheDocument();

@@ -1,6 +1,8 @@
 import express from "express";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { buildRegistrySubmissionDraftV2 } from "../../services/registry/halifaxRegistrySubmissionService";
+import { resolveRegistrySchemaForProperty } from "../../services/registry/schemas/registrySchemaResolver";
 
 type StoredDoc = { id: string; data: any };
 
@@ -206,6 +208,120 @@ async function createAdminApp(user: Record<string, unknown>) {
   });
   app.use("/api/admin", router);
   return app;
+}
+
+function buildSubmissionDraft(property: Record<string, any>) {
+  const schema = resolveRegistrySchemaForProperty(property);
+  return buildRegistrySubmissionDraftV2({
+    schema,
+    draftId: `${property.id}__${schema.sourceKey}`,
+    propertyId: property.id,
+    landlordId: "landlord-1",
+    fieldValues: {
+      siteAddress: {
+        line1: property.addressLine1,
+        line2: null,
+        city: property.city,
+        province: property.province,
+        postalCode: property.postalCode,
+        country: property.country || "Canada",
+      },
+      propertyIdentifierPid: "PID-123",
+      owner: {
+        name: "Jordan Harbour",
+        company: "Harbour Holdings Ltd.",
+        email: "owner@example.com",
+        phone: "902-555-0101",
+        address: {
+          line1: "55 Owner Lane",
+          line2: null,
+          city: "Halifax",
+          province: "NS",
+          postalCode: "B3H 2B2",
+          country: "Canada",
+        },
+      },
+      primaryContactSameAsOwner: true,
+      primaryContact: {
+        name: "Jordan Harbour",
+        company: "Harbour Holdings Ltd.",
+        email: "owner@example.com",
+        phone: "902-555-0101",
+        address: {
+          line1: "55 Owner Lane",
+          line2: null,
+          city: "Halifax",
+          province: "NS",
+          postalCode: "B3H 2B2",
+          country: "Canada",
+        },
+      },
+      moreThanFiveBuildings: false,
+      buildings: [
+        {
+          id: "building-1",
+          primaryAddress: {
+            line1: property.addressLine1,
+            line2: null,
+            city: property.city,
+            province: property.province,
+            postalCode: property.postalCode,
+            country: property.country || "Canada",
+          },
+          hasAlternateContact: null,
+          alternateContact: {
+            name: null,
+            company: null,
+            email: null,
+            phone: null,
+            address: {
+              line1: null,
+              line2: null,
+              city: null,
+              province: null,
+              postalCode: null,
+              country: "Canada",
+            },
+          },
+          hasAdditionalCivicAddress: null,
+          additionalCivicAddress: null,
+          rentalUnitTypes: ["Apartment(s)"],
+          otherRentalUnitType: null,
+          residentialUnitsRented: 8,
+          shortTermRentalUnits: 0,
+          buildingType: "Apartment building",
+          otherBuildingType: null,
+          totalResidentialUnits: 8,
+          hasCommercialUnits: false,
+          amenities: ["Laundry"],
+          fireLifeSafetySystems: ["Smoke alarm(s)"],
+          accessibilityFeatures: [],
+          yearConstructed: 1998,
+          notes: null,
+        },
+      ],
+      propertyDescription: "Ready for filing",
+    },
+    fieldMeta: {},
+    consent: {
+      preparationAuthorized: true,
+      preparationAuthorizedAt: "2026-04-05T00:00:00.000Z",
+      preparationAuthorizedBy: "landlord-1",
+      declarationsConfirmed: true,
+      declarationsConfirmedAt: "2026-04-05T00:01:00.000Z",
+      declarationsConfirmedBy: "landlord-1",
+      finalReviewConfirmed: false,
+      finalReviewConfirmedAt: null,
+    },
+    declarations: {
+      acknowledged: true,
+      maintenancePlanConfirmed: true,
+      ownerDeclarationConfirmed: true,
+      informationAccurateConfirmed: true,
+    },
+    status: "ready",
+    updatedBy: "landlord-1",
+  });
 }
 
 describe("properties routes publish + defaults", () => {
@@ -729,5 +845,79 @@ describe("properties routes publish + defaults", () => {
     expect(res.body?.submission?.declarations?.acknowledged).toBe(true);
     expect(res.body?.submission?.fieldValues?.buildings?.[0]?.buildingType).toBe("Apartment building");
     expect(typeof res.body?.submission?.validation?.readinessScore).toBe("number");
+  });
+
+  it("creates a ready package and filing request from the canonical draft", async () => {
+    const app = await createApp();
+    seedDoc("properties", "prop-1", {
+      landlordId: "landlord-1",
+      addressLine1: "12 Wharf Street",
+      city: "Halifax",
+      province: "NS",
+      postalCode: "B3H 1A1",
+      country: "Canada",
+      totalUnits: 8,
+    });
+    const draft = buildSubmissionDraft({
+      id: "prop-1",
+      addressLine1: "12 Wharf Street",
+      city: "Halifax",
+      province: "NS",
+      postalCode: "B3H 1A1",
+      country: "Canada",
+      totalUnits: 8,
+    });
+    seedDoc("propertyRegistrySubmissions", draft.draftId, draft);
+
+    const readyRes = await request(app).post("/api/properties/prop-1/registry-submission/ready").send({});
+    expect(readyRes.status).toBe(200);
+    expect(readyRes.body.ready.schemaVersion).toBe(3);
+    expect(readyRes.body.ready.status).toBe("ready_to_file");
+
+    const requestRes = await request(app).post("/api/properties/prop-1/registry-submission/filing-request").send({});
+    expect(requestRes.status).toBe(200);
+    expect(requestRes.body.request.adapterKey).toBe("halifax_rental_registry_manual_portal_v1");
+    expect(requestRes.body.request.status).toBe("ready_to_file");
+  });
+
+  it("persists filing lifecycle transitions and exposes filing status in registry-status", async () => {
+    const app = await createApp();
+    seedDoc("properties", "prop-1", {
+      landlordId: "landlord-1",
+      addressLine1: "12 Wharf Street",
+      city: "Halifax",
+      province: "NS",
+      postalCode: "B3H 1A1",
+      country: "Canada",
+      totalUnits: 8,
+    });
+    const draft = buildSubmissionDraft({
+      id: "prop-1",
+      addressLine1: "12 Wharf Street",
+      city: "Halifax",
+      province: "NS",
+      postalCode: "B3H 1A1",
+      country: "Canada",
+      totalUnits: 8,
+    });
+    seedDoc("propertyRegistrySubmissions", draft.draftId, draft);
+
+    await request(app).post("/api/properties/prop-1/registry-submission/ready").send({});
+    await request(app).post("/api/properties/prop-1/registry-submission/filing-request").send({});
+    const patchRes = await request(app)
+      .patch("/api/properties/prop-1/registry-submission/filing-request")
+      .send({
+        status: "filed_pending_confirmation",
+        note: "Submitted through Halifax portal.",
+        referenceNumbers: [{ type: "submission_id", value: "SUB-12345" }],
+      });
+
+    expect(patchRes.status).toBe(200);
+    expect(patchRes.body.filing.currentStatus).toBe("filed_pending_confirmation");
+    expect(patchRes.body.filing.result.referenceNumbers[0].value).toBe("SUB-12345");
+
+    const statusRes = await request(app).get("/api/properties/prop-1/registry-status");
+    expect(statusRes.status).toBe(200);
+    expect(statusRes.body.filing.currentStatus).toBe("filed_pending_confirmation");
   });
 });

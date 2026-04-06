@@ -14,6 +14,13 @@ import {
   markPropertyRegistrySubmissionExported,
   savePropertyRegistrySubmissionDraft,
 } from "../services/registry/halifaxRegistrySubmissionService";
+import {
+  createRegistrySubmissionFilingRequest,
+  createRegistrySubmissionReadyPackage,
+  loadRegistrySubmissionFilingSummaryByDraftId,
+  loadRegistrySubmissionReadyPackage,
+  updateRegistrySubmissionFilingLifecycle,
+} from "../services/registry/registrySubmissionLayerV3";
 import { GENERIC_CANADA_FIELD_MAP } from "../services/registry/schemas/genericCanadaRegistryReadySchema";
 import { normalizePid } from "../services/registry/registryUtils";
 
@@ -643,7 +650,7 @@ router.get("/:propertyId/registry-status", async (req: any, res) => {
           available: false,
           message: coverageMessage,
         },
-        pidPrompt: {
+      pidPrompt: {
           propertyPid: propertyPid || null,
           propertyPidMissing: !propertyPid,
           registryPid: null,
@@ -654,6 +661,7 @@ router.get("/:propertyId/registry-status", async (req: any, res) => {
           actionable: false,
         },
         readiness,
+        filing: await loadRegistrySubmissionFilingSummaryByDraftId(submission.draftId),
       });
     }
     let projection = await getPropertyRegistryProjection({ propertyId, source });
@@ -712,6 +720,7 @@ router.get("/:propertyId/registry-status", async (req: any, res) => {
         actionable: pidPromptEligible,
       },
       readiness,
+      filing: await loadRegistrySubmissionFilingSummaryByDraftId(submission.draftId),
     });
   } catch (err: any) {
     console.error("[GET /api/properties/:propertyId/registry-status] failed", err);
@@ -750,6 +759,7 @@ async function loadRegistrySubmissionResponse(req: any, res: any) {
       submission,
       fieldMap: resolveRegistrySchemaFieldMap(property),
       schema,
+      filing: await loadRegistrySubmissionFilingSummaryByDraftId(submission.draftId),
     });
   } catch (err: any) {
     console.error("[GET /api/properties/:propertyId/registry-submission] failed", err);
@@ -796,6 +806,7 @@ async function saveRegistrySubmissionResponse(req: any, res: any) {
       submission,
       fieldMap: resolveRegistrySchemaFieldMap(property),
       schema,
+      filing: await loadRegistrySubmissionFilingSummaryByDraftId(submission.draftId),
     });
   } catch (err: any) {
     console.error("[PUT /api/properties/:propertyId/registry-submission] failed", err);
@@ -858,6 +869,142 @@ async function exportRegistrySubmissionResponse(req: any, res: any) {
   }
 }
 
+async function createRegistrySubmissionReadyResponse(req: any, res: any) {
+  const roleAdmin = isAdminRole(req);
+  const landlordId = resolveLandlordId(req);
+  const propertyId = String(req.params?.propertyId || "").trim();
+
+  if (!propertyId) return res.status(400).json({ ok: false, error: "property_id_required" });
+  if (!roleAdmin && !landlordId) return res.status(401).json({ ok: false, error: "unauthorized" });
+
+  try {
+    const property = await loadPropertyOr404(propertyId);
+    if (!property) return res.status(404).json({ ok: false, error: "not_found" });
+    const ownership = ensurePropertyOwnership({ req, property, landlordId, roleAdmin });
+    if (!ownership.ok) {
+      return res.status(403).json({ ok: false, error: "forbidden" });
+    }
+
+    const ready = await createRegistrySubmissionReadyPackage({
+      property: { id: propertyId, ...property },
+      landlordId: ownership.ownerLandlordId || landlordId,
+      actorId: String(req.user?.id || "").trim() || null,
+    });
+
+    return res.json({ ok: true, ready });
+  } catch (err: any) {
+    console.error("[POST /api/properties/:propertyId/registry-submission/ready] failed", err);
+    return res.status(500).json({
+      ok: false,
+      error: "registry_submission_ready_failed",
+      message: err?.message || "Failed to build registry filing package",
+    });
+  }
+}
+
+async function fetchRegistrySubmissionReadyResponse(req: any, res: any) {
+  const roleAdmin = isAdminRole(req);
+  const landlordId = resolveLandlordId(req);
+  const propertyId = String(req.params?.propertyId || "").trim();
+
+  if (!propertyId) return res.status(400).json({ ok: false, error: "property_id_required" });
+  if (!roleAdmin && !landlordId) return res.status(401).json({ ok: false, error: "unauthorized" });
+
+  try {
+    const property = await loadPropertyOr404(propertyId);
+    if (!property) return res.status(404).json({ ok: false, error: "not_found" });
+    const ownership = ensurePropertyOwnership({ req, property, landlordId, roleAdmin });
+    if (!ownership.ok) {
+      return res.status(403).json({ ok: false, error: "forbidden" });
+    }
+
+    const ready = await loadRegistrySubmissionReadyPackage({
+      property: { id: propertyId, ...property },
+      landlordId: ownership.ownerLandlordId || landlordId,
+    });
+
+    return res.json({ ok: true, ready });
+  } catch (err: any) {
+    console.error("[GET /api/properties/:propertyId/registry-submission/ready] failed", err);
+    return res.status(500).json({
+      ok: false,
+      error: "registry_submission_ready_load_failed",
+      message: err?.message || "Failed to load registry filing package",
+    });
+  }
+}
+
+async function createRegistrySubmissionFilingRequestResponse(req: any, res: any) {
+  const roleAdmin = isAdminRole(req);
+  const landlordId = resolveLandlordId(req);
+  const propertyId = String(req.params?.propertyId || "").trim();
+
+  if (!propertyId) return res.status(400).json({ ok: false, error: "property_id_required" });
+  if (!roleAdmin && !landlordId) return res.status(401).json({ ok: false, error: "unauthorized" });
+
+  try {
+    const property = await loadPropertyOr404(propertyId);
+    if (!property) return res.status(404).json({ ok: false, error: "not_found" });
+    const ownership = ensurePropertyOwnership({ req, property, landlordId, roleAdmin });
+    if (!ownership.ok) {
+      return res.status(403).json({ ok: false, error: "forbidden" });
+    }
+
+    const requestRecord = await createRegistrySubmissionFilingRequest({
+      property: { id: propertyId, ...property },
+      landlordId: ownership.ownerLandlordId || landlordId,
+      actorId: String(req.user?.id || "").trim() || null,
+    });
+
+    return res.json({ ok: true, request: requestRecord });
+  } catch (err: any) {
+    console.error("[POST /api/properties/:propertyId/registry-submission/filing-request] failed", err);
+    const message = String(err?.message || "").toLowerCase();
+    return res.status(message.includes("ready to file") ? 400 : 500).json({
+      ok: false,
+      error: "registry_submission_request_failed",
+      message: err?.message || "Failed to create registry filing request",
+    });
+  }
+}
+
+async function updateRegistrySubmissionFilingStatusResponse(req: any, res: any) {
+  const roleAdmin = isAdminRole(req);
+  const landlordId = resolveLandlordId(req);
+  const propertyId = String(req.params?.propertyId || "").trim();
+
+  if (!propertyId) return res.status(400).json({ ok: false, error: "property_id_required" });
+  if (!roleAdmin && !landlordId) return res.status(401).json({ ok: false, error: "unauthorized" });
+
+  try {
+    const property = await loadPropertyOr404(propertyId);
+    if (!property) return res.status(404).json({ ok: false, error: "not_found" });
+    const ownership = ensurePropertyOwnership({ req, property, landlordId, roleAdmin });
+    if (!ownership.ok) {
+      return res.status(403).json({ ok: false, error: "forbidden" });
+    }
+
+    const filing = await updateRegistrySubmissionFilingLifecycle({
+      property: { id: propertyId, ...property },
+      landlordId: ownership.ownerLandlordId || landlordId,
+      actorId: String(req.user?.id || "").trim() || null,
+      status: req.body?.status,
+      note: req.body?.note || null,
+      referenceNumbers: Array.isArray(req.body?.referenceNumbers) ? req.body.referenceNumbers : [],
+      evidence: Array.isArray(req.body?.evidence) ? req.body.evidence : [],
+    });
+
+    return res.json({ ok: true, filing });
+  } catch (err: any) {
+    console.error("[PATCH /api/properties/:propertyId/registry-submission/filing-request] failed", err);
+    return res.status(500).json({
+      ok: false,
+      error: "registry_submission_filing_update_failed",
+      message: err?.message || "Failed to update registry filing status",
+    });
+  }
+}
+
 function resolveRegistrySchemaFieldMap(property: Record<string, any>) {
   const schema = getRegistrySchemaSummaryForProperty(property);
   if (schema.schemaKey === "halifax_rental_registry_v1") {
@@ -869,6 +1016,10 @@ function resolveRegistrySchemaFieldMap(property: Record<string, any>) {
 router.get("/:propertyId/registry-submission", loadRegistrySubmissionResponse);
 router.put("/:propertyId/registry-submission", saveRegistrySubmissionResponse);
 router.get("/:propertyId/registry-submission/export", exportRegistrySubmissionResponse);
+router.post("/:propertyId/registry-submission/ready", createRegistrySubmissionReadyResponse);
+router.get("/:propertyId/registry-submission/ready", fetchRegistrySubmissionReadyResponse);
+router.post("/:propertyId/registry-submission/filing-request", createRegistrySubmissionFilingRequestResponse);
+router.patch("/:propertyId/registry-submission/filing-request", updateRegistrySubmissionFilingStatusResponse);
 
 router.get("/:propertyId/registry-submission/halifax", loadRegistrySubmissionResponse);
 router.put("/:propertyId/registry-submission/halifax", saveRegistrySubmissionResponse);
