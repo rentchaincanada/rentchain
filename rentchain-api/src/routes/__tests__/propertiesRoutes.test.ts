@@ -920,4 +920,151 @@ describe("properties routes publish + defaults", () => {
     expect(statusRes.status).toBe(200);
     expect(statusRes.body.filing.currentStatus).toBe("filed_pending_confirmation");
   });
+
+  it("lists filing attempts newest-first and preserves prior attempts when retrying a rejected attempt", async () => {
+    const app = await createApp();
+    seedDoc("properties", "prop-1", {
+      landlordId: "landlord-1",
+      addressLine1: "12 Wharf Street",
+      city: "Halifax",
+      province: "NS",
+      postalCode: "B3H 1A1",
+      country: "Canada",
+      totalUnits: 8,
+    });
+    const draft = buildSubmissionDraft({
+      id: "prop-1",
+      addressLine1: "12 Wharf Street",
+      city: "Halifax",
+      province: "NS",
+      postalCode: "B3H 1A1",
+      country: "Canada",
+      totalUnits: 8,
+    });
+    seedDoc("propertyRegistrySubmissions", draft.draftId, draft);
+
+    await request(app).post("/api/properties/prop-1/registry-submission/ready").send({});
+    const requestRes = await request(app).post("/api/properties/prop-1/registry-submission/filing-request").send({});
+    expect(requestRes.status).toBe(200);
+
+    const rejectRes = await request(app)
+      .patch("/api/properties/prop-1/registry-submission/filing-request")
+      .send({
+        attemptId: requestRes.body.request.attemptId,
+        status: "rejected",
+        note: "Municipality requested corrections.",
+        referenceNumbers: [{ type: "external_reference", value: "RJ-22" }],
+      });
+    expect(rejectRes.status).toBe(200);
+    expect(rejectRes.body.filing.latestAttempt.status).toBe("rejected");
+
+    const retryRes = await request(app)
+      .post("/api/properties/prop-1/registry-submission/filing-attempts/retry")
+      .send({ attemptId: requestRes.body.request.attemptId });
+    expect(retryRes.status).toBe(200);
+    expect(retryRes.body.attempt.attemptNumber).toBe(2);
+    expect(retryRes.body.attempt.status).toBe("ready_to_file");
+    expect(retryRes.body.request.attemptId).toBe(retryRes.body.attempt.attemptId);
+
+    const historyRes = await request(app).get("/api/properties/prop-1/registry-submission/filing-attempts");
+    expect(historyRes.status).toBe(200);
+    expect(historyRes.body.attempts).toHaveLength(2);
+    expect(historyRes.body.attempts[0].attemptNumber).toBe(2);
+    expect(historyRes.body.attempts[1].attemptNumber).toBe(1);
+    expect(historyRes.body.latestAttempt.attemptId).toBe(retryRes.body.attempt.attemptId);
+
+    const statusRes = await request(app).get("/api/properties/prop-1/registry-status");
+    expect(statusRes.status).toBe(200);
+    expect(statusRes.body.filing.currentStatus).toBe("ready_to_file");
+    expect(statusRes.body.filing.latestAttempt.attemptNumber).toBe(2);
+  });
+
+  it("blocks retry when the ready package is stale relative to the draft", async () => {
+    const app = await createApp();
+    seedDoc("properties", "prop-1", {
+      landlordId: "landlord-1",
+      addressLine1: "12 Wharf Street",
+      city: "Halifax",
+      province: "NS",
+      postalCode: "B3H 1A1",
+      country: "Canada",
+      totalUnits: 8,
+    });
+    const draft = buildSubmissionDraft({
+      id: "prop-1",
+      addressLine1: "12 Wharf Street",
+      city: "Halifax",
+      province: "NS",
+      postalCode: "B3H 1A1",
+      country: "Canada",
+      totalUnits: 8,
+    });
+    seedDoc("propertyRegistrySubmissions", draft.draftId, draft);
+
+    await request(app).post("/api/properties/prop-1/registry-submission/ready").send({});
+    const requestRes = await request(app).post("/api/properties/prop-1/registry-submission/filing-request").send({});
+    await request(app)
+      .patch("/api/properties/prop-1/registry-submission/filing-request")
+      .send({
+        attemptId: requestRes.body.request.attemptId,
+        status: "failed",
+        note: "Portal timeout.",
+      });
+
+    seedDoc("propertyRegistrySubmissions", draft.draftId, {
+      ...draft,
+      timestamps: {
+        ...draft.timestamps,
+        updatedAt: "2026-04-07T00:00:00.000Z",
+      },
+    });
+
+    const retryRes = await request(app)
+      .post("/api/properties/prop-1/registry-submission/filing-attempts/retry")
+      .send({ attemptId: requestRes.body.request.attemptId });
+
+    expect(retryRes.status).toBe(400);
+    expect(String(retryRes.body.message || "")).toContain("Regenerate the ready package");
+  });
+
+  it("does not allow retrying a confirmed attempt", async () => {
+    const app = await createApp();
+    seedDoc("properties", "prop-1", {
+      landlordId: "landlord-1",
+      addressLine1: "12 Wharf Street",
+      city: "Halifax",
+      province: "NS",
+      postalCode: "B3H 1A1",
+      country: "Canada",
+      totalUnits: 8,
+    });
+    const draft = buildSubmissionDraft({
+      id: "prop-1",
+      addressLine1: "12 Wharf Street",
+      city: "Halifax",
+      province: "NS",
+      postalCode: "B3H 1A1",
+      country: "Canada",
+      totalUnits: 8,
+    });
+    seedDoc("propertyRegistrySubmissions", draft.draftId, draft);
+
+    await request(app).post("/api/properties/prop-1/registry-submission/ready").send({});
+    const requestRes = await request(app).post("/api/properties/prop-1/registry-submission/filing-request").send({});
+    await request(app)
+      .patch("/api/properties/prop-1/registry-submission/filing-request")
+      .send({
+        attemptId: requestRes.body.request.attemptId,
+        status: "filed_confirmed",
+        note: "Confirmed by Halifax.",
+        referenceNumbers: [{ type: "submission_id", value: "SUB-12345" }],
+      });
+
+    const retryRes = await request(app)
+      .post("/api/properties/prop-1/registry-submission/filing-attempts/retry")
+      .send({ attemptId: requestRes.body.request.attemptId });
+
+    expect(retryRes.status).toBe(400);
+    expect(String(retryRes.body.message || "")).toContain("cannot be retried");
+  });
 });

@@ -83,9 +83,34 @@ export type RegistrySubmissionReadyV3 = {
   };
 };
 
+export type RegistrySubmissionAttemptV3 = {
+  schemaVersion: 3;
+  attemptId: string;
+  propertyId: string;
+  sourceDraftId: string;
+  readyId: string;
+  requestId: string;
+  resultId: string | null;
+  attemptNumber: number;
+  filingChannel: RegistryFilingChannel;
+  adapterKey: string;
+  status: RegistrySubmissionLifecycleStatus;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string | null;
+  updatedBy: string | null;
+  referenceNumbers: RegistrySubmissionReferenceNumberV3[];
+  operatorNotes: string | null;
+  evidence: RegistrySubmissionEvidenceV3[];
+  audit: {
+    events: RegistrySubmissionAuditEventV3[];
+  };
+};
+
 export type RegistrySubmissionRequestV3 = {
   schemaVersion: 3;
   requestId: string;
+  attemptId: string;
   readyId: string;
   sourceDraftId: string;
   propertyId: string;
@@ -121,6 +146,7 @@ export type RegistrySubmissionRequestV3 = {
 export type RegistrySubmissionResultV3 = {
   schemaVersion: 3;
   resultId: string;
+  attemptId: string;
   requestId: string;
   readyId: string;
   sourceDraftId: string;
@@ -156,6 +182,8 @@ export type RegistrySubmissionResultV3 = {
 
 export type RegistrySubmissionFilingSummaryV3 = {
   ready: RegistrySubmissionReadyV3 | null;
+  latestAttempt: RegistrySubmissionAttemptV3 | null;
+  attempts: RegistrySubmissionAttemptV3[];
   request: RegistrySubmissionRequestV3 | null;
   result: RegistrySubmissionResultV3 | null;
   currentStatus: RegistrySubmissionLifecycleStatus | null;

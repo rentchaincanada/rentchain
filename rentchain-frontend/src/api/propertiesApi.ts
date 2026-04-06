@@ -386,9 +386,34 @@ export interface RegistrySubmissionReadyV3 {
   };
 }
 
+export interface RegistrySubmissionAttemptV3 {
+  schemaVersion: 3;
+  attemptId: string;
+  propertyId: string;
+  sourceDraftId: string;
+  readyId: string;
+  requestId: string;
+  resultId: string | null;
+  attemptNumber: number;
+  filingChannel: RegistryFilingChannel;
+  adapterKey: string;
+  status: RegistrySubmissionLifecycleStatus;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string | null;
+  updatedBy: string | null;
+  referenceNumbers: RegistrySubmissionReferenceNumberV3[];
+  operatorNotes: string | null;
+  evidence: RegistrySubmissionEvidenceV3[];
+  audit: {
+    events: RegistrySubmissionAuditEventV3[];
+  };
+}
+
 export interface RegistrySubmissionRequestV3 {
   schemaVersion: 3;
   requestId: string;
+  attemptId: string;
   readyId: string;
   sourceDraftId: string;
   propertyId: string;
@@ -424,6 +449,7 @@ export interface RegistrySubmissionRequestV3 {
 export interface RegistrySubmissionResultV3 {
   schemaVersion: 3;
   resultId: string;
+  attemptId: string;
   requestId: string;
   readyId: string;
   sourceDraftId: string;
@@ -459,6 +485,8 @@ export interface RegistrySubmissionResultV3 {
 
 export interface RegistrySubmissionFilingSummaryV3 {
   ready: RegistrySubmissionReadyV3 | null;
+  latestAttempt: RegistrySubmissionAttemptV3 | null;
+  attempts: RegistrySubmissionAttemptV3[];
   request: RegistrySubmissionRequestV3 | null;
   result: RegistrySubmissionResultV3 | null;
   currentStatus: RegistrySubmissionLifecycleStatus | null;
@@ -733,6 +761,7 @@ export async function updateRegistrySubmissionFilingStatus(
       RegistrySubmissionLifecycleStatus,
       "filed_pending_confirmation" | "filed_confirmed" | "rejected" | "failed" | "cancelled"
     >;
+    attemptId?: string | null;
     note?: string | null;
     referenceNumbers?: Array<Partial<RegistrySubmissionReferenceNumberV3>>;
     evidence?: Array<Partial<RegistrySubmissionEvidenceV3>>;
@@ -754,6 +783,7 @@ export async function attachFilingReferenceAndNotes(
   propertyId: string,
   payload: {
     status?: "filed_pending_confirmation";
+    attemptId?: string | null;
     note?: string | null;
     referenceNumber?: string | null;
     evidenceReference?: string | null;
@@ -761,6 +791,7 @@ export async function attachFilingReferenceAndNotes(
 ) {
   return updateRegistrySubmissionFilingStatus(propertyId, {
     status: payload.status || "filed_pending_confirmation",
+    attemptId: payload.attemptId || null,
     note: payload.note || null,
     referenceNumbers: payload.referenceNumber
       ? [
@@ -782,6 +813,35 @@ export async function attachFilingReferenceAndNotes(
         ]
       : [],
   });
+}
+
+export async function fetchRegistrySubmissionAttempts(propertyId: string): Promise<{
+  sourceDraftId: string;
+  latestAttempt: RegistrySubmissionAttemptV3 | null;
+  attempts: RegistrySubmissionAttemptV3[];
+}> {
+  const res = await api.get(`/properties/${encodeURIComponent(propertyId)}/registry-submission/filing-attempts`);
+  return res.data;
+}
+
+export async function fetchLatestRegistrySubmissionAttempt(propertyId: string): Promise<{
+  latestAttempt: RegistrySubmissionAttemptV3 | null;
+}> {
+  const res = await api.get(`/properties/${encodeURIComponent(propertyId)}/registry-submission/filing-attempts/latest`);
+  return res.data;
+}
+
+export async function retryRegistrySubmissionAttempt(
+  propertyId: string,
+  payload?: { attemptId?: string | null }
+): Promise<{
+  ready: RegistrySubmissionReadyV3;
+  attempt: RegistrySubmissionAttemptV3;
+  request: RegistrySubmissionRequestV3;
+  filing: RegistrySubmissionFilingSummaryV3;
+}> {
+  const res = await api.post(`/properties/${encodeURIComponent(propertyId)}/registry-submission/filing-attempts/retry`, payload || {});
+  return res.data;
 }
 
 export async function updateProperty(

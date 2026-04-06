@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   fetchPropertyRegistrySubmission: vi.fn(),
   createReadyFromDraft: vi.fn(),
   createRegistrySubmissionFilingRequest: vi.fn(),
+  retryRegistrySubmissionAttempt: vi.fn(),
   updateRegistrySubmissionFilingStatus: vi.fn(),
   attachFilingReferenceAndNotes: vi.fn(),
 }));
@@ -19,6 +20,7 @@ vi.mock("../../api/propertiesApi", async () => {
     fetchPropertyRegistrySubmission: mocks.fetchPropertyRegistrySubmission,
     createReadyFromDraft: mocks.createReadyFromDraft,
     createRegistrySubmissionFilingRequest: mocks.createRegistrySubmissionFilingRequest,
+    retryRegistrySubmissionAttempt: mocks.retryRegistrySubmissionAttempt,
     updateRegistrySubmissionFilingStatus: mocks.updateRegistrySubmissionFilingStatus,
     attachFilingReferenceAndNotes: mocks.attachFilingReferenceAndNotes,
   };
@@ -97,6 +99,8 @@ function buildStatus(overrides: Record<string, any> = {}) {
     },
     filing: {
       ready: null,
+      latestAttempt: null,
+      attempts: [],
       request: null,
       result: null,
       currentStatus: null,
@@ -313,6 +317,8 @@ function buildSubmission(overrides: Record<string, any> = {}) {
     },
     filing: {
       ready: null,
+      latestAttempt: null,
+      attempts: [],
       request: null,
       result: null,
       currentStatus: null,
@@ -327,6 +333,7 @@ describe("PropertyRegistryStatusCard", () => {
     mocks.fetchPropertyRegistrySubmission.mockReset();
     mocks.createReadyFromDraft.mockReset();
     mocks.createRegistrySubmissionFilingRequest.mockReset();
+    mocks.retryRegistrySubmissionAttempt.mockReset();
     mocks.updateRegistrySubmissionFilingStatus.mockReset();
     mocks.attachFilingReferenceAndNotes.mockReset();
   });
@@ -776,5 +783,233 @@ expect(screen.getByRole("button", { name: "View details" })).toBeInTheDocument()
 
     fireEvent.click(within(dialog).getByRole("button", { name: "Regenerate filing package" }));
     await waitFor(() => expect(mocks.createReadyFromDraft).toHaveBeenCalledWith("prop-1"));
+  });
+
+  it("renders attempts history and allows retrying the latest rejected attempt when the ready package is still current", async () => {
+    mocks.fetchPropertyRegistryStatus
+      .mockResolvedValueOnce(
+        buildStatus({
+          filing: {
+            ready: {
+              schemaVersion: 3,
+              readyId: "ready-2",
+              sourceDraftId: "prop-1__halifax_rental_registry_form",
+              sourceDraftVersion: 2,
+              propertyId: "prop-1",
+              sourceKey: "halifax_rental_registry_form",
+              schemaKey: "halifax_rental_registry_v1",
+              schemaLabel: "Halifax Rental Registry",
+              assistantType: "halifax_registry_submission_assistant",
+              filingChannel: "manual_portal",
+              status: "ready_to_file",
+              createdAt: "2026-04-06T12:00:00.000Z",
+              updatedAt: "2026-04-06T12:00:00.000Z",
+              actor: { landlordId: "landlord-1", updatedBy: "operator-1" },
+              jurisdiction: { country: "CA", province: "NS", municipality: "Halifax" },
+              validation: { missingRequiredFields: [], missingConsentItems: [], warnings: [], readinessScore: 96, completionPercent: 96, exportReady: true, errors: [] },
+              consentLock: {
+                preparationAuthorized: true,
+                preparationAuthorizedAt: "2026-04-05T00:00:00.000Z",
+                preparationAuthorizedBy: "landlord-1",
+                declarationsConfirmed: true,
+                declarationsConfirmedAt: "2026-04-05T00:02:00.000Z",
+                declarationsConfirmedBy: "landlord-1",
+                finalReviewConfirmed: false,
+                finalReviewConfirmedAt: null,
+              },
+              declarationsLock: { items: [], acceptedIds: [] },
+              normalizedSubmission: { sections: [], attachments: [], disclaimer: "Draft only." },
+              audit: { sourceDraftUpdatedAt: "2026-04-06T00:00:00.000Z", events: [] },
+            },
+            latestAttempt: {
+              schemaVersion: 3,
+              attemptId: "prop-1__attempt_2",
+              propertyId: "prop-1",
+              sourceDraftId: "prop-1__halifax_rental_registry_form",
+              readyId: "ready-2",
+              requestId: "prop-1__attempt_2__request",
+              resultId: "prop-1__attempt_2__result",
+              attemptNumber: 2,
+              filingChannel: "manual_portal",
+              adapterKey: "halifax_rental_registry_manual_portal_v1",
+              status: "rejected",
+              createdAt: "2026-04-06T12:00:00.000Z",
+              updatedAt: "2026-04-06T13:00:00.000Z",
+              createdBy: "operator-1",
+              updatedBy: "operator-2",
+              referenceNumbers: [{ type: "external_reference", value: "RJ-22", label: "Reference number", recordedAt: "2026-04-06T13:00:00.000Z", recordedBy: "operator-2" }],
+              operatorNotes: "Municipality requested corrections.",
+              evidence: [],
+              audit: { events: [] },
+            },
+            attempts: [
+              {
+                schemaVersion: 3,
+                attemptId: "prop-1__attempt_2",
+                propertyId: "prop-1",
+                sourceDraftId: "prop-1__halifax_rental_registry_form",
+                readyId: "ready-2",
+                requestId: "prop-1__attempt_2__request",
+                resultId: "prop-1__attempt_2__result",
+                attemptNumber: 2,
+                filingChannel: "manual_portal",
+                adapterKey: "halifax_rental_registry_manual_portal_v1",
+                status: "rejected",
+                createdAt: "2026-04-06T12:00:00.000Z",
+                updatedAt: "2026-04-06T13:00:00.000Z",
+                createdBy: "operator-1",
+                updatedBy: "operator-2",
+                referenceNumbers: [{ type: "external_reference", value: "RJ-22", label: "Reference number", recordedAt: "2026-04-06T13:00:00.000Z", recordedBy: "operator-2" }],
+                operatorNotes: "Municipality requested corrections.",
+                evidence: [],
+                audit: { events: [] },
+              },
+              {
+                schemaVersion: 3,
+                attemptId: "prop-1__attempt_1",
+                propertyId: "prop-1",
+                sourceDraftId: "prop-1__halifax_rental_registry_form",
+                readyId: "ready-1",
+                requestId: "prop-1__attempt_1__request",
+                resultId: "prop-1__attempt_1__result",
+                attemptNumber: 1,
+                filingChannel: "manual_portal",
+                adapterKey: "halifax_rental_registry_manual_portal_v1",
+                status: "failed",
+                createdAt: "2026-04-05T12:00:00.000Z",
+                updatedAt: "2026-04-05T12:30:00.000Z",
+                createdBy: "operator-1",
+                updatedBy: "operator-1",
+                referenceNumbers: [],
+                operatorNotes: "Portal timed out.",
+                evidence: [],
+                audit: { events: [] },
+              },
+            ],
+            request: {
+              schemaVersion: 3,
+              requestId: "prop-1__attempt_2__request",
+              attemptId: "prop-1__attempt_2",
+              readyId: "ready-2",
+              sourceDraftId: "prop-1__halifax_rental_registry_form",
+              propertyId: "prop-1",
+              sourceKey: "halifax_rental_registry_form",
+              schemaKey: "halifax_rental_registry_v1",
+              schemaLabel: "Halifax Rental Registry",
+              filingChannel: "manual_portal",
+              adapterKey: "halifax_rental_registry_manual_portal_v1",
+              status: "rejected",
+              createdAt: "2026-04-06T12:05:00.000Z",
+              updatedAt: "2026-04-06T13:00:00.000Z",
+              actor: { requestedBy: "operator-1", updatedBy: "operator-2" },
+              checklist: { portalUrl: null, steps: [], notes: [] },
+              payload: { sections: [], disclaimer: "Draft only." },
+              referenceNumbers: [],
+              operatorNotes: "Municipality requested corrections.",
+              evidence: [],
+              audit: { events: [] },
+            },
+            result: {
+              schemaVersion: 3,
+              resultId: "prop-1__attempt_2__result",
+              attemptId: "prop-1__attempt_2",
+              requestId: "prop-1__attempt_2__request",
+              readyId: "ready-2",
+              sourceDraftId: "prop-1__halifax_rental_registry_form",
+              propertyId: "prop-1",
+              sourceKey: "halifax_rental_registry_form",
+              schemaKey: "halifax_rental_registry_v1",
+              filingChannel: "manual_portal",
+              adapterKey: "halifax_rental_registry_manual_portal_v1",
+              status: "rejected",
+              createdAt: "2026-04-06T12:05:00.000Z",
+              updatedAt: "2026-04-06T13:00:00.000Z",
+              submittedAt: "2026-04-06T12:10:00.000Z",
+              confirmedAt: null,
+              rejectedAt: "2026-04-06T13:00:00.000Z",
+              failedAt: null,
+              cancelledAt: null,
+              actor: { updatedBy: "operator-2" },
+              referenceNumbers: [{ type: "external_reference", value: "RJ-22", label: "Reference number", recordedAt: "2026-04-06T13:00:00.000Z", recordedBy: "operator-2" }],
+              operatorNotes: "Municipality requested corrections.",
+              evidence: [],
+              outcome: { message: "Municipality requested corrections." },
+              audit: { events: [] },
+            },
+            currentStatus: "rejected",
+          },
+        })
+      )
+      .mockResolvedValueOnce(
+        buildStatus({
+          filing: {
+            ready: null,
+            latestAttempt: {
+              schemaVersion: 3,
+              attemptId: "prop-1__attempt_3",
+              propertyId: "prop-1",
+              sourceDraftId: "prop-1__halifax_rental_registry_form",
+              readyId: "ready-2",
+              requestId: "prop-1__attempt_3__request",
+              resultId: null,
+              attemptNumber: 3,
+              filingChannel: "manual_portal",
+              adapterKey: "halifax_rental_registry_manual_portal_v1",
+              status: "ready_to_file",
+              createdAt: "2026-04-06T14:00:00.000Z",
+              updatedAt: "2026-04-06T14:00:00.000Z",
+              createdBy: "operator-2",
+              updatedBy: "operator-2",
+              referenceNumbers: [],
+              operatorNotes: "Retry created from prior attempt.",
+              evidence: [],
+              audit: { events: [] },
+            },
+            attempts: [],
+            request: null,
+            result: null,
+            currentStatus: "ready_to_file",
+          },
+        })
+      );
+    mocks.fetchPropertyRegistrySubmission.mockResolvedValue(buildSubmission());
+    mocks.retryRegistrySubmissionAttempt.mockResolvedValue({
+      ready: { readyId: "ready-2" },
+      attempt: { attemptId: "prop-1__attempt_3" },
+      request: { requestId: "prop-1__attempt_3__request" },
+      filing: { currentStatus: "ready_to_file" },
+    });
+
+    render(
+      <PropertyRegistryStatusCard
+        property={{
+          id: "prop-1",
+          name: "Harbour View",
+          addressLine1: "12 Wharf Street",
+          city: "Halifax",
+          province: "NS",
+          postalCode: "B3H 1A1",
+          totalUnits: 8,
+          units: [],
+          createdAt: "2026-04-05T00:00:00.000Z",
+        }}
+      />
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "View details" }));
+    const dialog = await screen.findByRole("dialog", { name: "Compliance and registry details" });
+
+    expect(within(dialog).getByText("Latest filing attempt (#2)")).toBeInTheDocument();
+    expect(within(dialog).getByText("Attempt #1")).toBeInTheDocument();
+    expect(within(dialog).getByText("Municipality requested corrections.")).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Retry filing attempt" })).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Retry filing attempt" }));
+
+    await waitFor(() => {
+      expect(mocks.retryRegistrySubmissionAttempt).toHaveBeenCalledWith("prop-1", {
+        attemptId: "prop-1__attempt_2",
+      });
+    });
   });
 });
