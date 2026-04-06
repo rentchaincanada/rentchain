@@ -24,8 +24,6 @@ const pricingCardMotionStyle: React.CSSProperties = {
   willChange: "transform, box-shadow",
 };
 
-const desktopPricingGap = "22px";
-
 const wrappingTextStyle: React.CSSProperties = {
   whiteSpace: "normal",
   overflowWrap: "anywhere",
@@ -70,6 +68,7 @@ const PricingPage: React.FC = () => {
   const [interval, setInterval] = React.useState<PricingInterval>("monthly");
   const [pricingByPlan, setPricingByPlan] = React.useState<Partial<Record<BillingPlanPricing["key"], BillingPlanPricing>>>({});
   const [hoveredPlan, setHoveredPlan] = React.useState<PlanKey | null>(null);
+  const [isMobile, setIsMobile] = React.useState(false);
   const safeTrack = (eventName: string, props: Record<string, unknown>) => {
     try {
       track(eventName, props);
@@ -77,6 +76,19 @@ const PricingPage: React.FC = () => {
       // telemetry must never interrupt UX
     }
   };
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const media = window.matchMedia("(max-width: 767px)");
+    const update = () => setIsMobile(media.matches);
+    update();
+    if (typeof media.addEventListener === "function") {
+      media.addEventListener("change", update);
+      return () => media.removeEventListener("change", update);
+    }
+    media.addListener?.(update);
+    return () => media.removeListener?.(update);
+  }, []);
 
   React.useEffect(() => {
     let active = true;
@@ -173,12 +185,9 @@ const PricingPage: React.FC = () => {
         <div
           style={{
             display: "grid",
-            gap: "24px",
-            gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+            gridTemplateColumns: isMobile ? "1fr" : "repeat(4, minmax(0, 1fr))",
+            gap: spacing.md,
             alignItems: "stretch",
-            overflow: "visible",
-            padding: "8px",
-            margin: "-8px",
           }}
         >
           <Card style={{ gridColumn: "1 / -1" }}>
@@ -210,7 +219,7 @@ const PricingPage: React.FC = () => {
                 flexDirection: "column",
                 gap: 16,
                 minWidth: 0,
-                minHeight: "unset",
+                minHeight: isMobile ? "unset" : 0,
                 height: "100%",
                 padding: 20,
                 position: "relative",
@@ -356,7 +365,7 @@ const PricingPage: React.FC = () => {
                   ))}
                 </div>
               ) : null}
-              <div style={{ marginTop: 12, paddingTop: 8, width: "100%" }}>
+              <div style={{ marginTop: isMobile ? spacing.sm : "auto", paddingTop: 8, width: "100%" }}>
                 {plan === "free" ? (
                   <Button type="button" variant="secondary" onClick={() => navigate("/dashboard")} style={{ width: "100%" }}>
                     Start Free
