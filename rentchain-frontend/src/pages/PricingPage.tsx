@@ -21,6 +21,7 @@ type PlanKey = PricingPlanKey;
 
 const pricingCardMotionStyle: React.CSSProperties = {
   transition: "transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease",
+  willChange: "transform, box-shadow",
 };
 
 const wrappingTextStyle: React.CSSProperties = {
@@ -32,6 +33,13 @@ const wrappingTextStyle: React.CSSProperties = {
 const PLAN_FEATURES: Record<PlanKey, string[]> = Object.fromEntries(
   DEFAULT_PLANS.map((plan) => [plan.key, plan.features])
 ) as Record<PlanKey, string[]>;
+
+function pricingCardShadow(plan: PlanKey, hovered: boolean) {
+  if (plan === "pro") {
+    return hovered ? "0 22px 42px rgba(37,99,235,0.16)" : "0 16px 34px rgba(37,99,235,0.12)";
+  }
+  return hovered ? "0 16px 32px rgba(15,23,42,0.10)" : "0 10px 24px rgba(15,23,42,0.06)";
+}
 
 function normalizePlan(input?: string | null): PlanKey {
   const raw = String(input || "").trim().toLowerCase();
@@ -52,6 +60,7 @@ const PricingPage: React.FC = () => {
   const currentPlan = normalizePlan((caps?.plan as string) || user?.plan || null);
   const [interval, setInterval] = React.useState<PricingInterval>("monthly");
   const [pricingByPlan, setPricingByPlan] = React.useState<Partial<Record<BillingPlanPricing["key"], BillingPlanPricing>>>({});
+  const [hoveredPlan, setHoveredPlan] = React.useState<PlanKey | null>(null);
   const safeTrack = (eventName: string, props: Record<string, unknown>) => {
     try {
       track(eventName, props);
@@ -140,7 +149,15 @@ const PricingPage: React.FC = () => {
           </p>
         </Card>
 
-        <div style={{ display: "grid", gap: spacing.sm, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+        <div
+          style={{
+            display: "grid",
+            gap: spacing.md,
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            alignItems: "stretch",
+            overflow: "visible",
+          }}
+        >
           <Card style={{ gridColumn: "1 / -1" }}>
             <div style={{ display: "inline-flex", gap: 8, border: "1px solid rgba(15,23,42,0.12)", borderRadius: 999, padding: 4 }}>
               <Button
@@ -166,39 +183,30 @@ const PricingPage: React.FC = () => {
               key={plan}
               elevated={plan === "pro"}
               style={{
-                display: "grid",
-                gap: 14,
-                alignContent: "start",
-                alignItems: "start",
+                display: "flex",
+                flexDirection: "column",
+                gap: 16,
                 minWidth: 0,
                 minHeight: "100%",
                 padding: 20,
+                position: "relative",
+                zIndex: hoveredPlan === plan ? 2 : 1,
+                isolation: "isolate",
+                overflow: "visible",
+                transform: hoveredPlan === plan ? "translateY(-3px)" : "translateY(0)",
                 border:
                   plan === "pro" ? "1px solid rgba(37,99,235,0.28)" : "1px solid rgba(15,23,42,0.08)",
                 background:
                   plan === "pro"
                     ? "linear-gradient(180deg, rgba(37,99,235,0.06) 0%, #ffffff 28%)"
                     : "#ffffff",
-                boxShadow:
-                  plan === "pro"
-                    ? "0 16px 34px rgba(37,99,235,0.12)"
-                    : "0 10px 24px rgba(15,23,42,0.06)",
+                boxShadow: pricingCardShadow(plan, hoveredPlan === plan),
                 ...pricingCardMotionStyle,
               }}
-              onMouseEnter={(event) => {
-                event.currentTarget.style.transform = "translateY(-3px)";
-                event.currentTarget.style.boxShadow =
-                  plan === "pro"
-                    ? "0 22px 42px rgba(37,99,235,0.16)"
-                    : "0 16px 32px rgba(15,23,42,0.10)";
-              }}
-              onMouseLeave={(event) => {
-                event.currentTarget.style.transform = "translateY(0)";
-                event.currentTarget.style.boxShadow =
-                  plan === "pro"
-                    ? "0 16px 34px rgba(37,99,235,0.12)"
-                    : "0 10px 24px rgba(15,23,42,0.06)";
-              }}
+              onMouseEnter={() => setHoveredPlan(plan)}
+              onMouseLeave={() => setHoveredPlan((current) => (current === plan ? null : current))}
+              onFocus={() => setHoveredPlan(plan)}
+              onBlur={() => setHoveredPlan((current) => (current === plan ? null : current))}
             >
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: spacing.sm, flexWrap: "wrap" }}>
                 <div style={{ fontWeight: 800, fontSize: 20, lineHeight: 1.15, ...wrappingTextStyle }}>
@@ -237,6 +245,7 @@ const PricingPage: React.FC = () => {
                   minWidth: 0,
                   display: "grid",
                   gap: 8,
+                  flex: "0 0 auto",
                 }}
               >
                 {PLAN_FEATURES[plan].map((feature) => (
@@ -255,6 +264,8 @@ const PricingPage: React.FC = () => {
                     borderRadius: 12,
                     background: "rgba(15,23,42,0.03)",
                     border: "1px solid rgba(15,23,42,0.06)",
+                    minWidth: 0,
+                    flex: "0 0 auto",
                     ...wrappingTextStyle,
                   }}
                 >
@@ -270,6 +281,8 @@ const PricingPage: React.FC = () => {
                     padding: "12px 14px",
                     display: "grid",
                     gap: 8,
+                    minWidth: 0,
+                    flex: "0 0 auto",
                   }}
                 >
                   <div style={{ fontWeight: 800, lineHeight: 1.25, ...wrappingTextStyle }}>Built for stronger reporting</div>
@@ -299,6 +312,8 @@ const PricingPage: React.FC = () => {
                     padding: "12px 14px",
                     display: "grid",
                     gap: 8,
+                    minWidth: 0,
+                    flex: "0 0 auto",
                   }}
                 >
                   {TIER_MATRIX_AREAS.slice(0, 4).map((area) => (
@@ -308,7 +323,7 @@ const PricingPage: React.FC = () => {
                   ))}
                 </div>
               ) : null}
-              <div style={{ marginTop: "auto", paddingTop: 4 }}>
+              <div style={{ marginTop: "auto", paddingTop: 8, width: "100%" }}>
                 {plan === "free" ? (
                   <Button type="button" variant="secondary" onClick={() => navigate("/dashboard")} style={{ width: "100%" }}>
                     Start Free
