@@ -158,15 +158,16 @@ const PricingPage: React.FC = () => {
     <MacShell title="RentChain · Pricing" showTopNav={false}>
       <Section
         style={{
-          maxWidth: 1240,
+          maxWidth: 1280,
           margin: "0 auto",
           display: "grid",
           gap: spacing.lg,
           paddingTop: "calc(1rem + 16px)",
           paddingBottom: "calc(1rem + 16px)",
-          paddingLeft: 24,
-          paddingRight: 24,
+          paddingLeft: isMobile ? 24 : 32,
+          paddingRight: isMobile ? 24 : 32,
           boxSizing: "border-box",
+          background: "#f8fafc",
         }}
       >
         <Card elevated>
@@ -186,7 +187,8 @@ const PricingPage: React.FC = () => {
           style={{
             display: "grid",
             gridTemplateColumns: isMobile ? "1fr" : "repeat(4, minmax(0, 1fr))",
-            gap: isMobile ? spacing.md : spacing.lg,
+            columnGap: isMobile ? 0 : "32px",
+            rowGap: isMobile ? spacing.md : "24px",
             alignItems: "stretch",
           }}
         >
