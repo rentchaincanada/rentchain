@@ -25,6 +25,7 @@ const TIMELINE_MARKERS: Record<string, string> = {
 };
 const pricingCardMotionStyle: React.CSSProperties = {
   transition: "transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease",
+  willChange: "transform, box-shadow",
 };
 const wrappingTextStyle: React.CSSProperties = {
   whiteSpace: "normal",
@@ -48,6 +49,13 @@ function displayFeatureValue(value: string) {
   return TIMELINE_MARKERS[value] || value;
 }
 
+function pricingCardShadow(plan: PlanKey, hovered: boolean) {
+  if (plan === "pro") {
+    return hovered ? "0 22px 42px rgba(37,99,235,0.16)" : "0 16px 34px rgba(37,99,235,0.12)";
+  }
+  return hovered ? "0 16px 32px rgba(15,23,42,0.10)" : "0 10px 24px rgba(15,23,42,0.06)";
+}
+
 const PricingPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -59,6 +67,7 @@ const PricingPage: React.FC = () => {
   const [interval, setInterval] = React.useState<PricingInterval>("monthly");
   const [isMobile, setIsMobile] = React.useState(false);
   const [pricingByPlan, setPricingByPlan] = React.useState<Partial<Record<BillingPlanPricing["key"], BillingPlanPricing>>>({});
+  const [hoveredPlan, setHoveredPlan] = React.useState<PlanKey | null>(null);
   const safeTrack = (eventName: string, props: Record<string, unknown>) => {
     try {
       track(eventName, props);
@@ -209,6 +218,8 @@ const PricingPage: React.FC = () => {
             gap: spacing.md,
             ...mobileSectionStyle,
             gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(250px, 1fr))",
+            alignItems: "stretch",
+            overflow: "visible",
           }}
         >
           <Card style={{ gridColumn: "1 / -1" }}>
@@ -245,38 +256,31 @@ const PricingPage: React.FC = () => {
               key={plan}
               elevated={plan === "pro"}
               style={{
-                display: "grid",
-                gap: 14,
+                display: "flex",
+                flexDirection: "column",
+                gap: 16,
                 width: "100%",
                 minWidth: 0,
                 minHeight: "100%",
                 padding: isMobile ? 18 : 22,
+                position: "relative",
+                isolation: "isolate",
+                overflow: "visible",
+                zIndex: hoveredPlan === plan ? 2 : 1,
+                transform: !isMobile && hoveredPlan === plan ? "translateY(-3px)" : "translateY(0)",
                 border:
                   plan === "pro" ? "1px solid rgba(37,99,235,0.28)" : "1px solid rgba(15,23,42,0.08)",
                 background:
                   plan === "pro"
                     ? "linear-gradient(180deg, rgba(37,99,235,0.06) 0%, #ffffff 28%)"
                     : "#ffffff",
-                boxShadow:
-                  plan === "pro"
-                    ? "0 16px 34px rgba(37,99,235,0.12)"
-                    : "0 10px 24px rgba(15,23,42,0.06)",
+                boxShadow: pricingCardShadow(plan, !isMobile && hoveredPlan === plan),
                 ...pricingCardMotionStyle,
               }}
-              onMouseEnter={(event) => {
-                event.currentTarget.style.transform = "translateY(-3px)";
-                event.currentTarget.style.boxShadow =
-                  plan === "pro"
-                    ? "0 22px 42px rgba(37,99,235,0.16)"
-                    : "0 16px 32px rgba(15,23,42,0.10)";
-              }}
-              onMouseLeave={(event) => {
-                event.currentTarget.style.transform = "translateY(0)";
-                event.currentTarget.style.boxShadow =
-                  plan === "pro"
-                    ? "0 16px 34px rgba(37,99,235,0.12)"
-                    : "0 10px 24px rgba(15,23,42,0.06)";
-              }}
+              onMouseEnter={() => !isMobile && setHoveredPlan(plan)}
+              onMouseLeave={() => setHoveredPlan((current) => (current === plan ? null : current))}
+              onFocus={() => setHoveredPlan(plan)}
+              onBlur={() => setHoveredPlan((current) => (current === plan ? null : current))}
             >
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: spacing.sm, flexWrap: "wrap" }}>
                 <div style={{ fontSize: 21, fontWeight: 800, lineHeight: 1.15, ...wrappingTextStyle }}>
@@ -316,6 +320,7 @@ const PricingPage: React.FC = () => {
                   display: "grid",
                   gap: 8,
                   minWidth: 0,
+                  flex: "0 0 auto",
                 }}
               >
                 {CANONICAL_TIER_MATRIX[plan].features.map((feature) => (
@@ -333,6 +338,8 @@ const PricingPage: React.FC = () => {
                     padding: "12px 14px",
                     display: "grid",
                     gap: 8,
+                    minWidth: 0,
+                    flex: "0 0 auto",
                   }}
                 >
                   <div style={{ fontWeight: 700, color: text.primary, lineHeight: 1.25, ...wrappingTextStyle }}>
@@ -365,7 +372,7 @@ const PricingPage: React.FC = () => {
                   ) : null}
                 </div>
               ) : null}
-              <div style={{ marginTop: "auto", paddingTop: spacing.sm }}>
+              <div style={{ marginTop: "auto", paddingTop: spacing.sm, width: "100%" }}>
                 {plan === "free" ? (
                   <Button type="button" onClick={handleStartFree} style={{ width: "100%" }}>
                     {copy.pricing.ctaStartFree}
