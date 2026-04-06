@@ -705,12 +705,16 @@ export async function exportHalifaxRegistrySubmission(propertyId: string) {
   return exportPropertyRegistrySubmission(propertyId);
 }
 
-export async function createRegistrySubmissionReady(propertyId: string): Promise<{ ready: RegistrySubmissionReadyV3 | null }> {
+export async function createRegistrySubmissionReady(
+propertyId: string
+): Promise<{ ready: RegistrySubmissionReadyV3 | null }> {
   const res = await api.post(`/properties/${encodeURIComponent(propertyId)}/registry-submission/ready`, {});
   return res.data;
 }
 
-export async function fetchRegistrySubmissionReady(propertyId: string): Promise<{ ready: RegistrySubmissionReadyV3 | null }> {
+export async function fetchRegistrySubmissionReady(
+propertyId: string
+): Promise<{ ready: RegistrySubmissionReadyV3 | null }> {
   const res = await api.get(`/properties/${encodeURIComponent(propertyId)}/registry-submission/ready`);
   return res.data;
 }
@@ -736,6 +740,48 @@ export async function updateRegistrySubmissionFilingStatus(
 ): Promise<{ filing: RegistrySubmissionFilingSummaryV3 }> {
   const res = await api.patch(`/properties/${encodeURIComponent(propertyId)}/registry-submission/filing-request`, payload);
   return res.data;
+}
+
+export async function createReadyFromDraft(propertyId: string) {
+  return createRegistrySubmissionReady(propertyId);
+}
+
+export async function getReady(propertyId: string) {
+  return fetchRegistrySubmissionReady(propertyId);
+}
+
+export async function attachFilingReferenceAndNotes(
+  propertyId: string,
+  payload: {
+    status?: "filed_pending_confirmation";
+    note?: string | null;
+    referenceNumber?: string | null;
+    evidenceReference?: string | null;
+  }
+) {
+  return updateRegistrySubmissionFilingStatus(propertyId, {
+    status: payload.status || "filed_pending_confirmation",
+    note: payload.note || null,
+    referenceNumbers: payload.referenceNumber
+      ? [
+          {
+            type: "external_reference",
+            value: payload.referenceNumber,
+            label: "Reference number",
+          },
+        ]
+      : [],
+    evidence: payload.evidenceReference
+      ? [
+          {
+            id: `evidence-${Date.now()}`,
+            type: "other",
+            label: "Evidence reference",
+            note: payload.evidenceReference,
+          },
+        ]
+      : [],
+  });
 }
 
 export async function updateProperty(
