@@ -845,6 +845,36 @@ export async function retryRegistryFilingAttempt(
   return res.data;
 }
 
+export type RegistryUpgradeRequired = {
+  capability: string;
+  requiredCapability?: string;
+  currentPlan?: string;
+  requiredPlan?: string;
+  upgradePath?: string;
+  message?: string;
+  monetization?: {
+    freeIncludes?: string[];
+    paidUnlocks?: string[];
+  };
+};
+
+export function extractRegistryUpgradeRequired(error: any): RegistryUpgradeRequired | null {
+  const payload = error?.response?.data;
+  if (!payload || (payload?.error !== "upgrade_required" && payload?.code !== "upgrade_required")) {
+    return null;
+  }
+
+  return {
+    capability: String(payload?.requiredCapability || payload?.capability || ""),
+    requiredCapability: payload?.requiredCapability,
+    currentPlan: payload?.currentPlan,
+    requiredPlan: payload?.requiredPlan,
+    upgradePath: payload?.upgradePath,
+    message: payload?.message,
+    monetization: payload?.monetization,
+  };
+}
+
 export {
   createRegistryFilingReadyPackage as createRegistrySubmissionReady,
   fetchRegistryFilingReadyPackage as fetchRegistrySubmissionReady,

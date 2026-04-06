@@ -4,7 +4,9 @@ export type Capability =
   | "ai.insights"
   | "team.invites"
   | "properties.create"
-  | "units.create";
+  | "units.create"
+  | "registry_filing_access"
+  | "registry_attempts_history";
 
 export interface PlanSpec {
   plan: Plan;
@@ -19,6 +21,8 @@ export const PLANS: Record<Plan, PlanSpec> = {
       "team.invites": true,
       "properties.create": true,
       "units.create": true,
+      registry_filing_access: false,
+      registry_attempts_history: false,
     },
   },
   screening: {
@@ -28,6 +32,8 @@ export const PLANS: Record<Plan, PlanSpec> = {
       "team.invites": true,
       "properties.create": true,
       "units.create": true,
+      registry_filing_access: false,
+      registry_attempts_history: false,
     },
   },
   starter: {
@@ -37,6 +43,8 @@ export const PLANS: Record<Plan, PlanSpec> = {
       "team.invites": true,
       "properties.create": true,
       "units.create": true,
+      registry_filing_access: false,
+      registry_attempts_history: false,
     },
   },
   core: {
@@ -46,6 +54,8 @@ export const PLANS: Record<Plan, PlanSpec> = {
       "team.invites": true,
       "properties.create": true,
       "units.create": true,
+      registry_filing_access: false,
+      registry_attempts_history: false,
     },
   },
   pro: {
@@ -55,6 +65,8 @@ export const PLANS: Record<Plan, PlanSpec> = {
       "team.invites": true,
       "properties.create": true,
       "units.create": true,
+      registry_filing_access: true,
+      registry_attempts_history: true,
     },
   },
   elite: {
@@ -64,6 +76,8 @@ export const PLANS: Record<Plan, PlanSpec> = {
       "team.invites": true,
       "properties.create": true,
       "units.create": true,
+      registry_filing_access: true,
+      registry_attempts_history: true,
     },
   },
 };

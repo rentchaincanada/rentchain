@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Button, Card, Input, Pill } from "../ui/Ui";
+import { fetchBillingPricing, type BillingPricingResponse } from "../../api/billingApi";
 import {
   attachFilingReferenceAndNotes,
   createReadyFromDraft,
   createRegistryFilingRequest,
+  extractRegistryUpgradeRequired,
   fetchPropertyRegistryStatus,
   fetchPropertyRegistrySubmission,
   retryRegistryFilingAttempt,
@@ -16,9 +18,16 @@ import {
   type RegistrySubmissionLifecycleStatus,
   type RegistrySubmissionNormalizedSectionV3,
 } from "../../api/propertiesApi";
+import { useEntitlements } from "../../hooks/useEntitlements";
 
 type RegistryStatusPayload = Awaited<ReturnType<typeof fetchPropertyRegistryStatus>>;
 type RegistrySubmissionPayload = Awaited<ReturnType<typeof fetchPropertyRegistrySubmission>>;
+
+type RegistryUpgradeState = {
+  capability: string;
+  message: string;
+  requiredPlan: string;
+};
 
 function formatDate(value: string | null | undefined) {
   if (!value) return "--";
@@ -297,14 +306,17 @@ type Props = {
 };
 
 export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSubmissionAssistant }) => {
+  const entitlements = useEntitlements();
   const [data, setData] = useState<RegistryStatusPayload | null>(null);
   const [submissionData, setSubmissionData] = useState<RegistrySubmissionPayload | null>(null);
+  const [pricing, setPricing] = useState<BillingPricingResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [upgradeState, setUpgradeState] = useState<RegistryUpgradeState | null>(null);
   const [workflowForm, setWorkflowForm] = useState({
     referenceNumber: "",
     notes: "",
@@ -339,6 +351,25 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
     void loadData();
   }, [loadData]);
 
+  useEffect(() => {
+    let active = true;
+    if (entitlements.hasCapability("registry_filing_access") && entitlements.hasCapability("registry_attempts_history")) {
+      return () => {
+        active = false;
+      };
+    }
+    void fetchBillingPricing()
+      .then((next) => {
+        if (active) setPricing(next);
+      })
+      .catch(() => {
+        if (active) setPricing(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [entitlements]);
+
   const handleCopyPid = async () => {
     const pid = data?.pidPrompt.registryPid;
     if (!pid) return;
@@ -368,11 +399,22 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
       try {
         setActionLoading(true);
         setActionError(null);
+        setUpgradeState(null);
         await runner();
         setWorkflowForm({ referenceNumber: "", notes: "", evidenceReference: "" });
         await loadData();
       } catch (err: any) {
-        setActionError(err?.message || "Unable to update the filing workflow right now.");
+        const upgradeRequired = extractRegistryUpgradeRequired(err);
+        if (upgradeRequired) {
+          setUpgradeState({
+            capability: upgradeRequired.requiredCapability || upgradeRequired.capability,
+            message: upgradeRequired.message || "Upgrade to unlock filing workflow.",
+            requiredPlan: upgradeRequired.requiredPlan || "pro",
+          });
+          setActionError(upgradeRequired.message || "Upgrade to unlock filing workflow.");
+        } else {
+          setActionError(err?.message || "Unable to update the filing workflow right now.");
+        }
       } finally {
         setActionLoading(false);
       }
@@ -382,6 +424,16 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
 
   const filing = data?.filing || null;
   const submission = submissionData?.submission || null;
+  const hasRegistryFilingAccess = entitlements.isAdmin || entitlements.hasCapability("registry_filing_access");
+  const hasRegistryAttemptsHistory =
+    entitlements.isAdmin || entitlements.hasCapability("registry_attempts_history");
+  const registryPricing = pricing?.registry?.filingWorkflow || null;
+  const registryUpgradeLabel = registryPricing?.includedPlanKeys?.length
+    ? `Included on ${registryPricing.includedPlanKeys
+        .filter((plan) => plan !== "free")
+        .map((plan) => plan[0].toUpperCase() + plan.slice(1))
+        .join(" and ")}.`
+    : "Included on Pro and Elite.";
   const workflowStatus = resolvedWorkflowStatus(filing);
   const latestAttempt = filing?.latestAttempt || null;
   const timeline = useMemo(() => buildTimeline(submission, filing), [submission, filing]);
@@ -401,6 +453,20 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
     filing?.result?.referenceNumbers?.[0]?.value ||
     filing?.request?.referenceNumbers?.[0]?.value ||
     null;
+
+  const openRegistryUpgrade = useCallback(() => {
+    if (typeof window !== "undefined") {
+      window.location.assign("/pricing?feature=registry_filing_access");
+    }
+  }, []);
+
+  const showFilingWorkflowUpgrade =
+    !hasRegistryFilingAccess &&
+    (workflowStatus === "ready_to_file" ||
+      workflowStatus === "filed_pending_confirmation" ||
+      workflowStatus === "rejected" ||
+      workflowStatus === "failed" ||
+      workflowStatus === "cancelled");
 
   return (
     <Card style={{ display: "grid", gap: 12 }}>
@@ -662,6 +728,32 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                     placeholder="Email subject, screenshot note, or internal reference"
                   />
                 </label>
+                {showFilingWorkflowUpgrade || upgradeState ? (
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: 8,
+                      padding: "12px 14px",
+                      borderRadius: 12,
+                      border: "1px solid rgba(37,99,235,0.16)",
+                      background: "rgba(37,99,235,0.06)",
+                    }}
+                  >
+                    <div style={{ fontWeight: 700, color: "#0f172a" }}>Unlock filing workflow</div>
+                    <div style={{ color: "#475569", fontSize: 14, lineHeight: 1.5 }}>
+                      {upgradeState?.message || "Upgrade to file and track submissions through RentChain."}
+                    </div>
+                    <div style={{ color: "#475569", fontSize: 13 }}>
+                      Free includes draft prep, readiness checks, and export. Paid filing adds retry safety, audit trail,
+                      and attempts history. {registryUpgradeLabel}
+                    </div>
+                    <div>
+                      <Button type="button" onClick={openRegistryUpgrade}>
+                        Upgrade to file
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
                 {actionError ? <div style={{ color: "#b91c1c", fontSize: 14 }}>{actionError}</div> : null}
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {(workflowStatus === "draft" || workflowStatus === "in_review") && (
@@ -674,51 +766,64 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                     </Button>
                   )}
                   {workflowStatus === "ready_to_file" && !filing?.request && (
-                    <Button
-                      type="button"
-                      disabled={actionLoading || draftChangedSinceReady}
-                      onClick={() => void runWorkflowAction(() => createRegistryFilingRequest(String(propertyId)))}
-                    >
-                      Open filing checklist
-                    </Button>
+                    hasRegistryFilingAccess ? (
+                      <Button
+                        type="button"
+                        disabled={actionLoading || draftChangedSinceReady}
+                        onClick={() => void runWorkflowAction(() => createRegistryFilingRequest(String(propertyId)))}
+                      >
+                        Open filing checklist
+                      </Button>
+                    ) : (
+                      <Button type="button" variant="secondary" onClick={openRegistryUpgrade}>
+                        Unlock filing workflow
+                      </Button>
+                    )
                   )}
                   {workflowStatus === "ready_to_file" && filing?.request && (
-                    <Button
-                      type="button"
-                      disabled={actionLoading || draftChangedSinceReady}
-                      onClick={() =>
-                        void runWorkflowAction(() =>
-                          updateRegistryFilingStatus(String(propertyId), {
-                            attemptId: latestAttempt?.attemptId || null,
-                            status: "filed_pending_confirmation",
-                            note: workflowForm.notes || "Marked as filed through the Halifax manual portal workflow.",
-                            referenceNumbers: workflowForm.referenceNumber
-                              ? [
-                                  {
-                                    type: "external_reference",
-                                    value: workflowForm.referenceNumber,
-                                    label: "Reference number",
-                                  },
-                                ]
-                              : [],
-                            evidence: workflowForm.evidenceReference
-                              ? [
-                                  {
-                                    id: `evidence-${Date.now()}`,
-                                    type: "other",
-                                    label: "Evidence reference",
-                                    note: workflowForm.evidenceReference,
-                                  },
-                                ]
-                              : [],
-                          })
-                        )
-                      }
-                    >
-                      Mark as Filed
-                    </Button>
+                    hasRegistryFilingAccess ? (
+                      <Button
+                        type="button"
+                        disabled={actionLoading || draftChangedSinceReady}
+                        onClick={() =>
+                          void runWorkflowAction(() =>
+                            updateRegistryFilingStatus(String(propertyId), {
+                              attemptId: latestAttempt?.attemptId || null,
+                              status: "filed_pending_confirmation",
+                              note: workflowForm.notes || "Marked as filed through the Halifax manual portal workflow.",
+                              referenceNumbers: workflowForm.referenceNumber
+                                ? [
+                                    {
+                                      type: "external_reference",
+                                      value: workflowForm.referenceNumber,
+                                      label: "Reference number",
+                                    },
+                                  ]
+                                : [],
+                              evidence: workflowForm.evidenceReference
+                                ? [
+                                    {
+                                      id: `evidence-${Date.now()}`,
+                                      type: "other",
+                                      label: "Evidence reference",
+                                      note: workflowForm.evidenceReference,
+                                    },
+                                  ]
+                                : [],
+                            })
+                          )
+                        }
+                      >
+                        Mark as Filed
+                      </Button>
+                    ) : (
+                      <Button type="button" variant="secondary" onClick={openRegistryUpgrade}>
+                        Upgrade to file
+                      </Button>
+                    )
                   )}
                   {workflowStatus === "filed_pending_confirmation" && (
+                    hasRegistryFilingAccess ? (
                     <>
                       <Button
                         type="button"
@@ -843,22 +948,33 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                         Mark as Failed
                       </Button>
                     </>
+                    ) : (
+                      <Button type="button" variant="secondary" onClick={openRegistryUpgrade}>
+                        Upgrade to file
+                      </Button>
+                    )
                   )}
                   {(workflowStatus === "rejected" || workflowStatus === "failed" || workflowStatus === "cancelled") &&
                   latestAttempt ? (
-                    <Button
-                      type="button"
-                      disabled={actionLoading || draftChangedSinceReady}
-                      onClick={() =>
-                        void runWorkflowAction(() =>
-                          retryRegistryFilingAttempt(String(propertyId), {
-                            attemptId: latestAttempt.attemptId,
-                          })
-                        )
-                      }
-                    >
-                      Retry filing attempt
-                    </Button>
+                    hasRegistryFilingAccess ? (
+                      <Button
+                        type="button"
+                        disabled={actionLoading || draftChangedSinceReady}
+                        onClick={() =>
+                          void runWorkflowAction(() =>
+                            retryRegistryFilingAttempt(String(propertyId), {
+                              attemptId: latestAttempt.attemptId,
+                            })
+                          )
+                        }
+                      >
+                        Retry filing attempt
+                      </Button>
+                    ) : (
+                      <Button type="button" variant="secondary" onClick={openRegistryUpgrade}>
+                        Unlock retry workflow
+                      </Button>
+                    )
                   ) : null}
                 </div>
                 {(workflowStatus === "rejected" || workflowStatus === "failed" || workflowStatus === "cancelled") && (
@@ -987,7 +1103,29 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
 
               <Card style={{ display: "grid", gap: 12 }}>
                 <div style={{ fontWeight: 700, color: "#0f172a" }}>Filing history</div>
-                {filingHistory.length ? (
+                {!hasRegistryAttemptsHistory ? (
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: 8,
+                      padding: "10px 12px",
+                      borderRadius: 10,
+                      border: "1px solid rgba(37,99,235,0.14)",
+                      background: "rgba(37,99,235,0.05)",
+                    }}
+                  >
+                    <div style={{ fontWeight: 700, color: "#0f172a" }}>Unlock attempts history</div>
+                    <div style={{ color: "#475569", fontSize: 14, lineHeight: 1.5 }}>
+                      Filing history, retry safety, and audit tracking are part of the paid filing workflow.
+                    </div>
+                    <div style={{ color: "#475569", fontSize: 13 }}>{registryUpgradeLabel}</div>
+                    <div>
+                      <Button type="button" variant="secondary" onClick={openRegistryUpgrade}>
+                        Unlock filing history
+                      </Button>
+                    </div>
+                  </div>
+                ) : filingHistory.length ? (
                   filingHistory.map((entry) => (
                     <div
                       key={entry.key}

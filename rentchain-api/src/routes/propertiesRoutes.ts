@@ -1,5 +1,6 @@
 // rentchain-api/src/routes/propertiesRoutes.ts
 import { Router } from "express";
+import { CAPABILITIES, resolvePlanTier } from "../config/capabilities";
 import { requireCapability } from "../entitlements/entitlements.middleware";
 import { db, FieldValue } from "../config/firebase";
 import { normalizeProvince } from "../lib/province";
@@ -944,6 +945,9 @@ async function createRegistrySubmissionFilingRequestResponse(req: any, res: any)
 
   if (!propertyId) return res.status(400).json({ ok: false, error: "property_id_required" });
   if (!roleAdmin && !landlordId) return res.status(401).json({ ok: false, error: "unauthorized" });
+  if (!hasRegistryWorkflowCapability(req, "registry_filing_access")) {
+    return sendRegistryUpgradeRequired(res, req, "registry_filing_access");
+  }
 
   try {
     const property = await loadPropertyOr404(propertyId);
@@ -978,6 +982,9 @@ async function listRegistrySubmissionAttemptsResponse(req: any, res: any) {
 
   if (!propertyId) return res.status(400).json({ ok: false, error: "property_id_required" });
   if (!roleAdmin && !landlordId) return res.status(401).json({ ok: false, error: "unauthorized" });
+  if (!hasRegistryWorkflowCapability(req, "registry_attempts_history")) {
+    return sendRegistryUpgradeRequired(res, req, "registry_attempts_history");
+  }
 
   try {
     const property = await loadPropertyOr404(propertyId);
@@ -1042,6 +1049,9 @@ async function retryRegistrySubmissionAttemptResponse(req: any, res: any) {
 
   if (!propertyId) return res.status(400).json({ ok: false, error: "property_id_required" });
   if (!roleAdmin && !landlordId) return res.status(401).json({ ok: false, error: "unauthorized" });
+  if (!hasRegistryWorkflowCapability(req, "registry_filing_access")) {
+    return sendRegistryUpgradeRequired(res, req, "registry_filing_access");
+  }
 
   try {
     const property = await loadPropertyOr404(propertyId);
@@ -1087,6 +1097,9 @@ async function updateRegistrySubmissionFilingStatusResponse(req: any, res: any) 
 
   if (!propertyId) return res.status(400).json({ ok: false, error: "property_id_required" });
   if (!roleAdmin && !landlordId) return res.status(401).json({ ok: false, error: "unauthorized" });
+  if (!hasRegistryWorkflowCapability(req, "registry_filing_access")) {
+    return sendRegistryUpgradeRequired(res, req, "registry_filing_access");
+  }
 
   try {
     const property = await loadPropertyOr404(propertyId);
@@ -1210,6 +1223,45 @@ function ensurePropertyOwnership(params: {
     return { ok: false as const, ownerLandlordId };
   }
   return { ok: true as const, ownerLandlordId };
+}
+
+type RegistryWorkflowCapability = "registry_filing_access" | "registry_attempts_history";
+
+function hasRegistryWorkflowCapability(req: any, capability: RegistryWorkflowCapability) {
+  if (isAdminRole(req)) return true;
+
+  const userCapabilities = Array.isArray(req.user?.capabilities)
+    ? req.user.capabilities.map((value: unknown) => String(value))
+    : [];
+  if (userCapabilities.includes(capability)) return true;
+
+  const tier = resolvePlanTier(req.user?.plan);
+  return Boolean(CAPABILITIES[tier]?.[capability]);
+}
+
+function sendRegistryUpgradeRequired(res: any, req: any, capability: RegistryWorkflowCapability) {
+  return res.status(403).json({
+    ok: false,
+    error: "upgrade_required",
+    code: "upgrade_required",
+    reason: "missing_capability",
+    currentPlan: resolvePlanTier(req.user?.plan),
+    requiredPlan: "pro",
+    capability,
+    requiredCapability: capability,
+    upgradePath: "/pricing",
+    message:
+      capability === "registry_attempts_history"
+        ? "Upgrade to unlock filing attempt history and audit tracking."
+        : "Upgrade to file and track registry submissions.",
+    monetization: {
+      freeIncludes: ["draft", "readiness", "export"],
+      paidUnlocks:
+        capability === "registry_attempts_history"
+          ? ["attempt_history", "audit_tracking"]
+          : ["filing_workflow", "retry_safety", "attempt_history", "audit_tracking"],
+    },
+  });
 }
 
 router.post("/:propertyId/archive", async (req: any, res) => {
