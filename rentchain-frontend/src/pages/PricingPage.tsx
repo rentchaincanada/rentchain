@@ -186,7 +186,7 @@ const PricingPage: React.FC = () => {
           style={{
             display: "grid",
             gridTemplateColumns: isMobile ? "1fr" : "repeat(4, minmax(0, 1fr))",
-            gap: spacing.md,
+            gap: isMobile ? spacing.md : spacing.lg,
             alignItems: "stretch",
           }}
         >

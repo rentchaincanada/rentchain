@@ -261,7 +261,7 @@ const PricingPage: React.FC = () => {
           className="rc-pricing-grid"
           style={{
             display: "grid",
-            gap: spacing.md,
+            gap: isMobile ? spacing.md : spacing.lg,
             ...mobileSectionStyle,
             gridTemplateColumns: isMobile ? "1fr" : "repeat(4, minmax(0, 1fr))",
             alignItems: "stretch",
