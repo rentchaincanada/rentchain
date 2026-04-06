@@ -34,6 +34,13 @@ const PLAN_FEATURES: Record<PlanKey, string[]> = Object.fromEntries(
   DEFAULT_PLANS.map((plan) => [plan.key, plan.features])
 ) as Record<PlanKey, string[]>;
 
+const PLAN_AUDIENCE_COPY: Record<PlanKey, string> = {
+  free: "For landlords getting started with one property and wanting to try the basics.",
+  starter: "For landlords running the day-to-day work across active rentals.",
+  pro: "For growing operators who want stronger visibility and cleaner control.",
+  elite: "For portfolios that need deeper oversight, reporting, and decision support.",
+};
+
 function pricingCardShadow(plan: PlanKey, hovered: boolean) {
   if (plan === "pro") {
     return hovered ? "0 22px 42px rgba(37,99,235,0.16)" : "0 16px 34px rgba(37,99,235,0.12)";
@@ -139,13 +146,13 @@ const PricingPage: React.FC = () => {
         <Card elevated>
           <h1 style={{ margin: 0, fontSize: "1.5rem", fontWeight: 800 }}>Pricing</h1>
           <p style={{ marginTop: spacing.sm, color: text.muted, maxWidth: 760, lineHeight: 1.65 }}>
-            Free keeps guided onboarding, manual workflows, and pay-per-use screening usable today. Starter adds day-to-day rental operations, Pro adds exports and compliance reporting, and Elite adds advanced analytics and audit visibility.
+            Start simple on Free, move into day-to-day rental operations on Starter, get stronger control on Pro, and step up to deeper portfolio oversight on Elite.
           </p>
           <p style={{ marginTop: spacing.xs, color: text.muted, maxWidth: 760, lineHeight: 1.65 }}>
-            Screening is available across all tiers as pay-per-use when you run it. Paid plans add stronger workflow support, review visibility, summaries, and reporting around that same screening flow.
+            Screening stays pay-per-use on every plan. Paid plans add better tools around the work landlords do every week: keeping records clean, staying organized, and seeing more as operations grow.
           </p>
           <p style={{ marginTop: spacing.xs, color: text.muted, maxWidth: 760, lineHeight: 1.65 }}>
-            Published plan prices mirror the current checkout pricing when billing is available.
+            Plan prices below match the live checkout pricing when billing is available.
           </p>
         </Card>
 
@@ -230,13 +237,13 @@ const PricingPage: React.FC = () => {
                       boxShadow: "0 8px 20px rgba(37,99,235,0.12)",
                     }}
                   >
-                    Most Popular for growing portfolios
+                    Most Popular for growing landlords
                   </span>
                 ) : null}
               </div>
               <div style={{ fontSize: 26, fontWeight: 800, lineHeight: 1.05, ...wrappingTextStyle }}>{renderPrice(plan)}</div>
               <div style={{ color: text.muted, fontSize: 14, lineHeight: 1.65, minHeight: 68, ...wrappingTextStyle }}>
-                {CANONICAL_TIER_MATRIX[plan].tagline}
+                {PLAN_AUDIENCE_COPY[plan]}
               </div>
               <ul
                 style={{
@@ -271,7 +278,7 @@ const PricingPage: React.FC = () => {
                     ...wrappingTextStyle,
                   }}
                 >
-                  Free stays usable for setup, manual tracking, and archive support. Starter adds richer applicant and day-to-day workflow tools.
+                  Free is there to help you get started. Starter is where RentChain becomes a real day-to-day operating tool for active rentals.
                 </div>
               ) : null}
               {plan === "pro" ? (
@@ -287,7 +294,7 @@ const PricingPage: React.FC = () => {
                     flex: "0 0 auto",
                   }}
                 >
-                  <div style={{ fontWeight: 800, lineHeight: 1.25, ...wrappingTextStyle }}>Built for stronger reporting</div>
+                  <div style={{ fontWeight: 800, lineHeight: 1.25, ...wrappingTextStyle }}>Built for landlords handling more moving parts</div>
                   <ul
                     style={{
                       margin: 0,
@@ -299,10 +306,10 @@ const PricingPage: React.FC = () => {
                       gap: 6,
                     }}
                   >
-                    <li style={{ overflowWrap: "anywhere" }}>CSV expense import</li>
-                    <li style={{ overflowWrap: "anywhere" }}>CSV, spreadsheet, and PDF exports</li>
-                    <li style={{ overflowWrap: "anywhere" }}>Compliance reports and screening review summaries</li>
-                    <li style={{ overflowWrap: "anywhere" }}>Cleaner month-end and accountant handoff</li>
+                    <li style={{ overflowWrap: "anywhere" }}>Keep property records cleaner as the portfolio grows</li>
+                    <li style={{ overflowWrap: "anywhere" }}>Share clearer reports with partners, owners, or accountants</li>
+                    <li style={{ overflowWrap: "anywhere" }}>Get stronger visibility into screening and compliance work</li>
+                    <li style={{ overflowWrap: "anywhere" }}>Spend less time piecing together month-end information</li>
                   </ul>
                 </div>
               ) : null}
@@ -347,7 +354,7 @@ const PricingPage: React.FC = () => {
               Do I need a subscription to screen tenants?
             </summary>
             <p style={{ margin: `${spacing.sm} 0 0`, color: text.muted }}>
-              No. Screening is available as a pay-per-use workflow on every tier. Paid plans add more operational workflow, summaries, exports, and reporting around screening.
+              No. Screening is available as pay-per-use on every tier. Paid plans add the surrounding tools that make the rest of your rental work easier to manage.
             </p>
           </details>
         </Card>

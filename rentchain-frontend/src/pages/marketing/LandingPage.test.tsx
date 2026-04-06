@@ -43,7 +43,7 @@ describe("Marketing LandingPage", () => {
     cleanup();
   });
 
-  it("renders the readiness-focused value proposition and free versus paid framing", () => {
+  it("renders the landlord-first value proposition and free versus paid framing", () => {
     render(
       <MemoryRouter>
         <LandingPage />
@@ -51,11 +51,11 @@ describe("Marketing LandingPage", () => {
     );
 
     expect(
-      screen.getByRole("heading", { name: "Check whether your property is registry-ready before you file." })
+      screen.getByRole("heading", { name: "Keep your properties, tenants, and to-dos organized in one place." })
     ).toBeInTheDocument();
-    expect(screen.getByText(/Free includes draft preparation, readiness checks, JSON export/i)).toBeInTheDocument();
-    expect(screen.getByText(/Paid plans unlock the filing workflow, lifecycle tracking, retry safety/i)).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Check your property readiness" }).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Free lets you organize a property, see what is missing/i)).toBeInTheDocument();
+    expect(screen.getByText(/Paid plans unlock stronger day-to-day tools/i)).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Get started with a property" }).length).toBeGreaterThan(0);
   });
 
   it("stores source tags and routes unauthenticated users into the product signup flow", () => {
@@ -72,7 +72,7 @@ describe("Marketing LandingPage", () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Check your property readiness" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Get started with a property" })[0]);
 
     expect(mocks.navigate).toHaveBeenCalledWith("/signup?next=/properties&intent=registry_readiness");
     expect(mocks.track).toHaveBeenCalledWith(
@@ -105,7 +105,7 @@ describe("Marketing LandingPage", () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Check your property readiness" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Get started with a property" })[0]);
 
     expect(mocks.navigate).toHaveBeenCalledWith("/properties?intent=registry_readiness");
   });
