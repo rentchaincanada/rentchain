@@ -39,9 +39,9 @@ const FAQ_ITEMS = [
       "Paid plans unlock stronger day-to-day tools, clearer filing support, safer follow-through, and a better record of what happened over time.",
   },
   {
-    question: "Is this only for Halifax?",
+    question: "Is this available across Canada?",
     answer:
-      "Halifax is the first live municipal filing workflow. Other Canadian properties can still use RentChain to stay organized, prepare records, and see what needs attention.",
+      "Yes. RentChain is built for landlords across Canada. You can use it to organize your properties, manage tenants, and stay on top of what needs attention—no matter where your rentals are located. Some region-specific tools, like lease templates and compliance workflows, vary by province and continue to expand.",
   },
 ];
 
@@ -147,7 +147,7 @@ const LandingPage: React.FC = () => {
                   textTransform: "uppercase",
                 }}
               >
-                Built for everyday landlords
+                Built for landlords across Canada
               </div>
               <div style={{ display: "grid", gap: spacing.sm }}>
                 <h1
@@ -159,7 +159,7 @@ const LandingPage: React.FC = () => {
                     maxWidth: 760,
                   }}
                 >
-                  Keep your properties, tenants, and to-dos organized in one place.
+                  Keep your rentals organized and your day moving across Canada.
                 </h1>
                 <p
                   style={{
@@ -170,9 +170,9 @@ const LandingPage: React.FC = () => {
                     maxWidth: 720,
                   }}
                 >
-                  RentChain helps landlords stay on top of property details, tenant activity, maintenance,
-                  and the tasks that tend to fall through the cracks. When you need deeper filing and
-                  compliance help, those tools are there further down the workflow.
+                  RentChain helps landlords across Canada stay on top of property details, tenant activity,
+                  maintenance, and the tasks that tend to fall through the cracks. When you need deeper
+                  lease, filing, or compliance support, those tools can vary by province and continue to expand.
                 </p>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: spacing.sm, alignItems: "center" }}>
@@ -180,7 +180,7 @@ const LandingPage: React.FC = () => {
                   Get started with a property
                 </Button>
                 <div style={{ color: text.secondary, fontSize: "0.93rem", fontWeight: 600 }}>
-                  Free to try. Upgrade only when you need deeper support.
+                  Free to try. Upgrade when you need stronger workflows and deeper support.
                 </div>
               </div>
               <div
