@@ -69,6 +69,7 @@ const PricingPage: React.FC = () => {
   const [pricingByPlan, setPricingByPlan] = React.useState<Partial<Record<BillingPlanPricing["key"], BillingPlanPricing>>>({});
   const [hoveredPlan, setHoveredPlan] = React.useState<PlanKey | null>(null);
   const [isMobile, setIsMobile] = React.useState(false);
+  const [isCompactDesktop, setIsCompactDesktop] = React.useState(false);
   const safeTrack = (eventName: string, props: Record<string, unknown>) => {
     try {
       track(eventName, props);
@@ -79,15 +80,27 @@ const PricingPage: React.FC = () => {
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
-    const media = window.matchMedia("(max-width: 767px)");
-    const update = () => setIsMobile(media.matches);
+    const mobileMedia = window.matchMedia("(max-width: 767px)");
+    const compactDesktopMedia = window.matchMedia("(max-width: 1180px)");
+    const update = () => {
+      setIsMobile(mobileMedia.matches);
+      setIsCompactDesktop(!mobileMedia.matches && compactDesktopMedia.matches);
+    };
     update();
-    if (typeof media.addEventListener === "function") {
-      media.addEventListener("change", update);
-      return () => media.removeEventListener("change", update);
+    if (typeof mobileMedia.addEventListener === "function" && typeof compactDesktopMedia.addEventListener === "function") {
+      mobileMedia.addEventListener("change", update);
+      compactDesktopMedia.addEventListener("change", update);
+      return () => {
+        mobileMedia.removeEventListener("change", update);
+        compactDesktopMedia.removeEventListener("change", update);
+      };
     }
-    media.addListener?.(update);
-    return () => media.removeListener?.(update);
+    mobileMedia.addListener?.(update);
+    compactDesktopMedia.addListener?.(update);
+    return () => {
+      mobileMedia.removeListener?.(update);
+      compactDesktopMedia.removeListener?.(update);
+    };
   }, []);
 
   React.useEffect(() => {
@@ -193,7 +206,7 @@ const PricingPage: React.FC = () => {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: isMobile ? "1fr" : "repeat(4, minmax(0, 1fr))",
+              gridTemplateColumns: isMobile ? "1fr" : isCompactDesktop ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))",
               columnGap: isMobile ? 0 : "24px",
               rowGap: isMobile ? spacing.md : "24px",
               alignItems: "stretch",
