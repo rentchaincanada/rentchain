@@ -235,7 +235,6 @@ const PricingPage: React.FC = () => {
           overflow: "visible",
           padding: isMobile ? `0 ${spacing.md}px ${spacing.lg}px` : `${spacing.md} 32px calc(${spacing.lg} + 12px)`,
           boxSizing: "border-box",
-          background: "#f8fafc",
         }}
       >
         <div>
@@ -259,16 +258,24 @@ const PricingPage: React.FC = () => {
         </div>
 
         <div
-          className="rc-pricing-grid"
           style={{
-            display: "grid",
-            columnGap: isMobile ? 0 : "32px",
-            rowGap: isMobile ? spacing.md : "24px",
+            background: "#f3f7ff",
+            borderRadius: isMobile ? 20 : 24,
+            padding: isMobile ? 12 : 20,
+            boxSizing: "border-box",
             ...mobileSectionStyle,
-            gridTemplateColumns: isMobile ? "1fr" : "repeat(4, minmax(0, 1fr))",
-            alignItems: "stretch",
           }}
         >
+          <div
+            className="rc-pricing-grid"
+            style={{
+              display: "grid",
+              columnGap: isMobile ? 0 : "24px",
+              rowGap: isMobile ? spacing.md : "24px",
+              gridTemplateColumns: isMobile ? "1fr" : "repeat(4, minmax(0, 1fr))",
+              alignItems: "stretch",
+            }}
+          >
           <Card style={{ gridColumn: "1 / -1" }}>
             <div
               style={{
@@ -455,6 +462,7 @@ const PricingPage: React.FC = () => {
               </div>
             </Card>
           ))}
+          </div>
         </div>
 
         <div style={{ ...mobileSectionStyle, marginTop: spacing.lg }}>

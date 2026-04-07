@@ -167,7 +167,6 @@ const PricingPage: React.FC = () => {
           paddingLeft: isMobile ? 24 : 32,
           paddingRight: isMobile ? 24 : 32,
           boxSizing: "border-box",
-          background: "#f8fafc",
         }}
       >
         <Card elevated>
@@ -185,13 +184,21 @@ const PricingPage: React.FC = () => {
 
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: isMobile ? "1fr" : "repeat(4, minmax(0, 1fr))",
-            columnGap: isMobile ? 0 : "32px",
-            rowGap: isMobile ? spacing.md : "24px",
-            alignItems: "stretch",
+            background: "#f3f7ff",
+            borderRadius: isMobile ? 20 : 24,
+            padding: isMobile ? 12 : 20,
+            boxSizing: "border-box",
           }}
         >
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: isMobile ? "1fr" : "repeat(4, minmax(0, 1fr))",
+              columnGap: isMobile ? 0 : "24px",
+              rowGap: isMobile ? spacing.md : "24px",
+              alignItems: "stretch",
+            }}
+          >
           <Card style={{ gridColumn: "1 / -1" }}>
             <div style={{ display: "inline-flex", gap: 8, border: "1px solid rgba(15,23,42,0.12)", borderRadius: 999, padding: 4 }}>
               <Button
@@ -380,6 +387,7 @@ const PricingPage: React.FC = () => {
               </div>
             </Card>
           ))}
+          </div>
         </div>
 
         <Card>
