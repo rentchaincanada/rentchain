@@ -27,7 +27,6 @@ const pricingCardMotionStyle: React.CSSProperties = {
   transition: "transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease",
   willChange: "transform, box-shadow",
 };
-const desktopPricingGap = "22px";
 const wrappingTextStyle: React.CSSProperties = {
   whiteSpace: "normal",
   overflowWrap: "anywhere",
@@ -112,6 +111,7 @@ const PricingPage: React.FC = () => {
   const isAuthed = Boolean(user?.id);
   const [interval, setInterval] = React.useState<PricingInterval>("monthly");
   const [isMobile, setIsMobile] = React.useState(false);
+  const [isCompactDesktop, setIsCompactDesktop] = React.useState(false);
   const [pricingByPlan, setPricingByPlan] = React.useState<Partial<Record<BillingPlanPricing["key"], BillingPlanPricing>>>({});
   const [hoveredPlan, setHoveredPlan] = React.useState<PlanKey | null>(null);
   const safeTrack = (eventName: string, props: Record<string, unknown>) => {
@@ -127,25 +127,40 @@ const PricingPage: React.FC = () => {
     margin: "0 auto",
     padding: 0,
     boxSizing: "border-box",
-    overflowX: isMobile ? "hidden" : undefined,
   };
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
-    const media = window.matchMedia("(max-width: 767px)");
-    const update = () => setIsMobile(media.matches);
+    const mobileMedia = window.matchMedia("(max-width: 767px)");
+    const compactDesktopMedia = window.matchMedia("(max-width: 1180px)");
+    const update = () => {
+      setIsMobile(mobileMedia.matches);
+      setIsCompactDesktop(!mobileMedia.matches && compactDesktopMedia.matches);
+    };
     update();
-    const legacy = media as MediaQueryList & {
+    const mobileLegacy = mobileMedia as MediaQueryList & {
       addListener?: (listener: () => void) => void;
       removeListener?: (listener: () => void) => void;
     };
-    if (typeof legacy.addEventListener === "function") {
-      legacy.addEventListener("change", update);
-      return () => legacy.removeEventListener("change", update);
+    const compactLegacy = compactDesktopMedia as MediaQueryList & {
+      addListener?: (listener: () => void) => void;
+      removeListener?: (listener: () => void) => void;
+    };
+    if (typeof mobileLegacy.addEventListener === "function" && typeof compactLegacy.addEventListener === "function") {
+      mobileLegacy.addEventListener("change", update);
+      compactLegacy.addEventListener("change", update);
+      return () => {
+        mobileLegacy.removeEventListener("change", update);
+        compactLegacy.removeEventListener("change", update);
+      };
     }
-    if (typeof legacy.addListener === "function") {
-      legacy.addListener(update);
-      return () => legacy.removeListener?.(update);
+    if (typeof mobileLegacy.addListener === "function") {
+      mobileLegacy.addListener(update);
+      compactLegacy.addListener?.(update);
+      return () => {
+        mobileLegacy.removeListener?.(update);
+        compactLegacy.removeListener?.(update);
+      };
     }
   }, []);
 
@@ -272,7 +287,7 @@ const PricingPage: React.FC = () => {
               display: "grid",
               columnGap: isMobile ? 0 : "24px",
               rowGap: isMobile ? spacing.md : "24px",
-              gridTemplateColumns: isMobile ? "1fr" : "repeat(4, minmax(0, 1fr))",
+              gridTemplateColumns: isMobile ? "1fr" : isCompactDesktop ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))",
               alignItems: "stretch",
             }}
           >
