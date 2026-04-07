@@ -81,7 +81,7 @@ const PricingPage: React.FC = () => {
   React.useEffect(() => {
     if (typeof window === "undefined") return;
     const mobileMedia = window.matchMedia("(max-width: 767px)");
-    const compactDesktopMedia = window.matchMedia("(max-width: 1180px)");
+    const compactDesktopMedia = window.matchMedia("(max-width: 1279px)");
     const update = () => {
       setIsMobile(mobileMedia.matches);
       setIsCompactDesktop(!mobileMedia.matches && compactDesktopMedia.matches);
@@ -171,7 +171,7 @@ const PricingPage: React.FC = () => {
     <MacShell title="RentChain · Pricing" showTopNav={false}>
       <Section
         style={{
-          maxWidth: 1280,
+          maxWidth: 1360,
           margin: "0 auto",
           display: "grid",
           gap: spacing.lg,
@@ -207,7 +207,7 @@ const PricingPage: React.FC = () => {
             style={{
               display: "grid",
               gridTemplateColumns: isMobile ? "1fr" : isCompactDesktop ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))",
-              columnGap: isMobile ? 0 : "24px",
+              columnGap: isMobile ? 0 : "32px",
               rowGap: isMobile ? spacing.md : "24px",
               alignItems: "stretch",
             }}

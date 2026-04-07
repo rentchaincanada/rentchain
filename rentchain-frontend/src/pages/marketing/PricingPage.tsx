@@ -132,7 +132,7 @@ const PricingPage: React.FC = () => {
   React.useEffect(() => {
     if (typeof window === "undefined") return;
     const mobileMedia = window.matchMedia("(max-width: 767px)");
-    const compactDesktopMedia = window.matchMedia("(max-width: 1180px)");
+    const compactDesktopMedia = window.matchMedia("(max-width: 1279px)");
     const update = () => {
       setIsMobile(mobileMedia.matches);
       setIsCompactDesktop(!mobileMedia.matches && compactDesktopMedia.matches);
@@ -243,7 +243,7 @@ const PricingPage: React.FC = () => {
       <div
         style={{
           width: "100%",
-          maxWidth: 1320,
+          maxWidth: 1400,
           margin: "0 auto",
           display: "grid",
           gap: isMobile ? spacing.md : "28px",
@@ -285,7 +285,7 @@ const PricingPage: React.FC = () => {
             className="rc-pricing-grid"
             style={{
               display: "grid",
-              columnGap: isMobile ? 0 : "24px",
+              columnGap: isMobile ? 0 : "32px",
               rowGap: isMobile ? spacing.md : "24px",
               gridTemplateColumns: isMobile ? "1fr" : isCompactDesktop ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))",
               alignItems: "stretch",
