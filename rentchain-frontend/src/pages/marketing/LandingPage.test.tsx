@@ -51,11 +51,21 @@ describe("Marketing LandingPage", () => {
     );
 
     expect(
-      screen.getByRole("heading", { name: "Keep your properties, tenants, and to-dos organized in one place." })
+      screen.getByRole("heading", { name: "Keep your rentals organized and your day moving across Canada." })
     ).toBeInTheDocument();
-    expect(screen.getByText(/Free lets you organize a property, see what is missing/i)).toBeInTheDocument();
-    expect(screen.getByText(/Paid plans unlock stronger day-to-day tools/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /RentChain helps landlords across Canada stay on top of property details, tenant activity, maintenance, and the tasks that tend to fall through the cracks\./i
+      )
+    ).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Get started with a property" }).length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(/Free to try\. Upgrade when you need stronger workflows and deeper support\./i)
+    ).toBeInTheDocument();
+    expect(screen.getByText("Is this available across Canada?")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Yes\. RentChain is built for landlords across Canada\./i)
+    ).toBeInTheDocument();
   });
 
   it("stores source tags and routes unauthenticated users into the product signup flow", () => {
