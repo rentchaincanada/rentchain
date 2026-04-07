@@ -57,14 +57,14 @@ function pricingCardShadow(plan: PlanKey, hovered: boolean) {
 }
 
 const PLAN_AUDIENCE_COPY: Record<PlanKey, string> = {
-  free: "For landlords getting started and wanting to try the basics with one property.",
-  starter: "For landlords running day-to-day rental operations across active units.",
-  pro: "For growing operators who want stronger tools, clearer visibility, and more control.",
-  elite: "For portfolios that need deeper oversight, reporting, and portfolio-level visibility.",
+  free: "For landlords across Canada getting started and wanting to try the basics with one property.",
+  starter: "For landlords running day-to-day rental operations across active units with less friction.",
+  pro: "For growing operators who want stronger tools, clearer visibility, and better control.",
+  elite: "For portfolios that need deeper oversight, reporting, and stronger portfolio-level visibility.",
 };
 
 const PLAN_SUPPORT_COPY: Partial<Record<PlanKey, string>> = {
-  starter: "Free helps you get started. Starter is where RentChain becomes your everyday operating system for rental work.",
+  starter: "Free helps you get started. Starter is where RentChain becomes your everyday operating system for rental work across your portfolio.",
 };
 
 const PLAN_CALLOUT_COPY: Partial<
@@ -81,10 +81,10 @@ const PLAN_CALLOUT_COPY: Partial<
   pro: {
     title: "Built for landlords handling more moving parts",
     description:
-      "Pro gives growing landlords better visibility, stronger follow-through, and cleaner records as the business gets busier.",
+      "Pro gives growing landlords better visibility, stronger follow-through, and cleaner records as the business gets busier across more properties and tenants.",
     bullets: [
       "Keep property, tenant, and screening work easier to review",
-      "Stay on top of filing and compliance tasks when they matter",
+      "Stay on top of filing and compliance tasks when they matter, with region-specific tools continuing to expand",
       "Share clearer reports with partners, owners, or accountants",
     ],
     proofLine: "A strong fit when simple tools are no longer enough but full portfolio overhead still feels excessive.",
@@ -92,11 +92,11 @@ const PLAN_CALLOUT_COPY: Partial<
   elite: {
     title: "For teams that need deeper oversight",
     description:
-      "Elite is for portfolio operators who want a higher level view of what is happening across properties, records, and workflows.",
+      "Elite is for portfolio operators who want a higher level view of what is happening across properties, records, and workflows across Canada.",
     bullets: [
       "See more across the portfolio instead of property by property",
       "Keep leadership reporting and oversight cleaner",
-      "Support more complex rental operations with stronger visibility",
+      "Support more complex rental operations with stronger visibility and clearer oversight",
     ],
   },
 };
@@ -268,7 +268,7 @@ const PricingPage: React.FC = () => {
             {copy.pricing.subheadline}
           </p>
           <p style={{ margin: `${spacing.xs} 0 0`, color: text.muted, fontSize: "0.92rem" }}>
-            Start on Free to try the basics, move to Starter for daily rental work, step up to Pro for stronger control, and use Elite for deeper portfolio oversight.
+            Start on Free to try the basics, move to Starter for day-to-day rental work, step up to Pro for stronger tools and follow-through, and use Elite for deeper portfolio oversight.
           </p>
         </div>
 

@@ -144,9 +144,9 @@ export const marketingCopy: Record<Locale, MarketingCopy> = {
       authedPrimaryCta: "Go to dashboard",
     },
     pricing: {
-      headline: "Pricing that matches how RentChain works today",
+      headline: "Pricing for landlords across Canada",
       subheadline:
-        "Start on Free with guided setup and pay-per-use screening, then upgrade for richer workflow tools, accountant-ready exports, and stronger reporting.",
+        "Start on Free with guided setup and pay-per-use screening, then upgrade for richer workflow tools, cleaner records, and stronger reporting as your rental operations grow.",
       intervalLabels: {
         monthly: "Monthly",
         yearly: "Annual",
@@ -158,10 +158,10 @@ export const marketingCopy: Record<Locale, MarketingCopy> = {
         elite: "Elite",
       },
       tierTaglines: {
-        free: "Best for guided setup, manual workflows, and pay-per-use screening",
-        starter: "Best for active landlords coordinating applicants and day-to-day operations",
-        pro: "Best for growing portfolios that need exports, reporting, and team workflows",
-        elite: "Best for premium visibility, analytics, and audit-ready operations",
+        free: "Best for getting organized, setting up a property, and trying the basics",
+        starter: "Best for active landlords coordinating tenants and day-to-day operations",
+        pro: "Best for growing portfolios that need stronger tools, reporting, and team workflows",
+        elite: "Best for premium visibility, analytics, and portfolio-level oversight",
       },
       tierBadges: {
         pro: "Most Popular",
@@ -223,17 +223,17 @@ export const marketingCopy: Record<Locale, MarketingCopy> = {
         },
       ],
       timelineSection: {
-        title: "Operations visibility",
+        title: "Grow into deeper support",
         description:
-          "Paid plans expand visibility with stronger workflow reporting, cleaner exports, and a more complete operational record.",
+          "Paid plans add stronger workflow reporting, cleaner records, and a more complete operating picture as your rental business grows.",
         bullets: [
           "Workflow and screening progress visibility",
           "Cleaner records for reviews and reporting",
-          "Property and applicant context in one place",
-          "Export paths for stakeholders and accountants",
+          "Property and tenant context in one place",
+          "Exports and reporting for owners, partners, or accountants",
           "Analytics and audit visibility on Elite",
         ],
-        proofLine: "Designed to add clarity without overpromising unsupported automation.",
+        proofLine: "Some lease, filing, and compliance tools vary by province and continue to expand.",
       },
       screeningRow: {
         label: "Screening workflow",

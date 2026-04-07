@@ -35,10 +35,10 @@ const PLAN_FEATURES: Record<PlanKey, string[]> = Object.fromEntries(
 ) as Record<PlanKey, string[]>;
 
 const PLAN_AUDIENCE_COPY: Record<PlanKey, string> = {
-  free: "For landlords getting started with one property and wanting to try the basics.",
-  starter: "For landlords running the day-to-day work across active rentals.",
-  pro: "For growing operators who want stronger visibility and cleaner control.",
-  elite: "For portfolios that need deeper oversight, reporting, and decision support.",
+  free: "For landlords across Canada getting started and wanting to try the basics.",
+  starter: "For landlords running day-to-day rental operations with more consistency and less friction.",
+  pro: "For growing operators who want stronger tools, clearer visibility, and better follow-through.",
+  elite: "For portfolios that need deeper oversight, cleaner reporting, and stronger portfolio-level control.",
 };
 
 function pricingCardShadow(plan: PlanKey, hovered: boolean) {
@@ -185,13 +185,13 @@ const PricingPage: React.FC = () => {
         <Card elevated>
           <h1 style={{ margin: 0, fontSize: "1.5rem", fontWeight: 800 }}>Pricing</h1>
           <p style={{ marginTop: spacing.sm, color: text.muted, maxWidth: 760, lineHeight: 1.65 }}>
-            Start simple on Free, move into day-to-day rental operations on Starter, get stronger control on Pro, and step up to deeper portfolio oversight on Elite.
+            Start on Free to get organized, move into day-to-day rental operations on Starter, get stronger tools and follow-through on Pro, and step up to deeper portfolio oversight on Elite.
           </p>
           <p style={{ marginTop: spacing.xs, color: text.muted, maxWidth: 760, lineHeight: 1.65 }}>
-            Screening stays pay-per-use on every plan. Paid plans add better tools around the work landlords do every week: keeping records clean, staying organized, and seeing more as operations grow.
+            RentChain is built for landlords across Canada. Screening stays pay-per-use on every plan, while paid tiers add better tools around the work landlords do every week: keeping records clean, staying organized, and seeing more as operations grow.
           </p>
           <p style={{ marginTop: spacing.xs, color: text.muted, maxWidth: 760, lineHeight: 1.65 }}>
-            Plan prices below match the live checkout pricing when billing is available.
+            Some region-specific tools, like lease and compliance workflows, vary by province and continue to expand. Plan prices below match the live checkout pricing when billing is available.
           </p>
         </Card>
 

@@ -15,15 +15,15 @@ type HowItWorksStep = {
 const HOW_IT_WORKS: HowItWorksStep[] = [
   {
     title: "Set up your property",
-    body: "Add a property, keep the important details together, and stop chasing information across different tools.",
+    body: "Add a property, keep the important details together, and run rental work more smoothly whether you manage one place or many across Canada.",
   },
   {
     title: "See what needs attention",
-    body: "Catch missing details early so everyday tasks, tenant work, and filing steps are easier to finish cleanly.",
+    body: "Catch missing details early so tenant work, maintenance, and follow-up tasks are easier to finish cleanly before small issues grow.",
   },
   {
     title: "Add deeper support when you need it",
-    body: "Paid plans give growing landlords stronger workflow support, clearer records, and guided filing help when things get more complex.",
+    body: "Paid plans give growing landlords stronger workflow support, clearer records, and province-specific tools where they are available and still expanding.",
   },
 ];
 
@@ -39,9 +39,9 @@ const FAQ_ITEMS = [
       "Paid plans unlock stronger day-to-day tools, clearer filing support, safer follow-through, and a better record of what happened over time.",
   },
   {
-    question: "Is this only for Halifax?",
+    question: "Is this available across Canada?",
     answer:
-      "Halifax is the first live municipal filing workflow. Other Canadian properties can still use RentChain to stay organized, prepare records, and see what needs attention.",
+      "Yes. RentChain is built for landlords across Canada. You can use it to organize your properties, manage tenants, and stay on top of what needs attention—no matter where your rentals are located. Some region-specific tools, like lease templates and compliance workflows, vary by province and continue to expand.",
   },
 ];
 
@@ -147,7 +147,7 @@ const LandingPage: React.FC = () => {
                   textTransform: "uppercase",
                 }}
               >
-                Built for everyday landlords
+                Built for landlords across Canada
               </div>
               <div style={{ display: "grid", gap: spacing.sm }}>
                 <h1
@@ -159,7 +159,7 @@ const LandingPage: React.FC = () => {
                     maxWidth: 760,
                   }}
                 >
-                  Keep your properties, tenants, and to-dos organized in one place.
+                  Keep your rentals organized and your day moving across Canada.
                 </h1>
                 <p
                   style={{
@@ -170,9 +170,9 @@ const LandingPage: React.FC = () => {
                     maxWidth: 720,
                   }}
                 >
-                  RentChain helps landlords stay on top of property details, tenant activity, maintenance,
-                  and the tasks that tend to fall through the cracks. When you need deeper filing and
-                  compliance help, those tools are there further down the workflow.
+                  RentChain helps landlords across Canada stay on top of property details, tenant activity,
+                  maintenance, and the tasks that tend to fall through the cracks. When you need deeper
+                  lease, filing, or compliance support, those tools can vary by province and continue to expand.
                 </p>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: spacing.sm, alignItems: "center" }}>
@@ -180,7 +180,7 @@ const LandingPage: React.FC = () => {
                   Get started with a property
                 </Button>
                 <div style={{ color: text.secondary, fontSize: "0.93rem", fontWeight: 600 }}>
-                  Free to try. Upgrade only when you need deeper support.
+                  Free to try. Upgrade when you need stronger workflows and deeper support.
                 </div>
               </div>
               <div
@@ -193,8 +193,8 @@ const LandingPage: React.FC = () => {
               >
                 {[
                   "Organize a property and try the basics",
-                  "See what is missing before it becomes a problem",
-                  "Unlock guided filing support when you need it",
+                  "Stay ahead of issues before they become problems",
+                  "Unlock stronger support as your rentals grow",
                 ].map((item) => (
                   <div
                     key={item}
@@ -230,18 +230,18 @@ const LandingPage: React.FC = () => {
               </div>
               <div style={{ display: "grid", gap: spacing.sm }}>
                 <div style={{ fontSize: "1.2rem", fontWeight: 800, lineHeight: 1.25 }}>
-                  Get more help as your rental operations get busier.
+                  Get more help as your rental operations grow.
                 </div>
                 <p style={{ margin: 0, color: "rgba(255,255,255,0.8)", lineHeight: 1.7 }}>
                   Paid plans are for landlords who want cleaner day-to-day control, clearer records, and
-                  stronger support when a property task needs follow-through.
+                  stronger follow-through as properties, tenants, and tasks become harder to track by hand.
                 </p>
               </div>
               <div style={{ display: "grid", gap: 10 }}>
                 {[
                   "Keep property tasks, notes, and next steps easier to follow",
-                  "Get clearer filing support when a jurisdiction requires extra work",
-                  "Keep a better record of what was done and what happens next",
+                  "Stay organized across tenants, maintenance, and day-to-day operations",
+                  "Use deeper province-specific tools when they are available",
                 ].map((item) => (
                   <div
                     key={item}
@@ -317,7 +317,7 @@ const LandingPage: React.FC = () => {
                 <li>Set up a property and keep the important details together</li>
                 <li>See missing information before a task turns messy</li>
                 <li>Use the platform to get organized before paying</li>
-                <li>Try the workflow before deciding whether you need more support</li>
+                <li>Try the core workflow before deciding whether you need more support</li>
               </ul>
             </div>
           </Card>
@@ -327,7 +327,7 @@ const LandingPage: React.FC = () => {
               <ul style={{ margin: 0, paddingLeft: "1.1rem", color: text.muted, lineHeight: 1.8 }}>
                 <li>Run day-to-day rental work with stronger tools and less friction</li>
                 <li>Keep better oversight as you manage more units or properties</li>
-                <li>Get clearer filing and compliance support when you need it</li>
+                <li>Get deeper province-specific lease, filing, and compliance support when you need it</li>
                 <li>Keep a cleaner record of what was done and what happens next</li>
               </ul>
             </div>
@@ -404,9 +404,9 @@ const LandingPage: React.FC = () => {
                 Start simple, then grow into the tools you need.
               </div>
               <p style={{ margin: 0, color: text.muted, lineHeight: 1.75, maxWidth: 760 }}>
-                Add a property, get organized, and see how the workflow feels in practice. Filing and
-                compliance support are there when you need them, but you do not have to learn the whole
-                system to get value on day one.
+                Add a property, get organized, and see how the workflow feels in practice. You can start
+                getting value right away anywhere in Canada, then add deeper province-specific tools as
+                your needs grow.
               </p>
             </div>
             <Button type="button" onClick={handlePrimaryCta}>
