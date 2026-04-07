@@ -233,8 +233,9 @@ const PricingPage: React.FC = () => {
           display: "grid",
           gap: isMobile ? spacing.md : "28px",
           overflow: "visible",
-          padding: isMobile ? `0 ${spacing.md}px ${spacing.lg}px` : `${spacing.md} 24px calc(${spacing.lg} + 12px)`,
+          padding: isMobile ? `0 ${spacing.md}px ${spacing.lg}px` : `${spacing.md} 32px calc(${spacing.lg} + 12px)`,
           boxSizing: "border-box",
+          background: "#f8fafc",
         }}
       >
         <div>
@@ -261,7 +262,8 @@ const PricingPage: React.FC = () => {
           className="rc-pricing-grid"
           style={{
             display: "grid",
-            gap: isMobile ? spacing.md : spacing.lg,
+            columnGap: isMobile ? 0 : "32px",
+            rowGap: isMobile ? spacing.md : "24px",
             ...mobileSectionStyle,
             gridTemplateColumns: isMobile ? "1fr" : "repeat(4, minmax(0, 1fr))",
             alignItems: "stretch",
