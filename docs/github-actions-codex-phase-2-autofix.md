@@ -15,7 +15,7 @@ The goal is to let GitHub Actions attempt a single scoped repair pass after a fa
 
 Phase 2 adds:
 
-- `codex-ci-autofix.yml`
+- `codex-autofix-ci.yml`
 - failed `ci` run detection through `workflow_run`
 - failure-context gathering from the GitHub Actions API
 - a bounded Codex repair attempt
@@ -29,7 +29,7 @@ Phase 2 still does not include:
 - auto-merge
 - merge-gate approvals
 - deployment automation changes
-- repeated background retries outside GitHub’s natural workflow triggers
+- repeated background retries outside GitHub's natural workflow triggers
 - product or application-scope changes unrelated to CI repair
 
 ## Trigger Model
@@ -91,7 +91,7 @@ These permissions are intentionally narrower than a general admin workflow and a
 ## Autofix Flow
 
 1. GitHub finishes a `ci` run
-2. `codex-ci-autofix.yml` inspects the result
+2. `codex-autofix-ci.yml` inspects the result
 3. if the run failed and belongs to an eligible PR branch:
    - it gathers failing job and step context
    - installs repo dependencies
@@ -113,6 +113,14 @@ The autofix workflow stops safely when:
 - Codex cannot produce a safe scoped fix
 - there are no file changes to commit
 
+## Maintainer Guidance
+
+Maintainers should treat Phase 2 as a bounded repair assistant, not an approval substitute.
+
+- review any autofix commit like a normal PR update
+- disable the workflow in GitHub Actions if the repo is under unusual incident conditions
+- avoid raising the attempt cap casually without a separate safety review
+
 ## Operational Notes
 
 - The workflow comments on the PR using a stable marker so the latest autofix status is updated rather than spammed.
@@ -128,3 +136,4 @@ Potential later work could include:
 - optional maintainer approval before applying a fix
 - explicit merge-gate integration
 - selective retry policies
+

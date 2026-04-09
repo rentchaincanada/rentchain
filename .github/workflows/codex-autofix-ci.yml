@@ -1,4 +1,4 @@
-name: codex-ci-autofix
+name: codex-autofix-ci
 
 on:
   workflow_run:
@@ -14,7 +14,7 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: codex-ci-autofix-${{ github.event.workflow_run.id }}
+  group: codex-autofix-ci-${{ github.event.workflow_run.id }}
   cancel-in-progress: false
 
 jobs:
@@ -45,7 +45,6 @@ jobs:
               head_branch: pr?.head.ref || run.head_branch || "",
               head_sha: run.head_sha || "",
               base_branch: pr?.base.ref || "",
-              is_fork: isFork,
               html_url: run.html_url || "",
             };
 
@@ -221,7 +220,7 @@ jobs:
           git config user.name "rentchain-codex[bot]"
           git config user.email "rentchain-codex[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "chore: codex ci autofix attempt"
+          git commit -m "fix: codex autofix ci failure"
           echo "changed=true" >> "$GITHUB_OUTPUT"
 
       - name: Push autofix commit
@@ -298,3 +297,4 @@ jobs:
                 body,
               });
             }
+
