@@ -6,6 +6,15 @@ import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemp
 import { sendEmail } from "../services/emailService";
 import { getEnvFlags } from "../config/requiredEnv";
 import { getAdminEmails } from "../lib/adminEmails";
+import { resolveTenancyContext } from "../services/tenantPortal/tenancyContextService";
+import {
+  projectTenantApplication,
+  projectTenantLease,
+  projectTenantMaintenance,
+  projectTenantProperty,
+} from "../services/tenantPortal/tenantProjectionService";
+import { recordTenantEvent } from "../services/tenantPortal/tenantEventLogService";
+import { redeemTenancyInvite } from "../services/tenantPortal/tenantInviteService";
 
 const router = Router();
 router.use(authenticateJwt);
@@ -1615,6 +1624,247 @@ async function buildTenantMaintenanceUpdateItems(tenantId: string): Promise<Tena
 
   return items.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 }
+
+function requireTenantWorkspaceIdentity(req: any, res: any, next: any) {
+  const userId = String(req.user?.id || "").trim();
+  if (!userId) {
+    return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+  }
+  return next();
+}
+
+async function resolveWorkspaceContextOrRespond(req: any, res: any) {
+  const context = await resolveTenancyContext({
+    uid: String(req.user?.id || "").trim(),
+    email: String(req.user?.email || "").trim() || null,
+    tenantId: String(req.user?.tenantId || "").trim() || null,
+    leaseId: String(req.user?.leaseId || "").trim() || null,
+  });
+
+  if (context.ok) return context;
+
+  const status = context.reason === "unauthenticated" ? 401 : 403;
+  res.status(status).json({ ok: false, error: context.reason === "ambiguous_authority" ? "AMBIGUOUS_TENANCY_CONTEXT" : "FORBIDDEN" });
+  return null;
+}
+
+async function loadDocument(collectionName: string, docId: string | null) {
+  const id = String(docId || "").trim();
+  if (!id) return null;
+  const snap = await db.collection(collectionName).doc(id).get();
+  if (!snap.exists) return null;
+  return { id: snap.id, data: snap.data() as any };
+}
+
+async function loadTenantWorkspaceData(context: Awaited<ReturnType<typeof resolveTenancyContext>>) {
+  const propertyDoc = await loadDocument("properties", context.propertyId);
+
+  let applicationDoc = await loadDocument("applications", context.applicationId);
+  if (!applicationDoc && context.tenantId) {
+    try {
+      const snap = await db.collection("applications").where("tenantId", "==", context.tenantId).limit(1).get();
+      if (!snap.empty) {
+        applicationDoc = { id: snap.docs[0].id, data: snap.docs[0].data() as any };
+      }
+    } catch {
+      applicationDoc = null;
+    }
+  }
+  if (!applicationDoc && context.invitedEmail) {
+    try {
+      const snap = await db.collection("applications").where("applicantEmail", "==", context.invitedEmail).limit(5).get();
+      const match = snap.docs.find((doc) => String((doc.data() as any)?.propertyId || "") === String(context.propertyId || ""));
+      if (match) applicationDoc = { id: match.id, data: match.data() as any };
+    } catch {
+      applicationDoc = null;
+    }
+  }
+
+  let leaseDoc = await loadDocument("leases", context.leaseId);
+  if (!leaseDoc && context.tenantId) {
+    try {
+      const directSnap = await db.collection("leases").where("tenantId", "==", context.tenantId).limit(5).get();
+      const directMatch = directSnap.docs.find((doc) => {
+        const data = doc.data() as any;
+        return String(data?.propertyId || "") === String(context.propertyId || "");
+      });
+      if (directMatch) leaseDoc = { id: directMatch.id, data: directMatch.data() as any };
+    } catch {
+      leaseDoc = null;
+    }
+  }
+
+  const maintenanceItems: Array<{ id: string; data: any }> = [];
+  if (context.tenantId) {
+    try {
+      const snap = await db.collection("maintenanceRequests").where("tenantId", "==", context.tenantId).limit(50).get();
+      snap.docs.forEach((doc) => {
+        const data = doc.data() as any;
+        if (context.propertyId && String(data?.propertyId || "") !== String(context.propertyId)) return;
+        maintenanceItems.push({ id: doc.id, data });
+      });
+    } catch {
+      // ignore maintenance visibility errors and fail closed to empty list
+    }
+  }
+
+  return {
+    property: propertyDoc ? projectTenantProperty(propertyDoc.id, propertyDoc.data) : null,
+    application: applicationDoc ? projectTenantApplication(applicationDoc.id, applicationDoc.data) : null,
+    lease: leaseDoc ? projectTenantLease(leaseDoc.id, leaseDoc.data) : null,
+    maintenance: maintenanceItems
+      .map((item) => projectTenantMaintenance(item.id, item.data))
+      .sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0)),
+  };
+}
+
+async function handleTenantWorkspaceSummary(req: any, res: any) {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+
+  const workspace = await loadTenantWorkspaceData(context);
+  await recordTenantEvent({
+    eventType: "tenant_workspace_viewed",
+    entityType: "tenant_workspace",
+    entityId: String(context.propertyId || context.rc_prop_id || req.user?.id || "workspace"),
+    createdBy: String(req.user?.id || "").trim(),
+    context: {
+      authority: context.authority,
+      propertyId: context.propertyId,
+      rc_prop_id: context.rc_prop_id,
+      applicationId: context.applicationId,
+      leaseId: context.leaseId,
+    },
+    payload: {
+      maintenanceCount: workspace.maintenance.length,
+    },
+  });
+
+  return res.json({
+    ok: true,
+    data: {
+      context,
+      property: workspace.property,
+      application: workspace.application,
+      lease: workspace.lease,
+      maintenance: workspace.maintenance,
+    },
+  });
+}
+
+router.get("/workspace", requireTenantWorkspaceIdentity, handleTenantWorkspaceSummary);
+router.get("/me", requireTenantWorkspaceIdentity, handleTenantWorkspaceSummary);
+
+router.get("/application-status", requireTenantWorkspaceIdentity, async (req: any, res) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+  const workspace = await loadTenantWorkspaceData(context);
+  return res.json({ ok: true, data: workspace.application });
+});
+
+router.get("/lease", requireTenantWorkspaceIdentity, async (req: any, res) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+  const workspace = await loadTenantWorkspaceData(context);
+  return res.json({ ok: true, data: workspace.lease });
+});
+
+router.get("/maintenance-requests", requireTenantWorkspaceIdentity, async (req: any, res) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+  const workspace = await loadTenantWorkspaceData(context);
+  return res.json({ ok: true, data: workspace.maintenance });
+});
+
+router.post("/maintenance-requests", requireTenantWorkspaceIdentity, async (req: any, res) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+  if (context.authority !== "active_tenant" || !context.tenantId) {
+    return res.status(403).json({ ok: false, error: "TENANT_CONTEXT_REQUIRED" });
+  }
+
+  const title = String(req.body?.title || "").trim().slice(0, 180);
+  const description = String(req.body?.description || "").trim().slice(0, 2000);
+  if (!title || !description) {
+    return res.status(400).json({ ok: false, error: "TITLE_AND_DESCRIPTION_REQUIRED" });
+  }
+
+  const propertyDoc = await loadDocument("properties", context.propertyId);
+  const property = propertyDoc?.data || {};
+  const now = Date.now();
+  const ref = db.collection("maintenanceRequests").doc();
+  const data = {
+    id: ref.id,
+    tenantId: context.tenantId,
+    leaseId: context.leaseId || null,
+    propertyId: context.propertyId,
+    unitId: context.unitId || null,
+    landlordId: String(property?.landlordId || "").trim() || null,
+    title,
+    description,
+    category: String(req.body?.category || "GENERAL").trim().toUpperCase(),
+    priority: String(req.body?.priority || "NORMAL").trim().toUpperCase(),
+    status: "submitted",
+    createdAt: now,
+    updatedAt: now,
+    lastUpdatedBy: "TENANT",
+  };
+
+  await ref.set(data);
+  await recordTenantEvent({
+    eventType: "tenant_maintenance_submitted",
+    entityType: "maintenance_request",
+    entityId: ref.id,
+    createdBy: String(req.user?.id || "").trim(),
+    context: {
+      propertyId: context.propertyId,
+      rc_prop_id: context.rc_prop_id,
+      leaseId: context.leaseId,
+      tenantId: context.tenantId,
+    },
+    payload: {
+      title,
+      category: data.category,
+      priority: data.priority,
+    },
+  });
+
+  return res.status(201).json({ ok: true, data: projectTenantMaintenance(ref.id, data) });
+});
+
+router.post("/invite/redeem", requireTenantWorkspaceIdentity, async (req: any, res) => {
+  const token = String(req.body?.token || "").trim();
+  if (!token) return res.status(400).json({ ok: false, error: "TOKEN_REQUIRED" });
+
+  const redeemed = await redeemTenancyInvite({
+    token,
+    redeemedByUid: String(req.user?.id || "").trim(),
+    redeemedByEmail: String(req.user?.email || "").trim() || null,
+  });
+
+  if (!redeemed.ok) {
+    const status =
+      redeemed.error === "invite_not_found"
+        ? 404
+        : redeemed.error === "invite_used"
+        ? 409
+        : redeemed.error === "invite_email_mismatch"
+        ? 403
+        : 400;
+    return res.status(status).json({ ok: false, error: redeemed.error });
+  }
+
+  return res.json({
+    ok: true,
+    data: {
+      inviteId: redeemed.invite?.id || null,
+      propertyId: redeemed.invite?.propertyId || null,
+      applicationId: redeemed.invite?.applicationId || null,
+      rc_prop_id: redeemed.invite?.rc_prop_id || null,
+      status: redeemed.invite?.status || null,
+    },
+  });
+});
 
 router.get("/me", requireTenant, async (req: any, res) => {
   try {

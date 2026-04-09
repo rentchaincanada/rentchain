@@ -1,0 +1,129 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const collections = new Map<string, Map<string, any>>();
+
+function ensureCollection(name: string) {
+  if (!collections.has(name)) {
+    collections.set(name, new Map<string, any>());
+  }
+  return collections.get(name)!;
+}
+
+function clone(value: any) {
+  if (value === undefined) return undefined;
+  return JSON.parse(JSON.stringify(value));
+}
+
+function buildQueryDocs(name: string, filters: Array<{ field: string; op: string; value: any }>) {
+  const docs = Array.from(ensureCollection(name).entries())
+    .filter(([, data]) =>
+      filters.every((filter) => {
+        const target = data?.[filter.field];
+        if (filter.op === "==") return target === filter.value;
+        if (filter.op === "array-contains") return Array.isArray(target) && target.includes(filter.value);
+        return false;
+      })
+    )
+    .map(([id, data]) => ({ id, exists: true, data: () => clone(data) }));
+  return docs;
+}
+
+const dbMock = {
+  collection: (name: string) => ({
+    doc: (id?: string) => {
+      const docId = id || `doc_${ensureCollection(name).size + 1}`;
+      return {
+        id: docId,
+        get: async () => ({
+          id: docId,
+          exists: ensureCollection(name).has(docId),
+          data: () => clone(ensureCollection(name).get(docId)),
+        }),
+        set: async (value: any, opts?: { merge?: boolean }) => {
+          const current = ensureCollection(name).get(docId) || {};
+          ensureCollection(name).set(docId, opts?.merge ? { ...current, ...clone(value) } : clone(value));
+        },
+      };
+    },
+    where: (field: string, op: string, value: any) => ({
+      get: async () => {
+        const docs = buildQueryDocs(name, [{ field, op, value }]);
+        return { docs, empty: docs.length === 0 };
+      },
+    }),
+  }),
+};
+
+vi.mock("../../config/firebase", () => ({
+  db: dbMock,
+}));
+
+describe("resolveTenancyContext", () => {
+  beforeEach(() => {
+    collections.clear();
+  });
+
+  it("resolves applicant linkage from application email", async () => {
+    ensureCollection("applications").set("app-1", {
+      applicantEmail: "tenant@example.com",
+      propertyId: "prop-1",
+      unitApplied: "4A",
+      status: "submitted",
+    });
+    ensureCollection("properties").set("prop-1", {
+      rc_prop_id: "rc-prop-1",
+    });
+
+    const { resolveTenancyContext } = await import("../tenantPortal/tenancyContextService");
+    const result = await resolveTenancyContext({
+      uid: "user-1",
+      email: "tenant@example.com",
+      tenantId: null,
+      leaseId: null,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.authority).toBe("applicant");
+    expect(result.propertyId).toBe("prop-1");
+    expect(result.applicationId).toBe("app-1");
+    expect(result.rc_prop_id).toBe("rc-prop-1");
+  });
+
+  it("resolves active tenant linkage from lease context", async () => {
+    ensureCollection("leases").set("lease-1", {
+      tenantId: "tenant-1",
+      propertyId: "prop-2",
+      unitId: "unit-9",
+      status: "active",
+    });
+    ensureCollection("properties").set("prop-2", {
+      rc_prop_id: "rc-prop-2",
+    });
+
+    const { resolveTenancyContext } = await import("../tenantPortal/tenancyContextService");
+    const result = await resolveTenancyContext({
+      uid: "user-2",
+      email: "leaseholder@example.com",
+      tenantId: "tenant-1",
+      leaseId: null,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.authority).toBe("active_tenant");
+    expect(result.leaseId).toBe("lease-1");
+    expect(result.unitId).toBe("unit-9");
+  });
+
+  it("fails closed when no authority exists", async () => {
+    const { resolveTenancyContext } = await import("../tenantPortal/tenancyContextService");
+    const result = await resolveTenancyContext({
+      uid: "user-3",
+      email: "nobody@example.com",
+      tenantId: null,
+      leaseId: null,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe("no_authority");
+  });
+});
