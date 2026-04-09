@@ -1,12 +1,16 @@
 import { db } from "../../config/firebase";
+import { normalizePid } from "../registry/registryUtils";
+import { HalifaxR400IdentityAdapter } from "./adapters/HalifaxR400IdentityAdapter";
 import { OntarioPropertyIdentitySyntaxAdapter } from "./adapters/OntarioPropertyIdentitySyntaxAdapter";
 import { NovaScotiaPropertyIdentitySyntaxAdapter } from "./adapters/NovaScotiaPropertyIdentitySyntaxAdapter";
 import type {
   IdentityOracleExecutionResult,
   IdentityOracleIdentifierType,
   IdentityOracleNormalizationInput,
+  IdentityOraclePropertyContext,
   IdentityOracleRunRecord,
   IdentityOracleSyntaxResult,
+  IdentityOracleVerificationResult,
   PropertyIdentityProfileRecord,
 } from "./identityOracleTypes";
 
@@ -24,6 +28,7 @@ type Adapter = {
 
 const ONTARIO_ADAPTER = new OntarioPropertyIdentitySyntaxAdapter();
 const NOVA_SCOTIA_ADAPTER = new NovaScotiaPropertyIdentitySyntaxAdapter();
+const HALIFAX_R400_ADAPTER = new HalifaxR400IdentityAdapter();
 
 export async function runIdentityOracle(
   input: IdentityOracleNormalizationInput
@@ -49,6 +54,14 @@ export async function runIdentityOracle(
   const adapter = selectAdapter(province, input.identifierType);
   const syntaxResult = adapter.normalize(identifier);
   const createdAt = new Date().toISOString();
+  const verification = await maybeVerifyExternally({
+    input,
+    property,
+    province,
+    municipality,
+    identifierType: adapter.identifierType,
+    normalizedIdentifier: syntaxResult.normalizedIdentifier,
+  });
 
   const runRef = db.collection(RUNS_COLLECTION).doc();
   const run: IdentityOracleRunRecord = {
@@ -57,11 +70,20 @@ export async function runIdentityOracle(
     rc_prop_id: firstString(property.rc_prop_id, property.rcPropId, propertyId) || null,
     province: province || null,
     municipality: municipality || null,
-    namespaceKey: adapter.buildNamespaceKey({ municipality }),
+    namespaceKey: verification?.namespaceKey || adapter.buildNamespaceKey({ municipality }),
     identifierType: adapter.identifierType,
     originalIdentifier: identifier,
     normalizedIdentifier: syntaxResult.normalizedIdentifier,
     syntaxResult,
+    verificationStatus: verification?.verificationStatus || (syntaxResult.ok ? "SYNTAX_ONLY" : null),
+    confidence: verification?.confidence ?? null,
+    sourceType: verification?.sourceType || null,
+    sourceKey: verification?.sourceKey || null,
+    sourceLabel: verification?.sourceLabel || null,
+    sourceHealth: verification?.sourceHealth || null,
+    flags: verification?.flags || [],
+    notes: verification?.notes || [],
+    relatedNamespaces: verification?.relatedNamespaces || [],
     createdAt,
     createdBy: firstString(input.actorId) || null,
     actorType: input.actorType === "admin" ? "admin" : "system",
@@ -127,6 +149,15 @@ function buildProfileRecord(
         originalIdentifier: run.originalIdentifier,
         normalizedIdentifier: run.normalizedIdentifier,
         syntaxStatus: run.syntaxResult.status,
+        verificationStatus: run.verificationStatus || null,
+        confidence: run.confidence ?? null,
+        sourceType: run.sourceType || null,
+        sourceKey: run.sourceKey || null,
+        sourceLabel: run.sourceLabel || null,
+        sourceHealth: run.sourceHealth || null,
+        flags: run.flags || [],
+        notes: run.notes || [],
+        relatedNamespaces: run.relatedNamespaces || [],
         lastRunId: run.id,
         updatedAt: run.createdAt,
       },
@@ -154,6 +185,65 @@ function normalizeIdentifierType(value: string | null | undefined): IdentityOrac
   }
   if (normalized === "pid") return "pid";
   throw buildInputError("identifier_type_not_supported", 400);
+}
+
+async function maybeVerifyExternally(params: {
+  input: IdentityOracleNormalizationInput;
+  property: PropertyRecord;
+  province: string | null;
+  municipality: string | null;
+  identifierType: IdentityOracleIdentifierType;
+  normalizedIdentifier: string | null;
+}): Promise<IdentityOracleVerificationResult | null> {
+  const requestedSource = String(params.input.source || "").trim().toLowerCase();
+  if (!requestedSource) return null;
+  if (!params.normalizedIdentifier) return null;
+
+  if (requestedSource !== "halifax_r400") {
+    throw buildInputError("source_not_supported", 400);
+  }
+  if (params.province !== "NS") {
+    throw buildInputError("source_not_supported_for_province", 400);
+  }
+
+  const municipality = String(params.municipality || "").trim().toLowerCase();
+  if (municipality && municipality !== "halifax") {
+    throw buildInputError("source_not_supported_for_municipality", 400);
+  }
+  if (params.identifierType !== "pid") {
+    throw buildInputError("source_not_supported_for_identifier_type", 400);
+  }
+
+  return HALIFAX_R400_ADAPTER.verify({
+    province: "NS",
+    municipality: params.municipality,
+    propertyId: String(params.input.propertyId || "").trim(),
+    identifier: params.normalizedIdentifier,
+    identifierType: params.identifierType,
+    propertyContext: buildPropertyContext(params.property),
+  });
+}
+
+function buildPropertyContext(property: PropertyRecord): IdentityOraclePropertyContext {
+  return {
+    addressLine1: firstString(property.addressLine1, property.address1, property.address),
+    city: firstString(property.city, property.municipality),
+    province: firstString(property.province, property.addressProvince),
+    postalCode: firstString(property.postalCode),
+    pid:
+      normalizePid(property.pid) ||
+      normalizePid(property.PID) ||
+      normalizePid(property.propertyPid) ||
+      normalizePid(property.parcelId) ||
+      normalizePid(property.parcelPid) ||
+      null,
+    unitCount:
+      typeof property.unitCount === "number"
+        ? property.unitCount
+        : typeof property.totalUnits === "number"
+          ? property.totalUnits
+          : null,
+  };
 }
 
 function firstString(...values: any[]) {
