@@ -1,0 +1,149 @@
+name: codex-mission-runner
+
+on:
+  workflow_dispatch:
+    inputs:
+      mission_spec_path:
+        description: "Path to the mission spec file Codex should execute"
+        required: true
+        type: string
+      target_branch:
+        description: "Feature branch Codex should create or update"
+        required: true
+        type: string
+      base_branch:
+        description: "Base branch used to seed the target branch"
+        required: false
+        default: "main"
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: codex-mission-runner-${{ inputs.target_branch }}
+  cancel-in-progress: false
+
+jobs:
+  run-mission:
+    runs-on: ubuntu-latest
+    env:
+      MISSION_SPEC_PATH: ${{ inputs.mission_spec_path }}
+      TARGET_BRANCH: ${{ inputs.target_branch }}
+      BASE_BRANCH: ${{ inputs.base_branch }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.base_branch }}
+          fetch-depth: 0
+
+      - name: Validate mission inputs and guidance files
+        run: |
+          set -euo pipefail
+          test -f "$MISSION_SPEC_PATH"
+          test -f AGENTS.md
+          test -f PROCESS.md
+          test -f codex.md
+          {
+            echo "## Codex Mission Runner"
+            echo "- mission spec: \`$MISSION_SPEC_PATH\`"
+            echo "- target branch: \`$TARGET_BRANCH\`"
+            echo "- base branch: \`$BASE_BRANCH\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: |
+            rentchain-api/package-lock.json
+            rentchain-frontend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: rentchain-api
+        run: npm ci
+
+      - name: Install frontend dependencies
+        working-directory: rentchain-frontend
+        run: npm ci
+
+      - name: Prepare target branch
+        run: |
+          set -euo pipefail
+          git fetch origin "$BASE_BRANCH" "$TARGET_BRANCH" || true
+          git checkout "$BASE_BRANCH"
+          if git ls-remote --exit-code --heads origin "$TARGET_BRANCH" >/dev/null 2>&1; then
+            git checkout -B "$TARGET_BRANCH" "origin/$TARGET_BRANCH"
+          else
+            git checkout -B "$TARGET_BRANCH" "origin/$BASE_BRANCH"
+          fi
+
+      - name: Require Codex API secret
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${OPENAI_API_KEY:-}" ]; then
+            echo "OPENAI_API_KEY is required for codex-mission-runner." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+      - name: Run Codex mission
+        id: run_codex
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          working-directory: /github/workspace
+          sandbox: workspace-write
+          safety-strategy: drop-sudo
+          prompt: |
+            You are running inside the RentChain repository.
+
+            Follow these repo guidance files in order:
+            1. AGENTS.md
+            2. PROCESS.md
+            3. codex.md
+            4. ${{ inputs.mission_spec_path }}
+
+            Mission rules:
+            - Work only on the requested mission.
+            - Keep changes scoped to the mission spec.
+            - Do not bypass repo guidance.
+            - Do not modify unrelated files.
+            - Run the relevant verification commands required by the mission.
+            - Stop after implementation and verification.
+
+            Operate on branch `${{ inputs.target_branch }}` only.
+            If you make changes, leave them in the working tree for the workflow commit step.
+
+      - name: Commit mission changes if needed
+        id: commit_changes
+        run: |
+          set -euo pipefail
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Codex produced no file changes." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          git config user.name "rentchain-codex[bot]"
+          git config user.email "rentchain-codex[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore: apply Codex mission updates"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Push target branch
+        if: steps.commit_changes.outputs.changed == 'true'
+        run: git push -u origin "$TARGET_BRANCH"
+
+      - name: Publish follow-up instructions
+        if: always()
+        run: |
+          {
+            echo ""
+            echo "## Next step"
+            echo "Open or update a pull request from \`$TARGET_BRANCH\` into \`$BASE_BRANCH\` after reviewing the workflow output."
+          } >> "$GITHUB_STEP_SUMMARY"
