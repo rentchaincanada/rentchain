@@ -32,7 +32,14 @@ export interface IdentityOraclePropertyContext {
   province?: string | null;
   postalCode?: string | null;
   pid?: string | null;
+  pin?: string | null;
   unitCount?: number | null;
+}
+
+export interface IdentityOracleGateResult {
+  allowed: boolean;
+  reasonCode: string;
+  notes?: string[];
 }
 
 export interface IdentityOracleNormalizationInput {
@@ -70,6 +77,8 @@ export interface IdentityOracleRunRecord {
   sourceKey?: string | null;
   sourceLabel?: string | null;
   sourceHealth?: IdentityOracleSourceHealth | null;
+  policyGate?: IdentityOracleGateResult | null;
+  usageGate?: IdentityOracleGateResult | null;
   flags?: string[];
   notes?: string[];
   relatedNamespaces?: string[];
@@ -101,6 +110,8 @@ export interface PropertyIdentityProfileRecord {
       sourceKey?: string | null;
       sourceLabel?: string | null;
       sourceHealth?: IdentityOracleSourceHealth | null;
+      policyGate?: IdentityOracleGateResult | null;
+      usageGate?: IdentityOracleGateResult | null;
       flags?: string[];
       notes?: string[];
       relatedNamespaces?: string[];
@@ -125,6 +136,8 @@ export interface IdentityOracleVerificationResult {
   sourceKey: string;
   sourceLabel: string;
   sourceHealth: IdentityOracleSourceHealth;
+  policyGate?: IdentityOracleGateResult | null;
+  usageGate?: IdentityOracleGateResult | null;
   flags: string[];
   notes: string[];
   relatedNamespaces?: string[];
