@@ -6,6 +6,7 @@
 - Auth: Firebase Auth
 - Database: Firestore
 - Storage: Google Cloud Storage
+- Email: Mailgun
 - Infra: Terraform
 - Build/Deploy: GitHub Actions, Google Cloud Build, Cloud Run, Vercel
 

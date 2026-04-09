@@ -8,6 +8,7 @@ Reference for Firebase Auth providers, user roles, onboarding, and session/acces
 - backend verifies Firebase tokens
 - Firestore stores role/context relationships
 - role-aware middleware controls access
+- Mailgun handles auth-related email delivery where email notifications are required
 
 ## Supported Auth Modes
 - email/password
@@ -42,6 +43,7 @@ Tenant access must resolve from one of:
 - bind to `rc_prop_id` and `application_id`
 - write redemption audit event
 - invalidate after redemption
+- use Mailgun-backed delivery paths for onboarding/invite emails
 
 ## Projection Rules
 - landlord views may access full operational records

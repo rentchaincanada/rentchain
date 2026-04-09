@@ -68,6 +68,12 @@ firebase emulators:start
 * frontend: Vercel
 * infra: Terraform
 * auth/data: Firebase/Firestore
+* email: Mailgun
+
+## Email Provider Rule
+
+* Mailgun is the single supported email provider
+* deprecated SendGrid config must not be used for new work
 
 ## Change Checklist
 
