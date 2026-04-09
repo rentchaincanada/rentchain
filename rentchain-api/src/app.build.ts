@@ -92,6 +92,7 @@ import invitesRoutes from "./routes/invitesRoutes";
 import accessRoutes from "./routes/accessRoutes";
 import complianceRoutes from "./routes/complianceRoutes";
 import internalReportsRoutes from "./routes/internalReportsRoutes";
+import identityOracleInternalRoutes from "./routes/identityOracleInternalRoutes";
 import statusRoutes from "./routes/statusRoutes";
 import expensesRoutes from "./routes/expensesRoutes";
 import workOrdersRoutes from "./routes/workOrdersRoutes";
@@ -196,6 +197,7 @@ app.use("/api/invites", routeSource("invitesRoutes.ts"), invitesRoutes);
 app.use("/api/access", routeSource("accessRoutes.ts"), accessRoutes);
 app.use("/api/capabilities", routeSource("capabilitiesRoutes.ts"), capabilitiesRoutes);
 app.use("/api/internal", routeSource("internalReportsRoutes.ts"), internalReportsRoutes);
+app.use("/api/internal", routeSource("identityOracleInternalRoutes.ts"), identityOracleInternalRoutes);
 app.use("/api/status", routeSource("statusRoutes.ts"), statusRoutes);
 
 // Auth decode (non-blocking if header missing)
