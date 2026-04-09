@@ -4,6 +4,7 @@ import { getTenantMaintenance, type MaintenanceWorkflowItem } from "../../api/ma
 import { Card, Section } from "../../components/ui/Ui";
 import { clearTenantToken, getTenantToken } from "../../lib/tenantAuth";
 import { colors, radius, spacing, text as textTokens } from "../../styles/tokens";
+import { TenantSurfaceShell, prettyStatus } from "./TenantWorkspaceShared";
 
 function fmtDate(ts?: number | null) {
   if (!ts) return "—";
@@ -98,13 +99,9 @@ export default function TenantMaintenanceRequestDetailPage() {
   }
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: colors.bgAmbient,
-        padding: "clamp(12px, 3vw, 24px)",
-        boxSizing: "border-box",
-      }}
+    <TenantSurfaceShell
+      title="Maintenance Request"
+      subtitle="Review the tenant-safe details and current status of this maintenance request."
     >
       <Section style={{ maxWidth: 900, margin: "0 auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.md }}>
@@ -164,9 +161,9 @@ export default function TenantMaintenanceRequestDetailPage() {
             <div style={{ display: "grid", gap: spacing.sm }}>
               <div style={{ fontSize: "1.2rem", fontWeight: 800, color: textTokens.primary }}>{data.title}</div>
               <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap", color: textTokens.muted, fontSize: "0.95rem" }}>
-                <span>Status: {data.status}</span>
-                <span>Priority: {data.priority}</span>
-                <span>Category: {data.category}</span>
+                <span>Status: {prettyStatus(data.status)}</span>
+                <span>Priority: {prettyStatus(data.priority)}</span>
+                <span>Category: {prettyStatus(data.category)}</span>
                 {data.assignedContractorName ? <span>Contractor: {data.assignedContractorName}</span> : null}
               </div>
               <div style={{ color: textTokens.muted, fontSize: "0.95rem" }}>
@@ -213,7 +210,6 @@ export default function TenantMaintenanceRequestDetailPage() {
           </Card>
         ) : null}
       </Section>
-    </div>
+    </TenantSurfaceShell>
   );
 }
-

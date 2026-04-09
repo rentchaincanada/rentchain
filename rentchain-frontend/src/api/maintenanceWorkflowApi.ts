@@ -1,5 +1,9 @@
 import { apiFetch } from "./apiFetch";
-import { tenantApiFetch } from "./tenantApiFetch";
+import {
+  createTenantWorkspaceMaintenance,
+  getTenantWorkspaceMaintenance,
+  listTenantWorkspaceMaintenance,
+} from "./tenantPortal";
 
 export type MaintenanceWorkflowStatus =
   | "submitted"
@@ -56,25 +60,69 @@ export async function createTenantMaintenance(payload: {
   notes?: string;
   photoUploadPending?: boolean;
 }) {
-  return tenantApiFetch<{ ok: boolean; requestId: string; status: MaintenanceWorkflowStatus; data: MaintenanceWorkflowItem }>(
-    "/tenant/maintenance",
-    {
-      method: "POST",
-      body: payload,
-    }
-  );
+  const data = await createTenantWorkspaceMaintenance({
+    title: payload.title,
+    description: payload.description,
+    category: payload.category,
+    priority: payload.priority.toUpperCase(),
+  });
+  return {
+    ok: true,
+    requestId: data?.requestId || data?.id || "",
+    status: String(data?.status || "submitted").toLowerCase() as MaintenanceWorkflowStatus,
+    data: {
+      id: data?.requestId || data?.id || "",
+      tenantId: "",
+      landlordId: "",
+      propertyId: null,
+      unitId: null,
+      title: data?.title || payload.title,
+      description: data?.summary || payload.description,
+      category: String(data?.category || payload.category),
+      priority: String(data?.priority || payload.priority).toLowerCase() as "low" | "normal" | "urgent",
+      status: String(data?.status || "submitted").toLowerCase() as MaintenanceWorkflowStatus,
+      createdAt: data?.createdAt || Date.now(),
+      updatedAt: data?.updatedAt || Date.now(),
+    },
+  };
 }
 
 export async function listTenantMaintenance() {
-  return tenantApiFetch<{ ok: boolean; items: MaintenanceWorkflowItem[]; data?: MaintenanceWorkflowItem[] }>(
-    "/tenant/maintenance"
-  );
+  const items = await listTenantWorkspaceMaintenance();
+  const mapped: MaintenanceWorkflowItem[] = items.map((item) => ({
+    id: item.requestId,
+    tenantId: "",
+    landlordId: "",
+    propertyId: null,
+    unitId: null,
+    title: item.title || "Maintenance request",
+    description: item.summary || "",
+    category: String(item.category || "GENERAL"),
+    priority: String(item.priority || "normal").toLowerCase() as "low" | "normal" | "urgent",
+    status: String(item.status || "submitted").toLowerCase() as MaintenanceWorkflowStatus,
+    createdAt: item.createdAt || Date.now(),
+    updatedAt: item.updatedAt || item.createdAt || Date.now(),
+  }));
+  return { ok: true, items: mapped, data: mapped };
 }
 
 export async function getTenantMaintenance(id: string) {
-  return tenantApiFetch<{ ok: boolean; item: MaintenanceWorkflowItem; data?: MaintenanceWorkflowItem }>(
-    `/tenant/maintenance/${encodeURIComponent(id)}`
-  );
+  const item = await getTenantWorkspaceMaintenance(id);
+  const mapped: MaintenanceWorkflowItem = {
+    id: item?.requestId || id,
+    tenantId: "",
+    landlordId: "",
+    propertyId: null,
+    unitId: null,
+    title: item?.title || "Maintenance request",
+    description: item?.summary || "",
+    category: String(item?.category || "GENERAL"),
+    priority: String(item?.priority || "normal").toLowerCase() as "low" | "normal" | "urgent",
+    status: String(item?.status || "submitted").toLowerCase() as MaintenanceWorkflowStatus,
+    createdAt: item?.createdAt || Date.now(),
+    updatedAt: item?.updatedAt || item?.createdAt || Date.now(),
+  };
+  return { ok: true, item: mapped, data: mapped };
 }
 
 export async function listLandlordMaintenance(status?: string) {

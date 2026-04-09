@@ -1,8 +1,16 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { Card, Button } from "../../components/ui/Ui";
+import { Button } from "../../components/ui/Ui";
 import { listTenantMaintenance, type MaintenanceWorkflowItem } from "../../api/maintenanceWorkflowApi";
 import { colors, spacing, text as textTokens } from "../../styles/tokens";
+import {
+  TenantEmptyState,
+  TenantErrorState,
+  TenantInfoCard,
+  TenantLoadingState,
+  TenantSurfaceShell,
+  prettyStatus,
+} from "./TenantWorkspaceShared";
 
 function fmtDate(ts?: number | null) {
   if (!ts) return "—";
@@ -36,14 +44,10 @@ export default function TenantMaintenanceRequestsPage() {
   }, [load]);
 
   return (
-    <Card elevated style={{ display: "grid", gap: spacing.md, padding: spacing.lg }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: "1.4rem", color: textTokens.primary }}>Maintenance Requests</h1>
-          <div style={{ color: textTokens.muted, marginTop: 6 }}>
-            Track submitted, assigned, and completed requests.
-          </div>
-        </div>
+    <TenantSurfaceShell
+      title="Maintenance"
+      subtitle="Track tenant-safe maintenance summaries and submit a new request when something needs attention."
+      action={
         <div style={{ display: "flex", gap: 8 }}>
           <Button variant="secondary" onClick={() => void load()} disabled={loading}>
             Refresh
@@ -63,43 +67,35 @@ export default function TenantMaintenanceRequestsPage() {
             New request
           </Link>
         </div>
-      </div>
-
-      {error ? <div style={{ color: colors.danger }}>{error}</div> : null}
+      }
+    >
+      {error ? <TenantErrorState message={error} retry={() => void load()} /> : null}
       {loading ? (
-        <div style={{ color: textTokens.muted }}>Loading requests…</div>
+        <TenantLoadingState label="Loading maintenance requests..." />
       ) : items.length === 0 ? (
-        <div style={{ color: textTokens.muted }}>
-          No maintenance requests yet. Submit your first request.
-        </div>
+        <TenantEmptyState
+          title="No maintenance requests yet"
+          body="You can submit your first request from this workspace when you need help with the property."
+          action={<Link to="/tenant/maintenance/new">Create a request</Link>}
+        />
       ) : (
-        <div style={{ display: "grid", gap: 10 }}>
+        <div style={{ display: "grid", gap: spacing.md }}>
           {items.map((item) => (
-            <Link
-              key={item.id}
-              to={`/tenant/maintenance/${item.id}`}
-              style={{
-                textDecoration: "none",
-                border: `1px solid ${colors.border}`,
-                borderRadius: 12,
-                background: colors.card,
-                padding: "10px 12px",
-                display: "grid",
-                gap: 4,
-              }}
-            >
-              <div style={{ color: textTokens.primary, fontWeight: 700 }}>{item.title || "Request"}</div>
+            <TenantInfoCard key={item.id} heading={item.title || "Maintenance request"} accent="#b45309">
               <div style={{ color: textTokens.muted, fontSize: "0.92rem" }}>
-                {item.status} • {item.priority} • {item.category}
+                {prettyStatus(item.status)} • {prettyStatus(item.priority)} • {prettyStatus(item.category)}
               </div>
               <div style={{ color: textTokens.secondary, fontSize: "0.9rem" }}>
                 Created {fmtDate(item.createdAt)} • Last update {fmtDate(item.updatedAt)}
                 {item.assignedContractorName ? ` • Contractor: ${item.assignedContractorName}` : ""}
               </div>
-            </Link>
+              <div>
+                <Link to={`/tenant/maintenance/${item.id}`}>Open request</Link>
+              </div>
+            </TenantInfoCard>
           ))}
         </div>
       )}
-    </Card>
+    </TenantSurfaceShell>
   );
 }

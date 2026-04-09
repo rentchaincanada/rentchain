@@ -57,7 +57,9 @@ import MicroLiveInvitePage from "./pages/MicroLiveInvitePage";
 import TenantInviteRedeem from "./tenant/TenantInviteRedeem";
 import { LandlordNav } from "./components/layout/LandlordNav";
 import TenantPortalComingSoon from "./pages/tenant/TenantPortalComingSoon";
-import TenantDashboardPage from "./pages/tenant/TenantDashboardPage";
+import TenantWorkspacePage from "./pages/tenant/TenantWorkspacePage";
+import TenantApplicationStatusPage from "./pages/tenant/TenantApplicationStatusPage";
+import TenantLeasePage from "./pages/tenant/TenantLeasePage";
 import TenantLedgerPage from "./pages/tenant/TenantLedgerPage";
 import TenantActivityPage from "./pages/tenant/TenantActivityPage";
 import TenantAttachmentsPage from "./pages/tenant/TenantAttachmentsPage";
@@ -65,6 +67,7 @@ import TenantNoticesCenterPage from "./pages/tenant/TenantNoticesCenterPage";
 import TenantProfilePage from "./pages/tenant/TenantProfilePage";
 import TenantAccountPage from "./pages/tenant/TenantAccountPage";
 import TenantMagicRedeemPage from "./pages/tenant/TenantMagicRedeemPage";
+import TenantInviteRedeemPage from "./pages/tenant/TenantInviteRedeemPage";
 import TenantMaintenanceRequestDetailPage from "./pages/tenant/TenantMaintenanceRequestDetailPage";
 import TenantMaintenanceRequestsPage from "./pages/tenant/TenantMaintenanceRequestsPage";
 import TenantMaintenanceRequestNewPage from "./pages/tenant/TenantMaintenanceRequestNewPage";
@@ -910,7 +913,15 @@ function App() {
         <Route path="/apply" element={<ApplicantApplyPage />} />
         <Route
           path="/tenant"
-          element={renderTenantShell(<TenantDashboardPage />)}
+          element={renderTenantShell(<TenantWorkspacePage />)}
+        />
+        <Route
+          path="/tenant/application"
+          element={renderTenantShell(<TenantApplicationStatusPage />)}
+        />
+        <Route
+          path="/tenant/lease"
+          element={renderTenantShell(<TenantLeasePage />)}
         />
         <Route
           path="/tenant/activity"
@@ -965,6 +976,10 @@ function App() {
         <Route
           path="/tenant/maintenance/:id"
           element={renderTenantShell(<TenantMaintenanceRequestDetailPage />)}
+        />
+        <Route
+          path="/tenant/invite/redeem"
+          element={renderTenantShell(<TenantInviteRedeemPage />)}
         />
         {applicantApplyRedirects.map((path) => (
           <Route
