@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { NavLink } from "react-router-dom";
-import { tenantApiFetch } from "../../api/tenantApiFetch";
+import { getTenantWorkspace } from "../../api/tenantPortal";
 import { getTenantCommunicationSummary } from "../../api/tenantCommunicationsApi";
 import { logoutTenant } from "../../lib/logoutTenant";
 
@@ -8,29 +8,13 @@ type Props = {
   children: React.ReactNode;
 };
 
-type TenantMeResponse = {
-  ok: boolean;
-  data?: {
-    tenant?: {
-      name?: string | null;
-      email?: string | null;
-      shortId?: string | null;
-    };
-    unit?: {
-      label?: string | null;
-    };
-  };
-};
-
 const navItems = [
-  { label: "Dashboard", to: "/tenant" },
-  { label: "Activity", to: "/tenant/activity" },
-  { label: "Ledger", to: "/tenant/ledger" },
-  { label: "Documents", to: "/tenant/attachments" },
+  { label: "Workspace", to: "/tenant" },
+  { label: "Application", to: "/tenant/application" },
+  { label: "Lease", to: "/tenant/lease" },
   { label: "Maintenance", to: "/tenant/maintenance" },
   { label: "Messages", to: "/tenant/messages" },
   { label: "Notices", to: "/tenant/notices" },
-  { label: "Profile", to: "/tenant/profile" },
   { label: "Account", to: "/tenant/account" },
 ];
 
@@ -49,12 +33,12 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
     let cancelled = false;
     const loadIdentity = async () => {
       try {
-        const res = await tenantApiFetch<TenantMeResponse>("/tenant/me");
-        const name = String(res?.data?.tenant?.name || "").trim();
-        const email = String(res?.data?.tenant?.email || "").trim();
-        const unit = String(res?.data?.unit?.label || "").trim();
+        const workspace = await getTenantWorkspace();
+        const name = String(workspace?.context?.invitedEmail || "").trim();
+        const email = String(workspace?.context?.invitedEmail || "").trim();
+        const unit = String(workspace?.context?.unitId || "").trim();
         if (!cancelled) {
-          setTenantName(name || null);
+          setTenantName(name ? name.split("@")[0] : "Tenant workspace");
           setTenantEmail(email || null);
           setTenantUnit(unit || null);
         }
@@ -149,7 +133,7 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
           <div style={{ display: "grid", gap: 2 }}>
             <div style={{ fontWeight: 700 }}>RentChain Tenant Portal</div>
             <div style={{ fontSize: 12, color: "#64748b" }}>
-              {identityLoading ? "Loading profile..." : tenantName || "Tenant profile"}
+              {identityLoading ? "Loading workspace..." : tenantName || "Tenant workspace"}
             </div>
             <div style={{ fontSize: 12, color: "#94a3b8", minHeight: 16 }}>
               {identityLoading

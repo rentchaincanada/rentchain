@@ -1,8 +1,9 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { Button, Card, Input } from "../../components/ui/Ui";
+import { Button, Input } from "../../components/ui/Ui";
 import { createTenantMaintenance } from "../../api/maintenanceWorkflowApi";
 import { colors, radius, spacing, text as textTokens } from "../../styles/tokens";
+import { TenantSurfaceShell } from "./TenantWorkspaceShared";
 
 export default function TenantMaintenanceRequestNewPage() {
   const navigate = useNavigate();
@@ -43,13 +44,11 @@ export default function TenantMaintenanceRequestNewPage() {
   };
 
   return (
-    <Card elevated style={{ padding: spacing.lg, display: "grid", gap: spacing.md }}>
-      <div>
-        <h1 style={{ margin: 0, fontSize: "1.4rem", color: textTokens.primary }}>New Maintenance Request</h1>
-        <div style={{ color: textTokens.muted, marginTop: 6 }}>
-          Submit an issue for your landlord and contractor workflow.
-        </div>
-      </div>
+    <TenantSurfaceShell
+      title="New Maintenance Request"
+      subtitle="Submit a tenant-safe maintenance request through the workspace foundation route."
+    >
+      <div style={{ display: "grid", gap: spacing.md }}>
 
       {error ? (
         <div
@@ -172,6 +171,7 @@ export default function TenantMaintenanceRequestNewPage() {
           Back to requests
         </Button>
       </div>
-    </Card>
+      </div>
+    </TenantSurfaceShell>
   );
 }
