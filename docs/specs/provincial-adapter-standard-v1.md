@@ -1,36 +1,33 @@
 # Provincial Adapter Standard v1
 
 ## Purpose
-Define the reusable adapter contract for all Identity Oracle provincial verification adapters.
+Provincial adapters exist to extend Identity Oracle from syntax normalization into source-aware verification without polluting the core Oracle layer with province-specific logic.
 
-This standard is the source of truth for:
-- adapter shape
-- namespace behavior
-- identifier handling
-- verification status mapping
-- source behavior
-- audit and health expectations
-- schema drift handling
-- test coverage expectations
+The separation of responsibilities is:
+- Identity Oracle core:
+  - accepts property-scoped requests
+  - normalizes raw identifiers into canonical internal forms
+  - persists immutable run audit records
+  - updates latest property identity profile state
+  - exposes internal-only execution paths
+- provincial adapters:
+  - interpret province/source-specific identifier semantics
+  - classify identifier/source combinations
+  - validate province-specific syntax constraints when needed
+  - normalize source-facing lookup values
+  - verify identifiers against a defined authority source
+  - map source outcomes into shared verification statuses
 
-This standard applies to all future Identity Oracle provincial adapters, including open-data, feature-service, paid-gateway, manual-document, and internal-override sources.
+Adapters exist so future province integrations can be added without redefining the Oracle contract every time.
 
-## Scope
-In scope:
-- property identity verification adapters
-- source normalization rules
-- verification result mapping
-- health and drift handling
-- audit requirements
+## Adapter Interface Contract
+Each provincial adapter must implement the four required core methods:
+- `classify`
+- `normalize`
+- `validateSyntax`
+- `verify`
 
-Out of scope:
-- tenant portal UX
-- application/lease/tenant lifecycle mutation
-- billing or provider payment automation
-- compliance-law automation beyond verification signaling
-
-## 1. Adapter Interface
-Each provincial adapter must implement a stable internal contract.
+`healthCheck` may be implemented as an additional operational method, but it does not replace the four core contract methods.
 
 Reference shape:
 ```ts
@@ -56,23 +53,39 @@ export type IdentityOracleSourceHealth =
   | "unavailable"
   | "schema_drift_detected";
 
+export type ProvincialAdapterClassification = {
+  province: string;
+  source: string;
+  identifierType: string;
+  sourceType: IdentityOracleSourceType;
+  namespace: string;
+};
+
 export type ProvincialAdapterInput = {
   propertyId: string;
   rcPropId?: string | null;
   province: string;
   municipality?: string | null;
+  source: string;
   identifierType: string;
-  normalizedIdentifier: string;
+  rawIdentifier: string;
+  normalizedIdentifier?: string | null;
   actorType: "system" | "admin";
   actorId?: string | null;
 };
 
+export type ProvincialSyntaxValidation = {
+  ok: boolean;
+  normalizedIdentifier: string | null;
+  issues: string[];
+};
+
 export type ProvincialAdapterResult = {
-  namespaceKey: string;
+  namespace: string;
   identifierType: string;
   normalizedIdentifier: string;
   sourceType: IdentityOracleSourceType;
-  sourceKey: string;
+  source: string;
   verificationStatus: IdentityOracleVerificationStatus;
   confidence: number | null;
   matchedAtIso: string | null;
@@ -84,13 +97,12 @@ export type ProvincialAdapterResult = {
 };
 
 export type ProvincialIdentityAdapter = {
-  sourceKey: string;
-  supportsProvince(province: string): boolean;
-  supportsIdentifierType(identifierType: string): boolean;
-  buildNamespaceKey(input: { province: string; municipality?: string | null; identifierType: string }): string;
+  classify(input: ProvincialAdapterInput): ProvincialAdapterClassification;
+  normalize(input: ProvincialAdapterInput): string;
+  validateSyntax(input: ProvincialAdapterInput): ProvincialSyntaxValidation;
   verify(input: ProvincialAdapterInput): Promise<ProvincialAdapterResult>;
-  healthCheck(): Promise<{
-    sourceKey: string;
+  healthCheck?(): Promise<{
+    source: string;
     health: IdentityOracleSourceHealth;
     checkedAtIso: string;
     notes?: string[];
@@ -99,72 +111,86 @@ export type ProvincialIdentityAdapter = {
 ```
 
 Rules:
-- adapters must accept normalized identifiers, not raw user-entry strings
-- syntax-only normalization remains the responsibility of the Identity Oracle core layer
-- adapters must not mutate application, lease, tenant, or billing state
+- adapters must accept the Oracle’s normalized contract, not invent a parallel execution model
+- `classify` must determine province, source, identifier type, and canonical namespace
+- `normalize` must produce the exact source-facing lookup value used by verification
+- `validateSyntax` must return explicit pass/fail output and never hide identifier issues
+- `verify` must map real-world lookup outcomes into the shared verification taxonomy
 - adapters must fail closed
+- adapters must not mutate application, lease, tenant, billing, or tenant-portal state
 
-## 2. Namespace Conventions
-Namespace keys must be deterministic and human-auditable.
+## Namespace Rules
+The canonical external identifier namespace format is:
 
-Canonical format:
 ```text
-ca-<province-lower>[:<municipality-lower-slug>]:<identifier-type-lower>
+{province}:{source}:{value}
 ```
 
 Examples:
-- `ca-on:pin`
-- `ca-ns:pid`
-- `ca-ns:halifax:registry-id`
+- `NS:PVSC:40123456`
+- `NS:HRM:REH-2024-001`
+- `ON:LRO:101260418`
 
 Rules:
-- province segment is always required
-- municipality segment is included only when the source scope or identifier authority is municipality-specific
-- identifier segment must use stable internal taxonomy values, not provider labels
-- namespace keys must not include raw source URLs or opaque vendor IDs
+- `province` must be the canonical uppercase province code
+- `source` must be a stable uppercase source key, not a raw URL
+- `value` must be the normalized source-facing identifier value
+- the namespace must be deterministic for the same verified source input
+- the namespace must not depend on transient request metadata
+- the namespace must not include secrets, auth tokens, or arbitrary payload fragments
 
-## 3. Identifier Taxonomy
-Identifier types must map to a shared internal vocabulary.
+Compatibility note:
+- shorthand internal profile labels such as `ca-on:pin` or `ca-ns:pid` may still exist in current core storage logic
+- those labels are compatibility-oriented internal projections, not the primary provincial adapter namespace standard
 
-Initial allowed types:
+## Identifier Taxonomy
+Adapters must map source-specific identifiers into a shared internal taxonomy.
+
+Required initial taxonomy:
 - `pin`
 - `pid`
-- `registry_id`
-- `roll_number`
+- `registration_number`
+
+Allowed future extension examples:
 - `parcel_id`
+- `roll_number`
+- `registry_id`
 - `manual_document_ref`
 
 Rules:
-- internal identifier taxonomy must stay source-agnostic
-- provider-native field names must be mapped into internal taxonomy before persistence
-- adapters may support only a subset of the taxonomy
-- unsupported identifier types must fail with `MANUAL_REVIEW_REQUIRED` or request rejection, not silent coercion
+- `pin` covers Ontario-style property identification numbers
+- `pid` covers parcel/property identifiers such as Nova Scotia PID workflows
+- registration numbers must remain distinct from parcel/property identifiers
+- provider-native field names must be translated into internal taxonomy values before persistence
+- adding a new identifier type must not silently redefine an existing one
+- future extensibility must be explicit, documented, and test-covered
 
-## 4. Verification Status Taxonomy
-All adapters must map results into the following statuses exactly:
+## Verification Status Taxonomy
+All adapters must map outcomes into these statuses exactly:
 
 - `SYNTAX_ONLY`
-  - identifier passed normalization, but no external source verification was attempted or available
+  - syntax validation succeeded, but real-world verification did not occur
 - `VERIFIED_MATCH`
-  - source returned a strong authoritative match for the identifier and property context
+  - the source returned a strong authoritative match
 - `PARTIAL_MATCH`
-  - source returned a plausible but incomplete match that needs additional context or review
+  - the source returned a plausible but incomplete or weakly-scoped match
 - `UNREGISTERED_RISK`
-  - source returned evidence suggesting the property should exist but is absent, missing, or non-compliant in source context
+  - the source returned evidence suggesting expected registration or identity presence is missing
 - `UNVERIFIED`
-  - verification attempt completed without enough evidence to verify or flag risk
+  - verification completed but did not produce enough evidence to verify or flag risk
 - `MANUAL_REVIEW_REQUIRED`
-  - source response or input ambiguity requires human review
+  - ambiguity, conflict, or policy rules require human review
 - `SOURCE_UNAVAILABLE`
-  - the source could not be reached, parsed, or trusted at verification time
+  - the source could not be trusted, reached, or parsed for the attempted verification
 
 Rules:
-- adapters must never invent additional statuses in persisted verification records
-- ambiguous or conflicting source data must not be upgraded to `VERIFIED_MATCH`
-- source-health failure maps to `SOURCE_UNAVAILABLE`, not `UNVERIFIED`
+- no additional persisted statuses may be invented by a provincial adapter
+- `SYNTAX_ONLY` must never imply real-world verification happened
+- `SOURCE_UNAVAILABLE` must not be downgraded to `UNVERIFIED`
+- ambiguous or conflicting results must not be upgraded to `VERIFIED_MATCH`
 
-## 5. Source Taxonomy
-All adapters must classify the verification source as one of:
+## Source Taxonomy
+Every adapter must classify its source as one of:
 
 - `OPEN_DATASET`
 - `FEATURE_SERVICE`
@@ -173,22 +199,25 @@ All adapters must classify the verification source as one of:
 - `INTERNAL_OVERRIDE`
 
 Rules:
-- source type is about how authority is obtained, not how data is transported
-- the same province may eventually have multiple source types
-- `INTERNAL_OVERRIDE` must always be auditable and attributable to an actor
+- source taxonomy describes authority and access model, not transport details
+- one province may eventually support multiple sources with different taxonomy values
+- `INTERNAL_OVERRIDE` must always be attributable to a human or controlled system actor
+- adapters must declare source taxonomy explicitly, never infer it downstream
 
-## 6. Confidence Guidance
-Confidence is advisory and must not override status semantics.
+## Confidence Guidelines
+Confidence is advisory metadata and must not replace verification status semantics.
 
-Guidance:
+Guidelines:
 - `VERIFIED_MATCH`
-  - usually `0.9` to `1.0`
+  - usually high confidence
+  - confidence should still be capped below `1.0` when key corroborating fields are absent
 - `PARTIAL_MATCH`
-  - usually `0.4` to `0.89`
+  - moderate confidence only
+  - confidence must be capped because the match is incomplete by definition
 - `UNREGISTERED_RISK`
-  - optional; only set when the signal itself has measurable strength
+  - confidence may be set when the negative signal is strong and well-scoped
 - `UNVERIFIED`
-  - `null` or low confidence
+  - low confidence or `null`
 - `MANUAL_REVIEW_REQUIRED`
   - `null`
 - `SOURCE_UNAVAILABLE`
@@ -197,123 +226,148 @@ Guidance:
   - `null`
 
 Rules:
-- confidence must never be used as a substitute for verification status
-- confidence must be deterministic from adapter logic
-- if confidence cannot be justified, use `null`
+- confidence must be capped when the source response is partial, stale, indirect, or missing corroborating fields
+- missing data lowers confidence
+- ambiguous data lowers confidence and usually also changes status to `PARTIAL_MATCH` or `MANUAL_REVIEW_REQUIRED`
+- syntax-only validation must not imply real-world verification and therefore must not carry verification confidence
+- if confidence cannot be justified deterministically, use `null`
 
-## 7. Fallback And Source-Unavailable Behavior
-Adapters must define predictable degraded behavior.
+## Fallback Rules
+Adapters must define explicit degraded behavior for failure and ambiguity.
 
-Required behavior:
-- if the source is unavailable, return `SOURCE_UNAVAILABLE`
-- if source data is reachable but insufficient, return `UNVERIFIED` or `PARTIAL_MATCH`
-- if verification is skipped intentionally because only syntax validation is in scope, return `SYNTAX_ONLY`
-- if a fallback path exists, record both primary-source failure and fallback-source result in audit data
-- if no fallback exists, fail closed and preserve the last known verified state separately from the current run result
+Source unavailable:
+- return `SOURCE_UNAVAILABLE`
+- record the failure reason in audit data
+- do not silently downgrade to `UNVERIFIED`
 
-Rules:
-- do not silently downgrade `SOURCE_UNAVAILABLE` to `UNVERIFIED`
-- do not fabricate fallback matches from stale cache without marking provenance
-- cached results must remain attributable to their source and capture staleness
+Schema mismatch:
+- fail closed
+- treat severe schema uncertainty as `SOURCE_UNAVAILABLE` or `MANUAL_REVIEW_REQUIRED`
+- record the mismatch or missing field condition in audit data
 
-## 8. Audit Requirements
-Every verification run must produce immutable audit evidence.
+Ambiguous match:
+- do not upgrade to `VERIFIED_MATCH`
+- return `PARTIAL_MATCH` or `MANUAL_REVIEW_REQUIRED`, depending on certainty and risk
+
+Missing identifiers:
+- reject verification or return `MANUAL_REVIEW_REQUIRED`, depending on where the failure occurs
+- do not fabricate lookup values from weak heuristics
+
+Manual-review escalation behavior:
+- ambiguous or conflicting outcomes must remain visible for downstream reviewers
+- manual review must be traceable to the specific run, source, and identifier involved
+
+Fallback path rules:
+- if a secondary source exists, record both the primary-source failure and the fallback-source result
+- cached fallback data must retain provenance and freshness information
+- no fallback path may bypass audit requirements
+
+## Audit Requirements
+Every adapter verification run must produce immutable, traceable evidence.
 
 Minimum audit requirements:
-- store a run record in `identity_oracle_runs`
+- write an append-only record to `identity_oracle_runs`
 - capture:
   - `propertyId`
   - `rc_prop_id`
   - `province`
   - `municipality`
-  - `namespaceKey`
+  - `namespace`
   - `identifierType`
   - `originalIdentifier`
   - `normalizedIdentifier`
   - syntax result
   - verification status
-  - source type
+  - source taxonomy
   - source key
-  - actor type/id
+  - actor type
+  - actor id
   - created timestamp
-- record health or schema-drift notes when relevant
-- profile updates in `property_identity_profiles` must point back to the latest run id
+  - reasons or issue notes
+- update `property_identity_profiles` by reference to the latest run id
 
-Rules:
-- run records are append-only
-- adapters must never overwrite prior run records
-- raw provider payloads should be stored by reference when needed, not sprayed into summary documents
+Traceability rules:
+- downstream agents must be able to determine which source, status, and namespace produced the current profile state
+- audit evidence must preserve enough context for Risk Agent, Compliance Agent, and future review tooling
+- raw provider payloads should be stored by reference when needed, not duplicated into summary docs
+- prior run records must never be overwritten
 
-## 9. Health Check Expectations
-Every external-source adapter must expose health behavior.
+## Health & Reliability
+Every external-source adapter must define operational reliability behavior.
 
-Minimum expectations:
-- explicit `healthCheck()` implementation
-- record source reachability
-- validate authentication/config presence where applicable
-- validate minimum expected fields or schema markers
-- surface:
-  - `healthy`
-  - `degraded`
-  - `unavailable`
-  - `schema_drift_detected`
+Required expectations:
+- implement source health checks
+- define retry strategy for transient failures
+- define schema drift handling expectations
 
-Rules:
-- health checks must be safe to run without mutating source state
-- health failures must not widen access or bypass verification controls
-- health results should be observable by internal-only routes or operational tooling
+Health checks:
+- validate reachability
+- validate auth/config presence where applicable
+- validate expected critical fields or schema markers
+- surface `healthy`, `degraded`, `unavailable`, or `schema_drift_detected`
 
-## 10. Schema Drift Handling Expectations
-Adapters must guard against source shape changes.
+Retry strategy:
+- only retry transient failures that are known to be safe
+- retries must not widen access or mutate source state
+- repeated failure must still resolve to a deterministic terminal outcome
 
-Required behavior:
-- validate presence of critical fields before trusting a response
-- explicitly detect missing/renamed identifiers or status fields
+Schema drift handling:
+- detect missing or renamed critical fields explicitly
 - fail closed on parsing uncertainty
-- classify drift impact in audit notes
-- map severe drift to `SOURCE_UNAVAILABLE` or `MANUAL_REVIEW_REQUIRED`, depending on certainty
+- record schema drift notes in audit evidence
+- do not attempt silent best-effort parsing of unknown shapes
 
-Rules:
-- no best-effort silent parsing of unknown schemas
-- provider schema assumptions must be test-covered
-- adapters must document the minimum field contract they depend on
+## Test Matrix
+Every adapter must ship with a minimum test matrix.
 
-## 11. Test Matrix
-Each adapter must ship with a minimum test matrix.
+Required unit tests:
+- `classify` produces the expected province/source/identifier classification
+- `normalize` produces deterministic source-facing identifier values
+- `validateSyntax` accepts valid identifiers
+- `validateSyntax` rejects malformed identifiers
+- namespace generation follows `{province}:{source}:{value}`
+- status mapping covers all relevant positive and negative outcomes
+- confidence behavior is capped correctly when data is partial or ambiguous
+- schema drift detection behaves as expected
+- health check success and failure cases are covered
 
-Required test categories:
-- syntax-valid identifier passes through to adapter
-- unsupported identifier type rejects cleanly
-- namespace key generation is deterministic
-- verified full match maps to `VERIFIED_MATCH`
-- partial source response maps to `PARTIAL_MATCH`
-- absent or suspicious source response maps to `UNREGISTERED_RISK` or `UNVERIFIED` as designed
-- unavailable source maps to `SOURCE_UNAVAILABLE`
-- schema drift or missing required fields is detected
-- health check success and failure cases
-- cache hit behavior, if caching exists
-- audit write shape includes required fields
-- profile projection/update points to latest run correctly
+Required integration tests:
+- successful verification flow maps to `VERIFIED_MATCH`
+- incomplete but plausible verification maps to `PARTIAL_MATCH`
+- missing expected registration maps to `UNREGISTERED_RISK` or `UNVERIFIED` as designed
+- source outage maps to `SOURCE_UNAVAILABLE`
+- audit writes include required fields
+- profile projection points to the latest run correctly
 
-## 12. Definition Of Done
-An adapter is done only when:
-- it implements the standard interface
-- namespace logic is deterministic and documented
-- identifier taxonomy mapping is explicit
-- verification statuses are limited to the approved taxonomy
-- source type is declared explicitly
+Required failure scenarios:
+- source unavailable
+- schema mismatch
+- ambiguous match
+- missing identifiers
+- manual-review escalation path
+
+## Definition of Done
+An adapter is not complete until:
+- the required contract methods are implemented:
+  - `classify`
+  - `normalize`
+  - `validateSyntax`
+  - `verify`
+- verification statuses map correctly to the approved taxonomy
+- source taxonomy is declared explicitly
+- audit requirements are fully met
+- health checks are defined
+- schema drift handling is defined
 - fallback behavior is defined
-- health checks exist
-- schema drift guards exist
-- immutable audit writes exist
-- tests cover the required matrix
+- tests pass
+- limitations are documented honestly
 - no unrelated application state is mutated
 
-## Identity Oracle Core Compatibility
+## Compatibility Notes
 The current Identity Oracle core already establishes:
-- syntax normalization before verification
+- syntax normalization before external verification
 - append-only `identity_oracle_runs`
 - latest-state projection in `property_identity_profiles`
 - internal-only execution route pattern at `/api/internal/identity-oracle/run`
 
-All future provincial adapters must integrate into that core contract rather than inventing a parallel pipeline.
+Future provincial adapters must integrate into that core contract rather than inventing a parallel pipeline.
