@@ -137,3 +137,4 @@ Potential later work could include:
 - explicit merge-gate integration
 - selective retry policies
 
+Phase 3 now adds a separate guarded merge gate so autofix remains distinct from merge readiness decisions.

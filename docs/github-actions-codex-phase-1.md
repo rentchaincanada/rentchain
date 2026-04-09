@@ -25,6 +25,8 @@ Existing legacy workflows remain in place in this phase. The new `ci.yml` is the
 
 Phase 2 builds on this baseline with a separate bounded autofix workflow documented in `docs/github-actions-codex-phase-2-autofix.md`.
 
+Phase 3 adds a guarded merge gate documented in `docs/github-actions-codex-phase-3-merge-gate.md`.
+
 ## Workflows Added
 
 ### `codex-mission-runner.yml`
