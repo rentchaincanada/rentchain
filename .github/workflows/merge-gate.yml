@@ -1,0 +1,359 @@
+name: merge-gate
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+      - labeled
+      - unlabeled
+      - review_requested
+      - edited
+  pull_request_review:
+    types:
+      - submitted
+      - dismissed
+  merge_group:
+
+permissions:
+  contents: read
+  pull-requests: read
+  checks: read
+  statuses: read
+  issues: write
+
+concurrency:
+  group: merge-gate-${{ github.event.pull_request.number || github.event.merge_group.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  merge-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate merge readiness
+        id: evaluate
+        uses: actions/github-script@v7
+        env:
+          REQUIRED_APPROVAL_LABEL: maintainer-approved
+          BLOCKING_LABELS: do-not-merge,manual-review-required
+          FALLBACK_REQUIRED_CHECKS: backend,frontend
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const eventName = context.eventName;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            if (eventName === "merge_group") {
+              const summary = [
+                "Merge gate compatibility run for merge queue context.",
+                "This check exists so merge-gate can run under merge queue when required by branch protection.",
+                "",
+                "Blocking conditions:",
+                "- None in merge_group compatibility mode.",
+                "",
+                "Advisory conditions:",
+                "- PR-level founder review and label signals are evaluated on pull request events before queue entry.",
+              ].join("\n");
+              core.setOutput("ready", "true");
+              core.setOutput("summary", summary);
+              core.setOutput("commentable", "false");
+              core.setOutput("comment_skip_reason", "Merge queue context does not post PR comments.");
+              core.setOutput("pr_number", "");
+              return;
+            }
+
+            const prNumber =
+              context.payload.pull_request?.number ||
+              context.payload.review?.pull_request_url?.split("/").pop() ||
+              null;
+
+            if (!prNumber) {
+              core.setOutput("ready", "false");
+              core.setOutput("summary", [
+                "Merge gate failed. PR readiness could not be evaluated safely.",
+                "",
+                "Blocking conditions:",
+                "- Unable to determine pull request context for merge-gate evaluation.",
+              ].join("\n"));
+              core.setOutput("commentable", "false");
+              core.setOutput("comment_skip_reason", "Pull request context could not be determined for comment posting.");
+              core.setOutput("pr_number", "");
+              return;
+            }
+
+            const requiredApprovalLabel = String(process.env.REQUIRED_APPROVAL_LABEL || "maintainer-approved").trim();
+            const blockingLabels = String(process.env.BLOCKING_LABELS || "")
+              .split(",")
+              .map((item) => item.trim())
+              .filter(Boolean);
+            const fallbackRequiredChecks = String(process.env.FALLBACK_REQUIRED_CHECKS || "")
+              .split(",")
+              .map((item) => item.trim())
+              .filter(Boolean);
+
+            const { data: pr } = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: Number(prNumber),
+            });
+
+            const reviewQuery = await github.graphql(
+              `
+                query MergeGatePullRequest($owner: String!, $repo: String!, $number: Int!) {
+                  repository(owner: $owner, name: $repo) {
+                    pullRequest(number: $number) {
+                      isDraft
+                      reviewDecision
+                      baseRefName
+                      headRefName
+                      headRefOid
+                      headRepository {
+                        nameWithOwner
+                      }
+                      labels(first: 100) {
+                        nodes {
+                          name
+                        }
+                      }
+                    }
+                  }
+                }
+              `,
+              { owner, repo, number: Number(prNumber) }
+            );
+
+            const pull = reviewQuery.repository.pullRequest;
+            const labels = new Set((pull.labels.nodes || []).map((node) => node.name));
+            const requestedReviewerCount =
+              (pr.requested_reviewers || []).length + (pr.requested_teams || []).length;
+            const isInRepo = pull.headRepository?.nameWithOwner === `${owner}/${repo}`;
+            const reviewDecision = String(pull.reviewDecision || "");
+
+            let requiredChecks = [];
+            let usedBranchProtection = false;
+            try {
+              const protection = await github.request(
+                "GET /repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks",
+                {
+                  owner,
+                  repo,
+                  branch: pull.baseRefName,
+                }
+              );
+              const contexts = Array.isArray(protection.data.contexts) ? protection.data.contexts : [];
+              const checks = Array.isArray(protection.data.checks)
+                ? protection.data.checks.map((entry) => entry?.context).filter(Boolean)
+                : [];
+              requiredChecks = [...new Set([...contexts, ...checks])];
+              usedBranchProtection = requiredChecks.length > 0;
+            } catch (error) {
+              requiredChecks = fallbackRequiredChecks;
+            }
+
+            requiredChecks = requiredChecks.filter((check) => check && check !== "merge-gate");
+
+            const { data: checkRunsData } = await github.rest.checks.listForRef({
+              owner,
+              repo,
+              ref: pull.headRefOid,
+              per_page: 100,
+            });
+            const { data: combinedStatus } = await github.rest.repos.getCombinedStatusForRef({
+              owner,
+              repo,
+              ref: pull.headRefOid,
+            });
+
+            const successfulConclusions = new Set(["success", "neutral", "skipped"]);
+            const completedStatuses = new Set(["completed"]);
+
+            function checkState(name) {
+              const checkRun = (checkRunsData.check_runs || []).find((run) => run.name === name);
+              if (checkRun) {
+                return {
+                  source: "check_run",
+                  status: checkRun.status || "",
+                  conclusion: checkRun.conclusion || "",
+                  passing:
+                    completedStatuses.has(String(checkRun.status || "")) &&
+                    successfulConclusions.has(String(checkRun.conclusion || "")),
+                };
+              }
+
+              const statusContext = (combinedStatus.statuses || []).find((status) => status.context === name);
+              if (statusContext) {
+                return {
+                  source: "status",
+                  status: statusContext.state || "",
+                  conclusion: statusContext.state || "",
+                  passing: statusContext.state === "success",
+                };
+              }
+
+              return {
+                source: "missing",
+                status: "missing",
+                conclusion: "missing",
+                passing: false,
+              };
+            }
+
+            const blockers = [];
+            const advisories = [];
+
+            if (pull.isDraft) blockers.push("PR is still draft.");
+            if (!isInRepo) blockers.push("PR head branch is not in the same repository.");
+
+            const presentBlockingLabels = blockingLabels.filter((label) => labels.has(label));
+            if (presentBlockingLabels.length) {
+              blockers.push(`Blocking label present: ${presentBlockingLabels.join(", ")}.`);
+            }
+
+            if (!labels.has(requiredApprovalLabel)) {
+              advisories.push(`Missing \`${requiredApprovalLabel}\` label (advisory only).`);
+            }
+
+            if (requestedReviewerCount > 0) {
+              advisories.push("Outstanding review requests are still open (advisory only).");
+            }
+
+            if (reviewDecision === "CHANGES_REQUESTED") {
+              blockers.push("A blocking changes-requested review is still active.");
+            } else if (reviewDecision !== "APPROVED") {
+              advisories.push("Pull request does not currently have an approved review decision (advisory only).");
+            }
+
+            const requiredCheckResults = requiredChecks.map((checkName) => ({
+              name: checkName,
+              ...checkState(checkName),
+            }));
+
+            for (const result of requiredCheckResults) {
+              if (!result.passing) {
+                blockers.push(
+                  `Required check \`${result.name}\` is not passing (source: ${result.source}, state: ${result.status || "unknown"}, conclusion: ${result.conclusion || "unknown"}).`
+                );
+              }
+            }
+
+            if (!requiredChecks.length) {
+              blockers.push("No required checks were discoverable for merge evaluation.");
+            }
+
+            const ready = blockers.length === 0;
+            const summaryLines = [
+              ready
+                ? "Merge gate passed. PR is merge-ready under the founder-operated guarded policy."
+                : "Merge gate failed. PR is not merge-ready yet.",
+              `PR #${prNumber}`,
+              `Branch protection required checks source: ${usedBranchProtection ? "GitHub branch protection" : "workflow fallback list"}`,
+            ];
+
+            if (requiredChecks.length) {
+              summaryLines.push(`Required checks evaluated: ${requiredChecks.join(", ")}`);
+            } else {
+              summaryLines.push("No required checks were discoverable, so merge-gate could not confirm CI readiness.");
+            }
+
+            summaryLines.push("");
+            summaryLines.push("Blocking conditions:");
+            if (blockers.length) {
+              for (const item of blockers) summaryLines.push(`- ${item}`);
+            } else {
+              summaryLines.push("- None.");
+            }
+
+            summaryLines.push("");
+            summaryLines.push("Advisory conditions:");
+            if (advisories.length) {
+              for (const item of advisories) summaryLines.push(`- ${item}`);
+            } else {
+              summaryLines.push("- None.");
+            }
+
+            core.setOutput("ready", ready ? "true" : "false");
+            core.setOutput("summary", summaryLines.join("\n"));
+            core.setOutput("commentable", isInRepo ? "true" : "false");
+            core.setOutput(
+              "comment_skip_reason",
+              isInRepo
+                ? ""
+                : "Skipping PR comment because the head branch is not in the same repository and token write access may be restricted."
+            );
+            core.setOutput("pr_number", String(prNumber));
+
+      - name: Publish merge-gate summary
+        run: |
+          {
+            echo "## Merge Gate"
+            echo "${{ steps.evaluate.outputs.summary }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Update merge-gate PR comment
+        if: steps.evaluate.outputs.commentable == 'true'
+        continue-on-error: true
+        uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ steps.evaluate.outputs.pr_number }}
+          MERGE_GATE_SUMMARY: ${{ steps.evaluate.outputs.summary }}
+          MERGE_GATE_READY: ${{ steps.evaluate.outputs.ready }}
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            try {
+              const issue_number = Number(process.env.PR_NUMBER);
+              const marker = "<!-- rentchain-merge-gate -->";
+              const heading = process.env.MERGE_GATE_READY === "true" ? "Merge-ready" : "Not merge-ready";
+              const body = `${marker}\n## Merge Gate\n\n**${heading}**\n\n${process.env.MERGE_GATE_SUMMARY}`;
+
+              const { data: comments } = await github.rest.issues.listComments({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number,
+                per_page: 100,
+              });
+              const existing = comments.find((comment) =>
+                comment.user?.type === "Bot" && comment.body?.includes(marker)
+              );
+
+              if (existing) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: existing.id,
+                  body,
+                });
+              } else {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number,
+                  body,
+                });
+              }
+            } catch (error) {
+              const status = error?.status || error?.response?.status || "unknown";
+              const message = error?.message || "Unknown comment-posting failure";
+              if (String(status) === "403") {
+                core.warning(`Merge-gate PR comment skipped because comment writes are not permitted in this context (${status}: ${message}).`);
+              } else {
+                core.warning(`Merge-gate PR comment failed but will not block the workflow (${status}: ${message}).`);
+              }
+            }
+
+      - name: Log skipped PR comment context
+        if: steps.evaluate.outputs.commentable != 'true' && steps.evaluate.outputs.comment_skip_reason != ''
+        run: |
+          {
+            echo "## Merge Gate Comment"
+            echo "${{ steps.evaluate.outputs.comment_skip_reason }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Enforce merge gate
+        if: steps.evaluate.outputs.ready != 'true'
+        run: |
+          echo "Merge gate is not satisfied."
+          exit 1
