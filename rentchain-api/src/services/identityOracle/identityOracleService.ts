@@ -1,6 +1,7 @@
 import { db } from "../../config/firebase";
 import { normalizePid } from "../registry/registryUtils";
 import { HalifaxR400IdentityAdapter } from "./adapters/HalifaxR400IdentityAdapter";
+import { OntarioGatewayIdentityAdapter } from "./adapters/OntarioGatewayIdentityAdapter";
 import { OntarioPropertyIdentitySyntaxAdapter } from "./adapters/OntarioPropertyIdentitySyntaxAdapter";
 import { NovaScotiaPropertyIdentitySyntaxAdapter } from "./adapters/NovaScotiaPropertyIdentitySyntaxAdapter";
 import type {
@@ -29,6 +30,7 @@ type Adapter = {
 const ONTARIO_ADAPTER = new OntarioPropertyIdentitySyntaxAdapter();
 const NOVA_SCOTIA_ADAPTER = new NovaScotiaPropertyIdentitySyntaxAdapter();
 const HALIFAX_R400_ADAPTER = new HalifaxR400IdentityAdapter();
+const ONTARIO_GATEWAY_ADAPTER = new OntarioGatewayIdentityAdapter();
 
 export async function runIdentityOracle(
   input: IdentityOracleNormalizationInput
@@ -81,6 +83,8 @@ export async function runIdentityOracle(
     sourceKey: verification?.sourceKey || null,
     sourceLabel: verification?.sourceLabel || null,
     sourceHealth: verification?.sourceHealth || null,
+    policyGate: verification?.policyGate || null,
+    usageGate: verification?.usageGate || null,
     flags: verification?.flags || [],
     notes: verification?.notes || [],
     relatedNamespaces: verification?.relatedNamespaces || [],
@@ -155,6 +159,8 @@ function buildProfileRecord(
         sourceKey: run.sourceKey || null,
         sourceLabel: run.sourceLabel || null,
         sourceHealth: run.sourceHealth || null,
+        policyGate: run.policyGate || null,
+        usageGate: run.usageGate || null,
         flags: run.flags || [],
         notes: run.notes || [],
         relatedNamespaces: run.relatedNamespaces || [],
@@ -200,8 +206,26 @@ async function maybeVerifyExternally(params: {
   if (!params.normalizedIdentifier) return null;
 
   if (requestedSource !== "halifax_r400") {
-    throw buildInputError("source_not_supported", 400);
+    if (requestedSource !== "ontario_gateway") {
+      throw buildInputError("source_not_supported", 400);
+    }
+    if (params.province !== "ON") {
+      throw buildInputError("source_not_supported_for_province", 400);
+    }
+    if (params.identifierType !== "pin") {
+      throw buildInputError("source_not_supported_for_identifier_type", 400);
+    }
+
+    return ONTARIO_GATEWAY_ADAPTER.verify({
+      province: "ON",
+      propertyId: String(params.input.propertyId || "").trim(),
+      source: "ontario_gateway",
+      identifier: params.normalizedIdentifier,
+      identifierType: params.identifierType,
+      propertyContext: buildPropertyContext(params.property),
+    });
   }
+
   if (params.province !== "NS") {
     throw buildInputError("source_not_supported_for_province", 400);
   }
@@ -236,6 +260,9 @@ function buildPropertyContext(property: PropertyRecord): IdentityOraclePropertyC
       normalizePid(property.propertyPid) ||
       normalizePid(property.parcelId) ||
       normalizePid(property.parcelPid) ||
+      null,
+    pin:
+      firstString(property.pin, property.PIN, property.propertyPin, property.rollPin) ||
       null,
     unitCount:
       typeof property.unitCount === "number"
