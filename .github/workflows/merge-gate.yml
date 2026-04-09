@@ -55,6 +55,7 @@ jobs:
               core.setOutput("ready", "true");
               core.setOutput("summary", summary);
               core.setOutput("commentable", "false");
+              core.setOutput("comment_skip_reason", "Merge queue context does not post PR comments.");
               core.setOutput("pr_number", "");
               core.setOutput("unmet", "");
               return;
@@ -69,6 +70,7 @@ jobs:
               core.setOutput("ready", "false");
               core.setOutput("summary", "Unable to determine pull request context for merge-gate evaluation.");
               core.setOutput("commentable", "false");
+              core.setOutput("comment_skip_reason", "Pull request context could not be determined for comment posting.");
               core.setOutput("pr_number", "");
               core.setOutput("unmet", "Unable to determine pull request context.");
               return;
@@ -254,7 +256,13 @@ jobs:
 
             core.setOutput("ready", ready ? "true" : "false");
             core.setOutput("summary", summaryLines.join("\n"));
-            core.setOutput("commentable", "true");
+            core.setOutput("commentable", isInRepo ? "true" : "false");
+            core.setOutput(
+              "comment_skip_reason",
+              isInRepo
+                ? ""
+                : "Skipping PR comment because the head branch is not in the same repository and token write access may be restricted."
+            );
             core.setOutput("pr_number", String(prNumber));
             core.setOutput("unmet", unmet.join("\n"));
 
@@ -267,6 +275,7 @@ jobs:
 
       - name: Update merge-gate PR comment
         if: steps.evaluate.outputs.commentable == 'true'
+        continue-on-error: true
         uses: actions/github-script@v7
         env:
           PR_NUMBER: ${{ steps.evaluate.outputs.pr_number }}
@@ -275,36 +284,54 @@ jobs:
         with:
           github-token: ${{ github.token }}
           script: |
-            const issue_number = Number(process.env.PR_NUMBER);
-            const marker = "<!-- rentchain-merge-gate -->";
-            const heading = process.env.MERGE_GATE_READY === "true" ? "Merge-ready" : "Not merge-ready";
-            const body = `${marker}\n## Merge Gate\n\n**${heading}**\n\n${process.env.MERGE_GATE_SUMMARY}`;
+            try {
+              const issue_number = Number(process.env.PR_NUMBER);
+              const marker = "<!-- rentchain-merge-gate -->";
+              const heading = process.env.MERGE_GATE_READY === "true" ? "Merge-ready" : "Not merge-ready";
+              const body = `${marker}\n## Merge Gate\n\n**${heading}**\n\n${process.env.MERGE_GATE_SUMMARY}`;
 
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number,
-              per_page: 100,
-            });
-            const existing = comments.find((comment) =>
-              comment.user?.type === "Bot" && comment.body?.includes(marker)
-            );
-
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existing.id,
-                body,
-              });
-            } else {
-              await github.rest.issues.createComment({
+              const { data: comments } = await github.rest.issues.listComments({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number,
-                body,
+                per_page: 100,
               });
+              const existing = comments.find((comment) =>
+                comment.user?.type === "Bot" && comment.body?.includes(marker)
+              );
+
+              if (existing) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: existing.id,
+                  body,
+                });
+              } else {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number,
+                  body,
+                });
+              }
+            } catch (error) {
+              const status = error?.status || error?.response?.status || "unknown";
+              const message = error?.message || "Unknown comment-posting failure";
+              if (String(status) === "403") {
+                core.warning(`Merge-gate PR comment skipped because comment writes are not permitted in this context (${status}: ${message}).`);
+              } else {
+                core.warning(`Merge-gate PR comment failed but will not block the workflow (${status}: ${message}).`);
+              }
             }
+
+      - name: Log skipped PR comment context
+        if: steps.evaluate.outputs.commentable != 'true' && steps.evaluate.outputs.comment_skip_reason != ''
+        run: |
+          {
+            echo "## Merge Gate Comment"
+            echo "${{ steps.evaluate.outputs.comment_skip_reason }}"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Enforce merge gate
         if: steps.evaluate.outputs.ready != 'true'

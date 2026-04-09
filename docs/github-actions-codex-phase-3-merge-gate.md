@@ -7,7 +7,7 @@ Phase 3 adds a guarded merge-gate workflow that evaluates whether a pull request
 It provides:
 
 - an explicit `merge-gate` check in GitHub
-- a concise PR comment that explains missing requirements
+- a concise PR comment that explains missing requirements when comment writes are permitted
 - a policy layer that works alongside GitHub branch protection instead of replacing it
 - optional merge queue compatibility through the `merge_group` event
 
@@ -70,6 +70,19 @@ The merge gate adds:
 - a consistent signal that maintainers can use before merging
 
 If branch protection and merge-gate disagree, branch protection still controls whether GitHub allows the merge.
+
+## Comment Posting Behavior
+
+Merge-gate comments are best-effort only.
+
+Behavior:
+
+- the merge-readiness evaluation remains the source of truth
+- the workflow check still passes or fails based on merge policy
+- PR comment posting is attempted only in safe commentable contexts
+- if GitHub denies comment writes, such as a `403 Resource not accessible by integration`, the workflow logs the condition and continues
+
+This prevents comment-permission limits from turning a valid merge-gate result into a failed workflow.
 
 ## Merge Queue Notes
 
