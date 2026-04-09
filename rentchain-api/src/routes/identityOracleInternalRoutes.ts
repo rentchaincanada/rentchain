@@ -23,6 +23,7 @@ router.post("/identity-oracle/run", requireInternalJobToken, async (req: any, re
       identifierType: body?.identifierType,
       province: body?.province,
       municipality: body?.municipality,
+      source: body?.source,
       actorId: body?.actorId,
       actorType: body?.actorType,
     });
