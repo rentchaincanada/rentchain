@@ -23,6 +23,8 @@ Phase 1 does not include:
 
 Existing legacy workflows remain in place in this phase. The new `ci.yml` is the Phase 1 baseline workflow, and consolidating older workflow overlap can happen in a follow-up mission.
 
+Phase 2 builds on this baseline with a separate bounded autofix workflow documented in `docs/github-actions-codex-phase-2-autofix.md`.
+
 ## Workflows Added
 
 ### `codex-mission-runner.yml`
