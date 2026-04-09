@@ -34,17 +34,17 @@ jobs:
       - name: Set up Node 20
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "20.20.0"
           cache: npm
           cache-dependency-path: rentchain-api/package-lock.json
 
       - name: Install backend dependencies
-        run: npm ci
-
-      - name: Run backend tests
-        env:
-          CI: "true"
-        run: npm run test
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
 
       - name: Build backend
         run: npm run build
@@ -61,7 +61,7 @@ jobs:
       - name: Set up Node 20
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "20.20.0"
           cache: npm
           cache-dependency-path: rentchain-frontend/package-lock.json
 

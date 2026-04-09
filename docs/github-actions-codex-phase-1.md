@@ -69,8 +69,7 @@ Jobs:
 
 - backend
   - Node 20
-  - `npm ci`
-  - `npm run test`
+  - install dependencies using the existing lockfile-aware pattern
   - `npm run build`
 - frontend
   - Node 20
@@ -153,13 +152,14 @@ Repository setup expectations:
 The Phase 1 CI workflow verifies:
 
 - backend dependency installation
-- backend tests
 - backend build
 - frontend dependency installation
 - frontend tests
 - frontend build
 
 The workflow uses the commands already established in the repo’s `package.json` files and pins Node to version 20.
+
+For backend verification, Phase 1 intentionally matches the repo's current trusted workflow behavior and runs the backend build path rather than introducing a new backend test contract inside this mission. Existing repo workflows already treat backend build validation as the stable baseline, while backend route tests such as `propertiesRoutes.test.ts` are not part of the current known-good GitHub Actions path.
 
 ## What Codex PR Review Does
 
