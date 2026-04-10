@@ -5,7 +5,11 @@ import { colors, text } from "../styles/tokens";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import { LockedFeature } from "@/components/billing/LockedFeature";
 import { ApplicationDecisionSummaryCard } from "@/components/applications/ApplicationDecisionSummaryCard";
-import { evaluateApplicationRiskSnapshot } from "@/api/rentalApplicationsApi";
+import {
+  evaluateApplicationRiskSnapshot,
+  recordApplicationRiskDecision,
+} from "@/api/rentalApplicationsApi";
+import type { LandlordDecisionAction } from "@/types/applicationDecisionSummary";
 import {
   fetchReviewSummary,
   fetchReviewSummaryPdfSignedUrl,
@@ -95,6 +99,7 @@ function ApplicationReviewSummaryPageBody() {
   const [error, setError] = useState<SummaryLoadError | null>(null);
   const [summary, setSummary] = useState<ApplicationReviewSummary | null>(null);
   const [evaluatingRisk, setEvaluatingRisk] = useState(false);
+  const [savingDecision, setSavingDecision] = useState(false);
 
   const loadSummary = React.useCallback(async () => {
     if (!entitlements.canViewReviewSummary) {
@@ -185,6 +190,27 @@ function ApplicationReviewSummaryPageBody() {
       });
     } finally {
       setEvaluatingRisk(false);
+    }
+  };
+
+  const handleDecision = async (decision: LandlordDecisionAction, notes: string) => {
+    if (!id) return;
+    setSavingDecision(true);
+    try {
+      await recordApplicationRiskDecision(id, { decision, notes });
+      showToast({
+        message: "Decision note saved",
+        description: "Your landlord review decision was captured without changing application status.",
+        variant: "success",
+      });
+    } catch (err: any) {
+      showToast({
+        message: "Decision note failed",
+        description: err?.message || "Unable to save the landlord decision note.",
+        variant: "error",
+      });
+    } finally {
+      setSavingDecision(false);
     }
   };
 
@@ -318,6 +344,8 @@ function ApplicationReviewSummaryPageBody() {
             summary={summary.decisionSummary || null}
             onEvaluateRisk={handleEvaluateRisk}
             evaluatingRisk={evaluatingRisk}
+            onDecision={handleDecision}
+            submittingDecision={savingDecision}
           />
 
           <Card style={{ display: "grid", gap: 6 }}>

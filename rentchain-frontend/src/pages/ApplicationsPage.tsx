@@ -8,6 +8,7 @@ import {
   fetchRentalApplication,
   fetchApplicationDecisionSummary,
   evaluateApplicationRiskSnapshot,
+  recordApplicationRiskDecision,
   updateRentalApplicationStatus,
   fetchScreeningQuote,
   createScreeningCheckout,
@@ -29,7 +30,7 @@ import {
   type ScreeningEvent,
   type ScreeningReceipt,
 } from "@/api/rentalApplicationsApi";
-import type { ApplicationDecisionSummary } from "@/types/applicationDecisionSummary";
+import type { ApplicationDecisionSummary, LandlordDecisionAction } from "@/types/applicationDecisionSummary";
 import { useToast } from "../components/ui/ToastProvider";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import { track } from "@/lib/analytics";
@@ -260,6 +261,7 @@ const ApplicationsPage: React.FC = () => {
   const [detail, setDetail] = useState<RentalApplication | null>(null);
   const [decisionSummary, setDecisionSummary] = useState<ApplicationDecisionSummary | null>(null);
   const [evaluatingRisk, setEvaluatingRisk] = useState(false);
+  const [savingDecision, setSavingDecision] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -697,6 +699,31 @@ const ApplicationsPage: React.FC = () => {
       setEvaluatingRisk(false);
     }
   }, [detail?.id, showToast]);
+
+  const saveLandlordDecision = useCallback(
+    async (decision: LandlordDecisionAction, notes: string) => {
+      const id = String(detail?.id || "").trim();
+      if (!id) return;
+      setSavingDecision(true);
+      try {
+        await recordApplicationRiskDecision(id, { decision, notes });
+        showToast({
+          message: "Decision note saved",
+          description: "Your landlord decision was captured without changing application status.",
+          variant: "success",
+        });
+      } catch (err: any) {
+        showToast({
+          message: "Decision note failed",
+          description: err?.message || "Unable to save the landlord decision note.",
+          variant: "error",
+        });
+      } finally {
+        setSavingDecision(false);
+      }
+    },
+    [detail?.id, showToast]
+  );
 
   useEffect(() => {
     let alive = true;
@@ -1954,6 +1981,8 @@ const ApplicationsPage: React.FC = () => {
                 summary={decisionSummary}
                 onEvaluateRisk={refreshRiskSnapshot}
                 evaluatingRisk={evaluatingRisk}
+                onDecision={saveLandlordDecision}
+                submittingDecision={savingDecision}
               />
               <div ref={screeningSectionRef}>
                 <Card>

@@ -1,4 +1,8 @@
-import type { ApplicationDecisionSummary, RiskAgentReviewSnapshot } from "@/types/applicationDecisionSummary";
+import type {
+  ApplicationDecisionSummary,
+  LandlordDecisionAction,
+  RiskAgentReviewSnapshot,
+} from "@/types/applicationDecisionSummary";
 import { apiFetch } from "./apiFetch";
 import { getBureauAdapter } from "@/bureau";
 import { comparePrimaryVsShadow } from "@/bureau/shadow/compare";
@@ -376,6 +380,21 @@ export async function evaluateApplicationRiskSnapshot(id: string): Promise<RiskA
     body: JSON.stringify({}),
   });
   return ((res?.latest || res?.run || null) as RiskAgentReviewSnapshot) || null;
+}
+
+export async function recordApplicationRiskDecision(
+  id: string,
+  payload: { decision: LandlordDecisionAction; notes?: string | null }
+): Promise<{ id: string; decision: LandlordDecisionAction; notes: string | null; createdAt: string }> {
+  const res: any = await apiFetch(`/risk-agent/applications/${encodeURIComponent(id)}/decision`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      decision: payload.decision,
+      notes: String(payload.notes || "").trim() || null,
+    }),
+  });
+  return res?.decision as { id: string; decision: LandlordDecisionAction; notes: string | null; createdAt: string };
 }
 
 export async function fetchRentalApplication(id: string): Promise<RentalApplication> {

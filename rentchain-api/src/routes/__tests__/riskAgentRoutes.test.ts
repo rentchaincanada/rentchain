@@ -23,6 +23,10 @@ function seedDoc(name: string, id: string, data: any) {
   ensureCollection(name).set(id, { id, data: clone(data) });
 }
 
+function listDocs(name: string) {
+  return Array.from(ensureCollection(name).values()).map((entry) => clone({ id: entry.id, ...entry.data }));
+}
+
 vi.mock("../../config/firebase", () => ({
   db: {
     collection(name: string) {
@@ -269,5 +273,58 @@ describe("riskAgentRoutes", () => {
     });
 
     expect(res.status).toBe(403);
+  });
+
+  it("stores a decision audit record without mutating application status", async () => {
+    const res = await invokeRouter({
+      method: "POST",
+      url: "/risk-agent/applications/app-1/decision",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "landlord-1",
+          landlordId: "landlord-1",
+          role: "landlord",
+        }),
+      },
+      body: {
+        decision: "request_info",
+        notes: "Need one more paystub before deciding.",
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.decision).toEqual(
+      expect.objectContaining({
+        applicationId: "app-1",
+        decision: "request_info",
+        notes: "Need one more paystub before deciding.",
+        userId: "landlord-1",
+      })
+    );
+
+    const decisions = listDocs("risk_agent_decisions");
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]).toEqual(
+      expect.objectContaining({
+        applicationId: "app-1",
+        decision: "request_info",
+        notes: "Need one more paystub before deciding.",
+      })
+    );
+
+    const application = ensureCollection("rentalApplications").get("app-1")?.data;
+    expect(application?.status).toBe("IN_REVIEW");
+  });
+
+  it("rejects unauthorized decision audit access", async () => {
+    const res = await invokeRouter({
+      method: "POST",
+      url: "/risk-agent/applications/app-1/decision",
+      body: {
+        decision: "approve",
+      },
+    });
+
+    expect(res.status).toBe(401);
   });
 });

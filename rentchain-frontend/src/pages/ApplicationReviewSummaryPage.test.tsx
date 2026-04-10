@@ -15,6 +15,7 @@ vi.mock("../api/reviewSummaryApi", () => ({
 
 vi.mock("@/api/rentalApplicationsApi", () => ({
   evaluateApplicationRiskSnapshot: vi.fn(),
+  recordApplicationRiskDecision: vi.fn(),
 }));
 
 vi.mock("../components/ui/ToastProvider", () => ({
@@ -120,7 +121,7 @@ describe("ApplicationReviewSummaryPage", () => {
 
     expect(await screen.findByText("Application Review Summary")).toBeInTheDocument();
     expect(await screen.findByText("Jane Applicant")).toBeInTheDocument();
-    expect(await screen.findByText("Risk Agent Snapshot")).toBeInTheDocument();
+    expect(await screen.findByText("Landlord Decision Panel")).toBeInTheDocument();
     expect(await screen.findByText("Identity verification completed")).toBeInTheDocument();
   });
 });

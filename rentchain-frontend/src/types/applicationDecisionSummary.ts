@@ -21,6 +21,8 @@ export type RiskAgentReviewSnapshot = {
   createdAt?: string | null;
 } | null;
 
+export type LandlordDecisionAction = "approve" | "reject" | "request_info";
+
 export type ApplicationDecisionSummary = {
   applicationId: string;
   status?: string | null;
