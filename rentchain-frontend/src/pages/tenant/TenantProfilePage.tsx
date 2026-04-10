@@ -346,11 +346,9 @@ export default function TenantProfilePage() {
                 {step}
               </div>
             ))}
-            {documentEntry?.available && documentEntry?.path ? (
-              <Link to={documentEntry.path} style={{ fontWeight: 700 }}>
-                {documentEntry.label}
-              </Link>
-            ) : null}
+            <Link to="/tenant/attachments" style={{ fontWeight: 700 }}>
+              Review documents
+            </Link>
           </div>
         ) : (
           <div style={{ color: textTokens.muted }}>No pending next steps right now.</div>

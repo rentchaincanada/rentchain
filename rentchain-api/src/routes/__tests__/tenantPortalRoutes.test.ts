@@ -179,6 +179,17 @@ describe("tenantPortalRoutes foundation", () => {
       created_at: Date.now(),
       expires_at: Date.now() + 10_000,
     });
+    ensureCollection("ledgerAttachments").set("attachment-1", {
+      tenantId: "tenant-1",
+      ledgerItemId: "ledger-1",
+      title: "Government ID",
+      fileName: "id-card.pdf",
+      purpose: "identity",
+      purposeLabel: "Upload Id",
+      url: "https://example.com/id-card.pdf",
+      createdAt: 500,
+      internalNotes: "private",
+    });
   });
 
   it("rejects unauthorized tenant workspace access", async () => {
@@ -289,6 +300,44 @@ describe("tenantPortalRoutes foundation", () => {
     expect(Array.isArray(res.body?.data?.sections)).toBe(true);
     const readinessSection = res.body?.data?.sections?.find((section: any) => section.key === "readiness");
     expect(readinessSection).toBeTruthy();
+  });
+
+  it("returns tenant-safe document states and completion guidance", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/attachments",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body?.data)).toBe(true);
+    expect(res.body?.summary?.total).toBeGreaterThan(0);
+    expect(res.body?.summary?.pendingReview).toBeTypeOf("number");
+    expect(res.body?.guidance?.headline).toBeTypeOf("string");
+    expect(res.body?.data?.[0]?.internalNotes).toBeUndefined();
+    expect(
+      res.body?.data?.some((item: any) =>
+        ["uploaded", "missing", "pending_review", "verified", "needs_attention", "reupload_requested"].includes(item.status)
+      )
+    ).toBe(true);
+  });
+
+  it("rejects unauthorized tenant attachments access", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/attachments",
+    });
+
+    expect(res.status).toBe(401);
   });
 
   it("returns tenant-safe profile data with edit and document entry actions", async () => {
