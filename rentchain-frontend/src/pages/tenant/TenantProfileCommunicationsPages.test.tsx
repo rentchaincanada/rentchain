@@ -64,9 +64,9 @@ describe("tenant profile and communications pages", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/RentChain Tenant Portal/i)).toBeInTheDocument();
+    expect(await screen.findByText(/RentChain Tenant Space/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Profile/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Feed/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /History/i })).toBeInTheDocument();
   });
 
   it("tenant profile page renders safe projected profile data and identity states", async () => {
