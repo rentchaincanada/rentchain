@@ -7,6 +7,7 @@ import {
   fetchRentalApplications,
   fetchRentalApplication,
   fetchApplicationDecisionSummary,
+  evaluateApplicationRiskSnapshot,
   updateRentalApplicationStatus,
   fetchScreeningQuote,
   createScreeningCheckout,
@@ -258,6 +259,7 @@ const ApplicationsPage: React.FC = () => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<RentalApplication | null>(null);
   const [decisionSummary, setDecisionSummary] = useState<ApplicationDecisionSummary | null>(null);
+  const [evaluatingRisk, setEvaluatingRisk] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -671,6 +673,30 @@ const ApplicationsPage: React.FC = () => {
       setLoadingDetail(false);
     }
   };
+
+  const refreshRiskSnapshot = useCallback(async () => {
+    const id = String(detail?.id || "").trim();
+    if (!id) return;
+    setEvaluatingRisk(true);
+    try {
+      await evaluateApplicationRiskSnapshot(id);
+      const nextDecisionSummary = await fetchApplicationDecisionSummary(id);
+      setDecisionSummary(nextDecisionSummary);
+      showToast({
+        message: "Risk snapshot refreshed",
+        description: "The latest Risk Agent result is available for this application.",
+        variant: "success",
+      });
+    } catch (err: any) {
+      showToast({
+        message: "Risk refresh failed",
+        description: err?.message || "Unable to refresh the latest risk snapshot.",
+        variant: "error",
+      });
+    } finally {
+      setEvaluatingRisk(false);
+    }
+  }, [detail?.id, showToast]);
 
   useEffect(() => {
     let alive = true;
@@ -1924,7 +1950,11 @@ const ApplicationsPage: React.FC = () => {
                 </div>
               </div>
 
-              <ApplicationDecisionSummaryCard summary={decisionSummary} />
+              <ApplicationDecisionSummaryCard
+                summary={decisionSummary}
+                onEvaluateRisk={refreshRiskSnapshot}
+                evaluatingRisk={evaluatingRisk}
+              />
               <div ref={screeningSectionRef}>
                 <Card>
                   <div className="rc-applications-card-header" style={{ marginBottom: 8 }}>

@@ -1,5 +1,5 @@
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApplicationDecisionSummaryCard } from "./ApplicationDecisionSummaryCard";
 
 afterEach(() => {
@@ -13,6 +13,24 @@ describe("ApplicationDecisionSummaryCard", () => {
         summary={{
           applicationId: "app-1",
           status: "IN_REVIEW",
+          riskSnapshot: {
+            version: "risk-v1",
+            status: "completed",
+            score: 72,
+            grade: "B",
+            confidence: 0.84,
+            factors: [
+              {
+                code: "identity_verified",
+                label: "Identity verification completed",
+                impact: "positive",
+                weight: 8,
+              },
+            ],
+            flags: ["Income verification incomplete"],
+            recommendations: ["Request additional income documentation"],
+            updatedAt: "2026-04-01T00:00:00.000Z",
+          },
           riskInsights: {
             score: 78,
             grade: "B",
@@ -41,12 +59,15 @@ describe("ApplicationDecisionSummaryCard", () => {
     );
 
     expect(screen.getByText("Application decision support")).toBeInTheDocument();
-    expect(screen.getByText("AI Risk Insights")).toBeInTheDocument();
+    expect(screen.getByText("Risk Agent Snapshot")).toBeInTheDocument();
+    expect(screen.getByText("Legacy Decision Signals")).toBeInTheDocument();
     expect(screen.getByText("Reference Questions")).toBeInTheDocument();
     expect(screen.getByText("Screening Recommendation")).toBeInTheDocument();
     expect(screen.getByText("Decision Support Summary")).toBeInTheDocument();
     expect(screen.getByText("Income stress")).toBeInTheDocument();
     expect(screen.getByText("Overall result: Review")).toBeInTheDocument();
+    expect(screen.getByText("Identity verification completed")).toBeInTheDocument();
+    expect(screen.getByText("Income verification incomplete")).toBeInTheDocument();
   });
 
   it("renders partial decision data safely", () => {
@@ -126,5 +147,14 @@ describe("ApplicationDecisionSummaryCard", () => {
     expect(
       screen.getByText("Decision support will appear as application and screening data becomes available.")
     ).toBeInTheDocument();
+  });
+
+  it("renders a not-evaluated risk state and triggers a refresh action safely", () => {
+    const onEvaluateRisk = vi.fn();
+    render(<ApplicationDecisionSummaryCard summary={{ applicationId: "app-3", riskSnapshot: null }} onEvaluateRisk={onEvaluateRisk} />);
+
+    expect(screen.getByText("Risk Agent has not evaluated this application yet. Run an evaluation to surface score, grade, factors, flags, and next review steps here.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Evaluate risk" }));
+    expect(onEvaluateRisk).toHaveBeenCalledTimes(1);
   });
 });
