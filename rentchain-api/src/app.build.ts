@@ -100,6 +100,7 @@ import transunionRoutes from "./services/integrations/transunion/transunionRoute
 import viewingRoutes from "./routes/viewingRoutes";
 import screeningOpsRoutes from "./routes/screeningOpsRoutes";
 import leaseOverlapCleanupRoutes from "./routes/leaseOverlapCleanupRoutes";
+import riskAgentRoutes from "./routes/riskAgentRoutes";
 
 process.on("unhandledRejection", (reason) => {
   console.error("[FATAL] unhandledRejection", reason);
@@ -258,6 +259,7 @@ app.use("/api", routeSource("usageBreakdownRoutes.ts"), usageBreakdownRoutes);
 app.use("/api/properties", propertiesRoutes);
 app.use("/api/integrations", routeSource("transunionRoutes.ts"), transunionRoutes);
 app.use("/api", routeSource("screeningOpsRoutes.ts"), screeningOpsRoutes);
+app.use("/api", routeSource("riskAgentRoutes.ts"), riskAgentRoutes);
 app.use("/api", routeSource("leaseOverlapCleanupRoutes.ts"), leaseOverlapCleanupRoutes);
 app.use("/api", routeSource("rentalApplicationsRoutes.ts"), rentalApplicationsRoutes);
 if (process.env.NODE_ENV !== "production") {
