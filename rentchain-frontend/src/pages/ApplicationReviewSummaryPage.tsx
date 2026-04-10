@@ -4,6 +4,8 @@ import { Card, Button } from "../components/ui/Ui";
 import { colors, text } from "../styles/tokens";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import { LockedFeature } from "@/components/billing/LockedFeature";
+import { ApplicationDecisionSummaryCard } from "@/components/applications/ApplicationDecisionSummaryCard";
+import { evaluateApplicationRiskSnapshot } from "@/api/rentalApplicationsApi";
 import {
   fetchReviewSummary,
   fetchReviewSummaryPdfSignedUrl,
@@ -92,6 +94,7 @@ function ApplicationReviewSummaryPageBody() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<SummaryLoadError | null>(null);
   const [summary, setSummary] = useState<ApplicationReviewSummary | null>(null);
+  const [evaluatingRisk, setEvaluatingRisk] = useState(false);
 
   const loadSummary = React.useCallback(async () => {
     if (!entitlements.canViewReviewSummary) {
@@ -160,6 +163,28 @@ function ApplicationReviewSummaryPageBody() {
       showToast({ message: successMessage, variant: "success" });
     } catch {
       showToast({ message: "Copy failed", variant: "error" });
+    }
+  };
+
+  const handleEvaluateRisk = async () => {
+    if (!id) return;
+    setEvaluatingRisk(true);
+    try {
+      await evaluateApplicationRiskSnapshot(id);
+      await loadSummary();
+      showToast({
+        message: "Risk snapshot refreshed",
+        description: "The latest Risk Agent result is now available in this review summary.",
+        variant: "success",
+      });
+    } catch (err: any) {
+      showToast({
+        message: "Risk refresh failed",
+        description: err?.message || "Unable to refresh the latest risk snapshot.",
+        variant: "error",
+      });
+    } finally {
+      setEvaluatingRisk(false);
     }
   };
 
@@ -288,6 +313,12 @@ function ApplicationReviewSummaryPageBody() {
               <div style={{ fontSize: 13, color: text.subtle }}>Flags: none</div>
             )}
           </Card>
+
+          <ApplicationDecisionSummaryCard
+            summary={summary.decisionSummary || null}
+            onEvaluateRisk={handleEvaluateRisk}
+            evaluatingRisk={evaluatingRisk}
+          />
 
           <Card style={{ display: "grid", gap: 6 }}>
             <div style={{ fontWeight: 700 }}>Insights</div>

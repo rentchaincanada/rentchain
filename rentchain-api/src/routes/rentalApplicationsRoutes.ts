@@ -31,6 +31,7 @@ import { enqueueScreeningJob } from "../services/screeningJobs";
 import { createSignedUrl, putPdfObject } from "../storage/pdfStore";
 import { buildReviewSummary, buildReviewSummaryPdf } from "../lib/reviewSummary";
 import { buildApplicationDecisionSummary } from "../services/risk/applicationDecisionSummary";
+import { getLatestApplicationRisk } from "../services/riskAgent/riskAgentService";
 import { rateLimitScreeningIp, rateLimitScreeningUser } from "../middleware/rateLimit";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 import { sendEmail } from "../services/emailService";
@@ -3039,7 +3040,8 @@ router.get("/rental-applications/:id/review-summary", async (req: any, res) => {
       application: access.data,
       reviewSummary: summary,
     });
-    return res.json({ ok: true, summary, decisionSummary });
+    const risk = await getLatestApplicationRisk({ applicationId: id });
+    return res.json({ ok: true, summary, decisionSummary, risk });
   } catch (err: any) {
     console.error("[review_summary] failed", err?.message || err);
     return res.status(500).json({

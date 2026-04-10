@@ -1,6 +1,7 @@
 import { apiFetch } from "./apiFetch";
+import type { ApplicationDecisionSummary, RiskAgentReviewSnapshot } from "@/types/applicationDecisionSummary";
 
-export type ApplicationReviewSummary = {
+type ReviewSummaryCore = {
   applicationId: string;
   generatedAt: string;
   applicant: {
@@ -48,10 +49,27 @@ export type ApplicationReviewSummary = {
   insights: string[];
 };
 
+export type ApplicationReviewSummary = ReviewSummaryCore & {
+  decisionSummary?: ApplicationDecisionSummary | null;
+  risk?: RiskAgentReviewSnapshot;
+};
+
 export class ReviewSummaryApiError extends Error {
   status?: number;
   backendError?: string;
   detail?: string;
+}
+
+function attachRiskSnapshot(
+  decisionSummary: ApplicationDecisionSummary | null | undefined,
+  risk: RiskAgentReviewSnapshot | undefined
+): ApplicationDecisionSummary | null {
+  if (!decisionSummary && !risk) return null;
+  return {
+    applicationId: decisionSummary?.applicationId || "",
+    ...(decisionSummary || {}),
+    riskSnapshot: risk || null,
+  };
 }
 
 export async function fetchReviewSummary(applicationId: string): Promise<ApplicationReviewSummary> {
@@ -71,7 +89,14 @@ export async function fetchReviewSummary(applicationId: string): Promise<Applica
     err.detail = typeof res?.detail === "string" ? res.detail : undefined;
     throw err;
   }
-  return res.summary as ApplicationReviewSummary;
+  return {
+    ...(res.summary as ReviewSummaryCore),
+    decisionSummary: attachRiskSnapshot(
+      (res?.decisionSummary || null) as ApplicationDecisionSummary | null,
+      (res?.risk || null) as RiskAgentReviewSnapshot
+    ),
+    risk: ((res?.risk || null) as RiskAgentReviewSnapshot) || null,
+  };
 }
 
 export async function fetchReviewSummaryPdfSignedUrl(applicationId: string): Promise<string> {

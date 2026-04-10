@@ -1,4 +1,4 @@
-import type { ApplicationDecisionSummary } from "@/types/applicationDecisionSummary";
+import type { ApplicationDecisionSummary, RiskAgentReviewSnapshot } from "@/types/applicationDecisionSummary";
 import { apiFetch } from "./apiFetch";
 import { getBureauAdapter } from "@/bureau";
 import { comparePrimaryVsShadow } from "@/bureau/shadow/compare";
@@ -361,7 +361,21 @@ export async function fetchRentalApplications(params?: {
 
 export async function fetchApplicationDecisionSummary(id: string): Promise<ApplicationDecisionSummary | null> {
   const res: any = await apiFetch(`/rental-applications/${encodeURIComponent(id)}/review-summary`);
-  return (res?.decisionSummary || null) as ApplicationDecisionSummary | null;
+  if (!res?.decisionSummary && !res?.risk) return null;
+  return {
+    applicationId: String(res?.decisionSummary?.applicationId || id),
+    ...(res?.decisionSummary || {}),
+    riskSnapshot: ((res?.risk || null) as RiskAgentReviewSnapshot) || null,
+  } as ApplicationDecisionSummary;
+}
+
+export async function evaluateApplicationRiskSnapshot(id: string): Promise<RiskAgentReviewSnapshot> {
+  const res: any = await apiFetch(`/risk-agent/applications/${encodeURIComponent(id)}/evaluate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+  return ((res?.latest || res?.run || null) as RiskAgentReviewSnapshot) || null;
 }
 
 export async function fetchRentalApplication(id: string): Promise<RentalApplication> {

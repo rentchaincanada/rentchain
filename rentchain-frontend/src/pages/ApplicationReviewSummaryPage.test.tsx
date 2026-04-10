@@ -13,6 +13,10 @@ vi.mock("../api/reviewSummaryApi", () => ({
   ReviewSummaryApiError: class ReviewSummaryApiError extends Error {},
 }));
 
+vi.mock("@/api/rentalApplicationsApi", () => ({
+  evaluateApplicationRiskSnapshot: vi.fn(),
+}));
+
 vi.mock("../components/ui/ToastProvider", () => ({
   useToast: () => ({ showToast: vi.fn() }),
 }));
@@ -89,11 +93,34 @@ describe("ApplicationReviewSummaryPage", () => {
       screening: { status: "complete", provider: "transunion", referenceId: "TU-1" },
       derived: { incomeToRentRatio: null, completeness: { score: 0.8, label: "High" }, flags: [] },
       insights: [],
+      decisionSummary: {
+        applicationId: "app-1",
+        riskSnapshot: {
+          version: "risk-v1",
+          status: "completed",
+          score: 72,
+          grade: "B",
+          confidence: 0.84,
+          factors: [
+            {
+              code: "identity_verified",
+              label: "Identity verification completed",
+              impact: "positive",
+              weight: 8,
+            },
+          ],
+          flags: ["Income verification incomplete"],
+          recommendations: ["Request additional income documentation"],
+          updatedAt: "2026-04-01T00:00:00.000Z",
+        },
+      },
     } as any);
 
     renderPage();
 
     expect(await screen.findByText("Application Review Summary")).toBeInTheDocument();
     expect(await screen.findByText("Jane Applicant")).toBeInTheDocument();
+    expect(await screen.findByText("Risk Agent Snapshot")).toBeInTheDocument();
+    expect(await screen.findByText("Identity verification completed")).toBeInTheDocument();
   });
 });
