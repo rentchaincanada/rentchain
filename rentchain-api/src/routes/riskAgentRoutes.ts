@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db } from "../config/firebase";
 import { requireLandlord } from "../middleware/requireLandlord";
+import { recordRiskDecisionAudit } from "../services/riskAgent/riskDecisionAuditService";
 import { evaluateApplicationRisk, getLatestApplicationRisk } from "../services/riskAgent/riskAgentService";
 
 const router = Router();
@@ -63,6 +64,39 @@ router.get("/risk-agent/applications/:id/latest", async (req: any, res) => {
     return res.status(statusCode).json({
       ok: false,
       error: statusCode >= 500 ? "risk_agent_latest_failed" : String(err?.message || "bad_request"),
+    });
+  }
+});
+
+router.post("/risk-agent/applications/:id/decision", async (req: any, res) => {
+  try {
+    const applicationId = String(req.params?.id || "").trim();
+    await assertApplicationAccess(req, applicationId);
+
+    const decision = String(req.body?.decision || "").trim().toLowerCase();
+    if (!["approve", "reject", "request_info"].includes(decision)) {
+      return res.status(400).json({ ok: false, error: "invalid_decision" });
+    }
+
+    const notes = String(req.body?.notes || "").trim();
+    const audit = await recordRiskDecisionAudit({
+      applicationId,
+      landlordId: String(req.user?.landlordId || req.user?.id || "").trim() || null,
+      userId: String(req.user?.id || "").trim() || null,
+      role: String(req.user?.role || "").trim() || null,
+      decision: decision as "approve" | "reject" | "request_info",
+      notes: notes || null,
+    });
+
+    return res.json({ ok: true, decision: audit });
+  } catch (err: any) {
+    const statusCode = typeof err?.statusCode === "number" ? err.statusCode : 500;
+    if (statusCode >= 500) {
+      console.error("[risk-agent] decision audit failed", err?.message || err);
+    }
+    return res.status(statusCode).json({
+      ok: false,
+      error: statusCode >= 500 ? "risk_agent_decision_failed" : String(err?.message || "bad_request"),
     });
   }
 });

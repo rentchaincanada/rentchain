@@ -59,7 +59,7 @@ describe("ApplicationDecisionSummaryCard", () => {
     );
 
     expect(screen.getByText("Application decision support")).toBeInTheDocument();
-    expect(screen.getByText("Risk Agent Snapshot")).toBeInTheDocument();
+    expect(screen.getByText("Landlord Decision Panel")).toBeInTheDocument();
     expect(screen.getByText("Legacy Decision Signals")).toBeInTheDocument();
     expect(screen.getByText("Reference Questions")).toBeInTheDocument();
     expect(screen.getByText("Screening Recommendation")).toBeInTheDocument();
@@ -68,6 +68,7 @@ describe("ApplicationDecisionSummaryCard", () => {
     expect(screen.getByText("Overall result: Review")).toBeInTheDocument();
     expect(screen.getByText("Identity verification completed")).toBeInTheDocument();
     expect(screen.getByText("Income verification incomplete")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Approve" })).toBeInTheDocument();
   });
 
   it("renders partial decision data safely", () => {
@@ -153,8 +154,37 @@ describe("ApplicationDecisionSummaryCard", () => {
     const onEvaluateRisk = vi.fn();
     render(<ApplicationDecisionSummaryCard summary={{ applicationId: "app-3", riskSnapshot: null }} onEvaluateRisk={onEvaluateRisk} />);
 
-    expect(screen.getByText("Risk Agent has not evaluated this application yet. Run an evaluation to surface score, grade, factors, flags, and next review steps here.")).toBeInTheDocument();
+    expect(screen.getByText("No risk snapshot is available yet. Evaluate risk first to unlock the decision panel.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Evaluate risk" }));
     expect(onEvaluateRisk).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes decision actions through to the provided handler", () => {
+    const onDecision = vi.fn();
+    render(
+      <ApplicationDecisionSummaryCard
+        summary={{
+          applicationId: "app-4",
+          riskSnapshot: {
+            version: "risk-v1",
+            status: "completed",
+            score: 88,
+            grade: "A",
+            confidence: 0.94,
+            factors: [],
+            flags: [],
+            recommendations: [],
+            updatedAt: "2026-04-01T00:00:00.000Z",
+          },
+        }}
+        onDecision={onDecision}
+      />
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("Optional decision notes for your team audit trail"), {
+      target: { value: "Looks strong overall." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    expect(onDecision).toHaveBeenCalledWith("approve", "Looks strong overall.");
   });
 });
