@@ -145,6 +145,160 @@ type TenantDocumentItem = {
   helpPath: string | null;
 };
 
+type TenantAccessRequestStatus = "pending";
+type TenantAccessGrantStatus = "active" | "expired" | "revoked";
+type TenantAccessActivityType =
+  | "request_submitted"
+  | "access_granted"
+  | "access_viewed"
+  | "access_revoked"
+  | "access_expired";
+
+type TenantAccessRequestItem = {
+  id: string;
+  requestedByLabel: string;
+  categories: string[];
+  status: TenantAccessRequestStatus;
+  requestedAt: number | null;
+  reviewCtaLabel: string;
+};
+
+type TenantAccessGrantItem = {
+  id: string;
+  grantedToLabel: string;
+  categories: string[];
+  status: TenantAccessGrantStatus;
+  grantedAt: number | null;
+  expiresAt: number | null;
+  lastActivityAt: number | null;
+  canRevoke: boolean;
+  accessLabel: string;
+};
+
+type TenantAccessActivityItem = {
+  id: string;
+  type: TenantAccessActivityType;
+  title: string;
+  occurredAt: number | null;
+};
+
+type TenantAccessWorkspace = {
+  summary: {
+    activeGrants: number;
+    pendingRequests: number;
+    latestActivityAt: number | null;
+  };
+  pendingRequests: TenantAccessRequestItem[];
+  activeAccess: TenantAccessGrantItem[];
+  recentActivity: TenantAccessActivityItem[];
+  guidance: {
+    headline: string;
+    body: string;
+  };
+};
+
+function buildTenantAccessWorkspace(input: {
+  shareRecords: any[];
+  propertyLabel: string | null;
+}): TenantAccessWorkspace {
+  const now = Date.now();
+  const categories = ["Rental history"];
+  const grantedToLabel = input.propertyLabel
+    ? `Shared with your landlord for ${input.propertyLabel}`
+    : "Shared with your landlord";
+
+  const activeAccess = input.shareRecords
+    .filter((record) => {
+      const expiresAt = typeof record?.expiresAt === "number" ? record.expiresAt : null;
+      return !record?.revoked && !(expiresAt && expiresAt <= now);
+    })
+    .map((record) => ({
+      id: String(record?.id || ""),
+      grantedToLabel,
+      categories,
+      status: "active" as const,
+      grantedAt: typeof record?.createdAt === "number" ? record.createdAt : null,
+      expiresAt: typeof record?.expiresAt === "number" ? record.expiresAt : null,
+      lastActivityAt: typeof record?.lastAccessedAt === "number" ? record.lastAccessedAt : null,
+      canRevoke: true,
+      accessLabel: "View-only access",
+    }))
+    .filter((item) => item.id)
+    .sort(
+      (a, b) =>
+        timestampToSort(b.lastActivityAt || b.grantedAt) - timestampToSort(a.lastActivityAt || a.grantedAt)
+    );
+
+  const recentActivity = input.shareRecords
+    .flatMap((record) => {
+      const id = String(record?.id || "");
+      if (!id) return [];
+
+      const items: TenantAccessActivityItem[] = [];
+      const createdAt = typeof record?.createdAt === "number" ? record.createdAt : null;
+      const revokedAt = typeof record?.revokedAt === "number" ? record.revokedAt : null;
+      const lastAccessedAt = typeof record?.lastAccessedAt === "number" ? record.lastAccessedAt : null;
+      const expiresAt = typeof record?.expiresAt === "number" ? record.expiresAt : null;
+
+      if (createdAt) {
+        items.push({
+          id: `${id}:created`,
+          type: "access_granted",
+          title: "Access granted to your landlord",
+          occurredAt: createdAt,
+        });
+      }
+      if (lastAccessedAt) {
+        items.push({
+          id: `${id}:viewed`,
+          type: "access_viewed",
+          title: "Your shared access link was viewed",
+          occurredAt: lastAccessedAt,
+        });
+      }
+      if (revokedAt) {
+        items.push({
+          id: `${id}:revoked`,
+          type: "access_revoked",
+          title: "You revoked access",
+          occurredAt: revokedAt,
+        });
+      } else if (expiresAt && expiresAt <= now) {
+        items.push({
+          id: `${id}:expired`,
+          type: "access_expired",
+          title: "A shared access link expired",
+          occurredAt: expiresAt,
+        });
+      }
+
+      return items;
+    })
+    .sort((a, b) => timestampToSort(b.occurredAt) - timestampToSort(a.occurredAt))
+    .slice(0, 6);
+
+  const latestActivityAt =
+    recentActivity.reduce((max, item) => Math.max(max, timestampToSort(item.occurredAt)), 0) || null;
+
+  return {
+    summary: {
+      activeGrants: activeAccess.length,
+      pendingRequests: 0,
+      latestActivityAt,
+    },
+    pendingRequests: [],
+    activeAccess,
+    recentActivity,
+    guidance: {
+      headline: activeAccess.length
+        ? "You can review and manage the access you’ve already shared."
+        : "Nothing is shared from your profile right now.",
+      body:
+        "This view shows tenant-safe sharing records only. V1 focuses on the access you’ve already granted, so request review stays read-first until broader permission flows are introduced.",
+    },
+  };
+}
+
 const SCREENING_REQUEST_STATUSES = [
   "requested",
   "consent_pending",
@@ -2619,6 +2773,109 @@ async function handleTenantNotifications(req: any, res: any) {
 }
 
 router.get("/notifications", requireTenantWorkspaceIdentity, handleTenantNotifications);
+
+router.get("/access", requireTenantWorkspaceIdentity, async (req: any, res) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+
+  try {
+    const tenantId = String(context.tenantId || req.user?.tenantId || "").trim();
+    const propertyDoc = await loadDocument("properties", context.propertyId);
+    const propertyLabel =
+      [propertyDoc?.data?.street1, propertyDoc?.data?.street2].filter(Boolean).join(", ") || null;
+
+    let shareRecords: any[] = [];
+    if (tenantId) {
+      const snap = await db.collection("tenantHistoryShares").where("tenantId", "==", tenantId).get();
+      shareRecords = snap.docs
+        .map((doc: any) => ({ id: doc.id, ...(doc.data() as any) }))
+        .sort((a, b) => timestampToSort(b.lastAccessedAt || b.revokedAt || b.createdAt) - timestampToSort(a.lastAccessedAt || a.revokedAt || a.createdAt));
+    }
+
+    const workspace = buildTenantAccessWorkspace({
+      shareRecords,
+      propertyLabel,
+    });
+
+    await recordTenantEvent({
+      eventType: "tenant_access_viewed",
+      entityType: "tenant_access",
+      entityId: String(context.tenantId || context.applicationId || context.propertyId || req.user?.id || "tenant_access"),
+      createdBy: String(req.user?.id || "").trim(),
+      context: {
+        authority: context.authority,
+        propertyId: context.propertyId,
+        rc_prop_id: context.rc_prop_id,
+        applicationId: context.applicationId,
+        leaseId: context.leaseId,
+      },
+      payload: {
+        activeGrants: workspace.summary.activeGrants,
+        pendingRequests: workspace.summary.pendingRequests,
+      },
+    });
+
+    return res.json({ ok: true, data: workspace });
+  } catch (err: any) {
+    console.error("[tenant/access] failed", {
+      userId: req.user?.id,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_ACCESS_FAILED" });
+  }
+});
+
+router.post("/access/:shareId/revoke", requireTenantWorkspaceIdentity, async (req: any, res) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+
+  const tenantId = String(context.tenantId || req.user?.tenantId || "").trim();
+  const shareId = String(req.params?.shareId || "").trim();
+  if (!tenantId || !shareId) {
+    return res.status(400).json({ ok: false, error: "TENANT_ACCESS_REVOKE_INVALID" });
+  }
+
+  try {
+    const ref = db.collection("tenantHistoryShares").doc(shareId);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      return res.status(404).json({ ok: false, error: "TENANT_ACCESS_NOT_FOUND" });
+    }
+
+    const share = snap.data() as any;
+    if (String(share?.tenantId || "").trim() !== tenantId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    await ref.set({ revoked: true, revokedAt: Date.now() }, { merge: true });
+
+    await recordTenantEvent({
+      eventType: "tenant_access_revoked",
+      entityType: "tenant_access",
+      entityId: shareId,
+      createdBy: String(req.user?.id || "").trim(),
+      context: {
+        authority: context.authority,
+        propertyId: context.propertyId,
+        rc_prop_id: context.rc_prop_id,
+        applicationId: context.applicationId,
+        leaseId: context.leaseId,
+      },
+      payload: {
+        tenantId,
+      },
+    });
+
+    return res.json({ ok: true, shareId, revoked: true });
+  } catch (err: any) {
+    console.error("[tenant/access:revoke] failed", {
+      userId: req.user?.id,
+      shareId,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_ACCESS_REVOKE_FAILED" });
+  }
+});
 
 router.get("/application-status", requireTenantWorkspaceIdentity, async (req: any, res) => {
   const context = await resolveWorkspaceContextOrRespond(req, res);

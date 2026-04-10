@@ -20,6 +20,10 @@ const tenantApplicationCompletionApi = vi.hoisted(() => ({
   getTenantApplicationCompletion: vi.fn(),
 }));
 
+const tenantAccessApi = vi.hoisted(() => ({
+  getTenantAccess: vi.fn(),
+}));
+
 const maintenanceWorkflowApi = vi.hoisted(() => ({
   listTenantMaintenance: vi.fn(),
 }));
@@ -30,6 +34,7 @@ const tenantCommunicationsApi = vi.hoisted(() => ({
 
 vi.mock("../../api/tenantPortal", () => tenantPortalApi);
 vi.mock("../../api/tenantApplicationCompletion", () => tenantApplicationCompletionApi);
+vi.mock("../../api/tenantAccess", () => tenantAccessApi);
 vi.mock("../../api/tenantCommunicationsApi", () => tenantCommunicationsApi);
 vi.mock("../../api/maintenanceWorkflowApi", async () => {
   const actual = await vi.importActual<any>("../../api/maintenanceWorkflowApi");
@@ -47,6 +52,20 @@ describe("tenant workspace frontend shell", () => {
       unreadMessages: 1,
       unreadNotices: 2,
       unreadScreeningUpdates: 0,
+    });
+    tenantAccessApi.getTenantAccess.mockResolvedValue({
+      summary: {
+        activeGrants: 1,
+        pendingRequests: 0,
+        latestActivityAt: 1000,
+      },
+      pendingRequests: [],
+      activeAccess: [],
+      recentActivity: [],
+      guidance: {
+        headline: "You can review and manage the access you’ve already shared.",
+        body: "This view shows tenant-safe sharing records only.",
+      },
     });
     tenantPortalApi.getTenantWorkspace.mockResolvedValue({
       context: {
@@ -77,6 +96,7 @@ describe("tenant workspace frontend shell", () => {
 
     expect(await screen.findByText(/RentChain Tenant Space/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Dashboard/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Access/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Documents/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /History/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Application/i })).toBeInTheDocument();
@@ -146,6 +166,8 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.getByText(/Active tenancy/i)).toBeInTheDocument();
     expect(screen.getByText(/123 Main St, Unit 4, Halifax, NS/i)).toBeInTheDocument();
     expect(screen.getByText(/finish_profile/i)).toBeInTheDocument();
+    expect(screen.getByText(/1 active access grant/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Open access/i })).toBeInTheDocument();
   });
 
   it("renders application completion page with safe grouped checklist fields", async () => {

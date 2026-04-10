@@ -1,6 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { getTenantWorkspace } from "../../api/tenantPortal";
+import { getTenantAccess, type TenantAccessWorkspace } from "../../api/tenantAccess";
 import {
   TenantEmptyState,
   TenantErrorState,
@@ -17,6 +18,7 @@ import { spacing, text as textTokens } from "../../styles/tokens";
 
 export default function TenantWorkspacePage() {
   const [data, setData] = React.useState<Awaited<ReturnType<typeof getTenantWorkspace>> | null>(null);
+  const [access, setAccess] = React.useState<TenantAccessWorkspace | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -24,10 +26,20 @@ export default function TenantWorkspacePage() {
     setLoading(true);
     setError(null);
     try {
-      const next = await getTenantWorkspace();
-      setData(next);
+      const [workspaceResult, accessResult] = await Promise.allSettled([
+        getTenantWorkspace(),
+        getTenantAccess(),
+      ]);
+
+      if (workspaceResult.status === "rejected") {
+        throw workspaceResult.reason;
+      }
+
+      setData(workspaceResult.value);
+      setAccess(accessResult.status === "fulfilled" ? accessResult.value : null);
     } catch (err: any) {
       setData(null);
+      setAccess(null);
       setError(err?.payload?.error || err?.message || "Unable to load your tenant workspace.");
     } finally {
       setLoading(false);
@@ -138,6 +150,17 @@ export default function TenantWorkspacePage() {
                 : "You have no maintenance requests yet."}
             </div>
             <Link to="/tenant/maintenance">Open maintenance</Link>
+          </div>
+        </TenantInfoCard>
+
+        <TenantInfoCard heading="Access" accent="#0891b2">
+          <div style={{ display: "grid", gap: spacing.sm }}>
+            <div style={{ color: textTokens.secondary }}>
+              {access
+                ? `${access.summary.activeGrants} active access grant${access.summary.activeGrants === 1 ? "" : "s"} and ${access.summary.pendingRequests} pending request${access.summary.pendingRequests === 1 ? "" : "s"}.`
+                : "Review what you’ve shared and who can currently view supported profile information."}
+            </div>
+            <Link to="/tenant/access">Open access</Link>
           </div>
         </TenantInfoCard>
       </div>

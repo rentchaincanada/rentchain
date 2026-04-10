@@ -11,6 +11,7 @@ type Props = {
 const navItems = [
   { label: "Dashboard", to: "/tenant/dashboard" },
   { label: "Profile", to: "/tenant/profile" },
+  { label: "Access", to: "/tenant/access" },
   { label: "Application", to: "/tenant/application" },
   { label: "Documents", to: "/tenant/attachments" },
   { label: "History", to: "/tenant/activity" },

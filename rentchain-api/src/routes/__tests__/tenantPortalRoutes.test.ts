@@ -190,6 +190,22 @@ describe("tenantPortalRoutes foundation", () => {
       createdAt: 500,
       internalNotes: "private",
     });
+    ensureCollection("tenantHistoryShares").set("share-1", {
+      tenantId: "tenant-1",
+      landlordId: "landlord-1",
+      createdAt: 1_000,
+      expiresAt: Date.now() + 86_400_000,
+      lastAccessedAt: 2_000,
+      revoked: false,
+    });
+    ensureCollection("tenantHistoryShares").set("share-2", {
+      tenantId: "tenant-1",
+      landlordId: "landlord-1",
+      createdAt: 900,
+      expiresAt: Date.now() + 86_400_000,
+      revoked: true,
+      revokedAt: 1_500,
+    });
   });
 
   it("rejects unauthorized tenant workspace access", async () => {
@@ -361,6 +377,60 @@ describe("tenantPortalRoutes foundation", () => {
     expect(res.body?.data?.profile?.internalNotes).toBeUndefined();
     expect(res.body?.data?.actions?.editableFields).toEqual(["displayName", "phone"]);
     expect(res.body?.data?.actions?.documentEntry?.path).toBe("/tenant/attachments");
+  });
+
+  it("returns tenant-safe access visibility from existing share records", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/access",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.summary?.activeGrants).toBe(1);
+    expect(res.body?.data?.summary?.pendingRequests).toBe(0);
+    expect(res.body?.data?.activeAccess?.[0]?.grantedToLabel).toMatch(/Shared with your landlord/i);
+    expect(res.body?.data?.activeAccess?.[0]?.categories).toEqual(["Rental history"]);
+    expect(res.body?.data?.pendingRequests).toEqual([]);
+    expect(
+      res.body?.data?.recentActivity?.some((item: any) =>
+        ["access_granted", "access_viewed", "access_revoked"].includes(item.type)
+      )
+    ).toBe(true);
+
+    const eventDocs = Array.from(ensureCollection("event_log").values());
+    expect(eventDocs.some((event) => event.event_type === "tenant_access_viewed")).toBe(true);
+  });
+
+  it("allows a tenant to revoke only their own active access share", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/access/share-1/revoke",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.revoked).toBe(true);
+    expect(ensureCollection("tenantHistoryShares").get("share-1")?.revoked).toBe(true);
+
+    const eventDocs = Array.from(ensureCollection("event_log").values());
+    expect(eventDocs.some((event) => event.event_type === "tenant_access_revoked")).toBe(true);
   });
 
   it("updates only allowed tenant profile fields", async () => {
