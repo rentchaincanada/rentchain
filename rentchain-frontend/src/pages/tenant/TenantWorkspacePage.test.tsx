@@ -75,8 +75,10 @@ describe("tenant workspace frontend shell", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/RentChain Tenant Portal/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Workspace/i })).toBeInTheDocument();
+    expect(await screen.findByText(/RentChain Tenant Space/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Dashboard/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Documents/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /History/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Application/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Lease/i })).toBeInTheDocument();
   });
@@ -139,7 +141,7 @@ describe("tenant workspace frontend shell", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/^Tenant Workspace$/i)).toBeInTheDocument();
+    expect(await screen.findByText(/^Tenant Dashboard$/i)).toBeInTheDocument();
     expect(screen.queryByText(/^Applicant$/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Active tenancy/i)).toBeInTheDocument();
     expect(screen.getByText(/123 Main St, Unit 4, Halifax, NS/i)).toBeInTheDocument();
@@ -282,7 +284,7 @@ describe("tenant workspace frontend shell", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/cannot open this workspace/i)).toBeInTheDocument();
+    expect(await screen.findByText(/cannot open this dashboard/i)).toBeInTheDocument();
   });
 
   it("empty state renders safely for application and maintenance", async () => {

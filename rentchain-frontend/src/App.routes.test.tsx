@@ -1,7 +1,11 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+beforeEach(() => {
+  cleanup();
+});
 
 vi.stubEnv("VITE_TENANT_PORTAL_ENABLED", "true");
 
@@ -40,12 +44,42 @@ vi.mock("./features/automation/timeline/AutomationTimelinePage", () => ({
 }));
 
 vi.mock("./pages/tenant/TenantWorkspacePage", () => ({
-  default: () => <h1>Tenant Workspace</h1>,
+  default: () => <h1>Tenant Dashboard</h1>,
 }));
 
 vi.mock("./pages/tenant/TenantApplicationStatusPage", () => ({
   default: () => <h1>Tenant Application Status</h1>,
 }));
+
+describe("Routes: /tenant", () => {
+  it("renders the tenant-first landing page without landlord pricing content", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/tenant"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(
+      await screen.findByText(/Your rental profile\. Secure, organized, and in your control\./i)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Create free account/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /tenant/dashboard", () => {
+  it("renders the tenant dashboard route without falling into landlord surfaces", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/tenant/dashboard"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Tenant Dashboard/i)).toBeInTheDocument();
+    expect(screen.queryByText(/DashboardPage/i)).not.toBeInTheDocument();
+  });
+});
 
 describe("Routes: /automation/timeline", () => {
   it("renders the Automation Timeline shell and does not fall through to NotFound", async () => {

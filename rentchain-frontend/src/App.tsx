@@ -57,6 +57,8 @@ import MicroLiveInvitePage from "./pages/MicroLiveInvitePage";
 import TenantInviteRedeem from "./tenant/TenantInviteRedeem";
 import { LandlordNav } from "./components/layout/LandlordNav";
 import TenantPortalComingSoon from "./pages/tenant/TenantPortalComingSoon";
+import TenantLandingPage from "./pages/tenant/TenantLandingPage";
+import TenantLayout from "./pages/tenant/TenantLayout";
 import TenantWorkspacePage from "./pages/tenant/TenantWorkspacePage";
 import TenantApplicationStatusPage from "./pages/tenant/TenantApplicationStatusPage";
 import TenantLeasePage from "./pages/tenant/TenantLeasePage";
@@ -95,7 +97,6 @@ import ContractorDashboardPage from "./pages/contractor/ContractorDashboardPage"
 import ContractorJobsPage from "./pages/contractor/ContractorJobsPage";
 import ContractorProfilePage from "./pages/contractor/ContractorProfilePage";
 import { ContractorNav } from "./components/layout/ContractorNav";
-import { TenantNav } from "./components/layout/TenantNav";
 import { getRoleDefaultDestination } from "./lib/authDestination";
 
 const TENANT_PORTAL_ENABLED = import.meta.env.VITE_TENANT_PORTAL_ENABLED === "true";
@@ -262,7 +263,7 @@ function App() {
   const renderTenantShell = (page: React.ReactNode) =>
     TENANT_PORTAL_ENABLED ? (
       <RequireTenant>
-        <TenantNav>{page}</TenantNav>
+        <TenantLayout>{page}</TenantLayout>
       </RequireTenant>
     ) : (
       <TenantPortalComingSoon />
@@ -913,6 +914,10 @@ function App() {
         <Route path="/apply" element={<ApplicantApplyPage />} />
         <Route
           path="/tenant"
+          element={TENANT_PORTAL_ENABLED ? <TenantLandingPage /> : <TenantPortalComingSoon />}
+        />
+        <Route
+          path="/tenant/dashboard"
           element={renderTenantShell(<TenantWorkspacePage />)}
         />
         <Route
