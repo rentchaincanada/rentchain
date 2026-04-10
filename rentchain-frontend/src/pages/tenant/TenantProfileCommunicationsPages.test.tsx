@@ -120,6 +120,7 @@ describe("tenant profile and communications pages", () => {
     expect(screen.getAllByText(/Upload government id/i).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /Save profile changes/i })).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: /Review requested documents/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: /Open documents|Review documents/i }).length).toBeGreaterThan(0);
   });
 
   it("tenant profile page saves bounded profile edits safely", async () => {

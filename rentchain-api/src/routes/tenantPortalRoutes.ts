@@ -118,6 +118,33 @@ type TenantCompletionSection = {
   items: TenantCompletionItem[];
 };
 
+type TenantDocumentStatus =
+  | "missing"
+  | "uploaded"
+  | "pending_review"
+  | "verified"
+  | "needs_attention"
+  | "reupload_requested";
+
+type TenantDocumentItem = {
+  id: string;
+  label: string;
+  category: string;
+  status: TenantDocumentStatus;
+  fileName: string | null;
+  title: string | null;
+  purpose: string | null;
+  purposeLabel: string | null;
+  url: string | null;
+  uploadedAt: number | null;
+  nextAction: string | null;
+  actionAvailable: boolean;
+  actionLabel: string | null;
+  actionPath: string | null;
+  helpLabel: string | null;
+  helpPath: string | null;
+};
+
 const SCREENING_REQUEST_STATUSES = [
   "requested",
   "consent_pending",
@@ -1887,6 +1914,214 @@ function shapeTenantProfileResponse(profile: Awaited<ReturnType<typeof loadTenan
   return {
     ...profile,
     actions: buildTenantProfileActions(profile),
+  };
+}
+
+function normalizeDocumentKey(value: unknown): string {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function documentCategoryForLabel(value: string): string {
+  const normalized = normalizeDocumentKey(value);
+  if (normalized.includes("income") || normalized.includes("paystub") || normalized.includes("employment")) return "Income";
+  if (normalized.includes("identity") || normalized.includes("id") || normalized.includes("passport") || normalized.includes("license")) {
+    return "Identity";
+  }
+  if (normalized.includes("lease")) return "Lease";
+  if (normalized.includes("invite")) return "Invite";
+  return "Documents";
+}
+
+function labelForAttachmentRecord(item: any): string {
+  const purpose = String(item?.purpose || "").trim();
+  const custom = String(item?.purposeLabel || "").trim();
+  if (purpose && custom) return `${purpose} — ${custom}`;
+  if (custom) return custom;
+  if (purpose) return purpose;
+  return String(item?.title || item?.fileName || "Document").trim() || "Document";
+}
+
+function toTenantDocumentStatus(params: {
+  checklistStatus: string | null;
+  hasAttachment: boolean;
+  nextAction: string | null;
+}): TenantDocumentStatus {
+  const normalized = String(params.checklistStatus || "").trim().toLowerCase();
+  const nextAction = String(params.nextAction || "").trim().toLowerCase();
+
+  if (normalized === "verified" || normalized === "completed") return "verified";
+  if (normalized === "pending") return "pending_review";
+  if (normalized === "needs_review") {
+    if (nextAction.includes("reupload") || nextAction.includes("re-upload") || nextAction.includes("replace")) {
+      return "reupload_requested";
+    }
+    return "needs_attention";
+  }
+  if (params.hasAttachment) return "uploaded";
+  return "missing";
+}
+
+function documentNextActionCopy(status: TenantDocumentStatus, nextAction: string | null, hasAttachmentUrl: boolean): string | null {
+  const explicit = String(nextAction || "").trim();
+  if (explicit) return explicit;
+  switch (status) {
+    case "verified":
+      return "This document has been reviewed and accepted.";
+    case "pending_review":
+      return "Your document has been added and is waiting for review.";
+    case "uploaded":
+      return "Your document has been added and is waiting to be reviewed in context.";
+    case "needs_attention":
+      return "This document needs attention before your application is fully complete.";
+    case "reupload_requested":
+      return "A clearer or updated version is needed before review can continue.";
+    default:
+      return hasAttachmentUrl ? "Review the latest file you added here." : "This document is still needed for completion.";
+  }
+}
+
+function buildTenantDocumentWorkspace(params: {
+  attachments: Array<any>;
+  profile: Awaited<ReturnType<typeof loadTenantProfileProjection>>;
+}) {
+  const checklist = Array.isArray(params.profile?.identity?.documentChecklist) ? params.profile.identity.documentChecklist : [];
+  const attachments = Array.isArray(params.attachments) ? params.attachments : [];
+
+  const normalizedAttachmentMap = new Map<string, any[]>();
+  attachments.forEach((item) => {
+    const labels = [item?.purpose, item?.purposeLabel, item?.title, item?.fileName]
+      .map((value) => normalizeDocumentKey(value))
+      .filter(Boolean);
+    labels.forEach((label) => {
+      const current = normalizedAttachmentMap.get(label) || [];
+      current.push(item);
+      normalizedAttachmentMap.set(label, current);
+    });
+  });
+
+  const usedAttachmentIds = new Set<string>();
+  const items: TenantDocumentItem[] = checklist.map((entry: any, index: number) => {
+    const label = String(entry?.label || "").trim() || prettyChecklistLabel(String(entry?.code || "document"));
+    const normalizedTargets = [
+      normalizeDocumentKey(entry?.code),
+      normalizeDocumentKey(label),
+      normalizeDocumentKey(entry?.nextStep),
+    ].filter(Boolean);
+
+    const matchedAttachment =
+      normalizedTargets
+        .flatMap((target) => normalizedAttachmentMap.get(target) || [])
+        .find((item) => item && !usedAttachmentIds.has(String(item.id || ""))) || null;
+
+    if (matchedAttachment?.id) {
+      usedAttachmentIds.add(String(matchedAttachment.id));
+    }
+
+    const status = toTenantDocumentStatus({
+      checklistStatus: String(entry?.status || ""),
+      hasAttachment: Boolean(matchedAttachment),
+      nextAction: String(entry?.nextStep || ""),
+    });
+
+    return {
+      id: String(entry?.code || matchedAttachment?.id || `document_${index + 1}`),
+      label,
+      category: documentCategoryForLabel(String(entry?.code || label)),
+      status,
+      fileName: matchedAttachment?.fileName ? String(matchedAttachment.fileName) : null,
+      title: matchedAttachment?.title ? String(matchedAttachment.title) : null,
+      purpose: matchedAttachment?.purpose ? String(matchedAttachment.purpose) : null,
+      purposeLabel: matchedAttachment?.purposeLabel ? String(matchedAttachment.purposeLabel) : null,
+      url: matchedAttachment?.url ? String(matchedAttachment.url) : null,
+      uploadedAt: Number(matchedAttachment?.createdAt || 0) || null,
+      nextAction: documentNextActionCopy(status, String(entry?.nextStep || ""), Boolean(matchedAttachment?.url)),
+      actionAvailable: false,
+      actionLabel: null,
+      actionPath: null,
+      helpLabel: status === "missing" || status === "needs_attention" || status === "reupload_requested" ? "Open messages" : null,
+      helpPath: status === "missing" || status === "needs_attention" || status === "reupload_requested" ? "/tenant/messages" : null,
+    };
+  });
+
+  attachments.forEach((item, index) => {
+    if (usedAttachmentIds.has(String(item?.id || ""))) return;
+    const label = labelForAttachmentRecord(item);
+    items.push({
+      id: String(item?.id || `uploaded_document_${index + 1}`),
+      label,
+      category: documentCategoryForLabel(label),
+      status: "uploaded",
+      fileName: item?.fileName ? String(item.fileName) : null,
+      title: item?.title ? String(item.title) : null,
+      purpose: item?.purpose ? String(item.purpose) : null,
+      purposeLabel: item?.purposeLabel ? String(item.purposeLabel) : null,
+      url: item?.url ? String(item.url) : null,
+      uploadedAt: Number(item?.createdAt || 0) || null,
+      nextAction: "This file has been added to your record.",
+      actionAvailable: false,
+      actionLabel: null,
+      actionPath: null,
+      helpLabel: null,
+      helpPath: null,
+    });
+  });
+
+  const order: Record<TenantDocumentStatus, number> = {
+    reupload_requested: 0,
+    needs_attention: 1,
+    missing: 2,
+    pending_review: 3,
+    uploaded: 4,
+    verified: 5,
+  };
+  items.sort((a, b) => {
+    const priority = order[a.status] - order[b.status];
+    if (priority !== 0) return priority;
+    return (b.uploadedAt || 0) - (a.uploadedAt || 0);
+  });
+
+  const summary = {
+    total: items.length,
+    missing: items.filter((item) => item.status === "missing").length,
+    uploaded: items.filter((item) => item.status === "uploaded").length,
+    pendingReview: items.filter((item) => item.status === "pending_review").length,
+    verified: items.filter((item) => item.status === "verified").length,
+    needsAttention: items.filter((item) => item.status === "needs_attention" || item.status === "reupload_requested").length,
+  };
+
+  const nextSteps = items
+    .filter((item) => item.status === "missing" || item.status === "needs_attention" || item.status === "reupload_requested")
+    .slice(0, 4)
+    .map((item) => item.nextAction)
+    .filter((value: string | null): value is string => Boolean(value));
+
+  return {
+    summary,
+    guidance: {
+      headline:
+        summary.needsAttention > 0
+          ? "Some documents need attention before your application can move forward smoothly."
+          : summary.missing > 0
+          ? "A few documents are still missing from your completion checklist."
+          : summary.pendingReview > 0
+          ? "Your latest documents are in and waiting for review."
+          : items.length
+          ? "Your current tenant-safe document record is up to date."
+          : "You have not added any tenant-visible documents yet.",
+      nextSteps,
+      uploadEntryAvailable: false,
+      uploadEntryLabel: null,
+      uploadEntryPath: null,
+      supportPath: "/tenant/messages",
+      supportLabel: "Message your landlord",
+    },
+    updatedAt: items.find((item) => item.uploadedAt)?.uploadedAt || null,
+    items,
   };
 }
 
@@ -3841,20 +4076,38 @@ router.get("/ledger", requireTenant, async (req: any, res) => {
   }
 });
 
-router.get("/attachments", requireTenant, async (req: any, res) => {
+router.get("/attachments", requireTenantWorkspaceIdentity, async (req: any, res) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+
   try {
     const tenantId = req.user?.tenantId;
     if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
 
-    const snap = await db
-      .collection("ledgerAttachments")
-      .where("tenantId", "==", tenantId)
-      .limit(50)
-      .get();
+    const [snap, profile] = await Promise.all([
+      db.collection("ledgerAttachments").where("tenantId", "==", tenantId).limit(50).get(),
+      loadTenantProfileProjection({
+        context,
+        userId: String(req.user?.id || "").trim(),
+        userEmail: String(req.user?.email || "").trim() || null,
+      }),
+    ]);
 
-    const data = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
-    data.sort((a, b) => (Number(b.createdAt || 0) || 0) - (Number(a.createdAt || 0) || 0));
-    return res.json({ ok: true, data });
+    const rawAttachments = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+    rawAttachments.sort((a, b) => (Number(b.createdAt || 0) || 0) - (Number(a.createdAt || 0) || 0));
+
+    const workspace = buildTenantDocumentWorkspace({
+      attachments: rawAttachments,
+      profile,
+    });
+
+    return res.json({
+      ok: true,
+      data: workspace.items,
+      summary: workspace.summary,
+      guidance: workspace.guidance,
+      updatedAt: workspace.updatedAt,
+    });
   } catch (err) {
     console.error("[tenant/attachments] failed", {
       tenantId: req.user?.tenantId,
