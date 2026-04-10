@@ -25,6 +25,28 @@ export type TenantCommunicationSummary = {
   unreadTotal: number;
 };
 
+export type TenantThreadMessage = {
+  id: string;
+  senderRole: "tenant" | "landlord";
+  body: string;
+  createdAt: string | null;
+  createdAtMs: number | null;
+};
+
+export type TenantCommunicationsWorkspace = {
+  canSend: boolean;
+  canSendReason: string | null;
+  thread: {
+    id: string;
+    landlordLabel: string;
+    propertyId: string | null;
+    unitId: string | null;
+    unreadCount: number;
+    lastMessageAt: string | null;
+    messages: TenantThreadMessage[];
+  } | null;
+};
+
 export async function getTenantMessages() {
   return tenantApiFetch<{ ok: boolean; items: TenantCommunicationItem[]; unreadCount: number }>(
     "/tenant/messages"
@@ -69,5 +91,24 @@ export async function markTenantScreeningUpdateRead(requestId: string) {
 
 export async function getTenantCommunicationSummary() {
   return tenantApiFetch<TenantCommunicationSummary>("/tenant/communication/summary");
+}
+
+export async function getTenantCommunicationsWorkspace(): Promise<TenantCommunicationsWorkspace> {
+  const res = await tenantApiFetch<{ ok: boolean; data: TenantCommunicationsWorkspace }>("/tenant/communications");
+  return res.data;
+}
+
+export async function sendTenantCommunicationMessage(body: string): Promise<TenantThreadMessage> {
+  const res = await tenantApiFetch<{ ok: boolean; data: TenantThreadMessage }>("/tenant/communications/messages", {
+    method: "POST",
+    body: { body },
+  });
+  return res.data;
+}
+
+export async function markTenantCommunicationsRead(): Promise<void> {
+  await tenantApiFetch<{ ok: boolean }>("/tenant/communications/read", {
+    method: "POST",
+  });
 }
 

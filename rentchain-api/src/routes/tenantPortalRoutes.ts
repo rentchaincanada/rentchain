@@ -15,6 +15,13 @@ import {
 } from "../services/tenantPortal/tenantProjectionService";
 import { recordTenantEvent } from "../services/tenantPortal/tenantEventLogService";
 import { redeemTenancyInvite } from "../services/tenantPortal/tenantInviteService";
+import { loadTenantProfileProjection } from "../services/tenantPortal/tenantProfileService";
+import {
+  loadTenantCommunicationsWorkspace,
+  markTenantCommunicationsRead,
+  sendTenantCommunicationMessage,
+} from "../services/tenantPortal/tenantCommunicationsService";
+import { listTenantNotificationFeed } from "../services/tenantPortal/tenantNotificationsService";
 
 const router = Router();
 router.use(authenticateJwt);
@@ -1755,6 +1762,156 @@ async function handleTenantWorkspaceSummary(req: any, res: any) {
 router.get("/workspace", requireTenantWorkspaceIdentity, handleTenantWorkspaceSummary);
 router.get("/me", requireTenantWorkspaceIdentity, handleTenantWorkspaceSummary);
 
+router.get("/profile", requireTenantWorkspaceIdentity, async (req: any, res) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+
+  try {
+    const profile = await loadTenantProfileProjection({
+      context,
+      userId: String(req.user?.id || "").trim(),
+      userEmail: String(req.user?.email || "").trim() || null,
+    });
+
+    await recordTenantEvent({
+      eventType: "tenant_profile_viewed",
+      entityType: "tenant_profile",
+      entityId: String(context.tenantId || context.applicationId || context.propertyId || req.user?.id || "tenant_profile"),
+      createdBy: String(req.user?.id || "").trim(),
+      context: {
+        authority: context.authority,
+        propertyId: context.propertyId,
+        rc_prop_id: context.rc_prop_id,
+        applicationId: context.applicationId,
+        leaseId: context.leaseId,
+      },
+      payload: {
+        overallStatus: profile.identity.overallStatus,
+      },
+    });
+
+    return res.json({ ok: true, data: profile });
+  } catch (err: any) {
+    console.error("[tenant/profile] failed", {
+      userId: req.user?.id,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_PROFILE_FAILED" });
+  }
+});
+
+router.get("/communications", requireTenantWorkspaceIdentity, async (req: any, res) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+
+  try {
+    const workspace = await loadTenantCommunicationsWorkspace({
+      context,
+      userId: String(req.user?.id || "").trim(),
+    });
+    return res.json({ ok: true, data: workspace });
+  } catch (err: any) {
+    console.error("[tenant/communications] failed", {
+      userId: req.user?.id,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_COMMUNICATIONS_FAILED" });
+  }
+});
+
+router.post("/communications/messages", requireTenantWorkspaceIdentity, async (req: any, res) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+
+  try {
+    const result = await sendTenantCommunicationMessage({
+      context,
+      userId: String(req.user?.id || "").trim(),
+      body: req.body?.body,
+    });
+
+    if (!result.ok) {
+      const status =
+        result.error === "TENANCY_CONTEXT_REQUIRED" || result.error === "LANDLORD_CONTEXT_MISSING"
+          ? 403
+          : result.error === "MESSAGE_BODY_REQUIRED" || result.error === "MESSAGE_BODY_TOO_LONG"
+          ? 400
+          : 500;
+      return res.status(status).json({ ok: false, error: result.error });
+    }
+
+    return res.status(201).json({ ok: true, data: result.message });
+  } catch (err: any) {
+    console.error("[tenant/communications/messages] failed", {
+      userId: req.user?.id,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_COMMUNICATION_SEND_FAILED" });
+  }
+});
+
+router.post("/communications/read", requireTenantWorkspaceIdentity, async (req: any, res) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+
+  try {
+    const result = await markTenantCommunicationsRead({
+      context,
+      userId: String(req.user?.id || "").trim(),
+    });
+    if (!result.ok) {
+      return res.status(403).json({ ok: false, error: result.error });
+    }
+    return res.json({ ok: true });
+  } catch (err: any) {
+    console.error("[tenant/communications/read] failed", {
+      userId: req.user?.id,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_COMMUNICATION_READ_FAILED" });
+  }
+});
+
+async function handleTenantNotifications(req: any, res: any) {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+
+  try {
+    const items = await listTenantNotificationFeed({
+      context,
+      userId: String(req.user?.id || "").trim(),
+      userEmail: String(req.user?.email || "").trim() || null,
+    });
+
+    await recordTenantEvent({
+      eventType: "tenant_notifications_viewed",
+      entityType: "tenant_notifications",
+      entityId: String(context.tenantId || context.applicationId || context.propertyId || req.user?.id || "tenant_notifications"),
+      createdBy: String(req.user?.id || "").trim(),
+      context: {
+        authority: context.authority,
+        propertyId: context.propertyId,
+        rc_prop_id: context.rc_prop_id,
+        applicationId: context.applicationId,
+        leaseId: context.leaseId,
+      },
+      payload: {
+        itemCount: items.length,
+      },
+    });
+
+    return res.json({ ok: true, data: items });
+  } catch (err: any) {
+    console.error("[tenant/notifications] failed", {
+      userId: req.user?.id,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_NOTIFICATIONS_FAILED" });
+  }
+}
+
+router.get("/notifications", requireTenantWorkspaceIdentity, handleTenantNotifications);
+
 router.get("/application-status", requireTenantWorkspaceIdentity, async (req: any, res) => {
   const context = await resolveWorkspaceContextOrRespond(req, res);
   if (!context) return;
@@ -2045,121 +2202,7 @@ router.get("/me", requireTenant, async (req: any, res) => {
   }
 });
 
-router.get("/activity", requireTenant, async (req: any, res) => {
-  try {
-    const tenantId = req.user?.tenantId;
-    if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
-
-    const items: Array<{
-      id: string;
-      type: "invite" | "lease" | "rent" | "notice" | "system";
-      title: string;
-      description?: string;
-      occurredAt: number;
-    }> = [];
-
-    let tenantData: any = {};
-    try {
-      const tenantSnap = await db.collection("tenants").doc(tenantId).get();
-      tenantData = tenantSnap.exists ? (tenantSnap.data() as any) : {};
-    } catch {
-      tenantData = {};
-    }
-    const tenantEmail = tenantData?.email ?? req.user?.email ?? null;
-
-    // Invite redemption
-    try {
-      const inviteSnap = await db
-        .collection("tenantInvites")
-        .where("tenantId", "==", tenantId)
-        .limit(1)
-        .get();
-      const doc = inviteSnap.docs[0];
-      if (doc?.exists) {
-        const inv = doc.data() as any;
-        const occurredAt = toMillis(inv.redeemedAt ?? inv.createdAt ?? null);
-        if (occurredAt) {
-          items.push({
-            id: `invite-${doc.id}`,
-            type: "invite",
-            title: "Invite accepted",
-            description: tenantEmail ? `Joined as ${tenantEmail}` : "Invite accepted",
-            occurredAt,
-          });
-        }
-      }
-    } catch {
-      // ignore invite errors
-    }
-
-    // Lease start
-    try {
-      const data = tenantData || {};
-      const propertyId = data?.propertyId ?? null;
-      const unitId = data?.unitId ?? data?.unit ?? null;
-      const leaseStart = toMillis(
-        data?.leaseStart ?? data?.lease_begin ?? data?.leaseStartDate ?? null
-      );
-      if (propertyId && unitId && leaseStart) {
-        let propertyName: string | null = data?.propertyName ?? data?.property ?? null;
-        try {
-          const propSnap = await db.collection("properties").doc(propertyId).get();
-          if (propSnap.exists) {
-            const prop = propSnap.data() as any;
-            propertyName = prop?.name ?? prop?.addressLine1 ?? propertyName ?? null;
-          }
-        } catch {
-          // ignore
-        }
-        items.push({
-          id: `lease-${tenantId}-${leaseStart}`,
-          type: "lease",
-          title: "Lease started",
-          description: propertyName ?? undefined,
-          occurredAt: leaseStart,
-        });
-      }
-    } catch {
-      // ignore lease errors
-    }
-
-    // Ledger / rent events
-    try {
-      const { listEventsForTenant } = await import("../services/ledgerEventsService");
-      const ledgerEvents = listEventsForTenant(tenantId).slice(0, 10);
-      ledgerEvents.forEach((ev) => {
-        const occurredAt = toMillis(ev.occurredAt);
-        if (!occurredAt) return;
-        const type: "rent" | "system" =
-          ev.type.includes("charge") || ev.type.includes("payment") ? "rent" : "system";
-        const title =
-          ev.type === "charge_created" || ev.type === "charge_issued"
-            ? "Rent charge issued"
-            : ev.type === "payment_recorded" || ev.type === "payment_created"
-            ? "Payment recorded"
-            : "Account update";
-        const description = ev.notes ?? ev.reference?.kind ?? undefined;
-        items.push({
-          id: `ledger-${ev.id}`,
-          type,
-          title,
-          description,
-          occurredAt,
-        });
-      });
-    } catch {
-      // ignore ledger errors
-    }
-
-    items.sort((a, b) => b.occurredAt - a.occurredAt);
-    const limited = items.slice(0, 25);
-
-    return res.json({ ok: true, data: limited });
-  } catch (err) {
-    console.error("[tenantPortalRoutes] /tenant/activity error", err);
-    return res.status(500).json({ ok: false, error: "TENANT_ACTIVITY_FAILED" });
-  }
-});
+router.get("/activity", requireTenantWorkspaceIdentity, handleTenantNotifications);
 
 router.get("/messages", requireTenant, async (req: any, res) => {
   try {

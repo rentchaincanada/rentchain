@@ -1,25 +1,19 @@
 import React, { useEffect, useState } from "react";
-import { tenantApiFetch } from "../../api/tenantApiFetch";
-import { Card } from "../../components/ui/Ui";
-import { colors, spacing, text as textTokens } from "../../styles/tokens";
-
-type ActivityItem = {
-  id: string;
-  type: "invite" | "lease" | "rent" | "notice" | "system";
-  title: string;
-  description?: string | null;
-  occurredAt: number;
-};
-
-function fmtDate(ts: number | null | undefined): string {
-  if (!ts) return "—";
-  const d = new Date(ts);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-}
+import { Link } from "react-router-dom";
+import { getTenantNotifications, type TenantNotificationItem } from "../../api/tenantNotifications";
+import {
+  TenantEmptyState,
+  TenantErrorState,
+  TenantLoadingState,
+  TenantSurfaceShell,
+  TenantUnauthorizedState,
+  formatDate,
+  prettyStatus,
+} from "./TenantWorkspaceShared";
+import { spacing, text as textTokens } from "../../styles/tokens";
 
 export default function TenantActivityPage() {
-  const [items, setItems] = useState<ActivityItem[]>([]);
+  const [items, setItems] = useState<TenantNotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,8 +23,8 @@ export default function TenantActivityPage() {
       setLoading(true);
       setError(null);
       try {
-        const res = await tenantApiFetch<{ ok: boolean; data: ActivityItem[] }>("/tenant/activity");
-        if (!cancelled) setItems(Array.isArray(res?.data) ? res.data : []);
+        const res = await getTenantNotifications();
+        if (!cancelled) setItems(Array.isArray(res) ? res : []);
       } catch (err: any) {
         if (!cancelled) setError(err?.message || "Unable to load activity.");
       } finally {
@@ -43,44 +37,80 @@ export default function TenantActivityPage() {
     };
   }, []);
 
-  return (
-    <Card elevated style={{ padding: spacing.lg }}>
-      <div style={{ marginBottom: spacing.md }}>
-        <h1 style={{ margin: 0, color: textTokens.primary, fontSize: "1.4rem" }}>Activity</h1>
-        <div style={{ marginTop: 6, color: textTokens.muted }}>
-          Recent events for your tenant account.
-        </div>
-      </div>
+  if (loading) {
+    return (
+      <TenantSurfaceShell
+        title="Notifications & Feed"
+        subtitle="Recent tenant-safe updates across your application, profile, communications, and tenancy."
+      >
+        <TenantLoadingState label="Loading your recent feed..." />
+      </TenantSurfaceShell>
+    );
+  }
 
-      {error ? (
-        <div style={{ color: colors.danger }}>{error}</div>
-      ) : loading ? (
-        <div style={{ color: textTokens.muted }}>Loading activity…</div>
-      ) : items.length === 0 ? (
-        <div style={{ color: textTokens.muted }}>No activity available yet.</div>
+  if (error) {
+    const unauthorized = /unauthorized|forbidden|ambiguous/i.test(error);
+    return (
+      <TenantSurfaceShell
+        title="Notifications & Feed"
+        subtitle="Only tenant-safe updates and system-visible events appear here."
+      >
+        {unauthorized ? <TenantUnauthorizedState /> : <TenantErrorState message={error} />}
+      </TenantSurfaceShell>
+    );
+  }
+
+  return (
+    <TenantSurfaceShell
+      title="Notifications & Feed"
+      subtitle="Track the tenant-safe updates that matter most: application progress, identity steps, communications, lease changes, and maintenance."
+    >
+      {items.length === 0 ? (
+        <TenantEmptyState
+          title="No notifications yet"
+          body="Recent updates will appear here once your application, tenancy, or communications begin generating tenant-visible events."
+        />
       ) : (
         <div style={{ display: "grid", gap: spacing.sm }}>
           {items.map((item) => (
             <div
               key={item.id}
               style={{
-                border: `1px solid ${colors.border}`,
+                border: "1px solid rgba(15,23,42,0.08)",
                 borderRadius: 12,
-                background: colors.card,
                 padding: spacing.sm,
+                display: "grid",
+                gap: 8,
               }}
             >
-              <div style={{ fontWeight: 700, color: textTokens.primary }}>{item.title}</div>
-              <div style={{ color: textTokens.muted, fontSize: "0.9rem" }}>
-                {item.type} • {fmtDate(item.occurredAt)}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                <div style={{ fontWeight: 700, color: textTokens.primary }}>{item.title}</div>
+                <div
+                  style={{
+                    padding: "4px 8px",
+                    borderRadius: 999,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: item.status === "success" ? "#166534" : item.status === "warning" ? "#9a3412" : "#1d4ed8",
+                    background: item.status === "success" ? "#dcfce7" : item.status === "warning" ? "#ffedd5" : "#dbeafe",
+                  }}
+                >
+                  {prettyStatus(item.type)}
+                </div>
               </div>
-              {item.description ? (
-                <div style={{ marginTop: 6, color: textTokens.secondary }}>{item.description}</div>
-              ) : null}
+              <div style={{ color: textTokens.secondary }}>{item.summary}</div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                <div style={{ color: textTokens.muted, fontSize: "0.9rem" }}>{formatDate(item.createdAt)}</div>
+                {item.relatedPath ? (
+                  <Link to={item.relatedPath} style={{ fontWeight: 700 }}>
+                    Open
+                  </Link>
+                ) : null}
+              </div>
             </div>
           ))}
         </div>
       )}
-    </Card>
+    </TenantSurfaceShell>
   );
 }

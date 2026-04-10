@@ -1,0 +1,214 @@
+import React from "react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
+import TenantProfilePage from "./TenantProfilePage";
+import TenantMessagesCenterPage from "./TenantMessagesCenterPage";
+import TenantActivityPage from "./TenantActivityPage";
+import { TenantNav } from "../../components/layout/TenantNav";
+
+const tenantProfileApi = vi.hoisted(() => ({
+  getTenantProfile: vi.fn(),
+}));
+
+const tenantCommunicationsApi = vi.hoisted(() => ({
+  getTenantCommunicationSummary: vi.fn(),
+  getTenantCommunicationsWorkspace: vi.fn(),
+  sendTenantCommunicationMessage: vi.fn(),
+  markTenantCommunicationsRead: vi.fn(),
+}));
+
+const tenantNotificationsApi = vi.hoisted(() => ({
+  getTenantNotifications: vi.fn(),
+}));
+
+const tenantPortalApi = vi.hoisted(() => ({
+  getTenantWorkspace: vi.fn(),
+}));
+
+vi.mock("../../api/tenantProfile", () => tenantProfileApi);
+vi.mock("../../api/tenantCommunicationsApi", () => tenantCommunicationsApi);
+vi.mock("../../api/tenantNotifications", () => tenantNotificationsApi);
+vi.mock("../../api/tenantPortal", () => tenantPortalApi);
+
+describe("tenant profile and communications pages", () => {
+  beforeEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    tenantPortalApi.getTenantWorkspace.mockResolvedValue({
+      context: {
+        authority: "active_tenant",
+        propertyId: "prop-1",
+        rc_prop_id: "rc-prop-1",
+        applicationId: "app-1",
+        leaseId: "lease-1",
+        tenantId: "tenant-1",
+        unitId: "unit-2",
+        invitedEmail: "tenant@example.com",
+      },
+    });
+    tenantCommunicationsApi.getTenantCommunicationSummary.mockResolvedValue({
+      unreadMessages: 1,
+      unreadNotices: 0,
+      unreadScreeningUpdates: 0,
+    });
+  });
+
+  it("tenant nav integrates profile and feed links coherently", async () => {
+    render(
+      <MemoryRouter>
+        <TenantNav>
+          <div>Tenant content</div>
+        </TenantNav>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/RentChain Tenant Portal/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Profile/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Feed/i })).toBeInTheDocument();
+  });
+
+  it("tenant profile page renders safe projected profile data and identity states", async () => {
+    tenantProfileApi.getTenantProfile.mockResolvedValue({
+      context: { authority: "active_tenant" },
+      profile: {
+        displayName: "Taylor Tenant",
+        email: "tenant@example.com",
+        phone: "902-555-0100",
+        authorityLabel: "Active tenant",
+        property: {
+          street1: "123 Main St",
+          street2: "Unit 4",
+          city: "Halifax",
+          province: "NS",
+        },
+        application: { status: "submitted" },
+        lease: { status: "active", monthlyRent: 1800, startDate: "2026-02-01", endDate: "2027-01-31", documentUrl: null },
+      },
+      identity: {
+        overallStatus: "pending",
+        identityVerification: {
+          status: "pending",
+          label: "Pending",
+          note: "Verification is still in progress.",
+          updatedAt: "2026-01-05T00:00:00.000Z",
+        },
+        documentChecklist: [{ code: "upload_id", label: "Upload Id", status: "missing", nextStep: "Upload government id" }],
+        nextSteps: ["Upload government id"],
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantProfilePage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Tenant Profile/i)).toBeInTheDocument();
+    expect(screen.getByText(/Taylor Tenant/i)).toBeInTheDocument();
+    expect(screen.getByText(/Verification is still in progress/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Upload government id/i).length).toBeGreaterThan(0);
+  });
+
+  it("communications page handles empty state and compose/send success", async () => {
+    tenantCommunicationsApi.getTenantCommunicationsWorkspace.mockResolvedValue({
+      canSend: true,
+      canSendReason: null,
+      thread: {
+        id: "thread-1",
+        landlordLabel: "Landlord",
+        unreadCount: 0,
+        lastMessageAt: null,
+        propertyId: "prop-1",
+        unitId: "unit-2",
+        messages: [],
+      },
+    });
+    tenantCommunicationsApi.markTenantCommunicationsRead.mockResolvedValue(undefined);
+    tenantCommunicationsApi.sendTenantCommunicationMessage.mockResolvedValue({
+      id: "msg-1",
+      senderRole: "tenant",
+      body: "Hello there",
+      createdAt: "2026-01-06T00:00:00.000Z",
+      createdAtMs: 1234,
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantMessagesCenterPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Once you or your landlord start a conversation/i)).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox", { name: /Compose message/i }), {
+      target: { value: "Hello there" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Send message/i }));
+    expect(tenantCommunicationsApi.sendTenantCommunicationMessage).toHaveBeenCalledWith("Hello there");
+  });
+
+  it("communications page handles send failure safely", async () => {
+    tenantCommunicationsApi.getTenantCommunicationsWorkspace.mockResolvedValue({
+      canSend: true,
+      canSendReason: null,
+      thread: {
+        id: "thread-1",
+        landlordLabel: "Landlord",
+        unreadCount: 0,
+        lastMessageAt: null,
+        propertyId: "prop-1",
+        unitId: "unit-2",
+        messages: [],
+      },
+    });
+    tenantCommunicationsApi.markTenantCommunicationsRead.mockResolvedValue(undefined);
+    tenantCommunicationsApi.sendTenantCommunicationMessage.mockRejectedValue(new Error("Send failed"));
+
+    render(
+      <MemoryRouter>
+        <TenantMessagesCenterPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Once you or your landlord start a conversation/i)).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox", { name: /Compose message/i }), {
+      target: { value: "Hello there" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Send message/i }));
+    expect(await screen.findByText(/Send failed/i)).toBeInTheDocument();
+  });
+
+  it("notifications page renders safe feed items", async () => {
+    tenantNotificationsApi.getTenantNotifications.mockResolvedValue([
+      {
+        id: "feed-1",
+        type: "application",
+        title: "Application status updated",
+        summary: "Current application status: submitted.",
+        createdAt: "2026-01-05T00:00:00.000Z",
+        status: "info",
+        relatedPath: "/tenant/application",
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <TenantActivityPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Notifications & Feed/i)).toBeInTheDocument();
+    expect(screen.getByText(/Application status updated/i)).toBeInTheDocument();
+  });
+
+  it("unauthorized profile state renders safely", async () => {
+    tenantProfileApi.getTenantProfile.mockRejectedValue({ message: "FORBIDDEN" });
+    render(
+      <MemoryRouter>
+        <TenantProfilePage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Access unavailable/i)).toBeInTheDocument();
+  });
+});
