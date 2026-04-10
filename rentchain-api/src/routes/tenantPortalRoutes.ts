@@ -108,6 +108,7 @@ type TenantCompletionItem = {
   status: CompletionStatus;
   nextAction: string | null;
   actionPath: string | null;
+  actionLabel: string | null;
 };
 
 type TenantCompletionSection = {
@@ -1798,7 +1799,16 @@ function prettyChecklistLabel(value: string): string {
 function inferActionPath(params: { key: string; nextAction: string | null; authority: string | null }): string | null {
   const key = String(params.key || "").toLowerCase();
   const nextAction = String(params.nextAction || "").toLowerCase();
-  if (key.includes("identity") || key.includes("document") || key.includes("income") || key.includes("profile") || key.includes("employer")) {
+  if (
+    key.includes("document") ||
+    key.includes("income") ||
+    key.includes("upload") ||
+    nextAction.includes("document") ||
+    nextAction.includes("upload")
+  ) {
+    return "/tenant/attachments";
+  }
+  if (key.includes("identity") || key.includes("profile") || key.includes("employer")) {
     return "/tenant/profile";
   }
   if (key.includes("invite") || params.authority === "invite") {
@@ -1808,6 +1818,76 @@ function inferActionPath(params: { key: string; nextAction: string | null; autho
     return "/tenant/messages";
   }
   return null;
+}
+
+function inferActionLabel(actionPath: string | null): string | null {
+  switch (actionPath) {
+    case "/tenant/attachments":
+      return "Open documents";
+    case "/tenant/profile":
+      return "Update profile";
+    case "/tenant/invite/redeem":
+      return "Redeem invite";
+    case "/tenant/messages":
+      return "Open messages";
+    case "/tenant/lease":
+      return "Open lease";
+    case "/tenant/activity":
+      return "Open feed";
+    case "/tenant/application":
+      return "Open application";
+    default:
+      return null;
+  }
+}
+
+function cleanProfileField(value: unknown, max = 120): string | null {
+  const next = String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .slice(0, max);
+  return next || null;
+}
+
+async function queryFirstDocument(collectionName: string, field: string, value: string | null) {
+  const normalized = cleanProfileField(value, 160);
+  if (!normalized) return null;
+  try {
+    const snap = await db.collection(collectionName).where(field, "==", normalized).limit(1).get();
+    const doc = snap.docs?.[0];
+    if (!doc) return null;
+    return { id: doc.id, data: (doc.data() as any) || {} };
+  } catch {
+    return null;
+  }
+}
+
+function buildTenantProfileActions(profile: Awaited<ReturnType<typeof loadTenantProfileProjection>>) {
+  const checklist = Array.isArray(profile?.identity?.documentChecklist) ? profile.identity.documentChecklist : [];
+  const pendingDocuments = checklist.filter((item: any) => {
+    const status = String(item?.status || "").trim().toLowerCase();
+    return status === "missing" || status === "pending" || status === "needs_review";
+  }).length;
+
+  return {
+    editableFields: ["displayName", "phone"],
+    documentEntry: {
+      available: true,
+      path: "/tenant/attachments",
+      label: pendingDocuments > 0 ? "Review requested documents" : "Open documents",
+      note:
+        pendingDocuments > 0
+          ? `${pendingDocuments} document-related step${pendingDocuments === 1 ? "" : "s"} still need attention.`
+          : "Open your tenant documents area to review what has already been shared with your record.",
+    },
+  };
+}
+
+function shapeTenantProfileResponse(profile: Awaited<ReturnType<typeof loadTenantProfileProjection>>) {
+  return {
+    ...profile,
+    actions: buildTenantProfileActions(profile),
+  };
 }
 
 function buildCompletionSections(params: {
@@ -1830,6 +1910,7 @@ function buildCompletionSections(params: {
           ? null
           : identity?.identityVerification?.note || "Complete identity verification",
       actionPath: identity?.identityVerification?.status === "verified" ? null : "/tenant/profile",
+      actionLabel: identity?.identityVerification?.status === "verified" ? null : "Update profile",
     },
   ];
 
@@ -1845,6 +1926,13 @@ function buildCompletionSections(params: {
             nextAction: String(item.nextStep || ""),
             authority: context.authority,
           }),
+          actionLabel: inferActionLabel(
+            inferActionPath({
+              key: String(item.code || ""),
+              nextAction: String(item.nextStep || ""),
+              authority: context.authority,
+            })
+          ),
         }))
       : [
           {
@@ -1852,7 +1940,8 @@ function buildCompletionSections(params: {
             label: "Documents",
             status: "not_started",
             nextAction: "Add any requested identity or income documents",
-            actionPath: "/tenant/profile",
+            actionPath: "/tenant/attachments",
+            actionLabel: "Open documents",
           },
         ];
 
@@ -1873,6 +1962,16 @@ function buildCompletionSections(params: {
             ) || "",
           authority: context.authority,
         }),
+        actionLabel: inferActionLabel(
+          inferActionPath({
+            key: String(step || ""),
+            nextAction:
+              (application?.nextActions || []).find((action: string) =>
+                String(action || "").toLowerCase().includes(String(step || "").toLowerCase())
+              ) || "",
+            authority: context.authority,
+          })
+        ),
       }))
     : [];
 
@@ -1890,6 +1989,7 @@ function buildCompletionSections(params: {
         profileSummary?.displayName && profileSummary?.email ? null : "Complete your profile details",
       actionPath:
         profileSummary?.displayName && profileSummary?.email ? null : "/tenant/profile",
+      actionLabel: profileSummary?.displayName && profileSummary?.email ? null : "Update profile",
     },
     ...(missingStepItems.length
       ? missingStepItems
@@ -1900,6 +2000,7 @@ function buildCompletionSections(params: {
             status: application ? "completed" : "not_started",
             nextAction: application ? null : "Start your application details",
             actionPath: application ? null : context.authority === "invite" ? "/tenant/invite/redeem" : "/tenant/profile",
+            actionLabel: application ? null : context.authority === "invite" ? "Redeem invite" : "Update profile",
           } as TenantCompletionItem,
         ]),
   ];
@@ -1930,6 +2031,12 @@ function buildCompletionSections(params: {
             ? "/tenant/invite/redeem"
             : "/tenant/application"
           : null,
+      actionLabel:
+        !application || String(application?.status || "").toLowerCase() === "draft"
+          ? context.authority === "invite"
+            ? "Redeem invite"
+            : "Open application"
+          : null,
     },
     {
       key: "lease_readiness",
@@ -1942,6 +2049,7 @@ function buildCompletionSections(params: {
           : "pending",
       nextAction: workspace.lease ? null : "Watch for lease updates after your application review",
       actionPath: workspace.lease ? "/tenant/lease" : "/tenant/activity",
+      actionLabel: workspace.lease ? "Open lease" : "Open feed",
     },
   ];
 
@@ -2067,13 +2175,101 @@ router.get("/profile", requireTenantWorkspaceIdentity, async (req: any, res) => 
       },
     });
 
-    return res.json({ ok: true, data: profile });
+    return res.json({ ok: true, data: shapeTenantProfileResponse(profile) });
   } catch (err: any) {
     console.error("[tenant/profile] failed", {
       userId: req.user?.id,
       message: err?.message || "failed",
     });
     return res.status(500).json({ ok: false, error: "TENANT_PROFILE_FAILED" });
+  }
+});
+
+router.patch("/profile", requireTenantWorkspaceIdentity, async (req: any, res) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+
+  const displayName = cleanProfileField(req.body?.displayName, 120);
+  const phone = cleanProfileField(req.body?.phone, 40);
+  const requestedFields = Object.keys(req.body || {}).filter((field) => ["displayName", "phone"].includes(field));
+  if (!requestedFields.length) {
+    return res.status(400).json({ ok: false, error: "TENANT_PROFILE_FIELDS_REQUIRED" });
+  }
+
+  try {
+    const userId = String(req.user?.id || "").trim();
+    const userEmail = cleanProfileField(String(req.user?.email || "").trim().toLowerCase(), 160);
+
+    const tenantDocId = cleanProfileField(context.tenantId, 120);
+    const applicationDocId =
+      cleanProfileField(context.applicationId, 120) ||
+      (await queryFirstDocument("applications", "applicantEmail", userEmail))?.id ||
+      (await queryFirstDocument("applications", "email", userEmail))?.id ||
+      null;
+
+    if (!tenantDocId && !applicationDocId) {
+      return res.status(403).json({ ok: false, error: "TENANT_PROFILE_EDIT_UNAVAILABLE" });
+    }
+
+    const now = Date.now();
+
+    if (tenantDocId) {
+      const tenantUpdates: Record<string, any> = {
+        updatedAt: now,
+        updatedAtServer: FieldValue.serverTimestamp(),
+      };
+      if (requestedFields.includes("displayName")) {
+        tenantUpdates.fullName = displayName;
+      }
+      if (requestedFields.includes("phone")) {
+        tenantUpdates.phone = phone;
+      }
+      await db.collection("tenants").doc(tenantDocId).set(tenantUpdates, { merge: true });
+    }
+
+    if (applicationDocId) {
+      const applicationUpdates: Record<string, any> = {
+        updatedAt: now,
+      };
+      if (requestedFields.includes("displayName")) {
+        applicationUpdates.applicantName = displayName;
+      }
+      if (requestedFields.includes("phone")) {
+        applicationUpdates.phone = phone;
+      }
+      await db.collection("applications").doc(applicationDocId).set(applicationUpdates, { merge: true });
+    }
+
+    const profile = await loadTenantProfileProjection({
+      context,
+      userId,
+      userEmail,
+    });
+
+    await recordTenantEvent({
+      eventType: "tenant_profile_updated",
+      entityType: "tenant_profile",
+      entityId: String(context.tenantId || context.applicationId || context.propertyId || userId || "tenant_profile"),
+      createdBy: userId,
+      context: {
+        authority: context.authority,
+        propertyId: context.propertyId,
+        rc_prop_id: context.rc_prop_id,
+        applicationId: context.applicationId,
+        leaseId: context.leaseId,
+      },
+      payload: {
+        updatedFields: requestedFields,
+      },
+    });
+
+    return res.json({ ok: true, data: shapeTenantProfileResponse(profile) });
+  } catch (err: any) {
+    console.error("[tenant/profile:patch] failed", {
+      userId: req.user?.id,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_PROFILE_UPDATE_FAILED" });
   }
 });
 

@@ -124,7 +124,7 @@ const CompletionItemRow: React.FC<{ item: TenantApplicationCompletionItem }> = (
       {item.actionPath ? (
         <div>
           <Link to={item.actionPath} style={{ fontWeight: 700 }}>
-            Continue this step
+            {item.actionLabel || "Continue this step"}
           </Link>
         </div>
       ) : null}

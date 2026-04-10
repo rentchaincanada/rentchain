@@ -150,6 +150,12 @@ describe("tenantPortalRoutes foundation", () => {
       documentUrl: "https://example.com/lease.pdf",
       confidentialNotes: "private",
     });
+    ensureCollection("tenants").set("tenant-1", {
+      email: "tenant@example.com",
+      fullName: "Taylor Tenant",
+      phone: "902-555-0100",
+      internalNotes: "do-not-expose",
+    });
     ensureCollection("maintenanceRequests").set("maint-1", {
       tenantId: "tenant-1",
       propertyId: "prop-1",
@@ -242,6 +248,10 @@ describe("tenantPortalRoutes foundation", () => {
     expect(res.body?.data?.sections?.flatMap((section: any) => section.items || [])).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ sin: expect.anything() })])
     );
+    const documentItem = res.body?.data?.sections
+      ?.flatMap((section: any) => section.items || [])
+      ?.find((item: any) => item.key === "upload_id");
+    expect(documentItem?.actionPath).toBe("/tenant/attachments");
 
     const eventDocs = Array.from(ensureCollection("event_log").values());
     expect(eventDocs.some((event) => event.event_type === "tenant_application_completion_viewed")).toBe(true);
@@ -279,6 +289,75 @@ describe("tenantPortalRoutes foundation", () => {
     expect(Array.isArray(res.body?.data?.sections)).toBe(true);
     const readinessSection = res.body?.data?.sections?.find((section: any) => section.key === "readiness");
     expect(readinessSection).toBeTruthy();
+  });
+
+  it("returns tenant-safe profile data with edit and document entry actions", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/profile",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.profile?.displayName).toBe("Taylor Tenant");
+    expect(res.body?.data?.profile?.phone).toBe("902-555-0100");
+    expect(res.body?.data?.profile?.internalNotes).toBeUndefined();
+    expect(res.body?.data?.actions?.editableFields).toEqual(["displayName", "phone"]);
+    expect(res.body?.data?.actions?.documentEntry?.path).toBe("/tenant/attachments");
+  });
+
+  it("updates only allowed tenant profile fields", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "PATCH",
+      url: "/profile",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+      body: {
+        displayName: "Taylor Updated",
+        phone: "902-555-0111",
+        internalNotes: "should-not-stick",
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.profile?.displayName).toBe("Taylor Updated");
+    expect(res.body?.data?.profile?.phone).toBe("902-555-0111");
+    expect(ensureCollection("tenants").get("tenant-1")?.fullName).toBe("Taylor Updated");
+    expect(ensureCollection("tenants").get("tenant-1")?.phone).toBe("902-555-0111");
+    expect(ensureCollection("tenants").get("tenant-1")?.internalNotes).toBe("do-not-expose");
+    expect(ensureCollection("applications").get("app-1")?.applicantName).toBe("Taylor Updated");
+    expect(ensureCollection("applications").get("app-1")?.phone).toBe("902-555-0111");
+
+    const eventDocs = Array.from(ensureCollection("event_log").values());
+    expect(eventDocs.some((event) => event.event_type === "tenant_profile_updated")).toBe(true);
+  });
+
+  it("rejects unauthorized tenant profile edits", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "PATCH",
+      url: "/profile",
+      body: {
+        displayName: "Taylor Updated",
+      },
+    });
+
+    expect(res.status).toBe(401);
   });
 
   it("submits maintenance only for active tenant context", async () => {

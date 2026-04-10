@@ -61,9 +61,29 @@ export type TenantProfileData = {
     }>;
     nextSteps: string[];
   };
+  actions: {
+    editableFields: string[];
+    documentEntry: {
+      available: boolean;
+      path: string | null;
+      label: string;
+      note: string | null;
+    };
+  };
 };
 
 export async function getTenantProfile(): Promise<TenantProfileData> {
   const res = await tenantApiFetch<{ ok: boolean; data: TenantProfileData }>("/tenant/profile");
+  return res.data;
+}
+
+export async function updateTenantProfile(input: {
+  displayName?: string | null;
+  phone?: string | null;
+}): Promise<TenantProfileData> {
+  const res = await tenantApiFetch<{ ok: boolean; data: TenantProfileData }>("/tenant/profile", {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
   return res.data;
 }
