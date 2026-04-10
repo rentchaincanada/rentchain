@@ -111,7 +111,7 @@ export default function TenantWorkspacePage() {
             <div style={{ display: "grid", gap: spacing.sm }}>
               <div style={{ color: textTokens.secondary }}>Current status: <strong>{prettyStatus(data.application.status)}</strong></div>
               <div style={{ color: textTokens.secondary }}>Updated: {formatDate(data.application.updatedAt || data.application.createdAt)}</div>
-              <Link to="/tenant/application">Open application status</Link>
+              <Link to="/tenant/application">Open completion checklist</Link>
             </div>
           ) : (
             <TenantEmptyState title="No application projection yet" body="We couldn't find a tenant-safe application view for this workspace yet." />

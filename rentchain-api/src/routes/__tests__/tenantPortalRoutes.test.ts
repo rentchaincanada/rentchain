@@ -214,6 +214,73 @@ describe("tenantPortalRoutes foundation", () => {
     expect(eventDocs.some((event) => event.event_type === "tenant_workspace_viewed")).toBe(true);
   });
 
+  it("returns a grouped tenant-safe application completion checklist", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/application-completion",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.progressPercent).toBeTypeOf("number");
+    expect(Array.isArray(res.body?.data?.sections)).toBe(true);
+    expect(res.body?.data?.sections?.map((section: any) => section.key)).toEqual(
+      expect.arrayContaining(["identity", "documents", "profile", "readiness"])
+    );
+    expect(res.body?.data?.sections?.some((section: any) => Array.isArray(section.items) && section.items.length > 0)).toBe(true);
+    expect(res.body?.data?.sections?.flatMap((section: any) => section.items || [])).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ internalSecret: expect.anything() })])
+    );
+    expect(res.body?.data?.sections?.flatMap((section: any) => section.items || [])).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ sin: expect.anything() })])
+    );
+
+    const eventDocs = Array.from(ensureCollection("event_log").values());
+    expect(eventDocs.some((event) => event.event_type === "tenant_application_completion_viewed")).toBe(true);
+  });
+
+  it("rejects unauthorized application completion access", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/application-completion",
+    });
+
+    expect(res.status).toBe(401);
+  });
+
+  it("handles missing application context safely in the completion engine", async () => {
+    ensureCollection("applications").clear();
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/application-completion",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.status).toMatch(/not_started|in_progress|pending|needs_review/);
+    expect(Array.isArray(res.body?.data?.sections)).toBe(true);
+    const readinessSection = res.body?.data?.sections?.find((section: any) => section.key === "readiness");
+    expect(readinessSection).toBeTruthy();
+  });
+
   it("submits maintenance only for active tenant context", async () => {
     const router = (await import("../tenantPortalRoutes")).default;
     const res = await invokeRouter(router, {
