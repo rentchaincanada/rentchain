@@ -11,10 +11,13 @@ import { TenantNav } from "../../components/layout/TenantNav";
 
 const tenantPortalApi = vi.hoisted(() => ({
   getTenantWorkspace: vi.fn(),
-  getTenantApplicationStatus: vi.fn(),
   getTenantLeaseWorkspace: vi.fn(),
   listTenantWorkspaceMaintenance: vi.fn(),
   redeemTenantWorkspaceInvite: vi.fn(),
+}));
+
+const tenantApplicationCompletionApi = vi.hoisted(() => ({
+  getTenantApplicationCompletion: vi.fn(),
 }));
 
 const maintenanceWorkflowApi = vi.hoisted(() => ({
@@ -26,6 +29,7 @@ const tenantCommunicationsApi = vi.hoisted(() => ({
 }));
 
 vi.mock("../../api/tenantPortal", () => tenantPortalApi);
+vi.mock("../../api/tenantApplicationCompletion", () => tenantApplicationCompletionApi);
 vi.mock("../../api/tenantCommunicationsApi", () => tenantCommunicationsApi);
 vi.mock("../../api/maintenanceWorkflowApi", async () => {
   const actual = await vi.importActual<any>("../../api/maintenanceWorkflowApi");
@@ -142,13 +146,27 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.getByText(/finish_profile/i)).toBeInTheDocument();
   });
 
-  it("renders application status page with safe projected fields", async () => {
-    tenantPortalApi.getTenantApplicationStatus.mockResolvedValue({
-      applicationId: "app-1",
-      status: "submitted",
-      missingSteps: ["upload_id"],
-      nextActions: ["finish_profile"],
-      createdAt: "2026-01-01T00:00:00.000Z",
+  it("renders application completion page with safe grouped checklist fields", async () => {
+    tenantApplicationCompletionApi.getTenantApplicationCompletion.mockResolvedValue({
+      status: "in_progress",
+      progressPercent: 62,
+      sections: [
+        {
+          key: "documents",
+          label: "Documents",
+          status: "missing",
+          items: [
+            {
+              key: "upload_id",
+              label: "Upload Id",
+              status: "missing",
+              nextAction: "Upload government id",
+              actionPath: "/tenant/profile",
+            },
+          ],
+        },
+      ],
+      nextSteps: ["Upload government id"],
       updatedAt: "2026-01-02T00:00:00.000Z",
     });
 
@@ -158,9 +176,9 @@ describe("tenant workspace frontend shell", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/Application Status/i)).toBeInTheDocument();
-    expect(screen.getByText(/Submitted/i)).toBeInTheDocument();
-    expect(screen.getByText(/upload_id/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Application Completion/i)).toBeInTheDocument();
+    expect(screen.getByText(/62%/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Upload government id/i).length).toBeGreaterThan(0);
   });
 
   it("renders lease page with safe projected fields", async () => {
@@ -268,7 +286,7 @@ describe("tenant workspace frontend shell", () => {
   });
 
   it("empty state renders safely for application and maintenance", async () => {
-    tenantPortalApi.getTenantApplicationStatus.mockResolvedValue(null);
+    tenantApplicationCompletionApi.getTenantApplicationCompletion.mockResolvedValue(null);
     maintenanceWorkflowApi.listTenantMaintenance.mockResolvedValue({ items: [] });
 
     const applicationRender = render(
@@ -276,7 +294,7 @@ describe("tenant workspace frontend shell", () => {
         <TenantApplicationStatusPage />
       </MemoryRouter>
     );
-    expect(await screen.findByText(/No application status yet/i)).toBeInTheDocument();
+    expect(await screen.findByText(/No application checklist yet/i)).toBeInTheDocument();
     applicationRender.unmount();
 
     render(

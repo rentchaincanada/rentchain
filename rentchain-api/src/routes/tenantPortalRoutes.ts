@@ -93,6 +93,30 @@ type TenantCommunicationItem = {
   relatedEntityId: string | null;
 };
 
+type CompletionStatus =
+  | "completed"
+  | "verified"
+  | "pending"
+  | "missing"
+  | "needs_review"
+  | "not_started"
+  | "in_progress";
+
+type TenantCompletionItem = {
+  key: string;
+  label: string;
+  status: CompletionStatus;
+  nextAction: string | null;
+  actionPath: string | null;
+};
+
+type TenantCompletionSection = {
+  key: string;
+  label: string;
+  status: CompletionStatus;
+  items: TenantCompletionItem[];
+};
+
 const SCREENING_REQUEST_STATUSES = [
   "requested",
   "consent_pending",
@@ -1725,6 +1749,259 @@ async function loadTenantWorkspaceData(context: Awaited<ReturnType<typeof resolv
   };
 }
 
+function completionWeight(status: CompletionStatus): number {
+  switch (status) {
+    case "completed":
+    case "verified":
+      return 1;
+    case "pending":
+    case "in_progress":
+      return 0.55;
+    case "needs_review":
+      return 0.35;
+    default:
+      return 0;
+  }
+}
+
+function aggregateCompletionStatus(statuses: CompletionStatus[]): CompletionStatus {
+  if (!statuses.length) return "not_started";
+  if (statuses.every((status) => status === "completed" || status === "verified")) return "completed";
+  if (statuses.some((status) => status === "needs_review")) return "needs_review";
+  if (statuses.every((status) => status === "missing" || status === "not_started")) return "not_started";
+  if (statuses.some((status) => status === "pending")) return "pending";
+  return "in_progress";
+}
+
+function mapIdentityStatus(status: string | null | undefined): CompletionStatus {
+  switch (String(status || "").trim().toLowerCase()) {
+    case "verified":
+      return "verified";
+    case "pending":
+      return "pending";
+    case "needs_review":
+      return "needs_review";
+    case "missing":
+      return "missing";
+    default:
+      return "not_started";
+  }
+}
+
+function prettyChecklistLabel(value: string): string {
+  return String(value || "")
+    .trim()
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function inferActionPath(params: { key: string; nextAction: string | null; authority: string | null }): string | null {
+  const key = String(params.key || "").toLowerCase();
+  const nextAction = String(params.nextAction || "").toLowerCase();
+  if (key.includes("identity") || key.includes("document") || key.includes("income") || key.includes("profile") || key.includes("employer")) {
+    return "/tenant/profile";
+  }
+  if (key.includes("invite") || params.authority === "invite") {
+    return "/tenant/invite/redeem";
+  }
+  if (key.includes("message") || key.includes("communication") || nextAction.includes("message") || nextAction.includes("contact")) {
+    return "/tenant/messages";
+  }
+  return null;
+}
+
+function buildCompletionSections(params: {
+  context: Awaited<ReturnType<typeof resolveTenancyContext>>;
+  workspace: Awaited<ReturnType<typeof loadTenantWorkspaceData>>;
+  profile: Awaited<ReturnType<typeof loadTenantProfileProjection>>;
+}) {
+  const { context, workspace, profile } = params;
+  const application = workspace.application;
+  const profileSummary = profile.profile;
+  const identity = profile.identity;
+
+  const identityItems: TenantCompletionItem[] = [
+    {
+      key: "identity_verification",
+      label: "Identity verification",
+      status: mapIdentityStatus(identity?.identityVerification?.status),
+      nextAction:
+        identity?.identityVerification?.status === "verified"
+          ? null
+          : identity?.identityVerification?.note || "Complete identity verification",
+      actionPath: identity?.identityVerification?.status === "verified" ? null : "/tenant/profile",
+    },
+  ];
+
+  const documentItems: TenantCompletionItem[] =
+    identity?.documentChecklist?.length
+      ? identity.documentChecklist.map((item: any) => ({
+          key: String(item.code || "").trim(),
+          label: String(item.label || "").trim() || prettyChecklistLabel(String(item.code || "")),
+          status: mapIdentityStatus(item.status),
+          nextAction: String(item.nextStep || "").trim() || null,
+          actionPath: inferActionPath({
+            key: String(item.code || ""),
+            nextAction: String(item.nextStep || ""),
+            authority: context.authority,
+          }),
+        }))
+      : [
+          {
+            key: "documents_not_started",
+            label: "Documents",
+            status: "not_started",
+            nextAction: "Add any requested identity or income documents",
+            actionPath: "/tenant/profile",
+          },
+        ];
+
+  const missingStepItems: TenantCompletionItem[] = Array.isArray(application?.missingSteps)
+    ? application.missingSteps.map((step: string) => ({
+        key: String(step || "").trim().toLowerCase(),
+        label: prettyChecklistLabel(step),
+        status: "missing" as CompletionStatus,
+        nextAction:
+          (application?.nextActions || []).find((action: string) =>
+            String(action || "").toLowerCase().includes(String(step || "").toLowerCase())
+          ) || `Complete ${prettyChecklistLabel(step)}`,
+        actionPath: inferActionPath({
+          key: String(step || ""),
+          nextAction:
+            (application?.nextActions || []).find((action: string) =>
+              String(action || "").toLowerCase().includes(String(step || "").toLowerCase())
+            ) || "",
+          authority: context.authority,
+        }),
+      }))
+    : [];
+
+  const profileItems: TenantCompletionItem[] = [
+    {
+      key: "profile_basics",
+      label: "Profile basics",
+      status:
+        profileSummary?.displayName && profileSummary?.email
+          ? "completed"
+          : profileSummary?.email
+          ? "pending"
+          : "missing",
+      nextAction:
+        profileSummary?.displayName && profileSummary?.email ? null : "Complete your profile details",
+      actionPath:
+        profileSummary?.displayName && profileSummary?.email ? null : "/tenant/profile",
+    },
+    ...(missingStepItems.length
+      ? missingStepItems
+      : [
+          {
+            key: "application_details",
+            label: "Application details",
+            status: application ? "completed" : "not_started",
+            nextAction: application ? null : "Start your application details",
+            actionPath: application ? null : context.authority === "invite" ? "/tenant/invite/redeem" : "/tenant/profile",
+          } as TenantCompletionItem,
+        ]),
+  ];
+
+  const readinessItems: TenantCompletionItem[] = [
+    {
+      key: "application_submission",
+      label: "Application submission",
+      status:
+        !application
+          ? "not_started"
+          : ["approved", "submitted", "in_review", "conditional_cosigner", "conditional_deposit"].includes(
+              String(application.status || "").toLowerCase()
+            )
+          ? "completed"
+          : String(application.status || "").toLowerCase() === "draft"
+          ? "in_progress"
+          : "pending",
+      nextAction:
+        !application
+          ? "Begin your application"
+          : String(application.status || "").toLowerCase() === "draft"
+          ? "Finish the remaining application steps"
+          : null,
+      actionPath:
+        !application || String(application?.status || "").toLowerCase() === "draft"
+          ? context.authority === "invite"
+            ? "/tenant/invite/redeem"
+            : "/tenant/application"
+          : null,
+    },
+    {
+      key: "lease_readiness",
+      label: "Lease readiness",
+      status:
+        workspace.lease?.status
+          ? ["active", "signed"].includes(String(workspace.lease.status || "").toLowerCase())
+            ? "completed"
+            : "pending"
+          : "pending",
+      nextAction: workspace.lease ? null : "Watch for lease updates after your application review",
+      actionPath: workspace.lease ? "/tenant/lease" : "/tenant/activity",
+    },
+  ];
+
+  const sections: TenantCompletionSection[] = [
+    {
+      key: "identity",
+      label: "Identity",
+      status: aggregateCompletionStatus(identityItems.map((item) => item.status)),
+      items: identityItems,
+    },
+    {
+      key: "documents",
+      label: "Documents",
+      status: aggregateCompletionStatus(documentItems.map((item) => item.status)),
+      items: documentItems,
+    },
+    {
+      key: "profile",
+      label: "Profile & Application Info",
+      status: aggregateCompletionStatus(profileItems.map((item) => item.status)),
+      items: profileItems,
+    },
+    {
+      key: "readiness",
+      label: "Application Readiness",
+      status: aggregateCompletionStatus(readinessItems.map((item) => item.status)),
+      items: readinessItems,
+    },
+  ];
+
+  const actionableItems = sections
+    .flatMap((section) => section.items)
+    .filter((item) => !["completed", "verified"].includes(item.status) && item.nextAction);
+  const nextSteps = Array.from(new Set(actionableItems.map((item) => String(item.nextAction || "").trim()).filter(Boolean)));
+
+  const allStatuses = sections.flatMap((section) => section.items.map((item) => item.status));
+  const weightedTotal = allStatuses.reduce((sum, status) => sum + completionWeight(status), 0);
+  const progressPercent = allStatuses.length ? Math.round((weightedTotal / allStatuses.length) * 100) : 0;
+  const status =
+    progressPercent >= 100 && !sections.some((section) => section.status === "needs_review")
+      ? "completed"
+      : sections.some((section) => section.status === "needs_review")
+      ? "needs_review"
+      : progressPercent === 0
+      ? "not_started"
+      : "in_progress";
+
+  return {
+    status,
+    progressPercent,
+    sections,
+    nextSteps,
+    updatedAt:
+      profile?.identity?.identityVerification?.updatedAt ||
+      profileSummary?.application?.updatedAt ||
+      profileSummary?.lease?.startDate ||
+      null,
+  };
+}
+
 async function handleTenantWorkspaceSummary(req: any, res: any) {
   const context = await resolveWorkspaceContextOrRespond(req, res);
   if (!context) return;
@@ -1917,6 +2194,51 @@ router.get("/application-status", requireTenantWorkspaceIdentity, async (req: an
   if (!context) return;
   const workspace = await loadTenantWorkspaceData(context);
   return res.json({ ok: true, data: workspace.application });
+});
+
+router.get("/application-completion", requireTenantWorkspaceIdentity, async (req: any, res) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+
+  try {
+    const [workspace, profile] = await Promise.all([
+      loadTenantWorkspaceData(context),
+      loadTenantProfileProjection({
+        context,
+        userId: String(req.user?.id || "").trim(),
+        userEmail: String(req.user?.email || "").trim() || null,
+      }),
+    ]);
+
+    const summary = buildCompletionSections({ context, workspace, profile });
+
+    await recordTenantEvent({
+      eventType: "tenant_application_completion_viewed",
+      entityType: "tenant_application_completion",
+      entityId: String(context.applicationId || context.tenantId || context.propertyId || req.user?.id || "tenant_application_completion"),
+      createdBy: String(req.user?.id || "").trim(),
+      context: {
+        authority: context.authority,
+        propertyId: context.propertyId,
+        rc_prop_id: context.rc_prop_id,
+        applicationId: context.applicationId,
+        leaseId: context.leaseId,
+      },
+      payload: {
+        progressPercent: summary.progressPercent,
+        status: summary.status,
+        nextStepCount: summary.nextSteps.length,
+      },
+    });
+
+    return res.json({ ok: true, data: summary });
+  } catch (err: any) {
+    console.error("[tenant/application-completion] failed", {
+      userId: req.user?.id,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_APPLICATION_COMPLETION_FAILED" });
+  }
 });
 
 router.get("/lease", requireTenantWorkspaceIdentity, async (req: any, res) => {
