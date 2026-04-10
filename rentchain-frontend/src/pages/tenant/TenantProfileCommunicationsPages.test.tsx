@@ -115,8 +115,8 @@ describe("tenant profile and communications pages", () => {
     );
 
     expect(await screen.findByText(/Tenant Profile/i)).toBeInTheDocument();
-    expect(screen.getByText(/Taylor Tenant/i)).toBeInTheDocument();
-    expect(screen.getByText(/Verification is still in progress/i)).toBeInTheDocument();
+    expect(await screen.findByDisplayValue(/Taylor Tenant/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Verification is still in progress/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Upload government id/i).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /Save profile changes/i })).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: /Review requested documents/i }).length).toBeGreaterThan(0);
