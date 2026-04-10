@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { getTenantProfile, type TenantProfileStatus } from "../../api/tenantProfile";
+import { Link } from "react-router-dom";
+import { getTenantProfile, updateTenantProfile, type TenantProfileStatus } from "../../api/tenantProfile";
 import {
   TenantEmptyState,
   TenantErrorState,
@@ -31,6 +32,10 @@ export default function TenantProfilePage() {
   const [data, setData] = useState<Awaited<ReturnType<typeof getTenantProfile>> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [formValues, setFormValues] = useState({ displayName: "", phone: "" });
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -39,7 +44,13 @@ export default function TenantProfilePage() {
       setError(null);
       try {
         const res = await getTenantProfile();
-        if (!cancelled) setData(res);
+        if (!cancelled) {
+          setData(res);
+          setFormValues({
+            displayName: res?.profile?.displayName || "",
+            phone: res?.profile?.phone || "",
+          });
+        }
       } catch (err: any) {
         if (!cancelled) setError(err?.message || "Unable to load profile information.");
       } finally {
@@ -51,6 +62,36 @@ export default function TenantProfilePage() {
       cancelled = true;
     };
   }, []);
+
+  const handleChange =
+    (field: "displayName" | "phone") => (event: React.ChangeEvent<HTMLInputElement>) => {
+      setSaveError(null);
+      setSaveMessage(null);
+      setFormValues((current) => ({ ...current, [field]: event.target.value }));
+    };
+
+  const handleSave = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSaving(true);
+    setSaveError(null);
+    setSaveMessage(null);
+    try {
+      const next = await updateTenantProfile({
+        displayName: formValues.displayName,
+        phone: formValues.phone,
+      });
+      setData(next);
+      setFormValues({
+        displayName: next?.profile?.displayName || "",
+        phone: next?.profile?.phone || "",
+      });
+      setSaveMessage("Profile details updated.");
+    } catch (err: any) {
+      setSaveError(err?.payload?.error || err?.message || "Unable to save profile changes.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -77,6 +118,7 @@ export default function TenantProfilePage() {
 
   const identityTone = statusTone(data?.identity?.overallStatus || "missing");
   const verificationTone = statusTone(data?.identity?.identityVerification?.status || "missing");
+  const documentEntry = data?.actions?.documentEntry;
   const propertyAddress = [
     data?.profile?.property?.street1,
     data?.profile?.property?.street2,
@@ -102,6 +144,93 @@ export default function TenantProfilePage() {
             { label: "Lease status", value: prettyStatus(data?.profile?.lease?.status) },
           ]}
         />
+      </TenantInfoCard>
+
+      <TenantInfoCard heading="Edit profile details" accent="#0f766e">
+        <form onSubmit={handleSave} style={{ display: "grid", gap: spacing.sm }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: spacing.sm,
+            }}
+          >
+            <label style={{ display: "grid", gap: 6, color: textTokens.secondary }}>
+              <span style={{ fontWeight: 700, color: textTokens.primary }}>Display name</span>
+              <input
+                name="displayName"
+                value={formValues.displayName}
+                onChange={handleChange("displayName")}
+                maxLength={120}
+                style={{
+                  border: "1px solid rgba(15,23,42,0.12)",
+                  borderRadius: 10,
+                  padding: "10px 12px",
+                  font: "inherit",
+                }}
+              />
+            </label>
+
+            <label style={{ display: "grid", gap: 6, color: textTokens.secondary }}>
+              <span style={{ fontWeight: 700, color: textTokens.primary }}>Phone</span>
+              <input
+                name="phone"
+                value={formValues.phone}
+                onChange={handleChange("phone")}
+                maxLength={40}
+                style={{
+                  border: "1px solid rgba(15,23,42,0.12)",
+                  borderRadius: 10,
+                  padding: "10px 12px",
+                  font: "inherit",
+                }}
+              />
+            </label>
+          </div>
+
+          <div style={{ color: textTokens.muted }}>
+            You can update a small tenant-safe set of profile fields here without changing lease, approval, or verification records.
+          </div>
+
+          {saveError ? <div style={{ color: "#b91c1c", fontWeight: 600 }}>{saveError}</div> : null}
+          {saveMessage ? <div style={{ color: "#166534", fontWeight: 600 }}>{saveMessage}</div> : null}
+
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button
+              type="submit"
+              disabled={saving}
+              style={{
+                padding: "10px 14px",
+                borderRadius: 10,
+                border: "1px solid rgba(15,23,42,0.12)",
+                background: "#0f766e",
+                color: "#fff",
+                fontWeight: 700,
+                cursor: saving ? "wait" : "pointer",
+              }}
+            >
+              {saving ? "Saving..." : "Save profile changes"}
+            </button>
+            {documentEntry?.available && documentEntry?.path ? (
+              <Link
+                to={documentEntry.path}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "10px 14px",
+                  borderRadius: 10,
+                  textDecoration: "none",
+                  fontWeight: 700,
+                  border: "1px solid rgba(15,23,42,0.12)",
+                  color: textTokens.primary,
+                }}
+              >
+                {documentEntry.label}
+              </Link>
+            ) : null}
+          </div>
+        </form>
       </TenantInfoCard>
 
       <div
@@ -158,6 +287,7 @@ export default function TenantProfilePage() {
       </div>
 
       <TenantInfoCard heading="Document checklist" accent="#b45309">
+        {documentEntry?.note ? <div style={{ color: textTokens.secondary }}>{documentEntry.note}</div> : null}
         {data?.identity?.documentChecklist?.length ? (
           <div style={{ display: "grid", gap: spacing.sm }}>
             {data.identity.documentChecklist.map((item) => {
@@ -189,6 +319,13 @@ export default function TenantProfilePage() {
                     </div>
                   </div>
                   {item.nextStep ? <div style={{ color: textTokens.secondary }}>{item.nextStep}</div> : null}
+                  {documentEntry?.available && documentEntry?.path ? (
+                    <div>
+                      <Link to={documentEntry.path} style={{ fontWeight: 700 }}>
+                        {documentEntry.label}
+                      </Link>
+                    </div>
+                  ) : null}
                 </div>
               );
             })}
@@ -209,6 +346,11 @@ export default function TenantProfilePage() {
                 {step}
               </div>
             ))}
+            {documentEntry?.available && documentEntry?.path ? (
+              <Link to={documentEntry.path} style={{ fontWeight: 700 }}>
+                {documentEntry.label}
+              </Link>
+            ) : null}
           </div>
         ) : (
           <div style={{ color: textTokens.muted }}>No pending next steps right now.</div>

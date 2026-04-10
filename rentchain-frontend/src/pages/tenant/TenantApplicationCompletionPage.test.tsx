@@ -32,6 +32,7 @@ describe("tenant application completion page", () => {
               status: "verified",
               nextAction: null,
               actionPath: null,
+              actionLabel: null,
             },
           ],
         },
@@ -45,7 +46,8 @@ describe("tenant application completion page", () => {
               label: "Income documents",
               status: "missing",
               nextAction: "Upload income documents",
-              actionPath: "/tenant/profile",
+              actionPath: "/tenant/attachments",
+              actionLabel: "Open documents",
             },
           ],
         },
@@ -64,7 +66,7 @@ describe("tenant application completion page", () => {
     expect(screen.getByText(/62%/i)).toBeInTheDocument();
     expect(screen.getByText(/Identity verification/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Upload income documents/i).length).toBeGreaterThan(0);
-    expect(screen.getByRole("link", { name: /Continue this step/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Open documents/i })).toBeInTheDocument();
   });
 
   it("renders empty state safely", async () => {

@@ -9,6 +9,7 @@ import { TenantNav } from "../../components/layout/TenantNav";
 
 const tenantProfileApi = vi.hoisted(() => ({
   getTenantProfile: vi.fn(),
+  updateTenantProfile: vi.fn(),
 }));
 
 const tenantCommunicationsApi = vi.hoisted(() => ({
@@ -96,6 +97,15 @@ describe("tenant profile and communications pages", () => {
         documentChecklist: [{ code: "upload_id", label: "Upload Id", status: "missing", nextStep: "Upload government id" }],
         nextSteps: ["Upload government id"],
       },
+      actions: {
+        editableFields: ["displayName", "phone"],
+        documentEntry: {
+          available: true,
+          path: "/tenant/attachments",
+          label: "Review requested documents",
+          note: "1 document-related step still needs attention.",
+        },
+      },
     });
 
     render(
@@ -108,6 +118,143 @@ describe("tenant profile and communications pages", () => {
     expect(screen.getByText(/Taylor Tenant/i)).toBeInTheDocument();
     expect(screen.getByText(/Verification is still in progress/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Upload government id/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /Save profile changes/i })).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /Review requested documents/i }).length).toBeGreaterThan(0);
+  });
+
+  it("tenant profile page saves bounded profile edits safely", async () => {
+    tenantProfileApi.getTenantProfile.mockResolvedValue({
+      context: { authority: "active_tenant" },
+      profile: {
+        displayName: "Taylor Tenant",
+        email: "tenant@example.com",
+        phone: "902-555-0100",
+        authorityLabel: "Active tenant",
+        property: null,
+        application: null,
+        lease: null,
+      },
+      identity: {
+        overallStatus: "verified",
+        identityVerification: {
+          status: "verified",
+          label: "Verified",
+          note: "All set.",
+          updatedAt: "2026-01-05T00:00:00.000Z",
+        },
+        documentChecklist: [],
+        nextSteps: [],
+      },
+      actions: {
+        editableFields: ["displayName", "phone"],
+        documentEntry: {
+          available: true,
+          path: "/tenant/attachments",
+          label: "Open documents",
+          note: "Open your tenant documents area.",
+        },
+      },
+    });
+    tenantProfileApi.updateTenantProfile.mockResolvedValue({
+      context: { authority: "active_tenant" },
+      profile: {
+        displayName: "Taylor Updated",
+        email: "tenant@example.com",
+        phone: "902-555-0111",
+        authorityLabel: "Active tenant",
+        property: null,
+        application: null,
+        lease: null,
+      },
+      identity: {
+        overallStatus: "verified",
+        identityVerification: {
+          status: "verified",
+          label: "Verified",
+          note: "All set.",
+          updatedAt: "2026-01-05T00:00:00.000Z",
+        },
+        documentChecklist: [],
+        nextSteps: [],
+      },
+      actions: {
+        editableFields: ["displayName", "phone"],
+        documentEntry: {
+          available: true,
+          path: "/tenant/attachments",
+          label: "Open documents",
+          note: "Open your tenant documents area.",
+        },
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantProfilePage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByDisplayValue("Taylor Tenant")).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox", { name: /Display name/i }), {
+      target: { value: "Taylor Updated" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: /Phone/i }), {
+      target: { value: "902-555-0111" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Save profile changes/i }));
+
+    expect(tenantProfileApi.updateTenantProfile).toHaveBeenCalledWith({
+      displayName: "Taylor Updated",
+      phone: "902-555-0111",
+    });
+    expect(await screen.findByText(/Profile details updated/i)).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Taylor Updated")).toBeInTheDocument();
+  });
+
+  it("tenant profile page handles validation failure safely", async () => {
+    tenantProfileApi.getTenantProfile.mockResolvedValue({
+      context: { authority: "active_tenant" },
+      profile: {
+        displayName: "Taylor Tenant",
+        email: "tenant@example.com",
+        phone: "902-555-0100",
+        authorityLabel: "Active tenant",
+        property: null,
+        application: null,
+        lease: null,
+      },
+      identity: {
+        overallStatus: "pending",
+        identityVerification: {
+          status: "pending",
+          label: "Pending",
+          note: "Verification is still in progress.",
+          updatedAt: "2026-01-05T00:00:00.000Z",
+        },
+        documentChecklist: [],
+        nextSteps: [],
+      },
+      actions: {
+        editableFields: ["displayName", "phone"],
+        documentEntry: {
+          available: false,
+          path: null,
+          label: "Open documents",
+          note: null,
+        },
+      },
+    });
+    tenantProfileApi.updateTenantProfile.mockRejectedValue(new Error("TENANT_PROFILE_UPDATE_FAILED"));
+
+    render(
+      <MemoryRouter>
+        <TenantProfilePage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByDisplayValue("Taylor Tenant")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Save profile changes/i }));
+    expect(await screen.findByText(/TENANT_PROFILE_UPDATE_FAILED/i)).toBeInTheDocument();
   });
 
   it("communications page handles empty state and compose/send success", async () => {

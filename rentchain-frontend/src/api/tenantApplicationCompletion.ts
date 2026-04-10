@@ -15,6 +15,7 @@ export type TenantApplicationCompletionItem = {
   status: TenantApplicationCompletionStatus;
   nextAction: string | null;
   actionPath: string | null;
+  actionLabel: string | null;
 };
 
 export type TenantApplicationCompletionSection = {
