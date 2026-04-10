@@ -10,12 +10,12 @@ type Props = {
 
 const navItems = [
   { label: "Workspace", to: "/tenant" },
+  { label: "Profile", to: "/tenant/profile" },
   { label: "Application", to: "/tenant/application" },
   { label: "Lease", to: "/tenant/lease" },
   { label: "Maintenance", to: "/tenant/maintenance" },
   { label: "Messages", to: "/tenant/messages" },
-  { label: "Notices", to: "/tenant/notices" },
-  { label: "Account", to: "/tenant/account" },
+  { label: "Feed", to: "/tenant/activity" },
 ];
 
 export const TenantNav: React.FC<Props> = ({ children }) => {

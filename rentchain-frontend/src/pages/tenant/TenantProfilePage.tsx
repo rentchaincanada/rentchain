@@ -1,44 +1,34 @@
 import React, { useEffect, useState } from "react";
-import { tenantApiFetch } from "../../api/tenantApiFetch";
-import { Card } from "../../components/ui/Ui";
-import { colors, spacing, text as textTokens } from "../../styles/tokens";
+import { getTenantProfile, type TenantProfileStatus } from "../../api/tenantProfile";
+import {
+  TenantEmptyState,
+  TenantErrorState,
+  TenantInfoCard,
+  TenantKeyValueGrid,
+  TenantLoadingState,
+  TenantSurfaceShell,
+  TenantUnauthorizedState,
+  formatDate,
+  formatMoney,
+  prettyStatus,
+} from "./TenantWorkspaceShared";
+import { spacing, text as textTokens } from "../../styles/tokens";
 
-type TenantMeResponse = {
-  ok: boolean;
-  data?: {
-    tenant?: {
-      name?: string | null;
-      email?: string | null;
-      shortId?: string | null;
-    };
-    property?: { name?: string | null };
-    unit?: { label?: string | null };
-    lease?: { startDate?: number | null; endDate?: number | null };
-  };
-};
-
-function fmtDate(ts?: number | null): string {
-  if (!ts) return "—";
-  const d = new Date(ts);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+function statusTone(status: TenantProfileStatus): { label: string; color: string; background: string } {
+  switch (status) {
+    case "verified":
+      return { label: "Verified", color: "#166534", background: "#dcfce7" };
+    case "pending":
+      return { label: "Pending", color: "#1d4ed8", background: "#dbeafe" };
+    case "needs_review":
+      return { label: "Needs review", color: "#9a3412", background: "#ffedd5" };
+    default:
+      return { label: "Missing", color: "#991b1b", background: "#fee2e2" };
+  }
 }
-
-function valueOrDash(value?: string | null): string {
-  const trimmed = String(value || "").trim();
-  return trimmed || "—";
-}
-
-const rowStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "200px 1fr",
-  gap: spacing.sm,
-  padding: `${spacing.xs} 0`,
-  borderBottom: `1px solid ${colors.border}`,
-};
 
 export default function TenantProfilePage() {
-  const [data, setData] = useState<TenantMeResponse["data"] | null>(null);
+  const [data, setData] = useState<Awaited<ReturnType<typeof getTenantProfile>> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,8 +38,8 @@ export default function TenantProfilePage() {
       setLoading(true);
       setError(null);
       try {
-        const res = await tenantApiFetch<TenantMeResponse>("/tenant/me");
-        if (!cancelled) setData(res?.data || null);
+        const res = await getTenantProfile();
+        if (!cancelled) setData(res);
       } catch (err: any) {
         if (!cancelled) setError(err?.message || "Unable to load profile information.");
       } finally {
@@ -62,65 +52,168 @@ export default function TenantProfilePage() {
     };
   }, []);
 
+  if (loading) {
+    return (
+      <TenantSurfaceShell
+        title="Tenant Profile"
+        subtitle="Your profile and identity checklist are shown from tenant-safe projections only."
+      >
+        <TenantLoadingState label="Loading your profile and identity status..." />
+      </TenantSurfaceShell>
+    );
+  }
+
+  if (error) {
+    const unauthorized = /unauthorized|forbidden|ambiguous/i.test(error);
+    return (
+      <TenantSurfaceShell
+        title="Tenant Profile"
+        subtitle="This page reflects your tenancy context, profile basics, and document visibility."
+      >
+        {unauthorized ? <TenantUnauthorizedState /> : <TenantErrorState message={error} />}
+      </TenantSurfaceShell>
+    );
+  }
+
+  const identityTone = statusTone(data?.identity?.overallStatus || "missing");
+  const verificationTone = statusTone(data?.identity?.identityVerification?.status || "missing");
+  const propertyAddress = [
+    data?.profile?.property?.street1,
+    data?.profile?.property?.street2,
+    data?.profile?.property?.city,
+    data?.profile?.property?.province,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
   return (
-    <Card elevated style={{ padding: spacing.lg }}>
-      <div style={{ marginBottom: spacing.md }}>
-        <h1 style={{ margin: 0, color: textTokens.primary, fontSize: "1.4rem" }}>Profile Information</h1>
-        <div style={{ marginTop: 6, color: textTokens.muted }}>
-          Account and lease details for your tenant profile.
-        </div>
+    <TenantSurfaceShell
+      title="Tenant Profile"
+      subtitle="Review your tenant-safe profile details, identity progress, and the next steps still linked to your tenancy or application."
+    >
+      <TenantInfoCard heading="Profile Summary" accent="#0f766e">
+        <TenantKeyValueGrid
+          rows={[
+            { label: "Name", value: data?.profile?.displayName || "—" },
+            { label: "Email", value: data?.profile?.email || "—" },
+            { label: "Phone", value: data?.profile?.phone || "—" },
+            { label: "Access", value: data?.profile?.authorityLabel || "Tenant" },
+            { label: "Property", value: propertyAddress || "No property linked yet" },
+            { label: "Lease status", value: prettyStatus(data?.profile?.lease?.status) },
+          ]}
+        />
+      </TenantInfoCard>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+          gap: spacing.md,
+        }}
+      >
+        <TenantInfoCard heading="Identity status" accent="#1d4ed8">
+          <div style={{ display: "grid", gap: spacing.sm }}>
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "fit-content",
+                padding: "6px 10px",
+                borderRadius: 999,
+                fontWeight: 700,
+                color: identityTone.color,
+                background: identityTone.background,
+              }}
+            >
+              {identityTone.label}
+            </div>
+            <div style={{ color: textTokens.secondary }}>
+              Verification: <strong>{verificationTone.label}</strong>
+            </div>
+            <div style={{ color: textTokens.secondary }}>
+              {data?.identity?.identityVerification?.note || "Open next steps below if anything is still pending."}
+            </div>
+            <div style={{ color: textTokens.muted }}>
+              Updated: {formatDate(data?.identity?.identityVerification?.updatedAt)}
+            </div>
+          </div>
+        </TenantInfoCard>
+
+        <TenantInfoCard heading="Lease & application" accent="#7c3aed">
+          <TenantKeyValueGrid
+            rows={[
+              { label: "Application", value: prettyStatus(data?.profile?.application?.status) },
+              { label: "Lease", value: prettyStatus(data?.profile?.lease?.status) },
+              { label: "Rent", value: formatMoney(data?.profile?.lease?.monthlyRent) },
+              { label: "Lease start", value: formatDate(data?.profile?.lease?.startDate) },
+              { label: "Lease end", value: formatDate(data?.profile?.lease?.endDate) },
+              {
+                label: "Lease document",
+                value: data?.profile?.lease?.documentUrl ? "Available" : "Not shared yet",
+              },
+            ]}
+          />
+        </TenantInfoCard>
       </div>
 
-      {error ? (
-        <div style={{ color: colors.danger }}>{error}</div>
-      ) : loading ? (
-        <div style={{ color: textTokens.muted }}>Loading profile…</div>
-      ) : (
-        <div style={{ display: "grid", gap: 0 }}>
-          <div style={rowStyle}>
-            <div style={{ color: textTokens.muted }}>Full Name</div>
-            <div style={{ color: textTokens.primary, fontWeight: 600 }}>{valueOrDash(data?.tenant?.name)}</div>
+      <TenantInfoCard heading="Document checklist" accent="#b45309">
+        {data?.identity?.documentChecklist?.length ? (
+          <div style={{ display: "grid", gap: spacing.sm }}>
+            {data.identity.documentChecklist.map((item) => {
+              const tone = statusTone(item.status);
+              return (
+                <div
+                  key={item.code}
+                  style={{
+                    display: "grid",
+                    gap: 6,
+                    border: "1px solid rgba(15,23,42,0.08)",
+                    borderRadius: 12,
+                    padding: "12px 14px",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                    <div style={{ fontWeight: 700, color: textTokens.primary }}>{item.label}</div>
+                    <div
+                      style={{
+                        padding: "4px 8px",
+                        borderRadius: 999,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: tone.color,
+                        background: tone.background,
+                      }}
+                    >
+                      {tone.label}
+                    </div>
+                  </div>
+                  {item.nextStep ? <div style={{ color: textTokens.secondary }}>{item.nextStep}</div> : null}
+                </div>
+              );
+            })}
           </div>
-          <div style={rowStyle}>
-            <div style={{ color: textTokens.muted }}>Email</div>
-            <div style={{ color: textTokens.primary, fontWeight: 600 }}>{valueOrDash(data?.tenant?.email)}</div>
-          </div>
-          <div style={rowStyle}>
-            <div style={{ color: textTokens.muted }}>Lease Property</div>
-            <div style={{ color: textTokens.primary, fontWeight: 600 }}>{valueOrDash(data?.property?.name)}</div>
-          </div>
-          <div style={rowStyle}>
-            <div style={{ color: textTokens.muted }}>Unit</div>
-            <div style={{ color: textTokens.primary, fontWeight: 600 }}>{valueOrDash(data?.unit?.label)}</div>
-          </div>
-          <div style={rowStyle}>
-            <div style={{ color: textTokens.muted }}>Lease Start</div>
-            <div style={{ color: textTokens.primary, fontWeight: 600 }}>{fmtDate(data?.lease?.startDate)}</div>
-          </div>
-          <div style={{ ...rowStyle, borderBottom: "none" }}>
-            <div style={{ color: textTokens.muted }}>Lease End</div>
-            <div style={{ color: textTokens.primary, fontWeight: 600 }}>{fmtDate(data?.lease?.endDate)}</div>
-          </div>
-        </div>
-      )}
+        ) : (
+          <TenantEmptyState
+            title="No document checklist yet"
+            body="When documents or identity steps are linked to your application or lease, they will appear here in a tenant-safe format."
+          />
+        )}
+      </TenantInfoCard>
 
-      <div style={{ marginTop: spacing.md }}>
-        <button
-          type="button"
-          disabled
-          style={{
-            border: `1px solid ${colors.border}`,
-            borderRadius: 10,
-            background: colors.panel,
-            color: textTokens.muted,
-            padding: "8px 12px",
-            cursor: "not-allowed",
-            fontWeight: 600,
-          }}
-        >
-          Edit Profile (Coming soon)
-        </button>
-      </div>
-    </Card>
+      <TenantInfoCard heading="Next steps" accent="#0891b2">
+        {data?.identity?.nextSteps?.length ? (
+          <div style={{ display: "grid", gap: 8 }}>
+            {data.identity.nextSteps.map((step) => (
+              <div key={step} style={{ color: textTokens.secondary }}>
+                {step}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ color: textTokens.muted }}>No pending next steps right now.</div>
+        )}
+      </TenantInfoCard>
+    </TenantSurfaceShell>
   );
 }
