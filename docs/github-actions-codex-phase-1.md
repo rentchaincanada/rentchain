@@ -21,9 +21,9 @@ Phase 1 does not include:
 - infra mutation outside workflow files
 - Slack, Linear, or other notification integrations
 
-Existing legacy workflows remain in place in this phase. The new `ci.yml` is the Phase 1 baseline workflow, and consolidating older workflow overlap can happen in a follow-up mission.
+The Phase 1 baseline now sits inside the consolidated workflow stack documented in `docs/github-actions-workflow-consolidation.md`.
 
-Phase 2 builds on this baseline with a separate bounded autofix workflow documented in `docs/github-actions-codex-phase-2-autofix.md`.
+Phase 2 builds on this baseline with a separate bounded autofix workflow documented in `docs/github-actions-codex-phase-2-autofix.md`, and Phase 3 adds the guarded merge-gate documented in `docs/github-actions-codex-phase-3-merge-gate.md`.
 
 ## Workflows Added
 
@@ -163,6 +163,13 @@ The workflow uses the commands already established in the repo’s `package.json
 
 For backend verification, Phase 1 intentionally matches the repo's current trusted workflow behavior and runs the backend build path rather than introducing a new backend test contract inside this mission. Existing repo workflows already treat backend build validation as the stable baseline, while backend route tests such as `propertiesRoutes.test.ts` are not part of the current known-good GitHub Actions path.
 
+Within the consolidated workflow stack, the stable CI check names intended for branch protection are:
+
+- `backend`
+- `frontend`
+
+The separate `merge-gate` workflow is the guarded readiness layer that sits on top of these checks rather than replacing them.
+
 ## What Codex PR Review Does
 
 Codex PR review:
@@ -173,11 +180,10 @@ Codex PR review:
 - comments on the pull request instead of modifying code
 - skips safely if the API secret is missing
 
-## Future Phase 2 Possibilities
+## Relationship To Later Phases
 
-Potential follow-up work for Phase 2:
+Later phases build on this baseline:
 
-- Codex-assisted CI autofix loops
-- merge gate logic
-- optional auto-merge after green verification and review policy checks
-- workflow consolidation once the Phase 1 baseline is stable
+- Phase 2 adds bounded CI autofix
+- Phase 3 adds guarded merge readiness evaluation
+- workflow consolidation documents the final authoritative stack and legacy workflow cleanup

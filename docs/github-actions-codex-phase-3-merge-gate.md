@@ -11,6 +11,8 @@ It provides:
 - a policy layer that works alongside GitHub branch protection instead of replacing it
 - optional merge queue compatibility through the `merge_group` event
 
+Within the consolidated workflow stack documented in `docs/github-actions-workflow-consolidation.md`, `merge-gate` is the explicit guarded readiness check that sits alongside the authoritative CI checks.
+
 ## Founder-Operated Policy
 
 RentChain currently uses a founder-operated merge process.
@@ -76,6 +78,12 @@ The merge gate adds:
 - a founder-compatible policy layer for merge judgment
 
 It does not replace GitHub’s merge controls.
+
+In the consolidated stack, the intended required checks are:
+
+- `backend`
+- `frontend`
+- `merge-gate`
 
 ## Merge Queue Notes
 
