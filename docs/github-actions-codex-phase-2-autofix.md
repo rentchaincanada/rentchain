@@ -22,6 +22,8 @@ Phase 2 adds:
 - a scoped bot commit back to the same PR branch when a safe fix exists
 - a PR comment describing the autofix outcome
 
+Inside the consolidated workflow stack documented in `docs/github-actions-workflow-consolidation.md`, this workflow is operational rather than a required branch-protection check.
+
 ## What Phase 2 Does Not Add
 
 Phase 2 still does not include:
@@ -134,6 +136,6 @@ Potential later work could include:
 
 - richer autofix eligibility rules per failing job
 - optional maintainer approval before applying a fix
-- explicit merge-gate integration
 - selective retry policies
 
+Phase 3 is now documented separately in `docs/github-actions-codex-phase-3-merge-gate.md`.
