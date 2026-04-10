@@ -357,6 +357,9 @@ export const LoginPage: React.FC = () => {
           <Link to="/signup" style={{ color: colors.accent, textDecoration: "none", fontWeight: 600 }}>
             Create free account
           </Link>
+          <Link to="/tenant" style={{ color: colors.accent, textDecoration: "none", fontWeight: 600 }}>
+            Are you a tenant? Access your profile
+          </Link>
           <Link to="/request-access" style={{ color: text.muted, textDecoration: "none" }}>
             Request access
           </Link>

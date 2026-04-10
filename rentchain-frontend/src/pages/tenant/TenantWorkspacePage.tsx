@@ -40,7 +40,7 @@ export default function TenantWorkspacePage() {
 
   if (loading) {
     return (
-      <TenantSurfaceShell title="Tenant Workspace" subtitle="Loading your property, application, lease, and maintenance summary.">
+      <TenantSurfaceShell title="Tenant Dashboard" subtitle="Loading your rental profile, application progress, lease, and maintenance summary.">
         <TenantLoadingState />
       </TenantSurfaceShell>
     );
@@ -49,9 +49,9 @@ export default function TenantWorkspacePage() {
   if (error) {
     const unauthorized = /unauthorized|forbidden|ambiguous/i.test(error);
     return (
-      <TenantSurfaceShell title="Tenant Workspace" subtitle="Your summary is generated from the tenant-safe workspace contract only.">
+      <TenantSurfaceShell title="Tenant Dashboard" subtitle="Your dashboard only shows tenant-safe information tied to your current rental context.">
         {unauthorized ? (
-          <TenantErrorState message="Your current session cannot open this workspace yet. Sign in again or contact support if this looks wrong." retry={load} />
+          <TenantErrorState message="Your current session cannot open this dashboard yet. Sign in again or contact support if this looks wrong." retry={load} />
         ) : (
           <TenantErrorState message={error} retry={load} />
         )}
@@ -67,8 +67,8 @@ export default function TenantWorkspacePage() {
 
   return (
     <TenantSurfaceShell
-      title="Tenant Workspace"
-      subtitle="Your RentChain tenant workspace is powered by the landlord-side canonical records that are safe for tenant access."
+      title="Tenant Dashboard"
+      subtitle="Keep your rental profile, documents, application progress, and ongoing tenancy details organized in one place."
       action={
         <Link
           to="/tenant/invite/redeem"
@@ -87,7 +87,7 @@ export default function TenantWorkspacePage() {
         </Link>
       }
     >
-      <TenantInfoCard heading="Workspace Summary" accent="#0f766e">
+      <TenantInfoCard heading="Dashboard Summary" accent="#0f766e">
         <TenantKeyValueGrid
           rows={[
             { label: "Access", value: prettyAuthority(data?.context?.authority) },
@@ -111,10 +111,10 @@ export default function TenantWorkspacePage() {
             <div style={{ display: "grid", gap: spacing.sm }}>
               <div style={{ color: textTokens.secondary }}>Current status: <strong>{prettyStatus(data.application.status)}</strong></div>
               <div style={{ color: textTokens.secondary }}>Updated: {formatDate(data.application.updatedAt || data.application.createdAt)}</div>
-              <Link to="/tenant/application">Open completion checklist</Link>
+              <Link to="/tenant/application">Open application checklist</Link>
             </div>
           ) : (
-            <TenantEmptyState title="No application projection yet" body="We couldn't find a tenant-safe application view for this workspace yet." />
+            <TenantEmptyState title="No application view yet" body="We couldn't find a tenant-safe application summary for this dashboard yet." />
           )}
         </TenantInfoCard>
 

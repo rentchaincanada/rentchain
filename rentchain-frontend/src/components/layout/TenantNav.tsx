@@ -9,13 +9,14 @@ type Props = {
 };
 
 const navItems = [
-  { label: "Workspace", to: "/tenant" },
+  { label: "Dashboard", to: "/tenant/dashboard" },
   { label: "Profile", to: "/tenant/profile" },
   { label: "Application", to: "/tenant/application" },
+  { label: "Documents", to: "/tenant/attachments" },
+  { label: "History", to: "/tenant/activity" },
   { label: "Lease", to: "/tenant/lease" },
   { label: "Maintenance", to: "/tenant/maintenance" },
   { label: "Messages", to: "/tenant/messages" },
-  { label: "Feed", to: "/tenant/activity" },
 ];
 
 export const TenantNav: React.FC<Props> = ({ children }) => {
@@ -131,9 +132,9 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
           }}
         >
           <div style={{ display: "grid", gap: 2 }}>
-            <div style={{ fontWeight: 700 }}>RentChain Tenant Portal</div>
+            <div style={{ fontWeight: 700 }}>RentChain Tenant Space</div>
             <div style={{ fontSize: 12, color: "#64748b" }}>
-              {identityLoading ? "Loading workspace..." : tenantName || "Tenant workspace"}
+              {identityLoading ? "Loading your space..." : tenantName || "Your tenant space"}
             </div>
             <div style={{ fontSize: 12, color: "#94a3b8", minHeight: 16 }}>
               {identityLoading
@@ -154,7 +155,7 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
             }}
           >
             {navItems.map((item) => (
-              <NavLink key={item.to} to={item.to} style={linkStyle} end={item.to === "/tenant"}>
+              <NavLink key={item.to} to={item.to} style={linkStyle} end={item.to === "/tenant/dashboard"}>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                   <span>{item.label}</span>
                   {item.to === "/tenant/messages" && unreadMessages > 0 ? (
