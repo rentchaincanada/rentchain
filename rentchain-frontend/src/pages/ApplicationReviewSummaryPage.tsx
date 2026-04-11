@@ -18,6 +18,7 @@ import {
 } from "../api/reviewSummaryApi";
 import { useToast } from "../components/ui/ToastProvider";
 import { buildLandlordIntakeAlignmentView } from "./applicationReviewIntakeAlignment";
+import { buildLandlordStructuredActivityTimeline } from "./structuredActivityTimeline";
 
 function money(cents: number | null): string {
   if (cents == null || !Number.isFinite(cents)) return "Not provided";
@@ -225,6 +226,10 @@ function ApplicationReviewSummaryPageBody() {
     () => (summary ? buildLandlordIntakeAlignmentView(summary) : null),
     [summary]
   );
+  const recentActivity = useMemo(
+    () => (summary ? buildLandlordStructuredActivityTimeline(summary).slice(0, 4) : []),
+    [summary]
+  );
 
   return (
     <div style={{ padding: 16, display: "grid", gap: 12 }}>
@@ -398,6 +403,51 @@ function ApplicationReviewSummaryPageBody() {
                 <div style={{ fontSize: 12, color: text.subtle }}>
                   Shared with tenant permission and current server-authorized review access.
                 </div>
+              </Card>
+
+              <Card style={{ display: "grid", gap: 8 }}>
+                <div style={{ fontWeight: 700 }}>Recent activity</div>
+                <div style={{ fontSize: 12, color: text.subtle }}>
+                  Recent review-state updates are shown here using the same authorized summary and current package state.
+                </div>
+                {recentActivity.length ? (
+                  recentActivity.map((item) => (
+                    <div
+                      key={item.id}
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "grid",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                        <div style={{ fontWeight: 600, color: text.main }}>{item.title}</div>
+                        <div
+                          style={{
+                            padding: "4px 8px",
+                            borderRadius: 999,
+                            fontSize: 12,
+                            fontWeight: 700,
+                            color: item.actionRequired ? "#9a3412" : "#1d4ed8",
+                            background: item.actionRequired ? "#ffedd5" : "#dbeafe",
+                          }}
+                        >
+                          {item.actionRequired ? "Needs attention" : "Updated"}
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 13, color: text.subtle }}>{item.description}</div>
+                      <div style={{ fontSize: 12, color: text.subtle }}>
+                        {(item.actorLabel ? `${item.actorLabel} • ` : "") + dateOr(item.occurredAt)}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ fontSize: 13, color: text.subtle }}>
+                    No recent review activity is available from the current summary yet.
+                  </div>
+                )}
               </Card>
             </Card>
           ) : null}

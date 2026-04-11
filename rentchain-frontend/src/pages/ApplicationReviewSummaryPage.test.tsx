@@ -122,12 +122,14 @@ describe("ApplicationReviewSummaryPage", () => {
     expect(await screen.findByText("Application Review Summary")).toBeInTheDocument();
     expect(await screen.findByText("Intake Summary")).toBeInTheDocument();
     expect(await screen.findByText("Shared package categories")).toBeInTheDocument();
+    expect(await screen.findByText("Recent activity")).toBeInTheDocument();
     expect(screen.getAllByText("Profile details").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Rental history").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Documents & records").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Consent / identity status").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Application readiness").length).toBeGreaterThan(0);
-    expect(await screen.findByText("Ready for review")).toBeInTheDocument();
+    expect((await screen.findAllByText("Ready for review")).length).toBeGreaterThan(0);
+    expect(await screen.findByText("Application readiness updated")).toBeInTheDocument();
     expect(await screen.findByText("Shared with tenant permission and current server-authorized review access.")).toBeInTheDocument();
     expect(await screen.findByText("Jane Applicant")).toBeInTheDocument();
     expect(await screen.findByText("Landlord Decision Panel")).toBeInTheDocument();
