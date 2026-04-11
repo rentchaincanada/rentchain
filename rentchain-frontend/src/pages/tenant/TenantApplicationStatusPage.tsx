@@ -1,5 +1,5 @@
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import {
   getTenantApplicationCompletion,
   type TenantApplicationCompletionItem,
@@ -20,6 +20,7 @@ import {
 } from "./TenantWorkspaceShared";
 import { spacing, text as textTokens } from "../../styles/tokens";
 import { buildTenantApplicationReuseView } from "./tenantApplicationReuse";
+import { buildTenantApplicationFlow } from "./tenantApplicationFlow";
 
 function statusTone(status: TenantApplicationCompletionStatus) {
   switch (status) {
@@ -137,6 +138,7 @@ const CompletionItemRow: React.FC<{ item: TenantApplicationCompletionItem }> = (
 };
 
 export default function TenantApplicationStatusPage() {
+  const location = useLocation();
   const [data, setData] = React.useState<Awaited<ReturnType<typeof getTenantApplicationCompletion>>>(null);
   const [profile, setProfile] = React.useState<Awaited<ReturnType<typeof getTenantProfile>> | null>(null);
   const [attachments, setAttachments] = React.useState<Awaited<ReturnType<typeof getTenantAttachments>> | null>(null);
@@ -219,6 +221,20 @@ export default function TenantApplicationStatusPage() {
     attachments,
     access,
   });
+  const flow = buildTenantApplicationFlow({
+    search: location.search,
+    completion: data,
+    reuse,
+  });
+  const flowTone =
+    flow.state === "ready_to_proceed"
+      ? { color: "#166534", background: "#dcfce7", label: "Ready to proceed" }
+      : flow.state === "ready_to_review"
+      ? { color: "#1d4ed8", background: "#dbeafe", label: "Ready to review" }
+      : flow.state === "needs_attention"
+      ? { color: "#9a3412", background: "#ffedd5", label: "Needs attention" }
+      : { color: "#0f766e", background: "#ccfbf1", label: "Readiness" };
+  const entryLabel = flow.entry === "invite" ? "Invite entry" : flow.entry === "application" ? "Application link" : "Direct tenant navigation";
 
   return (
     <TenantSurfaceShell
@@ -243,6 +259,135 @@ export default function TenantApplicationStatusPage() {
       }
     >
       <CompletionProgressCard progressPercent={data.progressPercent} status={data.status} />
+
+      <TenantInfoCard heading="Flow Status" accent="#0891b2">
+        <div style={{ display: "grid", gap: spacing.sm }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontWeight: 800, color: textTokens.primary }}>{flow.title}</div>
+              <div style={{ color: textTokens.secondary }}>{flow.detail}</div>
+            </div>
+            <div
+              style={{
+                padding: "6px 10px",
+                borderRadius: 999,
+                fontWeight: 700,
+                color: flowTone.color,
+                background: flowTone.background,
+              }}
+            >
+              {flowTone.label}
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
+            <div
+              style={{
+                padding: "6px 10px",
+                borderRadius: 999,
+                background: "rgba(15,23,42,0.06)",
+                color: textTokens.secondary,
+                fontWeight: 700,
+              }}
+            >
+              {entryLabel}
+            </div>
+            <div
+              style={{
+                padding: "6px 10px",
+                borderRadius: 999,
+                background: "rgba(15,23,42,0.06)",
+                color: textTokens.secondary,
+                fontWeight: 700,
+              }}
+            >
+              {flow.readyCount} readiness signal{flow.readyCount === 1 ? "" : "s"} ready
+            </div>
+            <div
+              style={{
+                padding: "6px 10px",
+                borderRadius: 999,
+                background: "rgba(15,23,42,0.06)",
+                color: textTokens.secondary,
+                fontWeight: 700,
+              }}
+            >
+              {flow.missingCount} missing item{flow.missingCount === 1 ? "" : "s"}
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+              gap: spacing.sm,
+            }}
+          >
+            {flow.steps.map((step) => {
+              const tone =
+                step.status === "complete"
+                  ? { color: "#166534", background: "#dcfce7", label: "Complete" }
+                  : step.status === "current"
+                  ? { color: "#1d4ed8", background: "#dbeafe", label: "Current" }
+                  : { color: "#64748b", background: "#e2e8f0", label: "Up next" };
+              return (
+                <div
+                  key={step.key}
+                  style={{
+                    border: "1px solid rgba(15,23,42,0.08)",
+                    borderRadius: 12,
+                    padding: "12px 14px",
+                    display: "grid",
+                    gap: 6,
+                  }}
+                >
+                  <div style={{ fontWeight: 700, color: textTokens.primary }}>{step.label}</div>
+                  <div
+                    style={{
+                      width: "fit-content",
+                      padding: "4px 8px",
+                      borderRadius: 999,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: tone.color,
+                      background: tone.background,
+                    }}
+                  >
+                    {tone.label}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div
+            style={{
+              border: "1px solid rgba(15,23,42,0.08)",
+              borderRadius: 12,
+              padding: "12px 14px",
+              display: "grid",
+              gap: 8,
+            }}
+          >
+            <div style={{ fontWeight: 700, color: textTokens.primary }}>Next step</div>
+            <div style={{ color: textTokens.secondary }}>{flow.nextStepDetail}</div>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <Link to={flow.nextStepPath} style={{ fontWeight: 700 }}>
+                {flow.nextStepLabel}
+              </Link>
+              <Link to="/tenant/profile" style={{ fontWeight: 700 }}>
+                Profile
+              </Link>
+              <Link to="/tenant/attachments" style={{ fontWeight: 700 }}>
+                Documents
+              </Link>
+              <Link to="/tenant/access" style={{ fontWeight: 700 }}>
+                Access
+              </Link>
+            </div>
+          </div>
+        </div>
+      </TenantInfoCard>
 
       <TenantInfoCard heading="Application Readiness Summary" accent="#0f766e">
         <div

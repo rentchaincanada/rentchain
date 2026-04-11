@@ -389,6 +389,10 @@ describe("tenant workspace frontend shell", () => {
     fireEvent.click(screen.getByRole("button", { name: /Redeem invite/i }));
 
     expect(await screen.findByText(/Invite redeemed/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Continue to application readiness/i })).toHaveAttribute(
+      "href",
+      "/tenant/application?entry=invite&inviteToken=app-1"
+    );
   });
 
   it("invite redemption page handles expired or reused states", async () => {
@@ -409,6 +413,16 @@ describe("tenant workspace frontend shell", () => {
     fireEvent.click(screen.getByRole("button", { name: /Redeem invite/i }));
 
     expect(await screen.findByText(/This invite has expired/i)).toBeInTheDocument();
+  });
+
+  it("invite redemption page prefills token from the route query", async () => {
+    render(
+      <MemoryRouter initialEntries={["/tenant/invite/redeem?token=token-123"]}>
+        <TenantInviteRedeemPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole("textbox", { name: /Invite token/i })).toHaveValue("token-123");
   });
 
   it("unauthorized workspace response renders safe denial state", async () => {

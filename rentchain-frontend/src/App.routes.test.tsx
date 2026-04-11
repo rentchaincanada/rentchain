@@ -1,6 +1,6 @@
 import React from "react";
 import { cleanup, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 beforeEach(() => {
@@ -48,7 +48,10 @@ vi.mock("./pages/tenant/TenantWorkspacePage", () => ({
 }));
 
 vi.mock("./pages/tenant/TenantApplicationStatusPage", () => ({
-  default: () => <h1>Tenant Application Status</h1>,
+  default: () => {
+    const location = useLocation();
+    return <h1>{`Tenant Application Status ${location.pathname}${location.search}`}</h1>;
+  },
 }));
 
 describe("Routes: /tenant", () => {
@@ -106,5 +109,31 @@ describe("Routes: /tenant/application", () => {
 
     expect(await screen.findByText(/Tenant Application Status/i)).toBeInTheDocument();
     expect(screen.queryByText(/Dashboard/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: tenant application aliases", () => {
+  it("normalizes tenant apply links into the tenant application flow", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/tenant/apply/app-123"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(
+      await screen.findByText(/Tenant Application Status \/tenant\/application\?entry=application&applicationToken=app-123/i)
+    ).toBeInTheDocument();
+  });
+
+  it("normalizes tenant invite redeem aliases into a tokenized redeem route", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/tenant/invite/redeem/invite-123"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole("textbox", { name: /Invite token/i })).toHaveValue("invite-123");
   });
 });

@@ -1,8 +1,9 @@
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { redeemTenantWorkspaceInvite } from "../../api/tenantPortal";
 import { TenantInfoCard, TenantSurfaceShell } from "./TenantWorkspaceShared";
 import { colors, radius, spacing, text as textTokens } from "../../styles/tokens";
+import { buildTenantApplicationEntryPath } from "./tenantApplicationFlow";
 
 function mapInviteError(input: string | null) {
   const normalized = String(input || "").trim().toLowerCase();
@@ -16,7 +17,12 @@ function mapInviteError(input: string | null) {
 }
 
 export default function TenantInviteRedeemPage() {
-  const [token, setToken] = React.useState("");
+  const location = useLocation();
+  const prefilledToken = React.useMemo(
+    () => String(new URLSearchParams(location.search).get("token") || "").trim(),
+    [location.search]
+  );
+  const [token, setToken] = React.useState(prefilledToken);
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [success, setSuccess] = React.useState<{
@@ -47,6 +53,14 @@ export default function TenantInviteRedeemPage() {
       setSubmitting(false);
     }
   };
+
+  React.useEffect(() => {
+    setToken(prefilledToken);
+  }, [prefilledToken]);
+
+  const nextApplicationPath = success
+    ? buildTenantApplicationEntryPath({ entry: "invite", token: success.applicationId || success.inviteId || prefilledToken })
+    : buildTenantApplicationEntryPath({ entry: "invite", token: prefilledToken });
 
   return (
     <TenantSurfaceShell
@@ -101,7 +115,8 @@ export default function TenantInviteRedeemPage() {
               <div>Status: {success.status || "redeemed"}</div>
               {success.propertyId ? <div>Property: {success.propertyId}</div> : null}
               {success.applicationId ? <div>Application: {success.applicationId}</div> : null}
-              <div>
+              <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
+                <Link to={nextApplicationPath}>Continue to application readiness</Link>
                 <Link to="/tenant">Return to workspace</Link>
               </div>
             </div>
