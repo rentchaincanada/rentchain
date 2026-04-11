@@ -32,22 +32,28 @@ describe("buildLandlordReviewGuidance", () => {
     expect(result.nextSteps[0]).toMatch(/Review the categories already available now/i);
   });
 
-  it("returns partly available when some categories are missing but some are still available", () => {
+  it("returns partly available when the package only has partial categories left", () => {
     const result = buildLandlordReviewGuidance(
       buildIntake({
         packageCategories: [
           { key: "profile_details", label: "Profile details", status: "ready", detail: "Available" },
-          { key: "rental_history", label: "Rental history", status: "missing", detail: "Missing" },
+          { key: "rental_history", label: "Rental history", status: "partial", detail: "Partial" },
           { key: "documents_records", label: "Documents & records", status: "partial", detail: "Partial" },
-          { key: "consent_identity_status", label: "Consent / identity status", status: "missing", detail: "Missing" },
+          { key: "consent_identity_status", label: "Consent / identity status", status: "partial", detail: "Partial" },
           { key: "application_readiness", label: "Application readiness", status: "partial", detail: "Partial" },
         ],
       })
     );
 
     expect(result.state).toBe("partly_available");
-    expect(result.missingCategories).toEqual(["Rental history", "Consent / identity status"]);
-    expect(result.nextSteps.some((step) => /Follow up on missing information/i.test(step))).toBe(true);
+    expect(result.summary).toBe("Ready for re-review");
+    expect(result.missingCategories).toEqual([
+      "Rental history",
+      "Documents & records",
+      "Consent / identity status",
+      "Application readiness",
+    ]);
+    expect(result.nextSteps.some((step) => /Re-review the package/i.test(step))).toBe(true);
   });
 
   it("returns needs follow-up when nothing is available to review", () => {
@@ -64,7 +70,7 @@ describe("buildLandlordReviewGuidance", () => {
     );
 
     expect(result.state).toBe("needs_follow_up");
-    expect(result.summary).toBe("Needs follow-up");
-    expect(result.nextSteps[0]).toMatch(/Follow up on missing information/i);
+    expect(result.summary).toBe("Follow-up needed");
+    expect(result.nextSteps.some((step) => /Request follow-up/i.test(step))).toBe(true);
   });
 });

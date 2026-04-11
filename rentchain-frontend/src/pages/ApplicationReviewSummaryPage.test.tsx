@@ -130,7 +130,13 @@ describe("ApplicationReviewSummaryPage", () => {
     expect(screen.getAllByText("Application readiness").length).toBeGreaterThan(0);
     expect(await screen.findByText("Ready for review")).toBeInTheDocument();
     expect(await screen.findByText("Next steps")).toBeInTheDocument();
+    expect(await screen.findByText("Structured follow-up loop")).toBeInTheDocument();
     expect(screen.getAllByText(/Review the categories already available now/i).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText((_, element) => element?.textContent?.includes("Follow-up categories:") ?? false).length
+    ).toBeGreaterThan(0);
+    expect(screen.getAllByText("Rental history").length).toBeGreaterThan(0);
+    expect(await screen.findByText(/Follow up is organized by aligned package categories/i)).toBeInTheDocument();
     expect(await screen.findByText("Shared with tenant permission and current server-authorized review access.")).toBeInTheDocument();
     expect(await screen.findByText("Jane Applicant")).toBeInTheDocument();
     expect(await screen.findByText("Landlord Decision Panel")).toBeInTheDocument();
