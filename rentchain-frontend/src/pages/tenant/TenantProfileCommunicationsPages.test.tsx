@@ -390,7 +390,8 @@ describe("tenant profile and communications pages", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/Notifications & Feed/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Recent Activity/i)).toBeInTheDocument();
+    expect(screen.getByText(/Timeline summary/i)).toBeInTheDocument();
     expect(screen.getByText(/Application status updated/i)).toBeInTheDocument();
   });
 
