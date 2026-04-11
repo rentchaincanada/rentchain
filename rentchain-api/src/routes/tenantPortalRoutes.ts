@@ -1846,6 +1846,55 @@ function requireTenantWorkspaceIdentity(req: any, res: any, next: any) {
   return next();
 }
 
+const TENANT_NOTIFICATION_PREFERENCE_KEYS = [
+  "follow_up_requested",
+  "ready_for_rereview",
+  "application_updated",
+  "access_changed",
+  "documents_updated",
+] as const;
+
+type TenantNotificationPreferenceKey = (typeof TENANT_NOTIFICATION_PREFERENCE_KEYS)[number];
+
+type TenantNotificationPreferences = {
+  inApp: Record<TenantNotificationPreferenceKey, boolean>;
+  updatedAt: number | null;
+};
+
+function defaultTenantNotificationPreferences(): TenantNotificationPreferences {
+  return {
+    inApp: {
+      follow_up_requested: true,
+      ready_for_rereview: true,
+      application_updated: true,
+      access_changed: true,
+      documents_updated: true,
+    },
+    updatedAt: null,
+  };
+}
+
+function normalizeTenantNotificationPreferences(input: any): TenantNotificationPreferences {
+  const defaults = defaultTenantNotificationPreferences();
+  const source = input?.inApp && typeof input.inApp === "object" ? input.inApp : {};
+  const inApp = { ...defaults.inApp };
+  for (const key of TENANT_NOTIFICATION_PREFERENCE_KEYS) {
+    if (typeof source[key] === "boolean") {
+      inApp[key] = source[key];
+    }
+  }
+  return {
+    inApp,
+    updatedAt: typeof input?.updatedAt === "number" && Number.isFinite(input.updatedAt) ? input.updatedAt : null,
+  };
+}
+
+async function loadTenantNotificationPreferences(userId: string): Promise<TenantNotificationPreferences> {
+  const userSnap = await db.collection("users").doc(userId).get();
+  const data = userSnap.exists ? userSnap.data() : null;
+  return normalizeTenantNotificationPreferences(data?.tenantNotificationPreferences);
+}
+
 async function resolveWorkspaceContextOrRespond(req: any, res: any) {
   const context = await resolveTenancyContext({
     uid: String(req.user?.id || "").trim(),
@@ -2535,6 +2584,73 @@ async function handleTenantWorkspaceSummary(req: any, res: any) {
 
 router.get("/workspace", requireTenantWorkspaceIdentity, handleTenantWorkspaceSummary);
 router.get("/me", requireTenantWorkspaceIdentity, handleTenantWorkspaceSummary);
+
+router.get("/notification-preferences", requireTenantWorkspaceIdentity, async (req: any, res) => {
+  const userId = String(req.user?.id || "").trim();
+  if (!userId) {
+    return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+  }
+
+  try {
+    const preferences = await loadTenantNotificationPreferences(userId);
+    return res.json({ ok: true, data: preferences });
+  } catch (err: any) {
+    console.error("[tenant/notification-preferences] failed", {
+      userId: req.user?.id,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_NOTIFICATION_PREFERENCES_FAILED" });
+  }
+});
+
+router.patch("/notification-preferences", requireTenantWorkspaceIdentity, async (req: any, res) => {
+  const userId = String(req.user?.id || "").trim();
+  if (!userId) {
+    return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+  }
+
+  const requested = req.body?.inApp;
+  if (!requested || typeof requested !== "object") {
+    return res.status(400).json({ ok: false, error: "TENANT_NOTIFICATION_PREFERENCES_INVALID" });
+  }
+
+  const hasRequestedField = TENANT_NOTIFICATION_PREFERENCE_KEYS.some((key) => typeof requested[key] === "boolean");
+  if (!hasRequestedField) {
+    return res.status(400).json({ ok: false, error: "TENANT_NOTIFICATION_PREFERENCES_INVALID" });
+  }
+
+  try {
+    const current = await loadTenantNotificationPreferences(userId);
+    const next: TenantNotificationPreferences = {
+      inApp: { ...current.inApp },
+      updatedAt: Date.now(),
+    };
+
+    for (const key of TENANT_NOTIFICATION_PREFERENCE_KEYS) {
+      if (typeof requested[key] === "boolean") {
+        next.inApp[key] = requested[key];
+      }
+    }
+
+    await db.collection("users").doc(userId).set(
+      {
+        tenantNotificationPreferences: {
+          inApp: next.inApp,
+          updatedAt: next.updatedAt,
+        },
+      },
+      { merge: true }
+    );
+
+    return res.json({ ok: true, data: next });
+  } catch (err: any) {
+    console.error("[tenant/notification-preferences:patch] failed", {
+      userId: req.user?.id,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_NOTIFICATION_PREFERENCES_UPDATE_FAILED" });
+  }
+});
 
 router.get("/profile", requireTenantWorkspaceIdentity, async (req: any, res) => {
   const context = await resolveWorkspaceContextOrRespond(req, res);

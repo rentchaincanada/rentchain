@@ -20,10 +20,15 @@ const tenantAccessApi = vi.hoisted(() => ({
   getTenantAccess: vi.fn(),
 }));
 
+const tenantNotificationPreferencesApi = vi.hoisted(() => ({
+  getTenantNotificationPreferences: vi.fn(),
+}));
+
 vi.mock("../../api/tenantApplicationCompletion", () => tenantApplicationCompletionApi);
 vi.mock("../../api/tenantProfile", () => tenantProfileApi);
 vi.mock("../../api/tenantAttachmentsApi", () => tenantAttachmentsApi);
 vi.mock("../../api/tenantAccess", () => tenantAccessApi);
+vi.mock("../../api/tenantNotificationPreferences", () => tenantNotificationPreferencesApi);
 
 describe("tenant application completion page", () => {
   beforeEach(() => {
@@ -120,6 +125,16 @@ describe("tenant application completion page", () => {
         headline: "You can review and manage the access you’ve already shared.",
         body: "This view shows tenant-safe sharing records only.",
       },
+    });
+    tenantNotificationPreferencesApi.getTenantNotificationPreferences.mockResolvedValue({
+      inApp: {
+        follow_up_requested: true,
+        ready_for_rereview: true,
+        application_updated: true,
+        access_changed: true,
+        documents_updated: true,
+      },
+      updatedAt: 1710000000000,
     });
   });
 
@@ -221,5 +236,35 @@ describe("tenant application completion page", () => {
 
     expect(await screen.findByText(/We couldn't load this view/i)).toBeInTheDocument();
     expect(screen.getByText(/Unable to load application completion/i)).toBeInTheDocument();
+  });
+
+  it("respects muted document update notifications", async () => {
+    tenantNotificationPreferencesApi.getTenantNotificationPreferences.mockResolvedValue({
+      inApp: {
+        follow_up_requested: true,
+        ready_for_rereview: true,
+        application_updated: true,
+        access_changed: true,
+        documents_updated: false,
+      },
+      updatedAt: 1710000000000,
+    });
+    tenantApplicationCompletionApi.getTenantApplicationCompletion.mockResolvedValue({
+      status: "in_progress",
+      progressPercent: 40,
+      sections: [],
+      nextSteps: [],
+      updatedAt: "2026-01-02T00:00:00.000Z",
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantApplicationStatusPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Recent workflow updates/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^Documents updated$/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/^Access changed$/i)).toBeInTheDocument();
   });
 });

@@ -32,6 +32,10 @@ const tenantProfileApi = vi.hoisted(() => ({
   getTenantProfile: vi.fn(),
 }));
 
+const tenantNotificationPreferencesApi = vi.hoisted(() => ({
+  getTenantNotificationPreferences: vi.fn(),
+}));
+
 const maintenanceWorkflowApi = vi.hoisted(() => ({
   listTenantMaintenance: vi.fn(),
 }));
@@ -45,6 +49,7 @@ vi.mock("../../api/tenantApplicationCompletion", () => tenantApplicationCompleti
 vi.mock("../../api/tenantAccess", () => tenantAccessApi);
 vi.mock("../../api/tenantAttachmentsApi", () => tenantAttachmentsApi);
 vi.mock("../../api/tenantProfile", () => tenantProfileApi);
+vi.mock("../../api/tenantNotificationPreferences", () => tenantNotificationPreferencesApi);
 vi.mock("../../api/tenantCommunicationsApi", () => tenantCommunicationsApi);
 vi.mock("../../api/maintenanceWorkflowApi", async () => {
   const actual = await vi.importActual<any>("../../api/maintenanceWorkflowApi");
@@ -202,6 +207,16 @@ describe("tenant workspace frontend shell", () => {
         },
       },
     });
+    tenantNotificationPreferencesApi.getTenantNotificationPreferences.mockResolvedValue({
+      inApp: {
+        follow_up_requested: true,
+        ready_for_rereview: true,
+        application_updated: true,
+        access_changed: true,
+        documents_updated: true,
+      },
+      updatedAt: 1710000000000,
+    });
   });
 
   it("tenant shell renders expected navigation safely", async () => {
@@ -295,6 +310,29 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.getByText(/Documents updated/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open document vault/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open access/i })).toBeInTheDocument();
+  });
+
+  it("filters muted in-app document notifications from tenant views", async () => {
+    tenantNotificationPreferencesApi.getTenantNotificationPreferences.mockResolvedValue({
+      inApp: {
+        follow_up_requested: true,
+        ready_for_rereview: true,
+        application_updated: true,
+        access_changed: true,
+        documents_updated: false,
+      },
+      updatedAt: 1710000000000,
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantWorkspacePage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Recent workflow updates/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^Documents updated$/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/^Access changed$/i)).toBeInTheDocument();
   });
 
   it("renders application completion page with safe grouped checklist fields", async () => {

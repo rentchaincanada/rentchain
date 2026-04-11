@@ -5,6 +5,7 @@ import {
   type TenantApplicationCompletionItem,
   type TenantApplicationCompletionStatus,
 } from "../../api/tenantApplicationCompletion";
+import { getTenantNotificationPreferences } from "../../api/tenantNotificationPreferences";
 import { getTenantAccess } from "../../api/tenantAccess";
 import { getTenantAttachments } from "../../api/tenantAttachmentsApi";
 import { getTenantProfile } from "../../api/tenantProfile";
@@ -25,6 +26,7 @@ import { buildTenantLandlordInteractionLoop } from "../tenantLandlordInteraction
 import { buildFollowUpResolutionState } from "../followUpResolutionState";
 import StructuredNotificationList from "../StructuredNotificationList";
 import { buildTenantStructuredNotificationTriggers } from "../structuredNotificationTriggers";
+import { filterStructuredNotificationsByPreferences } from "../notificationChannelRouting";
 
 function statusTone(status: TenantApplicationCompletionStatus) {
   switch (status) {
@@ -147,6 +149,7 @@ export default function TenantApplicationStatusPage() {
   const [profile, setProfile] = React.useState<Awaited<ReturnType<typeof getTenantProfile>> | null>(null);
   const [attachments, setAttachments] = React.useState<Awaited<ReturnType<typeof getTenantAttachments>> | null>(null);
   const [access, setAccess] = React.useState<Awaited<ReturnType<typeof getTenantAccess>> | null>(null);
+  const [notificationPreferences, setNotificationPreferences] = React.useState<Awaited<ReturnType<typeof getTenantNotificationPreferences>> | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -154,11 +157,12 @@ export default function TenantApplicationStatusPage() {
     setLoading(true);
     setError(null);
     try {
-      const [completionResult, profileResult, attachmentsResult, accessResult] = await Promise.allSettled([
+      const [completionResult, profileResult, attachmentsResult, accessResult, preferencesResult] = await Promise.allSettled([
         getTenantApplicationCompletion(),
         getTenantProfile(),
         getTenantAttachments(),
         getTenantAccess(),
+        getTenantNotificationPreferences(),
       ]);
       if (completionResult.status !== "fulfilled") {
         throw completionResult.reason;
@@ -167,11 +171,13 @@ export default function TenantApplicationStatusPage() {
       setProfile(profileResult.status === "fulfilled" ? profileResult.value : null);
       setAttachments(attachmentsResult.status === "fulfilled" ? attachmentsResult.value : null);
       setAccess(accessResult.status === "fulfilled" ? accessResult.value : null);
+      setNotificationPreferences(preferencesResult.status === "fulfilled" ? preferencesResult.value : null);
     } catch (err: any) {
       setData(null);
       setProfile(null);
       setAttachments(null);
       setAccess(null);
+      setNotificationPreferences(null);
       setError(err?.payload?.error || err?.message || "Unable to load application completion.");
     } finally {
       setLoading(false);
@@ -235,13 +241,16 @@ export default function TenantApplicationStatusPage() {
     packageCategories: reuse.packageCategories,
   });
   const resolutionView = buildFollowUpResolutionState(reuse.packageCategories);
-  const notificationItems = buildTenantStructuredNotificationTriggers({
-    packageCategories: reuse.packageCategories,
-    completion: data,
-    profile,
-    attachments,
-    access,
-  });
+  const notificationItems = filterStructuredNotificationsByPreferences(
+    buildTenantStructuredNotificationTriggers({
+      packageCategories: reuse.packageCategories,
+      completion: data,
+      profile,
+      attachments,
+      access,
+    }),
+    notificationPreferences
+  );
   const flowTone =
     flow.state === "ready_to_proceed"
       ? { color: "#166534", background: "#dcfce7", label: "Ready to proceed" }

@@ -5,6 +5,7 @@ import { getTenantAccess, type TenantAccessWorkspace } from "../../api/tenantAcc
 import { getTenantAttachments } from "../../api/tenantAttachmentsApi";
 import { getTenantProfile } from "../../api/tenantProfile";
 import { getTenantApplicationCompletion } from "../../api/tenantApplicationCompletion";
+import { getTenantNotificationPreferences } from "../../api/tenantNotificationPreferences";
 import {
   TenantEmptyState,
   TenantErrorState,
@@ -24,6 +25,7 @@ import { buildTenantDocumentVaultView } from "./tenantDocumentVault";
 import { buildTenantApplicationReuseView } from "./tenantApplicationReuse";
 import StructuredNotificationList from "../StructuredNotificationList";
 import { buildTenantStructuredNotificationTriggers } from "../structuredNotificationTriggers";
+import { filterStructuredNotificationsByPreferences } from "../notificationChannelRouting";
 
 export default function TenantWorkspacePage() {
   const [data, setData] = React.useState<Awaited<ReturnType<typeof getTenantWorkspace>> | null>(null);
@@ -31,6 +33,7 @@ export default function TenantWorkspacePage() {
   const [attachments, setAttachments] = React.useState<Awaited<ReturnType<typeof getTenantAttachments>> | null>(null);
   const [profileData, setProfileData] = React.useState<Awaited<ReturnType<typeof getTenantProfile>> | null>(null);
   const [completion, setCompletion] = React.useState<Awaited<ReturnType<typeof getTenantApplicationCompletion>> | null>(null);
+  const [notificationPreferences, setNotificationPreferences] = React.useState<Awaited<ReturnType<typeof getTenantNotificationPreferences>> | null>(null);
   const [profileLoading, setProfileLoading] = React.useState(true);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -39,11 +42,12 @@ export default function TenantWorkspacePage() {
     setLoading(true);
     setError(null);
     try {
-      const [workspaceResult, accessResult, attachmentsResult, completionResult] = await Promise.allSettled([
+      const [workspaceResult, accessResult, attachmentsResult, completionResult, preferencesResult] = await Promise.allSettled([
         getTenantWorkspace(),
         getTenantAccess(),
         getTenantAttachments(),
         getTenantApplicationCompletion(),
+        getTenantNotificationPreferences(),
       ]);
 
       if (workspaceResult.status === "rejected") {
@@ -54,11 +58,13 @@ export default function TenantWorkspacePage() {
       setAccess(accessResult.status === "fulfilled" ? accessResult.value : null);
       setAttachments(attachmentsResult.status === "fulfilled" ? attachmentsResult.value : null);
       setCompletion(completionResult.status === "fulfilled" ? completionResult.value : null);
+      setNotificationPreferences(preferencesResult.status === "fulfilled" ? preferencesResult.value : null);
     } catch (err: any) {
       setData(null);
       setAccess(null);
       setAttachments(null);
       setCompletion(null);
+      setNotificationPreferences(null);
       setError(err?.payload?.error || err?.message || "Unable to load your tenant workspace.");
     } finally {
       setLoading(false);
@@ -134,13 +140,16 @@ export default function TenantWorkspacePage() {
     attachments,
     access,
   });
-  const notificationItems = buildTenantStructuredNotificationTriggers({
-    packageCategories: reuse.packageCategories,
-    completion,
-    profile: profileData,
-    attachments,
-    access,
-  });
+  const notificationItems = filterStructuredNotificationsByPreferences(
+    buildTenantStructuredNotificationTriggers({
+      packageCategories: reuse.packageCategories,
+      completion,
+      profile: profileData,
+      attachments,
+      access,
+    }),
+    notificationPreferences
+  );
 
   return (
     <TenantSurfaceShell
