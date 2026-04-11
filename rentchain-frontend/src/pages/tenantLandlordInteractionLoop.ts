@@ -1,9 +1,7 @@
 import type { SharePackageCategoryKey, SharePackageCategoryView } from "./sharePackageAlignment";
+import { buildFollowUpResolutionState, type FollowUpResolutionOverallState } from "./followUpResolutionState";
 
-export type TenantLandlordInteractionLoopState =
-  | "ready_for_review"
-  | "follow_up_needed"
-  | "ready_for_rereview";
+export type TenantLandlordInteractionLoopState = FollowUpResolutionOverallState;
 
 export type TenantLandlordInteractionLoopAudience = "tenant" | "landlord";
 
@@ -60,79 +58,136 @@ function buildHeadline(
   state: TenantLandlordInteractionLoopState
 ): string {
   if (audience === "landlord") {
-    if (state === "ready_for_review") return "Ready to review";
     if (state === "ready_for_rereview") return "Ready for re-review";
+    if (state === "partly_addressed") return "Partly addressed";
     return "Follow-up needed";
   }
 
-  if (state === "ready_for_review") return "Ready to continue";
   if (state === "ready_for_rereview") return "Ready for re-review";
-  return "Follow-up requested";
+  if (state === "partly_addressed") return "Partly addressed";
+  return "Follow-up needed";
+}
+
+function describeCategoryList(categories: string[]): string {
+  return categories.join(", ");
+}
+
+function buildLandlordDetail(
+  state: TenantLandlordInteractionLoopState,
+  followUpCategories: string[],
+  addressedCategories: string[]
+): string {
+  if (state === "ready_for_rereview") {
+    return "The follow-up categories surfaced in this authorized package now appear addressed and are ready for re-review.";
+  }
+  if (state === "partly_addressed") {
+    return `Some follow-up appears addressed already (${describeCategoryList(
+      addressedCategories
+    )}), while ${describeCategoryList(followUpCategories)} still need follow-up.`;
+  }
+  return `Follow-up is still needed in ${describeCategoryList(
+    followUpCategories
+  )} before this package is ready for re-review.`;
+}
+
+function buildTenantDetail(
+  state: TenantLandlordInteractionLoopState,
+  followUpCategories: string[],
+  addressedCategories: string[]
+): string {
+  if (state === "ready_for_rereview") {
+    return "Your package now appears ready for re-review based on the categories currently available in your tenant-safe workspace.";
+  }
+  if (state === "partly_addressed") {
+    return `You have already addressed ${describeCategoryList(
+      addressedCategories
+    )}. ${describeCategoryList(followUpCategories)} still need attention before re-review.`;
+  }
+  return `A few package categories still need attention before this application looks ready for re-review: ${describeCategoryList(
+    followUpCategories
+  )}.`;
 }
 
 function buildDetail(
   audience: TenantLandlordInteractionLoopAudience,
   state: TenantLandlordInteractionLoopState,
-  followUpCategories: string[]
+  followUpCategories: string[],
+  addressedCategories: string[]
 ): string {
   if (audience === "landlord") {
-    if (state === "ready_for_review") {
-      return "The aligned package categories are organized enough to review now using the information currently available.";
-    }
-    if (state === "ready_for_rereview") {
-      return "Most package categories are in place, with only a few partly available sections left to confirm before final review.";
-    }
-    return `Follow-up is still needed in ${followUpCategories.join(", ")} before this package feels complete.`;
+    return buildLandlordDetail(state, followUpCategories, addressedCategories);
   }
 
-  if (state === "ready_for_review") {
-    return "Your current package categories look organized enough to continue with review from your saved profile.";
-  }
+  return buildTenantDetail(state, followUpCategories, addressedCategories);
+}
+
+function buildLandlordNextSteps(
+  state: TenantLandlordInteractionLoopState,
+  followUpCategories: string[],
+  addressedCategories: string[]
+): string[] {
   if (state === "ready_for_rereview") {
-    return "You have enough in place to return for re-review, with only a few sections still needing a final pass.";
+    return [
+      "Review again using the categories that now appear addressed in the current authorized package.",
+      "Capture any final review decision separately from this follow-up summary.",
+    ];
   }
-  return `A few package categories still need attention before this application feels ready to share again: ${followUpCategories.join(", ")}.`;
+
+  if (state === "partly_addressed") {
+    return [
+      `Review the addressed categories now visible in ${describeCategoryList(addressedCategories)}.`,
+      `Keep follow-up active for ${describeCategoryList(followUpCategories)} until those categories are updated.`,
+    ];
+  }
+
+  return [
+    `Request follow-up in ${describeCategoryList(followUpCategories)} using the aligned package categories.`,
+    "Review the package again after those categories are updated in the tenant workflow.",
+  ];
+}
+
+function buildTenantNextSteps(
+  state: TenantLandlordInteractionLoopState,
+  followUpCategories: string[],
+  addressedCategories: string[]
+): string[] {
+  if (state === "ready_for_rereview") {
+    return [
+      "Review again from your application readiness page when you are ready.",
+      "Keep the addressed categories as they are unless something changes.",
+    ];
+  }
+
+  if (state === "partly_addressed") {
+    return [
+      `Keep ${describeCategoryList(addressedCategories)} as they are while you finish ${describeCategoryList(
+        followUpCategories
+      )}.`,
+      `Finish the categories that still need attention so your package can be ready for re-review.`,
+    ];
+  }
+
+  return [
+    `Work through ${describeCategoryList(followUpCategories)} next so your package is easier to review again.`,
+    "The categories already addressed can stay as they are while you update the remaining sections.",
+  ];
 }
 
 export function buildTenantLandlordInteractionLoop(params: {
   audience: TenantLandlordInteractionLoopAudience;
   packageCategories: SharePackageCategoryView[];
 }): TenantLandlordInteractionLoopView {
-  const followUpItems = params.packageCategories.filter((item) => item.status !== "ready");
-  const missingItems = followUpItems.filter((item) => item.status === "missing");
-  const readyCategories = params.packageCategories
-    .filter((item) => item.status === "ready")
-    .map((item) => item.label);
-  const followUpCategories = followUpItems.map((item) => item.label);
+  const resolution = buildFollowUpResolutionState(params.packageCategories);
+  const followUpItems = resolution.openFollowUpCategories;
+  const addressedItems = resolution.addressedCategories;
+  const readyCategories = addressedItems.map((item) => item.label);
+  const followUpCategories = resolution.remainingCategoriesNeedingAttention;
+  const state: TenantLandlordInteractionLoopState = resolution.overallState;
 
-  let state: TenantLandlordInteractionLoopState = "ready_for_review";
-  if (followUpItems.length > 0) {
-    state = missingItems.length > 0 ? "follow_up_needed" : "ready_for_rereview";
-  }
-
-  const nextSteps: string[] = [];
-  if (params.audience === "landlord") {
-    if (readyCategories.length > 0) {
-      nextSteps.push("Review the categories already available now so the current package can move forward without guesswork.");
-    }
-    if (followUpCategories.length > 0) {
-      nextSteps.push(`Request follow-up in ${followUpCategories.join(", ")} using the aligned package categories.`);
-      nextSteps.push("Re-review the package after those categories are updated in the tenant workflow.");
-    }
-    if (nextSteps.length === 0) {
-      nextSteps.push("Review the available package and capture your decision in the summary when you are ready.");
-    }
-  } else {
-    if (followUpCategories.length > 0) {
-      nextSteps.push(`Work through ${followUpCategories.join(", ")} next so your package is easier to re-review.`);
-    }
-    if (readyCategories.length > 0) {
-      nextSteps.push("Keep the categories that are already ready as they are while you update the remaining sections.");
-    }
-    if (nextSteps.length === 0) {
-      nextSteps.push("Continue with your application and review what is already ready to share.");
-    }
-  }
+  const nextSteps =
+    params.audience === "landlord"
+      ? buildLandlordNextSteps(state, followUpCategories, readyCategories)
+      : buildTenantNextSteps(state, followUpCategories, readyCategories);
 
   const actionsMap = new Map<string, TenantLandlordInteractionLoopAction>();
   if (params.audience === "tenant") {
@@ -150,20 +205,22 @@ export function buildTenantLandlordInteractionLoop(params: {
         categories: [item.label],
       });
     });
-    if (!actionsMap.has("/tenant/application")) {
-      actionsMap.set("/tenant/application", {
-        label: "Review your application",
-        path: "/tenant/application",
-        detail: "Return to your application readiness view before continuing.",
-        categories: ["Application readiness"],
-      });
-    }
+    actionsMap.set("/tenant/application", {
+      label: state === "ready_for_rereview" ? "Review again" : "Review your application",
+      path: "/tenant/application",
+      detail:
+        state === "ready_for_rereview"
+          ? "Return to your application readiness view and confirm the package is ready for re-review."
+          : "Return to your application readiness view and confirm the package is ready to continue.",
+      categories:
+        state === "ready_for_rereview" ? ["Ready for re-review"] : ["Application readiness"],
+    });
   }
 
   return {
     state,
     headline: buildHeadline(params.audience, state),
-    detail: buildDetail(params.audience, state, followUpCategories),
+    detail: buildDetail(params.audience, state, followUpCategories, readyCategories),
     followUpCategories,
     readyCategories,
     nextSteps,

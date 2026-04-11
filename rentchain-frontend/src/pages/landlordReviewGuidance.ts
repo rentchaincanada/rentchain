@@ -2,9 +2,9 @@ import type { LandlordIntakeAlignmentView } from "./applicationReviewIntakeAlign
 import { buildTenantLandlordInteractionLoop } from "./tenantLandlordInteractionLoop";
 
 export type LandlordReviewGuidanceState =
-  | "ready_to_review"
-  | "partly_available"
-  | "needs_follow_up";
+  | "follow_up_needed"
+  | "partly_addressed"
+  | "ready_for_rereview";
 
 export type LandlordReviewGuidanceView = {
   state: LandlordReviewGuidanceState;
@@ -21,12 +21,7 @@ export function buildLandlordReviewGuidance(
     audience: "landlord",
     packageCategories: intake.packageCategories,
   });
-  const state: LandlordReviewGuidanceState =
-    loop.state === "ready_for_review"
-      ? "ready_to_review"
-      : loop.state === "ready_for_rereview"
-      ? "partly_available"
-      : "needs_follow_up";
+  const state: LandlordReviewGuidanceState = loop.state;
 
   return {
     state,

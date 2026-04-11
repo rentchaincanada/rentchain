@@ -40,16 +40,16 @@ function categories(
 }
 
 describe("buildTenantLandlordInteractionLoop", () => {
-  it("returns ready for review when every category is ready", () => {
+  it("returns ready for rereview when every category is addressed", () => {
     const result = buildTenantLandlordInteractionLoop({
       audience: "landlord",
       packageCategories: categories(["ready", "ready", "ready", "ready", "ready"]),
     });
 
-    expect(result.state).toBe("ready_for_review");
+    expect(result.state).toBe("ready_for_rereview");
     expect(result.followUpCategories).toEqual([]);
     expect(result.readyCategories).toHaveLength(5);
-    expect(result.nextSteps[0]).toMatch(/Review the categories already available now/i);
+    expect(result.nextSteps[0]).toMatch(/Review again/i);
   });
 
   it("returns ready for rereview when the package only has partial categories left", () => {
@@ -59,31 +59,48 @@ describe("buildTenantLandlordInteractionLoop", () => {
     });
 
     expect(result.state).toBe("ready_for_rereview");
-    expect(result.followUpCategories).toEqual([
+    expect(result.followUpCategories).toEqual([]);
+    expect(result.readyCategories).toEqual([
+      "Profile details",
       "Rental history",
+      "Documents & records",
       "Consent / identity status",
       "Application readiness",
     ]);
     expect(result.actions.map((item) => item.path)).toEqual([
-      "/tenant/profile",
-      "/tenant/access",
       "/tenant/application",
     ]);
+    expect(result.headline).toBe("Ready for re-review");
   });
 
-  it("returns follow up needed when any categories are missing", () => {
+  it("returns partly addressed when open and addressed categories are mixed", () => {
     const result = buildTenantLandlordInteractionLoop({
       audience: "tenant",
       packageCategories: categories(["missing", "ready", "missing", "partial", "partial"]),
     });
 
-    expect(result.state).toBe("follow_up_needed");
+    expect(result.state).toBe("partly_addressed");
     expect(result.followUpCategories).toEqual([
       "Profile details",
       "Documents & records",
+    ]);
+    expect(result.readyCategories).toEqual([
+      "Rental history",
       "Consent / identity status",
       "Application readiness",
     ]);
+    expect(result.nextSteps[0]).toMatch(/Keep Rental history/i);
+  });
+
+  it("returns follow up needed when every category is still open", () => {
+    const result = buildTenantLandlordInteractionLoop({
+      audience: "tenant",
+      packageCategories: categories(["missing", "missing", "missing", "missing", "missing"]),
+    });
+
+    expect(result.state).toBe("follow_up_needed");
+    expect(result.followUpCategories).toHaveLength(5);
+    expect(result.readyCategories).toEqual([]);
     expect(result.nextSteps[0]).toMatch(/Work through/i);
   });
 });
