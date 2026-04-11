@@ -21,6 +21,7 @@ import {
 import { spacing, text as textTokens } from "../../styles/tokens";
 import { buildTenantApplicationReuseView } from "./tenantApplicationReuse";
 import { buildTenantApplicationFlow } from "./tenantApplicationFlow";
+import { buildTenantLandlordInteractionLoop } from "../tenantLandlordInteractionLoop";
 
 function statusTone(status: TenantApplicationCompletionStatus) {
   switch (status) {
@@ -226,6 +227,10 @@ export default function TenantApplicationStatusPage() {
     completion: data,
     reuse,
   });
+  const interactionLoop = buildTenantLandlordInteractionLoop({
+    audience: "tenant",
+    packageCategories: reuse.packageCategories,
+  });
   const flowTone =
     flow.state === "ready_to_proceed"
       ? { color: "#166534", background: "#dcfce7", label: "Ready to proceed" }
@@ -235,6 +240,12 @@ export default function TenantApplicationStatusPage() {
       ? { color: "#9a3412", background: "#ffedd5", label: "Needs attention" }
       : { color: "#0f766e", background: "#ccfbf1", label: "Readiness" };
   const entryLabel = flow.entry === "invite" ? "Invite entry" : flow.entry === "application" ? "Application link" : "Direct tenant navigation";
+  const interactionTone =
+    interactionLoop.state === "ready_for_review"
+      ? { color: "#166534", background: "#dcfce7", label: "Ready to continue" }
+      : interactionLoop.state === "ready_for_rereview"
+      ? { color: "#1d4ed8", background: "#dbeafe", label: "Ready for re-review" }
+      : { color: "#9a3412", background: "#ffedd5", label: "Follow-up requested" };
 
   return (
     <TenantSurfaceShell
@@ -465,18 +476,71 @@ export default function TenantApplicationStatusPage() {
           </div>
         </TenantInfoCard>
 
-        <TenantInfoCard heading="Review Package Guidance" accent="#166534">
+        <TenantInfoCard heading="Structured Follow-up" accent="#166534">
           <div style={{ display: "grid", gap: spacing.sm }}>
-            {[...reuse.reusableProfileItems, ...reuse.documentItems].map((item) => {
-              const tone =
-                item.status === "ready"
-                  ? { color: "#166534", background: "#dcfce7", label: "Ready" }
-                  : item.status === "info"
-                  ? { color: "#1d4ed8", background: "#dbeafe", label: "In review" }
-                  : { color: "#9a3412", background: "#ffedd5", label: "Needs attention" };
-              return (
+            <div
+              style={{
+                border: "1px solid rgba(15,23,42,0.08)",
+                borderRadius: 12,
+                padding: "12px 14px",
+                display: "grid",
+                gap: 8,
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontWeight: 700, color: textTokens.primary }}>{interactionLoop.headline}</div>
+                  <div style={{ color: textTokens.secondary }}>{interactionLoop.detail}</div>
+                </div>
                 <div
-                  key={item.label}
+                  style={{
+                    padding: "4px 8px",
+                    borderRadius: 999,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: interactionTone.color,
+                    background: interactionTone.background,
+                  }}
+                >
+                  {interactionTone.label}
+                </div>
+              </div>
+
+              {interactionLoop.followUpCategories.length ? (
+                <div style={{ color: textTokens.secondary }}>
+                  <strong style={{ color: textTokens.primary }}>Needs attention:</strong>{" "}
+                  {interactionLoop.followUpCategories.join(", ")}
+                </div>
+              ) : (
+                <div style={{ color: textTokens.secondary }}>
+                  <strong style={{ color: textTokens.primary }}>Ready now:</strong>{" "}
+                  {interactionLoop.readyCategories.join(", ")}
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: "grid", gap: 8 }}>
+              <div style={{ fontWeight: 700, color: textTokens.primary }}>Next steps</div>
+              {interactionLoop.nextSteps.map((step) => (
+                <div
+                  key={step}
+                  style={{
+                    border: "1px solid rgba(15,23,42,0.08)",
+                    borderRadius: 12,
+                    padding: "12px 14px",
+                    color: textTokens.secondary,
+                  }}
+                >
+                  {step}
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: "grid", gap: 8 }}>
+              <div style={{ fontWeight: 700, color: textTokens.primary }}>Go next</div>
+              {interactionLoop.actions.map((action) => (
+                <div
+                  key={action.path}
                   style={{
                     border: "1px solid rgba(15,23,42,0.08)",
                     borderRadius: 12,
@@ -485,30 +549,17 @@ export default function TenantApplicationStatusPage() {
                     gap: 8,
                   }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                    <div style={{ fontWeight: 700, color: textTokens.primary }}>{item.label}</div>
-                    <div
-                      style={{
-                        padding: "4px 8px",
-                        borderRadius: 999,
-                        fontSize: 12,
-                        fontWeight: 700,
-                        color: tone.color,
-                        background: tone.background,
-                      }}
-                    >
-                      {tone.label}
-                    </div>
+                  <div style={{ fontWeight: 700, color: textTokens.primary }}>{action.label}</div>
+                  <div style={{ color: textTokens.secondary }}>{action.detail}</div>
+                  <div style={{ color: textTokens.secondary, fontSize: 12 }}>
+                    Covers: {action.categories.join(", ")}
                   </div>
-                  <div style={{ color: textTokens.secondary }}>{item.detail}</div>
-                  {item.actionPath ? (
-                    <Link to={item.actionPath} style={{ fontWeight: 700 }}>
-                      {item.actionLabel || "Open documents"}
-                    </Link>
-                  ) : null}
+                  <Link to={action.path} style={{ fontWeight: 700 }}>
+                    {action.label}
+                  </Link>
                 </div>
-              );
-            })}
+              ))}
+            </div>
           </div>
         </TenantInfoCard>
       </div>

@@ -18,6 +18,8 @@ import {
 } from "../api/reviewSummaryApi";
 import { useToast } from "../components/ui/ToastProvider";
 import { buildLandlordIntakeAlignmentView } from "./applicationReviewIntakeAlignment";
+import { buildLandlordReviewGuidance } from "./landlordReviewGuidance";
+import { buildTenantLandlordInteractionLoop } from "./tenantLandlordInteractionLoop";
 import { buildLandlordStructuredActivityTimeline } from "./structuredActivityTimeline";
 
 function money(cents: number | null): string {
@@ -223,13 +225,30 @@ function ApplicationReviewSummaryPageBody() {
   };
 
   const intakeView = useMemo(
-    () => (summary ? buildLandlordIntakeAlignmentView(summary) : null),
-    [summary]
-  );
-  const recentActivity = useMemo(
-    () => (summary ? buildLandlordStructuredActivityTimeline(summary).slice(0, 4) : []),
-    [summary]
-  );
+  () => (summary ? buildLandlordIntakeAlignmentView(summary) : null),
+  [summary]
+);
+
+const guidanceView = useMemo(
+  () => (intakeView ? buildLandlordReviewGuidance(intakeView) : null),
+  [intakeView]
+);
+
+const interactionLoop = useMemo(
+  () =>
+    intakeView
+      ? buildTenantLandlordInteractionLoop({
+          audience: "landlord",
+          packageCategories: intakeView.packageCategories,
+        })
+      : null,
+  [intakeView]
+);
+
+const recentActivity = useMemo(
+  () => (summary ? buildLandlordStructuredActivityTimeline(summary).slice(0, 4) : []),
+  [summary]
+);
 
   return (
     <div style={{ padding: 16, display: "grid", gap: 12 }}>
@@ -449,6 +468,84 @@ function ApplicationReviewSummaryPageBody() {
                   </div>
                 )}
               </Card>
+            </Card>
+          ) : null}
+
+          {guidanceView && interactionLoop ? (
+            <Card style={{ display: "grid", gap: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontWeight: 700 }}>Review workflow guidance</div>
+                  <div style={{ fontSize: 13, color: text.subtle, marginTop: 4 }}>
+                    {guidanceView.explanation}
+                  </div>
+                </div>
+                <div
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 999,
+                    fontWeight: 700,
+                    color:
+                      guidanceView.state === "ready_to_review"
+                        ? "#166534"
+                        : guidanceView.state === "partly_available"
+                        ? "#1d4ed8"
+                        : "#9a3412",
+                    background:
+                      guidanceView.state === "ready_to_review"
+                        ? "#dcfce7"
+                        : guidanceView.state === "partly_available"
+                        ? "#dbeafe"
+                        : "#ffedd5",
+                  }}
+                >
+                  {guidanceView.summary}
+                </div>
+              </div>
+
+              {interactionLoop.followUpCategories.length ? (
+                <div style={{ fontSize: 13, color: text.subtle }}>
+                  <strong style={{ color: text.main }}>Follow-up categories:</strong>{" "}
+                  {interactionLoop.followUpCategories.join(", ")}
+                </div>
+              ) : (
+                <div style={{ fontSize: 13, color: text.subtle }}>
+                  <strong style={{ color: text.main }}>Available now:</strong>{" "}
+                  {interactionLoop.readyCategories.join(", ")}
+                </div>
+              )}
+
+              <div style={{ display: "grid", gap: 8 }}>
+                <div style={{ fontWeight: 700 }}>Structured follow-up loop</div>
+                <div style={{ fontSize: 13, color: text.subtle }}>{interactionLoop.detail}</div>
+                {interactionLoop.followUpCategories.length ? (
+                  <div style={{ fontSize: 13, color: text.subtle }}>
+                    Follow up is organized by aligned package categories so the tenant can work back through the same areas in their readiness flow.
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 13, color: text.subtle }}>
+                    No follow-up categories are surfaced right now, so this package is ready for landlord review as-is.
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: "grid", gap: 8 }}>
+                <div style={{ fontWeight: 700 }}>Next steps</div>
+                {interactionLoop.nextSteps.map((step) => (
+                  <div
+                    key={step}
+                    style={{
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: 10,
+                      padding: 10,
+                      fontSize: 13,
+                      color: text.subtle,
+                    }}
+                  >
+                    {step}
+                  </div>
+                ))}
+              </div>
             </Card>
           ) : null}
 
