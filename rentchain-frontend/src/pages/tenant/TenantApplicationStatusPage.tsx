@@ -423,14 +423,14 @@ export default function TenantApplicationStatusPage() {
           gap: spacing.md,
         }}
       >
-        <TenantInfoCard heading="Use Your Saved Profile" accent="#1d4ed8">
+        <TenantInfoCard heading="Share Package" accent="#1d4ed8">
           <div style={{ display: "grid", gap: spacing.sm }}>
-            {reuse.reusableProfileItems.map((item) => {
+            {reuse.packageCategories.map((item) => {
               const tone =
                 item.status === "ready"
                   ? { color: "#166534", background: "#dcfce7", label: "Ready" }
-                  : item.status === "info"
-                  ? { color: "#1d4ed8", background: "#dbeafe", label: "In review" }
+                  : item.status === "partial"
+                  ? { color: "#1d4ed8", background: "#dbeafe", label: "Partly ready" }
                   : { color: "#9a3412", background: "#ffedd5", label: "Needs attention" };
               return (
                 <div
@@ -459,23 +459,20 @@ export default function TenantApplicationStatusPage() {
                     </div>
                   </div>
                   <div style={{ color: textTokens.secondary }}>{item.detail}</div>
-                  {item.actionPath ? (
-                    <Link to={item.actionPath} style={{ fontWeight: 700 }}>
-                      {item.actionLabel || "Review"}
-                    </Link>
-                  ) : null}
                 </div>
               );
             })}
           </div>
         </TenantInfoCard>
 
-        <TenantInfoCard heading="Document Readiness" accent="#166534">
+        <TenantInfoCard heading="Review Package Guidance" accent="#166534">
           <div style={{ display: "grid", gap: spacing.sm }}>
-            {reuse.documentItems.map((item) => {
+            {[...reuse.reusableProfileItems, ...reuse.documentItems].map((item) => {
               const tone =
                 item.status === "ready"
                   ? { color: "#166534", background: "#dcfce7", label: "Ready" }
+                  : item.status === "info"
+                  ? { color: "#1d4ed8", background: "#dbeafe", label: "In review" }
                   : { color: "#9a3412", background: "#ffedd5", label: "Needs attention" };
               return (
                 <div
@@ -554,6 +551,9 @@ export default function TenantApplicationStatusPage() {
               <strong style={{ color: textTokens.primary }}>{item.label}:</strong> {item.detail}
             </div>
           ))}
+          <div style={{ color: textTokens.secondary }}>
+            <strong style={{ color: textTokens.primary }}>Shared package:</strong> Profile details, rental history, documents & records, consent / identity status, and application readiness stay aligned with what a landlord can review today.
+          </div>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
             <Link to="/tenant/profile" style={{ fontWeight: 700 }}>
               Review your profile

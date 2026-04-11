@@ -5,6 +5,7 @@ import type { TenantProfileData } from "../../api/tenantProfile";
 import { buildTenantDocumentVaultView } from "./tenantDocumentVault";
 import { buildTenantProfileCompletion } from "./tenantProfileCompletion";
 import { prettyStatus } from "./TenantWorkspaceShared";
+import { buildTenantSharePackageCategories, type SharePackageCategoryView } from "../sharePackageAlignment";
 
 type ApplicationReuseMetric = {
   label: string;
@@ -28,6 +29,7 @@ type ApplicationShareInsight = {
 
 export type TenantApplicationReuseView = {
   metrics: ApplicationReuseMetric[];
+  packageCategories: SharePackageCategoryView[];
   reusableProfileItems: ApplicationReuseItem[];
   documentItems: ApplicationReuseItem[];
   missingItems: ApplicationReuseItem[];
@@ -191,8 +193,30 @@ export function buildTenantApplicationReuseView(params: {
     },
   ];
 
+  const packageCategories = buildTenantSharePackageCategories({
+    hasProfileBasics: Boolean(
+      params.profile?.profile.displayName && params.profile?.profile.email && params.profile?.profile.phone
+    ),
+    rentalHistoryDetail: params.profile
+      ? propertySummary(params.profile.profile)
+      : "Property details will appear here when they are linked to this application.",
+    hasRentalHistory: Boolean(
+      params.profile?.profile.property || params.profile?.profile.application || params.profile?.profile.lease
+    ),
+    readyDocumentCount: documentVault.readyItems.length,
+    missingDocumentCount: documentVault.missingItems.length,
+    identityStatusLabel:
+      params.profile?.identity?.identityVerification?.note ||
+      "Identity and consent status will appear here when they are available in your profile.",
+    identityVerified: params.profile?.identity?.identityVerification?.status === "verified",
+    activeGrantCount: params.access?.summary?.activeGrants || 0,
+    progressPercent: params.completion?.progressPercent ?? 0,
+    missingCount: missingItems.filter((item) => item.status !== "info").length,
+  });
+
   return {
     metrics,
+    packageCategories,
     reusableProfileItems,
     documentItems,
     missingItems,
