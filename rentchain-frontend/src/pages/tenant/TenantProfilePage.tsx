@@ -14,6 +14,8 @@ import {
   prettyStatus,
 } from "./TenantWorkspaceShared";
 import { spacing, text as textTokens } from "../../styles/tokens";
+import TenantProfileCompletionCard from "./TenantProfileCompletionCard";
+import { buildTenantProfileCompletion } from "./tenantProfileCompletion";
 
 function statusTone(status: TenantProfileStatus): { label: string; color: string; background: string } {
   switch (status) {
@@ -119,6 +121,7 @@ export default function TenantProfilePage() {
   const identityTone = statusTone(data?.identity?.overallStatus || "missing");
   const verificationTone = statusTone(data?.identity?.identityVerification?.status || "missing");
   const documentEntry = data?.actions?.documentEntry;
+  const completion = data ? buildTenantProfileCompletion(data) : null;
   const propertyAddress = [
     data?.profile?.property?.street1,
     data?.profile?.property?.street2,
@@ -127,26 +130,43 @@ export default function TenantProfilePage() {
   ]
     .filter(Boolean)
     .join(", ");
+  const applicationSignals = [
+    ...(data?.profile?.application?.missingSteps || []),
+    ...(data?.profile?.application?.nextActions || []),
+  ]
+    .join(" ")
+    .toLowerCase();
+  const hasEmploymentSignal =
+    /employment|employer|income|paystub|salary|proof of income/.test(applicationSignals);
 
   return (
     <TenantSurfaceShell
       title="Tenant Profile"
-      subtitle="Review your tenant-safe profile details, identity progress, and the next steps still linked to your tenancy or application."
+      subtitle="This is your organized rental profile space. Review what is already connected, what is still missing, and what you can update right now."
     >
-      <TenantInfoCard heading="Profile Summary" accent="#0f766e">
-        <TenantKeyValueGrid
-          rows={[
-            { label: "Name", value: data?.profile?.displayName || "—" },
-            { label: "Email", value: data?.profile?.email || "—" },
-            { label: "Phone", value: data?.profile?.phone || "—" },
-            { label: "Access", value: data?.profile?.authorityLabel || "Tenant" },
-            { label: "Property", value: propertyAddress || "No property linked yet" },
-            { label: "Lease status", value: prettyStatus(data?.profile?.lease?.status) },
-          ]}
-        />
-      </TenantInfoCard>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+          gap: spacing.md,
+        }}
+      >
+        <TenantInfoCard heading="Your profile" accent="#0f766e">
+          <TenantKeyValueGrid
+            rows={[
+              { label: "Name", value: data?.profile?.displayName || "—" },
+              { label: "Email", value: data?.profile?.email || "—" },
+              { label: "Phone", value: data?.profile?.phone || "—" },
+              { label: "Access", value: data?.profile?.authorityLabel || "Tenant" },
+              { label: "Property", value: propertyAddress || "No property linked yet" },
+              { label: "Lease status", value: prettyStatus(data?.profile?.lease?.status) },
+            ]}
+          />
+        </TenantInfoCard>
+        {completion ? <TenantProfileCompletionCard completion={completion} actionLabel="Keep your profile organized" /> : null}
+      </div>
 
-      <TenantInfoCard heading="Edit profile details" accent="#0f766e">
+      <TenantInfoCard heading="Contact details" accent="#0f766e">
         <form onSubmit={handleSave} style={{ display: "grid", gap: spacing.sm }}>
           <div
             style={{
@@ -189,7 +209,7 @@ export default function TenantProfilePage() {
           </div>
 
           <div style={{ color: textTokens.muted }}>
-            You can update a small tenant-safe set of profile fields here without changing lease, approval, or verification records.
+            Keep your rental profile organized by keeping your contact details current. Updating these fields will not change lease, approval, or verification records.
           </div>
 
           {saveError ? <div style={{ color: "#b91c1c", fontWeight: 600 }}>{saveError}</div> : null}
@@ -240,6 +260,25 @@ export default function TenantProfilePage() {
           gap: spacing.md,
         }}
       >
+        <TenantInfoCard heading="Rental record" accent="#7c3aed">
+          <TenantKeyValueGrid
+            rows={[
+              { label: "Application", value: prettyStatus(data?.profile?.application?.status) },
+              { label: "Lease", value: prettyStatus(data?.profile?.lease?.status) },
+              { label: "Rent", value: formatMoney(data?.profile?.lease?.monthlyRent) },
+              { label: "Lease start", value: formatDate(data?.profile?.lease?.startDate) },
+              { label: "Lease end", value: formatDate(data?.profile?.lease?.endDate) },
+              {
+                label: "Lease document",
+                value: data?.profile?.lease?.documentUrl ? "Available" : "Not shared yet",
+              },
+            ]}
+          />
+          <div style={{ color: textTokens.muted }}>
+            This section keeps your current rental record visible in one place. Longer history can be added over time as more tenant-safe records are linked.
+          </div>
+        </TenantInfoCard>
+
         <TenantInfoCard heading="Identity status" accent="#1d4ed8">
           <div style={{ display: "grid", gap: spacing.sm }}>
             <div
@@ -269,20 +308,24 @@ export default function TenantProfilePage() {
           </div>
         </TenantInfoCard>
 
-        <TenantInfoCard heading="Lease & application" accent="#7c3aed">
-          <TenantKeyValueGrid
-            rows={[
-              { label: "Application", value: prettyStatus(data?.profile?.application?.status) },
-              { label: "Lease", value: prettyStatus(data?.profile?.lease?.status) },
-              { label: "Rent", value: formatMoney(data?.profile?.lease?.monthlyRent) },
-              { label: "Lease start", value: formatDate(data?.profile?.lease?.startDate) },
-              { label: "Lease end", value: formatDate(data?.profile?.lease?.endDate) },
-              {
-                label: "Lease document",
-                value: data?.profile?.lease?.documentUrl ? "Available" : "Not shared yet",
-              },
-            ]}
-          />
+        <TenantInfoCard heading="Employment and income" accent="#0891b2">
+          <div style={{ display: "grid", gap: spacing.sm }}>
+            <div style={{ color: textTokens.secondary }}>
+              {hasEmploymentSignal
+                ? "Your current application checklist still points to employment or income details that need attention."
+                : "Employment and income details are not surfaced in this tenant-safe profile summary yet."}
+            </div>
+            <div style={{ color: textTokens.muted }}>
+              {hasEmploymentSignal
+                ? "Use your application checklist to see the next supported step."
+                : "When employment or income details are linked to your tenant-safe application flow, they will appear here in a clearer profile summary."}
+            </div>
+            <div>
+              <Link to="/tenant/application" style={{ fontWeight: 700 }}>
+                {hasEmploymentSignal ? "Open application checklist" : "View application progress"}
+              </Link>
+            </div>
+          </div>
         </TenantInfoCard>
       </div>
 
@@ -346,12 +389,17 @@ export default function TenantProfilePage() {
                 {step}
               </div>
             ))}
-            <Link to="/tenant/attachments" style={{ fontWeight: 700 }}>
-              Review documents
-            </Link>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <Link to="/tenant/attachments" style={{ fontWeight: 700 }}>
+                Review documents
+              </Link>
+              <Link to="/tenant/application" style={{ fontWeight: 700 }}>
+                Open application checklist
+              </Link>
+            </div>
           </div>
         ) : (
-          <div style={{ color: textTokens.muted }}>No pending next steps right now.</div>
+          <div style={{ color: textTokens.muted }}>No pending next steps right now. Keep your profile organized and check back here when new steps appear.</div>
         )}
       </TenantInfoCard>
     </TenantSurfaceShell>

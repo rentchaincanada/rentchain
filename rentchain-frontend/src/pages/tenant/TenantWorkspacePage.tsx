@@ -2,6 +2,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { getTenantWorkspace } from "../../api/tenantPortal";
 import { getTenantAccess, type TenantAccessWorkspace } from "../../api/tenantAccess";
+import { getTenantProfile } from "../../api/tenantProfile";
 import {
   TenantEmptyState,
   TenantErrorState,
@@ -15,10 +16,14 @@ import {
   prettyStatus,
 } from "./TenantWorkspaceShared";
 import { spacing, text as textTokens } from "../../styles/tokens";
+import TenantProfileCompletionCard from "./TenantProfileCompletionCard";
+import { buildTenantProfileCompletion } from "./tenantProfileCompletion";
 
 export default function TenantWorkspacePage() {
   const [data, setData] = React.useState<Awaited<ReturnType<typeof getTenantWorkspace>> | null>(null);
   const [access, setAccess] = React.useState<TenantAccessWorkspace | null>(null);
+  const [profileData, setProfileData] = React.useState<Awaited<ReturnType<typeof getTenantProfile>> | null>(null);
+  const [profileLoading, setProfileLoading] = React.useState(true);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -50,6 +55,31 @@ export default function TenantWorkspacePage() {
     void load();
   }, [load]);
 
+  React.useEffect(() => {
+    let cancelled = false;
+    const loadProfile = async () => {
+      setProfileLoading(true);
+      try {
+        const next = await getTenantProfile();
+        if (!cancelled) {
+          setProfileData(next);
+        }
+      } catch {
+        if (!cancelled) {
+          setProfileData(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setProfileLoading(false);
+        }
+      }
+    };
+    void loadProfile();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   if (loading) {
     return (
       <TenantSurfaceShell title="Tenant Dashboard" subtitle="Loading your rental profile, application progress, lease, and maintenance summary.">
@@ -76,6 +106,7 @@ export default function TenantWorkspacePage() {
     .join(", ");
   const maintenanceCount = Array.isArray(data?.maintenance) ? data.maintenance.length : 0;
   const nextActions = data?.application?.nextActions || [];
+  const profileCompletion = profileData ? buildTenantProfileCompletion(profileData) : null;
 
   return (
     <TenantSurfaceShell
@@ -110,6 +141,29 @@ export default function TenantWorkspacePage() {
           ]}
         />
       </TenantInfoCard>
+
+      {profileLoading ? (
+        <TenantInfoCard heading="Profile completion" accent="#1d4ed8">
+          <div style={{ color: textTokens.secondary }}>
+            Loading your profile completion summary...
+          </div>
+        </TenantInfoCard>
+      ) : profileCompletion ? (
+        <TenantProfileCompletionCard completion={profileCompletion} compact />
+      ) : (
+        <TenantInfoCard heading="Profile completion" accent="#1d4ed8">
+          <div style={{ display: "grid", gap: spacing.sm }}>
+            <div style={{ color: textTokens.secondary }}>
+              Your profile summary is not available yet, but you can still open your profile workspace and keep your details organized.
+            </div>
+            <div>
+              <Link to="/tenant/profile" style={{ fontWeight: 700 }}>
+                View your profile
+              </Link>
+            </div>
+          </div>
+        </TenantInfoCard>
+      )}
 
       <div
         style={{

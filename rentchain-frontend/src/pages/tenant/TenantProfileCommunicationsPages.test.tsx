@@ -116,8 +116,14 @@ describe("tenant profile and communications pages", () => {
     );
 
     expect(await screen.findByText(/Tenant Profile/i)).toBeInTheDocument();
+    expect(screen.getByText(/This is your organized rental profile space/i)).toBeInTheDocument();
+    expect(screen.getByText(/Profile completion/i)).toBeInTheDocument();
     expect(await screen.findByDisplayValue(/Taylor Tenant/i)).toBeInTheDocument();
-    expect(await screen.findByText(/Verification is still in progress/i)).toBeInTheDocument();
+    expect((await screen.findAllByText(/Verification is still in progress/i)).length).toBeGreaterThan(0);
+    expect(screen.getByRole("textbox", { name: /Display name/i })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: /Phone/i })).toBeInTheDocument();
+    expect(screen.getAllByText(/Rental record/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Employment and income/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Upload government id/i).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /Save profile changes/i })).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: /Review requested documents/i }).length).toBeGreaterThan(0);

@@ -24,6 +24,10 @@ const tenantAccessApi = vi.hoisted(() => ({
   getTenantAccess: vi.fn(),
 }));
 
+const tenantProfileApi = vi.hoisted(() => ({
+  getTenantProfile: vi.fn(),
+}));
+
 const maintenanceWorkflowApi = vi.hoisted(() => ({
   listTenantMaintenance: vi.fn(),
 }));
@@ -35,6 +39,7 @@ const tenantCommunicationsApi = vi.hoisted(() => ({
 vi.mock("../../api/tenantPortal", () => tenantPortalApi);
 vi.mock("../../api/tenantApplicationCompletion", () => tenantApplicationCompletionApi);
 vi.mock("../../api/tenantAccess", () => tenantAccessApi);
+vi.mock("../../api/tenantProfile", () => tenantProfileApi);
 vi.mock("../../api/tenantCommunicationsApi", () => tenantCommunicationsApi);
 vi.mock("../../api/maintenanceWorkflowApi", async () => {
   const actual = await vi.importActual<any>("../../api/maintenanceWorkflowApi");
@@ -82,6 +87,77 @@ describe("tenant workspace frontend shell", () => {
       application: null,
       lease: null,
       maintenance: [],
+    });
+    tenantProfileApi.getTenantProfile.mockResolvedValue({
+      context: {
+        authority: "active_tenant",
+        propertyId: "prop-1",
+        rc_prop_id: "rc-prop-1",
+        applicationId: "app-1",
+        leaseId: "lease-1",
+        tenantId: "tenant-1",
+        unitId: "unit-1",
+        invitedEmail: "tenant@example.com",
+      },
+      profile: {
+        displayName: "Taylor Tenant",
+        email: "tenant@example.com",
+        phone: "902-555-0100",
+        authorityLabel: "Active tenant",
+        property: {
+          propertyId: "prop-1",
+          rc_prop_id: "rc-prop-1",
+          street1: "123 Main St",
+          street2: "Unit 4",
+          city: "Halifax",
+          province: "NS",
+          postalCode: "B3H1A1",
+          features: ["laundry"],
+        },
+        application: {
+          applicationId: "app-1",
+          status: "submitted",
+          missingSteps: [],
+          nextActions: [],
+          createdAt: null,
+          updatedAt: null,
+        },
+        lease: {
+          leaseId: "lease-1",
+          startDate: "2026-02-01",
+          endDate: "2027-01-31",
+          monthlyRent: 1800,
+          status: "active",
+          documentUrl: null,
+        },
+      },
+      identity: {
+        overallStatus: "pending",
+        identityVerification: {
+          status: "pending",
+          label: "Pending",
+          note: "Verification is still in progress.",
+          updatedAt: "2026-01-05T00:00:00.000Z",
+        },
+        documentChecklist: [
+          {
+            code: "upload_id",
+            label: "Upload Id",
+            status: "missing",
+            nextStep: "Upload government id",
+          },
+        ],
+        nextSteps: ["Upload government id"],
+      },
+      actions: {
+        editableFields: ["displayName", "phone"],
+        documentEntry: {
+          available: true,
+          path: "/tenant/attachments",
+          label: "Review requested documents",
+          note: "1 document-related step still needs attention.",
+        },
+      },
     });
   });
 
@@ -162,6 +238,9 @@ describe("tenant workspace frontend shell", () => {
     );
 
     expect(await screen.findByText(/^Tenant Dashboard$/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Profile completion/i)).toBeInTheDocument();
+    expect(screen.getByText(/Add missing details to keep your rental profile organized/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /View your profile/i })).toBeInTheDocument();
     expect(screen.queryByText(/^Applicant$/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Active tenancy/i)).toBeInTheDocument();
     expect(screen.getByText(/123 Main St, Unit 4, Halifax, NS/i)).toBeInTheDocument();
