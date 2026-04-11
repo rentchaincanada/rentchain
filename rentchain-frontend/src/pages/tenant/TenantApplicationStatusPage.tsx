@@ -5,6 +5,9 @@ import {
   type TenantApplicationCompletionItem,
   type TenantApplicationCompletionStatus,
 } from "../../api/tenantApplicationCompletion";
+import { getTenantAccess } from "../../api/tenantAccess";
+import { getTenantAttachments } from "../../api/tenantAttachmentsApi";
+import { getTenantProfile } from "../../api/tenantProfile";
 import {
   TenantEmptyState,
   TenantErrorState,
@@ -16,6 +19,7 @@ import {
   prettyStatus,
 } from "./TenantWorkspaceShared";
 import { spacing, text as textTokens } from "../../styles/tokens";
+import { buildTenantApplicationReuseView } from "./tenantApplicationReuse";
 
 function statusTone(status: TenantApplicationCompletionStatus) {
   switch (status) {
@@ -134,6 +138,9 @@ const CompletionItemRow: React.FC<{ item: TenantApplicationCompletionItem }> = (
 
 export default function TenantApplicationStatusPage() {
   const [data, setData] = React.useState<Awaited<ReturnType<typeof getTenantApplicationCompletion>>>(null);
+  const [profile, setProfile] = React.useState<Awaited<ReturnType<typeof getTenantProfile>> | null>(null);
+  const [attachments, setAttachments] = React.useState<Awaited<ReturnType<typeof getTenantAttachments>> | null>(null);
+  const [access, setAccess] = React.useState<Awaited<ReturnType<typeof getTenantAccess>> | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -141,9 +148,24 @@ export default function TenantApplicationStatusPage() {
     setLoading(true);
     setError(null);
     try {
-      setData(await getTenantApplicationCompletion());
+      const [completionResult, profileResult, attachmentsResult, accessResult] = await Promise.allSettled([
+        getTenantApplicationCompletion(),
+        getTenantProfile(),
+        getTenantAttachments(),
+        getTenantAccess(),
+      ]);
+      if (completionResult.status !== "fulfilled") {
+        throw completionResult.reason;
+      }
+      setData(completionResult.value);
+      setProfile(profileResult.status === "fulfilled" ? profileResult.value : null);
+      setAttachments(attachmentsResult.status === "fulfilled" ? attachmentsResult.value : null);
+      setAccess(accessResult.status === "fulfilled" ? accessResult.value : null);
     } catch (err: any) {
       setData(null);
+      setProfile(null);
+      setAttachments(null);
+      setAccess(null);
       setError(err?.payload?.error || err?.message || "Unable to load application completion.");
     } finally {
       setLoading(false);
@@ -191,10 +213,17 @@ export default function TenantApplicationStatusPage() {
     );
   }
 
+  const reuse = buildTenantApplicationReuseView({
+    completion: data,
+    profile,
+    attachments,
+    access,
+  });
+
   return (
     <TenantSurfaceShell
-      title="Application Completion"
-      subtitle="Use this checklist to finish the right steps in the right order so your application moves forward with fewer delays."
+      title="Application Readiness"
+      subtitle="Use your saved profile to prepare this application. Review what’s ready to share and add any missing details before you continue."
       action={
         <Link
           to="/tenant/profile"
@@ -209,11 +238,193 @@ export default function TenantApplicationStatusPage() {
             border: "1px solid rgba(15,23,42,0.08)",
           }}
         >
-          Open profile
+          Review your profile
         </Link>
       }
     >
       <CompletionProgressCard progressPercent={data.progressPercent} status={data.status} />
+
+      <TenantInfoCard heading="Application Readiness Summary" accent="#0f766e">
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+            gap: spacing.sm,
+          }}
+        >
+          {reuse.metrics.map((metric) => (
+            <div
+              key={metric.label}
+              style={{
+                border: "1px solid rgba(15,23,42,0.08)",
+                borderRadius: 12,
+                padding: "12px 14px",
+                display: "grid",
+                gap: 4,
+              }}
+            >
+              <div style={{ fontSize: "1.6rem", fontWeight: 900, color: metric.accent }}>{metric.value}</div>
+              <div style={{ color: textTokens.secondary, fontWeight: 700 }}>{metric.label}</div>
+              <div style={{ color: textTokens.muted, fontSize: 12 }}>{metric.hint}</div>
+            </div>
+          ))}
+        </div>
+      </TenantInfoCard>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+          gap: spacing.md,
+        }}
+      >
+        <TenantInfoCard heading="Use Your Saved Profile" accent="#1d4ed8">
+          <div style={{ display: "grid", gap: spacing.sm }}>
+            {reuse.reusableProfileItems.map((item) => {
+              const tone =
+                item.status === "ready"
+                  ? { color: "#166534", background: "#dcfce7", label: "Ready" }
+                  : item.status === "info"
+                  ? { color: "#1d4ed8", background: "#dbeafe", label: "In review" }
+                  : { color: "#9a3412", background: "#ffedd5", label: "Needs attention" };
+              return (
+                <div
+                  key={item.label}
+                  style={{
+                    border: "1px solid rgba(15,23,42,0.08)",
+                    borderRadius: 12,
+                    padding: "12px 14px",
+                    display: "grid",
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                    <div style={{ fontWeight: 700, color: textTokens.primary }}>{item.label}</div>
+                    <div
+                      style={{
+                        padding: "4px 8px",
+                        borderRadius: 999,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: tone.color,
+                        background: tone.background,
+                      }}
+                    >
+                      {tone.label}
+                    </div>
+                  </div>
+                  <div style={{ color: textTokens.secondary }}>{item.detail}</div>
+                  {item.actionPath ? (
+                    <Link to={item.actionPath} style={{ fontWeight: 700 }}>
+                      {item.actionLabel || "Review"}
+                    </Link>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </TenantInfoCard>
+
+        <TenantInfoCard heading="Document Readiness" accent="#166534">
+          <div style={{ display: "grid", gap: spacing.sm }}>
+            {reuse.documentItems.map((item) => {
+              const tone =
+                item.status === "ready"
+                  ? { color: "#166534", background: "#dcfce7", label: "Ready" }
+                  : { color: "#9a3412", background: "#ffedd5", label: "Needs attention" };
+              return (
+                <div
+                  key={item.label}
+                  style={{
+                    border: "1px solid rgba(15,23,42,0.08)",
+                    borderRadius: 12,
+                    padding: "12px 14px",
+                    display: "grid",
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                    <div style={{ fontWeight: 700, color: textTokens.primary }}>{item.label}</div>
+                    <div
+                      style={{
+                        padding: "4px 8px",
+                        borderRadius: 999,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: tone.color,
+                        background: tone.background,
+                      }}
+                    >
+                      {tone.label}
+                    </div>
+                  </div>
+                  <div style={{ color: textTokens.secondary }}>{item.detail}</div>
+                  {item.actionPath ? (
+                    <Link to={item.actionPath} style={{ fontWeight: 700 }}>
+                      {item.actionLabel || "Open documents"}
+                    </Link>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </TenantInfoCard>
+      </div>
+
+      <TenantInfoCard heading="Missing Details" accent="#b45309">
+        {reuse.missingItems.length ? (
+          <div style={{ display: "grid", gap: spacing.sm }}>
+            {reuse.missingItems.slice(0, 8).map((item, index) => (
+              <div
+                key={`${item.label}-${index}`}
+                style={{
+                  border: "1px solid rgba(15,23,42,0.08)",
+                  borderRadius: 12,
+                  padding: "12px 14px",
+                  display: "grid",
+                  gap: 8,
+                }}
+              >
+                <div style={{ fontWeight: 700, color: textTokens.primary }}>{item.label}</div>
+                <div style={{ color: textTokens.secondary }}>{item.detail}</div>
+                {item.actionPath ? (
+                  <Link to={item.actionPath} style={{ fontWeight: 700 }}>
+                    {item.actionLabel || "Review this step"}
+                  </Link>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ color: textTokens.secondary }}>
+            No major missing details are surfaced right now. Review the sections below before you continue.
+          </div>
+        )}
+      </TenantInfoCard>
+
+      <TenantInfoCard heading="Review Before Sharing" accent="#0891b2">
+        <div style={{ display: "grid", gap: spacing.sm }}>
+          {reuse.shareInsights.map((item) => (
+            <div key={item.label} style={{ color: textTokens.secondary }}>
+              <strong style={{ color: textTokens.primary }}>{item.label}:</strong> {item.detail}
+            </div>
+          ))}
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <Link to="/tenant/profile" style={{ fontWeight: 700 }}>
+              Review your profile
+            </Link>
+            <Link to="/tenant/attachments" style={{ fontWeight: 700 }}>
+              Open documents
+            </Link>
+            <Link to="/tenant/access" style={{ fontWeight: 700 }}>
+              Review access
+            </Link>
+          </div>
+          <div style={{ color: textTokens.muted }}>
+            This v1 view does not invent autofill or document-level sharing controls that are not already supported elsewhere in the tenant workspace.
+          </div>
+        </div>
+      </TenantInfoCard>
 
       {data.nextSteps.length ? (
         <TenantInfoCard heading="Next Steps" accent="#0891b2">
@@ -277,6 +488,9 @@ export default function TenantApplicationStatusPage() {
         </div>
         <div style={{ color: textTokens.muted }}>
           Status: <strong>{prettyStatus(data.status)}</strong>
+        </div>
+        <div style={{ color: textTokens.muted }}>
+          Review what’s ready before continuing so this application feels like a guided reuse flow, not a blank restart.
         </div>
       </TenantInfoCard>
     </TenantSurfaceShell>
