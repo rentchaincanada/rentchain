@@ -8,12 +8,119 @@ const tenantApplicationCompletionApi = vi.hoisted(() => ({
   getTenantApplicationCompletion: vi.fn(),
 }));
 
+const tenantProfileApi = vi.hoisted(() => ({
+  getTenantProfile: vi.fn(),
+}));
+
+const tenantAttachmentsApi = vi.hoisted(() => ({
+  getTenantAttachments: vi.fn(),
+}));
+
+const tenantAccessApi = vi.hoisted(() => ({
+  getTenantAccess: vi.fn(),
+}));
+
 vi.mock("../../api/tenantApplicationCompletion", () => tenantApplicationCompletionApi);
+vi.mock("../../api/tenantProfile", () => tenantProfileApi);
+vi.mock("../../api/tenantAttachmentsApi", () => tenantAttachmentsApi);
+vi.mock("../../api/tenantAccess", () => tenantAccessApi);
 
 describe("tenant application completion page", () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
+    tenantProfileApi.getTenantProfile.mockResolvedValue({
+      context: { authority: "applicant" },
+      profile: {
+        displayName: "Taylor Tenant",
+        email: "tenant@example.com",
+        phone: "902-555-0100",
+        authorityLabel: "Applicant",
+        property: {
+          street1: "123 Main St",
+          street2: "Unit 4",
+          city: "Halifax",
+          province: "NS",
+        },
+        application: { status: "submitted", missingSteps: [], nextActions: [] },
+        lease: null,
+      },
+      identity: {
+        overallStatus: "pending",
+        identityVerification: {
+          status: "pending",
+          label: "Pending",
+          note: "Verification is still in progress.",
+          updatedAt: "2026-01-05T00:00:00.000Z",
+        },
+        documentChecklist: [],
+        nextSteps: [],
+      },
+      actions: {
+        editableFields: ["displayName", "phone"],
+        documentEntry: {
+          available: true,
+          path: "/tenant/attachments",
+          label: "Open documents",
+          note: "Open your tenant documents area.",
+        },
+      },
+    });
+    tenantAttachmentsApi.getTenantAttachments.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: "doc-1",
+          label: "Government ID",
+          category: "Identity",
+          status: "uploaded",
+        },
+      ],
+      summary: {
+        total: 1,
+        missing: 0,
+        uploaded: 1,
+        pendingReview: 0,
+        verified: 0,
+        needsAttention: 0,
+      },
+      guidance: {
+        headline: "Your current tenant-safe document record is up to date.",
+        nextSteps: [],
+        uploadEntryAvailable: false,
+        uploadEntryLabel: null,
+        uploadEntryPath: null,
+        supportPath: "/tenant/messages",
+        supportLabel: "Message your landlord",
+      },
+      updatedAt: 1710000000000,
+    });
+    tenantAccessApi.getTenantAccess.mockResolvedValue({
+      summary: {
+        activeGrants: 1,
+        pendingRequests: 0,
+        latestActivityAt: 1710000000000,
+      },
+      pendingRequests: [],
+      activeAccess: [
+        {
+          id: "share-1",
+          grantedToLabel: "Shared with your landlord",
+          categories: ["Rental history"],
+          status: "active",
+          grantedAt: 1710000000000,
+          expiresAt: 1711000000000,
+          lastActivityAt: 1710000000000,
+          canRevoke: true,
+          accessLabel: "View-only access",
+        },
+      ],
+      recentActivity: [],
+      guidance: {
+        headline: "You can review and manage the access you’ve already shared.",
+        body: "This view shows tenant-safe sharing records only.",
+      },
+    });
   });
 
   it("renders progress and grouped checklist safely", async () => {
@@ -62,11 +169,17 @@ describe("tenant application completion page", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/Application Completion/i)).toBeInTheDocument();
-    expect(screen.getByText(/62%/i)).toBeInTheDocument();
-    expect(screen.getByText(/Identity verification/i)).toBeInTheDocument();
+    expect(await screen.findAllByText(/Application Readiness/i)).not.toHaveLength(0);
+    expect(screen.getAllByText(/62%/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Application Readiness Summary/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Use Your Saved Profile/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Document Readiness/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Review Before Sharing/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Identity verification/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Upload income documents/i).length).toBeGreaterThan(0);
-    expect(screen.getByRole("link", { name: /Open documents/i })).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /Review your profile/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: /Open documents/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: /Review access/i }).length).toBeGreaterThan(0);
   });
 
   it("renders empty state safely", async () => {

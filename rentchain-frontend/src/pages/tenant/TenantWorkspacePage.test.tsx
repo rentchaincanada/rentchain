@@ -317,8 +317,8 @@ describe("tenant workspace frontend shell", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/Application Completion/i)).toBeInTheDocument();
-    expect(screen.getByText(/62%/i)).toBeInTheDocument();
+    expect(await screen.findAllByText(/Application Readiness/i)).not.toHaveLength(0);
+    expect(screen.getAllByText(/62%/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Upload government id/i).length).toBeGreaterThan(0);
   });
 
