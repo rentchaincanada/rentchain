@@ -24,6 +24,10 @@ const tenantAccessApi = vi.hoisted(() => ({
   getTenantAccess: vi.fn(),
 }));
 
+const tenantAttachmentsApi = vi.hoisted(() => ({
+  getTenantAttachments: vi.fn(),
+}));
+
 const tenantProfileApi = vi.hoisted(() => ({
   getTenantProfile: vi.fn(),
 }));
@@ -39,6 +43,7 @@ const tenantCommunicationsApi = vi.hoisted(() => ({
 vi.mock("../../api/tenantPortal", () => tenantPortalApi);
 vi.mock("../../api/tenantApplicationCompletion", () => tenantApplicationCompletionApi);
 vi.mock("../../api/tenantAccess", () => tenantAccessApi);
+vi.mock("../../api/tenantAttachmentsApi", () => tenantAttachmentsApi);
 vi.mock("../../api/tenantProfile", () => tenantProfileApi);
 vi.mock("../../api/tenantCommunicationsApi", () => tenantCommunicationsApi);
 vi.mock("../../api/maintenanceWorkflowApi", async () => {
@@ -87,6 +92,37 @@ describe("tenant workspace frontend shell", () => {
       application: null,
       lease: null,
       maintenance: [],
+    });
+    tenantAttachmentsApi.getTenantAttachments.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: "doc-1",
+          label: "Government ID",
+          category: "Identity",
+          status: "uploaded",
+          fileName: "id-card.pdf",
+          uploadedAt: 1710000000000,
+        },
+      ],
+      summary: {
+        total: 1,
+        missing: 0,
+        uploaded: 1,
+        pendingReview: 0,
+        verified: 0,
+        needsAttention: 0,
+      },
+      guidance: {
+        headline: "Your current tenant-safe document record is up to date.",
+        nextSteps: [],
+        uploadEntryAvailable: false,
+        uploadEntryLabel: null,
+        uploadEntryPath: null,
+        supportPath: "/tenant/messages",
+        supportLabel: "Message your landlord",
+      },
+      updatedAt: 1710000000000,
     });
     tenantProfileApi.getTenantProfile.mockResolvedValue({
       context: {
@@ -246,6 +282,8 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.getByText(/123 Main St, Unit 4, Halifax, NS/i)).toBeInTheDocument();
     expect(screen.getByText(/finish_profile/i)).toBeInTheDocument();
     expect(screen.getByText(/1 active access grant/i)).toBeInTheDocument();
+    expect(screen.getByText(/1 document in your vault, 1 ready to share, and 0 still needing attention/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Open document vault/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open access/i })).toBeInTheDocument();
   });
 

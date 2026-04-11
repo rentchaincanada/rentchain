@@ -8,12 +8,43 @@ const tenantAttachmentsApi = vi.hoisted(() => ({
   getTenantAttachments: vi.fn(),
 }));
 
+const tenantAccessApi = vi.hoisted(() => ({
+  getTenantAccess: vi.fn(),
+}));
+
 vi.mock("../../api/tenantAttachmentsApi", () => tenantAttachmentsApi);
+vi.mock("../../api/tenantAccess", () => tenantAccessApi);
 
 describe("tenant attachments page", () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
+    tenantAccessApi.getTenantAccess.mockResolvedValue({
+      summary: {
+        activeGrants: 1,
+        pendingRequests: 0,
+        latestActivityAt: 1710001000000,
+      },
+      pendingRequests: [],
+      activeAccess: [
+        {
+          id: "share-1",
+          grantedToLabel: "Shared with your landlord for 123 Main St",
+          categories: ["Rental history"],
+          status: "active",
+          grantedAt: 1710000000000,
+          expiresAt: 1711000000000,
+          lastActivityAt: 1710001000000,
+          canRevoke: true,
+          accessLabel: "View-only access",
+        },
+      ],
+      recentActivity: [],
+      guidance: {
+        headline: "You can review and manage the access you’ve already shared.",
+        body: "This view shows tenant-safe sharing records only.",
+      },
+    });
   });
 
   it("renders empty state correctly", async () => {
@@ -46,8 +77,8 @@ describe("tenant attachments page", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/No documents visible yet/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Open completion checklist/i })).toBeInTheDocument();
+    expect(await screen.findByText(/No documents in your vault yet/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Add documents to your profile/i })).toBeInTheDocument();
   });
 
   it("renders grouped status-aware document items and guidance", async () => {
@@ -105,12 +136,15 @@ describe("tenant attachments page", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/Document Summary/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Document Vault Summary/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Ready to share/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Sharing Visibility/i)).toBeInTheDocument();
     expect(screen.getByText(/Some documents need attention/i)).toBeInTheDocument();
     expect(screen.getByText(/Re-upload requested/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Pending review/i).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: /Open file/i }).length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: /Message your landlord/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Review sharing/i })).toBeInTheDocument();
     expect(screen.getByText(/Direct upload is not available from this page yet/i)).toBeInTheDocument();
   });
 

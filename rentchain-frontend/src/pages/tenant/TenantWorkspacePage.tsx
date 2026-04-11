@@ -2,6 +2,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { getTenantWorkspace } from "../../api/tenantPortal";
 import { getTenantAccess, type TenantAccessWorkspace } from "../../api/tenantAccess";
+import { getTenantAttachments } from "../../api/tenantAttachmentsApi";
 import { getTenantProfile } from "../../api/tenantProfile";
 import {
   TenantEmptyState,
@@ -18,10 +19,12 @@ import {
 import { spacing, text as textTokens } from "../../styles/tokens";
 import TenantProfileCompletionCard from "./TenantProfileCompletionCard";
 import { buildTenantProfileCompletion } from "./tenantProfileCompletion";
+import { buildTenantDocumentVaultView } from "./tenantDocumentVault";
 
 export default function TenantWorkspacePage() {
   const [data, setData] = React.useState<Awaited<ReturnType<typeof getTenantWorkspace>> | null>(null);
   const [access, setAccess] = React.useState<TenantAccessWorkspace | null>(null);
+  const [attachments, setAttachments] = React.useState<Awaited<ReturnType<typeof getTenantAttachments>> | null>(null);
   const [profileData, setProfileData] = React.useState<Awaited<ReturnType<typeof getTenantProfile>> | null>(null);
   const [profileLoading, setProfileLoading] = React.useState(true);
   const [loading, setLoading] = React.useState(true);
@@ -31,9 +34,10 @@ export default function TenantWorkspacePage() {
     setLoading(true);
     setError(null);
     try {
-      const [workspaceResult, accessResult] = await Promise.allSettled([
+      const [workspaceResult, accessResult, attachmentsResult] = await Promise.allSettled([
         getTenantWorkspace(),
         getTenantAccess(),
+        getTenantAttachments(),
       ]);
 
       if (workspaceResult.status === "rejected") {
@@ -42,9 +46,11 @@ export default function TenantWorkspacePage() {
 
       setData(workspaceResult.value);
       setAccess(accessResult.status === "fulfilled" ? accessResult.value : null);
+      setAttachments(attachmentsResult.status === "fulfilled" ? attachmentsResult.value : null);
     } catch (err: any) {
       setData(null);
       setAccess(null);
+      setAttachments(null);
       setError(err?.payload?.error || err?.message || "Unable to load your tenant workspace.");
     } finally {
       setLoading(false);
@@ -107,6 +113,13 @@ export default function TenantWorkspacePage() {
   const maintenanceCount = Array.isArray(data?.maintenance) ? data.maintenance.length : 0;
   const nextActions = data?.application?.nextActions || [];
   const profileCompletion = profileData ? buildTenantProfileCompletion(profileData) : null;
+  const documentVault = buildTenantDocumentVaultView({
+    items: attachments?.data || [],
+    summary: attachments?.summary,
+    guidance: attachments?.guidance,
+    updatedAt: attachments?.updatedAt,
+    access,
+  });
 
   return (
     <TenantSurfaceShell
@@ -215,6 +228,20 @@ export default function TenantWorkspacePage() {
                 : "Review what you’ve shared and who can currently view supported profile information."}
             </div>
             <Link to="/tenant/access">Open access</Link>
+          </div>
+        </TenantInfoCard>
+
+        <TenantInfoCard heading="Documents" accent="#166534">
+          <div style={{ display: "grid", gap: spacing.sm }}>
+            <div style={{ color: textTokens.secondary }}>
+              {attachments
+                ? `${documentVault.metrics[0]?.value || 0} document${documentVault.metrics[0]?.value === 1 ? "" : "s"} in your vault, ${documentVault.metrics[1]?.value || 0} ready to share, and ${documentVault.metrics[2]?.value || 0} still needing attention.`
+                : "Open your document vault to review readiness and sharing visibility."}
+            </div>
+            <div style={{ color: textTokens.muted }}>
+              {attachments?.guidance?.headline || "Keep your profile organized by keeping documents ready in one place."}
+            </div>
+            <Link to="/tenant/attachments">Open document vault</Link>
           </div>
         </TenantInfoCard>
       </div>

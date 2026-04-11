@@ -12,6 +12,10 @@ const tenantProfileApi = vi.hoisted(() => ({
   updateTenantProfile: vi.fn(),
 }));
 
+const tenantAttachmentsApi = vi.hoisted(() => ({
+  getTenantAttachments: vi.fn(),
+}));
+
 const tenantCommunicationsApi = vi.hoisted(() => ({
   getTenantCommunicationSummary: vi.fn(),
   getTenantCommunicationsWorkspace: vi.fn(),
@@ -28,6 +32,7 @@ const tenantPortalApi = vi.hoisted(() => ({
 }));
 
 vi.mock("../../api/tenantProfile", () => tenantProfileApi);
+vi.mock("../../api/tenantAttachmentsApi", () => tenantAttachmentsApi);
 vi.mock("../../api/tenantCommunicationsApi", () => tenantCommunicationsApi);
 vi.mock("../../api/tenantNotifications", () => tenantNotificationsApi);
 vi.mock("../../api/tenantPortal", () => tenantPortalApi);
@@ -47,6 +52,37 @@ describe("tenant profile and communications pages", () => {
         unitId: "unit-2",
         invitedEmail: "tenant@example.com",
       },
+    });
+    tenantAttachmentsApi.getTenantAttachments.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: "doc-1",
+          label: "Upload Id",
+          category: "Identity",
+          status: "uploaded",
+          fileName: "id-card.pdf",
+          uploadedAt: 1710000000000,
+        },
+      ],
+      summary: {
+        total: 1,
+        missing: 0,
+        uploaded: 1,
+        pendingReview: 0,
+        verified: 0,
+        needsAttention: 0,
+      },
+      guidance: {
+        headline: "Your current tenant-safe document record is up to date.",
+        nextSteps: [],
+        uploadEntryAvailable: false,
+        uploadEntryLabel: null,
+        uploadEntryPath: null,
+        supportPath: "/tenant/messages",
+        supportLabel: "Message your landlord",
+      },
+      updatedAt: 1710000000000,
     });
     tenantCommunicationsApi.getTenantCommunicationSummary.mockResolvedValue({
       unreadMessages: 1,
@@ -126,6 +162,8 @@ describe("tenant profile and communications pages", () => {
     expect(screen.getAllByText(/Employment and income/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Upload government id/i).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /Save profile changes/i })).toBeInTheDocument();
+    expect(screen.getAllByText(/Document Vault/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: /Open document vault/i })).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: /Review requested documents/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: /Open documents|Review documents/i }).length).toBeGreaterThan(0);
   });
