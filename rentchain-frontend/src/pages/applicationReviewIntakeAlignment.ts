@@ -1,4 +1,8 @@
 import type { ApplicationReviewSummary } from "../api/reviewSummaryApi";
+import {
+  buildLandlordSharePackageCategories,
+  type SharePackageCategoryView,
+} from "./sharePackageAlignment";
 
 type IntakeMetric = {
   label: string;
@@ -18,37 +22,24 @@ export type LandlordIntakeAlignmentView = {
   headline: string;
   detail: string;
   metrics: IntakeMetric[];
-  profileItems: IntakeItem[];
-  recordItems: IntakeItem[];
+  packageCategories: SharePackageCategoryView[];
   missingItems: IntakeItem[];
 };
-
-function hasText(value: string | null | undefined): boolean {
-  return Boolean(String(value || "").trim());
-}
-
-function moneyProvided(value: number | null | undefined): boolean {
-  return typeof value === "number" && Number.isFinite(value);
-}
-
-function statusLabel(available: boolean): IntakeItem["status"] {
-  return available ? "available" : "missing";
-}
 
 function missingFlagDetails(flags: string[]): IntakeItem[] {
   const groups = new Map<string, string>();
   flags.forEach((flag) => {
     if (flag.startsWith("MISSING_CURRENT_ADDRESS_")) {
       groups.set(
-        "Current address",
-        "Current address details are still incomplete in the information available to review."
+        "Rental history",
+        "Rental history details are still incomplete in the information available to review."
       );
       return;
     }
     if (flag === "MISSING_TIME_AT_ADDRESS" || flag === "MISSING_CURRENT_RENT") {
       groups.set(
-        "Current housing details",
-        "Housing history details are still limited in the current intake view."
+        "Rental history",
+        "Rental history details are still limited in the current intake view."
       );
       return;
     }
@@ -59,29 +50,22 @@ function missingFlagDetails(flags: string[]): IntakeItem[] {
       flag === "MISSING_MONTHS_AT_JOB"
     ) {
       groups.set(
-        "Employment & income",
-        "Employment or income details are not fully available to review yet."
+        "Profile details",
+        "Profile details are not fully available to review yet."
       );
       return;
     }
     if (flag === "MISSING_WORK_REFERENCE_NAME" || flag === "MISSING_WORK_REFERENCE_PHONE") {
       groups.set(
-        "Work reference",
-        "A full work reference is not yet available in the shared intake data."
+        "Profile details",
+        "Supporting profile details are still incomplete in the shared intake data."
       );
       return;
     }
-    if (flag === "MISSING_SIGNATURE") {
+    if (flag === "MISSING_SIGNATURE" || flag === "MISSING_APPLICATION_CONSENT") {
       groups.set(
-        "Signature record",
-        "A signed application record is not available in this review summary yet."
-      );
-      return;
-    }
-    if (flag === "MISSING_APPLICATION_CONSENT") {
-      groups.set(
-        "Consent record",
-        "An application consent record is not available in this review summary yet."
+        "Consent / identity status",
+        "Consent or identity status is not fully available in this review package yet."
       );
     }
   });
@@ -96,89 +80,18 @@ function missingFlagDetails(flags: string[]): IntakeItem[] {
 export function buildLandlordIntakeAlignmentView(
   summary: ApplicationReviewSummary
 ): LandlordIntakeAlignmentView {
-  const profileItems: IntakeItem[] = [
-    {
-      label: "Shared profile details",
-      status: statusLabel(hasText(summary.applicant.name) || hasText(summary.applicant.email)),
-      detail:
-        hasText(summary.applicant.name) || hasText(summary.applicant.email)
-          ? "Core applicant identity and contact details are available to review."
-          : "Core applicant identity details are still limited in this intake view.",
-    },
-    {
-      label: "Address history",
-      status: statusLabel(
-        hasText(summary.applicant.currentAddressLine) &&
-          hasText(summary.applicant.city) &&
-          hasText(summary.applicant.provinceState)
-      ),
-      detail:
-        hasText(summary.applicant.currentAddressLine) &&
-        hasText(summary.applicant.city) &&
-        hasText(summary.applicant.provinceState)
-          ? "Current address details are available to review."
-          : "Address history details are still incomplete in the shared intake data.",
-    },
-    {
-      label: "Employment & income",
-      status: statusLabel(
-        hasText(summary.employment.employerName) &&
-          hasText(summary.employment.jobTitle) &&
-          moneyProvided(summary.employment.incomeAmountCents) &&
-          hasText(summary.employment.incomeFrequency)
-      ),
-      detail:
-        hasText(summary.employment.employerName) &&
-        hasText(summary.employment.jobTitle) &&
-        moneyProvided(summary.employment.incomeAmountCents) &&
-        hasText(summary.employment.incomeFrequency)
-          ? "Employment and income details are available to review."
-          : "Employment or income details still need follow-up.",
-    },
-    {
-      label: "Work reference",
-      status: statusLabel(hasText(summary.reference.name) && hasText(summary.reference.phone)),
-      detail:
-        hasText(summary.reference.name) && hasText(summary.reference.phone)
-          ? "A work reference is available to review."
-          : "A full work reference is not yet available in this intake view.",
-    },
-  ];
-
-  const recordItems: IntakeItem[] = [
-    {
-      label: "Consent record",
-      status: statusLabel(
-        hasText(summary.compliance.applicationConsentVersion) ||
-          hasText(summary.compliance.applicationConsentAcceptedAt)
-      ),
-      detail:
-        hasText(summary.compliance.applicationConsentVersion) ||
-        hasText(summary.compliance.applicationConsentAcceptedAt)
-          ? "An application consent record is available to review."
-          : "No application consent record is visible in this summary yet.",
-    },
-    {
-      label: "Signature record",
-      status: statusLabel(hasText(summary.compliance.signatureType) || hasText(summary.compliance.signedAt)),
-      detail:
-        hasText(summary.compliance.signatureType) || hasText(summary.compliance.signedAt)
-          ? "A signed application record is available to review."
-          : "A signed application record is not visible in this summary yet.",
-    },
-    {
-      label: "Screening reference",
-      status: statusLabel(hasText(summary.screening.referenceId) || hasText(summary.screening.provider)),
-      detail:
-        hasText(summary.screening.referenceId) || hasText(summary.screening.provider)
-          ? "A screening or verification record is available in the current intake view."
-          : "No screening or verification record is visible yet.",
-    },
-  ];
-
+  const packageCategories = buildLandlordSharePackageCategories(summary);
   const missingItems = missingFlagDetails(summary.derived.flags);
-  const profileAvailable = profileItems.filter((item) => item.status === "available").length;
-  const recordsAvailable = recordItems.filter((item) => item.status === "available").length;
+  const profileAvailable = packageCategories.filter(
+    (item) =>
+      (item.key === "profile_details" || item.key === "rental_history") &&
+      item.status !== "missing"
+  ).length;
+  const recordsAvailable = packageCategories.filter(
+    (item) =>
+      (item.key === "documents_records" || item.key === "consent_identity_status") &&
+      item.status !== "missing"
+  ).length;
   const state = missingItems.length === 0 ? "ready_for_review" : "needs_follow_up";
 
   return {
@@ -187,18 +100,18 @@ export function buildLandlordIntakeAlignmentView(
     detail:
       state === "ready_for_review"
         ? "This intake view only reflects information that is currently available in the authorized review summary."
-        : "Some categories are still missing or incomplete in the information currently available to review.",
+        : "Some package categories are still missing or incomplete in the information currently available to review.",
     metrics: [
       {
-        label: "Shared profile details",
-        value: `${profileAvailable}/${profileItems.length}`,
-        hint: "High-level profile categories available to review.",
+        label: "Profile details",
+        value: `${profileAvailable}/2`,
+        hint: "Aligned package categories available to review.",
         accent: "#1d4ed8",
       },
       {
-        label: "Shared documents & records",
+        label: "Documents & records",
         value: String(recordsAvailable),
-        hint: "Visible consent, signature, or screening records.",
+        hint: "High-level package records currently visible to review.",
         accent: "#166534",
       },
       {
@@ -208,14 +121,13 @@ export function buildLandlordIntakeAlignmentView(
         accent: "#b45309",
       },
       {
-        label: "Completeness",
+        label: "Application readiness",
         value: `${Math.round(summary.derived.completeness.score * 100)}%`,
         hint: "Current review-summary completeness signal.",
         accent: "#7c3aed",
       },
     ],
-    profileItems,
-    recordItems,
+    packageCategories,
     missingItems,
   };
 }

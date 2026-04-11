@@ -60,12 +60,6 @@ function intakeTone(state: "ready_for_review" | "needs_follow_up") {
     : { color: "#9a3412", background: "#ffedd5", label: "Needs follow-up" };
 }
 
-function itemTone(status: "available" | "missing") {
-  return status === "available"
-    ? { color: "#166534", background: "#dcfce7", label: "Available" }
-    : { color: "#9a3412", background: "#ffedd5", label: "Missing" };
-}
-
 type SummaryLoadError = {
   message: string;
   status?: number;
@@ -331,85 +325,49 @@ function ApplicationReviewSummaryPageBody() {
                 ))}
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
-                <Card style={{ display: "grid", gap: 8 }}>
-                  <div style={{ fontWeight: 700 }}>Shared profile details</div>
-                  <div style={{ fontSize: 12, color: text.subtle }}>
-                    Only categories visible in the current authorized review summary appear here.
-                  </div>
-                  {intakeView.profileItems.map((item) => {
-                    const tone = itemTone(item.status);
-                    return (
-                      <div
-                        key={item.label}
-                        style={{
-                          border: `1px solid ${colors.border}`,
-                          borderRadius: 10,
-                          padding: 10,
-                          display: "grid",
-                          gap: 6,
-                        }}
-                      >
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                          <div style={{ fontWeight: 600, color: text.main }}>{item.label}</div>
-                          <div
-                            style={{
-                              padding: "4px 8px",
-                              borderRadius: 999,
-                              fontSize: 12,
-                              fontWeight: 700,
-                              color: tone.color,
-                              background: tone.background,
-                            }}
-                          >
-                            {tone.label}
-                          </div>
+              <Card style={{ display: "grid", gap: 8 }}>
+                <div style={{ fontWeight: 700 }}>Shared package categories</div>
+                <div style={{ fontSize: 12, color: text.subtle }}>
+                  These categories match the tenant-facing package language and only reflect records available in the current authorized review summary.
+                </div>
+                {intakeView.packageCategories.map((item) => {
+                  const tone =
+                    item.status === "ready"
+                      ? { color: "#166534", background: "#dcfce7", label: "Available to review" }
+                      : item.status === "partial"
+                      ? { color: "#1d4ed8", background: "#dbeafe", label: "Partly available" }
+                      : { color: "#9a3412", background: "#ffedd5", label: "Missing" };
+                  return (
+                    <div
+                      key={item.key}
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "grid",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                        <div style={{ fontWeight: 600, color: text.main }}>{item.label}</div>
+                        <div
+                          style={{
+                            padding: "4px 8px",
+                            borderRadius: 999,
+                            fontSize: 12,
+                            fontWeight: 700,
+                            color: tone.color,
+                            background: tone.background,
+                          }}
+                        >
+                          {tone.label}
                         </div>
-                        <div style={{ fontSize: 13, color: text.subtle }}>{item.detail}</div>
                       </div>
-                    );
-                  })}
-                </Card>
-
-                <Card style={{ display: "grid", gap: 8 }}>
-                  <div style={{ fontWeight: 700 }}>Shared documents & records</div>
-                  <div style={{ fontSize: 12, color: text.subtle }}>
-                    This stays high-level and only reflects records already available to review.
-                  </div>
-                  {intakeView.recordItems.map((item) => {
-                    const tone = itemTone(item.status);
-                    return (
-                      <div
-                        key={item.label}
-                        style={{
-                          border: `1px solid ${colors.border}`,
-                          borderRadius: 10,
-                          padding: 10,
-                          display: "grid",
-                          gap: 6,
-                        }}
-                      >
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                          <div style={{ fontWeight: 600, color: text.main }}>{item.label}</div>
-                          <div
-                            style={{
-                              padding: "4px 8px",
-                              borderRadius: 999,
-                              fontSize: 12,
-                              fontWeight: 700,
-                              color: tone.color,
-                              background: tone.background,
-                            }}
-                          >
-                            {tone.label}
-                          </div>
-                        </div>
-                        <div style={{ fontSize: 13, color: text.subtle }}>{item.detail}</div>
-                      </div>
-                    );
-                  })}
-                </Card>
-              </div>
+                      <div style={{ fontSize: 13, color: text.subtle }}>{item.detail}</div>
+                    </div>
+                  );
+                })}
+              </Card>
 
               <Card style={{ display: "grid", gap: 8 }}>
                 <div style={{ fontWeight: 700 }}>Missing items</div>

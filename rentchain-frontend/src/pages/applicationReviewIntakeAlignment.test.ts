@@ -57,8 +57,15 @@ describe("buildLandlordIntakeAlignmentView", () => {
     const view = buildLandlordIntakeAlignmentView(buildSummary());
 
     expect(view.state).toBe("ready_for_review");
-    expect(view.metrics[0]?.value).toBe("4/4");
-    expect(view.metrics[1]?.value).toBe("3");
+    expect(view.metrics[0]?.value).toBe("2/2");
+    expect(view.metrics[1]?.value).toBe("2");
+    expect(view.packageCategories.map((item) => item.label)).toEqual([
+      "Profile details",
+      "Rental history",
+      "Documents & records",
+      "Consent / identity status",
+      "Application readiness",
+    ]);
     expect(view.missingItems).toHaveLength(0);
   });
 
@@ -118,11 +125,9 @@ describe("buildLandlordIntakeAlignmentView", () => {
     expect(view.state).toBe("needs_follow_up");
     expect(view.missingItems.map((item) => item.label)).toEqual(
       expect.arrayContaining([
-        "Current address",
-        "Employment & income",
-        "Work reference",
-        "Signature record",
-        "Consent record",
+        "Rental history",
+        "Profile details",
+        "Consent / identity status",
       ])
     );
   });

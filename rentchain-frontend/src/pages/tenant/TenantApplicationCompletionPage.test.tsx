@@ -176,8 +176,13 @@ describe("tenant application completion page", () => {
     expect(screen.getByText(/Invite entry/i)).toBeInTheDocument();
     expect(screen.getByText(/^Next step$/i)).toBeInTheDocument();
     expect(screen.getByText(/Application Readiness Summary/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/Use Your Saved Profile/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Document Readiness/i)).toBeInTheDocument();
+    expect(screen.getByText(/Share Package/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Profile details/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Rental history/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Documents & records/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Consent \/ identity status/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Application readiness/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Review Package Guidance/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Review Before Sharing/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Identity verification/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Upload income documents/i).length).toBeGreaterThan(0);
