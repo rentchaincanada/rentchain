@@ -18,6 +18,7 @@ import {
 } from "../api/reviewSummaryApi";
 import { useToast } from "../components/ui/ToastProvider";
 import { buildLandlordIntakeAlignmentView } from "./applicationReviewIntakeAlignment";
+import { buildLandlordReviewGuidance } from "./landlordReviewGuidance";
 
 function money(cents: number | null): string {
   if (cents == null || !Number.isFinite(cents)) return "Not provided";
@@ -225,6 +226,10 @@ function ApplicationReviewSummaryPageBody() {
     () => (summary ? buildLandlordIntakeAlignmentView(summary) : null),
     [summary]
   );
+  const guidanceView = useMemo(
+    () => (intakeView ? buildLandlordReviewGuidance(intakeView) : null),
+    [intakeView]
+  );
 
   return (
     <div style={{ padding: 16, display: "grid", gap: 12 }}>
@@ -399,6 +404,69 @@ function ApplicationReviewSummaryPageBody() {
                   Shared with tenant permission and current server-authorized review access.
                 </div>
               </Card>
+            </Card>
+          ) : null}
+
+          {guidanceView ? (
+            <Card style={{ display: "grid", gap: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontWeight: 700 }}>Review workflow guidance</div>
+                  <div style={{ fontSize: 13, color: text.subtle, marginTop: 4 }}>
+                    {guidanceView.explanation}
+                  </div>
+                </div>
+                <div
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 999,
+                    fontWeight: 700,
+                    color:
+                      guidanceView.state === "ready_to_review"
+                        ? "#166534"
+                        : guidanceView.state === "partly_available"
+                        ? "#1d4ed8"
+                        : "#9a3412",
+                    background:
+                      guidanceView.state === "ready_to_review"
+                        ? "#dcfce7"
+                        : guidanceView.state === "partly_available"
+                        ? "#dbeafe"
+                        : "#ffedd5",
+                  }}
+                >
+                  {guidanceView.summary}
+                </div>
+              </div>
+
+              {guidanceView.missingCategories.length ? (
+                <div style={{ fontSize: 13, color: text.subtle }}>
+                  <strong style={{ color: text.main }}>Missing information:</strong>{" "}
+                  {guidanceView.missingCategories.join(", ")}
+                </div>
+              ) : (
+                <div style={{ fontSize: 13, color: text.subtle }}>
+                  <strong style={{ color: text.main }}>Available now:</strong> The aligned package categories are ready for review.
+                </div>
+              )}
+
+              <div style={{ display: "grid", gap: 8 }}>
+                <div style={{ fontWeight: 700 }}>Next steps</div>
+                {guidanceView.nextSteps.map((step) => (
+                  <div
+                    key={step}
+                    style={{
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: 10,
+                      padding: 10,
+                      fontSize: 13,
+                      color: text.subtle,
+                    }}
+                  >
+                    {step}
+                  </div>
+                ))}
+              </div>
             </Card>
           ) : null}
 
