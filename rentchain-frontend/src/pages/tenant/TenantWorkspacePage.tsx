@@ -4,6 +4,7 @@ import { getTenantWorkspace } from "../../api/tenantPortal";
 import { getTenantAccess, type TenantAccessWorkspace } from "../../api/tenantAccess";
 import { getTenantAttachments } from "../../api/tenantAttachmentsApi";
 import { getTenantProfile } from "../../api/tenantProfile";
+import { getTenantApplicationCompletion } from "../../api/tenantApplicationCompletion";
 import {
   TenantEmptyState,
   TenantErrorState,
@@ -20,12 +21,16 @@ import { spacing, text as textTokens } from "../../styles/tokens";
 import TenantProfileCompletionCard from "./TenantProfileCompletionCard";
 import { buildTenantProfileCompletion } from "./tenantProfileCompletion";
 import { buildTenantDocumentVaultView } from "./tenantDocumentVault";
+import { buildTenantApplicationReuseView } from "./tenantApplicationReuse";
+import StructuredNotificationList from "../StructuredNotificationList";
+import { buildTenantStructuredNotificationTriggers } from "../structuredNotificationTriggers";
 
 export default function TenantWorkspacePage() {
   const [data, setData] = React.useState<Awaited<ReturnType<typeof getTenantWorkspace>> | null>(null);
   const [access, setAccess] = React.useState<TenantAccessWorkspace | null>(null);
   const [attachments, setAttachments] = React.useState<Awaited<ReturnType<typeof getTenantAttachments>> | null>(null);
   const [profileData, setProfileData] = React.useState<Awaited<ReturnType<typeof getTenantProfile>> | null>(null);
+  const [completion, setCompletion] = React.useState<Awaited<ReturnType<typeof getTenantApplicationCompletion>> | null>(null);
   const [profileLoading, setProfileLoading] = React.useState(true);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -34,10 +39,11 @@ export default function TenantWorkspacePage() {
     setLoading(true);
     setError(null);
     try {
-      const [workspaceResult, accessResult, attachmentsResult] = await Promise.allSettled([
+      const [workspaceResult, accessResult, attachmentsResult, completionResult] = await Promise.allSettled([
         getTenantWorkspace(),
         getTenantAccess(),
         getTenantAttachments(),
+        getTenantApplicationCompletion(),
       ]);
 
       if (workspaceResult.status === "rejected") {
@@ -47,10 +53,12 @@ export default function TenantWorkspacePage() {
       setData(workspaceResult.value);
       setAccess(accessResult.status === "fulfilled" ? accessResult.value : null);
       setAttachments(attachmentsResult.status === "fulfilled" ? attachmentsResult.value : null);
+      setCompletion(completionResult.status === "fulfilled" ? completionResult.value : null);
     } catch (err: any) {
       setData(null);
       setAccess(null);
       setAttachments(null);
+      setCompletion(null);
       setError(err?.payload?.error || err?.message || "Unable to load your tenant workspace.");
     } finally {
       setLoading(false);
@@ -120,6 +128,19 @@ export default function TenantWorkspacePage() {
     updatedAt: attachments?.updatedAt,
     access,
   });
+  const reuse = buildTenantApplicationReuseView({
+    completion,
+    profile: profileData,
+    attachments,
+    access,
+  });
+  const notificationItems = buildTenantStructuredNotificationTriggers({
+    packageCategories: reuse.packageCategories,
+    completion,
+    profile: profileData,
+    attachments,
+    access,
+  });
 
   return (
     <TenantSurfaceShell
@@ -152,6 +173,14 @@ export default function TenantWorkspacePage() {
             { label: "Lease", value: prettyStatus(data?.lease?.status) },
             { label: "Maintenance", value: `${maintenanceCount} request${maintenanceCount === 1 ? "" : "s"}` },
           ]}
+        />
+      </TenantInfoCard>
+
+      <TenantInfoCard heading="Recent activity / notifications" accent="#0891b2">
+        <StructuredNotificationList
+          heading="Recent workflow updates"
+          emptyLabel="Workflow-triggered notifications will appear here as your application, documents, access, and follow-up state change."
+          items={notificationItems}
         />
       </TenantInfoCard>
 

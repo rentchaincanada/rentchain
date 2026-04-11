@@ -136,6 +136,8 @@ describe("ApplicationReviewSummaryPage", () => {
     expect(screen.getAllByText(/Review the addressed categories now visible/i).length).toBeGreaterThan(0);
     expect(await screen.findByText("Still needs follow-up")).toBeInTheDocument();
     expect(await screen.findByText("Now appears addressed")).toBeInTheDocument();
+    expect(await screen.findByText("Recent updates")).toBeInTheDocument();
+    expect(await screen.findByText(/Tenant updated follow-up items/i)).toBeInTheDocument();
     expect(await screen.findByText(/Follow-up stays organized by aligned package categories/i)).toBeInTheDocument();
     expect(await screen.findByText("Shared with tenant permission and current server-authorized review access.")).toBeInTheDocument();
     expect(await screen.findByText("Jane Applicant")).toBeInTheDocument();

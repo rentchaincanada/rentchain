@@ -63,6 +63,13 @@ describe("tenant workspace frontend shell", () => {
       unreadNotices: 2,
       unreadScreeningUpdates: 0,
     });
+    tenantApplicationCompletionApi.getTenantApplicationCompletion.mockResolvedValue({
+      status: "in_progress",
+      progressPercent: 62,
+      sections: [],
+      nextSteps: ["Upload government id"],
+      updatedAt: "2026-01-02T00:00:00.000Z",
+    });
     tenantAccessApi.getTenantAccess.mockResolvedValue({
       summary: {
         activeGrants: 1,
@@ -274,6 +281,8 @@ describe("tenant workspace frontend shell", () => {
     );
 
     expect(await screen.findByText(/^Tenant Dashboard$/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Recent activity \/ notifications/i)).toBeInTheDocument();
+    expect(screen.getByText(/Recent workflow updates/i)).toBeInTheDocument();
     expect(await screen.findByText(/Profile completion/i)).toBeInTheDocument();
     expect(screen.getByText(/Add missing details to keep your rental profile organized/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /View your profile/i })).toBeInTheDocument();
@@ -281,8 +290,9 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.getByText(/Active tenancy/i)).toBeInTheDocument();
     expect(screen.getByText(/123 Main St, Unit 4, Halifax, NS/i)).toBeInTheDocument();
     expect(screen.getByText(/finish_profile/i)).toBeInTheDocument();
-    expect(screen.getByText(/1 active access grant/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/1 active access grant/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/1 document in your vault, 1 ready to share, and 0 still needing attention/i)).toBeInTheDocument();
+    expect(screen.getByText(/Documents updated/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open document vault/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open access/i })).toBeInTheDocument();
   });

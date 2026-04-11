@@ -22,6 +22,8 @@ import { buildLandlordReviewGuidance } from "./landlordReviewGuidance";
 import { buildTenantLandlordInteractionLoop } from "./tenantLandlordInteractionLoop";
 import { buildLandlordStructuredActivityTimeline } from "./structuredActivityTimeline";
 import { buildFollowUpResolutionState } from "./followUpResolutionState";
+import StructuredNotificationList from "./StructuredNotificationList";
+import { buildLandlordStructuredNotificationTriggers } from "./structuredNotificationTriggers";
 
 function money(cents: number | null): string {
   if (cents == null || !Number.isFinite(cents)) return "Not provided";
@@ -253,6 +255,13 @@ function ApplicationReviewSummaryPageBody() {
   const resolutionView = useMemo(
     () => (intakeView ? buildFollowUpResolutionState(intakeView.packageCategories) : null),
     [intakeView]
+  );
+  const structuredNotifications = useMemo(
+    () =>
+      summary && intakeView
+        ? buildLandlordStructuredNotificationTriggers(summary, intakeView.packageCategories)
+        : [],
+    [summary, intakeView]
   );
 
   const recentActivity = useMemo(
@@ -582,6 +591,16 @@ function ApplicationReviewSummaryPageBody() {
                   </div>
                 ))}
               </div>
+            </Card>
+          ) : null}
+
+          {structuredNotifications.length ? (
+            <Card style={{ display: "grid", gap: 8 }}>
+              <StructuredNotificationList
+                heading="Recent updates"
+                emptyLabel="Recent workflow-triggered review updates will appear here as the package changes."
+                items={structuredNotifications}
+              />
             </Card>
           ) : null}
 

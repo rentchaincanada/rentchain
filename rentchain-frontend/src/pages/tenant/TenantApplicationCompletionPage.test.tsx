@@ -176,6 +176,8 @@ describe("tenant application completion page", () => {
     expect(screen.getByText(/Invite entry/i)).toBeInTheDocument();
     expect(screen.getByText(/^Next step$/i)).toBeInTheDocument();
     expect(screen.getByText(/Application Readiness Summary/i)).toBeInTheDocument();
+    expect(screen.getByText(/Recent activity \/ notifications/i)).toBeInTheDocument();
+    expect(screen.getByText(/Recent workflow updates/i)).toBeInTheDocument();
     expect(screen.getByText(/Share Package/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Profile details/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Rental history/i).length).toBeGreaterThan(0);
@@ -185,6 +187,7 @@ describe("tenant application completion page", () => {
     expect(screen.getByText(/Structured Follow-up/i)).toBeInTheDocument();
     expect(screen.getByText(/Still needs attention/i)).toBeInTheDocument();
     expect(screen.getByText(/^Addressed$/i)).toBeInTheDocument();
+    expect(screen.getByText(/Application ready for re-review/i)).toBeInTheDocument();
     expect(screen.getByText(/Go next/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Review Before Sharing/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Identity verification/i).length).toBeGreaterThan(0);
