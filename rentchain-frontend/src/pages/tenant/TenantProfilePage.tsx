@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getTenantProfile, updateTenantProfile, type TenantProfileStatus } from "../../api/tenantProfile";
+import { getTenantAttachments } from "../../api/tenantAttachmentsApi";
 import {
   TenantEmptyState,
   TenantErrorState,
@@ -16,6 +17,7 @@ import {
 import { spacing, text as textTokens } from "../../styles/tokens";
 import TenantProfileCompletionCard from "./TenantProfileCompletionCard";
 import { buildTenantProfileCompletion } from "./tenantProfileCompletion";
+import { buildTenantDocumentVaultView } from "./tenantDocumentVault";
 
 function statusTone(status: TenantProfileStatus): { label: string; color: string; background: string } {
   switch (status) {
@@ -38,6 +40,7 @@ export default function TenantProfilePage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<Awaited<ReturnType<typeof getTenantAttachments>> | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -60,6 +63,22 @@ export default function TenantProfilePage() {
       }
     };
     void load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadAttachments = async () => {
+      try {
+        const next = await getTenantAttachments();
+        if (!cancelled) setAttachments(next);
+      } catch {
+        if (!cancelled) setAttachments(null);
+      }
+    };
+    void loadAttachments();
     return () => {
       cancelled = true;
     };
@@ -138,6 +157,13 @@ export default function TenantProfilePage() {
     .toLowerCase();
   const hasEmploymentSignal =
     /employment|employer|income|paystub|salary|proof of income/.test(applicationSignals);
+  const documentVault = buildTenantDocumentVaultView({
+    items: attachments?.data || [],
+    summary: attachments?.summary,
+    guidance: attachments?.guidance,
+    updatedAt: attachments?.updatedAt,
+    access: null,
+  });
 
   return (
     <TenantSurfaceShell
@@ -328,6 +354,43 @@ export default function TenantProfilePage() {
           </div>
         </TenantInfoCard>
       </div>
+
+      <TenantInfoCard heading="Document Vault" accent="#b45309">
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+            gap: spacing.sm,
+          }}
+        >
+          {documentVault.metrics.slice(0, 3).map((metric) => (
+            <div
+              key={metric.label}
+              style={{
+                border: "1px solid rgba(15,23,42,0.08)",
+                borderRadius: 12,
+                padding: "12px 14px",
+                display: "grid",
+                gap: 4,
+              }}
+            >
+              <div style={{ fontSize: "1.4rem", fontWeight: 900, color: metric.accent }}>{metric.value}</div>
+              <div style={{ color: textTokens.secondary, fontWeight: 700 }}>{metric.label}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ color: textTokens.secondary }}>
+          {attachments?.guidance?.headline || "Add documents to your profile and keep them organized here."}
+        </div>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <Link to="/tenant/attachments" style={{ fontWeight: 700 }}>
+            Open document vault
+          </Link>
+          <Link to="/tenant/access" style={{ fontWeight: 700 }}>
+            Review sharing
+          </Link>
+        </div>
+      </TenantInfoCard>
 
       <TenantInfoCard heading="Document checklist" accent="#b45309">
         {documentEntry?.note ? <div style={{ color: textTokens.secondary }}>{documentEntry.note}</div> : null}
