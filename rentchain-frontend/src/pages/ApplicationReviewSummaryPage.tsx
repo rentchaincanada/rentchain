@@ -17,6 +17,7 @@ import {
   ReviewSummaryApiError,
 } from "../api/reviewSummaryApi";
 import { useToast } from "../components/ui/ToastProvider";
+import { buildLandlordIntakeAlignmentView } from "./applicationReviewIntakeAlignment";
 
 function money(cents: number | null): string {
   if (cents == null || !Number.isFinite(cents)) return "Not provided";
@@ -51,6 +52,18 @@ function kv(label: string, value: string) {
       <div style={{ fontWeight: 600, color: text.main }}>{value || "Not provided"}</div>
     </div>
   );
+}
+
+function intakeTone(state: "ready_for_review" | "needs_follow_up") {
+  return state === "ready_for_review"
+    ? { color: "#166534", background: "#dcfce7", label: "Ready for review" }
+    : { color: "#9a3412", background: "#ffedd5", label: "Needs follow-up" };
+}
+
+function itemTone(status: "available" | "missing") {
+  return status === "available"
+    ? { color: "#166534", background: "#dcfce7", label: "Available" }
+    : { color: "#9a3412", background: "#ffedd5", label: "Missing" };
 }
 
 type SummaryLoadError = {
@@ -214,6 +227,11 @@ function ApplicationReviewSummaryPageBody() {
     }
   };
 
+  const intakeView = useMemo(
+    () => (summary ? buildLandlordIntakeAlignmentView(summary) : null),
+    [summary]
+  );
+
   return (
     <div style={{ padding: 16, display: "grid", gap: 12 }}>
       {!entitlements.canViewReviewSummary ? (
@@ -271,6 +289,161 @@ function ApplicationReviewSummaryPageBody() {
 
       {!loading && !error && summary ? (
         <>
+          {intakeView ? (
+            <Card style={{ display: "grid", gap: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontWeight: 700 }}>Intake Summary</div>
+                  <div style={{ fontSize: 13, color: text.subtle, marginTop: 4 }}>
+                    {intakeView.detail}
+                  </div>
+                </div>
+                <div
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 999,
+                    fontWeight: 700,
+                    color: intakeTone(intakeView.state).color,
+                    background: intakeTone(intakeView.state).background,
+                  }}
+                >
+                  {intakeTone(intakeView.state).label}
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
+                {intakeView.metrics.map((metric) => (
+                  <div
+                    key={metric.label}
+                    style={{
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: 10,
+                      background: "#fff",
+                      padding: 12,
+                      display: "grid",
+                      gap: 4,
+                    }}
+                  >
+                    <div style={{ fontSize: 24, fontWeight: 800, color: metric.accent }}>{metric.value}</div>
+                    <div style={{ fontWeight: 600, color: text.main }}>{metric.label}</div>
+                    <div style={{ fontSize: 12, color: text.subtle }}>{metric.hint}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
+                <Card style={{ display: "grid", gap: 8 }}>
+                  <div style={{ fontWeight: 700 }}>Shared profile details</div>
+                  <div style={{ fontSize: 12, color: text.subtle }}>
+                    Only categories visible in the current authorized review summary appear here.
+                  </div>
+                  {intakeView.profileItems.map((item) => {
+                    const tone = itemTone(item.status);
+                    return (
+                      <div
+                        key={item.label}
+                        style={{
+                          border: `1px solid ${colors.border}`,
+                          borderRadius: 10,
+                          padding: 10,
+                          display: "grid",
+                          gap: 6,
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                          <div style={{ fontWeight: 600, color: text.main }}>{item.label}</div>
+                          <div
+                            style={{
+                              padding: "4px 8px",
+                              borderRadius: 999,
+                              fontSize: 12,
+                              fontWeight: 700,
+                              color: tone.color,
+                              background: tone.background,
+                            }}
+                          >
+                            {tone.label}
+                          </div>
+                        </div>
+                        <div style={{ fontSize: 13, color: text.subtle }}>{item.detail}</div>
+                      </div>
+                    );
+                  })}
+                </Card>
+
+                <Card style={{ display: "grid", gap: 8 }}>
+                  <div style={{ fontWeight: 700 }}>Shared documents & records</div>
+                  <div style={{ fontSize: 12, color: text.subtle }}>
+                    This stays high-level and only reflects records already available to review.
+                  </div>
+                  {intakeView.recordItems.map((item) => {
+                    const tone = itemTone(item.status);
+                    return (
+                      <div
+                        key={item.label}
+                        style={{
+                          border: `1px solid ${colors.border}`,
+                          borderRadius: 10,
+                          padding: 10,
+                          display: "grid",
+                          gap: 6,
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                          <div style={{ fontWeight: 600, color: text.main }}>{item.label}</div>
+                          <div
+                            style={{
+                              padding: "4px 8px",
+                              borderRadius: 999,
+                              fontSize: 12,
+                              fontWeight: 700,
+                              color: tone.color,
+                              background: tone.background,
+                            }}
+                          >
+                            {tone.label}
+                          </div>
+                        </div>
+                        <div style={{ fontSize: 13, color: text.subtle }}>{item.detail}</div>
+                      </div>
+                    );
+                  })}
+                </Card>
+              </div>
+
+              <Card style={{ display: "grid", gap: 8 }}>
+                <div style={{ fontWeight: 700 }}>Missing items</div>
+                <div style={{ fontSize: 12, color: text.subtle }}>
+                  Missing categories stay high-level so this view does not imply access to anything the tenant has not shared.
+                </div>
+                {intakeView.missingItems.length ? (
+                  intakeView.missingItems.map((item) => (
+                    <div
+                      key={item.label}
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "grid",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ fontWeight: 600, color: text.main }}>{item.label}</div>
+                      <div style={{ fontSize: 13, color: text.subtle }}>{item.detail}</div>
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ fontSize: 13, color: text.subtle }}>
+                    No major intake gaps are surfaced in the current review summary.
+                  </div>
+                )}
+                <div style={{ fontSize: 12, color: text.subtle }}>
+                  Shared with tenant permission and current server-authorized review access.
+                </div>
+              </Card>
+            </Card>
+          ) : null}
+
           <Card style={{ display: "grid", gap: 8 }}>
             <div style={{ fontWeight: 700 }}>Applicant Overview</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
