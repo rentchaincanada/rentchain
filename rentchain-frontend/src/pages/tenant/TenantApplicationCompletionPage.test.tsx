@@ -164,13 +164,17 @@ describe("tenant application completion page", () => {
     });
 
     render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={["/tenant/application?entry=invite&inviteToken=invite-1"]}>
         <TenantApplicationStatusPage />
       </MemoryRouter>
     );
 
     expect(await screen.findAllByText(/Application Readiness/i)).not.toHaveLength(0);
     expect(screen.getAllByText(/62%/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Flow Status/i)).toBeInTheDocument();
+    expect(screen.getByText(/Needs attention before review/i)).toBeInTheDocument();
+    expect(screen.getByText(/Invite entry/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Next step$/i)).toBeInTheDocument();
     expect(screen.getByText(/Application Readiness Summary/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Use Your Saved Profile/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Document Readiness/i)).toBeInTheDocument();

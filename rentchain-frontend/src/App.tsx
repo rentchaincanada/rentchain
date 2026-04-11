@@ -74,6 +74,7 @@ import TenantInviteRedeemPage from "./pages/tenant/TenantInviteRedeemPage";
 import TenantMaintenanceRequestDetailPage from "./pages/tenant/TenantMaintenanceRequestDetailPage";
 import TenantMaintenanceRequestsPage from "./pages/tenant/TenantMaintenanceRequestsPage";
 import TenantMaintenanceRequestNewPage from "./pages/tenant/TenantMaintenanceRequestNewPage";
+import { buildTenantApplicationEntryPath } from "./pages/tenant/tenantApplicationFlow";
 import MonthlyOpsReportPageWithNudge from "./pages/reports/MonthlyOpsReportPageWithNudge";
 import InvitesPage from "./pages/landlord/InvitesPage";
 import PublicApplyPage from "./pages/PublicApplyPage";
@@ -246,6 +247,19 @@ const LegacyTenantMagicRedirect: React.FC = () => {
   return <Navigate to={`/auth/magic${query}`} replace />;
 };
 
+const TenantApplicationEntryRedirect: React.FC<{ entry: "invite" | "application" }> = ({ entry }) => {
+  const { token } = useParams();
+  return <Navigate to={buildTenantApplicationEntryPath({ entry, token })} replace />;
+};
+
+const TenantInviteRedeemRedirect: React.FC = () => {
+  const { token } = useParams();
+  const params = new URLSearchParams();
+  if (token) params.set("token", token);
+  const query = params.toString();
+  return <Navigate to={query ? `/tenant/invite/redeem?${query}` : "/tenant/invite/redeem"} replace />;
+};
+
 const AccountRouteGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
   const role = String(user?.actorRole || user?.role || "").trim().toLowerCase();
@@ -325,6 +339,18 @@ function App() {
           element={
             TENANT_PORTAL_ENABLED ? <LegacyTokenInviteRedirect source="tenant" /> : <TenantInviteRedeem />
           }
+        />
+        <Route
+          path="/tenant/apply"
+          element={TENANT_PORTAL_ENABLED ? <TenantApplicationEntryRedirect entry="application" /> : <TenantPortalComingSoon />}
+        />
+        <Route
+          path="/tenant/apply/:token"
+          element={TENANT_PORTAL_ENABLED ? <TenantApplicationEntryRedirect entry="application" /> : <TenantPortalComingSoon />}
+        />
+        <Route
+          path="/tenant/invite/redeem/:token"
+          element={TENANT_PORTAL_ENABLED ? <TenantInviteRedeemRedirect /> : <TenantPortalComingSoon />}
         />
 
         <Route
