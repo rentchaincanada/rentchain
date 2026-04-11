@@ -23,6 +23,8 @@ import { buildTenantApplicationReuseView } from "./tenantApplicationReuse";
 import { buildTenantApplicationFlow } from "./tenantApplicationFlow";
 import { buildTenantLandlordInteractionLoop } from "../tenantLandlordInteractionLoop";
 import { buildFollowUpResolutionState } from "../followUpResolutionState";
+import StructuredNotificationList from "../StructuredNotificationList";
+import { buildTenantStructuredNotificationTriggers } from "../structuredNotificationTriggers";
 
 function statusTone(status: TenantApplicationCompletionStatus) {
   switch (status) {
@@ -233,6 +235,13 @@ export default function TenantApplicationStatusPage() {
     packageCategories: reuse.packageCategories,
   });
   const resolutionView = buildFollowUpResolutionState(reuse.packageCategories);
+  const notificationItems = buildTenantStructuredNotificationTriggers({
+    packageCategories: reuse.packageCategories,
+    completion: data,
+    profile,
+    attachments,
+    access,
+  });
   const flowTone =
     flow.state === "ready_to_proceed"
       ? { color: "#166534", background: "#dcfce7", label: "Ready to proceed" }
@@ -427,6 +436,14 @@ export default function TenantApplicationStatusPage() {
             </div>
           ))}
         </div>
+      </TenantInfoCard>
+
+      <TenantInfoCard heading="Recent activity / notifications" accent="#0891b2">
+        <StructuredNotificationList
+          heading="Recent workflow updates"
+          emptyLabel="Recent workflow-triggered notifications will appear here once this application starts moving through review and follow-up."
+          items={notificationItems}
+        />
       </TenantInfoCard>
 
       <div
