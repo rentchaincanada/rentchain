@@ -23,16 +23,16 @@ function buildIntake(
 }
 
 describe("buildLandlordReviewGuidance", () => {
-  it("returns ready to review when no package categories are missing", () => {
+  it("returns ready for rereview when no package categories are missing", () => {
     const result = buildLandlordReviewGuidance(buildIntake());
 
-    expect(result.state).toBe("ready_to_review");
-    expect(result.summary).toBe("Ready to review");
+    expect(result.state).toBe("ready_for_rereview");
+    expect(result.summary).toBe("Ready for re-review");
     expect(result.missingCategories).toEqual([]);
-    expect(result.nextSteps[0]).toMatch(/Review the categories already available now/i);
+    expect(result.nextSteps[0]).toMatch(/Review again/i);
   });
 
-  it("returns partly available when the package only has partial categories left", () => {
+  it("returns ready for rereview when the package only has partial categories left", () => {
     const result = buildLandlordReviewGuidance(
       buildIntake({
         packageCategories: [
@@ -45,15 +45,32 @@ describe("buildLandlordReviewGuidance", () => {
       })
     );
 
-    expect(result.state).toBe("partly_available");
+    expect(result.state).toBe("ready_for_rereview");
     expect(result.summary).toBe("Ready for re-review");
+    expect(result.missingCategories).toEqual([]);
+    expect(result.nextSteps.some((step) => /Review again/i.test(step))).toBe(true);
+  });
+
+  it("returns partly addressed when some categories are addressed and some still need follow-up", () => {
+    const result = buildLandlordReviewGuidance(
+      buildIntake({
+        packageCategories: [
+          { key: "profile_details", label: "Profile details", status: "ready", detail: "Available" },
+          { key: "rental_history", label: "Rental history", status: "missing", detail: "Missing" },
+          { key: "documents_records", label: "Documents & records", status: "ready", detail: "Available" },
+          { key: "consent_identity_status", label: "Consent / identity status", status: "missing", detail: "Missing" },
+          { key: "application_readiness", label: "Application readiness", status: "partial", detail: "Partial" },
+        ],
+      })
+    );
+
+    expect(result.state).toBe("partly_addressed");
+    expect(result.summary).toBe("Partly addressed");
     expect(result.missingCategories).toEqual([
       "Rental history",
-      "Documents & records",
       "Consent / identity status",
-      "Application readiness",
     ]);
-    expect(result.nextSteps.some((step) => /Re-review the package/i.test(step))).toBe(true);
+    expect(result.nextSteps.some((step) => /Keep follow-up active/i.test(step))).toBe(true);
   });
 
   it("returns needs follow-up when nothing is available to review", () => {
@@ -69,7 +86,7 @@ describe("buildLandlordReviewGuidance", () => {
       })
     );
 
-    expect(result.state).toBe("needs_follow_up");
+    expect(result.state).toBe("follow_up_needed");
     expect(result.summary).toBe("Follow-up needed");
     expect(result.nextSteps.some((step) => /Request follow-up/i.test(step))).toBe(true);
   });

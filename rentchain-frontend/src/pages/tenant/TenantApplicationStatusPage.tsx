@@ -22,6 +22,7 @@ import { spacing, text as textTokens } from "../../styles/tokens";
 import { buildTenantApplicationReuseView } from "./tenantApplicationReuse";
 import { buildTenantApplicationFlow } from "./tenantApplicationFlow";
 import { buildTenantLandlordInteractionLoop } from "../tenantLandlordInteractionLoop";
+import { buildFollowUpResolutionState } from "../followUpResolutionState";
 
 function statusTone(status: TenantApplicationCompletionStatus) {
   switch (status) {
@@ -231,6 +232,7 @@ export default function TenantApplicationStatusPage() {
     audience: "tenant",
     packageCategories: reuse.packageCategories,
   });
+  const resolutionView = buildFollowUpResolutionState(reuse.packageCategories);
   const flowTone =
     flow.state === "ready_to_proceed"
       ? { color: "#166534", background: "#dcfce7", label: "Ready to proceed" }
@@ -241,11 +243,11 @@ export default function TenantApplicationStatusPage() {
       : { color: "#0f766e", background: "#ccfbf1", label: "Readiness" };
   const entryLabel = flow.entry === "invite" ? "Invite entry" : flow.entry === "application" ? "Application link" : "Direct tenant navigation";
   const interactionTone =
-    interactionLoop.state === "ready_for_review"
-      ? { color: "#166534", background: "#dcfce7", label: "Ready to continue" }
-      : interactionLoop.state === "ready_for_rereview"
-      ? { color: "#1d4ed8", background: "#dbeafe", label: "Ready for re-review" }
-      : { color: "#9a3412", background: "#ffedd5", label: "Follow-up requested" };
+    interactionLoop.state === "ready_for_rereview"
+      ? { color: "#166534", background: "#dcfce7", label: "Ready for re-review" }
+      : interactionLoop.state === "partly_addressed"
+      ? { color: "#1d4ed8", background: "#dbeafe", label: "Partly addressed" }
+      : { color: "#9a3412", background: "#ffedd5", label: "Follow-up needed" };
 
   return (
     <TenantSurfaceShell
@@ -506,17 +508,53 @@ export default function TenantApplicationStatusPage() {
                 </div>
               </div>
 
-              {interactionLoop.followUpCategories.length ? (
-                <div style={{ color: textTokens.secondary }}>
-                  <strong style={{ color: textTokens.primary }}>Needs attention:</strong>{" "}
-                  {interactionLoop.followUpCategories.join(", ")}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
+                <div
+                  style={{
+                    border: "1px solid rgba(15,23,42,0.08)",
+                    borderRadius: 12,
+                    padding: "12px 14px",
+                    display: "grid",
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ fontWeight: 700, color: textTokens.primary }}>Still needs attention</div>
+                  {resolutionView.openFollowUpCategories.length ? (
+                    resolutionView.openFollowUpCategories.map((item) => (
+                      <div key={item.key} style={{ color: textTokens.secondary }}>
+                        <strong style={{ color: textTokens.primary }}>{item.label}:</strong> {item.detail}
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ color: textTokens.secondary }}>
+                      No categories still need attention from the current tenant-safe package.
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div style={{ color: textTokens.secondary }}>
-                  <strong style={{ color: textTokens.primary }}>Ready now:</strong>{" "}
-                  {interactionLoop.readyCategories.join(", ")}
+
+                <div
+                  style={{
+                    border: "1px solid rgba(15,23,42,0.08)",
+                    borderRadius: 12,
+                    padding: "12px 14px",
+                    display: "grid",
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ fontWeight: 700, color: textTokens.primary }}>Addressed</div>
+                  {resolutionView.addressedCategories.length ? (
+                    resolutionView.addressedCategories.map((item) => (
+                      <div key={item.key} style={{ color: textTokens.secondary }}>
+                        <strong style={{ color: textTokens.primary }}>{item.label}:</strong> {item.detail}
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ color: textTokens.secondary }}>
+                      Addressed categories will appear here as your package becomes more complete.
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
 
             <div style={{ display: "grid", gap: 8 }}>

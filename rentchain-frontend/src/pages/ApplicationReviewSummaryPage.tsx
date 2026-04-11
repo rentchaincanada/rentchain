@@ -21,6 +21,7 @@ import { buildLandlordIntakeAlignmentView } from "./applicationReviewIntakeAlign
 import { buildLandlordReviewGuidance } from "./landlordReviewGuidance";
 import { buildTenantLandlordInteractionLoop } from "./tenantLandlordInteractionLoop";
 import { buildLandlordStructuredActivityTimeline } from "./structuredActivityTimeline";
+import { buildFollowUpResolutionState } from "./followUpResolutionState";
 
 function money(cents: number | null): string {
   if (cents == null || !Number.isFinite(cents)) return "Not provided";
@@ -61,6 +62,16 @@ function intakeTone(state: "ready_for_review" | "needs_follow_up") {
   return state === "ready_for_review"
     ? { color: "#166534", background: "#dcfce7", label: "Ready for review" }
     : { color: "#9a3412", background: "#ffedd5", label: "Needs follow-up" };
+}
+
+function followUpTone(state: "follow_up_needed" | "partly_addressed" | "ready_for_rereview") {
+  if (state === "ready_for_rereview") {
+    return { color: "#166534", background: "#dcfce7", label: "Ready for re-review" };
+  }
+  if (state === "partly_addressed") {
+    return { color: "#1d4ed8", background: "#dbeafe", label: "Partly addressed" };
+  }
+  return { color: "#9a3412", background: "#ffedd5", label: "Follow-up needed" };
 }
 
 type SummaryLoadError = {
@@ -224,31 +235,30 @@ function ApplicationReviewSummaryPageBody() {
     }
   };
 
-  const intakeView = useMemo(
-  () => (summary ? buildLandlordIntakeAlignmentView(summary) : null),
-  [summary]
-);
+  const intakeView = useMemo(() => (summary ? buildLandlordIntakeAlignmentView(summary) : null), [summary]);
 
-const guidanceView = useMemo(
-  () => (intakeView ? buildLandlordReviewGuidance(intakeView) : null),
-  [intakeView]
-);
+  const guidanceView = useMemo(() => (intakeView ? buildLandlordReviewGuidance(intakeView) : null), [intakeView]);
 
-const interactionLoop = useMemo(
-  () =>
-    intakeView
-      ? buildTenantLandlordInteractionLoop({
-          audience: "landlord",
-          packageCategories: intakeView.packageCategories,
-        })
-      : null,
-  [intakeView]
-);
+  const interactionLoop = useMemo(
+    () =>
+      intakeView
+        ? buildTenantLandlordInteractionLoop({
+            audience: "landlord",
+            packageCategories: intakeView.packageCategories,
+          })
+        : null,
+    [intakeView]
+  );
 
-const recentActivity = useMemo(
-  () => (summary ? buildLandlordStructuredActivityTimeline(summary).slice(0, 4) : []),
-  [summary]
-);
+  const resolutionView = useMemo(
+    () => (intakeView ? buildFollowUpResolutionState(intakeView.packageCategories) : null),
+    [intakeView]
+  );
+
+  const recentActivity = useMemo(
+    () => (summary ? buildLandlordStructuredActivityTimeline(summary).slice(0, 4) : []),
+    [summary]
+  );
 
   return (
     <div style={{ padding: 16, display: "grid", gap: 12 }}>
@@ -471,11 +481,11 @@ const recentActivity = useMemo(
             </Card>
           ) : null}
 
-          {guidanceView && interactionLoop ? (
+          {guidanceView && interactionLoop && resolutionView ? (
             <Card style={{ display: "grid", gap: 10 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
                 <div>
-                  <div style={{ fontWeight: 700 }}>Review workflow guidance</div>
+                  <div style={{ fontWeight: 700 }}>Follow-up resolution</div>
                   <div style={{ fontSize: 13, color: text.subtle, marginTop: 4 }}>
                     {guidanceView.explanation}
                   </div>
@@ -485,46 +495,72 @@ const recentActivity = useMemo(
                     padding: "6px 10px",
                     borderRadius: 999,
                     fontWeight: 700,
-                    color:
-                      guidanceView.state === "ready_to_review"
-                        ? "#166534"
-                        : guidanceView.state === "partly_available"
-                        ? "#1d4ed8"
-                        : "#9a3412",
-                    background:
-                      guidanceView.state === "ready_to_review"
-                        ? "#dcfce7"
-                        : guidanceView.state === "partly_available"
-                        ? "#dbeafe"
-                        : "#ffedd5",
+                    color: followUpTone(guidanceView.state).color,
+                    background: followUpTone(guidanceView.state).background,
                   }}
                 >
-                  {guidanceView.summary}
+                  {followUpTone(guidanceView.state).label}
                 </div>
               </div>
 
-              {interactionLoop.followUpCategories.length ? (
-                <div style={{ fontSize: 13, color: text.subtle }}>
-                  <strong style={{ color: text.main }}>Follow-up categories:</strong>{" "}
-                  {interactionLoop.followUpCategories.join(", ")}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 8 }}>
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: 10,
+                    padding: 10,
+                    display: "grid",
+                    gap: 6,
+                  }}
+                >
+                  <div style={{ fontWeight: 700, color: text.main }}>Still needs follow-up</div>
+                  {resolutionView.openFollowUpCategories.length ? (
+                    resolutionView.openFollowUpCategories.map((item) => (
+                      <div key={item.key} style={{ fontSize: 13, color: text.subtle }}>
+                        <strong style={{ color: text.main }}>{item.label}:</strong> {item.detail}
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ fontSize: 13, color: text.subtle }}>
+                      No categories still need follow-up from the current authorized package.
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div style={{ fontSize: 13, color: text.subtle }}>
-                  <strong style={{ color: text.main }}>Available now:</strong>{" "}
-                  {interactionLoop.readyCategories.join(", ")}
+
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: 10,
+                    padding: 10,
+                    display: "grid",
+                    gap: 6,
+                  }}
+                >
+                  <div style={{ fontWeight: 700, color: text.main }}>Now appears addressed</div>
+                  {resolutionView.addressedCategories.length ? (
+                    resolutionView.addressedCategories.map((item) => (
+                      <div key={item.key} style={{ fontSize: 13, color: text.subtle }}>
+                        <strong style={{ color: text.main }}>{item.label}:</strong> {item.detail}
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ fontSize: 13, color: text.subtle }}>
+                      No addressed categories are visible yet from the current authorized package.
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
 
               <div style={{ display: "grid", gap: 8 }}>
                 <div style={{ fontWeight: 700 }}>Structured follow-up loop</div>
                 <div style={{ fontSize: 13, color: text.subtle }}>{interactionLoop.detail}</div>
-                {interactionLoop.followUpCategories.length ? (
+                {resolutionView.openFollowUpCategories.length ? (
                   <div style={{ fontSize: 13, color: text.subtle }}>
-                    Follow up is organized by aligned package categories so the tenant can work back through the same areas in their readiness flow.
+                    Follow-up stays organized by aligned package categories so the tenant and landlord are looking at the same high-level areas.
                   </div>
                 ) : (
                   <div style={{ fontSize: 13, color: text.subtle }}>
-                    No follow-up categories are surfaced right now, so this package is ready for landlord review as-is.
+                    The currently visible follow-up categories now appear addressed, so this package is ready for re-review.
                   </div>
                 )}
               </div>
