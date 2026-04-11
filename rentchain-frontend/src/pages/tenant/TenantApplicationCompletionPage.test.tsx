@@ -182,13 +182,16 @@ describe("tenant application completion page", () => {
     expect(screen.getAllByText(/Documents & records/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Consent \/ identity status/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Application readiness/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Review Package Guidance/i)).toBeInTheDocument();
+    expect(screen.getByText(/Structured Follow-up/i)).toBeInTheDocument();
+    expect(screen.getByText(/Needs attention:/i)).toBeInTheDocument();
+    expect(screen.getByText(/Go next/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Review Before Sharing/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Identity verification/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Upload income documents/i).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: /Review your profile/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: /Open documents/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: /Review access/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: /Review your application/i }).length).toBeGreaterThan(0);
   });
 
   it("renders empty state safely", async () => {
