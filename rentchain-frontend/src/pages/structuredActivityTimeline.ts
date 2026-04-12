@@ -1,5 +1,8 @@
 import type { ApplicationReviewSummary } from "../api/reviewSummaryApi";
 import type { TenantNotificationItem } from "../api/tenantNotifications";
+import { buildLandlordIntakeAlignmentView } from "./applicationReviewIntakeAlignment";
+import { buildLandlordDecisionWorkspace } from "./landlordDecisionWorkspace";
+import { buildLandlordDecisionOutcome } from "./landlordDecisionOutcome";
 
 export type StructuredActivityTimelineItem = {
   id: string;
@@ -95,6 +98,22 @@ export function buildLandlordStructuredActivityTimeline(
   const items: StructuredActivityTimelineItem[] = [];
   const missingCategories = summary.derived.flags.length;
   const completeness = Math.round(summary.derived.completeness.score * 100);
+  const intakeView = buildLandlordIntakeAlignmentView(summary);
+  const decisionWorkspace = buildLandlordDecisionWorkspace({
+    summary,
+    packageCategories: intakeView.packageCategories,
+  });
+  const decisionOutcome = buildLandlordDecisionOutcome({
+    decisionStatus: summary.decisionSummary?.status || null,
+    decisionWorkspace,
+    followUpOverallState:
+      decisionWorkspace.decisionState === "ready_for_decision"
+        ? "ready_for_rereview"
+        : decisionWorkspace.decisionState === "needs_follow_up"
+        ? "follow_up_needed"
+        : "partly_addressed",
+    remainingCategories: intakeView.packageCategories.filter((item) => item.status === "missing"),
+  });
 
   pushTimelineItem(items, {
     id: `review-summary-${summary.applicationId}`,
@@ -166,6 +185,19 @@ export function buildLandlordStructuredActivityTimeline(
       relatedPath: null,
     });
   }
+
+  pushTimelineItem(items, {
+    id: `decision-outcome-${summary.applicationId}`,
+    type: decisionOutcome.outcomeState === "ready_for_next_step" ? "ready_for_rereview" : "review_updated",
+    title: decisionOutcome.timelineEvent.title,
+    description: decisionOutcome.timelineEvent.description,
+    occurredAt:
+      summary.decisionSummary?.riskSnapshot?.updatedAt ||
+      summary.generatedAt,
+    actorLabel: decisionOutcome.source === "explicit" ? "Decision workspace" : "Derived review state",
+    actionRequired: decisionOutcome.timelineEvent.actionRequired,
+    relatedPath: null,
+  });
 
   return items.sort((left, right) => right.occurredAt - left.occurredAt);
 }

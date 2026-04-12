@@ -24,6 +24,7 @@ import { buildTenantApplicationReuseView } from "./tenantApplicationReuse";
 import { buildTenantApplicationFlow } from "./tenantApplicationFlow";
 import { buildTenantLandlordInteractionLoop } from "../tenantLandlordInteractionLoop";
 import { buildFollowUpResolutionState } from "../followUpResolutionState";
+import { buildLandlordDecisionOutcome } from "../landlordDecisionOutcome";
 import StructuredNotificationList from "../StructuredNotificationList";
 import { buildTenantStructuredNotificationTriggers } from "../structuredNotificationTriggers";
 import { filterStructuredNotificationsByPreferences } from "../notificationChannelRouting";
@@ -266,6 +267,16 @@ export default function TenantApplicationStatusPage() {
       : interactionLoop.state === "partly_addressed"
       ? { color: "#1d4ed8", background: "#dbeafe", label: "Partly addressed" }
       : { color: "#9a3412", background: "#ffedd5", label: "Follow-up needed" };
+  const decisionOutcome = buildLandlordDecisionOutcome({
+    followUpOverallState: resolutionView.overallState,
+    remainingCategories: resolutionView.remainingCategoriesNeedingAttention,
+  });
+  const decisionOutcomeTone =
+    decisionOutcome.outcomeState === "ready_for_next_step"
+      ? { color: "#166534", background: "#dcfce7", label: "Ready for next step" }
+      : decisionOutcome.outcomeState === "not_proceeding"
+      ? { color: "#7f1d1d", background: "#fee2e2", label: "Not proceeding" }
+      : { color: "#1d4ed8", background: "#dbeafe", label: "Hold for later" };
 
   return (
     <TenantSurfaceShell
@@ -453,6 +464,71 @@ export default function TenantApplicationStatusPage() {
           emptyLabel="Recent workflow-triggered notifications will appear here once this application starts moving through review and follow-up."
           items={notificationItems}
         />
+      </TenantInfoCard>
+
+      <TenantInfoCard heading="Decision outcome" accent="#0f766e">
+        <div style={{ display: "grid", gap: spacing.sm }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontWeight: 800, color: textTokens.primary }}>{decisionOutcome.label}</div>
+              <div style={{ color: textTokens.secondary }}>{decisionOutcome.tenantDescription}</div>
+            </div>
+            <div
+              style={{
+                padding: "6px 10px",
+                borderRadius: 999,
+                fontWeight: 700,
+                color: decisionOutcomeTone.color,
+                background: decisionOutcomeTone.background,
+              }}
+            >
+              {decisionOutcomeTone.label}
+            </div>
+          </div>
+
+          <div
+            style={{
+              border: "1px solid rgba(15,23,42,0.08)",
+              borderRadius: 12,
+              padding: "12px 14px",
+              display: "grid",
+              gap: 8,
+            }}
+          >
+            <div style={{ fontWeight: 700, color: textTokens.primary }}>What this means</div>
+            <div style={{ color: textTokens.secondary }}>
+              {decisionOutcome.source === "explicit"
+                ? "This high-level outcome comes from the current authorized application outcome record."
+                : "This high-level outcome is derived from your current follow-up and re-review state."}
+            </div>
+            {decisionOutcome.blockers.length ? (
+              <div style={{ display: "grid", gap: 6 }}>
+                {decisionOutcome.blockers.map((item) => (
+                  <div key={item} style={{ color: textTokens.secondary }}>
+                    {item}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          <div
+            style={{
+              border: "1px solid rgba(15,23,42,0.08)",
+              borderRadius: 12,
+              padding: "12px 14px",
+              display: "grid",
+              gap: 8,
+            }}
+          >
+            <div style={{ fontWeight: 700, color: textTokens.primary }}>Next steps</div>
+            {decisionOutcome.tenantNextSteps.map((step) => (
+              <div key={step} style={{ color: textTokens.secondary }}>
+                {step}
+              </div>
+            ))}
+          </div>
+        </div>
       </TenantInfoCard>
 
       <div

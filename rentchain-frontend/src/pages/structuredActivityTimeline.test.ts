@@ -89,6 +89,9 @@ describe("structuredActivityTimeline", () => {
       title: "Review state updated",
       actionRequired: false,
     });
+    expect(
+      result.some((item) => item.title === "Application placed on hold" && item.actionRequired)
+    ).toBe(true);
     expect(result.some((item) => item.title === "Review follow-up remains active" && item.actionRequired)).toBe(true);
     expect(result.some((item) => item.title === "Follow-up requested")).toBe(true);
     expect(result.some((item) => item.title === "Consent / identity status pending")).toBe(true);

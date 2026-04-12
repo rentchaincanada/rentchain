@@ -23,6 +23,7 @@ import { buildTenantLandlordInteractionLoop } from "./tenantLandlordInteractionL
 import { buildLandlordStructuredActivityTimeline } from "./structuredActivityTimeline";
 import { buildFollowUpResolutionState } from "./followUpResolutionState";
 import { buildLandlordDecisionWorkspace } from "./landlordDecisionWorkspace";
+import { buildLandlordDecisionOutcome } from "./landlordDecisionOutcome";
 import StructuredNotificationList from "./StructuredNotificationList";
 import { buildLandlordStructuredNotificationTriggers } from "./structuredNotificationTriggers";
 
@@ -85,6 +86,16 @@ function decisionTone(state: "needs_follow_up" | "hold_for_later" | "ready_for_d
     return { color: "#1d4ed8", background: "#dbeafe", label: "Hold for later" };
   }
   return { color: "#9a3412", background: "#ffedd5", label: "Needs follow-up" };
+}
+
+function decisionOutcomeTone(state: "ready_for_next_step" | "hold_for_later" | "not_proceeding") {
+  if (state === "ready_for_next_step") {
+    return { color: "#166534", background: "#dcfce7", label: "Ready for next step" };
+  }
+  if (state === "not_proceeding") {
+    return { color: "#7f1d1d", background: "#fee2e2", label: "Not proceeding" };
+  }
+  return { color: "#1d4ed8", background: "#dbeafe", label: "Hold for later" };
 }
 
 type SummaryLoadError = {
@@ -283,6 +294,18 @@ function ApplicationReviewSummaryPageBody() {
           })
         : null,
     [summary, intakeView]
+  );
+  const decisionOutcome = useMemo(
+    () =>
+      decisionWorkspace && resolutionView
+        ? buildLandlordDecisionOutcome({
+            decisionStatus: summary?.decisionSummary?.status || null,
+            decisionWorkspace,
+            followUpOverallState: resolutionView.overallState,
+            remainingCategories: resolutionView.remainingCategoriesNeedingAttention,
+          })
+        : null,
+    [decisionWorkspace, resolutionView, summary]
   );
 
   const recentActivity = useMemo(
@@ -697,6 +720,84 @@ function ApplicationReviewSummaryPageBody() {
               <div style={{ fontSize: 12, color: text.subtle }}>
                 This workspace helps organize the next landlord step after review. It does not automate approval, decline, or lease actions.
               </div>
+
+              {decisionOutcome ? (
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: 10,
+                    padding: 10,
+                    display: "grid",
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                    <div>
+                      <div style={{ fontWeight: 700, color: text.main }}>Decision outcome</div>
+                      <div style={{ fontSize: 13, color: text.subtle, marginTop: 4 }}>
+                        {decisionOutcome.description}
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 999,
+                        fontWeight: 700,
+                        color: decisionOutcomeTone(decisionOutcome.outcomeState).color,
+                        background: decisionOutcomeTone(decisionOutcome.outcomeState).background,
+                      }}
+                    >
+                      {decisionOutcomeTone(decisionOutcome.outcomeState).label}
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: 12, color: text.subtle }}>
+                    {decisionOutcome.sourceLabel}
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 8 }}>
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "grid",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.main }}>Outcome blockers</div>
+                      {decisionOutcome.blockers.length ? (
+                        decisionOutcome.blockers.map((item) => (
+                          <div key={item} style={{ fontSize: 13, color: text.subtle }}>
+                            {item}
+                          </div>
+                        ))
+                      ) : (
+                        <div style={{ fontSize: 13, color: text.subtle }}>
+                          No current blockers are surfaced for this structured outcome view.
+                        </div>
+                      )}
+                    </div>
+
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "grid",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.main }}>Outcome next steps</div>
+                      {decisionOutcome.landlordNextSteps.map((step) => (
+                        <div key={step} style={{ fontSize: 13, color: text.subtle }}>
+                          {step}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </Card>
           ) : null}
 

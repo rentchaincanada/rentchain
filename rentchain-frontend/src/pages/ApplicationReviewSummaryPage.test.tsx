@@ -141,6 +141,11 @@ describe("ApplicationReviewSummaryPage", () => {
     expect(await screen.findByText("What is still missing")).toBeInTheDocument();
     expect(await screen.findByText(/This application is not ready for a landlord next-step decision yet/i)).toBeInTheDocument();
     expect(screen.getAllByText("Needs follow-up").length).toBeGreaterThan(0);
+    expect(await screen.findByText("Decision outcome")).toBeInTheDocument();
+    expect(await screen.findByText("Hold for later")).toBeInTheDocument();
+    expect(await screen.findByText("Outcome blockers")).toBeInTheDocument();
+    expect(await screen.findByText("Outcome next steps")).toBeInTheDocument();
+    expect(await screen.findByText(/Derived from current review state/i)).toBeInTheDocument();
     expect(await screen.findByText("Recent updates")).toBeInTheDocument();
     expect(await screen.findByText(/Tenant updated follow-up items/i)).toBeInTheDocument();
     expect(await screen.findByText(/Follow-up stays organized by aligned package categories/i)).toBeInTheDocument();
@@ -221,6 +226,7 @@ describe("ApplicationReviewSummaryPage", () => {
 
     expect((await screen.findAllByText("Decision workspace")).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("Ready for decision")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Ready for next step")).length).toBeGreaterThan(0);
     expect(await screen.findByText(/No decision blockers are currently surfaced/i)).toBeInTheDocument();
   });
 
@@ -295,6 +301,8 @@ describe("ApplicationReviewSummaryPage", () => {
 
     expect((await screen.findAllByText("Decision workspace")).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("Hold for later")).length).toBeGreaterThan(0);
-    expect(await screen.findByText(/Screening is still recommended before moving this file/i)).toBeInTheDocument();
+    expect(
+      (await screen.findAllByText(/Screening is still recommended before moving this file/i)).length
+    ).toBeGreaterThan(0);
   });
 });
