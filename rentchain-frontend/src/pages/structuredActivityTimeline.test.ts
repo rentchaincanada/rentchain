@@ -92,8 +92,82 @@ describe("structuredActivityTimeline", () => {
     expect(
       result.some((item) => item.title === "Application placed on hold" && item.actionRequired)
     ).toBe(true);
+    expect(
+      result.some((item) => item.title === "Application marked ready for lease step")
+    ).toBe(false);
     expect(result.some((item) => item.title === "Review follow-up remains active" && item.actionRequired)).toBe(true);
     expect(result.some((item) => item.title === "Follow-up requested")).toBe(true);
     expect(result.some((item) => item.title === "Consent / identity status pending")).toBe(true);
+  });
+
+  it("includes a lease-step readiness event when the application is ready for the next step", () => {
+    const result = buildLandlordStructuredActivityTimeline({
+      applicationId: "app-2",
+      generatedAt: "2026-04-03T00:00:00.000Z",
+      applicant: {
+        name: "Jordan Applicant",
+        email: "jordan@example.com",
+        currentAddressLine: "12 Main St",
+        city: "Halifax",
+        provinceState: "NS",
+        postalCode: "B3H1A1",
+        country: "CA",
+        timeAtCurrentAddressMonths: 24,
+        currentRentAmountCents: 180000,
+      },
+      employment: {
+        employerName: "Acme",
+        jobTitle: "Manager",
+        incomeAmountCents: 7200000,
+        incomeFrequency: "annual",
+        incomeMonthlyCents: 600000,
+        monthsAtJob: 36,
+      },
+      reference: { name: "Sam Ref", phone: "555-0100" },
+      compliance: {
+        applicationConsentAcceptedAt: "2026-03-29T00:00:00.000Z",
+        applicationConsentVersion: "v1",
+        signatureType: "electronic",
+        signedAt: "2026-03-29T00:00:00.000Z",
+      },
+      screening: { status: "complete", provider: "transunion", referenceId: "TU-2" },
+      derived: { incomeToRentRatio: 3.2, completeness: { score: 0.92, label: "High" }, flags: [] },
+      insights: [],
+      decisionSummary: {
+        applicationId: "app-2",
+        screeningRecommendation: {
+          recommended: false,
+          reason: "Already complete.",
+          priority: "low",
+        },
+        screeningSummary: {
+          available: true,
+          provider: "transunion",
+          completedAt: "2026-04-01T00:00:00.000Z",
+          highlights: [],
+        },
+        riskSnapshot: {
+          version: "risk-v1",
+          status: "completed",
+          score: 78,
+          grade: "B",
+          confidence: 0.88,
+          factors: [],
+          flags: [],
+          recommendations: [],
+          updatedAt: "2026-04-04T00:00:00.000Z",
+        },
+      },
+      risk: null,
+    } as any);
+
+    expect(
+      result.some(
+        (item) =>
+          item.title === "Application marked ready for lease step" &&
+          item.actorLabel === "Decision workspace" &&
+          item.actionRequired === false
+      )
+    ).toBe(true);
   });
 });
