@@ -219,7 +219,7 @@ describe("tenant application completion page", () => {
     expect(screen.getAllByText(/Not started/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Move-in readiness/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/^Lease execution$/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/What happens next/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/What happens next/i)).toBeInTheDocument();
     expect(screen.getByText(/This handoff view shows whether your file is ready to move into the next lease step/i)).toBeInTheDocument();
     expect(screen.getAllByText(/^Blockers$/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/^Lease signing$/i).length).toBeGreaterThan(0);
