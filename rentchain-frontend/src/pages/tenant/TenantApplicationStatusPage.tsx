@@ -978,50 +978,12 @@ export default function TenantApplicationStatusPage() {
                 No current blockers are visible in your tenant workspace for this handoff stage.
               </div>
             )}
-          </div>
-
-          <div
-            style={{
-              border: "1px solid rgba(15,23,42,0.08)",
-              borderRadius: 12,
-              padding: "12px 14px",
-              display: "grid",
-              gap: 8,
-            }}
-          >
-<div style={{ fontWeight: 700, color: textTokens.primary }}>Blockers</div>
-{executionWorkspace.blockers.length ? (
-  executionWorkspace.blockers.map((item, index) => (
-    <div key={`${item}-${index}`} style={{ color: textTokens.secondary }}>
-      {item}
-    </div>
-  ))
-) : (
-  <div style={{ color: textTokens.secondary }}>
-    No current blockers are visible in your tenant workspace for this handoff stage.
-  </div>
-)}
-
-<div style={{ fontWeight: 700, color: textTokens.primary }}>Next steps</div>
-{executionWorkspace.nextSteps.map((step, index) => (
-  <div key={`${step}-${index}`} style={{ color: textTokens.secondary }}>
-    {step}
-  </div>
-))}
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <Link to="/tenant/profile" style={{ fontWeight: 700 }}>
-                Review your profile
-              </Link>
-              <Link to="/tenant/attachments" style={{ fontWeight: 700 }}>
-                Open documents
-              </Link>
-              <Link to="/tenant/access" style={{ fontWeight: 700 }}>
-                Review access
-              </Link>
-              <Link to="/tenant/lease" style={{ fontWeight: 700 }}>
-                Open lease details
-              </Link>
-            </div>
+            <div style={{ fontWeight: 700, color: textTokens.primary }}>Next steps</div>
+            {executionWorkspace.nextSteps.map((step, index) => (
+              <div key={`${step}-${index}`} style={{ color: textTokens.secondary }}>
+                {step}
+              </div>
+            ))}
           </div>
         </div>
       </TenantInfoCard>
@@ -1057,21 +1019,6 @@ export default function TenantApplicationStatusPage() {
           >
             <div style={{ fontWeight: 700, color: textTokens.primary }}>Who is expected to act</div>
             <div style={{ color: textTokens.secondary }}>{signingWorkspace.currentActorLabel}</div>
-          </div>
-
-          <div
-            style={{
-              border: "1px solid rgba(15,23,42,0.08)",
-              borderRadius: 12,
-              padding: "12px 14px",
-              display: "grid",
-              gap: 8,
-            }}
-          >
-            <div style={{ fontWeight: 700, color: textTokens.primary }}>What happens next</div>
-            <div style={{ color: textTokens.secondary }}>
-              This signing view shows whether the lease is ready for review or signature without implying provider-backed e-signing or legal completion that is not visible in your workspace.
-            </div>
           </div>
 
           <div

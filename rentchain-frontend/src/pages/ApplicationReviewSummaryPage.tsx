@@ -1329,50 +1329,30 @@ function ApplicationReviewSummaryPageBody() {
                     <div style={{ fontSize: 13, color: text.subtle }}>{executionWorkspace.label}</div>
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
-                    <div
-                      style={{
-                        border: `1px solid ${colors.border}`,
-                        borderRadius: 10,
-                        padding: 10,
-                        display: "grid",
-                        gap: 6,
-                      }}
-                    >
-                      <div style={{ fontWeight: 700, color: text.main }}>Blockers</div>
-                      {executionWorkspace.blockers.length ? (
-                        executionWorkspace.blockers.map((item, index) => (
-                          <div key={`${item}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
-                            {item}
-                          </div>
-                        ))
-                      ) : (
-                        <div style={{ fontSize: 13, color: text.subtle }}>
-                          No current blockers are surfaced in this execution handoff view.
+                  <div style={{ display: "grid", gap: 12 }}>
+                    <div style={{ fontWeight: 700, color: text.main }}>Blockers</div>
+                    {executionWorkspace.blockers.length ? (
+                      executionWorkspace.blockers.map((item, index) => (
+                        <div key={`${item}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
+                          {item}
                         </div>
-                      )}
-                    </div>
+                      ))
+                    ) : (
+                      <div style={{ fontSize: 13, color: text.subtle }}>
+                        No current blockers are surfaced in this execution handoff view.
+                      </div>
+                    )}
 
-                    <div
-                      style={{
-                        border: `1px solid ${colors.border}`,
-                        borderRadius: 10,
-                        padding: 10,
-                        display: "grid",
-                        gap: 6,
-                      }}
-                    >
-                      <div style={{ fontWeight: 700, color: text.main }}>Next step</div>
-                      {executionWorkspace.nextSteps.map((step, index) => (
-                        <div key={`${step}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
-                          {step}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                    <div style={{ fontWeight: 700, color: text.main }}>Next step</div>
+                    {executionWorkspace.nextSteps.map((step, index) => (
+                      <div key={`${step}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
+                        {step}
+                      </div>
+                    ))}
 
-                  <div style={{ fontSize: 12, color: text.subtle }}>
-                    This workspace defines the handoff from structured readiness into the real-world execution process. It does not imply signing, payment, or completion has already happened.
+                    <div style={{ fontSize: 12, color: text.subtle }}>
+                      This workspace defines the handoff from structured readiness into the real-world execution process. It does not imply signing, payment, or completion has already happened.
+                    </div>
                   </div>
                 </div>
               ) : null}
@@ -1435,58 +1415,29 @@ function ApplicationReviewSummaryPageBody() {
                     </div>
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
-                    <div
-                      style={{
-                        border: `1px solid ${colors.border}`,
-                        borderRadius: 10,
-                        padding: 10,
-                        display: "grid",
-                        gap: 6,
-                      }}
-                    >
-                      <div style={{ fontWeight: 700, color: text.main }}>Blockers</div>
-                      {signingWorkspace.blockers.length ? (
-                        signingWorkspace.blockers.map((item, index) => (
-                      {executionWorkspace.blockers.length ? (
-                        executionWorkspace.blockers.map((item, index) => (
-                          <div key={`${item}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
-                            {item}
-                          </div>
-                        ))
-                      ) : (
-                        <div style={{ fontSize: 13, color: text.subtle }}>
-                          No current signing blockers are surfaced from this review-summary view.
-                        <div style={{ fontSize: 13, color: text.subtle }}>
-   No current blockers are surfaced in this execution handoff view.
+                  <div style={{ display: "grid", gap: 12 }}>
+                    <div style={{ fontWeight: 700, color: text.main }}>Blockers</div>
+                    {signingWorkspace.blockers.length ? (
+                      signingWorkspace.blockers.map((item, index) => (
+                        <div key={`${item}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
+                          {item}
                         </div>
-                      )}
-                    </div>
+                      ))
+                    ) : (
+                      <div style={{ fontSize: 13, color: text.subtle }}>
+                        No current signing blockers are surfaced from this review-summary view.
+                      </div>
+                    )}
+                    <div style={{ fontWeight: 700, color: text.main }}>Next steps</div>
+                    {signingWorkspace.nextActions.map((step, index) => (
+                      <div key={`${step}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
+                        {step}
+                      </div>
+                    ))}
 
-                    <div
-                      style={{
-                        border: `1px solid ${colors.border}`,
-                        borderRadius: 10,
-                        padding: 10,
-                        display: "grid",
-                        gap: 6,
-                      }}
-                    >
-                      <div style={{ fontWeight: 700, color: text.main }}>Next steps</div>
-                      {signingWorkspace.nextActions.map((step, index) => (
-                      <div style={{ fontWeight: 700, color: text.main }}>Next step</div>
-                      {executionWorkspace.nextSteps.map((step, index) => (
-                        <div key={`${step}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
-                          {step}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div style={{ fontSize: 12, color: text.subtle }}>
-                    This signing workspace is a structured status view only. It does not claim provider-backed e-signing or legal completion unless the current authorized lease state truly shows it.
                     <div style={{ fontSize: 12, color: text.subtle }}>
-This workspace defines the handoff from structured readiness into the real-world execution process. It does not imply signing, payment, or completion has already happened.
+                      This signing workspace is a structured status view only. It does not claim provider-backed e-signing or legal completion unless the current authorized lease state truly shows it.
+                    </div>
                   </div>
                 </div>
               ) : null}
