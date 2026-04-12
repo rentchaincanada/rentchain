@@ -203,6 +203,10 @@ describe("tenant application completion page", () => {
     expect(screen.getByText(/Still needs attention/i)).toBeInTheDocument();
     expect(screen.getByText(/^Addressed$/i)).toBeInTheDocument();
     expect(screen.getByText(/Application ready for re-review/i)).toBeInTheDocument();
+    expect(screen.getByText(/Decision outcome/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Hold for later/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/What this means/i)).toBeInTheDocument();
+    expect(screen.getByText(/derived from your current follow-up and re-review state/i)).toBeInTheDocument();
     expect(screen.getByText(/Go next/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Review Before Sharing/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Identity verification/i).length).toBeGreaterThan(0);
