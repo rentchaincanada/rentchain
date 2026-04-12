@@ -99,7 +99,12 @@ import ContractorDashboardPage from "./pages/contractor/ContractorDashboardPage"
 import ContractorJobsPage from "./pages/contractor/ContractorJobsPage";
 import ContractorProfilePage from "./pages/contractor/ContractorProfilePage";
 import { ContractorNav } from "./components/layout/ContractorNav";
-import { getRoleDefaultDestination } from "./lib/authDestination";
+import {
+  getRoleDefaultDestination,
+  resolveTenantPostAuthDestination,
+  TENANT_DEFAULT_DESTINATION,
+} from "./lib/authDestination";
+import { getTenantToken } from "./lib/tenantAuth";
 
 const TENANT_PORTAL_ENABLED = import.meta.env.VITE_TENANT_PORTAL_ENABLED === "true";
 
@@ -267,6 +272,18 @@ const AccountRouteGate: React.FC<{ children: React.ReactNode }> = ({ children })
   if (isAllowed) return <>{children}</>;
   if (role === "contractor") return <Navigate to="/contractor/profile" replace />;
   return <Navigate to={getRoleDefaultDestination(role as any)} replace />;
+};
+
+const TenantEntryRouteGate: React.FC = () => {
+  const location = useLocation();
+  const tenantToken = typeof window === "undefined" ? null : getTenantToken();
+  if (!tenantToken) return <TenantLandingPage />;
+
+  const destination = resolveTenantPostAuthDestination({
+    search: location.search,
+    fallback: TENANT_DEFAULT_DESTINATION,
+  }).destination;
+  return <Navigate to={destination} replace />;
 };
 
 function App() {
@@ -941,7 +958,7 @@ function App() {
         <Route path="/apply" element={<ApplicantApplyPage />} />
         <Route
           path="/tenant"
-          element={TENANT_PORTAL_ENABLED ? <TenantLandingPage /> : <TenantPortalComingSoon />}
+          element={TENANT_PORTAL_ENABLED ? <TenantEntryRouteGate /> : <TenantPortalComingSoon />}
         />
         <Route
           path="/tenant/dashboard"

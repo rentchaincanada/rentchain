@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 beforeEach(() => {
   cleanup();
+  mockTenantToken = null;
 });
 
 vi.stubEnv("VITE_TENANT_PORTAL_ENABLED", "true");
@@ -29,6 +30,8 @@ vi.mock("./components/layout/TenantNav", () => ({
   TenantNav: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
+let mockTenantToken: string | null = null;
+
 vi.mock("./context/useAuth", () => ({
   useAuth: () => ({
     user: { id: "landlord_1", role: "landlord", landlordId: "landlord_1" },
@@ -37,6 +40,10 @@ vi.mock("./context/useAuth", () => ({
     ready: true,
     authStatus: "authed",
   }),
+}));
+
+vi.mock("./lib/tenantAuth", () => ({
+  getTenantToken: () => mockTenantToken,
 }));
 
 vi.mock("./features/automation/timeline/AutomationTimelinePage", () => ({
@@ -67,6 +74,32 @@ describe("Routes: /tenant", () => {
       await screen.findByText(/Your rental profile\. Secure, organized, and in your control\./i)
     ).toBeInTheDocument();
     expect(screen.queryByText(/Create free account/i)).not.toBeInTheDocument();
+  });
+
+  it("redirects authenticated tenants from the public tenant entry page to the tenant dashboard", async () => {
+    mockTenantToken = "header.payload.signature";
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/tenant"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Tenant Dashboard/i)).toBeInTheDocument();
+  });
+
+  it("restores a safe preserved tenant route when an authenticated tenant lands on /tenant", async () => {
+    mockTenantToken = "header.payload.signature";
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/tenant?next=%2Ftenant%2Fapplication"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(
+      await screen.findByText(/Tenant Application Status \/tenant\/application/i)
+    ).toBeInTheDocument();
   });
 });
 
