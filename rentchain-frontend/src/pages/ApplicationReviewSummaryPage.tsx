@@ -22,6 +22,7 @@ import { buildLandlordReviewGuidance } from "./landlordReviewGuidance";
 import { buildTenantLandlordInteractionLoop } from "./tenantLandlordInteractionLoop";
 import { buildLandlordStructuredActivityTimeline } from "./structuredActivityTimeline";
 import { buildFollowUpResolutionState } from "./followUpResolutionState";
+import { buildLandlordDecisionWorkspace } from "./landlordDecisionWorkspace";
 import StructuredNotificationList from "./StructuredNotificationList";
 import { buildLandlordStructuredNotificationTriggers } from "./structuredNotificationTriggers";
 
@@ -74,6 +75,16 @@ function followUpTone(state: "follow_up_needed" | "partly_addressed" | "ready_fo
     return { color: "#1d4ed8", background: "#dbeafe", label: "Partly addressed" };
   }
   return { color: "#9a3412", background: "#ffedd5", label: "Follow-up needed" };
+}
+
+function decisionTone(state: "needs_follow_up" | "hold_for_later" | "ready_for_decision") {
+  if (state === "ready_for_decision") {
+    return { color: "#166534", background: "#dcfce7", label: "Ready for decision" };
+  }
+  if (state === "hold_for_later") {
+    return { color: "#1d4ed8", background: "#dbeafe", label: "Hold for later" };
+  }
+  return { color: "#9a3412", background: "#ffedd5", label: "Needs follow-up" };
 }
 
 type SummaryLoadError = {
@@ -261,6 +272,16 @@ function ApplicationReviewSummaryPageBody() {
       summary && intakeView
         ? buildLandlordStructuredNotificationTriggers(summary, intakeView.packageCategories)
         : [],
+    [summary, intakeView]
+  );
+  const decisionWorkspace = useMemo(
+    () =>
+      summary && intakeView
+        ? buildLandlordDecisionWorkspace({
+            summary,
+            packageCategories: intakeView.packageCategories,
+          })
+        : null,
     [summary, intakeView]
   );
 
@@ -590,6 +611,91 @@ function ApplicationReviewSummaryPageBody() {
                     {step}
                   </div>
                 ))}
+              </div>
+            </Card>
+          ) : null}
+
+          {decisionWorkspace ? (
+            <Card style={{ display: "grid", gap: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontWeight: 700 }}>Decision workspace</div>
+                  <div style={{ fontSize: 13, color: text.subtle, marginTop: 4 }}>
+                    {decisionWorkspace.explanation}
+                  </div>
+                </div>
+                <div
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 999,
+                    fontWeight: 700,
+                    color: decisionTone(decisionWorkspace.decisionState).color,
+                    background: decisionTone(decisionWorkspace.decisionState).background,
+                  }}
+                >
+                  {decisionTone(decisionWorkspace.decisionState).label}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: 10,
+                  padding: 10,
+                  display: "grid",
+                  gap: 6,
+                }}
+              >
+                <div style={{ fontWeight: 700, color: text.main }}>Decision status</div>
+                <div style={{ fontSize: 13, color: text.subtle }}>
+                  {decisionWorkspace.statusLabel}
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 8 }}>
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: 10,
+                    padding: 10,
+                    display: "grid",
+                    gap: 6,
+                  }}
+                >
+                  <div style={{ fontWeight: 700, color: text.main }}>What is still missing</div>
+                  {decisionWorkspace.blockers.length ? (
+                    decisionWorkspace.blockers.map((item) => (
+                      <div key={item} style={{ fontSize: 13, color: text.subtle }}>
+                        {item}
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ fontSize: 13, color: text.subtle }}>
+                      No decision blockers are currently surfaced in this read-first workspace.
+                    </div>
+                  )}
+                </div>
+
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: 10,
+                    padding: 10,
+                    display: "grid",
+                    gap: 6,
+                  }}
+                >
+                  <div style={{ fontWeight: 700, color: text.main }}>Next steps</div>
+                  {decisionWorkspace.nextSteps.map((step) => (
+                    <div key={step} style={{ fontSize: 13, color: text.subtle }}>
+                      {step}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ fontSize: 12, color: text.subtle }}>
+                This workspace helps organize the next landlord step after review. It does not automate approval, decline, or lease actions.
               </div>
             </Card>
           ) : null}
