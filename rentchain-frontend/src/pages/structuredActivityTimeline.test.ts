@@ -95,6 +95,9 @@ describe("structuredActivityTimeline", () => {
     expect(
       result.some((item) => item.title === "Application marked ready for lease step")
     ).toBe(false);
+    expect(
+      result.some((item) => item.title === "Lease preparation awaiting next action")
+    ).toBe(false);
     expect(result.some((item) => item.title === "Review follow-up remains active" && item.actionRequired)).toBe(true);
     expect(result.some((item) => item.title === "Follow-up requested")).toBe(true);
     expect(result.some((item) => item.title === "Consent / identity status pending")).toBe(true);
@@ -166,6 +169,22 @@ describe("structuredActivityTimeline", () => {
         (item) =>
           item.title === "Application marked ready for lease step" &&
           item.actorLabel === "Decision workspace" &&
+          item.actionRequired === false
+      )
+    ).toBe(true);
+    expect(
+      result.some(
+        (item) =>
+          item.title === "Lease preparation awaiting next action" &&
+          item.actorLabel === "Lease preparation" &&
+          item.actionRequired === false
+      )
+    ).toBe(true);
+    expect(
+      result.some(
+        (item) =>
+          item.title === "Move-in readiness updated" &&
+          item.actorLabel === "Move-in readiness" &&
           item.actionRequired === false
       )
     ).toBe(true);
