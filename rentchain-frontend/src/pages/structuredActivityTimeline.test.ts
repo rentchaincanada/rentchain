@@ -180,5 +180,13 @@ describe("structuredActivityTimeline", () => {
           item.actionRequired === false
       )
     ).toBe(true);
+    expect(
+      result.some(
+        (item) =>
+          item.title === "Move-in readiness updated" &&
+          item.actorLabel === "Move-in readiness" &&
+          item.actionRequired === false
+      )
+    ).toBe(true);
   });
 });

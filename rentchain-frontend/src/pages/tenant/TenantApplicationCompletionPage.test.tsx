@@ -217,8 +217,9 @@ describe("tenant application completion page", () => {
     expect(screen.getAllByText(/Not ready for lease step/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Lease preparation/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Not started/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Completed items/i)).toBeInTheDocument();
-    expect(screen.getByText(/Outstanding items/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Move-in readiness/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Completed items/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Outstanding items/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/What this means/i)).toBeInTheDocument();
     expect(screen.getByText(/derived from your current follow-up and re-review state/i)).toBeInTheDocument();
     expect(screen.getByText(/Go next/i)).toBeInTheDocument();
@@ -286,7 +287,9 @@ describe("tenant application completion page", () => {
 
     expect((await screen.findAllByText(/Lease preparation/i)).length).toBeGreaterThan(0);
     expect((await screen.findAllByText(/Ready for execution/i)).length).toBeGreaterThan(0);
-    expect(screen.getByText(/A lease document is already visible in the current workspace/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/A lease document is already visible in the current workspace/i).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/Move-in readiness/i)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/Ready for move-in/i)).length).toBeGreaterThan(0);
   });
 
   it("renders empty state safely", async () => {
