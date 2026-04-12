@@ -24,11 +24,16 @@ const tenantNotificationPreferencesApi = vi.hoisted(() => ({
   getTenantNotificationPreferences: vi.fn(),
 }));
 
+const tenantPortalApi = vi.hoisted(() => ({
+  getTenantLeaseWorkspace: vi.fn(),
+}));
+
 vi.mock("../../api/tenantApplicationCompletion", () => tenantApplicationCompletionApi);
 vi.mock("../../api/tenantProfile", () => tenantProfileApi);
 vi.mock("../../api/tenantAttachmentsApi", () => tenantAttachmentsApi);
 vi.mock("../../api/tenantAccess", () => tenantAccessApi);
 vi.mock("../../api/tenantNotificationPreferences", () => tenantNotificationPreferencesApi);
+vi.mock("../../api/tenantPortal", () => tenantPortalApi);
 
 describe("tenant application completion page", () => {
   beforeEach(() => {
@@ -136,6 +141,7 @@ describe("tenant application completion page", () => {
       },
       updatedAt: 1710000000000,
     });
+    tenantPortalApi.getTenantLeaseWorkspace.mockResolvedValue(null);
   });
 
   it("renders progress and grouped checklist safely", async () => {
@@ -189,7 +195,7 @@ describe("tenant application completion page", () => {
     expect(screen.getByText(/Flow Status/i)).toBeInTheDocument();
     expect(screen.getByText(/Needs attention before review/i)).toBeInTheDocument();
     expect(screen.getByText(/Invite entry/i)).toBeInTheDocument();
-    expect(screen.getByText(/^Next step$/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/^Next step$/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Application Readiness Summary/i)).toBeInTheDocument();
     expect(screen.getByText(/Recent activity \/ notifications/i)).toBeInTheDocument();
     expect(screen.getByText(/Recent workflow updates/i)).toBeInTheDocument();
@@ -203,8 +209,10 @@ describe("tenant application completion page", () => {
     expect(screen.getByText(/Still needs attention/i)).toBeInTheDocument();
     expect(screen.getByText(/^Addressed$/i)).toBeInTheDocument();
     expect(screen.getByText(/Application ready for re-review/i)).toBeInTheDocument();
-    expect(screen.getByText(/Decision outcome/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Decision outcome/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Hold for later/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/^Lease step$/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Not ready for lease step/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/What this means/i)).toBeInTheDocument();
     expect(screen.getByText(/derived from your current follow-up and re-review state/i)).toBeInTheDocument();
     expect(screen.getByText(/Go next/i)).toBeInTheDocument();
@@ -215,6 +223,34 @@ describe("tenant application completion page", () => {
     expect(screen.getAllByRole("link", { name: /Open documents/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: /Review access/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: /Review again/i }).length).toBeGreaterThan(0);
+  });
+
+  it("shows lease-step-started state when a lease workspace record is visible", async () => {
+    tenantPortalApi.getTenantLeaseWorkspace.mockResolvedValue({
+      leaseId: "lease-1",
+      startDate: "2026-05-01",
+      endDate: "2027-04-30",
+      monthlyRent: 180000,
+      status: "draft",
+      documentUrl: null,
+    });
+    tenantApplicationCompletionApi.getTenantApplicationCompletion.mockResolvedValue({
+      status: "completed",
+      progressPercent: 100,
+      sections: [],
+      nextSteps: [],
+      updatedAt: "2026-01-02T00:00:00.000Z",
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantApplicationStatusPage />
+      </MemoryRouter>
+    );
+
+    expect((await screen.findAllByText(/Lease step/i)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/Lease step started/i)).length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: /Open lease details/i })).toBeInTheDocument();
   });
 
   it("renders empty state safely", async () => {

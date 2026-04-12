@@ -9,6 +9,7 @@ import { getTenantNotificationPreferences } from "../../api/tenantNotificationPr
 import { getTenantAccess } from "../../api/tenantAccess";
 import { getTenantAttachments } from "../../api/tenantAttachmentsApi";
 import { getTenantProfile } from "../../api/tenantProfile";
+import { getTenantLeaseWorkspace } from "../../api/tenantPortal";
 import {
   TenantEmptyState,
   TenantErrorState,
@@ -25,6 +26,7 @@ import { buildTenantApplicationFlow } from "./tenantApplicationFlow";
 import { buildTenantLandlordInteractionLoop } from "../tenantLandlordInteractionLoop";
 import { buildFollowUpResolutionState } from "../followUpResolutionState";
 import { buildLandlordDecisionOutcome } from "../landlordDecisionOutcome";
+import { buildLeaseFlowTransitionState } from "../leaseFlowTransitionState";
 import StructuredNotificationList from "../StructuredNotificationList";
 import { buildTenantStructuredNotificationTriggers } from "../structuredNotificationTriggers";
 import { filterStructuredNotificationsByPreferences } from "../notificationChannelRouting";
@@ -150,6 +152,7 @@ export default function TenantApplicationStatusPage() {
   const [profile, setProfile] = React.useState<Awaited<ReturnType<typeof getTenantProfile>> | null>(null);
   const [attachments, setAttachments] = React.useState<Awaited<ReturnType<typeof getTenantAttachments>> | null>(null);
   const [access, setAccess] = React.useState<Awaited<ReturnType<typeof getTenantAccess>> | null>(null);
+  const [lease, setLease] = React.useState<Awaited<ReturnType<typeof getTenantLeaseWorkspace>> | null>(null);
   const [notificationPreferences, setNotificationPreferences] = React.useState<Awaited<ReturnType<typeof getTenantNotificationPreferences>> | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -158,11 +161,12 @@ export default function TenantApplicationStatusPage() {
     setLoading(true);
     setError(null);
     try {
-      const [completionResult, profileResult, attachmentsResult, accessResult, preferencesResult] = await Promise.allSettled([
+      const [completionResult, profileResult, attachmentsResult, accessResult, leaseResult, preferencesResult] = await Promise.allSettled([
         getTenantApplicationCompletion(),
         getTenantProfile(),
         getTenantAttachments(),
         getTenantAccess(),
+        getTenantLeaseWorkspace(),
         getTenantNotificationPreferences(),
       ]);
       if (completionResult.status !== "fulfilled") {
@@ -172,12 +176,14 @@ export default function TenantApplicationStatusPage() {
       setProfile(profileResult.status === "fulfilled" ? profileResult.value : null);
       setAttachments(attachmentsResult.status === "fulfilled" ? attachmentsResult.value : null);
       setAccess(accessResult.status === "fulfilled" ? accessResult.value : null);
+      setLease(leaseResult.status === "fulfilled" ? leaseResult.value : null);
       setNotificationPreferences(preferencesResult.status === "fulfilled" ? preferencesResult.value : null);
     } catch (err: any) {
       setData(null);
       setProfile(null);
       setAttachments(null);
       setAccess(null);
+      setLease(null);
       setNotificationPreferences(null);
       setError(err?.payload?.error || err?.message || "Unable to load application completion.");
     } finally {
@@ -271,12 +277,25 @@ export default function TenantApplicationStatusPage() {
     followUpOverallState: resolutionView.overallState,
     remainingCategories: resolutionView.remainingCategoriesNeedingAttention,
   });
+  const leaseTransition = buildLeaseFlowTransitionState({
+    audience: "tenant",
+    decisionOutcome,
+    lease,
+  });
   const decisionOutcomeTone =
     decisionOutcome.outcomeState === "ready_for_next_step"
       ? { color: "#166534", background: "#dcfce7", label: "Ready for next step" }
       : decisionOutcome.outcomeState === "not_proceeding"
       ? { color: "#7f1d1d", background: "#fee2e2", label: "Not proceeding" }
       : { color: "#1d4ed8", background: "#dbeafe", label: "Hold for later" };
+  const leaseTransitionTone =
+    leaseTransition.transitionState === "lease_step_started"
+      ? { color: "#0f766e", background: "#ccfbf1", label: "Lease step started" }
+      : leaseTransition.transitionState === "ready_for_lease_step"
+      ? { color: "#166534", background: "#dcfce7", label: "Ready for lease step" }
+      : leaseTransition.transitionState === "awaiting_next_action"
+      ? { color: "#1d4ed8", background: "#dbeafe", label: "Awaiting next action" }
+      : { color: "#9a3412", background: "#ffedd5", label: "Not ready for lease step" };
 
   return (
     <TenantSurfaceShell
@@ -527,6 +546,69 @@ export default function TenantApplicationStatusPage() {
                 {step}
               </div>
             ))}
+          </div>
+        </div>
+      </TenantInfoCard>
+
+      <TenantInfoCard heading="Lease step" accent="#7c3aed">
+        <div style={{ display: "grid", gap: spacing.sm }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontWeight: 800, color: textTokens.primary }}>{leaseTransition.label}</div>
+              <div style={{ color: textTokens.secondary }}>{leaseTransition.explanation}</div>
+            </div>
+            <div
+              style={{
+                padding: "6px 10px",
+                borderRadius: 999,
+                fontWeight: 700,
+                color: leaseTransitionTone.color,
+                background: leaseTransitionTone.background,
+              }}
+            >
+              {leaseTransitionTone.label}
+            </div>
+          </div>
+
+          {leaseTransition.blockers.length ? (
+            <div
+              style={{
+                border: "1px solid rgba(15,23,42,0.08)",
+                borderRadius: 12,
+                padding: "12px 14px",
+                display: "grid",
+                gap: 8,
+              }}
+            >
+              <div style={{ fontWeight: 700, color: textTokens.primary }}>What is still blocking this step</div>
+              {leaseTransition.blockers.map((item) => (
+                <div key={item} style={{ color: textTokens.secondary }}>
+                  {item}
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          <div
+            style={{
+              border: "1px solid rgba(15,23,42,0.08)",
+              borderRadius: 12,
+              padding: "12px 14px",
+              display: "grid",
+              gap: 8,
+            }}
+          >
+            <div style={{ fontWeight: 700, color: textTokens.primary }}>Next step</div>
+            {leaseTransition.nextActions.map((step) => (
+              <div key={step} style={{ color: textTokens.secondary }}>
+                {step}
+              </div>
+            ))}
+            {leaseTransition.transitionState === "lease_step_started" ? (
+              <Link to="/tenant/lease" style={{ fontWeight: 700 }}>
+                Open lease details
+              </Link>
+            ) : null}
           </div>
         </div>
       </TenantInfoCard>

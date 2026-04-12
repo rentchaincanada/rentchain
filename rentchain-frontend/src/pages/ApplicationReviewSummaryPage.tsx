@@ -24,6 +24,7 @@ import { buildLandlordStructuredActivityTimeline } from "./structuredActivityTim
 import { buildFollowUpResolutionState } from "./followUpResolutionState";
 import { buildLandlordDecisionWorkspace } from "./landlordDecisionWorkspace";
 import { buildLandlordDecisionOutcome } from "./landlordDecisionOutcome";
+import { buildLeaseFlowTransitionState } from "./leaseFlowTransitionState";
 import StructuredNotificationList from "./StructuredNotificationList";
 import { buildLandlordStructuredNotificationTriggers } from "./structuredNotificationTriggers";
 
@@ -96,6 +97,21 @@ function decisionOutcomeTone(state: "ready_for_next_step" | "hold_for_later" | "
     return { color: "#7f1d1d", background: "#fee2e2", label: "Not proceeding" };
   }
   return { color: "#1d4ed8", background: "#dbeafe", label: "Hold for later" };
+}
+
+function leaseTransitionTone(
+  state: "not_ready_for_lease" | "ready_for_lease_step" | "lease_step_started" | "awaiting_next_action"
+) {
+  if (state === "lease_step_started") {
+    return { color: "#0f766e", background: "#ccfbf1", label: "Lease step started" };
+  }
+  if (state === "ready_for_lease_step") {
+    return { color: "#166534", background: "#dcfce7", label: "Ready for lease step" };
+  }
+  if (state === "awaiting_next_action") {
+    return { color: "#1d4ed8", background: "#dbeafe", label: "Awaiting next action" };
+  }
+  return { color: "#9a3412", background: "#ffedd5", label: "Not ready for lease step" };
 }
 
 type SummaryLoadError = {
@@ -306,6 +322,16 @@ function ApplicationReviewSummaryPageBody() {
           })
         : null,
     [decisionWorkspace, resolutionView, summary]
+  );
+  const leaseTransition = useMemo(
+    () =>
+      decisionOutcome
+        ? buildLeaseFlowTransitionState({
+            audience: "landlord",
+            decisionOutcome,
+          })
+        : null,
+    [decisionOutcome]
   );
 
   const recentActivity = useMemo(
@@ -790,6 +816,80 @@ function ApplicationReviewSummaryPageBody() {
                     >
                       <div style={{ fontWeight: 700, color: text.main }}>Outcome next steps</div>
                       {decisionOutcome.landlordNextSteps.map((step) => (
+                        <div key={step} style={{ fontSize: 13, color: text.subtle }}>
+                          {step}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {leaseTransition ? (
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: 10,
+                    padding: 10,
+                    display: "grid",
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                    <div>
+                      <div style={{ fontWeight: 700, color: text.main }}>Lease step</div>
+                      <div style={{ fontSize: 13, color: text.subtle, marginTop: 4 }}>
+                        {leaseTransition.explanation}
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 999,
+                        fontWeight: 700,
+                        color: leaseTransitionTone(leaseTransition.transitionState).color,
+                        background: leaseTransitionTone(leaseTransition.transitionState).background,
+                      }}
+                    >
+                      {leaseTransitionTone(leaseTransition.transitionState).label}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 8 }}>
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "grid",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.main }}>Lease blockers</div>
+                      {leaseTransition.blockers.length ? (
+                        leaseTransition.blockers.map((item) => (
+                          <div key={item} style={{ fontSize: 13, color: text.subtle }}>
+                            {item}
+                          </div>
+                        ))
+                      ) : (
+                        <div style={{ fontSize: 13, color: text.subtle }}>
+                          No lease-step blockers are currently surfaced in this read-first transition view.
+                        </div>
+                      )}
+                    </div>
+
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "grid",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.main }}>Next action</div>
+                      {leaseTransition.nextActions.map((step) => (
                         <div key={step} style={{ fontSize: 13, color: text.subtle }}>
                           {step}
                         </div>

@@ -3,6 +3,7 @@ import type { TenantNotificationItem } from "../api/tenantNotifications";
 import { buildLandlordIntakeAlignmentView } from "./applicationReviewIntakeAlignment";
 import { buildLandlordDecisionWorkspace } from "./landlordDecisionWorkspace";
 import { buildLandlordDecisionOutcome } from "./landlordDecisionOutcome";
+import { buildLeaseFlowTransitionState } from "./leaseFlowTransitionState";
 
 export type StructuredActivityTimelineItem = {
   id: string;
@@ -114,6 +115,10 @@ export function buildLandlordStructuredActivityTimeline(
         : "partly_addressed",
     remainingCategories: intakeView.packageCategories.filter((item) => item.status === "missing"),
   });
+  const leaseTransition = buildLeaseFlowTransitionState({
+    audience: "landlord",
+    decisionOutcome,
+  });
 
   pushTimelineItem(items, {
     id: `review-summary-${summary.applicationId}`,
@@ -198,6 +203,21 @@ export function buildLandlordStructuredActivityTimeline(
     actionRequired: decisionOutcome.timelineEvent.actionRequired,
     relatedPath: null,
   });
+
+  if (leaseTransition.timelineEvent) {
+    pushTimelineItem(items, {
+      id: `lease-transition-${summary.applicationId}`,
+      type: leaseTransition.transitionState === "ready_for_lease_step" ? "ready_for_rereview" : "review_updated",
+      title: leaseTransition.timelineEvent.title,
+      description: leaseTransition.timelineEvent.description,
+      occurredAt:
+        summary.decisionSummary?.riskSnapshot?.updatedAt ||
+        summary.generatedAt,
+      actorLabel: "Decision workspace",
+      actionRequired: leaseTransition.timelineEvent.actionRequired,
+      relatedPath: null,
+    });
+  }
 
   return items.sort((left, right) => right.occurredAt - left.occurredAt);
 }
