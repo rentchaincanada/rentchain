@@ -197,6 +197,14 @@ describe("structuredActivityTimeline", () => {
       )
     ).toBe(true);
     expect(
+      result.some(
+        (item) =>
+          item.title === "Lease ready for signing" &&
+          item.actorLabel === "Lease signing" &&
+          item.actionRequired === false
+      )
+    ).toBe(true);
+    expect(
       result.some((item) => item.title === "Execution started")
     ).toBe(false);
   });

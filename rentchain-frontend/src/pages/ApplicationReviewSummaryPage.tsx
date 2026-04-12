@@ -29,6 +29,7 @@ import { buildLeasePreparationWorkspaceState } from "./leasePreparationWorkspace
 import { buildMoveInReadinessWorkspaceState } from "./moveInReadinessWorkspaceState";
 import { buildLeaseExecutionReadinessState } from "./leaseExecutionReadinessState";
 import { buildLeaseExecutionWorkspace } from "./leaseExecutionWorkspace";
+import { buildLeaseSigningWorkspaceState } from "./leaseSigningWorkspaceState";
 import StructuredNotificationList from "./StructuredNotificationList";
 import { buildLandlordStructuredNotificationTriggers } from "./structuredNotificationTriggers";
 
@@ -176,6 +177,33 @@ function leaseExecutionReadinessTone(
     return { color: "#1d4ed8", background: "#dbeafe", label: "Awaiting execution action" };
   }
   return { color: "#64748b", background: "#e2e8f0", label: "Not ready for execution" };
+}
+
+function leaseSigningTone(
+  state:
+    | "not_ready_for_signing"
+    | "ready_for_signing"
+    | "signing_in_progress"
+    | "awaiting_tenant_signature"
+    | "awaiting_landlord_signature"
+    | "signed_or_completed"
+) {
+  if (state === "signed_or_completed") {
+    return { color: "#166534", background: "#dcfce7", label: "Signed" };
+  }
+  if (state === "awaiting_tenant_signature") {
+    return { color: "#1d4ed8", background: "#dbeafe", label: "Awaiting tenant signature" };
+  }
+  if (state === "awaiting_landlord_signature") {
+    return { color: "#7c3aed", background: "#ede9fe", label: "Awaiting landlord signature" };
+  }
+  if (state === "signing_in_progress") {
+    return { color: "#0f766e", background: "#ccfbf1", label: "Signing in progress" };
+  }
+  if (state === "ready_for_signing") {
+    return { color: "#166534", background: "#dcfce7", label: "Ready for signing" };
+  }
+  return { color: "#64748b", background: "#e2e8f0", label: "Not ready for signing" };
 }
 
 type SummaryLoadError = {
@@ -437,6 +465,16 @@ function ApplicationReviewSummaryPageBody() {
           })
         : null,
     [decisionOutcome, intakeView, leasePreparation, moveInReadiness]
+  );
+  const signingWorkspace = useMemo(
+    () =>
+      executionWorkspace
+        ? buildLeaseSigningWorkspaceState({
+            audience: "landlord",
+            executionWorkspace,
+          })
+        : null,
+    [executionWorkspace]
   );
 
   const recentActivity = useMemo(
@@ -1335,6 +1373,112 @@ function ApplicationReviewSummaryPageBody() {
 
                   <div style={{ fontSize: 12, color: text.subtle }}>
                     This workspace defines the handoff from structured readiness into the real-world execution process. It does not imply signing, payment, or completion has already happened.
+                  </div>
+                </div>
+              ) : null}
+
+              {signingWorkspace ? (
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: 10,
+                    padding: 10,
+                    display: "grid",
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                    <div>
+                      <div style={{ fontWeight: 700, color: text.main }}>Lease signing</div>
+                      <div style={{ fontSize: 13, color: text.subtle, marginTop: 4 }}>
+                        {signingWorkspace.explanation}
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 999,
+                        fontWeight: 700,
+                        color: leaseSigningTone(signingWorkspace.signingState).color,
+                        background: leaseSigningTone(signingWorkspace.signingState).background,
+                      }}
+                    >
+                      {leaseSigningTone(signingWorkspace.signingState).label}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "grid",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.main }}>Signing status</div>
+                      <div style={{ fontSize: 13, color: text.subtle }}>{signingWorkspace.label}</div>
+                    </div>
+
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "grid",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.main }}>Next actor</div>
+                      <div style={{ fontSize: 13, color: text.subtle }}>{signingWorkspace.currentActorLabel}</div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "grid",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.main }}>Blockers</div>
+                      {signingWorkspace.blockers.length ? (
+                        signingWorkspace.blockers.map((item, index) => (
+                          <div key={`${item}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
+                            {item}
+                          </div>
+                        ))
+                      ) : (
+                        <div style={{ fontSize: 13, color: text.subtle }}>
+                          No current signing blockers are surfaced from this review-summary view.
+                        </div>
+                      )}
+                    </div>
+
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "grid",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.main }}>Next steps</div>
+                      {signingWorkspace.nextActions.map((step, index) => (
+                        <div key={`${step}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
+                          {step}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: 12, color: text.subtle }}>
+                    This signing workspace is a structured status view only. It does not claim provider-backed e-signing or legal completion unless the current authorized lease state truly shows it.
                   </div>
                 </div>
               ) : null}
