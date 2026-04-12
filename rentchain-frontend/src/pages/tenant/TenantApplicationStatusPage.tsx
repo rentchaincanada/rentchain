@@ -989,12 +989,25 @@ export default function TenantApplicationStatusPage() {
               gap: 8,
             }}
           >
-            <div style={{ fontWeight: 700, color: textTokens.primary }}>Next steps</div>
-            {executionWorkspace.nextSteps.map((step, index) => (
-              <div key={`${step}-${index}`} style={{ color: textTokens.secondary }}>
-                {step}
-              </div>
-            ))}
+<div style={{ fontWeight: 700, color: textTokens.primary }}>Blockers</div>
+{executionWorkspace.blockers.length ? (
+  executionWorkspace.blockers.map((item, index) => (
+    <div key={`${item}-${index}`} style={{ color: textTokens.secondary }}>
+      {item}
+    </div>
+  ))
+) : (
+  <div style={{ color: textTokens.secondary }}>
+    No current blockers are visible in your tenant workspace for this handoff stage.
+  </div>
+)}
+
+<div style={{ fontWeight: 700, color: textTokens.primary }}>Next steps</div>
+{executionWorkspace.nextSteps.map((step, index) => (
+  <div key={`${step}-${index}`} style={{ color: textTokens.secondary }}>
+    {step}
+  </div>
+))}
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
               <Link to="/tenant/profile" style={{ fontWeight: 700 }}>
                 Review your profile
@@ -1093,11 +1106,33 @@ export default function TenantApplicationStatusPage() {
               gap: 8,
             }}
           >
-            <div style={{ fontWeight: 700, color: textTokens.primary }}>Next steps</div>
-            {signingWorkspace.nextActions.map((step, index) => (
-              <div key={`${step}-${index}`} style={{ color: textTokens.secondary }}>
-                {step}
-              </div>
+        <div
+  style={{
+    border: "1px solid rgba(15,23,42,0.08)",
+    borderRadius: 12,
+    padding: "12px 14px",
+    display: "grid",
+    gap: 8,
+  }}
+>
+  <div style={{ fontWeight: 700, color: textTokens.primary }}>Next steps</div>
+  {signingWorkspace.nextActions.map((step, index) => (
+    <div key={`${step}-${index}`} style={{ color: textTokens.secondary }}>
+      {step}
+    </div>
+  ))}
+  <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+    <Link to="/tenant/lease" style={{ fontWeight: 700 }}>
+      Review lease
+    </Link>
+    <Link to="/tenant/application" style={{ fontWeight: 700 }}>
+      Review application
+    </Link>
+    <Link to="/tenant/attachments" style={{ fontWeight: 700 }}>
+      Open documents
+    </Link>
+  </div>
+</div>
             ))}
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
               <Link to="/tenant/lease" style={{ fontWeight: 700 }}>

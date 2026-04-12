@@ -1448,6 +1448,8 @@ function ApplicationReviewSummaryPageBody() {
                       <div style={{ fontWeight: 700, color: text.main }}>Blockers</div>
                       {signingWorkspace.blockers.length ? (
                         signingWorkspace.blockers.map((item, index) => (
+                      {executionWorkspace.blockers.length ? (
+                        executionWorkspace.blockers.map((item, index) => (
                           <div key={`${item}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
                             {item}
                           </div>
@@ -1455,6 +1457,8 @@ function ApplicationReviewSummaryPageBody() {
                       ) : (
                         <div style={{ fontSize: 13, color: text.subtle }}>
                           No current signing blockers are surfaced from this review-summary view.
+                        <div style={{ fontSize: 13, color: text.subtle }}>
+   No current blockers are surfaced in this execution handoff view.
                         </div>
                       )}
                     </div>
@@ -1470,6 +1474,8 @@ function ApplicationReviewSummaryPageBody() {
                     >
                       <div style={{ fontWeight: 700, color: text.main }}>Next steps</div>
                       {signingWorkspace.nextActions.map((step, index) => (
+                      <div style={{ fontWeight: 700, color: text.main }}>Next step</div>
+                      {executionWorkspace.nextSteps.map((step, index) => (
                         <div key={`${step}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
                           {step}
                         </div>
@@ -1479,6 +1485,8 @@ function ApplicationReviewSummaryPageBody() {
 
                   <div style={{ fontSize: 12, color: text.subtle }}>
                     This signing workspace is a structured status view only. It does not claim provider-backed e-signing or legal completion unless the current authorized lease state truly shows it.
+                    <div style={{ fontSize: 12, color: text.subtle }}>
+This workspace defines the handoff from structured readiness into the real-world execution process. It does not imply signing, payment, or completion has already happened.
                   </div>
                 </div>
               ) : null}
