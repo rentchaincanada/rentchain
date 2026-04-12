@@ -296,7 +296,7 @@ describe("tenant workspace frontend shell", () => {
     );
 
     expect(await screen.findByText(/^Tenant Dashboard$/i)).toBeInTheDocument();
-    expect(screen.getByText(/Your tenant workspace is ready/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Your tenant workspace is ready/i)).toBeInTheDocument();
     expect(screen.getByText(/What to do next/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Continue to your dashboard/i })).toBeInTheDocument();
     expect(await screen.findByText(/Recent activity \/ notifications/i)).toBeInTheDocument();

@@ -7,6 +7,7 @@ import { buildLeaseFlowTransitionState } from "./leaseFlowTransitionState";
 import { buildLeasePreparationWorkspaceState } from "./leasePreparationWorkspaceState";
 import { buildMoveInReadinessWorkspaceState } from "./moveInReadinessWorkspaceState";
 import { buildLeaseExecutionReadinessState } from "./leaseExecutionReadinessState";
+import { buildLeaseExecutionWorkspace } from "./leaseExecutionWorkspace";
 
 export type StructuredActivityTimelineItem = {
   id: string;
@@ -135,12 +136,15 @@ export function buildLandlordStructuredActivityTimeline(
     leasePreparation,
     packageCategories: intakeView.packageCategories,
   });
-  const executionReadiness = buildLeaseExecutionReadinessState({
+  const executionWorkspace = buildLeaseExecutionWorkspace({
     audience: "landlord",
-    decisionOutcome,
-    leasePreparation,
-    moveInReadiness,
-    packageCategories: intakeView.packageCategories,
+    executionReadiness: buildLeaseExecutionReadinessState({
+      audience: "landlord",
+      decisionOutcome,
+      leasePreparation,
+      moveInReadiness,
+      packageCategories: intakeView.packageCategories,
+    }),
   });
 
   pushTimelineItem(items, {
@@ -278,20 +282,21 @@ export function buildLandlordStructuredActivityTimeline(
     });
   }
 
-  if (executionReadiness.timelineEvent) {
+  if (executionWorkspace.timelineEvent) {
     pushTimelineItem(items, {
       id: `lease-execution-readiness-${summary.applicationId}`,
       type:
-        executionReadiness.readinessState === "ready_for_execution"
+        executionWorkspace.executionState === "ready_for_execution" ||
+        executionWorkspace.executionState === "execution_in_progress"
           ? "ready_for_rereview"
           : "review_updated",
-      title: executionReadiness.timelineEvent.title,
-      description: executionReadiness.timelineEvent.description,
+      title: executionWorkspace.timelineEvent.title,
+      description: executionWorkspace.timelineEvent.description,
       occurredAt:
         summary.decisionSummary?.riskSnapshot?.updatedAt ||
         summary.generatedAt,
       actorLabel: "Lease execution readiness",
-      actionRequired: executionReadiness.timelineEvent.actionRequired,
+      actionRequired: executionWorkspace.timelineEvent.actionRequired,
       relatedPath: null,
     });
   }
