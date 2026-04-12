@@ -27,6 +27,7 @@ import { buildTenantLandlordInteractionLoop } from "../tenantLandlordInteraction
 import { buildFollowUpResolutionState } from "../followUpResolutionState";
 import { buildLandlordDecisionOutcome } from "../landlordDecisionOutcome";
 import { buildLeaseFlowTransitionState } from "../leaseFlowTransitionState";
+import { buildLeasePreparationWorkspaceState } from "../leasePreparationWorkspaceState";
 import StructuredNotificationList from "../StructuredNotificationList";
 import { buildTenantStructuredNotificationTriggers } from "../structuredNotificationTriggers";
 import { filterStructuredNotificationsByPreferences } from "../notificationChannelRouting";
@@ -282,6 +283,13 @@ export default function TenantApplicationStatusPage() {
     decisionOutcome,
     lease,
   });
+  const leasePreparation = buildLeasePreparationWorkspaceState({
+    audience: "tenant",
+    decisionOutcome,
+    leaseTransition,
+    packageCategories: reuse.packageCategories,
+    lease,
+  });
   const decisionOutcomeTone =
     decisionOutcome.outcomeState === "ready_for_next_step"
       ? { color: "#166534", background: "#dcfce7", label: "Ready for next step" }
@@ -296,6 +304,16 @@ export default function TenantApplicationStatusPage() {
       : leaseTransition.transitionState === "awaiting_next_action"
       ? { color: "#1d4ed8", background: "#dbeafe", label: "Awaiting next action" }
       : { color: "#9a3412", background: "#ffedd5", label: "Not ready for lease step" };
+  const leasePreparationTone =
+    leasePreparation.preparationState === "ready_for_execution"
+      ? { color: "#166534", background: "#dcfce7", label: "Ready for execution" }
+      : leasePreparation.preparationState === "preparing_lease"
+      ? { color: "#0f766e", background: "#ccfbf1", label: "Preparing lease" }
+      : leasePreparation.preparationState === "awaiting_next_action"
+      ? { color: "#1d4ed8", background: "#dbeafe", label: "Awaiting next action" }
+      : leasePreparation.preparationState === "needs_attention"
+      ? { color: "#9a3412", background: "#ffedd5", label: "Needs attention" }
+      : { color: "#64748b", background: "#e2e8f0", label: "Not started" };
 
   return (
     <TenantSurfaceShell
@@ -600,6 +618,115 @@ export default function TenantApplicationStatusPage() {
           >
             <div style={{ fontWeight: 700, color: textTokens.primary }}>Next step</div>
             {leaseTransition.nextActions.map((step) => (
+              <div key={step} style={{ color: textTokens.secondary }}>
+                {step}
+              </div>
+            ))}
+            {leaseTransition.transitionState === "lease_step_started" ? (
+              <Link to="/tenant/lease" style={{ fontWeight: 700 }}>
+                Open lease details
+              </Link>
+            ) : null}
+          </div>
+        </div>
+      </TenantInfoCard>
+
+      <TenantInfoCard heading="Lease preparation" accent="#6d28d9">
+        <div style={{ display: "grid", gap: spacing.sm }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontWeight: 800, color: textTokens.primary }}>{leasePreparation.label}</div>
+              <div style={{ color: textTokens.secondary }}>{leasePreparation.explanation}</div>
+            </div>
+            <div
+              style={{
+                padding: "6px 10px",
+                borderRadius: 999,
+                fontWeight: 700,
+                color: leasePreparationTone.color,
+                background: leasePreparationTone.background,
+              }}
+            >
+              {leasePreparationTone.label}
+            </div>
+          </div>
+
+          <div
+            style={{
+              border: "1px solid rgba(15,23,42,0.08)",
+              borderRadius: 12,
+              padding: "12px 14px",
+              display: "grid",
+              gap: 8,
+            }}
+          >
+            <div style={{ fontWeight: 700, color: textTokens.primary }}>Completed items</div>
+            {leasePreparation.completedItems.length ? (
+              leasePreparation.completedItems.map((item) => (
+                <div key={item.key} style={{ color: textTokens.secondary }}>
+                  <strong style={{ color: textTokens.primary }}>{item.label}:</strong> {item.detail}
+                </div>
+              ))
+            ) : (
+              <div style={{ color: textTokens.secondary }}>
+                No completed lease-preparation items are visible in your tenant workspace yet.
+              </div>
+            )}
+          </div>
+
+          <div
+            style={{
+              border: "1px solid rgba(15,23,42,0.08)",
+              borderRadius: 12,
+              padding: "12px 14px",
+              display: "grid",
+              gap: 8,
+            }}
+          >
+            <div style={{ fontWeight: 700, color: textTokens.primary }}>Outstanding items</div>
+            {leasePreparation.outstandingItems.length ? (
+              leasePreparation.outstandingItems.map((item) => (
+                <div key={item.key} style={{ color: textTokens.secondary }}>
+                  <strong style={{ color: textTokens.primary }}>{item.label}:</strong> {item.detail}
+                </div>
+              ))
+            ) : (
+              <div style={{ color: textTokens.secondary }}>
+                No outstanding preparation items are currently visible in your tenant workspace.
+              </div>
+            )}
+          </div>
+
+          {leasePreparation.blockers.length ? (
+            <div
+              style={{
+                border: "1px solid rgba(15,23,42,0.08)",
+                borderRadius: 12,
+                padding: "12px 14px",
+                display: "grid",
+                gap: 8,
+              }}
+            >
+              <div style={{ fontWeight: 700, color: textTokens.primary }}>Needs attention</div>
+              {leasePreparation.blockers.map((item) => (
+                <div key={item} style={{ color: textTokens.secondary }}>
+                  {item}
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          <div
+            style={{
+              border: "1px solid rgba(15,23,42,0.08)",
+              borderRadius: 12,
+              padding: "12px 14px",
+              display: "grid",
+              gap: 8,
+            }}
+          >
+            <div style={{ fontWeight: 700, color: textTokens.primary }}>Next steps</div>
+            {leasePreparation.nextActions.map((step) => (
               <div key={step} style={{ color: textTokens.secondary }}>
                 {step}
               </div>
