@@ -29,6 +29,7 @@ import { buildLandlordDecisionOutcome } from "../landlordDecisionOutcome";
 import { buildLeaseFlowTransitionState } from "../leaseFlowTransitionState";
 import { buildLeasePreparationWorkspaceState } from "../leasePreparationWorkspaceState";
 import { buildMoveInReadinessWorkspaceState } from "../moveInReadinessWorkspaceState";
+import { buildLeaseExecutionReadinessState } from "../leaseExecutionReadinessState";
 import StructuredNotificationList from "../StructuredNotificationList";
 import { buildTenantStructuredNotificationTriggers } from "../structuredNotificationTriggers";
 import { filterStructuredNotificationsByPreferences } from "../notificationChannelRouting";
@@ -336,6 +337,24 @@ export default function TenantApplicationStatusPage() {
       : moveInReadiness.readinessState === "needs_attention"
       ? { color: "#9a3412", background: "#ffedd5", label: "Needs attention" }
       : { color: "#64748b", background: "#e2e8f0", label: "Not started" };
+  const executionReadiness = buildLeaseExecutionReadinessState({
+    audience: "tenant",
+    decisionOutcome,
+    leasePreparation,
+    moveInReadiness,
+    packageCategories: reuse.packageCategories,
+    lease,
+  });
+  const executionReadinessTone =
+    executionReadiness.readinessState === "ready_for_execution"
+      ? { color: "#166534", background: "#dcfce7", label: "Ready for execution" }
+      : executionReadiness.readinessState === "preparing_for_execution"
+      ? { color: "#0f766e", background: "#ccfbf1", label: "Preparing to proceed" }
+      : executionReadiness.readinessState === "awaiting_next_action"
+      ? { color: "#1d4ed8", background: "#dbeafe", label: "Awaiting final requirements" }
+      : executionReadiness.readinessState === "needs_attention"
+      ? { color: "#9a3412", background: "#ffedd5", label: "Needs attention" }
+      : { color: "#64748b", background: "#e2e8f0", label: "Not ready for execution" };
 
   return (
     <TenantSurfaceShell
@@ -860,6 +879,124 @@ export default function TenantApplicationStatusPage() {
           >
             <div style={{ fontWeight: 700, color: textTokens.primary }}>Next steps</div>
             {moveInReadiness.nextActions.map((step, index) => (
+              <div key={`${step}-${index}`} style={{ color: textTokens.secondary }}>
+                {step}
+              </div>
+            ))}
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <Link to="/tenant/profile" style={{ fontWeight: 700 }}>
+                Review your profile
+              </Link>
+              <Link to="/tenant/attachments" style={{ fontWeight: 700 }}>
+                Open documents
+              </Link>
+              <Link to="/tenant/access" style={{ fontWeight: 700 }}>
+                Review access
+              </Link>
+              <Link to="/tenant/lease" style={{ fontWeight: 700 }}>
+                Open lease details
+              </Link>
+            </div>
+          </div>
+        </div>
+      </TenantInfoCard>
+
+      <TenantInfoCard heading="Lease execution readiness" accent="#0f766e">
+        <div style={{ display: "grid", gap: spacing.sm }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontWeight: 800, color: textTokens.primary }}>{executionReadiness.label}</div>
+              <div style={{ color: textTokens.secondary }}>{executionReadiness.explanation}</div>
+            </div>
+            <div
+              style={{
+                padding: "6px 10px",
+                borderRadius: 999,
+                fontWeight: 700,
+                color: executionReadinessTone.color,
+                background: executionReadinessTone.background,
+              }}
+            >
+              {executionReadinessTone.label}
+            </div>
+          </div>
+
+          <div
+            style={{
+              border: "1px solid rgba(15,23,42,0.08)",
+              borderRadius: 12,
+              padding: "12px 14px",
+              display: "grid",
+              gap: 8,
+            }}
+          >
+            <div style={{ fontWeight: 700, color: textTokens.primary }}>Completed items</div>
+            {executionReadiness.completedItems.length ? (
+              executionReadiness.completedItems.map((item) => (
+                <div key={item.key} style={{ color: textTokens.secondary }}>
+                  <strong style={{ color: textTokens.primary }}>{item.label}:</strong> {item.detail}
+                </div>
+              ))
+            ) : (
+              <div style={{ color: textTokens.secondary }}>
+                No completed execution-readiness items are visible in your tenant workspace yet.
+              </div>
+            )}
+          </div>
+
+          <div
+            style={{
+              border: "1px solid rgba(15,23,42,0.08)",
+              borderRadius: 12,
+              padding: "12px 14px",
+              display: "grid",
+              gap: 8,
+            }}
+          >
+            <div style={{ fontWeight: 700, color: textTokens.primary }}>Outstanding items</div>
+            {executionReadiness.outstandingItems.length ? (
+              executionReadiness.outstandingItems.map((item) => (
+                <div key={item.key} style={{ color: textTokens.secondary }}>
+                  <strong style={{ color: textTokens.primary }}>{item.label}:</strong> {item.detail}
+                </div>
+              ))
+            ) : (
+              <div style={{ color: textTokens.secondary }}>
+                No outstanding execution-readiness items are currently visible in your tenant workspace.
+              </div>
+            )}
+          </div>
+
+          {executionReadiness.blockers.length ? (
+            <div
+              style={{
+                border: "1px solid rgba(15,23,42,0.08)",
+                borderRadius: 12,
+                padding: "12px 14px",
+                display: "grid",
+                gap: 8,
+              }}
+            >
+              <div style={{ fontWeight: 700, color: textTokens.primary }}>Outstanding blockers</div>
+              {executionReadiness.blockers.map((item, index) => (
+                <div key={`${item}-${index}`} style={{ color: textTokens.secondary }}>
+                  {item}
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          <div
+            style={{
+              border: "1px solid rgba(15,23,42,0.08)",
+              borderRadius: 12,
+              padding: "12px 14px",
+              display: "grid",
+              gap: 8,
+            }}
+          >
+            <div style={{ fontWeight: 700, color: textTokens.primary }}>Next steps</div>
+            {executionReadiness.nextActions.map((step, index) => (
               <div key={`${step}-${index}`} style={{ color: textTokens.secondary }}>
                 {step}
               </div>

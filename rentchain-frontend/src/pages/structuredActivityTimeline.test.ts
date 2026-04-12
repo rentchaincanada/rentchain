@@ -188,5 +188,13 @@ describe("structuredActivityTimeline", () => {
           item.actionRequired === false
       )
     ).toBe(true);
+    expect(
+      result.some(
+        (item) =>
+          item.title === "Lease execution readiness updated" &&
+          item.actorLabel === "Lease execution readiness" &&
+          item.actionRequired === false
+      )
+    ).toBe(true);
   });
 });

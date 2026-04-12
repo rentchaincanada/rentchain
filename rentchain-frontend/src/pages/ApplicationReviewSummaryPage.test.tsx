@@ -156,6 +156,8 @@ describe("ApplicationReviewSummaryPage", () => {
     expect(await screen.findByText("Preparation blockers")).toBeInTheDocument();
     expect(await screen.findByText("Move-in readiness")).toBeInTheDocument();
     expect(await screen.findByText("Readiness blockers")).toBeInTheDocument();
+    expect(await screen.findByText("Lease execution readiness")).toBeInTheDocument();
+    expect(await screen.findByText("Outstanding blockers")).toBeInTheDocument();
     expect(await screen.findByText("Recent updates")).toBeInTheDocument();
     expect(await screen.findByText(/Tenant updated follow-up items/i)).toBeInTheDocument();
     expect(await screen.findByText(/Follow-up stays organized by aligned package categories/i)).toBeInTheDocument();
@@ -241,6 +243,8 @@ describe("ApplicationReviewSummaryPage", () => {
     expect((await screen.findAllByText("Awaiting next action")).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("Move-in readiness")).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("Awaiting next action")).length).toBeGreaterThan(1);
+    expect((await screen.findAllByText("Lease execution readiness")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Awaiting final requirements")).length).toBeGreaterThan(0);
     expect(await screen.findByText(/A lease-preparation record is not visible from the current review-summary surface yet/i)).toBeInTheDocument();
     expect(await screen.findByText(/Move this file into the lease flow/i)).toBeInTheDocument();
     expect(await screen.findByText(/No decision blockers are currently surfaced/i)).toBeInTheDocument();
@@ -319,6 +323,7 @@ describe("ApplicationReviewSummaryPage", () => {
     expect((await screen.findAllByText("Hold for later")).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("Not ready for lease step")).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("Not started")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Not ready for execution")).length).toBeGreaterThan(0);
     expect(
       (await screen.findAllByText(/Screening is still recommended before moving this file/i)).length
     ).toBeGreaterThan(0);
