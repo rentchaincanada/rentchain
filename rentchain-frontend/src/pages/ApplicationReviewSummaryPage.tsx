@@ -28,6 +28,7 @@ import { buildLeaseFlowTransitionState } from "./leaseFlowTransitionState";
 import { buildLeasePreparationWorkspaceState } from "./leasePreparationWorkspaceState";
 import { buildMoveInReadinessWorkspaceState } from "./moveInReadinessWorkspaceState";
 import { buildLeaseExecutionReadinessState } from "./leaseExecutionReadinessState";
+import { buildLeaseExecutionWorkspace } from "./leaseExecutionWorkspace";
 import StructuredNotificationList from "./StructuredNotificationList";
 import { buildLandlordStructuredNotificationTriggers } from "./structuredNotificationTriggers";
 
@@ -161,22 +162,18 @@ function moveInReadinessTone(
 function leaseExecutionReadinessTone(
   state:
     | "not_ready_for_execution"
-    | "preparing_for_execution"
-    | "needs_attention"
     | "ready_for_execution"
-    | "awaiting_next_action"
+    | "execution_in_progress"
+    | "awaiting_execution_action"
 ) {
+  if (state === "execution_in_progress") {
+    return { color: "#0f766e", background: "#ccfbf1", label: "Execution in progress" };
+  }
   if (state === "ready_for_execution") {
     return { color: "#166534", background: "#dcfce7", label: "Ready for execution" };
   }
-  if (state === "preparing_for_execution") {
-    return { color: "#0f766e", background: "#ccfbf1", label: "Preparing to proceed" };
-  }
-  if (state === "needs_attention") {
-    return { color: "#9a3412", background: "#ffedd5", label: "Needs attention" };
-  }
-  if (state === "awaiting_next_action") {
-    return { color: "#1d4ed8", background: "#dbeafe", label: "Awaiting final requirements" };
+  if (state === "awaiting_execution_action") {
+    return { color: "#1d4ed8", background: "#dbeafe", label: "Awaiting execution action" };
   }
   return { color: "#64748b", background: "#e2e8f0", label: "Not ready for execution" };
 }
@@ -425,15 +422,18 @@ function ApplicationReviewSummaryPageBody() {
         : null,
     [decisionOutcome, intakeView, leasePreparation, leaseTransition]
   );
-  const executionReadiness = useMemo(
+  const executionWorkspace = useMemo(
     () =>
       decisionOutcome && leasePreparation && moveInReadiness && intakeView
-        ? buildLeaseExecutionReadinessState({
+        ? buildLeaseExecutionWorkspace({
             audience: "landlord",
-            decisionOutcome,
-            leasePreparation,
-            moveInReadiness,
-            packageCategories: intakeView.packageCategories,
+            executionReadiness: buildLeaseExecutionReadinessState({
+              audience: "landlord",
+              decisionOutcome,
+              leasePreparation,
+              moveInReadiness,
+              packageCategories: intakeView.packageCategories,
+            }),
           })
         : null,
     [decisionOutcome, intakeView, leasePreparation, moveInReadiness]
@@ -1248,7 +1248,7 @@ function ApplicationReviewSummaryPageBody() {
                 </div>
               ) : null}
 
-              {executionReadiness ? (
+              {executionWorkspace ? (
                 <div
                   style={{
                     border: `1px solid ${colors.border}`,
@@ -1260,9 +1260,9 @@ function ApplicationReviewSummaryPageBody() {
                 >
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
                     <div>
-                      <div style={{ fontWeight: 700, color: text.main }}>Lease execution readiness</div>
+                      <div style={{ fontWeight: 700, color: text.main }}>Lease execution workspace</div>
                       <div style={{ fontSize: 13, color: text.subtle, marginTop: 4 }}>
-                        {executionReadiness.explanation}
+                        {executionWorkspace.explanation}
                       </div>
                     </div>
                     <div
@@ -1270,12 +1270,25 @@ function ApplicationReviewSummaryPageBody() {
                         padding: "6px 10px",
                         borderRadius: 999,
                         fontWeight: 700,
-                        color: leaseExecutionReadinessTone(executionReadiness.readinessState).color,
-                        background: leaseExecutionReadinessTone(executionReadiness.readinessState).background,
+                        color: leaseExecutionReadinessTone(executionWorkspace.executionState).color,
+                        background: leaseExecutionReadinessTone(executionWorkspace.executionState).background,
                       }}
                     >
-                      {leaseExecutionReadinessTone(executionReadiness.readinessState).label}
+                      {leaseExecutionReadinessTone(executionWorkspace.executionState).label}
                     </div>
+                  </div>
+
+                  <div
+                    style={{
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: 10,
+                      padding: 10,
+                      display: "grid",
+                      gap: 6,
+                    }}
+                  >
+                    <div style={{ fontWeight: 700, color: text.main }}>Execution status</div>
+                    <div style={{ fontSize: 13, color: text.subtle }}>{executionWorkspace.label}</div>
                   </div>
 
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
@@ -1288,64 +1301,16 @@ function ApplicationReviewSummaryPageBody() {
                         gap: 6,
                       }}
                     >
-                      <div style={{ fontWeight: 700, color: text.main }}>Completed items</div>
-                      {executionReadiness.completedItems.length ? (
-                        executionReadiness.completedItems.map((item) => (
-                          <div key={item.key} style={{ fontSize: 13, color: text.subtle }}>
-                            <strong style={{ color: text.main }}>{item.label}:</strong> {item.detail}
-                          </div>
-                        ))
-                      ) : (
-                        <div style={{ fontSize: 13, color: text.subtle }}>
-                          No completed execution-readiness items are surfaced from this review-summary view yet.
-                        </div>
-                      )}
-                    </div>
-
-                    <div
-                      style={{
-                        border: `1px solid ${colors.border}`,
-                        borderRadius: 10,
-                        padding: 10,
-                        display: "grid",
-                        gap: 6,
-                      }}
-                    >
-                      <div style={{ fontWeight: 700, color: text.main }}>Outstanding items</div>
-                      {executionReadiness.outstandingItems.length ? (
-                        executionReadiness.outstandingItems.map((item) => (
-                          <div key={item.key} style={{ fontSize: 13, color: text.subtle }}>
-                            <strong style={{ color: text.main }}>{item.label}:</strong> {item.detail}
-                          </div>
-                        ))
-                      ) : (
-                        <div style={{ fontSize: 13, color: text.subtle }}>
-                          No outstanding execution-readiness items are currently surfaced from the visible review state.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
-                    <div
-                      style={{
-                        border: `1px solid ${colors.border}`,
-                        borderRadius: 10,
-                        padding: 10,
-                        display: "grid",
-                        gap: 6,
-                      }}
-                    >
-                      <div style={{ fontWeight: 700, color: text.main }}>Outstanding blockers</div>
-                      {executionReadiness.blockers.length ? (
-                        executionReadiness.blockers.map((item, index) => (
+                      <div style={{ fontWeight: 700, color: text.main }}>Blockers</div>
+                      {executionWorkspace.blockers.length ? (
+                        executionWorkspace.blockers.map((item, index) => (
                           <div key={`${item}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
                             {item}
                           </div>
                         ))
                       ) : (
                         <div style={{ fontSize: 13, color: text.subtle }}>
-                          No current blockers are surfaced in this read-first execution-readiness workspace.
+                          No current blockers are surfaced in this execution handoff view.
                         </div>
                       )}
                     </div>
@@ -1359,13 +1324,17 @@ function ApplicationReviewSummaryPageBody() {
                         gap: 6,
                       }}
                     >
-                      <div style={{ fontWeight: 700, color: text.main }}>Next steps</div>
-                      {executionReadiness.nextActions.map((step, index) => (
+                      <div style={{ fontWeight: 700, color: text.main }}>Next step</div>
+                      {executionWorkspace.nextSteps.map((step, index) => (
                         <div key={`${step}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
                           {step}
                         </div>
                       ))}
                     </div>
+                  </div>
+
+                  <div style={{ fontSize: 12, color: text.subtle }}>
+                    This workspace defines the handoff from structured readiness into the real-world execution process. It does not imply signing, payment, or completion has already happened.
                   </div>
                 </div>
               ) : null}

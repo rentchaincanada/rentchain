@@ -218,9 +218,10 @@ describe("tenant application completion page", () => {
     expect(screen.getAllByText(/Lease preparation/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Not started/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Move-in readiness/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Lease execution readiness/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Completed items/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Outstanding items/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/^Lease execution$/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/What happens next/i)).toBeInTheDocument();
+    expect(screen.getByText(/This handoff view shows whether your file is ready to move into the next lease step/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/^Blockers$/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/What this means/i)).toBeInTheDocument();
     expect(screen.getByText(/derived from your current follow-up and re-review state/i)).toBeInTheDocument();
     expect(screen.getByText(/Go next/i)).toBeInTheDocument();
@@ -291,8 +292,8 @@ describe("tenant application completion page", () => {
     expect(screen.getAllByText(/A lease document is already visible in the current workspace/i).length).toBeGreaterThan(0);
     expect((await screen.findAllByText(/Move-in readiness/i)).length).toBeGreaterThan(0);
     expect((await screen.findAllByText(/Ready for move-in/i)).length).toBeGreaterThan(0);
-    expect((await screen.findAllByText(/Lease execution readiness/i)).length).toBeGreaterThan(0);
-    expect((await screen.findAllByText(/^Ready for execution$/i)).length).toBeGreaterThan(1);
+    expect((await screen.findAllByText(/^Lease execution$/i)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/Execution in progress/i)).length).toBeGreaterThan(0);
   });
 
   it("renders empty state safely", async () => {

@@ -191,10 +191,13 @@ describe("structuredActivityTimeline", () => {
     expect(
       result.some(
         (item) =>
-          item.title === "Lease execution readiness updated" &&
+          item.title === "Ready for execution" &&
           item.actorLabel === "Lease execution readiness" &&
           item.actionRequired === false
       )
     ).toBe(true);
+    expect(
+      result.some((item) => item.title === "Execution started")
+    ).toBe(false);
   });
 });
