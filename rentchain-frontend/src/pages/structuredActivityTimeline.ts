@@ -5,6 +5,7 @@ import { buildLandlordDecisionWorkspace } from "./landlordDecisionWorkspace";
 import { buildLandlordDecisionOutcome } from "./landlordDecisionOutcome";
 import { buildLeaseFlowTransitionState } from "./leaseFlowTransitionState";
 import { buildLeasePreparationWorkspaceState } from "./leasePreparationWorkspaceState";
+import { buildMoveInReadinessWorkspaceState } from "./moveInReadinessWorkspaceState";
 
 export type StructuredActivityTimelineItem = {
   id: string;
@@ -126,6 +127,13 @@ export function buildLandlordStructuredActivityTimeline(
     leaseTransition,
     packageCategories: intakeView.packageCategories,
   });
+  const moveInReadiness = buildMoveInReadinessWorkspaceState({
+    audience: "landlord",
+    decisionOutcome,
+    leaseTransition,
+    leasePreparation,
+    packageCategories: intakeView.packageCategories,
+  });
 
   pushTimelineItem(items, {
     id: `review-summary-${summary.applicationId}`,
@@ -240,6 +248,24 @@ export function buildLandlordStructuredActivityTimeline(
         summary.generatedAt,
       actorLabel: "Lease preparation",
       actionRequired: leasePreparation.timelineEvent.actionRequired,
+      relatedPath: null,
+    });
+  }
+
+  if (moveInReadiness.timelineEvent) {
+    pushTimelineItem(items, {
+      id: `move-in-readiness-${summary.applicationId}`,
+      type:
+        moveInReadiness.readinessState === "ready_for_move_in"
+          ? "ready_for_rereview"
+          : "review_updated",
+      title: moveInReadiness.timelineEvent.title,
+      description: moveInReadiness.timelineEvent.description,
+      occurredAt:
+        summary.decisionSummary?.riskSnapshot?.updatedAt ||
+        summary.generatedAt,
+      actorLabel: "Move-in readiness",
+      actionRequired: moveInReadiness.timelineEvent.actionRequired,
       relatedPath: null,
     });
   }

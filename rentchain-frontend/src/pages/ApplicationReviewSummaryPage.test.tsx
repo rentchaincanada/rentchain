@@ -150,10 +150,12 @@ describe("ApplicationReviewSummaryPage", () => {
     expect(await screen.findByText("Not ready for lease step")).toBeInTheDocument();
     expect(await screen.findByText("Lease blockers")).toBeInTheDocument();
     expect(await screen.findByText("Lease preparation")).toBeInTheDocument();
-    expect(await screen.findByText("Not started")).toBeInTheDocument();
-    expect(await screen.findByText("Completed items")).toBeInTheDocument();
-    expect(await screen.findByText("Outstanding items")).toBeInTheDocument();
+    expect((await screen.findAllByText("Not started")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Completed items")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Outstanding items")).length).toBeGreaterThan(0);
     expect(await screen.findByText("Preparation blockers")).toBeInTheDocument();
+    expect(await screen.findByText("Move-in readiness")).toBeInTheDocument();
+    expect(await screen.findByText("Readiness blockers")).toBeInTheDocument();
     expect(await screen.findByText("Recent updates")).toBeInTheDocument();
     expect(await screen.findByText(/Tenant updated follow-up items/i)).toBeInTheDocument();
     expect(await screen.findByText(/Follow-up stays organized by aligned package categories/i)).toBeInTheDocument();
@@ -237,6 +239,8 @@ describe("ApplicationReviewSummaryPage", () => {
     expect((await screen.findAllByText("Ready for next step")).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("Ready for lease step")).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("Awaiting next action")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Move-in readiness")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Awaiting next action")).length).toBeGreaterThan(1);
     expect(await screen.findByText(/A lease-preparation record is not visible from the current review-summary surface yet/i)).toBeInTheDocument();
     expect(await screen.findByText(/Move this file into the lease flow/i)).toBeInTheDocument();
     expect(await screen.findByText(/No decision blockers are currently surfaced/i)).toBeInTheDocument();
