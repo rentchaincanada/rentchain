@@ -1194,7 +1194,7 @@ export default function TenantApplicationStatusPage() {
                   <div style={{ color: textTokens.secondary }}>{item.detail}</div>
                 </div>
               );
-            })}
+            })
           </div>
         </TenantInfoCard>
 
