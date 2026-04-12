@@ -3,7 +3,10 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { apiFetch } from "../../api/apiFetch";
 import { setTenantToken } from "../../lib/tenantAuth";
 import { clearAuthToken } from "../../lib/authToken";
-import { resolvePostAuthDestination } from "../../lib/authDestination";
+import {
+  resolveTenantPostAuthDestination,
+  TENANT_DEFAULT_DESTINATION,
+} from "../../lib/authDestination";
 import { fingerprintToken, trackAuthEvent } from "../../lib/authAnalytics";
 
 export default function TenantMagicRedeemPage() {
@@ -15,10 +18,9 @@ export default function TenantMagicRedeemPage() {
   const token = useMemo(() => new URLSearchParams(location.search).get("token") || "", [location.search]);
   const next = useMemo(
     () =>
-      resolvePostAuthDestination({
+      resolveTenantPostAuthDestination({
         search: location.search,
-        role: "tenant",
-        fallback: "/tenant",
+        fallback: TENANT_DEFAULT_DESTINATION,
       }).destination,
     [location.search]
   );
@@ -48,11 +50,10 @@ export default function TenantMagicRedeemPage() {
         }
         if (!mounted) return;
         setStatus("ok");
-        const destination = resolvePostAuthDestination({
+        const destination = resolveTenantPostAuthDestination({
           explicitDestination: res?.next || null,
           search: location.search,
-          role: "tenant",
-          fallback: "/tenant",
+          fallback: TENANT_DEFAULT_DESTINATION,
         }).destination;
         trackAuthEvent("auth.onboard.magic_link_completed", {
           tokenFingerprint: fingerprintToken(token),

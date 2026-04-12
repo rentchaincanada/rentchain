@@ -1,5 +1,8 @@
 import React from "react";
 import { Link } from "react-router-dom";
+import { TENANT_DEFAULT_DESTINATION } from "../../lib/authDestination";
+
+const tenantLoginPath = `/tenant/login?next=${encodeURIComponent(TENANT_DEFAULT_DESTINATION)}`;
 
 const primaryLinkStyle: React.CSSProperties = {
   display: "inline-flex",
@@ -80,11 +83,11 @@ export default function TenantLandingPage() {
             RentChain
           </Link>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <Link to="/tenant/login" style={secondaryLinkStyle}>
+            <Link to={tenantLoginPath} style={secondaryLinkStyle}>
               Log in / Continue
             </Link>
-            <Link to="/signup" style={secondaryLinkStyle}>
-              Create profile
+            <Link to={`${tenantLoginPath}&intent=create-profile`} style={secondaryLinkStyle}>
+              Get started
             </Link>
           </div>
         </header>
@@ -140,7 +143,7 @@ export default function TenantLandingPage() {
               </p>
             </div>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <Link to="/tenant/login" style={primaryLinkStyle}>
+              <Link to={tenantLoginPath} style={primaryLinkStyle}>
                 Log in / Continue
               </Link>
               <Link to="/tenant/dashboard" style={secondaryLinkStyle}>

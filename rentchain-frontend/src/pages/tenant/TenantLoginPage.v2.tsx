@@ -1,7 +1,10 @@
 import React, { useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { apiFetch } from "../../api/apiFetch";
-import { resolvePostAuthDestination } from "../../lib/authDestination";
+import {
+  resolveTenantPostAuthDestination,
+  TENANT_DEFAULT_DESTINATION,
+} from "../../lib/authDestination";
 import { trackAuthEvent } from "../../lib/authAnalytics";
 
 function Card({ children }: { children: React.ReactNode }) {
@@ -27,10 +30,9 @@ const TenantLoginPageV2: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const location = useLocation();
   const next = useMemo(() => {
-    const resolved = resolvePostAuthDestination({
+    const resolved = resolveTenantPostAuthDestination({
       search: location.search,
-      role: "tenant",
-      fallback: "/tenant",
+      fallback: TENANT_DEFAULT_DESTINATION,
     });
     return resolved.destination;
   }, [location.search]);
