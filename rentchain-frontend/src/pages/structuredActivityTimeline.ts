@@ -4,6 +4,7 @@ import { buildLandlordIntakeAlignmentView } from "./applicationReviewIntakeAlign
 import { buildLandlordDecisionWorkspace } from "./landlordDecisionWorkspace";
 import { buildLandlordDecisionOutcome } from "./landlordDecisionOutcome";
 import { buildLeaseFlowTransitionState } from "./leaseFlowTransitionState";
+import { buildLeasePreparationWorkspaceState } from "./leasePreparationWorkspaceState";
 
 export type StructuredActivityTimelineItem = {
   id: string;
@@ -119,6 +120,12 @@ export function buildLandlordStructuredActivityTimeline(
     audience: "landlord",
     decisionOutcome,
   });
+  const leasePreparation = buildLeasePreparationWorkspaceState({
+    audience: "landlord",
+    decisionOutcome,
+    leaseTransition,
+    packageCategories: intakeView.packageCategories,
+  });
 
   pushTimelineItem(items, {
     id: `review-summary-${summary.applicationId}`,
@@ -215,6 +222,24 @@ export function buildLandlordStructuredActivityTimeline(
         summary.generatedAt,
       actorLabel: "Decision workspace",
       actionRequired: leaseTransition.timelineEvent.actionRequired,
+      relatedPath: null,
+    });
+  }
+
+  if (leasePreparation.timelineEvent) {
+    pushTimelineItem(items, {
+      id: `lease-preparation-${summary.applicationId}`,
+      type:
+        leasePreparation.preparationState === "ready_for_execution"
+          ? "ready_for_rereview"
+          : "review_updated",
+      title: leasePreparation.timelineEvent.title,
+      description: leasePreparation.timelineEvent.description,
+      occurredAt:
+        summary.decisionSummary?.riskSnapshot?.updatedAt ||
+        summary.generatedAt,
+      actorLabel: "Lease preparation",
+      actionRequired: leasePreparation.timelineEvent.actionRequired,
       relatedPath: null,
     });
   }

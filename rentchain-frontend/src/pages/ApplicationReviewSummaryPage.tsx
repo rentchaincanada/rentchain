@@ -25,6 +25,7 @@ import { buildFollowUpResolutionState } from "./followUpResolutionState";
 import { buildLandlordDecisionWorkspace } from "./landlordDecisionWorkspace";
 import { buildLandlordDecisionOutcome } from "./landlordDecisionOutcome";
 import { buildLeaseFlowTransitionState } from "./leaseFlowTransitionState";
+import { buildLeasePreparationWorkspaceState } from "./leasePreparationWorkspaceState";
 import StructuredNotificationList from "./StructuredNotificationList";
 import { buildLandlordStructuredNotificationTriggers } from "./structuredNotificationTriggers";
 
@@ -112,6 +113,24 @@ function leaseTransitionTone(
     return { color: "#1d4ed8", background: "#dbeafe", label: "Awaiting next action" };
   }
   return { color: "#9a3412", background: "#ffedd5", label: "Not ready for lease step" };
+}
+
+function leasePreparationTone(
+  state: "not_started" | "preparing_lease" | "needs_attention" | "ready_for_execution" | "awaiting_next_action"
+) {
+  if (state === "ready_for_execution") {
+    return { color: "#166534", background: "#dcfce7", label: "Ready for execution" };
+  }
+  if (state === "preparing_lease") {
+    return { color: "#0f766e", background: "#ccfbf1", label: "Preparing lease" };
+  }
+  if (state === "awaiting_next_action") {
+    return { color: "#1d4ed8", background: "#dbeafe", label: "Awaiting next action" };
+  }
+  if (state === "needs_attention") {
+    return { color: "#9a3412", background: "#ffedd5", label: "Needs attention" };
+  }
+  return { color: "#64748b", background: "#e2e8f0", label: "Not started" };
 }
 
 type SummaryLoadError = {
@@ -332,6 +351,18 @@ function ApplicationReviewSummaryPageBody() {
           })
         : null,
     [decisionOutcome]
+  );
+  const leasePreparation = useMemo(
+    () =>
+      decisionOutcome && leaseTransition && intakeView
+        ? buildLeasePreparationWorkspaceState({
+            audience: "landlord",
+            decisionOutcome,
+            leaseTransition,
+            packageCategories: intakeView.packageCategories,
+          })
+        : null,
+    [decisionOutcome, intakeView, leaseTransition]
   );
 
   const recentActivity = useMemo(
@@ -890,6 +921,128 @@ function ApplicationReviewSummaryPageBody() {
                     >
                       <div style={{ fontWeight: 700, color: text.main }}>Next action</div>
                       {leaseTransition.nextActions.map((step) => (
+                        <div key={step} style={{ fontSize: 13, color: text.subtle }}>
+                          {step}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {leasePreparation ? (
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: 10,
+                    padding: 10,
+                    display: "grid",
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                    <div>
+                      <div style={{ fontWeight: 700, color: text.main }}>Lease preparation</div>
+                      <div style={{ fontSize: 13, color: text.subtle, marginTop: 4 }}>
+                        {leasePreparation.explanation}
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 999,
+                        fontWeight: 700,
+                        color: leasePreparationTone(leasePreparation.preparationState).color,
+                        background: leasePreparationTone(leasePreparation.preparationState).background,
+                      }}
+                    >
+                      {leasePreparationTone(leasePreparation.preparationState).label}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "grid",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.main }}>Completed items</div>
+                      {leasePreparation.completedItems.length ? (
+                        leasePreparation.completedItems.map((item) => (
+                          <div key={item.key} style={{ fontSize: 13, color: text.subtle }}>
+                            <strong style={{ color: text.main }}>{item.label}:</strong> {item.detail}
+                          </div>
+                        ))
+                      ) : (
+                        <div style={{ fontSize: 13, color: text.subtle }}>
+                          No completed lease-preparation items are surfaced from this review-summary view yet.
+                        </div>
+                      )}
+                    </div>
+
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "grid",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.main }}>Outstanding items</div>
+                      {leasePreparation.outstandingItems.length ? (
+                        leasePreparation.outstandingItems.map((item) => (
+                          <div key={item.key} style={{ fontSize: 13, color: text.subtle }}>
+                            <strong style={{ color: text.main }}>{item.label}:</strong> {item.detail}
+                          </div>
+                        ))
+                      ) : (
+                        <div style={{ fontSize: 13, color: text.subtle }}>
+                          No outstanding lease-preparation items are currently surfaced from the visible review state.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "grid",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.main }}>Preparation blockers</div>
+                      {leasePreparation.blockers.length ? (
+                        leasePreparation.blockers.map((item) => (
+                          <div key={item} style={{ fontSize: 13, color: text.subtle }}>
+                            {item}
+                          </div>
+                        ))
+                      ) : (
+                        <div style={{ fontSize: 13, color: text.subtle }}>
+                          No current blockers are surfaced in this read-first preparation workspace.
+                        </div>
+                      )}
+                    </div>
+
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "grid",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.main }}>Next steps</div>
+                      {leasePreparation.nextActions.map((step) => (
                         <div key={step} style={{ fontSize: 13, color: text.subtle }}>
                           {step}
                         </div>

@@ -213,6 +213,10 @@ describe("tenant application completion page", () => {
     expect(screen.getAllByText(/Hold for later/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/^Lease step$/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Not ready for lease step/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Lease preparation/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Not started/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Completed items/i)).toBeInTheDocument();
+    expect(screen.getByText(/Outstanding items/i)).toBeInTheDocument();
     expect(screen.getByText(/What this means/i)).toBeInTheDocument();
     expect(screen.getByText(/derived from your current follow-up and re-review state/i)).toBeInTheDocument();
     expect(screen.getByText(/Go next/i)).toBeInTheDocument();
@@ -250,7 +254,37 @@ describe("tenant application completion page", () => {
 
     expect((await screen.findAllByText(/Lease step/i)).length).toBeGreaterThan(0);
     expect((await screen.findAllByText(/Lease step started/i)).length).toBeGreaterThan(0);
-    expect(screen.getByRole("link", { name: /Open lease details/i })).toBeInTheDocument();
+    expect((await screen.findAllByText(/Lease preparation/i)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/Preparing lease/i)).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: /Open lease details/i }).length).toBeGreaterThan(0);
+  });
+
+  it("shows ready-for-execution preparation when the lease document is already visible", async () => {
+    tenantPortalApi.getTenantLeaseWorkspace.mockResolvedValue({
+      leaseId: "lease-1",
+      startDate: "2026-05-01",
+      endDate: "2027-04-30",
+      monthlyRent: 180000,
+      status: "draft",
+      documentUrl: "https://example.com/lease.pdf",
+    });
+    tenantApplicationCompletionApi.getTenantApplicationCompletion.mockResolvedValue({
+      status: "completed",
+      progressPercent: 100,
+      sections: [],
+      nextSteps: [],
+      updatedAt: "2026-01-02T00:00:00.000Z",
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantApplicationStatusPage />
+      </MemoryRouter>
+    );
+
+    expect((await screen.findAllByText(/Lease preparation/i)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/Ready for execution/i)).length).toBeGreaterThan(0);
+    expect(screen.getByText(/A lease document is already visible in the current workspace/i)).toBeInTheDocument();
   });
 
   it("renders empty state safely", async () => {
