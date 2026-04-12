@@ -23,6 +23,8 @@ import TenantProfileCompletionCard from "./TenantProfileCompletionCard";
 import { buildTenantProfileCompletion } from "./tenantProfileCompletion";
 import { buildTenantDocumentVaultView } from "./tenantDocumentVault";
 import { buildTenantApplicationReuseView } from "./tenantApplicationReuse";
+import { buildTenantWorkspaceModeView } from "./tenantWorkspaceMode";
+import TenantWorkspaceModeBanner from "./TenantWorkspaceModeBanner";
 import StructuredNotificationList from "../StructuredNotificationList";
 import { buildTenantStructuredNotificationTriggers } from "../structuredNotificationTriggers";
 import { filterStructuredNotificationsByPreferences } from "../notificationChannelRouting";
@@ -140,6 +142,7 @@ export default function TenantWorkspacePage() {
     attachments,
     access,
   });
+  const modeView = buildTenantWorkspaceModeView(data?.context);
   const notificationItems = filterStructuredNotificationsByPreferences(
     buildTenantStructuredNotificationTriggers({
       packageCategories: reuse.packageCategories,
@@ -173,6 +176,8 @@ export default function TenantWorkspacePage() {
         </Link>
       }
     >
+      <TenantWorkspaceModeBanner view={modeView} />
+
       <TenantInfoCard heading="Dashboard Summary" accent="#0f766e">
         <TenantKeyValueGrid
           rows={[

@@ -31,6 +31,8 @@ import { buildLeasePreparationWorkspaceState } from "../leasePreparationWorkspac
 import StructuredNotificationList from "../StructuredNotificationList";
 import { buildTenantStructuredNotificationTriggers } from "../structuredNotificationTriggers";
 import { filterStructuredNotificationsByPreferences } from "../notificationChannelRouting";
+import { buildTenantWorkspaceModeView } from "./tenantWorkspaceMode";
+import TenantWorkspaceModeBanner from "./TenantWorkspaceModeBanner";
 
 function statusTone(status: TenantApplicationCompletionStatus) {
   switch (status) {
@@ -290,6 +292,7 @@ export default function TenantApplicationStatusPage() {
     packageCategories: reuse.packageCategories,
     lease,
   });
+  const modeView = buildTenantWorkspaceModeView(profile?.context || null);
   const decisionOutcomeTone =
     decisionOutcome.outcomeState === "ready_for_next_step"
       ? { color: "#166534", background: "#dcfce7", label: "Ready for next step" }
@@ -338,6 +341,8 @@ export default function TenantApplicationStatusPage() {
       }
     >
       <CompletionProgressCard progressPercent={data.progressPercent} status={data.status} />
+
+      <TenantWorkspaceModeBanner view={modeView} />
 
       <TenantInfoCard heading="Flow Status" accent="#0891b2">
         <div style={{ display: "grid", gap: spacing.sm }}>
