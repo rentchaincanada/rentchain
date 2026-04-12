@@ -218,6 +218,7 @@ describe("tenant application completion page", () => {
     expect(screen.getAllByText(/Lease preparation/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Not started/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Move-in readiness/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Lease execution readiness/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Completed items/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Outstanding items/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/What this means/i)).toBeInTheDocument();
@@ -290,6 +291,8 @@ describe("tenant application completion page", () => {
     expect(screen.getAllByText(/A lease document is already visible in the current workspace/i).length).toBeGreaterThan(0);
     expect((await screen.findAllByText(/Move-in readiness/i)).length).toBeGreaterThan(0);
     expect((await screen.findAllByText(/Ready for move-in/i)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/Lease execution readiness/i)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/^Ready for execution$/i)).length).toBeGreaterThan(1);
   });
 
   it("renders empty state safely", async () => {
