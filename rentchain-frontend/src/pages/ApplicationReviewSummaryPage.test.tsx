@@ -122,6 +122,7 @@ describe("ApplicationReviewSummaryPage", () => {
     expect(await screen.findByText("Application Review Summary")).toBeInTheDocument();
     expect(await screen.findByText("Intake Summary")).toBeInTheDocument();
     expect(await screen.findByText("Follow-up resolution")).toBeInTheDocument();
+    expect((await screen.findAllByText("Decision workspace")).length).toBeGreaterThan(0);
     expect(await screen.findByText("Shared package categories")).toBeInTheDocument();
     expect(await screen.findByText("Recent activity")).toBeInTheDocument();
     expect(screen.getAllByText("Profile details").length).toBeGreaterThan(0);
@@ -131,11 +132,15 @@ describe("ApplicationReviewSummaryPage", () => {
     expect(screen.getAllByText("Application readiness").length).toBeGreaterThan(0);
     expect((await screen.findAllByText("Partly addressed")).length).toBeGreaterThan(0);
     expect(await screen.findByText("Application readiness updated")).toBeInTheDocument();
-    expect(await screen.findByText("Next steps")).toBeInTheDocument();
+    expect((await screen.findAllByText("Next steps")).length).toBeGreaterThan(0);
     expect(await screen.findByText("Structured follow-up loop")).toBeInTheDocument();
     expect(screen.getAllByText(/Review the addressed categories now visible/i).length).toBeGreaterThan(0);
     expect(await screen.findByText("Still needs follow-up")).toBeInTheDocument();
     expect(await screen.findByText("Now appears addressed")).toBeInTheDocument();
+    expect(await screen.findByText("Decision status")).toBeInTheDocument();
+    expect(await screen.findByText("What is still missing")).toBeInTheDocument();
+    expect(await screen.findByText(/This application is not ready for a landlord next-step decision yet/i)).toBeInTheDocument();
+    expect(screen.getAllByText("Needs follow-up").length).toBeGreaterThan(0);
     expect(await screen.findByText("Recent updates")).toBeInTheDocument();
     expect(await screen.findByText(/Tenant updated follow-up items/i)).toBeInTheDocument();
     expect(await screen.findByText(/Follow-up stays organized by aligned package categories/i)).toBeInTheDocument();
@@ -143,5 +148,153 @@ describe("ApplicationReviewSummaryPage", () => {
     expect(await screen.findByText("Jane Applicant")).toBeInTheDocument();
     expect(await screen.findByText("Landlord Decision Panel")).toBeInTheDocument();
     expect(await screen.findByText("Identity verification completed")).toBeInTheDocument();
+  });
+
+  it("shows ready for decision when follow-up is resolved and review signals are organized", async () => {
+    const { useEntitlements } = await import("@/hooks/useEntitlements");
+    const { fetchReviewSummary } = await import("../api/reviewSummaryApi");
+
+    vi.mocked(useEntitlements).mockReturnValue({
+      canViewReviewSummary: true,
+      canExportPdf: true,
+    } as any);
+    vi.mocked(fetchReviewSummary).mockResolvedValue({
+      applicationId: "app-1",
+      generatedAt: "2026-04-01T00:00:00.000Z",
+      applicant: {
+        name: "Jordan Applicant",
+        email: "jordan@example.com",
+        currentAddressLine: "12 Main St",
+        city: "Halifax",
+        provinceState: "NS",
+        postalCode: "B3H1A1",
+        country: "CA",
+        timeAtCurrentAddressMonths: 24,
+        currentRentAmountCents: 180000,
+      },
+      employment: {
+        employerName: "Acme",
+        jobTitle: "Manager",
+        incomeAmountCents: 7200000,
+        incomeFrequency: "annual",
+        incomeMonthlyCents: 600000,
+        monthsAtJob: 36,
+      },
+      reference: { name: "Sam Ref", phone: "555-0100" },
+      compliance: {
+        applicationConsentAcceptedAt: "2026-03-29T00:00:00.000Z",
+        applicationConsentVersion: "v1",
+        signatureType: "electronic",
+        signedAt: "2026-03-29T00:00:00.000Z",
+      },
+      screening: { status: "complete", provider: "transunion", referenceId: "TU-2" },
+      derived: { incomeToRentRatio: 3.2, completeness: { score: 0.92, label: "High" }, flags: [] },
+      insights: [],
+      decisionSummary: {
+        applicationId: "app-1",
+        screeningRecommendation: {
+          recommended: false,
+          reason: "Already complete.",
+          priority: "low",
+        },
+        screeningSummary: {
+          available: true,
+          provider: "transunion",
+          completedAt: "2026-04-01T00:00:00.000Z",
+          highlights: [],
+        },
+        riskSnapshot: {
+          version: "risk-v1",
+          status: "completed",
+          score: 78,
+          grade: "B",
+          confidence: 0.88,
+          factors: [],
+          flags: [],
+          recommendations: [],
+          updatedAt: "2026-04-01T00:00:00.000Z",
+        },
+      },
+    } as any);
+
+    renderPage();
+
+    expect((await screen.findAllByText("Decision workspace")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Ready for decision")).length).toBeGreaterThan(0);
+    expect(await screen.findByText(/No decision blockers are currently surfaced/i)).toBeInTheDocument();
+  });
+
+  it("shows hold for later when follow-up is resolved but review signals still need work", async () => {
+    const { useEntitlements } = await import("@/hooks/useEntitlements");
+    const { fetchReviewSummary } = await import("../api/reviewSummaryApi");
+
+    vi.mocked(useEntitlements).mockReturnValue({
+      canViewReviewSummary: true,
+      canExportPdf: true,
+    } as any);
+    vi.mocked(fetchReviewSummary).mockResolvedValue({
+      applicationId: "app-1",
+      generatedAt: "2026-04-01T00:00:00.000Z",
+      applicant: {
+        name: "Morgan Applicant",
+        email: "morgan@example.com",
+        currentAddressLine: "45 Harbour St",
+        city: "Halifax",
+        provinceState: "NS",
+        postalCode: "B3H2B2",
+        country: "CA",
+        timeAtCurrentAddressMonths: 18,
+        currentRentAmountCents: 160000,
+      },
+      employment: {
+        employerName: "Acme",
+        jobTitle: "Coordinator",
+        incomeAmountCents: 5400000,
+        incomeFrequency: "annual",
+        incomeMonthlyCents: 450000,
+        monthsAtJob: 8,
+      },
+      reference: { name: "Pat Ref", phone: "555-0101" },
+      compliance: {
+        applicationConsentAcceptedAt: "2026-03-29T00:00:00.000Z",
+        applicationConsentVersion: "v1",
+        signatureType: "electronic",
+        signedAt: "2026-03-29T00:00:00.000Z",
+      },
+      screening: { status: "not_run", provider: null, referenceId: null },
+      derived: { incomeToRentRatio: 2.1, completeness: { score: 0.68, label: "Medium" }, flags: ["MISSING_EMPLOYER_NAME"] },
+      insights: [],
+      decisionSummary: {
+        applicationId: "app-1",
+        screeningRecommendation: {
+          recommended: true,
+          reason: "Still recommended.",
+          priority: "high",
+        },
+        screeningSummary: {
+          available: false,
+          provider: null,
+          completedAt: null,
+          highlights: [],
+        },
+        riskSnapshot: {
+          version: "risk-v1",
+          status: "completed",
+          score: 61,
+          grade: "C",
+          confidence: 0.71,
+          factors: [],
+          flags: [],
+          recommendations: [],
+          updatedAt: "2026-04-01T00:00:00.000Z",
+        },
+      },
+    } as any);
+
+    renderPage();
+
+    expect((await screen.findAllByText("Decision workspace")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Hold for later")).length).toBeGreaterThan(0);
+    expect(await screen.findByText(/Screening is still recommended before moving this file/i)).toBeInTheDocument();
   });
 });
