@@ -191,6 +191,8 @@ describe("tenant application completion page", () => {
     );
 
     expect(await screen.findAllByText(/Application Readiness/i)).not.toHaveLength(0);
+    expect(screen.getByText(/Your application is in progress/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Continue your application/i })).toBeInTheDocument();
     expect(screen.getAllByText(/62%/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Flow Status/i)).toBeInTheDocument();
     expect(screen.getByText(/Needs attention before review/i)).toBeInTheDocument();
