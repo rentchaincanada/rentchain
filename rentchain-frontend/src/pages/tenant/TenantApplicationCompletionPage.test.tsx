@@ -223,8 +223,11 @@ describe("tenant application completion page", () => {
     expect(screen.getByText(/This handoff view shows whether your file is ready to move into the next lease step/i)).toBeInTheDocument();
     expect(screen.getAllByText(/^Blockers$/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/^Lease signing$/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Who is expected to act/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Who is expected to act/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Not ready for signing/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Deposit \/ first payment/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/What this payment covers/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Not requested/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/What this means/i)).toBeInTheDocument();
     expect(screen.getByText(/derived from your current follow-up and re-review state/i)).toBeInTheDocument();
     expect(screen.getByText(/Go next/i)).toBeInTheDocument();
@@ -299,6 +302,37 @@ describe("tenant application completion page", () => {
     expect((await screen.findAllByText(/Execution in progress/i)).length).toBeGreaterThan(0);
     expect((await screen.findAllByText(/^Lease signing$/i)).length).toBeGreaterThan(0);
     expect((await screen.findAllByText(/Signing in progress/i)).length).toBeGreaterThan(0);
+  });
+
+  it("shows requested payment details when a signed lease has an outstanding deposit", async () => {
+    tenantPortalApi.getTenantLeaseWorkspace.mockResolvedValue({
+      leaseId: "lease-1",
+      startDate: "2026-05-01",
+      endDate: "2027-04-30",
+      monthlyRent: 1800,
+      status: "signed",
+      documentUrl: "https://example.com/lease.pdf",
+      depositCents: 150000,
+      depositRequired: true,
+    });
+    tenantApplicationCompletionApi.getTenantApplicationCompletion.mockResolvedValue({
+      status: "completed",
+      progressPercent: 100,
+      sections: [],
+      nextSteps: [],
+      updatedAt: "2026-01-02T00:00:00.000Z",
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantApplicationStatusPage />
+      </MemoryRouter>
+    );
+
+    expect((await screen.findAllByText(/Deposit \/ first payment/i)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/Payment requested/i)).length).toBeGreaterThan(0);
+    expect(await screen.findByText(/Requested amount: \$1,500.00 deposit/i)).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /Open payments/i }).length).toBeGreaterThan(0);
   });
 
   it("renders empty state safely", async () => {

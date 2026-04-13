@@ -32,6 +32,7 @@ import { buildMoveInReadinessWorkspaceState } from "../moveInReadinessWorkspaceS
 import { buildLeaseExecutionReadinessState } from "../leaseExecutionReadinessState";
 import { buildLeaseExecutionWorkspace } from "../leaseExecutionWorkspace";
 import { buildLeaseSigningWorkspaceState } from "../leaseSigningWorkspaceState";
+import { buildDepositPaymentFlowState } from "../depositPaymentFlowState";
 import StructuredNotificationList from "../StructuredNotificationList";
 import { buildTenantStructuredNotificationTriggers } from "../structuredNotificationTriggers";
 import { filterStructuredNotificationsByPreferences } from "../notificationChannelRouting";
@@ -376,6 +377,21 @@ export default function TenantApplicationStatusPage() {
       : signingWorkspace.signingState === "ready_for_signing"
       ? { color: "#166534", background: "#dcfce7", label: "Ready for signing" }
       : { color: "#64748b", background: "#e2e8f0", label: "Not ready for signing" };
+  const paymentWorkspace = buildDepositPaymentFlowState({
+    audience: "tenant",
+    signingWorkspace,
+    lease,
+  });
+  const paymentTone =
+    paymentWorkspace.paymentState === "paid"
+      ? { color: "#166534", background: "#dcfce7", label: "Payment completed" }
+      : paymentWorkspace.paymentState === "pending"
+      ? { color: "#0f766e", background: "#ccfbf1", label: "Payment in progress" }
+      : paymentWorkspace.paymentState === "requested"
+      ? { color: "#1d4ed8", background: "#dbeafe", label: "Payment requested" }
+      : paymentWorkspace.paymentState === "needs_attention"
+      ? { color: "#9a3412", background: "#ffedd5", label: "Needs attention" }
+      : { color: "#64748b", background: "#e2e8f0", label: "Not requested" };
 
   return (
     <TenantSurfaceShell
@@ -1068,6 +1084,115 @@ export default function TenantApplicationStatusPage() {
               </Link>
               <Link to="/tenant/attachments" style={{ fontWeight: 700 }}>
                 Open documents
+              </Link>
+            </div>
+          </div>
+        </div>
+      </TenantInfoCard>
+
+      <TenantInfoCard heading="Deposit / first payment" accent="#1d4ed8">
+        <div style={{ display: "grid", gap: spacing.sm }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontWeight: 800, color: textTokens.primary }}>{paymentWorkspace.label}</div>
+              <div style={{ color: textTokens.secondary }}>{paymentWorkspace.explanation}</div>
+            </div>
+            <div
+              style={{
+                padding: "6px 10px",
+                borderRadius: 999,
+                fontWeight: 700,
+                color: paymentTone.color,
+                background: paymentTone.background,
+              }}
+            >
+              {paymentTone.label}
+            </div>
+          </div>
+
+          <div
+            style={{
+              border: "1px solid rgba(15,23,42,0.08)",
+              borderRadius: 12,
+              padding: "12px 14px",
+              display: "grid",
+              gap: 8,
+            }}
+          >
+            <div style={{ fontWeight: 700, color: textTokens.primary }}>What this payment covers</div>
+            <div style={{ color: textTokens.secondary }}>{paymentWorkspace.paymentLabel}</div>
+            {paymentWorkspace.amountLabel ? (
+              <div style={{ color: textTokens.secondary }}>
+                Requested amount: {paymentWorkspace.amountLabel}
+              </div>
+            ) : null}
+            {paymentWorkspace.paymentMethodLabel ? (
+              <div style={{ color: textTokens.secondary }}>
+                Expected method: {paymentWorkspace.paymentMethodLabel}
+              </div>
+            ) : null}
+          </div>
+
+          <div
+            style={{
+              border: "1px solid rgba(15,23,42,0.08)",
+              borderRadius: 12,
+              padding: "12px 14px",
+              display: "grid",
+              gap: 8,
+            }}
+          >
+            <div style={{ fontWeight: 700, color: textTokens.primary }}>Who is expected to act</div>
+            <div style={{ color: textTokens.secondary }}>{paymentWorkspace.currentActorLabel}</div>
+          </div>
+
+          <div
+            style={{
+              border: "1px solid rgba(15,23,42,0.08)",
+              borderRadius: 12,
+              padding: "12px 14px",
+              display: "grid",
+              gap: 8,
+            }}
+          >
+            <div style={{ fontWeight: 700, color: textTokens.primary }}>Blockers</div>
+            {paymentWorkspace.blockers.length ? (
+              paymentWorkspace.blockers.map((item, index) => (
+                <div key={`${item}-${index}`} style={{ color: textTokens.secondary }}>
+                  {item}
+                </div>
+              ))
+            ) : (
+              <div style={{ color: textTokens.secondary }}>
+                No current payment blockers are visible in your tenant workspace.
+              </div>
+            )}
+          </div>
+
+          <div
+            style={{
+              border: "1px solid rgba(15,23,42,0.08)",
+              borderRadius: 12,
+              padding: "12px 14px",
+              display: "grid",
+              gap: 8,
+            }}
+          >
+            <div style={{ fontWeight: 700, color: textTokens.primary }}>Next steps</div>
+            {paymentWorkspace.nextActions.map((step, index) => (
+              <div key={`${step}-${index}`} style={{ color: textTokens.secondary }}>
+                {step}
+              </div>
+            ))}
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <Link to="/tenant/lease" style={{ fontWeight: 700 }}>
+                Review lease
+              </Link>
+              <Link to="/tenant/payments" style={{ fontWeight: 700 }}>
+                Open payments
+              </Link>
+              <Link to="/tenant/application" style={{ fontWeight: 700 }}>
+                Review application
               </Link>
             </div>
           </div>
