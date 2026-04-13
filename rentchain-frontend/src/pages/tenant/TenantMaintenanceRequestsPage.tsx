@@ -5,6 +5,7 @@ import { listTenantMaintenance, type MaintenanceWorkflowItem } from "../../api/m
 import { colors, spacing, text as textTokens } from "../../styles/tokens";
 import { buildMaintenanceWorkspaceState } from "../maintenanceWorkspaceState";
 import { buildMaintenanceAssignmentRoutingView } from "../maintenanceAssignmentRoutingState";
+import { buildMaintenanceSchedulingAccessView } from "../maintenanceSchedulingAccessState";
 import {
   TenantEmptyState,
   TenantErrorState,
@@ -132,6 +133,7 @@ export default function TenantMaintenanceRequestsPage() {
             (() => {
               const requestView = workspaceView.requestViews.find((entry) => entry.id === item.id);
               const assignmentView = buildMaintenanceAssignmentRoutingView(item, "tenant");
+              const schedulingView = buildMaintenanceSchedulingAccessView(item, "tenant");
               return (
                 <TenantInfoCard
                   key={item.id}
@@ -150,6 +152,24 @@ export default function TenantMaintenanceRequestsPage() {
                     {` • Handling: ${assignmentView.tenantVisibleLabel}`}
                   </div>
                   <div style={{ color: textTokens.secondary }}>{assignmentView.summary}</div>
+                  <div
+                    style={{
+                      border: "1px solid rgba(15,23,42,0.08)",
+                      borderRadius: 12,
+                      padding: "12px 14px",
+                      display: "grid",
+                      gap: 8,
+                    }}
+                  >
+                    <div style={{ color: textTokens.primary, fontWeight: 700 }}>Scheduling / access</div>
+                    <div style={{ color: textTokens.secondary }}>{schedulingView.summary}</div>
+                    <div style={{ color: textTokens.secondary }}>
+                      {`${schedulingView.tenantVisibleLabel} • ${schedulingView.accessLabel}`}
+                    </div>
+                    <div style={{ color: textTokens.secondary }}>
+                      Upcoming service window: {schedulingView.serviceWindowSummary}
+                    </div>
+                  </div>
                   {requestView?.nextSteps.length ? (
                     <div style={{ display: "grid", gap: 4 }}>
                       <div style={{ color: textTokens.primary, fontWeight: 700 }}>Next step</div>

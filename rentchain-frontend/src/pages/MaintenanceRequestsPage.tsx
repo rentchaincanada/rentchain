@@ -15,6 +15,10 @@ import { getContractorProfileById, listContractorInvites } from "../api/workOrde
 import { colors, radius, spacing, text } from "../styles/tokens";
 import { buildMaintenanceLifecycleView, buildMaintenanceWorkspaceState } from "./maintenanceWorkspaceState";
 import { buildMaintenanceAssignmentRoutingView } from "./maintenanceAssignmentRoutingState";
+import {
+  buildMaintenanceSchedulingAccessView,
+  buildMaintenanceSchedulingCalendarEvents,
+} from "./maintenanceSchedulingAccessState";
 
 const FILTERS: Array<{ value: "all" | MaintenanceWorkflowStatus; label: string }> = [
   { value: "all", label: "All requests" },
@@ -55,6 +59,54 @@ function contractorLabel(contractor: LandlordMaintenanceContractor) {
   return contractor.businessName || contractor.contactName || contractor.email || contractor.id;
 }
 
+function toLocalInputValue(ts?: number | null) {
+  if (!ts) return "";
+  const date = new Date(ts);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(
+    date.getMinutes()
+  )}`;
+}
+
+function fromLocalInputValue(value: string) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
+}
+
+function startOfCalendarMonth(value: Date) {
+  const monthStart = new Date(value.getFullYear(), value.getMonth(), 1);
+  const offset = monthStart.getDay();
+  return new Date(value.getFullYear(), value.getMonth(), 1 - offset);
+}
+
+function buildCalendarDays(value: Date) {
+  const firstCell = startOfCalendarMonth(value);
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(firstCell);
+    date.setDate(firstCell.getDate() + index);
+    return date;
+  });
+}
+
+function dayKey(date: Date) {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function calendarPriorityTone(priority: MaintenanceWorkflowItem["priority"]) {
+  switch (priority) {
+    case "urgent":
+      return { bg: "rgba(220,38,38,0.14)", color: "#b91c1c" };
+    case "normal":
+      return { bg: "rgba(37,99,235,0.12)", color: "#1d4ed8" };
+    case "low":
+      return { bg: "rgba(22,163,74,0.14)", color: "#15803d" };
+    default:
+      return { bg: "rgba(249,115,22,0.16)", color: "#c2410c" };
+  }
+}
+
 export default function MaintenanceRequestsPage() {
   const { id: routeId } = useParams();
   const navigate = useNavigate();
@@ -70,6 +122,10 @@ export default function MaintenanceRequestsPage() {
   const [landlordNote, setLandlordNote] = React.useState("");
   const [priority, setPriority] = React.useState<"low" | "normal" | "urgent">("normal");
   const [contractorId, setContractorId] = React.useState("");
+  const [serviceWindowStart, setServiceWindowStart] = React.useState("");
+  const [serviceWindowEnd, setServiceWindowEnd] = React.useState("");
+  const [accessRequired, setAccessRequired] = React.useState<"unknown" | "yes" | "no">("unknown");
+  const [calendarMonth, setCalendarMonth] = React.useState(() => new Date());
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -159,6 +215,11 @@ export default function MaintenanceRequestsPage() {
       setLandlordNote(String(selected.landlordNote || ""));
       setPriority(selected.priority || "normal");
       setContractorId(String(selected.assignedContractorId || ""));
+      setServiceWindowStart(toLocalInputValue(selected.serviceWindowStartAt));
+      setServiceWindowEnd(toLocalInputValue(selected.serviceWindowEndAt));
+      setAccessRequired(
+        selected.accessRequired === true ? "yes" : selected.accessRequired === false ? "no" : "unknown"
+      );
       return;
     }
     if (filtered.length > 0 && !routeId) {
@@ -167,6 +228,9 @@ export default function MaintenanceRequestsPage() {
       setLandlordNote(String(first.landlordNote || ""));
       setPriority(first.priority || "normal");
       setContractorId(String(first.assignedContractorId || ""));
+      setServiceWindowStart(toLocalInputValue(first.serviceWindowStartAt));
+      setServiceWindowEnd(toLocalInputValue(first.serviceWindowEndAt));
+      setAccessRequired(first.accessRequired === true ? "yes" : first.accessRequired === false ? "no" : "unknown");
     }
   }, [filtered, routeId, selected]);
 
@@ -193,6 +257,40 @@ export default function MaintenanceRequestsPage() {
       await load();
     } catch (err: any) {
       setError(String(err?.message || "Failed to save request"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveScheduleAccess = async () => {
+    if (!selected) return;
+    const serviceWindowStartAt = fromLocalInputValue(serviceWindowStart);
+    const serviceWindowEndAt = fromLocalInputValue(serviceWindowEnd);
+    if (serviceWindowStart && !serviceWindowStartAt) {
+      setError("Enter a valid service window start time.");
+      return;
+    }
+    if (serviceWindowEnd && !serviceWindowEndAt) {
+      setError("Enter a valid service window end time.");
+      return;
+    }
+    if (serviceWindowStartAt && serviceWindowEndAt && serviceWindowEndAt < serviceWindowStartAt) {
+      setError("Service window end must be after the start time.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    try {
+      await patchLandlordMaintenance(selected.id, {
+        serviceWindowStartAt,
+        serviceWindowEndAt,
+        accessRequired: accessRequired === "yes" ? true : accessRequired === "no" ? false : null,
+      });
+      showToast({ message: "Scheduling details saved.", variant: "success" });
+      await load();
+    } catch (err: any) {
+      setError(String(err?.message || "Failed to save scheduling details"));
     } finally {
       setSaving(false);
     }
@@ -281,6 +379,23 @@ export default function MaintenanceRequestsPage() {
     () => (selected ? buildMaintenanceAssignmentRoutingView(selected, "landlord") : null),
     [selected]
   );
+  const selectedScheduling = React.useMemo(
+    () => (selected ? buildMaintenanceSchedulingAccessView(selected, "landlord") : null),
+    [selected]
+  );
+  const calendarEvents = React.useMemo(() => buildMaintenanceSchedulingCalendarEvents(items), [items]);
+  const calendarDays = React.useMemo(() => buildCalendarDays(calendarMonth), [calendarMonth]);
+  const calendarEventMap = React.useMemo(() => {
+    const next = new Map<string, typeof calendarEvents>();
+    calendarDays.forEach((date) => next.set(dayKey(date), []));
+    calendarEvents.forEach((event) => {
+      const key = dayKey(new Date(event.startAt));
+      const list = next.get(key) || [];
+      list.push(event);
+      next.set(key, list);
+    });
+    return next;
+  }, [calendarDays, calendarEvents]);
 
   const totalOpen = items.filter((item) => !["completed", "cancelled"].includes(item.status)).length;
   const needsReview = items.filter((item) => item.status === "submitted").length;
@@ -352,6 +467,105 @@ export default function MaintenanceRequestsPage() {
               </option>
             ))}
           </select>
+        </div>
+      </Card>
+
+      <Card elevated>
+        <div style={{ display: "grid", gap: spacing.md }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontWeight: 800, color: text.primary }}>Scheduled maintenance calendar</div>
+              <div style={{ color: text.muted, marginTop: 4 }}>
+                Read-only month view of scheduled maintenance windows. Select an item to open the related request.
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <Button
+                variant="secondary"
+                onClick={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+              >
+                Previous
+              </Button>
+              <div style={{ fontWeight: 700, color: text.primary, minWidth: 160, textAlign: "center" }}>
+                {calendarMonth.toLocaleDateString(undefined, { month: "long", year: "numeric" })}
+              </div>
+              <Button
+                variant="secondary"
+                onClick={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
+              gap: 8,
+            }}
+          >
+            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((label) => (
+              <div key={label} style={{ color: text.muted, fontSize: 12, fontWeight: 700, textAlign: "center" }}>
+                {label}
+              </div>
+            ))}
+            {calendarDays.map((date) => {
+              const key = dayKey(date);
+              const dayEvents = calendarEventMap.get(key) || [];
+              const inMonth = date.getMonth() === calendarMonth.getMonth();
+              return (
+                <div
+                  key={key}
+                  style={{
+                    minHeight: 120,
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: radius.md,
+                    padding: 8,
+                    background: inMonth ? colors.panel : colors.card,
+                    display: "grid",
+                    alignContent: "start",
+                    gap: 6,
+                    opacity: inMonth ? 1 : 0.72,
+                  }}
+                >
+                  <div style={{ fontSize: 12, fontWeight: 700, color: text.primary }}>{date.getDate()}</div>
+                  {dayEvents.length ? (
+                    dayEvents.map((event) => {
+                      const tone = calendarPriorityTone(event.priority);
+                      return (
+                        <button
+                          key={event.requestId}
+                          type="button"
+                          onClick={() => selectRequest(items.find((item) => item.id === event.requestId) || null)}
+                          style={{
+                            textAlign: "left",
+                            border: "none",
+                            borderRadius: radius.sm,
+                            padding: "6px 8px",
+                            background: tone.bg,
+                            color: tone.color,
+                            cursor: "pointer",
+                            display: "grid",
+                            gap: 2,
+                          }}
+                        >
+                          <span style={{ fontWeight: 700, fontSize: 12 }}>{event.title}</span>
+                          <span style={{ fontSize: 11 }}>
+                            {new Date(event.startAt).toLocaleTimeString(undefined, {
+                              hour: "numeric",
+                              minute: "2-digit",
+                            })}
+                          </span>
+                        </button>
+                      );
+                    })
+                  ) : (
+                    <div style={{ fontSize: 12, color: text.muted }}>No scheduled service</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       </Card>
 
@@ -584,6 +798,115 @@ export default function MaintenanceRequestsPage() {
                           {step}
                         </div>
                       ))}
+                    </div>
+                  ) : null}
+
+                  {selectedScheduling ? (
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: radius.md,
+                        padding: "12px 14px",
+                        background: colors.panel,
+                        display: "grid",
+                        gap: 10,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.primary }}>Scheduling / access</div>
+                      <div style={{ color: text.secondary }}>{selectedScheduling.summary}</div>
+                      <div style={{ display: "grid", gap: spacing.sm, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+                        <div>
+                          <div style={{ color: text.muted, fontSize: 12 }}>Scheduling status</div>
+                          <div style={{ color: text.primary, fontWeight: 700, marginTop: 6 }}>
+                            {selectedScheduling.schedulingLabel}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ color: text.muted, fontSize: 12 }}>Service window</div>
+                          <div style={{ color: text.primary, fontWeight: 700, marginTop: 6 }}>
+                            {selectedScheduling.serviceWindowSummary}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ color: text.muted, fontSize: 12 }}>Access</div>
+                          <div style={{ color: text.primary, fontWeight: 700, marginTop: 6 }}>
+                            {selectedScheduling.accessLabel}
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ display: "grid", gap: spacing.sm, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+                        <label style={{ display: "grid", gap: 4 }}>
+                          <span style={{ color: text.muted, fontSize: 12 }}>Service window start</span>
+                          <input
+                            type="datetime-local"
+                            value={serviceWindowStart}
+                            onChange={(e) => setServiceWindowStart(e.target.value)}
+                            style={{
+                              padding: "9px 10px",
+                              borderRadius: radius.md,
+                              border: `1px solid ${colors.border}`,
+                              background: colors.panel,
+                              color: text.primary,
+                            }}
+                          />
+                        </label>
+                        <label style={{ display: "grid", gap: 4 }}>
+                          <span style={{ color: text.muted, fontSize: 12 }}>Service window end</span>
+                          <input
+                            type="datetime-local"
+                            value={serviceWindowEnd}
+                            onChange={(e) => setServiceWindowEnd(e.target.value)}
+                            style={{
+                              padding: "9px 10px",
+                              borderRadius: radius.md,
+                              border: `1px solid ${colors.border}`,
+                              background: colors.panel,
+                              color: text.primary,
+                            }}
+                          />
+                        </label>
+                        <label style={{ display: "grid", gap: 4 }}>
+                          <span style={{ color: text.muted, fontSize: 12 }}>Access requirement</span>
+                          <select
+                            value={accessRequired}
+                            onChange={(e) => setAccessRequired(e.target.value as "unknown" | "yes" | "no")}
+                            style={{
+                              padding: "9px 10px",
+                              borderRadius: radius.md,
+                              border: `1px solid ${colors.border}`,
+                              background: colors.panel,
+                              color: text.primary,
+                            }}
+                          >
+                            <option value="unknown">Not set</option>
+                            <option value="yes">Access needed</option>
+                            <option value="no">Access not needed</option>
+                          </select>
+                        </label>
+                      </div>
+                      {selectedScheduling.blockers.length ? (
+                        <div style={{ display: "grid", gap: 4 }}>
+                          <div style={{ fontWeight: 700, color: text.primary }}>Needs attention</div>
+                          {selectedScheduling.blockers.map((item) => (
+                            <div key={item} style={{ color: text.secondary }}>
+                              {item}
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                      <div style={{ display: "grid", gap: 4 }}>
+                        <div style={{ fontWeight: 700, color: text.primary }}>Next steps</div>
+                        {selectedScheduling.nextActions.map((item) => (
+                          <div key={item} style={{ color: text.secondary }}>
+                            {item}
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <Button variant="secondary" onClick={() => void saveScheduleAccess()} disabled={saving}>
+                          {saving ? "Saving..." : "Save scheduling"}
+                        </Button>
+                      </div>
                     </div>
                   ) : null}
 

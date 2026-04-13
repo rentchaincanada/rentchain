@@ -166,6 +166,9 @@ describe("tenantPortalRoutes foundation", () => {
       description: "Kitchen faucet dripping",
       assignedContractorName: "North Shore Plumbing",
       contractorStatus: "assigned",
+      serviceWindowStartAt: 300,
+      serviceWindowEndAt: 600,
+      accessRequired: true,
       statusHistory: [
         {
           status: "submitted",
@@ -253,6 +256,8 @@ describe("tenantPortalRoutes foundation", () => {
     expect(res.body?.data?.maintenance?.[0]?.title).toBe("Leaky tap");
     expect(res.body?.data?.maintenance?.[0]?.assignedContractorName).toBe("North Shore Plumbing");
     expect(res.body?.data?.maintenance?.[0]?.contractorStatus).toBe("assigned");
+    expect(res.body?.data?.maintenance?.[0]?.serviceWindowStartAt).toBe(300);
+    expect(res.body?.data?.maintenance?.[0]?.accessRequired).toBe(true);
     expect(res.body?.data?.maintenance?.[0]?.statusHistory?.[0]?.message).toBe("Submitted from tenant workspace.");
     expect(res.body?.data?.maintenance?.[0]?.internalCost).toBeUndefined();
 

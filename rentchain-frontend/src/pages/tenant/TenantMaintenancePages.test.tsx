@@ -55,6 +55,9 @@ describe("tenant maintenance pages", () => {
           priority: "normal",
           category: "plumbing",
           assignedContractorName: null,
+          serviceWindowStartAt: null,
+          serviceWindowEndAt: null,
+          accessRequired: null,
           createdAt: 100,
           updatedAt: 200,
         },
@@ -72,6 +75,8 @@ describe("tenant maintenance pages", () => {
     expect(screen.getByText(/Leaky faucet/i)).toBeInTheDocument();
     expect(screen.getByText(/Your request has been submitted and is waiting for landlord review/i)).toBeInTheDocument();
     expect(screen.getByText(/Handling: Awaiting Assignment/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Scheduling \/ access/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Upcoming service window: No service window has been confirmed yet/i)).toBeInTheDocument();
   });
 
   it("renders the tenant maintenance detail with next steps and timeline", async () => {
@@ -85,6 +90,9 @@ describe("tenant maintenance pages", () => {
         category: "HVAC",
         assignedContractorName: "North Shore HVAC",
         contractorStatus: "in_progress",
+        serviceWindowStartAt: Date.UTC(2026, 3, 15, 13, 0),
+        serviceWindowEndAt: Date.UTC(2026, 3, 15, 15, 0),
+        accessRequired: true,
         createdAt: 100,
         updatedAt: 200,
         statusHistory: [
@@ -111,6 +119,8 @@ describe("tenant maintenance pages", () => {
     expect(screen.getByText(/Work is actively underway/i)).toBeInTheDocument();
     expect(screen.getByText(/Handling status/i)).toBeInTheDocument();
     expect(screen.getByText(/Your request is actively being handled/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Scheduling \/ access/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Access needed/i)).toBeInTheDocument();
     expect(screen.getByText(/Status timeline/i)).toBeInTheDocument();
     expect(screen.getByText(/Technician is on site/i)).toBeInTheDocument();
   });
