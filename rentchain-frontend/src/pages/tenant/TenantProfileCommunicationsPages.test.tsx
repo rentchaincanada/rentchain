@@ -332,6 +332,8 @@ describe("tenant profile and communications pages", () => {
       </MemoryRouter>
     );
 
+    expect(await screen.findByText(/Inbox summary/i)).toBeInTheDocument();
+    expect(screen.getByText(/Your inbox is ready when tenancy communication starts/i)).toBeInTheDocument();
     expect(await screen.findByText(/Once you or your landlord start a conversation/i)).toBeInTheDocument();
     fireEvent.change(screen.getByRole("textbox", { name: /Compose message/i }), {
       target: { value: "Hello there" },
@@ -347,11 +349,19 @@ describe("tenant profile and communications pages", () => {
       thread: {
         id: "thread-1",
         landlordLabel: "Landlord",
-        unreadCount: 0,
-        lastMessageAt: null,
+        unreadCount: 1,
+        lastMessageAt: "2026-01-06T00:00:00.000Z",
         propertyId: "prop-1",
         unitId: "unit-2",
-        messages: [],
+        messages: [
+          {
+            id: "msg-1",
+            senderRole: "landlord",
+            body: "Can you confirm the move-in time?",
+            createdAt: "2026-01-06T00:00:00.000Z",
+            createdAtMs: 1234,
+          },
+        ],
       },
     });
     tenantCommunicationsApi.markTenantCommunicationsRead.mockResolvedValue(undefined);
@@ -363,7 +373,9 @@ describe("tenant profile and communications pages", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/Once you or your landlord start a conversation/i)).toBeInTheDocument();
+    expect(await screen.findByText(/A tenancy message is waiting for your reply/i)).toBeInTheDocument();
+    expect(screen.getByText(/Reply needed/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Can you confirm the move-in time\?/i).length).toBeGreaterThan(0);
     fireEvent.change(screen.getByRole("textbox", { name: /Compose message/i }), {
       target: { value: "Hello there" },
     });
