@@ -423,7 +423,7 @@ export default function MaintenanceRequestsPage() {
 );
 })}
             </div>
-          }
+          
           masterDropdown={
             filtered.length ? (
               <select
