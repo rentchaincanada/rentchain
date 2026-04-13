@@ -56,13 +56,14 @@ export function buildTenantWorkspaceModeView(
     return {
       mode,
       eyebrow: "Active tenant workspace",
-      title: "Your tenant workspace is ready",
+      title: "Your tenancy is active",
       description:
-        "You're in your active tenant workspace now. You can use your dashboard, review documents, and open lease-related details from here.",
+        "You're in your active tenant workspace now. Use this as your current tenancy home for lease details, documents, payments, and next-step visibility.",
       nextSteps: [
         { label: "Continue to your dashboard", to: "/tenant/dashboard" },
-        { label: "Review documents", to: "/tenant/attachments" },
         { label: "Open lease details", to: "/tenant/lease" },
+        { label: "Review documents", to: "/tenant/attachments" },
+        { label: "Open payments", to: "/tenant/payments" },
       ],
     };
   }

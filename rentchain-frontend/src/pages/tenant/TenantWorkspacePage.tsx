@@ -24,6 +24,7 @@ import { buildTenantProfileCompletion } from "./tenantProfileCompletion";
 import { buildTenantDocumentVaultView } from "./tenantDocumentVault";
 import { buildTenantApplicationReuseView } from "./tenantApplicationReuse";
 import { buildTenantWorkspaceModeView } from "./tenantWorkspaceMode";
+import { buildActiveTenancyWorkspaceState } from "./activeTenancyWorkspaceState";
 import TenantWorkspaceModeBanner from "./TenantWorkspaceModeBanner";
 import StructuredNotificationList from "../StructuredNotificationList";
 import { buildTenantStructuredNotificationTriggers } from "../structuredNotificationTriggers";
@@ -143,6 +144,10 @@ export default function TenantWorkspacePage() {
     access,
   });
   const modeView = buildTenantWorkspaceModeView(data?.context);
+  const activeTenancy = buildActiveTenancyWorkspaceState({
+    context: data?.context,
+    lease: data?.lease,
+  });
   const notificationItems = filterStructuredNotificationsByPreferences(
     buildTenantStructuredNotificationTriggers({
       packageCategories: reuse.packageCategories,
@@ -177,6 +182,84 @@ export default function TenantWorkspacePage() {
       }
     >
       <TenantWorkspaceModeBanner view={modeView} />
+
+      <TenantInfoCard heading="Active tenancy" accent="#7c3aed">
+        <div style={{ display: "grid", gap: spacing.sm }}>
+          <div style={{ display: "grid", gap: 4 }}>
+            <div style={{ fontSize: "1.05rem", fontWeight: 800, color: textTokens.primary }}>
+              {activeTenancy.title}
+            </div>
+            <div style={{ color: textTokens.secondary, lineHeight: 1.6 }}>
+              {activeTenancy.explanation}
+            </div>
+          </div>
+
+          <TenantKeyValueGrid
+            rows={[
+              { label: "Status", value: activeTenancy.label },
+              { label: "Lease reference", value: data?.lease?.leaseId || "Not visible yet" },
+              { label: "Lease status", value: prettyStatus(data?.lease?.status) },
+              { label: "Monthly rent", value: formatMoney(data?.lease?.monthlyRent) },
+            ]}
+          />
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+              gap: spacing.sm,
+            }}
+          >
+            <div
+              style={{
+                border: "1px solid rgba(15,23,42,0.08)",
+                borderRadius: 12,
+                padding: "12px 14px",
+                display: "grid",
+                gap: 8,
+              }}
+            >
+              <div style={{ fontWeight: 700, color: textTokens.primary }}>Tenancy summary</div>
+              {activeTenancy.summaryItems.map((item, index) => (
+                <div key={`${item}-${index}`} style={{ color: textTokens.secondary }}>
+                  {item}
+                </div>
+              ))}
+            </div>
+
+            <div
+              style={{
+                border: "1px solid rgba(15,23,42,0.08)",
+                borderRadius: 12,
+                padding: "12px 14px",
+                display: "grid",
+                gap: 8,
+              }}
+            >
+              <div style={{ fontWeight: 700, color: textTokens.primary }}>
+                {activeTenancy.needsAttention.length ? "Needs attention" : "Next steps"}
+              </div>
+              {(activeTenancy.needsAttention.length ? activeTenancy.needsAttention : activeTenancy.nextActions).map((item, index) => (
+                <div key={`${item}-${index}`} style={{ color: textTokens.secondary }}>
+                  {item}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
+            <Link to="/tenant/lease" style={{ fontWeight: 700 }}>
+              Open lease details
+            </Link>
+            <Link to="/tenant/attachments" style={{ fontWeight: 700 }}>
+              Open documents
+            </Link>
+            <Link to="/tenant/payments" style={{ fontWeight: 700 }}>
+              Open payments
+            </Link>
+          </div>
+        </div>
+      </TenantInfoCard>
 
       <TenantInfoCard heading="Dashboard Summary" accent="#0f766e">
         <TenantKeyValueGrid

@@ -51,11 +51,12 @@ describe("tenantWorkspaceMode", () => {
     });
 
     expect(view.mode).toBe("active_tenant_mode");
-    expect(view.title).toMatch(/workspace is ready/i);
+    expect(view.title).toMatch(/tenancy is active/i);
     expect(view.nextSteps.map((step) => step.to)).toEqual([
       "/tenant/dashboard",
-      "/tenant/attachments",
       "/tenant/lease",
+      "/tenant/attachments",
+      "/tenant/payments",
     ]);
   });
 });
