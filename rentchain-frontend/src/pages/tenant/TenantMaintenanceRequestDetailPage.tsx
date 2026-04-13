@@ -7,6 +7,7 @@ import { colors, radius, spacing, text as textTokens } from "../../styles/tokens
 import { TenantSurfaceShell, prettyStatus } from "./TenantWorkspaceShared";
 import { buildMaintenanceLifecycleView } from "../maintenanceWorkspaceState";
 import { buildMaintenanceAssignmentRoutingView } from "../maintenanceAssignmentRoutingState";
+import { buildMaintenanceSchedulingAccessView } from "../maintenanceSchedulingAccessState";
 
 function fmtDate(ts?: number | null) {
   if (!ts) return "—";
@@ -26,6 +27,7 @@ export default function TenantMaintenanceRequestDetailPage() {
   );
   const lifecycleView = data ? buildMaintenanceLifecycleView(data, "tenant") : null;
   const assignmentView = data ? buildMaintenanceAssignmentRoutingView(data, "tenant") : null;
+  const schedulingView = data ? buildMaintenanceSchedulingAccessView(data, "tenant") : null;
 
   useEffect(() => {
     const token = getTenantToken();
@@ -226,6 +228,31 @@ export default function TenantMaintenanceRequestDetailPage() {
                       ))}
                     </>
                   ) : null}
+                </div>
+              ) : null}
+              {schedulingView ? (
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: radius.md,
+                    padding: "12px 14px",
+                    background: colors.panel,
+                    display: "grid",
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ fontWeight: 800, color: textTokens.primary }}>Scheduling / access</div>
+                  <div style={{ color: textTokens.secondary }}>{schedulingView.summary}</div>
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>Upcoming service window</div>
+                  <div style={{ color: textTokens.secondary }}>{schedulingView.serviceWindowSummary}</div>
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>Access</div>
+                  <div style={{ color: textTokens.secondary }}>{schedulingView.accessLabel}</div>
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>What happens next</div>
+                  {schedulingView.nextActions.map((step) => (
+                    <div key={step} style={{ color: textTokens.secondary }}>
+                      {step}
+                    </div>
+                  ))}
                 </div>
               ) : null}
               <div style={{ display: "grid", gap: 8, marginTop: spacing.xs }}>

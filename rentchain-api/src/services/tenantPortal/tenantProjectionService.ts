@@ -36,6 +36,9 @@ type TenantMaintenanceProjection = {
   summary: string | null;
   assignedContractorName: string | null;
   contractorStatus: string | null;
+  serviceWindowStartAt: number | null;
+  serviceWindowEndAt: number | null;
+  accessRequired: boolean | null;
   createdAt: number | null;
   updatedAt: number | null;
   statusHistory: Array<{
@@ -150,6 +153,9 @@ export function projectTenantMaintenance(recordId: string, data: any): TenantMai
     summary: asString(data?.summary) || asString(data?.description),
     assignedContractorName: asString(data?.assignedContractorName),
     contractorStatus: asString(data?.contractorStatus),
+    serviceWindowStartAt: toMillis(data?.serviceWindowStartAt),
+    serviceWindowEndAt: toMillis(data?.serviceWindowEndAt),
+    accessRequired: typeof data?.accessRequired === "boolean" ? data.accessRequired : null,
     createdAt: toMillis(data?.createdAt),
     updatedAt: toMillis(data?.updatedAt),
     statusHistory,

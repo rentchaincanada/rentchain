@@ -33,6 +33,9 @@ export type MaintenanceWorkflowItem = {
   assignedContractorName?: string | null;
   contractorStatus?: string | null;
   contractorLastUpdate?: string | null;
+  serviceWindowStartAt?: number | null;
+  serviceWindowEndAt?: number | null;
+  accessRequired?: boolean | null;
   landlordNote?: string | null;
   createdAt: number;
   updatedAt: number;
@@ -102,6 +105,9 @@ export async function listTenantMaintenance() {
     status: String(item.status || "submitted").toLowerCase() as MaintenanceWorkflowStatus,
     assignedContractorName: item.assignedContractorName || null,
     contractorStatus: item.contractorStatus || null,
+    serviceWindowStartAt: typeof item.serviceWindowStartAt === "number" ? item.serviceWindowStartAt : null,
+    serviceWindowEndAt: typeof item.serviceWindowEndAt === "number" ? item.serviceWindowEndAt : null,
+    accessRequired: typeof item.accessRequired === "boolean" ? item.accessRequired : null,
     createdAt: item.createdAt || Date.now(),
     updatedAt: item.updatedAt || item.createdAt || Date.now(),
     statusHistory: Array.isArray(item.statusHistory)
@@ -132,6 +138,9 @@ export async function getTenantMaintenance(id: string) {
     status: String(item?.status || "submitted").toLowerCase() as MaintenanceWorkflowStatus,
     assignedContractorName: item?.assignedContractorName || null,
     contractorStatus: item?.contractorStatus || null,
+    serviceWindowStartAt: typeof item?.serviceWindowStartAt === "number" ? item.serviceWindowStartAt : null,
+    serviceWindowEndAt: typeof item?.serviceWindowEndAt === "number" ? item.serviceWindowEndAt : null,
+    accessRequired: typeof item?.accessRequired === "boolean" ? item.accessRequired : null,
     createdAt: item?.createdAt || Date.now(),
     updatedAt: item?.updatedAt || item?.createdAt || Date.now(),
     statusHistory: Array.isArray(item?.statusHistory)
@@ -166,6 +175,9 @@ export async function patchLandlordMaintenance(
     status?: MaintenanceWorkflowStatus;
     priority?: "low" | "normal" | "urgent";
     landlordNote?: string | null;
+    serviceWindowStartAt?: number | null;
+    serviceWindowEndAt?: number | null;
+    accessRequired?: boolean | null;
     message?: string;
   }
 ) {

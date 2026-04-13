@@ -256,6 +256,27 @@ function cleanString(value: any, max = 200): string | null {
   return text.slice(0, max);
 }
 
+function normalizeOptionalBoolean(value: any): boolean | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+  if (typeof value === "boolean") return value;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return null;
+}
+
+function toMillis(value: any): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+  if (typeof value?.toMillis === "function") return value.toMillis();
+  if (typeof value?.seconds === "number") return value.seconds * 1000;
+  return null;
+}
+
 function normalizeScreeningList(value: any, maxItems = 8, maxLength = 80): string[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -506,6 +527,9 @@ async function upsertMaintenanceWorkOrder(input: {
   category: string | null;
   priority: string | null;
   status: string | null;
+  serviceWindowStartAt?: number | null;
+  serviceWindowEndAt?: number | null;
+  accessRequired?: boolean | null;
 }) {
   const workOrderId = `maintenance_${input.maintenanceRequestId}`;
   const ref = db.collection("workOrders").doc(workOrderId);
@@ -527,6 +551,9 @@ async function upsertMaintenanceWorkOrder(input: {
     category: String(input.category || "").trim() || "GENERAL",
     priority: String(input.priority || "").trim() || "normal",
     status: String(input.status || "assigned").trim() || "assigned",
+    serviceWindowStartAt: typeof input.serviceWindowStartAt === "number" ? input.serviceWindowStartAt : null,
+    serviceWindowEndAt: typeof input.serviceWindowEndAt === "number" ? input.serviceWindowEndAt : null,
+    accessRequired: typeof input.accessRequired === "boolean" ? input.accessRequired : null,
     visibility: "private",
     createdAt: createdAtMs,
     updatedAt: now,
@@ -571,6 +598,16 @@ function shapeContractorJobFromSources(workOrder: any, maintenance: any) {
       String(maintenance?.contractorStatus || workOrder?.contractorStatus || status).trim() || status,
     contractorLastUpdate:
       String(maintenance?.contractorLastUpdate || workOrder?.contractorLastUpdate || "").trim() || null,
+    serviceWindowStartAt:
+      toMillis(maintenance?.serviceWindowStartAt) ?? toMillis(workOrder?.serviceWindowStartAt) ?? null,
+    serviceWindowEndAt:
+      toMillis(maintenance?.serviceWindowEndAt) ?? toMillis(workOrder?.serviceWindowEndAt) ?? null,
+    accessRequired:
+      typeof maintenance?.accessRequired === "boolean"
+        ? maintenance.accessRequired
+        : typeof workOrder?.accessRequired === "boolean"
+        ? workOrder.accessRequired
+        : null,
     tenantName: String(maintenance?.tenantName || "").trim() || null,
     propertyLabel: String(maintenance?.propertyLabel || "").trim() || null,
     unitLabel: String(maintenance?.unitLabel || "").trim() || null,
@@ -932,12 +969,34 @@ router.patch("/landlord/maintenance/:id", async (req: any, res) => {
     if (req.body?.status !== undefined && !nextStatus) {
       return res.status(400).json({ ok: false, error: "INVALID_STATUS" });
     }
-    if (nextStatus && !canTransitionWorkflowStatus(currentStatus, nextStatus)) {
+    const requestedWindowStartAt = req.body?.serviceWindowStartAt === undefined ? undefined : toMillis(req.body?.serviceWindowStartAt);
+    const requestedWindowEndAt = req.body?.serviceWindowEndAt === undefined ? undefined : toMillis(req.body?.serviceWindowEndAt);
+    const requestedAccessRequired = normalizeOptionalBoolean(req.body?.accessRequired);
+    if (req.body?.serviceWindowStartAt !== undefined && requestedWindowStartAt === null && req.body?.serviceWindowStartAt !== null) {
+      return res.status(400).json({ ok: false, error: "INVALID_SERVICE_WINDOW_START" });
+    }
+    if (req.body?.serviceWindowEndAt !== undefined && requestedWindowEndAt === null && req.body?.serviceWindowEndAt !== null) {
+      return res.status(400).json({ ok: false, error: "INVALID_SERVICE_WINDOW_END" });
+    }
+    if (
+      typeof requestedWindowStartAt === "number" &&
+      typeof requestedWindowEndAt === "number" &&
+      requestedWindowEndAt < requestedWindowStartAt
+    ) {
+      return res.status(400).json({ ok: false, error: "INVALID_SERVICE_WINDOW_RANGE" });
+    }
+
+    let effectiveNextStatus = nextStatus;
+    if (!effectiveNextStatus && typeof requestedWindowStartAt === "number" && currentStatus === "assigned") {
+      effectiveNextStatus = "scheduled";
+    }
+
+    if (effectiveNextStatus && !canTransitionWorkflowStatus(currentStatus, effectiveNextStatus)) {
       return res.status(400).json({
         ok: false,
         error: "INVALID_STATUS_TRANSITION",
         currentStatus,
-        nextStatus,
+        nextStatus: effectiveNextStatus,
       });
     }
 
@@ -945,7 +1004,7 @@ router.patch("/landlord/maintenance/:id", async (req: any, res) => {
       updatedAt: Date.now(),
       lastUpdatedBy: "LANDLORD",
     };
-    if (nextStatus) update.status = nextStatus;
+    if (effectiveNextStatus) update.status = effectiveNextStatus;
     if (req.body?.priority !== undefined) {
       const rawPriority = String(req.body.priority || "").trim().toLowerCase();
       update.priority = ["low", "normal", "urgent"].includes(rawPriority) ? rawPriority : current.priority || "normal";
@@ -953,13 +1012,48 @@ router.patch("/landlord/maintenance/:id", async (req: any, res) => {
     if (req.body?.landlordNote !== undefined) {
       update.landlordNote = req.body.landlordNote === null ? null : String(req.body.landlordNote || "").trim().slice(0, 5000);
     }
+    if (req.body?.serviceWindowStartAt !== undefined) {
+      update.serviceWindowStartAt = requestedWindowStartAt;
+    }
+    if (req.body?.serviceWindowEndAt !== undefined) {
+      update.serviceWindowEndAt = requestedWindowEndAt;
+    }
+    if (requestedAccessRequired !== undefined) {
+      update.accessRequired = requestedAccessRequired;
+    }
     await ref.set(update, { merge: true });
-    if (nextStatus && nextStatus !== currentStatus) {
+    if (effectiveNextStatus && effectiveNextStatus !== currentStatus) {
       await appendStatusHistory(id, {
-        status: nextStatus,
+        status: effectiveNextStatus,
         actorRole: role === "admin" ? "admin" : "landlord",
         actorId,
-        message: String(req.body?.message || `Status changed to ${nextStatus}`).slice(0, 500),
+        message: String(req.body?.message || `Status changed to ${effectiveNextStatus}`).slice(0, 500),
+      });
+    }
+
+    if (req.body?.serviceWindowStartAt !== undefined || req.body?.serviceWindowEndAt !== undefined) {
+      const windowMessage =
+        typeof requestedWindowStartAt === "number"
+          ? "Service window updated."
+          : "Scheduled service window cleared.";
+      await appendStatusHistory(id, {
+        status: effectiveNextStatus || currentStatus,
+        actorRole: role === "admin" ? "admin" : "landlord",
+        actorId,
+        message: windowMessage,
+      });
+    }
+    if (requestedAccessRequired !== undefined) {
+      await appendStatusHistory(id, {
+        status: effectiveNextStatus || currentStatus,
+        actorRole: role === "admin" ? "admin" : "landlord",
+        actorId,
+        message:
+          requestedAccessRequired === true
+            ? "Access coordination marked as required."
+            : requestedAccessRequired === false
+            ? "Access coordination marked as not required."
+            : "Access coordination requirement cleared.",
       });
     }
 
@@ -979,7 +1073,10 @@ router.patch("/landlord/maintenance/:id", async (req: any, res) => {
         description: String(refreshed.description || "").trim() || null,
         category: String(refreshed.category || "").trim() || null,
         priority: String(refreshed.priority || "").trim() || null,
-        status: String(refreshed.status || nextStatus || currentStatus).trim() || currentStatus,
+        status: String(refreshed.status || effectiveNextStatus || currentStatus).trim() || currentStatus,
+        serviceWindowStartAt: toMillis(refreshed.serviceWindowStartAt),
+        serviceWindowEndAt: toMillis(refreshed.serviceWindowEndAt),
+        accessRequired: typeof refreshed.accessRequired === "boolean" ? refreshed.accessRequired : null,
       });
       workOrderId = workOrder.workOrderId;
     }
@@ -988,11 +1085,11 @@ router.patch("/landlord/maintenance/:id", async (req: any, res) => {
       ["users", String(refreshed.tenantId || "")],
     ]);
     let tenantNotification = null;
-    if (nextStatus && nextStatus !== currentStatus) {
+    if (effectiveNextStatus && effectiveNextStatus !== currentStatus) {
       tenantNotification = await sendMaintenanceStatusEmail({
         to: tenantEmail,
         subject: `Maintenance request updated: ${String(refreshed.title || "Request")}`,
-        intro: `Your maintenance request status changed to ${nextStatus}.`,
+        intro: `Your maintenance request status changed to ${effectiveNextStatus}.`,
         requestId: id,
         workOrderId,
         event: "landlord_maintenance_status_notify_tenant",
@@ -1230,6 +1327,9 @@ router.post("/landlord/maintenance/:id/assign", async (req: any, res) => {
         category: String(current.category || "").trim() || "GENERAL",
         priority: String(current.priority || "").trim() || "normal",
         status: "assigned",
+        serviceWindowStartAt: toMillis(current.serviceWindowStartAt),
+        serviceWindowEndAt: toMillis(current.serviceWindowEndAt),
+        accessRequired: typeof current.accessRequired === "boolean" ? current.accessRequired : null,
         visibility: "private",
         createdAt: Number(current.createdAt || now) || now,
         updatedAt: now,
@@ -1446,6 +1546,9 @@ router.patch("/contractor/jobs/:id/status", async (req: any, res) => {
       category: String(item.category || "").trim() || null,
       priority: String(item.priority || "").trim() || null,
       status: nextStatus,
+      serviceWindowStartAt: toMillis(item.serviceWindowStartAt),
+      serviceWindowEndAt: toMillis(item.serviceWindowEndAt),
+      accessRequired: typeof item.accessRequired === "boolean" ? item.accessRequired : null,
     });
 
     const refreshedSnap = await ref.get();
