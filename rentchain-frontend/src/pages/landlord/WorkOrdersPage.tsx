@@ -7,11 +7,13 @@ import { LockedFeature } from "@/components/billing/LockedFeature";
 import { fetchProperties } from "../../api/propertiesApi";
 import {
   addWorkOrderUpdate,
-  completeWorkOrder,
+  confirmWorkOrderCompletion,
+  getWorkOrder,
   getContractorProfileById,
   listWorkOrderUpdates,
   listWorkOrders,
   patchWorkOrder,
+  reopenWorkOrder,
   type WorkOrderRecord,
   type WorkOrderUpdateRecord,
 } from "../../api/workOrdersApi";
@@ -26,6 +28,27 @@ function canCompleteWorkOrder(item: WorkOrderRecord) {
   return item.status !== "completed" && item.status !== "cancelled";
 }
 
+function canConfirmCompletion(item: WorkOrderRecord) {
+  return item.status === "completed" && !item.completionConfirmedByLandlordAt;
+}
+
+function canReopenWorkOrder(item: WorkOrderRecord) {
+  return item.status === "completed";
+}
+
+function completionOutcomeLabel(value?: WorkOrderRecord["completionOutcome"]) {
+  switch (value) {
+    case "partially_completed":
+      return "Partially completed";
+    case "follow_up_required":
+      return "Follow-up required";
+    case "completed":
+      return "Completed";
+    default:
+      return "-";
+  }
+}
+
 export default function WorkOrdersPage() {
   const entitlements = useEntitlements();
   const [items, setItems] = React.useState<WorkOrderRecord[]>([]);
@@ -34,7 +57,13 @@ export default function WorkOrdersPage() {
   const [selected, setSelected] = React.useState<WorkOrderRecord | null>(null);
   const [updates, setUpdates] = React.useState<WorkOrderUpdateRecord[]>([]);
   const [newNote, setNewNote] = React.useState("");
+  const [completionSummary, setCompletionSummary] = React.useState("");
+  const [completionOutcome, setCompletionOutcome] = React.useState<"completed" | "partially_completed" | "follow_up_required">(
+    "completed"
+  );
+  const [reopenReason, setReopenReason] = React.useState("");
   const [savingNote, setSavingNote] = React.useState(false);
+  const [savingAction, setSavingAction] = React.useState(false);
   const [properties, setProperties] = React.useState<Array<{ id: string; name: string }>>([]);
   const [convertTarget, setConvertTarget] = React.useState<WorkOrderRecord | null>(null);
   const [convertVendor, setConvertVendor] = React.useState("");
@@ -57,7 +86,9 @@ export default function WorkOrdersPage() {
     setLoading(true);
     setError(null);
     try {
-      setItems(await listWorkOrders());
+      const nextItems = await listWorkOrders();
+      setItems(nextItems);
+      setSelected((current) => (current ? nextItems.find((item) => item.id === current.id) || current : null));
     } catch (err: any) {
       setError(String(err?.message || "Failed to load work orders"));
     } finally {
@@ -73,23 +104,98 @@ export default function WorkOrdersPage() {
     }
   }, []);
 
+  const refreshSelected = React.useCallback(
+    async (workOrderId: string) => {
+      const refreshed = await getWorkOrder(workOrderId).catch(() => null);
+      if (refreshed) {
+        setSelected(refreshed);
+      }
+      await loadUpdates(workOrderId);
+    },
+    [loadUpdates]
+  );
+
   const markCompleted = React.useCallback(
     async (item: WorkOrderRecord) => {
-      if (!canCompleteWorkOrder(item)) return;
-      const shouldUseContractorCompletion = Boolean(item.assignedContractorId) && item.status === "in_progress";
-      if (shouldUseContractorCompletion) {
-        await completeWorkOrder(item.id);
-      } else {
-        await patchWorkOrder(item.id, { status: "completed" });
+      if (!canCompleteWorkOrder(item) || item.assignedContractorId) return;
+      if (!completionSummary.trim()) {
+        setError("Add a completion summary before marking the work order completed.");
+        return;
       }
-      await load();
-      if (selected?.id === item.id) {
-        setSelected((prev) => (prev ? { ...prev, status: "completed" } : prev));
-        await loadUpdates(item.id);
+      setSavingAction(true);
+      setError(null);
+      try {
+        await patchWorkOrder(item.id, {
+          status: "completed",
+          completionSummary: completionSummary.trim(),
+          completionOutcome,
+        });
+        await load();
+        await refreshSelected(item.id);
+      } catch (err: any) {
+        setError(String(err?.message || "Failed to complete work order"));
+      } finally {
+        setSavingAction(false);
       }
     },
-    [load, loadUpdates, selected?.id]
+    [completionOutcome, completionSummary, load, refreshSelected]
   );
+
+  const handleConfirmCompletion = React.useCallback(
+    async (item: WorkOrderRecord) => {
+      if (!canConfirmCompletion(item)) return;
+      setSavingAction(true);
+      setError(null);
+      try {
+        await confirmWorkOrderCompletion(item.id);
+        await load();
+        await refreshSelected(item.id);
+      } catch (err: any) {
+        setError(String(err?.message || "Failed to confirm completion"));
+      } finally {
+        setSavingAction(false);
+      }
+    },
+    [load, refreshSelected]
+  );
+
+  const handleReopen = React.useCallback(
+    async (item: WorkOrderRecord, status: "in_progress" | "blocked") => {
+      if (!canReopenWorkOrder(item)) return;
+      if (!reopenReason.trim()) {
+        setError("Add a reason before reopening the work order.");
+        return;
+      }
+      setSavingAction(true);
+      setError(null);
+      try {
+        await reopenWorkOrder(item.id, { reason: reopenReason.trim(), status });
+        await load();
+        await refreshSelected(item.id);
+      } catch (err: any) {
+        setError(String(err?.message || "Failed to reopen work order"));
+      } finally {
+        setSavingAction(false);
+      }
+    },
+    [load, refreshSelected, reopenReason]
+  );
+
+  React.useEffect(() => {
+    if (!selected) {
+      setCompletionSummary("");
+      setCompletionOutcome("completed");
+      setReopenReason("");
+      return;
+    }
+    setCompletionSummary(String(selected.completionSummary || ""));
+    setCompletionOutcome(
+      selected.completionOutcome === "partially_completed" || selected.completionOutcome === "follow_up_required"
+        ? selected.completionOutcome
+        : "completed"
+    );
+    setReopenReason(String(selected.reopenReason || ""));
+  }, [selected]);
 
   React.useEffect(() => {
     if (!canUseWorkOrders) {
@@ -220,12 +326,12 @@ export default function WorkOrdersPage() {
                     >
                       Timeline
                     </Button>
-                    {canCompleteWorkOrder(item) ? (
+                    {!item.assignedContractorId && canCompleteWorkOrder(item) ? (
                       <Button
                         variant="ghost"
                         onClick={() => void markCompleted(item)}
                       >
-                        {item.assignedContractorId ? "Mark Completed" : "Mark Completed In-house"}
+                        Mark Completed In-house
                       </Button>
                     ) : null}
                     {item.status === "completed" && !item.linkedExpenseId ? (
@@ -294,12 +400,12 @@ export default function WorkOrdersPage() {
                         >
                           Timeline
                         </Button>
-                        {canCompleteWorkOrder(item) ? (
+                        {!item.assignedContractorId && canCompleteWorkOrder(item) ? (
                           <Button
                             variant="ghost"
                             onClick={() => void markCompleted(item)}
                           >
-                            {item.assignedContractorId ? "Mark Completed" : "Mark Completed In-house"}
+                            Mark Completed In-house
                           </Button>
                         ) : null}
                         {item.status === "completed" && !item.linkedExpenseId ? (
@@ -343,6 +449,71 @@ export default function WorkOrdersPage() {
         {selected ? (
           <Card>
             <div style={{ fontWeight: 700, marginBottom: 8 }}>Timeline: {selected.title}</div>
+            <div
+              style={{
+                display: "grid",
+                gap: 10,
+                marginBottom: 12,
+                padding: 12,
+                border: "1px solid #e2e8f0",
+                borderRadius: 12,
+                background: "#f8fafc",
+              }}
+            >
+              <div style={{ fontWeight: 700 }}>Execution and completion</div>
+              <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+                <div>
+                  <div style={{ fontSize: 12, color: "#64748b" }}>Scheduled time</div>
+                  <div style={{ marginTop: 4, fontWeight: 600 }}>{formatDate(selected.scheduledFor)}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: "#64748b" }}>Service started</div>
+                  <div style={{ marginTop: 4, fontWeight: 600 }}>
+                    {formatDate(selected.serviceStartedAt || selected.startedAtMs)}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: "#64748b" }}>Service completed</div>
+                  <div style={{ marginTop: 4, fontWeight: 600 }}>
+                    {formatDate(selected.serviceCompletedAt || selected.completedAtMs)}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: "#64748b" }}>Completion outcome</div>
+                  <div style={{ marginTop: 4, fontWeight: 600 }}>{completionOutcomeLabel(selected.completionOutcome)}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: "#64748b" }}>Completed by</div>
+                  <div style={{ marginTop: 4, fontWeight: 600 }}>{selected.completedByActorRole || "-"}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: "#64748b" }}>Landlord confirmation</div>
+                  <div style={{ marginTop: 4, fontWeight: 600 }}>
+                    {selected.completionConfirmedByLandlordAt
+                      ? `Confirmed ${formatDate(selected.completionConfirmedByLandlordAt)}`
+                      : "Awaiting review"}
+                  </div>
+                </div>
+              </div>
+              {selected.executionBlockedReason ? (
+                <div>
+                  <div style={{ fontSize: 12, color: "#64748b" }}>Blocked reason</div>
+                  <div style={{ marginTop: 4 }}>{selected.executionBlockedReason}</div>
+                </div>
+              ) : null}
+              {selected.completionSummary ? (
+                <div>
+                  <div style={{ fontSize: 12, color: "#64748b" }}>Completion summary</div>
+                  <div style={{ marginTop: 4, whiteSpace: "pre-wrap" }}>{selected.completionSummary}</div>
+                </div>
+              ) : null}
+              {selected.reopenReason ? (
+                <div>
+                  <div style={{ fontSize: 12, color: "#64748b" }}>Last reopen reason</div>
+                  <div style={{ marginTop: 4 }}>{selected.reopenReason}</div>
+                </div>
+              ) : null}
+            </div>
             <div style={{ display: "grid", gap: 8, maxHeight: 320, overflow: "auto", paddingRight: 4 }}>
               {updates.length === 0 ? (
                 <div style={{ color: "#64748b" }}>No updates yet.</div>
@@ -356,6 +527,73 @@ export default function WorkOrdersPage() {
                   </div>
                 ))
               )}
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gap: 8,
+                marginTop: 10,
+                padding: 12,
+                border: "1px solid #e2e8f0",
+                borderRadius: 12,
+                background: "#f8fafc",
+              }}
+            >
+              <div style={{ fontWeight: 700 }}>Completion review</div>
+              {!selected.assignedContractorId && canCompleteWorkOrder(selected) ? (
+                <>
+                  <textarea
+                    value={completionSummary}
+                    onChange={(e) => setCompletionSummary(e.target.value)}
+                    placeholder="Summarize what was completed for this in-house job"
+                    rows={3}
+                    style={{ width: "100%", borderRadius: 8, border: "1px solid #cbd5e1", padding: 8, resize: "vertical" }}
+                  />
+                  <select
+                    value={completionOutcome}
+                    onChange={(e) =>
+                      setCompletionOutcome(e.target.value as "completed" | "partially_completed" | "follow_up_required")
+                    }
+                    style={{ width: "100%", borderRadius: 8, border: "1px solid #cbd5e1", padding: 8 }}
+                  >
+                    <option value="completed">Completed</option>
+                    <option value="partially_completed">Partially completed</option>
+                    <option value="follow_up_required">Follow-up required</option>
+                  </select>
+                  <Button disabled={savingAction} onClick={() => void markCompleted(selected)}>
+                    {savingAction ? "Saving..." : "Complete In-house"}
+                  </Button>
+                </>
+              ) : null}
+              {canConfirmCompletion(selected) ? (
+                <Button disabled={savingAction} onClick={() => void handleConfirmCompletion(selected)}>
+                  {savingAction ? "Saving..." : "Confirm completion"}
+                </Button>
+              ) : null}
+              {canReopenWorkOrder(selected) ? (
+                <>
+                  <textarea
+                    value={reopenReason}
+                    onChange={(e) => setReopenReason(e.target.value)}
+                    placeholder="Explain why this work order needs follow-up"
+                    rows={3}
+                    style={{ width: "100%", borderRadius: 8, border: "1px solid #cbd5e1", padding: 8, resize: "vertical" }}
+                  />
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <Button variant="secondary" disabled={savingAction} onClick={() => void handleReopen(selected, "in_progress")}>
+                      {savingAction ? "Saving..." : "Reopen in progress"}
+                    </Button>
+                    <Button variant="ghost" disabled={savingAction} onClick={() => void handleReopen(selected, "blocked")}>
+                      {savingAction ? "Saving..." : "Reopen blocked"}
+                    </Button>
+                  </div>
+                </>
+              ) : null}
+              {!selected.assignedContractorId && canCompleteWorkOrder(selected) ? null : !canConfirmCompletion(selected) && !canReopenWorkOrder(selected) ? (
+                <div style={{ color: "#64748b" }}>
+                  Execution details are up to date. Review the timeline for the latest operational context.
+                </div>
+              ) : null}
             </div>
             <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
               <textarea

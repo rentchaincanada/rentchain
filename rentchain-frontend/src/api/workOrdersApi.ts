@@ -6,6 +6,8 @@ export type WorkOrderStatus =
   | "invited"
   | "assigned"
   | "accepted"
+  | "scheduled"
+  | "blocked"
   | "in_progress"
   | "completed"
   | "cancelled";
@@ -28,6 +30,21 @@ export type WorkOrderRecord = {
   acceptedAtMs: number | null;
   startedAtMs: number | null;
   completedAtMs: number | null;
+  scheduledFor?: number | null;
+  serviceStartedAt?: number | null;
+  serviceCompletedAt?: number | null;
+  lastExecutionUpdateAt?: number | null;
+  executionBlockedReason?: string | null;
+  completionSummary?: string | null;
+  completionOutcome?: "completed" | "partially_completed" | "follow_up_required" | null;
+  completedByActorRole?: "contractor" | "landlord" | "admin" | null;
+  completedByActorId?: string | null;
+  completionConfirmedByLandlordAt?: number | null;
+  completionConfirmedByLandlordBy?: string | null;
+  reopenedAt?: number | null;
+  reopenedByActorId?: string | null;
+  reopenedByActorRole?: "landlord" | "admin" | null;
+  reopenReason?: string | null;
   notesInternal: string;
   linkedExpenseId: string | null;
   createdAtMs: number;
@@ -45,10 +62,15 @@ export type WorkOrderUpdateRecord = {
     | "accepted"
     | "declined"
     | "status_changed"
+    | "scheduled"
+    | "started"
+    | "blocked"
     | "note"
     | "photo"
     | "invoice"
-    | "completed";
+    | "completed"
+    | "confirmed"
+    | "reopened";
   message: string;
   attachmentUrl: string | null;
   createdAtMs: number;
@@ -96,7 +118,14 @@ export async function getWorkOrder(workOrderId: string): Promise<WorkOrderRecord
 
 export async function patchWorkOrder(
   workOrderId: string,
-  patch: Partial<CreateWorkOrderInput> & { status?: WorkOrderStatus; linkedExpenseId?: string | null }
+  patch: Partial<CreateWorkOrderInput> & {
+    status?: WorkOrderStatus;
+    linkedExpenseId?: string | null;
+    scheduledFor?: number | null;
+    blockedReason?: string;
+    completionSummary?: string;
+    completionOutcome?: "completed" | "partially_completed" | "follow_up_required";
+  }
 ): Promise<WorkOrderRecord> {
   const res = await apiFetch<{ ok: boolean; item: WorkOrderRecord }>(
     `/work-orders/${encodeURIComponent(workOrderId)}`,
@@ -139,6 +168,27 @@ export async function completeWorkOrder(workOrderId: string): Promise<WorkOrderR
     { method: "POST" }
   );
   if (!res?.ok || !res.item) throw new Error("Failed to complete work order");
+  return res.item;
+}
+
+export async function confirmWorkOrderCompletion(workOrderId: string): Promise<WorkOrderRecord> {
+  const res = await apiFetch<{ ok: boolean; item: WorkOrderRecord }>(
+    `/landlord/work-orders/${encodeURIComponent(workOrderId)}/confirm-completion`,
+    { method: "POST" }
+  );
+  if (!res?.ok || !res.item) throw new Error("Failed to confirm work order completion");
+  return res.item;
+}
+
+export async function reopenWorkOrder(
+  workOrderId: string,
+  payload: { reason: string; status?: "in_progress" | "blocked" }
+): Promise<WorkOrderRecord> {
+  const res = await apiFetch<{ ok: boolean; item: WorkOrderRecord }>(
+    `/landlord/work-orders/${encodeURIComponent(workOrderId)}/reopen`,
+    { method: "POST", body: payload }
+  );
+  if (!res?.ok || !res.item) throw new Error("Failed to reopen work order");
   return res.item;
 }
 

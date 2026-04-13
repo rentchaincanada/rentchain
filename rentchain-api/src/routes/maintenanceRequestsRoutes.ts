@@ -30,6 +30,7 @@ const WORKFLOW_STATUSES = [
   "reviewed",
   "assigned",
   "scheduled",
+  "blocked",
   "in_progress",
   "completed",
   "cancelled",
@@ -59,8 +60,9 @@ const WORKFLOW_TRANSITIONS: Record<(typeof WORKFLOW_STATUSES)[number], Array<(ty
   submitted: ["reviewed", "assigned", "cancelled"],
   reviewed: ["assigned", "completed", "cancelled"],
   assigned: ["scheduled", "completed", "cancelled"],
-  scheduled: ["in_progress", "completed", "cancelled"],
-  in_progress: ["completed", "cancelled"],
+  scheduled: ["in_progress", "blocked", "completed", "cancelled"],
+  blocked: ["scheduled", "in_progress", "completed", "cancelled"],
+  in_progress: ["blocked", "completed", "cancelled"],
   completed: [],
   cancelled: [],
 };
@@ -411,6 +413,49 @@ async function appendStatusHistory(
     );
 }
 
+type WorkOrderExecutionUpdateType =
+  | "status_changed"
+  | "scheduled"
+  | "started"
+  | "blocked"
+  | "completed"
+  | "confirmed"
+  | "reopened";
+
+type WorkOrderCompletionOutcome = "completed" | "partially_completed" | "follow_up_required";
+
+function normalizeCompletionOutcome(value: any): WorkOrderCompletionOutcome | null {
+  const next = String(value || "").trim().toLowerCase();
+  if (next === "completed" || next === "partially_completed" || next === "follow_up_required") {
+    return next;
+  }
+  return null;
+}
+
+async function appendWorkOrderUpdate(
+  workOrderId: string,
+  payload: {
+    actorRole: "tenant" | "landlord" | "contractor" | "admin";
+    actorId: string | null;
+    updateType: WorkOrderExecutionUpdateType;
+    message?: string | null;
+  }
+) {
+  if (!workOrderId) return;
+  const ref = db.collection("workOrderUpdates").doc();
+  const createdAtMs = Date.now();
+  await ref.set({
+    id: ref.id,
+    workOrderId,
+    actorRole: payload.actorRole,
+    actorId: payload.actorId || null,
+    updateType: payload.updateType,
+    message: String(payload.message || "").trim().slice(0, 5000),
+    attachmentUrl: null,
+    createdAtMs,
+  });
+}
+
 async function lookupEmailFromDoc(docPath: [string, string][]): Promise<string | null> {
   for (const [collection, id] of docPath) {
     if (!id) continue;
@@ -530,6 +575,21 @@ async function upsertMaintenanceWorkOrder(input: {
   serviceWindowStartAt?: number | null;
   serviceWindowEndAt?: number | null;
   accessRequired?: boolean | null;
+  scheduledFor?: number | null;
+  serviceStartedAt?: number | null;
+  serviceCompletedAt?: number | null;
+  lastExecutionUpdateAt?: number | null;
+  executionBlockedReason?: string | null;
+  completionSummary?: string | null;
+  completionOutcome?: WorkOrderCompletionOutcome | null;
+  completedByActorRole?: "contractor" | "landlord" | "admin" | null;
+  completedByActorId?: string | null;
+  completionConfirmedByLandlordAt?: number | null;
+  completionConfirmedByLandlordBy?: string | null;
+  reopenedAt?: number | null;
+  reopenedByActorId?: string | null;
+  reopenedByActorRole?: "landlord" | "admin" | null;
+  reopenReason?: string | null;
 }) {
   const workOrderId = `maintenance_${input.maintenanceRequestId}`;
   const ref = db.collection("workOrders").doc(workOrderId);
@@ -551,9 +611,98 @@ async function upsertMaintenanceWorkOrder(input: {
     category: String(input.category || "").trim() || "GENERAL",
     priority: String(input.priority || "").trim() || "normal",
     status: String(input.status || "assigned").trim() || "assigned",
-    serviceWindowStartAt: typeof input.serviceWindowStartAt === "number" ? input.serviceWindowStartAt : null,
-    serviceWindowEndAt: typeof input.serviceWindowEndAt === "number" ? input.serviceWindowEndAt : null,
-    accessRequired: typeof input.accessRequired === "boolean" ? input.accessRequired : null,
+    serviceWindowStartAt:
+      input.serviceWindowStartAt !== undefined
+        ? typeof input.serviceWindowStartAt === "number"
+          ? input.serviceWindowStartAt
+          : null
+        : toMillis(existingData.serviceWindowStartAt),
+    serviceWindowEndAt:
+      input.serviceWindowEndAt !== undefined
+        ? typeof input.serviceWindowEndAt === "number"
+          ? input.serviceWindowEndAt
+          : null
+        : toMillis(existingData.serviceWindowEndAt),
+    accessRequired:
+      input.accessRequired !== undefined
+        ? typeof input.accessRequired === "boolean"
+          ? input.accessRequired
+          : null
+        : typeof existingData.accessRequired === "boolean"
+        ? existingData.accessRequired
+        : null,
+    scheduledFor:
+      input.scheduledFor !== undefined
+        ? typeof input.scheduledFor === "number"
+          ? input.scheduledFor
+          : null
+        : toMillis(existingData.scheduledFor),
+    serviceStartedAt:
+      input.serviceStartedAt !== undefined
+        ? typeof input.serviceStartedAt === "number"
+          ? input.serviceStartedAt
+          : null
+        : toMillis(existingData.serviceStartedAt),
+    serviceCompletedAt:
+      input.serviceCompletedAt !== undefined
+        ? typeof input.serviceCompletedAt === "number"
+          ? input.serviceCompletedAt
+          : null
+        : toMillis(existingData.serviceCompletedAt),
+    lastExecutionUpdateAt:
+      input.lastExecutionUpdateAt !== undefined
+        ? typeof input.lastExecutionUpdateAt === "number"
+          ? input.lastExecutionUpdateAt
+          : null
+        : toMillis(existingData.lastExecutionUpdateAt),
+    executionBlockedReason:
+      input.executionBlockedReason !== undefined
+        ? String(input.executionBlockedReason || "").trim() || null
+        : String(existingData.executionBlockedReason || "").trim() || null,
+    completionSummary:
+      input.completionSummary !== undefined
+        ? String(input.completionSummary || "").trim() || null
+        : String(existingData.completionSummary || "").trim() || null,
+    completionOutcome:
+      input.completionOutcome !== undefined
+        ? input.completionOutcome || null
+        : normalizeCompletionOutcome(existingData.completionOutcome),
+    completedByActorRole:
+      input.completedByActorRole !== undefined
+        ? input.completedByActorRole || null
+        : String(existingData.completedByActorRole || "").trim() || null,
+    completedByActorId:
+      input.completedByActorId !== undefined
+        ? String(input.completedByActorId || "").trim() || null
+        : String(existingData.completedByActorId || "").trim() || null,
+    completionConfirmedByLandlordAt:
+      input.completionConfirmedByLandlordAt !== undefined
+        ? typeof input.completionConfirmedByLandlordAt === "number"
+          ? input.completionConfirmedByLandlordAt
+          : null
+        : toMillis(existingData.completionConfirmedByLandlordAt),
+    completionConfirmedByLandlordBy:
+      input.completionConfirmedByLandlordBy !== undefined
+        ? String(input.completionConfirmedByLandlordBy || "").trim() || null
+        : String(existingData.completionConfirmedByLandlordBy || "").trim() || null,
+    reopenedAt:
+      input.reopenedAt !== undefined
+        ? typeof input.reopenedAt === "number"
+          ? input.reopenedAt
+          : null
+        : toMillis(existingData.reopenedAt),
+    reopenedByActorId:
+      input.reopenedByActorId !== undefined
+        ? String(input.reopenedByActorId || "").trim() || null
+        : String(existingData.reopenedByActorId || "").trim() || null,
+    reopenedByActorRole:
+      input.reopenedByActorRole !== undefined
+        ? input.reopenedByActorRole || null
+        : String(existingData.reopenedByActorRole || "").trim() || null,
+    reopenReason:
+      input.reopenReason !== undefined
+        ? String(input.reopenReason || "").trim() || null
+        : String(existingData.reopenReason || "").trim() || null,
     visibility: "private",
     createdAt: createdAtMs,
     updatedAt: now,
@@ -598,6 +747,21 @@ function shapeContractorJobFromSources(workOrder: any, maintenance: any) {
       String(maintenance?.contractorStatus || workOrder?.contractorStatus || status).trim() || status,
     contractorLastUpdate:
       String(maintenance?.contractorLastUpdate || workOrder?.contractorLastUpdate || "").trim() || null,
+    scheduledFor: toMillis(workOrder?.scheduledFor) ?? null,
+    serviceStartedAt: toMillis(workOrder?.serviceStartedAt) ?? null,
+    serviceCompletedAt: toMillis(workOrder?.serviceCompletedAt) ?? null,
+    lastExecutionUpdateAt: toMillis(workOrder?.lastExecutionUpdateAt) ?? null,
+    executionBlockedReason: String(workOrder?.executionBlockedReason || "").trim() || null,
+    completionSummary: String(workOrder?.completionSummary || "").trim() || null,
+    completionOutcome: normalizeCompletionOutcome(workOrder?.completionOutcome),
+    completionConfirmedByLandlordAt: toMillis(workOrder?.completionConfirmedByLandlordAt) ?? null,
+    completionConfirmedByLandlordBy: String(workOrder?.completionConfirmedByLandlordBy || "").trim() || null,
+    completedByActorRole: String(workOrder?.completedByActorRole || "").trim() || null,
+    completedByActorId: String(workOrder?.completedByActorId || "").trim() || null,
+    reopenedAt: toMillis(workOrder?.reopenedAt) ?? null,
+    reopenedByActorId: String(workOrder?.reopenedByActorId || "").trim() || null,
+    reopenedByActorRole: String(workOrder?.reopenedByActorRole || "").trim() || null,
+    reopenReason: String(workOrder?.reopenReason || "").trim() || null,
     serviceWindowStartAt:
       toMillis(maintenance?.serviceWindowStartAt) ?? toMillis(workOrder?.serviceWindowStartAt) ?? null,
     serviceWindowEndAt:
@@ -1099,6 +1263,12 @@ router.patch("/landlord/maintenance/:id", async (req: any, res) => {
         serviceWindowStartAt: toMillis(refreshed.serviceWindowStartAt),
         serviceWindowEndAt: toMillis(refreshed.serviceWindowEndAt),
         accessRequired: typeof refreshed.accessRequired === "boolean" ? refreshed.accessRequired : null,
+        scheduledFor: toMillis(refreshed.serviceWindowStartAt) ?? toMillis(refreshed.scheduledFor),
+        serviceCompletedAt: toMillis(refreshed.serviceCompletedAt),
+        completionSummary: String(refreshed.completionSummary || "").trim() || null,
+        completionOutcome: normalizeCompletionOutcome(refreshed.completionOutcome),
+        completionConfirmedByLandlordAt: toMillis(refreshed.completionConfirmedByLandlordAt),
+        completionConfirmedByLandlordBy: String(refreshed.completionConfirmedByLandlordBy || "").trim() || null,
       });
       workOrderId = workOrder.workOrderId;
     }
@@ -1352,6 +1522,21 @@ router.post("/landlord/maintenance/:id/assign", async (req: any, res) => {
         serviceWindowStartAt: toMillis(current.serviceWindowStartAt),
         serviceWindowEndAt: toMillis(current.serviceWindowEndAt),
         accessRequired: typeof current.accessRequired === "boolean" ? current.accessRequired : null,
+        scheduledFor: toMillis(current.serviceWindowStartAt),
+        serviceStartedAt: null,
+        serviceCompletedAt: null,
+        lastExecutionUpdateAt: null,
+        executionBlockedReason: null,
+        completionSummary: null,
+        completionOutcome: null,
+        completedByActorRole: null,
+        completedByActorId: null,
+        completionConfirmedByLandlordAt: null,
+        completionConfirmedByLandlordBy: null,
+        reopenedAt: null,
+        reopenedByActorId: null,
+        reopenedByActorRole: null,
+        reopenReason: null,
         visibility: "private",
         createdAt: Number(current.createdAt || now) || now,
         updatedAt: now,
@@ -1512,7 +1697,7 @@ router.patch("/contractor/jobs/:id/status", async (req: any, res) => {
     if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
 
     const nextStatus = normalizeWorkflowStatus(req.body?.status);
-    if (!nextStatus || !["assigned", "scheduled", "in_progress", "completed"].includes(nextStatus)) {
+    if (!nextStatus || !["assigned", "scheduled", "blocked", "in_progress", "completed"].includes(nextStatus)) {
       return res.status(400).json({ ok: false, error: "INVALID_STATUS" });
     }
 
@@ -1536,25 +1721,67 @@ router.patch("/contractor/jobs/:id/status", async (req: any, res) => {
       });
     }
 
-    const note = String(req.body?.message || "").trim().slice(0, 500);
-    await ref.set(
-      {
-        status: nextStatus,
-        contractorStatus: nextStatus,
-        contractorLastUpdate: note || null,
-        updatedAt: Date.now(),
-        lastUpdatedBy: "CONTRACTOR",
-      },
-      { merge: true }
-    );
-    await appendStatusHistory(id, {
-      status: nextStatus,
-      actorRole: access.role === "admin" ? "admin" : "contractor",
-      actorId,
-      message:
-        note ||
-        (isAcknowledgement ? "Contractor accepted the assigned job" : `Contractor updated status to ${nextStatus}`),
-    });
+    const now = Date.now();
+    const note = String(req.body?.message || req.body?.note || "").trim().slice(0, 500);
+    const blockedReason = String(req.body?.blockedReason || req.body?.executionBlockedReason || note || "")
+      .trim()
+      .slice(0, 500);
+    const completionSummary = String(req.body?.completionSummary || "").trim().slice(0, 2000);
+    const completionOutcome = normalizeCompletionOutcome(req.body?.completionOutcome) || "completed";
+    const requestedScheduledFor =
+      req.body?.scheduledFor === undefined ? undefined : toMillis(req.body?.scheduledFor);
+
+    if (req.body?.scheduledFor !== undefined && requestedScheduledFor === null && req.body?.scheduledFor !== null) {
+      return res.status(400).json({ ok: false, error: "INVALID_SCHEDULED_FOR" });
+    }
+    if (nextStatus === "blocked" && !blockedReason) {
+      return res.status(400).json({ ok: false, error: "BLOCKED_REASON_REQUIRED" });
+    }
+    if (nextStatus === "completed" && !completionSummary) {
+      return res.status(400).json({ ok: false, error: "COMPLETION_SUMMARY_REQUIRED" });
+    }
+
+    const existingWorkOrderRef = db.collection("workOrders").doc(`maintenance_${id}`);
+    const existingWorkOrderSnap = await existingWorkOrderRef.get();
+    const existingWorkOrder = existingWorkOrderSnap.exists ? ((existingWorkOrderSnap.data() as any) || {}) : {};
+
+    const scheduledFor =
+      nextStatus === "scheduled"
+        ? requestedScheduledFor === undefined
+          ? toMillis(existingWorkOrder.scheduledFor) ??
+            toMillis(item.scheduledFor) ??
+            toMillis(item.serviceWindowStartAt) ??
+            now
+          : requestedScheduledFor
+        : undefined;
+    const serviceStartedAt =
+      nextStatus === "in_progress"
+        ? toMillis(existingWorkOrder.serviceStartedAt) ?? toMillis(item.serviceStartedAt) ?? now
+        : undefined;
+    const serviceCompletedAt = nextStatus === "completed" ? now : undefined;
+    const contractorMessage =
+      nextStatus === "scheduled"
+        ? note || "Contractor scheduled the service visit."
+        : nextStatus === "in_progress"
+        ? note || "Contractor started the work."
+        : nextStatus === "blocked"
+        ? blockedReason
+        : nextStatus === "completed"
+        ? completionSummary
+        : note || (isAcknowledgement ? "Contractor accepted the assigned job." : `Contractor updated status to ${nextStatus}.`);
+    const historyMessage =
+      nextStatus === "scheduled"
+        ? scheduledFor
+          ? `Contractor scheduled service for ${new Date(scheduledFor).toLocaleString()}.`
+          : contractorMessage
+        : nextStatus === "in_progress"
+        ? contractorMessage
+        : nextStatus === "blocked"
+        ? `Service is blocked: ${blockedReason}`
+        : nextStatus === "completed"
+        ? `Service completed: ${completionSummary}`
+        : contractorMessage;
+
     const workOrder = await upsertMaintenanceWorkOrder({
       maintenanceRequestId: id,
       landlordId: String(item.landlordId || "").trim() || null,
@@ -1571,6 +1798,61 @@ router.patch("/contractor/jobs/:id/status", async (req: any, res) => {
       serviceWindowStartAt: toMillis(item.serviceWindowStartAt),
       serviceWindowEndAt: toMillis(item.serviceWindowEndAt),
       accessRequired: typeof item.accessRequired === "boolean" ? item.accessRequired : null,
+      scheduledFor,
+      serviceStartedAt,
+      serviceCompletedAt,
+      lastExecutionUpdateAt: now,
+      executionBlockedReason: nextStatus === "blocked" ? blockedReason : null,
+      completionSummary: nextStatus === "completed" ? completionSummary : undefined,
+      completionOutcome: nextStatus === "completed" ? completionOutcome : undefined,
+      completedByActorRole: nextStatus === "completed" ? (access.role === "admin" ? "admin" : "contractor") : undefined,
+      completedByActorId: nextStatus === "completed" ? actorId : undefined,
+      completionConfirmedByLandlordAt: nextStatus === "completed" ? null : undefined,
+      completionConfirmedByLandlordBy: nextStatus === "completed" ? null : undefined,
+      reopenedAt: nextStatus === "completed" ? null : undefined,
+      reopenedByActorId: nextStatus === "completed" ? null : undefined,
+      reopenedByActorRole: nextStatus === "completed" ? null : undefined,
+      reopenReason: nextStatus === "completed" ? null : undefined,
+    });
+
+    const maintenancePatch: Record<string, unknown> = {
+      status: nextStatus,
+      contractorStatus: nextStatus,
+      contractorLastUpdate: contractorMessage || null,
+      updatedAt: now,
+      lastUpdatedBy: "CONTRACTOR",
+      scheduledFor: workOrder.payload.scheduledFor ?? null,
+      serviceCompletedAt: workOrder.payload.serviceCompletedAt ?? null,
+    };
+    if (nextStatus === "completed") {
+      maintenancePatch.completionSummary = completionSummary;
+      maintenancePatch.completionOutcome = completionOutcome;
+    } else if (nextStatus === "blocked") {
+      maintenancePatch.completionSummary = null;
+      maintenancePatch.completionOutcome = null;
+    }
+    await ref.set(maintenancePatch, { merge: true });
+
+    await appendStatusHistory(id, {
+      status: nextStatus,
+      actorRole: access.role === "admin" ? "admin" : "contractor",
+      actorId,
+      message: historyMessage,
+    });
+    await appendWorkOrderUpdate(workOrder.workOrderId, {
+      actorRole: access.role === "admin" ? "admin" : "contractor",
+      actorId,
+      updateType:
+        nextStatus === "scheduled"
+          ? "scheduled"
+          : nextStatus === "in_progress"
+          ? "started"
+          : nextStatus === "blocked"
+          ? "blocked"
+          : nextStatus === "completed"
+          ? "completed"
+          : "status_changed",
+      message: historyMessage,
     });
 
     const refreshedSnap = await ref.get();

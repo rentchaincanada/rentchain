@@ -11,6 +11,7 @@ export type MaintenanceWorkflowStatus =
   | "reviewed"
   | "assigned"
   | "scheduled"
+  | "blocked"
   | "in_progress"
   | "completed"
   | "cancelled";
@@ -34,6 +35,21 @@ export type MaintenanceWorkflowItem = {
   assignedContractorName?: string | null;
   contractorStatus?: string | null;
   contractorLastUpdate?: string | null;
+  scheduledFor?: number | null;
+  serviceStartedAt?: number | null;
+  serviceCompletedAt?: number | null;
+  lastExecutionUpdateAt?: number | null;
+  executionBlockedReason?: string | null;
+  completionSummary?: string | null;
+  completionOutcome?: "completed" | "partially_completed" | "follow_up_required" | null;
+  completionConfirmedByLandlordAt?: number | null;
+  completionConfirmedByLandlordBy?: string | null;
+  completedByActorRole?: "contractor" | "landlord" | "admin" | null;
+  completedByActorId?: string | null;
+  reopenedAt?: number | null;
+  reopenedByActorId?: string | null;
+  reopenedByActorRole?: "landlord" | "admin" | null;
+  reopenReason?: string | null;
   serviceWindowStartAt?: number | null;
   serviceWindowEndAt?: number | null;
   accessRequired?: boolean | null;
@@ -111,6 +127,41 @@ export async function listTenantMaintenance() {
     contractorStatus: item.contractorStatus || null,
     serviceWindowStartAt: typeof item.serviceWindowStartAt === "number" ? item.serviceWindowStartAt : null,
     serviceWindowEndAt: typeof item.serviceWindowEndAt === "number" ? item.serviceWindowEndAt : null,
+    scheduledFor: typeof (item as any).scheduledFor === "number" ? (item as any).scheduledFor : null,
+    serviceStartedAt: typeof (item as any).serviceStartedAt === "number" ? (item as any).serviceStartedAt : null,
+    serviceCompletedAt: typeof (item as any).serviceCompletedAt === "number" ? (item as any).serviceCompletedAt : null,
+    lastExecutionUpdateAt:
+      typeof (item as any).lastExecutionUpdateAt === "number" ? (item as any).lastExecutionUpdateAt : null,
+    executionBlockedReason: typeof (item as any).executionBlockedReason === "string" ? (item as any).executionBlockedReason : null,
+    completionSummary: typeof (item as any).completionSummary === "string" ? (item as any).completionSummary : null,
+    completionOutcome:
+      (item as any).completionOutcome === "completed" ||
+      (item as any).completionOutcome === "partially_completed" ||
+      (item as any).completionOutcome === "follow_up_required"
+        ? (item as any).completionOutcome
+        : null,
+    completionConfirmedByLandlordAt:
+      typeof (item as any).completionConfirmedByLandlordAt === "number"
+        ? (item as any).completionConfirmedByLandlordAt
+        : null,
+    completionConfirmedByLandlordBy:
+      typeof (item as any).completionConfirmedByLandlordBy === "string"
+        ? (item as any).completionConfirmedByLandlordBy
+        : null,
+    completedByActorRole:
+      (item as any).completedByActorRole === "contractor" ||
+      (item as any).completedByActorRole === "landlord" ||
+      (item as any).completedByActorRole === "admin"
+        ? (item as any).completedByActorRole
+        : null,
+    completedByActorId: typeof (item as any).completedByActorId === "string" ? (item as any).completedByActorId : null,
+    reopenedAt: typeof (item as any).reopenedAt === "number" ? (item as any).reopenedAt : null,
+    reopenedByActorId: typeof (item as any).reopenedByActorId === "string" ? (item as any).reopenedByActorId : null,
+    reopenedByActorRole:
+      (item as any).reopenedByActorRole === "landlord" || (item as any).reopenedByActorRole === "admin"
+        ? (item as any).reopenedByActorRole
+        : null,
+    reopenReason: typeof (item as any).reopenReason === "string" ? (item as any).reopenReason : null,
     accessRequired: typeof item.accessRequired === "boolean" ? item.accessRequired : null,
     tenantConfirmationStatus:
       item.tenantConfirmationStatus === "confirmed" || item.tenantConfirmationStatus === "needs_schedule_change"
@@ -151,6 +202,44 @@ export async function getTenantMaintenance(id: string) {
     contractorStatus: item?.contractorStatus || null,
     serviceWindowStartAt: typeof item?.serviceWindowStartAt === "number" ? item.serviceWindowStartAt : null,
     serviceWindowEndAt: typeof item?.serviceWindowEndAt === "number" ? item.serviceWindowEndAt : null,
+    scheduledFor: typeof (item as any)?.scheduledFor === "number" ? (item as any).scheduledFor : null,
+    serviceStartedAt: typeof (item as any)?.serviceStartedAt === "number" ? (item as any).serviceStartedAt : null,
+    serviceCompletedAt: typeof (item as any)?.serviceCompletedAt === "number" ? (item as any).serviceCompletedAt : null,
+    lastExecutionUpdateAt:
+      typeof (item as any)?.lastExecutionUpdateAt === "number" ? (item as any).lastExecutionUpdateAt : null,
+    executionBlockedReason:
+      typeof (item as any)?.executionBlockedReason === "string" ? (item as any).executionBlockedReason : null,
+    completionSummary: typeof (item as any)?.completionSummary === "string" ? (item as any).completionSummary : null,
+    completionOutcome:
+      (item as any)?.completionOutcome === "completed" ||
+      (item as any)?.completionOutcome === "partially_completed" ||
+      (item as any)?.completionOutcome === "follow_up_required"
+        ? (item as any).completionOutcome
+        : null,
+    completionConfirmedByLandlordAt:
+      typeof (item as any)?.completionConfirmedByLandlordAt === "number"
+        ? (item as any).completionConfirmedByLandlordAt
+        : null,
+    completionConfirmedByLandlordBy:
+      typeof (item as any)?.completionConfirmedByLandlordBy === "string"
+        ? (item as any).completionConfirmedByLandlordBy
+        : null,
+    completedByActorRole:
+      (item as any)?.completedByActorRole === "contractor" ||
+      (item as any)?.completedByActorRole === "landlord" ||
+      (item as any)?.completedByActorRole === "admin"
+        ? (item as any).completedByActorRole
+        : null,
+    completedByActorId:
+      typeof (item as any)?.completedByActorId === "string" ? (item as any).completedByActorId : null,
+    reopenedAt: typeof (item as any)?.reopenedAt === "number" ? (item as any).reopenedAt : null,
+    reopenedByActorId:
+      typeof (item as any)?.reopenedByActorId === "string" ? (item as any).reopenedByActorId : null,
+    reopenedByActorRole:
+      (item as any)?.reopenedByActorRole === "landlord" || (item as any)?.reopenedByActorRole === "admin"
+        ? (item as any).reopenedByActorRole
+        : null,
+    reopenReason: typeof (item as any)?.reopenReason === "string" ? (item as any).reopenReason : null,
     accessRequired: typeof item?.accessRequired === "boolean" ? item.accessRequired : null,
     tenantConfirmationStatus:
       item?.tenantConfirmationStatus === "confirmed" || item?.tenantConfirmationStatus === "needs_schedule_change"
@@ -273,7 +362,14 @@ export async function listContractorMaintenanceJobs(status?: string) {
 
 export async function patchContractorMaintenanceJobStatus(
   id: string,
-  payload: { status: "assigned" | "scheduled" | "in_progress" | "completed"; message?: string }
+  payload: {
+    status: "assigned" | "scheduled" | "blocked" | "in_progress" | "completed";
+    message?: string;
+    scheduledFor?: number | null;
+    blockedReason?: string;
+    completionSummary?: string;
+    completionOutcome?: "completed" | "partially_completed" | "follow_up_required";
+  }
 ) {
   return apiFetch<{ ok: boolean; item: MaintenanceWorkflowItem; data?: MaintenanceWorkflowItem }>(
     `/contractor/jobs/${encodeURIComponent(id)}/status`,

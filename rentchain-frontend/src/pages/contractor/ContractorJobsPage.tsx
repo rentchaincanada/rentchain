@@ -15,18 +15,36 @@ function fmtDate(ts?: number | null) {
   return new Date(ts).toLocaleString();
 }
 
+function toLocalInputValue(ts?: number | null) {
+  if (!ts) return "";
+  const date = new Date(ts);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(
+    date.getMinutes()
+  )}`;
+}
+
+function fromLocalInputValue(value: string) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
+}
+
 function findScheduledDate(item: MaintenanceWorkflowItem) {
+  if (typeof item.scheduledFor === "number") return item.scheduledFor;
   const history = Array.isArray(item.statusHistory) ? item.statusHistory : [];
   const scheduledEntry = [...history]
     .filter((entry) => entry.status === "scheduled")
     .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0))[0];
-  return scheduledEntry?.createdAt || null;
+  return scheduledEntry?.createdAt || item.serviceWindowStartAt || null;
 }
 
 function statusLabel(status?: MaintenanceWorkflowStatus | string | null) {
   switch (status) {
     case "in_progress":
       return "in progress";
+    case "blocked":
+      return "blocked";
     case "submitted":
     case "reviewed":
     case "assigned":
@@ -63,6 +81,17 @@ function normalizeJob(item: any): MaintenanceWorkflowItem | null {
     landlordNote: item?.landlordNote ? String(item.landlordNote) : null,
     contractorStatus: item?.contractorStatus ? String(item.contractorStatus) : null,
     contractorLastUpdate: item?.contractorLastUpdate ? String(item.contractorLastUpdate) : null,
+    scheduledFor: typeof item?.scheduledFor === "number" ? item.scheduledFor : null,
+    serviceStartedAt: typeof item?.serviceStartedAt === "number" ? item.serviceStartedAt : null,
+    serviceCompletedAt: typeof item?.serviceCompletedAt === "number" ? item.serviceCompletedAt : null,
+    executionBlockedReason: item?.executionBlockedReason ? String(item.executionBlockedReason) : null,
+    completionSummary: item?.completionSummary ? String(item.completionSummary) : null,
+    completionOutcome:
+      item?.completionOutcome === "completed" ||
+      item?.completionOutcome === "partially_completed" ||
+      item?.completionOutcome === "follow_up_required"
+        ? item.completionOutcome
+        : null,
     createdAt: Number(item?.createdAt || 0),
     updatedAt: Number(item?.updatedAt || 0),
     statusHistory: Array.isArray(item?.statusHistory) ? item.statusHistory : [],
@@ -78,6 +107,9 @@ export default function ContractorJobsPage() {
   const [selectedId, setSelectedId] = React.useState(routeId || "");
   const [search, setSearch] = React.useState("");
   const [note, setNote] = React.useState("");
+  const [scheduledForInput, setScheduledForInput] = React.useState("");
+  const [completionSummary, setCompletionSummary] = React.useState("");
+  const [completionOutcome, setCompletionOutcome] = React.useState<"completed" | "partially_completed" | "follow_up_required">("completed");
   const [saving, setSaving] = React.useState(false);
 
   const load = React.useCallback(async () => {
@@ -130,6 +162,24 @@ export default function ContractorJobsPage() {
     }
   }, [filtered, routeId, selected]);
 
+  React.useEffect(() => {
+    if (!selected) {
+      setScheduledForInput("");
+      setCompletionSummary("");
+      setCompletionOutcome("completed");
+      setNote("");
+      return;
+    }
+    setScheduledForInput(toLocalInputValue(selected.scheduledFor || findScheduledDate(selected)));
+    setCompletionSummary(String(selected.completionSummary || ""));
+    setCompletionOutcome(
+      selected.completionOutcome === "partially_completed" || selected.completionOutcome === "follow_up_required"
+        ? selected.completionOutcome
+        : "completed"
+    );
+    setNote(String(selected.executionBlockedReason || selected.contractorLastUpdate || ""));
+  }, [selected]);
+
   const selectJob = (item: MaintenanceWorkflowItem | null) => {
     if (!item) {
       setSelectedId("");
@@ -141,16 +191,38 @@ export default function ContractorJobsPage() {
   };
 
   const updateStatus = React.useCallback(
-    async (status: "assigned" | "scheduled" | "in_progress" | "completed", fallbackMessage: string) => {
+    async (
+      status: "assigned" | "scheduled" | "blocked" | "in_progress" | "completed",
+      fallbackMessage: string
+    ) => {
       if (!selected) return;
+      const scheduledFor = fromLocalInputValue(scheduledForInput);
+      if (status === "scheduled" && scheduledForInput && !scheduledFor) {
+        setError("Enter a valid scheduled service time.");
+        return;
+      }
+      if (status === "blocked" && !note.trim()) {
+        setError("A blocked job needs a reason.");
+        return;
+      }
+      if (status === "completed" && !completionSummary.trim()) {
+        setError("Add a completion summary before finishing the job.");
+        return;
+      }
       setSaving(true);
       setError(null);
       try {
         await patchContractorMaintenanceJobStatus(selected.id, {
           status,
           message: note.trim() || fallbackMessage,
+          scheduledFor: status === "scheduled" ? scheduledFor : undefined,
+          blockedReason: status === "blocked" ? note.trim() : undefined,
+          completionSummary: status === "completed" ? completionSummary.trim() : undefined,
+          completionOutcome: status === "completed" ? completionOutcome : undefined,
         });
-        setNote("");
+        if (status === "completed") {
+          setCompletionSummary("");
+        }
         await load();
       } catch (err: any) {
         setError(String(err?.message || "Failed to update job"));
@@ -158,7 +230,7 @@ export default function ContractorJobsPage() {
         setSaving(false);
       }
     },
-    [load, note, selected]
+    [completionOutcome, completionSummary, load, note, scheduledForInput, selected]
   );
 
   const actions = React.useMemo(() => {
@@ -172,17 +244,23 @@ export default function ContractorJobsPage() {
     }
     if (selected.status === "assigned") {
       next.push({
-        label: "Mark scheduled",
+        label: "Schedule service",
         onClick: () => updateStatus("scheduled", "Contractor scheduled the visit."),
       });
     }
-    if (selected.status === "scheduled") {
+    if (["assigned", "scheduled", "blocked"].includes(selected.status)) {
       next.push({
-        label: "Mark in progress",
+        label: "Start work",
         onClick: () => updateStatus("in_progress", "Contractor started the work."),
       });
     }
-    if (selected.status === "in_progress") {
+    if (["scheduled", "in_progress"].includes(selected.status)) {
+      next.push({
+        label: "Mark blocked",
+        onClick: () => updateStatus("blocked", "Contractor reported a blocked visit."),
+      });
+    }
+    if (["scheduled", "blocked", "in_progress"].includes(selected.status)) {
       next.push({
         label: "Mark completed",
         onClick: () => updateStatus("completed", "Contractor completed the work."),
@@ -301,12 +379,22 @@ export default function ContractorJobsPage() {
                       <div style={{ color: text.primary, fontWeight: 700, marginTop: 6 }}>{selected.priority}</div>
                     </div>
                     <div>
-                      <div style={{ color: text.muted, fontSize: 12 }}>Scheduled date</div>
+                      <div style={{ color: text.muted, fontSize: 12 }}>Scheduled service</div>
                       <div style={{ color: text.primary, fontWeight: 700, marginTop: 6 }}>{fmtDate(findScheduledDate(selected))}</div>
                     </div>
                     <div>
                       <div style={{ color: text.muted, fontSize: 12 }}>Last update</div>
                       <div style={{ color: text.primary, fontWeight: 700, marginTop: 6 }}>{fmtDate(selected.updatedAt)}</div>
+                    </div>
+                    <div>
+                      <div style={{ color: text.muted, fontSize: 12 }}>Started</div>
+                      <div style={{ color: text.primary, fontWeight: 700, marginTop: 6 }}>{fmtDate(selected.serviceStartedAt)}</div>
+                    </div>
+                    <div>
+                      <div style={{ color: text.muted, fontSize: 12 }}>Completed</div>
+                      <div style={{ color: text.primary, fontWeight: 700, marginTop: 6 }}>
+                        {fmtDate(selected.serviceCompletedAt)}
+                      </div>
                     </div>
                   </div>
 
@@ -322,24 +410,98 @@ export default function ContractorJobsPage() {
                     </div>
                   ) : null}
 
-                  <label style={{ display: "grid", gap: 6 }}>
-                    <span style={{ color: text.muted, fontSize: 12 }}>Update note</span>
-                    <textarea
-                      rows={3}
-                      value={note}
-                      onChange={(e) => setNote(e.target.value)}
-                      placeholder="Add schedule details or a progress note"
-                      style={{
-                        width: "100%",
-                        padding: "10px",
-                        borderRadius: radius.md,
-                        border: `1px solid ${colors.border}`,
-                        background: colors.panel,
-                        color: text.primary,
-                        resize: "vertical",
-                      }}
-                    />
-                  </label>
+                  <div
+                    style={{
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: radius.md,
+                      padding: "12px 14px",
+                      background: colors.panel,
+                      display: "grid",
+                      gap: 8,
+                    }}
+                  >
+                    <div style={{ fontWeight: 700, color: text.primary }}>Execution details</div>
+                    <div style={{ color: text.secondary }}>
+                      {selected.executionBlockedReason
+                        ? `Blocked reason: ${selected.executionBlockedReason}`
+                        : selected.completionSummary
+                        ? `Completion summary: ${selected.completionSummary}`
+                        : selected.contractorLastUpdate || "Use the actions below to keep service progress current."}
+                    </div>
+                    <label style={{ display: "grid", gap: 4 }}>
+                      <span style={{ color: text.muted, fontSize: 12 }}>Scheduled service time</span>
+                      <input
+                        type="datetime-local"
+                        value={scheduledForInput}
+                        onChange={(e) => setScheduledForInput(e.target.value)}
+                        style={{
+                          padding: "9px 10px",
+                          borderRadius: radius.md,
+                          border: `1px solid ${colors.border}`,
+                          background: colors.panel,
+                          color: text.primary,
+                        }}
+                      />
+                    </label>
+                    <label style={{ display: "grid", gap: 6 }}>
+                      <span style={{ color: text.muted, fontSize: 12 }}>
+                        {selected.status === "completed" ? "Completion update" : "Execution note / blocked reason"}
+                      </span>
+                      <textarea
+                        rows={3}
+                        value={note}
+                        onChange={(e) => setNote(e.target.value)}
+                        placeholder="Add schedule details, a blocked reason, or a progress note"
+                        style={{
+                          width: "100%",
+                          padding: "10px",
+                          borderRadius: radius.md,
+                          border: `1px solid ${colors.border}`,
+                          background: colors.panel,
+                          color: text.primary,
+                          resize: "vertical",
+                        }}
+                      />
+                    </label>
+                    <label style={{ display: "grid", gap: 6 }}>
+                      <span style={{ color: text.muted, fontSize: 12 }}>Completion summary</span>
+                      <textarea
+                        rows={3}
+                        value={completionSummary}
+                        onChange={(e) => setCompletionSummary(e.target.value)}
+                        placeholder="Summarize what work was completed"
+                        style={{
+                          width: "100%",
+                          padding: "10px",
+                          borderRadius: radius.md,
+                          border: `1px solid ${colors.border}`,
+                          background: colors.panel,
+                          color: text.primary,
+                          resize: "vertical",
+                        }}
+                      />
+                    </label>
+                    <label style={{ display: "grid", gap: 4 }}>
+                      <span style={{ color: text.muted, fontSize: 12 }}>Completion outcome</span>
+                      <select
+                        value={completionOutcome}
+                        onChange={(e) =>
+                          setCompletionOutcome(e.target.value as "completed" | "partially_completed" | "follow_up_required")
+                        }
+                        style={{
+                          padding: "9px 10px",
+                          borderRadius: radius.md,
+                          border: `1px solid ${colors.border}`,
+                          background: colors.panel,
+                          color: text.primary,
+                        }}
+                      >
+                        <option value="completed">Completed</option>
+                        <option value="partially_completed">Partially completed</option>
+                        <option value="follow_up_required">Follow-up required</option>
+                      </select>
+                    </label>
+                  </div>
 
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     {actions.map((action) => (
