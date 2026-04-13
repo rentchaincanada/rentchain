@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { Button } from "../../components/ui/Ui";
 import { listTenantMaintenance, type MaintenanceWorkflowItem } from "../../api/maintenanceWorkflowApi";
 import { colors, spacing, text as textTokens } from "../../styles/tokens";
+import { buildMaintenanceWorkspaceState } from "../maintenanceWorkspaceState";
+import { buildMaintenanceAssignmentRoutingView } from "../maintenanceAssignmentRoutingState";
 import {
   TenantEmptyState,
   TenantErrorState,
@@ -43,6 +45,8 @@ export default function TenantMaintenanceRequestsPage() {
     void load();
   }, [load]);
 
+  const workspaceView = React.useMemo(() => buildMaintenanceWorkspaceState(items, "tenant"), [items]);
+
   return (
     <TenantSurfaceShell
       title="Maintenance"
@@ -80,19 +84,84 @@ export default function TenantMaintenanceRequestsPage() {
         />
       ) : (
         <div style={{ display: "grid", gap: spacing.md }}>
+          <TenantInfoCard heading="Maintenance workflow" accent="#1d4ed8">
+            <div style={{ display: "grid", gap: spacing.sm }}>
+              <div style={{ color: textTokens.primary, fontWeight: 800 }}>{workspaceView.summaryTitle}</div>
+              <div style={{ color: textTokens.secondary }}>{workspaceView.summaryDescription}</div>
+              <div
+                style={{
+                  display: "grid",
+                  gap: 10,
+                  gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+                }}
+              >
+                {[
+                  { label: "Submitted", value: workspaceView.counts.submitted },
+                  { label: "Acknowledged", value: workspaceView.counts.acknowledged },
+                  { label: "In progress", value: workspaceView.counts.in_progress },
+                  { label: "Completed", value: workspaceView.counts.completed },
+                  { label: "Needs attention", value: workspaceView.counts.needs_attention },
+                ].map((item) => (
+                  <div
+                    key={item.label}
+                    style={{
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: 12,
+                      padding: "12px 14px",
+                      background: colors.panel,
+                      display: "grid",
+                      gap: 4,
+                    }}
+                  >
+                    <div style={{ color: textTokens.muted, fontSize: "0.8rem", textTransform: "uppercase" }}>{item.label}</div>
+                    <div style={{ color: textTokens.primary, fontWeight: 800, fontSize: "1.3rem" }}>{item.value}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: "grid", gap: 6 }}>
+                <div style={{ color: textTokens.primary, fontWeight: 700 }}>What happens next</div>
+                {workspaceView.nextSteps.map((step) => (
+                  <div key={step} style={{ color: textTokens.secondary }}>
+                    {step}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </TenantInfoCard>
           {items.map((item) => (
-            <TenantInfoCard key={item.id} heading={item.title || "Maintenance request"} accent="#b45309">
-              <div style={{ color: textTokens.muted, fontSize: "0.92rem" }}>
-                {prettyStatus(item.status)} • {prettyStatus(item.priority)} • {prettyStatus(item.category)}
-              </div>
-              <div style={{ color: textTokens.secondary, fontSize: "0.9rem" }}>
-                Created {fmtDate(item.createdAt)} • Last update {fmtDate(item.updatedAt)}
-                {item.assignedContractorName ? ` • Contractor: ${item.assignedContractorName}` : ""}
-              </div>
-              <div>
-                <Link to={`/tenant/maintenance/${item.id}`}>Open request</Link>
-              </div>
-            </TenantInfoCard>
+            (() => {
+              const requestView = workspaceView.requestViews.find((entry) => entry.id === item.id);
+              const assignmentView = buildMaintenanceAssignmentRoutingView(item, "tenant");
+              return (
+                <TenantInfoCard
+                  key={item.id}
+                  heading={item.title || "Maintenance request"}
+                  accent={requestView?.needsAttention ? "#dc2626" : "#b45309"}
+                >
+                                   <div style={{ color: textTokens.muted, fontSize: "0.92rem" }}>
+                    {requestView?.lifecycleLabel || prettyStatus(item.status)} • {prettyStatus(item.priority)} •{" "}
+                    {prettyStatus(item.category)}
+                  </div>
+                  <div style={{ color: textTokens.secondary, lineHeight: 1.5 }}>
+                    {requestView?.summary || "This request is visible in your tenant maintenance workspace."}
+                  </div>
+                  <div style={{ color: textTokens.secondary, fontSize: "0.9rem" }}>
+                    Created {fmtDate(item.createdAt)} • Last update {fmtDate(item.updatedAt)}
+                    {` • Handling: ${assignmentView.tenantVisibleLabel}`}
+                  </div>
+                  <div style={{ color: textTokens.secondary }}>{assignmentView.summary}</div>
+                  {requestView?.nextSteps.length ? (
+                    <div style={{ display: "grid", gap: 4 }}>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Next step</div>
+                      <div style={{ color: textTokens.secondary }}>{requestView.nextSteps[0]}</div>
+                    </div>
+                  ) : null}
+                  <div>
+                    <Link to={`/tenant/maintenance/${item.id}`}>Open request</Link>
+                  </div>
+                </TenantInfoCard>
+              );
+            })()
           ))}
         </div>
       )}

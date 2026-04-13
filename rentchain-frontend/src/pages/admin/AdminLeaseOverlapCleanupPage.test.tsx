@@ -114,16 +114,22 @@ describe("AdminLeaseOverlapCleanupPage", () => {
     const leaseARadio = screen.getByLabelText("Select canonical lease lease-a") as HTMLInputElement;
     const leaseBRadio = screen.getByLabelText("Select canonical lease lease-b") as HTMLInputElement;
 
-    expect(leaseARadio.checked).toBe(true);
-    expect(leaseBRadio.checked).toBe(false);
+    await waitFor(() => {
+      expect(leaseARadio.checked).toBe(true);
+      expect(leaseBRadio.checked).toBe(false);
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "Use suggestion" }));
 
-    expect(leaseARadio.checked).toBe(false);
-    expect(leaseBRadio.checked).toBe(true);
+    await waitFor(() => {
+      expect(leaseARadio.checked).toBe(false);
+      expect(leaseBRadio.checked).toBe(true);
+    });
 
     fireEvent.click(leaseARadio);
-    expect(leaseARadio.checked).toBe(true);
+    await waitFor(() => {
+      expect(leaseARadio.checked).toBe(true);
+    });
   });
 
   it("still requires preview and confirmation before apply", async () => {

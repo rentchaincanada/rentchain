@@ -13,6 +13,7 @@ import {
   TenantUnauthorizedState,
 } from "./TenantWorkspaceShared";
 import { spacing, text as textTokens } from "../../styles/tokens";
+import { buildTenantCommunicationsWorkspaceState } from "./tenantCommunicationsWorkspaceState";
 
 export default function TenantMessagesCenterPage() {
   const [workspace, setWorkspace] = useState<Awaited<ReturnType<typeof getTenantCommunicationsWorkspace>> | null>(null);
@@ -42,6 +43,10 @@ export default function TenantMessagesCenterPage() {
 
   const thread = workspace?.thread;
   const messages = useMemo(() => thread?.messages || [], [thread]);
+  const inboxView = useMemo(
+    () => buildTenantCommunicationsWorkspaceState(workspace),
+    [workspace]
+  );
 
   const handleSend = async () => {
     const body = composer.trim();
@@ -85,10 +90,21 @@ export default function TenantMessagesCenterPage() {
   return (
     <TenantSurfaceShell
       title="Communications"
-      subtitle="Use this bounded thread to communicate with the property side safely. Sending stays disabled when your tenancy context is incomplete."
+      subtitle="Use this tenancy-scoped inbox to review recent communication, understand what needs attention, and keep the current conversation organized."
     >
-      <TenantInfoCard heading="Thread summary" accent="#1d4ed8">
+      <TenantInfoCard heading="Inbox summary" accent="#1d4ed8">
         <div style={{ display: "grid", gap: spacing.sm }}>
+          <div style={{ display: "grid", gap: 4 }}>
+            <div style={{ fontSize: "1.05rem", fontWeight: 800, color: textTokens.primary }}>
+              {inboxView.title}
+            </div>
+            <div style={{ color: textTokens.secondary, lineHeight: 1.6 }}>
+              {inboxView.description}
+            </div>
+          </div>
+          <div style={{ color: textTokens.secondary }}>
+            Inbox state: <strong>{inboxView.label}</strong>
+          </div>
           <div style={{ color: textTokens.secondary }}>
             Contact: <strong>{thread?.landlordLabel || "Landlord"}</strong>
           </div>
@@ -96,8 +112,69 @@ export default function TenantMessagesCenterPage() {
             Unread messages: <strong>{thread?.unreadCount || 0}</strong>
           </div>
           <div style={{ color: textTokens.secondary }}>
-            Last activity: <strong>{thread?.lastMessageAt ? new Date(thread.lastMessageAt).toLocaleString() : "No messages yet"}</strong>
+            Last activity:{" "}
+            <strong>{thread?.lastMessageAt ? new Date(thread.lastMessageAt).toLocaleString() : "No messages yet"}</strong>
           </div>
+        </div>
+      </TenantInfoCard>
+
+      <TenantInfoCard heading="Recent messages" accent="#0f766e">
+        {inboxView.threadSummaries.length ? (
+          <div style={{ display: "grid", gap: spacing.sm }}>
+            {inboxView.threadSummaries.map((summary) => (
+              <div
+                key={summary.id}
+                style={{
+                  border: "1px solid rgba(15,23,42,0.08)",
+                  borderRadius: 12,
+                  padding: "12px 14px",
+                  display: "grid",
+                  gap: 8,
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                  <div style={{ fontWeight: 700, color: textTokens.primary }}>
+                    Conversation with {summary.landlordLabel}
+                  </div>
+                  <div
+                    style={{
+                      padding: "4px 8px",
+                      borderRadius: 999,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: summary.needsReply ? "#9a3412" : "#1d4ed8",
+                      background: summary.needsReply ? "#ffedd5" : "#dbeafe",
+                    }}
+                  >
+                    {summary.stateLabel}
+                  </div>
+                </div>
+                <div style={{ color: textTokens.secondary }}>
+                  Latest update: {summary.latestPreview}
+                </div>
+                <div style={{ color: textTokens.muted, fontSize: "0.9rem" }}>
+                  {summary.latestMessageAt
+                    ? `Updated ${new Date(summary.latestMessageAt).toLocaleString()}`
+                    : "No messages yet"}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <TenantEmptyState
+            title="No thread activity yet"
+            body="A tenancy-scoped conversation will appear here once communication starts."
+          />
+        )}
+      </TenantInfoCard>
+
+      <TenantInfoCard heading="What to do next" accent="#7c3aed">
+        <div style={{ display: "grid", gap: 8 }}>
+          {inboxView.nextSteps.map((step) => (
+            <div key={step} style={{ color: textTokens.secondary }}>
+              {step}
+            </div>
+          ))}
         </div>
       </TenantInfoCard>
 
@@ -113,7 +190,7 @@ export default function TenantMessagesCenterPage() {
         <TenantErrorState message={error} retry={load} />
       ) : (
         <div style={{ display: "grid", gap: spacing.md }}>
-          <TenantInfoCard heading="Conversation" accent="#0f766e">
+          <TenantInfoCard heading="Conversation thread" accent="#0891b2">
             {messages.length ? (
               <div style={{ display: "grid", gap: 10 }}>
                 {messages.map((message) => (

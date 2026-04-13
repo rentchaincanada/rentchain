@@ -34,8 +34,16 @@ type TenantMaintenanceProjection = {
   priority: string | null;
   title: string | null;
   summary: string | null;
+  assignedContractorName: string | null;
+  contractorStatus: string | null;
   createdAt: number | null;
   updatedAt: number | null;
+  statusHistory: Array<{
+    status: string | null;
+    actorRole: string | null;
+    message: string | null;
+    createdAt: number | null;
+  }>;
 };
 
 function asString(value: unknown): string | null {
@@ -119,6 +127,20 @@ export function projectTenantApplication(recordId: string, data: any): TenantApp
 }
 
 export function projectTenantMaintenance(recordId: string, data: any): TenantMaintenanceProjection {
+  const statusHistory = Array.isArray(data?.statusHistory)
+    ? data.statusHistory
+        .map((entry: any) => ({
+          status: asString(entry?.status),
+          actorRole: asString(entry?.actorRole),
+          message: asString(entry?.message),
+          createdAt: toMillis(entry?.createdAt),
+        }))
+        .filter(
+          (entry: { status: string | null; actorRole: string | null; message: string | null; createdAt: number | null }) =>
+            Boolean(entry.status || entry.actorRole || entry.message || entry.createdAt)
+        )
+    : [];
+
   return {
     requestId: recordId,
     status: asString(data?.status),
@@ -126,7 +148,10 @@ export function projectTenantMaintenance(recordId: string, data: any): TenantMai
     priority: asString(data?.priority),
     title: asString(data?.title),
     summary: asString(data?.summary) || asString(data?.description),
+    assignedContractorName: asString(data?.assignedContractorName),
+    contractorStatus: asString(data?.contractorStatus),
     createdAt: toMillis(data?.createdAt),
     updatedAt: toMillis(data?.updatedAt),
+    statusHistory,
   };
 }
