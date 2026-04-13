@@ -322,12 +322,16 @@ describe("maintenanceRequestsRoutes scheduling access", () => {
     const savedMaintenance = ensureCollection("maintenanceRequests").get("maint-1");
     expect(savedMaintenance?.status).toBe("completed");
     expect(savedMaintenance?.completionSummary).toMatch(/Replaced the thermostat/i);
+    expect(savedMaintenance?.resolutionStatus).toBe("completed_pending_review");
+    expect(savedMaintenance?.followUpRequired).toBe(false);
 
     const savedWorkOrder = ensureCollection("workOrders").get("maintenance_maint-1");
     expect(savedWorkOrder?.serviceCompletedAt).toBeDefined();
     expect(savedWorkOrder?.completionSummary).toMatch(/Replaced the thermostat/i);
     expect(savedWorkOrder?.completedByActorRole).toBe("contractor");
     expect(savedWorkOrder?.completedByActorId).toBe("contractor-1");
+    expect(savedWorkOrder?.resolutionStatus).toBe("completed_pending_review");
+    expect(savedWorkOrder?.finalResolvedAt).toBeNull();
   });
 
   it("allows an assigned contractor to upload evidence for their job", async () => {

@@ -434,6 +434,93 @@ describe("tenantPortalRoutes foundation", () => {
     expect(JSON.stringify(res.body?.data?.evidence || [])).not.toMatch(/internal review/i);
   });
 
+  it("lets the tenant sign off a completed maintenance request as resolved", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    ensureCollection("maintenanceRequests").set("maint-2", {
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      status: "completed",
+      priority: "NORMAL",
+      category: "GENERAL",
+      title: "Window repair",
+      description: "The latch is broken.",
+      statusHistory: [],
+      createdAt: 100,
+      updatedAt: 200,
+    });
+    ensureCollection("workOrders").set("maintenance_maint-2", {
+      maintenanceRequestId: "maint-2",
+      tenantId: "tenant-1",
+      status: "completed",
+      resolutionStatus: "tenant_pending_signoff",
+    });
+
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/maintenance/maint-2/signoff",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+      body: {
+        decision: "resolved",
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.resolutionStatus).toBe("resolved");
+    expect(typeof res.body?.data?.finalResolvedAt).toBe("number");
+
+    const savedWorkOrder = ensureCollection("workOrders").get("maintenance_maint-2");
+    expect(savedWorkOrder?.tenantSignoffStatus).toBe("accepted");
+    expect(savedWorkOrder?.finalResolvedAt).toBeDefined();
+  });
+
+  it("requires a reason when the tenant reports the issue is not resolved", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    ensureCollection("maintenanceRequests").set("maint-2", {
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      status: "completed",
+      priority: "NORMAL",
+      category: "GENERAL",
+      title: "Window repair",
+      description: "The latch is broken.",
+      statusHistory: [],
+      createdAt: 100,
+      updatedAt: 200,
+    });
+    ensureCollection("workOrders").set("maintenance_maint-2", {
+      maintenanceRequestId: "maint-2",
+      tenantId: "tenant-1",
+      status: "completed",
+      resolutionStatus: "tenant_pending_signoff",
+    });
+
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/maintenance/maint-2/signoff",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+      body: {
+        decision: "not_resolved",
+      },
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body?.error).toBe("TENANT_DECLINE_REASON_REQUIRED");
+  });
+
   it("rejects unauthorized application completion access", async () => {
     const router = (await import("../tenantPortalRoutes")).default;
     const res = await invokeRouter(router, {

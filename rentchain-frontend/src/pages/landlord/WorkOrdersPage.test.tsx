@@ -9,7 +9,9 @@ const mocks = vi.hoisted(() => ({
   listWorkOrderUpdates: vi.fn(),
   getWorkOrder: vi.fn(),
   patchWorkOrder: vi.fn(),
+  approveWorkOrderResolution: vi.fn(),
   confirmWorkOrderCompletion: vi.fn(),
+  markWorkOrderFollowUpRequired: vi.fn(),
   reopenWorkOrder: vi.fn(),
   uploadWorkOrderEvidence: vi.fn(),
   updateWorkOrderEvidence: vi.fn(),
@@ -26,12 +28,14 @@ vi.mock("@/hooks/useEntitlements", () => ({
 
 vi.mock("../../api/workOrdersApi", () => ({
   addWorkOrderUpdate: mocks.addWorkOrderUpdate,
+  approveWorkOrderResolution: mocks.approveWorkOrderResolution,
   completeWorkOrder: vi.fn(),
   confirmWorkOrderCompletion: mocks.confirmWorkOrderCompletion,
   getContractorProfileById: mocks.getContractorProfileById,
   getWorkOrder: mocks.getWorkOrder,
   listWorkOrderUpdates: mocks.listWorkOrderUpdates,
   listWorkOrders: mocks.listWorkOrders,
+  markWorkOrderFollowUpRequired: mocks.markWorkOrderFollowUpRequired,
   patchWorkOrder: mocks.patchWorkOrder,
   reopenWorkOrder: mocks.reopenWorkOrder,
   updateWorkOrderEvidence: mocks.updateWorkOrderEvidence,
@@ -73,7 +77,9 @@ describe("WorkOrdersPage", () => {
     mocks.listWorkOrderUpdates.mockReset();
     mocks.getWorkOrder.mockReset();
     mocks.patchWorkOrder.mockReset();
+    mocks.approveWorkOrderResolution.mockReset();
     mocks.confirmWorkOrderCompletion.mockReset();
+    mocks.markWorkOrderFollowUpRequired.mockReset();
     mocks.reopenWorkOrder.mockReset();
     mocks.uploadWorkOrderEvidence.mockReset();
     mocks.updateWorkOrderEvidence.mockReset();
@@ -175,6 +181,12 @@ describe("WorkOrdersPage", () => {
       completedByActorRole: "contractor",
       completionConfirmedByLandlordAt: 40,
       completionConfirmedByLandlordBy: "landlord-1",
+      resolutionStatus: "completed_pending_review",
+      landlordApprovedAt: null,
+      tenantSignoffStatus: null,
+      followUpRequired: false,
+      followUpReason: null,
+      finalResolvedAt: null,
       reopenedAt: null,
       reopenedByActorId: null,
       reopenedByActorRole: null,
@@ -185,7 +197,9 @@ describe("WorkOrdersPage", () => {
       createdAtMs: 1,
       updatedAtMs: 40,
     });
+    mocks.approveWorkOrderResolution.mockResolvedValue({ ok: true });
     mocks.confirmWorkOrderCompletion.mockResolvedValue({ ok: true });
+    mocks.markWorkOrderFollowUpRequired.mockResolvedValue({ ok: true });
     mocks.reopenWorkOrder.mockResolvedValue({ ok: true });
 
     render(
@@ -199,11 +213,29 @@ describe("WorkOrdersPage", () => {
     expect(await screen.findByText(/Execution and completion/i)).toBeInTheDocument();
     expect(screen.getByText(/Replaced igniter and restored heat/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /confirm completion/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /approve resolution/i })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /confirm completion/i }));
 
     await waitFor(() => {
       expect(mocks.confirmWorkOrderCompletion).toHaveBeenCalledWith("wo-1");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /approve resolution/i }));
+
+    await waitFor(() => {
+      expect(mocks.approveWorkOrderResolution).toHaveBeenCalledWith("wo-1");
+    });
+
+    fireEvent.change(screen.getByPlaceholderText(/Explain why this work still needs follow-up/i), {
+      target: { value: "Heat is still uneven near the bedroom wall." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /mark follow-up required/i }));
+
+    await waitFor(() => {
+      expect(mocks.markWorkOrderFollowUpRequired).toHaveBeenCalledWith("wo-1", {
+        reason: "Heat is still uneven near the bedroom wall.",
+      });
     });
 
     fireEvent.change(screen.getByPlaceholderText(/Explain why this work order needs follow-up/i), {

@@ -42,6 +42,21 @@ type TenantMaintenanceProjection = {
   tenantConfirmationStatus: "confirmed" | "needs_schedule_change" | null;
   tenantConfirmationUpdatedAt: number | null;
   accessAcknowledgedAt: number | null;
+  resolutionStatus:
+    | "completed_pending_review"
+    | "landlord_approved"
+    | "tenant_pending_signoff"
+    | "resolved"
+    | "follow_up_required"
+    | null;
+  landlordApprovedAt: number | null;
+  tenantSignoffStatus: "pending" | "accepted" | "declined" | null;
+  tenantSignedOffAt: number | null;
+  tenantDeclinedAt: number | null;
+  tenantDeclineReason: string | null;
+  followUpRequired: boolean | null;
+  followUpReason: string | null;
+  finalResolvedAt: number | null;
   evidence: Array<{
     id: string;
     url: string | null;
@@ -176,6 +191,27 @@ export function projectTenantMaintenance(recordId: string, data: any): TenantMai
         : null,
     tenantConfirmationUpdatedAt: toMillis(data?.tenantConfirmationUpdatedAt),
     accessAcknowledgedAt: toMillis(data?.accessAcknowledgedAt),
+    resolutionStatus:
+      data?.resolutionStatus === "completed_pending_review" ||
+      data?.resolutionStatus === "landlord_approved" ||
+      data?.resolutionStatus === "tenant_pending_signoff" ||
+      data?.resolutionStatus === "resolved" ||
+      data?.resolutionStatus === "follow_up_required"
+        ? data.resolutionStatus
+        : null,
+    landlordApprovedAt: toMillis(data?.landlordApprovedAt),
+    tenantSignoffStatus:
+      data?.tenantSignoffStatus === "pending" ||
+      data?.tenantSignoffStatus === "accepted" ||
+      data?.tenantSignoffStatus === "declined"
+        ? data.tenantSignoffStatus
+        : null,
+    tenantSignedOffAt: toMillis(data?.tenantSignedOffAt),
+    tenantDeclinedAt: toMillis(data?.tenantDeclinedAt),
+    tenantDeclineReason: asString(data?.tenantDeclineReason),
+    followUpRequired: typeof data?.followUpRequired === "boolean" ? data.followUpRequired : null,
+    followUpReason: asString(data?.followUpReason),
+    finalResolvedAt: toMillis(data?.finalResolvedAt),
     evidence: Array.isArray(data?.evidence)
       ? data.evidence
           .map((entry: any) => ({

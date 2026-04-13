@@ -102,6 +102,34 @@ function normalizeCompletionOutcome(value: unknown): "completed" | "partially_co
   return null;
 }
 
+function normalizeResolutionStatus(
+  value: unknown
+):
+  | "completed_pending_review"
+  | "landlord_approved"
+  | "tenant_pending_signoff"
+  | "resolved"
+  | "follow_up_required"
+  | null {
+  const next = asString(value, 80).toLowerCase();
+  if (
+    next === "completed_pending_review" ||
+    next === "landlord_approved" ||
+    next === "tenant_pending_signoff" ||
+    next === "resolved" ||
+    next === "follow_up_required"
+  ) {
+    return next;
+  }
+  return null;
+}
+
+function normalizeTenantSignoffStatus(value: unknown): "pending" | "accepted" | "declined" | null {
+  const next = asString(value, 40).toLowerCase();
+  if (next === "pending" || next === "accepted" || next === "declined") return next;
+  return null;
+}
+
 function normalizeRole(req: any): string {
   const actorRole = asString(req.user?.actorRole, 40).toLowerCase();
   const role = asString(req.user?.role, 40).toLowerCase();
@@ -398,6 +426,16 @@ async function syncMaintenanceFromWorkOrder(workOrderId: string, patch: Record<s
       scheduledFor: toMillis(workOrder.scheduledFor),
       serviceCompletedAt: toMillis(workOrder.serviceCompletedAt),
       completionSummary: asOptionalString(workOrder.completionSummary, 2000),
+      resolutionStatus: normalizeResolutionStatus(workOrder.resolutionStatus),
+      landlordApprovedAt: toMillis(workOrder.landlordApprovedAt),
+      landlordApprovedBy: asOptionalString(workOrder.landlordApprovedBy, 120),
+      tenantSignoffStatus: normalizeTenantSignoffStatus(workOrder.tenantSignoffStatus),
+      tenantSignedOffAt: toMillis(workOrder.tenantSignedOffAt),
+      tenantDeclinedAt: toMillis(workOrder.tenantDeclinedAt),
+      tenantDeclineReason: asOptionalString(workOrder.tenantDeclineReason, 2000),
+      followUpRequired: typeof workOrder.followUpRequired === "boolean" ? workOrder.followUpRequired : null,
+      followUpReason: asOptionalString(workOrder.followUpReason, 2000),
+      finalResolvedAt: toMillis(workOrder.finalResolvedAt),
       contractorLastUpdate: asOptionalString(patch.contractorLastUpdate, 500) || asOptionalString(workOrder.completionSummary, 500),
       updatedAt: nowMs(),
       ...patch,
@@ -1161,18 +1199,29 @@ router.patch("/work-orders/:id", requireAuth, async (req: any, res) => {
         if (nextStatus === "completed") {
           const completionSummary = asString(req.body?.completionSummary, 2000);
           const completionOutcome = normalizeCompletionOutcome(req.body?.completionOutcome) || "completed";
+          const completedAt = nowMs();
           if (!completionSummary) {
             return res.status(400).json({ ok: false, error: "COMPLETION_SUMMARY_REQUIRED" });
           }
-          patch.completedAtMs = nowMs();
-          patch.serviceCompletedAt = nowMs();
-          patch.lastExecutionUpdateAt = nowMs();
+          patch.completedAtMs = completedAt;
+          patch.serviceCompletedAt = completedAt;
+          patch.lastExecutionUpdateAt = completedAt;
           patch.completionSummary = completionSummary;
           patch.completionOutcome = completionOutcome;
           patch.completedByActorRole = access.role === "admin" ? "admin" : "landlord";
           patch.completedByActorId = access.userId;
           patch.completionConfirmedByLandlordAt = null;
           patch.completionConfirmedByLandlordBy = null;
+          patch.resolutionStatus = "completed_pending_review";
+          patch.landlordApprovedAt = null;
+          patch.landlordApprovedBy = null;
+          patch.tenantSignoffStatus = null;
+          patch.tenantSignedOffAt = null;
+          patch.tenantDeclinedAt = null;
+          patch.tenantDeclineReason = null;
+          patch.followUpRequired = false;
+          patch.followUpReason = null;
+          patch.finalResolvedAt = null;
           updateMessage = "Work order marked completed in-house";
           maintenanceHistoryMessage = `Service completed in-house: ${completionSummary}`;
         }
@@ -1426,6 +1475,18 @@ router.post("/work-orders/:id/complete", requireAuth, async (req: any, res) => {
         status: "completed",
         assignedContractorId: userId,
         completedAtMs: now,
+        serviceCompletedAt: now,
+        lastExecutionUpdateAt: now,
+        resolutionStatus: "completed_pending_review",
+        landlordApprovedAt: null,
+        landlordApprovedBy: null,
+        tenantSignoffStatus: null,
+        tenantSignedOffAt: null,
+        tenantDeclinedAt: null,
+        tenantDeclineReason: null,
+        followUpRequired: false,
+        followUpReason: null,
+        finalResolvedAt: null,
         updatedAtMs: now,
       },
       { merge: true }
@@ -1475,10 +1536,21 @@ router.post("/landlord/work-orders/:id/confirm-completion", requireAuth, async (
     }
 
     const now = nowMs();
+    const tenantId = asOptionalString((access.item as any)?.tenantId, 120);
     await db.collection("workOrders").doc(workOrderId).set(
       {
         completionConfirmedByLandlordAt: now,
         completionConfirmedByLandlordBy: access.userId,
+        resolutionStatus: tenantId ? "tenant_pending_signoff" : "landlord_approved",
+        landlordApprovedAt: now,
+        landlordApprovedBy: access.userId,
+        tenantSignoffStatus: tenantId ? "pending" : null,
+        tenantSignedOffAt: null,
+        tenantDeclinedAt: null,
+        tenantDeclineReason: null,
+        followUpRequired: false,
+        followUpReason: null,
+        finalResolvedAt: null,
         updatedAtMs: now,
         lastExecutionUpdateAt: now,
       },
@@ -1490,18 +1562,24 @@ router.post("/landlord/work-orders/:id/confirm-completion", requireAuth, async (
       actorRole: isAdmin(req) ? "admin" : "landlord",
       actorId: access.userId,
       updateType: "confirmed",
-      message: "Landlord confirmed work order completion",
+      message: tenantId
+        ? "Landlord approved the completed work and is waiting for tenant signoff"
+        : "Landlord approved the completed work",
     });
 
     await syncMaintenanceFromWorkOrder(workOrderId, {
-      contractorLastUpdate: "Landlord confirmed completion.",
+      contractorLastUpdate: tenantId
+        ? "Landlord approved the completed work and is waiting for tenant signoff."
+        : "Landlord approved the completed work.",
     });
     await appendMaintenanceStatusHistory({
       maintenanceRequestId: asOptionalString((access.item as any)?.maintenanceRequestId, 120),
       status: "completed",
       actorRole: isAdmin(req) ? "admin" : "landlord",
       actorId: access.userId,
-      message: "Landlord confirmed completion.",
+      message: tenantId
+        ? "Landlord approved the completed work and is waiting for tenant signoff."
+        : "Landlord approved the completed work.",
     });
 
     const refreshed = await db.collection("workOrders").doc(workOrderId).get();
@@ -1509,6 +1587,146 @@ router.post("/landlord/work-orders/:id/confirm-completion", requireAuth, async (
   } catch (err) {
     console.error("[work-orders] confirm completion failed", err);
     return res.status(500).json({ ok: false, error: "WORK_ORDER_CONFIRM_COMPLETION_FAILED" });
+  }
+});
+
+router.post("/landlord/work-orders/:id/approve-resolution", requireAuth, async (req: any, res) => {
+  try {
+    if (!isLandlord(req)) return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+
+    const workOrderId = asString(req.params?.id, 120);
+    const access = await getWorkOrderAuthorized(req, workOrderId);
+    if (!access.ok) {
+      if (access.code === "NOT_FOUND") return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const currentStatus = asString((access.item as any)?.status, 40).toLowerCase();
+    if (currentStatus !== "completed") {
+      return res.status(400).json({ ok: false, error: "WORK_ORDER_NOT_COMPLETED" });
+    }
+
+    const now = nowMs();
+    const tenantId = asOptionalString((access.item as any)?.tenantId, 120);
+    await db.collection("workOrders").doc(workOrderId).set(
+      {
+        resolutionStatus: tenantId ? "tenant_pending_signoff" : "landlord_approved",
+        landlordApprovedAt: now,
+        landlordApprovedBy: access.userId,
+        completionConfirmedByLandlordAt: now,
+        completionConfirmedByLandlordBy: access.userId,
+        tenantSignoffStatus: tenantId ? "pending" : null,
+        tenantSignedOffAt: null,
+        tenantDeclinedAt: null,
+        tenantDeclineReason: null,
+        followUpRequired: false,
+        followUpReason: null,
+        finalResolvedAt: null,
+        updatedAtMs: now,
+        lastExecutionUpdateAt: now,
+      },
+      { merge: true }
+    );
+
+    await writeWorkOrderUpdate({
+      workOrderId,
+      actorRole: isAdmin(req) ? "admin" : "landlord",
+      actorId: access.userId,
+      updateType: "confirmed",
+      message: tenantId
+        ? "Landlord approved the completed work and is waiting for tenant signoff"
+        : "Landlord approved the completed work",
+    });
+
+    await syncMaintenanceFromWorkOrder(workOrderId, {
+      contractorLastUpdate: tenantId
+        ? "Landlord approved the completed work and is waiting for tenant signoff."
+        : "Landlord approved the completed work.",
+    });
+    await appendMaintenanceStatusHistory({
+      maintenanceRequestId: asOptionalString((access.item as any)?.maintenanceRequestId, 120),
+      status: "completed",
+      actorRole: isAdmin(req) ? "admin" : "landlord",
+      actorId: access.userId,
+      message: tenantId
+        ? "Landlord approved the completed work and is waiting for tenant signoff."
+        : "Landlord approved the completed work.",
+    });
+
+    const refreshed = await db.collection("workOrders").doc(workOrderId).get();
+    return res.json({ ok: true, item: await toWorkOrderResponseForAudience(refreshed.id, refreshed.data(), "landlord") });
+  } catch (err) {
+    console.error("[work-orders] approve resolution failed", err);
+    return res.status(500).json({ ok: false, error: "WORK_ORDER_APPROVE_RESOLUTION_FAILED" });
+  }
+});
+
+router.post("/landlord/work-orders/:id/mark-follow-up-required", requireAuth, async (req: any, res) => {
+  try {
+    if (!isLandlord(req)) return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+
+    const workOrderId = asString(req.params?.id, 120);
+    const access = await getWorkOrderAuthorized(req, workOrderId);
+    if (!access.ok) {
+      if (access.code === "NOT_FOUND") return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const currentStatus = asString((access.item as any)?.status, 40).toLowerCase();
+    if (currentStatus !== "completed") {
+      return res.status(400).json({ ok: false, error: "WORK_ORDER_NOT_COMPLETED" });
+    }
+
+    const reason = asString(req.body?.reason, 2000);
+    if (!reason) {
+      return res.status(400).json({ ok: false, error: "FOLLOW_UP_REASON_REQUIRED" });
+    }
+
+    const now = nowMs();
+    await db.collection("workOrders").doc(workOrderId).set(
+      {
+        resolutionStatus: "follow_up_required",
+        landlordApprovedAt: null,
+        landlordApprovedBy: null,
+        completionConfirmedByLandlordAt: null,
+        completionConfirmedByLandlordBy: null,
+        followUpRequired: true,
+        followUpReason: reason,
+        tenantSignoffStatus: null,
+        tenantSignedOffAt: null,
+        tenantDeclinedAt: null,
+        tenantDeclineReason: null,
+        finalResolvedAt: null,
+        updatedAtMs: now,
+        lastExecutionUpdateAt: now,
+      },
+      { merge: true }
+    );
+
+    await writeWorkOrderUpdate({
+      workOrderId,
+      actorRole: isAdmin(req) ? "admin" : "landlord",
+      actorId: access.userId,
+      updateType: "status_changed",
+      message: `Follow-up required: ${reason}`,
+    });
+
+    await syncMaintenanceFromWorkOrder(workOrderId, {
+      contractorLastUpdate: `Follow-up required: ${reason}`,
+    });
+    await appendMaintenanceStatusHistory({
+      maintenanceRequestId: asOptionalString((access.item as any)?.maintenanceRequestId, 120),
+      status: "completed",
+      actorRole: isAdmin(req) ? "admin" : "landlord",
+      actorId: access.userId,
+      message: `Follow-up required: ${reason}`,
+    });
+
+    const refreshed = await db.collection("workOrders").doc(workOrderId).get();
+    return res.json({ ok: true, item: await toWorkOrderResponseForAudience(refreshed.id, refreshed.data(), "landlord") });
+  } catch (err) {
+    console.error("[work-orders] mark follow-up required failed", err);
+    return res.status(500).json({ ok: false, error: "WORK_ORDER_MARK_FOLLOW_UP_FAILED" });
   }
 });
 
@@ -1541,6 +1759,16 @@ router.post("/landlord/work-orders/:id/reopen", requireAuth, async (req: any, re
         reopenedByActorId: access.userId,
         reopenedByActorRole: isAdmin(req) ? "admin" : "landlord",
         reopenReason: reason,
+        resolutionStatus: "follow_up_required",
+        landlordApprovedAt: null,
+        landlordApprovedBy: null,
+        tenantSignoffStatus: null,
+        tenantSignedOffAt: null,
+        tenantDeclinedAt: null,
+        tenantDeclineReason: null,
+        followUpRequired: true,
+        followUpReason: reason,
+        finalResolvedAt: null,
         completionConfirmedByLandlordAt: null,
         completionConfirmedByLandlordBy: null,
         updatedAtMs: now,

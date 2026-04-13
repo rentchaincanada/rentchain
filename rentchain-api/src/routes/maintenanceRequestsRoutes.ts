@@ -453,6 +453,28 @@ function normalizeCompletionOutcome(value: any): WorkOrderCompletionOutcome | nu
   return null;
 }
 
+function normalizeResolutionStatus(
+  value: any
+): "completed_pending_review" | "landlord_approved" | "tenant_pending_signoff" | "resolved" | "follow_up_required" | null {
+  const next = String(value || "").trim().toLowerCase();
+  if (
+    next === "completed_pending_review" ||
+    next === "landlord_approved" ||
+    next === "tenant_pending_signoff" ||
+    next === "resolved" ||
+    next === "follow_up_required"
+  ) {
+    return next;
+  }
+  return null;
+}
+
+function normalizeTenantSignoffStatus(value: any): "pending" | "accepted" | "declined" | null {
+  const next = String(value || "").trim().toLowerCase();
+  if (next === "pending" || next === "accepted" || next === "declined") return next;
+  return null;
+}
+
 async function appendWorkOrderUpdate(
   workOrderId: string,
   payload: {
@@ -607,6 +629,16 @@ async function upsertMaintenanceWorkOrder(input: {
   completedByActorId?: string | null;
   completionConfirmedByLandlordAt?: number | null;
   completionConfirmedByLandlordBy?: string | null;
+  resolutionStatus?: "completed_pending_review" | "landlord_approved" | "tenant_pending_signoff" | "resolved" | "follow_up_required" | null;
+  landlordApprovedAt?: number | null;
+  landlordApprovedBy?: string | null;
+  tenantSignoffStatus?: "pending" | "accepted" | "declined" | null;
+  tenantSignedOffAt?: number | null;
+  tenantDeclinedAt?: number | null;
+  tenantDeclineReason?: string | null;
+  followUpRequired?: boolean | null;
+  followUpReason?: string | null;
+  finalResolvedAt?: number | null;
   reopenedAt?: number | null;
   reopenedByActorId?: string | null;
   reopenedByActorRole?: "landlord" | "admin" | null;
@@ -706,6 +738,56 @@ async function upsertMaintenanceWorkOrder(input: {
       input.completionConfirmedByLandlordBy !== undefined
         ? String(input.completionConfirmedByLandlordBy || "").trim() || null
         : String(existingData.completionConfirmedByLandlordBy || "").trim() || null,
+    resolutionStatus:
+      input.resolutionStatus !== undefined ? input.resolutionStatus || null : normalizeResolutionStatus(existingData.resolutionStatus),
+    landlordApprovedAt:
+      input.landlordApprovedAt !== undefined
+        ? typeof input.landlordApprovedAt === "number"
+          ? input.landlordApprovedAt
+          : null
+        : toMillis(existingData.landlordApprovedAt),
+    landlordApprovedBy:
+      input.landlordApprovedBy !== undefined
+        ? String(input.landlordApprovedBy || "").trim() || null
+        : String(existingData.landlordApprovedBy || "").trim() || null,
+    tenantSignoffStatus:
+      input.tenantSignoffStatus !== undefined
+        ? input.tenantSignoffStatus || null
+        : normalizeTenantSignoffStatus(existingData.tenantSignoffStatus),
+    tenantSignedOffAt:
+      input.tenantSignedOffAt !== undefined
+        ? typeof input.tenantSignedOffAt === "number"
+          ? input.tenantSignedOffAt
+          : null
+        : toMillis(existingData.tenantSignedOffAt),
+    tenantDeclinedAt:
+      input.tenantDeclinedAt !== undefined
+        ? typeof input.tenantDeclinedAt === "number"
+          ? input.tenantDeclinedAt
+          : null
+        : toMillis(existingData.tenantDeclinedAt),
+    tenantDeclineReason:
+      input.tenantDeclineReason !== undefined
+        ? String(input.tenantDeclineReason || "").trim() || null
+        : String(existingData.tenantDeclineReason || "").trim() || null,
+    followUpRequired:
+      input.followUpRequired !== undefined
+        ? typeof input.followUpRequired === "boolean"
+          ? input.followUpRequired
+          : null
+        : typeof existingData.followUpRequired === "boolean"
+        ? existingData.followUpRequired
+        : null,
+    followUpReason:
+      input.followUpReason !== undefined
+        ? String(input.followUpReason || "").trim() || null
+        : String(existingData.followUpReason || "").trim() || null,
+    finalResolvedAt:
+      input.finalResolvedAt !== undefined
+        ? typeof input.finalResolvedAt === "number"
+          ? input.finalResolvedAt
+          : null
+        : toMillis(existingData.finalResolvedAt),
     reopenedAt:
       input.reopenedAt !== undefined
         ? typeof input.reopenedAt === "number"
@@ -1835,6 +1917,16 @@ router.patch("/contractor/jobs/:id/status", async (req: any, res) => {
       completedByActorId: nextStatus === "completed" ? actorId : undefined,
       completionConfirmedByLandlordAt: nextStatus === "completed" ? null : undefined,
       completionConfirmedByLandlordBy: nextStatus === "completed" ? null : undefined,
+      resolutionStatus: nextStatus === "completed" ? "completed_pending_review" : undefined,
+      landlordApprovedAt: nextStatus === "completed" ? null : undefined,
+      landlordApprovedBy: nextStatus === "completed" ? null : undefined,
+      tenantSignoffStatus: nextStatus === "completed" ? null : undefined,
+      tenantSignedOffAt: nextStatus === "completed" ? null : undefined,
+      tenantDeclinedAt: nextStatus === "completed" ? null : undefined,
+      tenantDeclineReason: nextStatus === "completed" ? null : undefined,
+      followUpRequired: nextStatus === "completed" ? false : undefined,
+      followUpReason: nextStatus === "completed" ? null : undefined,
+      finalResolvedAt: nextStatus === "completed" ? null : undefined,
       reopenedAt: nextStatus === "completed" ? null : undefined,
       reopenedByActorId: nextStatus === "completed" ? null : undefined,
       reopenedByActorRole: nextStatus === "completed" ? null : undefined,
@@ -1853,6 +1945,16 @@ router.patch("/contractor/jobs/:id/status", async (req: any, res) => {
     if (nextStatus === "completed") {
       maintenancePatch.completionSummary = completionSummary;
       maintenancePatch.completionOutcome = completionOutcome;
+      maintenancePatch.resolutionStatus = "completed_pending_review";
+      maintenancePatch.landlordApprovedAt = null;
+      maintenancePatch.landlordApprovedBy = null;
+      maintenancePatch.tenantSignoffStatus = null;
+      maintenancePatch.tenantSignedOffAt = null;
+      maintenancePatch.tenantDeclinedAt = null;
+      maintenancePatch.tenantDeclineReason = null;
+      maintenancePatch.followUpRequired = false;
+      maintenancePatch.followUpReason = null;
+      maintenancePatch.finalResolvedAt = null;
     } else if (nextStatus === "blocked") {
       maintenancePatch.completionSummary = null;
       maintenancePatch.completionOutcome = null;

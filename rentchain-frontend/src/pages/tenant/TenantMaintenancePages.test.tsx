@@ -11,6 +11,7 @@ const maintenanceWorkflowApi = vi.hoisted(() => ({
   getTenantMaintenance: vi.fn(),
   createTenantMaintenance: vi.fn(),
   updateTenantMaintenanceConfirmation: vi.fn(),
+  updateTenantMaintenanceSignoff: vi.fn(),
 }));
 
 const tenantAuth = vi.hoisted(() => ({
@@ -28,6 +29,7 @@ vi.mock("../../api/maintenanceWorkflowApi", async () => {
     getTenantMaintenance: maintenanceWorkflowApi.getTenantMaintenance,
     createTenantMaintenance: maintenanceWorkflowApi.createTenantMaintenance,
     updateTenantMaintenanceConfirmation: maintenanceWorkflowApi.updateTenantMaintenanceConfirmation,
+    updateTenantMaintenanceSignoff: maintenanceWorkflowApi.updateTenantMaintenanceSignoff,
   };
 });
 
@@ -202,6 +204,63 @@ describe("tenant maintenance pages", () => {
       });
     });
     expect(await screen.findByText(/The tenant has confirmed the service window and acknowledged the access requirement/i)).toBeInTheDocument();
+  });
+
+  it("submits tenant resolution signoff from the detail page", async () => {
+    maintenanceWorkflowApi.getTenantMaintenance.mockResolvedValue({
+      item: {
+        id: "maint-1",
+        title: "Broken heater",
+        description: "The heat is not turning on.",
+        status: "completed",
+        priority: "urgent",
+        category: "HVAC",
+        assignedContractorName: "North Shore HVAC",
+        contractorStatus: "completed",
+        resolutionStatus: "tenant_pending_signoff",
+        landlordApprovedAt: 350,
+        createdAt: 100,
+        updatedAt: 400,
+        statusHistory: [],
+      },
+    });
+    maintenanceWorkflowApi.updateTenantMaintenanceSignoff.mockResolvedValue({
+      item: {
+        id: "maint-1",
+        title: "Broken heater",
+        description: "The heat is not turning on.",
+        status: "completed",
+        priority: "urgent",
+        category: "HVAC",
+        assignedContractorName: "North Shore HVAC",
+        contractorStatus: "completed",
+        resolutionStatus: "resolved",
+        tenantSignoffStatus: "accepted",
+        tenantSignedOffAt: 500,
+        finalResolvedAt: 500,
+        createdAt: 100,
+        updatedAt: 500,
+        statusHistory: [],
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/tenant/maintenance/maint-1"]}>
+        <Routes>
+          <Route path="/tenant/maintenance/:id" element={<TenantMaintenanceRequestDetailPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /Mark resolved/i }));
+
+    await waitFor(() => {
+      expect(maintenanceWorkflowApi.updateTenantMaintenanceSignoff).toHaveBeenCalledWith("maint-1", {
+        decision: "resolved",
+        reason: undefined,
+      });
+    });
+    expect(await screen.findByText(/This request has been marked resolved/i)).toBeInTheDocument();
   });
 
   it("submits the tenant maintenance request form", async () => {

@@ -7,11 +7,13 @@ import { LockedFeature } from "@/components/billing/LockedFeature";
 import { fetchProperties } from "../../api/propertiesApi";
 import {
   addWorkOrderUpdate,
+  approveWorkOrderResolution,
   confirmWorkOrderCompletion,
   getWorkOrder,
   getContractorProfileById,
   listWorkOrderUpdates,
   listWorkOrders,
+  markWorkOrderFollowUpRequired,
   patchWorkOrder,
   reopenWorkOrder,
   updateWorkOrderEvidence,
@@ -36,8 +38,29 @@ function canConfirmCompletion(item: WorkOrderRecord) {
   return item.status === "completed" && !item.completionConfirmedByLandlordAt;
 }
 
+function canApproveResolution(item: WorkOrderRecord) {
+  return item.status === "completed" && item.resolutionStatus !== "tenant_pending_signoff" && item.resolutionStatus !== "resolved";
+}
+
 function canReopenWorkOrder(item: WorkOrderRecord) {
   return item.status === "completed";
+}
+
+function resolutionStatusLabel(value?: WorkOrderRecord["resolutionStatus"]) {
+  switch (value) {
+    case "completed_pending_review":
+      return "Completed, pending review";
+    case "landlord_approved":
+      return "Landlord approved";
+    case "tenant_pending_signoff":
+      return "Awaiting tenant signoff";
+    case "resolved":
+      return "Resolved";
+    case "follow_up_required":
+      return "Follow-up required";
+    default:
+      return "Not set";
+  }
 }
 
 function completionOutcomeLabel(value?: WorkOrderRecord["completionOutcome"]) {
@@ -96,6 +119,7 @@ export default function WorkOrdersPage() {
     "completed"
   );
   const [reopenReason, setReopenReason] = React.useState("");
+  const [followUpReason, setFollowUpReason] = React.useState("");
   const [savingNote, setSavingNote] = React.useState(false);
   const [savingAction, setSavingAction] = React.useState(false);
   const [savingEvidence, setSavingEvidence] = React.useState(false);
@@ -203,6 +227,46 @@ export default function WorkOrdersPage() {
     [load, refreshSelected]
   );
 
+  const handleApproveResolution = React.useCallback(
+    async (item: WorkOrderRecord) => {
+      if (!canApproveResolution(item)) return;
+      setSavingAction(true);
+      setError(null);
+      try {
+        await approveWorkOrderResolution(item.id);
+        await load();
+        await refreshSelected(item.id);
+      } catch (err: any) {
+        setError(String(err?.message || "Failed to approve resolution"));
+      } finally {
+        setSavingAction(false);
+      }
+    },
+    [load, refreshSelected]
+  );
+
+  const handleMarkFollowUpRequired = React.useCallback(
+    async (item: WorkOrderRecord) => {
+      if (!item || item.status !== "completed") return;
+      if (!followUpReason.trim()) {
+        setError("Add a follow-up reason before marking the work order for follow-up.");
+        return;
+      }
+      setSavingAction(true);
+      setError(null);
+      try {
+        await markWorkOrderFollowUpRequired(item.id, { reason: followUpReason.trim() });
+        await load();
+        await refreshSelected(item.id);
+      } catch (err: any) {
+        setError(String(err?.message || "Failed to mark follow-up required"));
+      } finally {
+        setSavingAction(false);
+      }
+    },
+    [followUpReason, load, refreshSelected]
+  );
+
   const handleReopen = React.useCallback(
     async (item: WorkOrderRecord, status: "in_progress" | "blocked") => {
       if (!canReopenWorkOrder(item)) return;
@@ -275,6 +339,7 @@ export default function WorkOrdersPage() {
       setCompletionSummary("");
       setCompletionOutcome("completed");
       setReopenReason("");
+      setFollowUpReason("");
       setEvidenceFile(null);
       setEvidenceCaption("");
       setEvidenceType("inspection");
@@ -288,6 +353,7 @@ export default function WorkOrdersPage() {
         : "completed"
     );
     setReopenReason(String(selected.reopenReason || ""));
+    setFollowUpReason(String(selected.followUpReason || ""));
   }, [selected]);
 
   React.useEffect(() => {
@@ -587,6 +653,10 @@ export default function WorkOrdersPage() {
                       : "Awaiting review"}
                   </div>
                 </div>
+                <div>
+                  <div style={{ fontSize: 12, color: "#64748b" }}>Resolution state</div>
+                  <div style={{ marginTop: 4, fontWeight: 600 }}>{resolutionStatusLabel(selected.resolutionStatus)}</div>
+                </div>
               </div>
               {selected.executionBlockedReason ? (
                 <div>
@@ -604,6 +674,12 @@ export default function WorkOrdersPage() {
                 <div>
                   <div style={{ fontSize: 12, color: "#64748b" }}>Last reopen reason</div>
                   <div style={{ marginTop: 4 }}>{selected.reopenReason}</div>
+                </div>
+              ) : null}
+              {selected.followUpReason ? (
+                <div>
+                  <div style={{ fontSize: 12, color: "#64748b" }}>Follow-up reason</div>
+                  <div style={{ marginTop: 4 }}>{selected.followUpReason}</div>
                 </div>
               ) : null}
             </div>
@@ -764,6 +840,25 @@ export default function WorkOrdersPage() {
                 <Button disabled={savingAction} onClick={() => void handleConfirmCompletion(selected)}>
                   {savingAction ? "Saving..." : "Confirm completion"}
                 </Button>
+              ) : null}
+              {canApproveResolution(selected) ? (
+                <Button disabled={savingAction} onClick={() => void handleApproveResolution(selected)}>
+                  {savingAction ? "Saving..." : "Approve resolution"}
+                </Button>
+              ) : null}
+              {selected.status === "completed" ? (
+                <>
+                  <textarea
+                    value={followUpReason}
+                    onChange={(e) => setFollowUpReason(e.target.value)}
+                    placeholder="Explain why this work still needs follow-up"
+                    rows={3}
+                    style={{ width: "100%", borderRadius: 8, border: "1px solid #cbd5e1", padding: 8, resize: "vertical" }}
+                  />
+                  <Button variant="secondary" disabled={savingAction} onClick={() => void handleMarkFollowUpRequired(selected)}>
+                    {savingAction ? "Saving..." : "Mark follow-up required"}
+                  </Button>
+                </>
               ) : null}
               {canReopenWorkOrder(selected) ? (
                 <>
