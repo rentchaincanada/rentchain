@@ -180,4 +180,125 @@ describe("maintenanceRequestsRoutes scheduling access", () => {
     expect(savedWorkOrder?.serviceWindowStartAt).toBe(500);
     expect(savedWorkOrder?.accessRequired).toBe(true);
   });
+
+  it("allows a contractor to schedule service with structured execution metadata", async () => {
+    const router = (await import("../maintenanceRequestsRoutes")).default;
+
+    const res = await invokeRouter(router, {
+      method: "PATCH",
+      url: "/contractor/jobs/maint-1/status",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "contractor-1",
+          role: "contractor",
+        }),
+      },
+      body: {
+        status: "scheduled",
+        scheduledFor: 700,
+        message: "Scheduled for tomorrow morning.",
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.item?.status).toBe("scheduled");
+    expect(res.body?.item?.scheduledFor).toBe(700);
+
+    const savedMaintenance = ensureCollection("maintenanceRequests").get("maint-1");
+    expect(savedMaintenance?.status).toBe("scheduled");
+    expect(savedMaintenance?.scheduledFor).toBe(700);
+
+    const savedWorkOrder = ensureCollection("workOrders").get("maintenance_maint-1");
+    expect(savedWorkOrder?.status).toBe("scheduled");
+    expect(savedWorkOrder?.scheduledFor).toBe(700);
+    expect(savedWorkOrder?.lastExecutionUpdateAt).toBeDefined();
+  });
+
+  it("rejects blocked contractor updates without a reason", async () => {
+    const router = (await import("../maintenanceRequestsRoutes")).default;
+    ensureCollection("maintenanceRequests").set("maint-1", {
+      ...ensureCollection("maintenanceRequests").get("maint-1"),
+      status: "scheduled",
+    });
+
+    const res = await invokeRouter(router, {
+      method: "PATCH",
+      url: "/contractor/jobs/maint-1/status",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "contractor-1",
+          role: "contractor",
+        }),
+      },
+      body: {
+        status: "blocked",
+      },
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body?.error).toBe("BLOCKED_REASON_REQUIRED");
+  });
+
+  it("rejects completed contractor updates without a completion summary", async () => {
+    const router = (await import("../maintenanceRequestsRoutes")).default;
+    ensureCollection("maintenanceRequests").set("maint-1", {
+      ...ensureCollection("maintenanceRequests").get("maint-1"),
+      status: "in_progress",
+    });
+
+    const res = await invokeRouter(router, {
+      method: "PATCH",
+      url: "/contractor/jobs/maint-1/status",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "contractor-1",
+          role: "contractor",
+        }),
+      },
+      body: {
+        status: "completed",
+      },
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body?.error).toBe("COMPLETION_SUMMARY_REQUIRED");
+  });
+
+  it("persists completion metadata when a contractor completes the job", async () => {
+    const router = (await import("../maintenanceRequestsRoutes")).default;
+    ensureCollection("maintenanceRequests").set("maint-1", {
+      ...ensureCollection("maintenanceRequests").get("maint-1"),
+      status: "in_progress",
+    });
+
+    const res = await invokeRouter(router, {
+      method: "PATCH",
+      url: "/contractor/jobs/maint-1/status",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "contractor-1",
+          role: "contractor",
+        }),
+      },
+      body: {
+        status: "completed",
+        completionSummary: "Replaced the thermostat and verified heat output.",
+        completionOutcome: "completed",
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.item?.status).toBe("completed");
+    expect(res.body?.item?.completionSummary).toMatch(/Replaced the thermostat/i);
+
+    const savedMaintenance = ensureCollection("maintenanceRequests").get("maint-1");
+    expect(savedMaintenance?.status).toBe("completed");
+    expect(savedMaintenance?.completionSummary).toMatch(/Replaced the thermostat/i);
+
+    const savedWorkOrder = ensureCollection("workOrders").get("maintenance_maint-1");
+    expect(savedWorkOrder?.serviceCompletedAt).toBeDefined();
+    expect(savedWorkOrder?.completionSummary).toMatch(/Replaced the thermostat/i);
+    expect(savedWorkOrder?.completedByActorRole).toBe("contractor");
+    expect(savedWorkOrder?.completedByActorId).toBe("contractor-1");
+  });
 });

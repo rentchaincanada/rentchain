@@ -1,0 +1,241 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const collections = new Map<string, Map<string, any>>();
+
+function ensureCollection(name: string) {
+  if (!collections.has(name)) {
+    collections.set(name, new Map<string, any>());
+  }
+  return collections.get(name)!;
+}
+
+function clone<T>(value: T): T {
+  return value === undefined ? value : JSON.parse(JSON.stringify(value));
+}
+
+function applyMerge(current: any, incoming: any) {
+  const next = { ...(current || {}) };
+  Object.entries(incoming || {}).forEach(([key, value]) => {
+    if (value && typeof value === "object" && (value as any).__op === "arrayUnion") {
+      const existing = Array.isArray(next[key]) ? next[key] : [];
+      next[key] = [...existing, ...(value as any).values.map((entry: any) => clone(entry))];
+      return;
+    }
+    next[key] = clone(value);
+  });
+  return next;
+}
+
+const dbMock = {
+  collection: (name: string) => ({
+    doc: (id: string) => ({
+      id,
+      get: async () => ({
+        id,
+        exists: ensureCollection(name).has(id),
+        data: () => clone(ensureCollection(name).get(id)),
+      }),
+      set: async (value: any, opts?: { merge?: boolean }) => {
+        const current = ensureCollection(name).get(id);
+        ensureCollection(name).set(id, opts?.merge ? applyMerge(current, value) : clone(value));
+      },
+      update: async (value: any) => {
+        const current = ensureCollection(name).get(id) || {};
+        ensureCollection(name).set(id, applyMerge(current, value));
+      },
+    }),
+  }),
+};
+
+vi.mock("../../config/firebase", () => ({
+  db: dbMock,
+  FieldValue: {
+    serverTimestamp: () => "__server_timestamp__",
+    arrayUnion: (...values: any[]) => ({ __op: "arrayUnion", values }),
+  },
+}));
+
+vi.mock("../../middleware/requireAuth", () => ({
+  requireAuth: (req: any, _res: any, next: any) => {
+    const header = String(req.headers["x-test-user"] || "").trim();
+    if (header) {
+      req.user = JSON.parse(header);
+    }
+    next();
+  },
+}));
+
+vi.mock("../../services/emailService", () => ({
+  sendEmail: vi.fn().mockResolvedValue(undefined),
+}));
+
+describe("workOrdersRoutes execution completion", () => {
+  async function invokeRouter(
+    router: any,
+    options: {
+      method: string;
+      url: string;
+      body?: any;
+      headers?: Record<string, string>;
+    }
+  ) {
+    return await new Promise<{ status: number; body: any }>((resolve, reject) => {
+      const req: any = {
+        method: options.method,
+        url: options.url,
+        originalUrl: options.url,
+        path: options.url,
+        body: options.body ?? {},
+        headers: options.headers ?? {},
+      };
+      const res: any = {
+        statusCode: 200,
+        status(code: number) {
+          this.statusCode = code;
+          return this;
+        },
+        json(payload: any) {
+          resolve({ status: this.statusCode, body: payload });
+          return this;
+        },
+        send(payload: any) {
+          resolve({ status: this.statusCode, body: payload });
+          return this;
+        },
+      };
+      router.handle(req, res, (error: any) => {
+        if (error) reject(error);
+      });
+    });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    collections.clear();
+    ensureCollection("maintenanceRequests").set("maint-1", {
+      id: "maint-1",
+      landlordId: "landlord-1",
+      status: "assigned",
+      statusHistory: [],
+      updatedAt: 100,
+    });
+    ensureCollection("workOrders").set("wo-1", {
+      id: "wo-1",
+      landlordId: "landlord-1",
+      maintenanceRequestId: "maint-1",
+      status: "assigned",
+      title: "Broken heater",
+      assignedContractorId: null,
+      createdAtMs: 100,
+      updatedAtMs: 100,
+    });
+  });
+
+  it("writes structured metadata when a landlord completes an in-house work order", async () => {
+    const router = (await import("../workOrdersRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "PATCH",
+      url: "/work-orders/wo-1",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "landlord-1",
+          role: "landlord",
+          landlordId: "landlord-1",
+        }),
+      },
+      body: {
+        status: "completed",
+        completionSummary: "Replaced the thermostat and tested the system.",
+        completionOutcome: "completed",
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.item?.status).toBe("completed");
+
+    const savedWorkOrder = ensureCollection("workOrders").get("wo-1");
+    expect(savedWorkOrder?.serviceCompletedAt).toBeDefined();
+    expect(savedWorkOrder?.completionSummary).toMatch(/Replaced the thermostat/i);
+    expect(savedWorkOrder?.completedByActorRole).toBe("landlord");
+    expect(savedWorkOrder?.completedByActorId).toBe("landlord-1");
+  });
+
+  it("confirms completion only for completed work orders", async () => {
+    const router = (await import("../workOrdersRoutes")).default;
+    ensureCollection("workOrders").set("wo-1", {
+      ...ensureCollection("workOrders").get("wo-1"),
+      status: "completed",
+      completionSummary: "Completed service visit.",
+      serviceCompletedAt: 500,
+    });
+
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/work-orders/wo-1/confirm-completion",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "landlord-1",
+          role: "landlord",
+          landlordId: "landlord-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.item?.completionConfirmedByLandlordAt).toBeDefined();
+
+    const savedWorkOrder = ensureCollection("workOrders").get("wo-1");
+    expect(savedWorkOrder?.completionConfirmedByLandlordBy).toBe("landlord-1");
+  });
+
+  it("rejects completion confirmation when the work order is not completed", async () => {
+    const router = (await import("../workOrdersRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/work-orders/wo-1/confirm-completion",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "landlord-1",
+          role: "landlord",
+          landlordId: "landlord-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body?.error).toBe("WORK_ORDER_NOT_COMPLETED");
+  });
+
+  it("reopens a completed work order with a required reason", async () => {
+    const router = (await import("../workOrdersRoutes")).default;
+    ensureCollection("workOrders").set("wo-1", {
+      ...ensureCollection("workOrders").get("wo-1"),
+      status: "completed",
+      completionSummary: "Completed service visit.",
+      serviceCompletedAt: 500,
+    });
+
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/work-orders/wo-1/reopen",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "landlord-1",
+          role: "landlord",
+          landlordId: "landlord-1",
+        }),
+      },
+      body: {
+        reason: "Heating issue still present after the visit.",
+        status: "blocked",
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.item?.status).toBe("blocked");
+
+    const savedWorkOrder = ensureCollection("workOrders").get("wo-1");
+    expect(savedWorkOrder?.reopenReason).toMatch(/Heating issue still present/i);
+    expect(savedWorkOrder?.executionBlockedReason).toMatch(/Heating issue still present/i);
+  });
+});
