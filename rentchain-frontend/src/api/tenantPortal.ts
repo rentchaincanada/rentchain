@@ -57,8 +57,17 @@ export type TenantWorkspaceMaintenance = {
   priority: string | null;
   title: string | null;
   summary: string | null;
+  assignedContractorName?: string | null;
+  contractorStatus?: string | null;
   createdAt: number | null;
   updatedAt: number | null;
+  statusHistory?: Array<{
+    status: string | null;
+    actorRole: string | null;
+    actorId?: string | null;
+    message: string | null;
+    createdAt: number | null;
+  }>;
 };
 
 export type TenantWorkspaceSummary = {

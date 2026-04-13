@@ -54,6 +54,7 @@ describe("tenant maintenance pages", () => {
           status: "submitted",
           priority: "normal",
           category: "plumbing",
+          assignedContractorName: null,
           createdAt: 100,
           updatedAt: 200,
         },
@@ -70,6 +71,7 @@ describe("tenant maintenance pages", () => {
     expect(screen.getByText(/A maintenance request is waiting for review/i)).toBeInTheDocument();
     expect(screen.getByText(/Leaky faucet/i)).toBeInTheDocument();
     expect(screen.getByText(/Your request has been submitted and is waiting for landlord review/i)).toBeInTheDocument();
+    expect(screen.getByText(/Handling: Awaiting Assignment/i)).toBeInTheDocument();
   });
 
   it("renders the tenant maintenance detail with next steps and timeline", async () => {
@@ -81,6 +83,8 @@ describe("tenant maintenance pages", () => {
         status: "in_progress",
         priority: "urgent",
         category: "HVAC",
+        assignedContractorName: "North Shore HVAC",
+        contractorStatus: "in_progress",
         createdAt: 100,
         updatedAt: 200,
         statusHistory: [
@@ -105,6 +109,8 @@ describe("tenant maintenance pages", () => {
     expect(await screen.findByText(/Broken heater/i)).toBeInTheDocument();
     expect(screen.getByText(/What this status means/i)).toBeInTheDocument();
     expect(screen.getByText(/Work is actively underway/i)).toBeInTheDocument();
+    expect(screen.getByText(/Handling status/i)).toBeInTheDocument();
+    expect(screen.getByText(/Your request is actively being handled/i)).toBeInTheDocument();
     expect(screen.getByText(/Status timeline/i)).toBeInTheDocument();
     expect(screen.getByText(/Technician is on site/i)).toBeInTheDocument();
   });

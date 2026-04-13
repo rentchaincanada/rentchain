@@ -64,6 +64,7 @@ describe("landlord maintenance workspace", () => {
           category: "HVAC",
           priority: "urgent",
           status: "submitted",
+          assignedContractorName: null,
           createdAt: 100,
           updatedAt: 200,
           statusHistory: [
@@ -91,9 +92,11 @@ describe("landlord maintenance workspace", () => {
 
     expect(await screen.findByText(/Maintenance Workflow/i)).toBeInTheDocument();
     expect(screen.getByText(/A request is waiting for review/i)).toBeInTheDocument();
-    expect(screen.getByText(/Needs attention/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Needs attention/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Broken heater/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Lifecycle summary/i)).toBeInTheDocument();
+    expect(screen.getByText(/Assignment \/ handling/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/No handler has been assigned to this request yet/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Review the request details/i)).toBeInTheDocument();
     expect(screen.getByText(/Mark reviewed/i)).toBeInTheDocument();
   });

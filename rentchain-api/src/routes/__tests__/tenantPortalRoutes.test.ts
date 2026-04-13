@@ -164,6 +164,16 @@ describe("tenantPortalRoutes foundation", () => {
       category: "GENERAL",
       title: "Leaky tap",
       description: "Kitchen faucet dripping",
+      assignedContractorName: "North Shore Plumbing",
+      contractorStatus: "assigned",
+      statusHistory: [
+        {
+          status: "submitted",
+          actorRole: "tenant",
+          message: "Submitted from tenant workspace.",
+          createdAt: 100,
+        },
+      ],
       createdAt: 100,
       updatedAt: 200,
       internalCost: 999,
@@ -241,6 +251,9 @@ describe("tenantPortalRoutes foundation", () => {
     expect(res.body?.data?.lease?.monthlyRent).toBe(1800);
     expect(res.body?.data?.lease?.confidentialNotes).toBeUndefined();
     expect(res.body?.data?.maintenance?.[0]?.title).toBe("Leaky tap");
+    expect(res.body?.data?.maintenance?.[0]?.assignedContractorName).toBe("North Shore Plumbing");
+    expect(res.body?.data?.maintenance?.[0]?.contractorStatus).toBe("assigned");
+    expect(res.body?.data?.maintenance?.[0]?.statusHistory?.[0]?.message).toBe("Submitted from tenant workspace.");
     expect(res.body?.data?.maintenance?.[0]?.internalCost).toBeUndefined();
 
     const eventDocs = Array.from(ensureCollection("event_log").values());

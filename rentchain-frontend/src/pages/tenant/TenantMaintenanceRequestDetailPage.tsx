@@ -6,6 +6,7 @@ import { clearTenantToken, getTenantToken } from "../../lib/tenantAuth";
 import { colors, radius, spacing, text as textTokens } from "../../styles/tokens";
 import { TenantSurfaceShell, prettyStatus } from "./TenantWorkspaceShared";
 import { buildMaintenanceLifecycleView } from "../maintenanceWorkspaceState";
+import { buildMaintenanceAssignmentRoutingView } from "../maintenanceAssignmentRoutingState";
 
 function fmtDate(ts?: number | null) {
   if (!ts) return "—";
@@ -24,6 +25,7 @@ export default function TenantMaintenanceRequestDetailPage() {
     typeof window === "undefined" ? true : !!getTenantToken()
   );
   const lifecycleView = data ? buildMaintenanceLifecycleView(data, "tenant") : null;
+  const assignmentView = data ? buildMaintenanceAssignmentRoutingView(data, "tenant") : null;
 
   useEffect(() => {
     const token = getTenantToken();
@@ -166,7 +168,7 @@ export default function TenantMaintenanceRequestDetailPage() {
                 <span>Status: {prettyStatus(data.status)}</span>
                 <span>Priority: {prettyStatus(data.priority)}</span>
                 <span>Category: {prettyStatus(data.category)}</span>
-                {data.assignedContractorName ? <span>Contractor: {data.assignedContractorName}</span> : null}
+                {assignmentView ? <span>Handling: {assignmentView.tenantVisibleLabel}</span> : null}
               </div>
               <div style={{ color: textTokens.muted, fontSize: "0.95rem" }}>
                 Created {fmtDate(data.createdAt)} • Updated {fmtDate(data.updatedAt)}
@@ -193,6 +195,37 @@ export default function TenantMaintenanceRequestDetailPage() {
                       {step}
                     </div>
                   ))}
+                </div>
+              ) : null}
+              {assignmentView ? (
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: radius.md,
+                    padding: "12px 14px",
+                    background: colors.panel,
+                    display: "grid",
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ fontWeight: 800, color: textTokens.primary }}>Handling status</div>
+                  <div style={{ color: textTokens.secondary }}>{assignmentView.summary}</div>
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>What happens next</div>
+                  {assignmentView.nextActions.map((step) => (
+                    <div key={step} style={{ color: textTokens.secondary }}>
+                      {step}
+                    </div>
+                  ))}
+                  {assignmentView.blockers.length ? (
+                    <>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Needs attention</div>
+                      {assignmentView.blockers.map((item) => (
+                        <div key={item} style={{ color: textTokens.secondary }}>
+                          {item}
+                        </div>
+                      ))}
+                    </>
+                  ) : null}
                 </div>
               ) : null}
               <div style={{ display: "grid", gap: 8, marginTop: spacing.xs }}>
