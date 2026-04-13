@@ -155,7 +155,7 @@ export default function TenantMaintenanceRequestsPage() {
     <div style={{ color: textTokens.primary, fontWeight: 700 }}>Next step</div>
     <div style={{ color: textTokens.secondary }}>{requestView.nextSteps[0]}</div>
   </div>
-) : null}      ) : null}
+) : null}     
                   <div>
                     <Link to={`/tenant/maintenance/${item.id}`}>Open request</Link>
                   </div>
