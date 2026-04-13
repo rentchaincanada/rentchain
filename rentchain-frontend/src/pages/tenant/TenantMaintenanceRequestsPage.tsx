@@ -4,6 +4,7 @@ import { Button } from "../../components/ui/Ui";
 import { listTenantMaintenance, type MaintenanceWorkflowItem } from "../../api/maintenanceWorkflowApi";
 import { colors, spacing, text as textTokens } from "../../styles/tokens";
 import { buildMaintenanceWorkspaceState } from "../maintenanceWorkspaceState";
+import { buildMaintenanceAssignmentRoutingView } from "../maintenanceAssignmentRoutingState";
 import {
   TenantEmptyState,
   TenantErrorState,
@@ -130,6 +131,7 @@ export default function TenantMaintenanceRequestsPage() {
           {items.map((item) => (
             (() => {
               const requestView = workspaceView.requestViews.find((entry) => entry.id === item.id);
+              const assignmentView = buildMaintenanceAssignmentRoutingView(item, "tenant");
               return (
                 <TenantInfoCard
                   key={item.id}
@@ -145,8 +147,9 @@ export default function TenantMaintenanceRequestsPage() {
                   </div>
                   <div style={{ color: textTokens.secondary, fontSize: "0.9rem" }}>
                     Created {fmtDate(item.createdAt)} • Last update {fmtDate(item.updatedAt)}
-                    {item.assignedContractorName ? ` • Contractor: ${item.assignedContractorName}` : ""}
+                    {` • Handling: ${assignmentView.tenantVisibleLabel}`}
                   </div>
+                  <div style={{ color: textTokens.secondary }}>{assignmentView.summary}</div>
                   {requestView?.nextSteps.length ? (
                     <div style={{ display: "grid", gap: 4 }}>
                       <div style={{ color: textTokens.primary, fontWeight: 700 }}>Next step</div>

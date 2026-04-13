@@ -100,8 +100,19 @@ export async function listTenantMaintenance() {
     category: String(item.category || "GENERAL"),
     priority: String(item.priority || "normal").toLowerCase() as "low" | "normal" | "urgent",
     status: String(item.status || "submitted").toLowerCase() as MaintenanceWorkflowStatus,
+    assignedContractorName: item.assignedContractorName || null,
+    contractorStatus: item.contractorStatus || null,
     createdAt: item.createdAt || Date.now(),
     updatedAt: item.updatedAt || item.createdAt || Date.now(),
+    statusHistory: Array.isArray(item.statusHistory)
+      ? item.statusHistory.map((entry) => ({
+          status: String(entry?.status || ""),
+          actorRole: String(entry?.actorRole || ""),
+          actorId: entry?.actorId ? String(entry.actorId) : null,
+          message: entry?.message ? String(entry.message) : null,
+          createdAt: typeof entry?.createdAt === "number" ? entry.createdAt : undefined,
+        }))
+      : [],
   }));
   return { ok: true, items: mapped, data: mapped };
 }
@@ -119,8 +130,19 @@ export async function getTenantMaintenance(id: string) {
     category: String(item?.category || "GENERAL"),
     priority: String(item?.priority || "normal").toLowerCase() as "low" | "normal" | "urgent",
     status: String(item?.status || "submitted").toLowerCase() as MaintenanceWorkflowStatus,
+    assignedContractorName: item?.assignedContractorName || null,
+    contractorStatus: item?.contractorStatus || null,
     createdAt: item?.createdAt || Date.now(),
     updatedAt: item?.updatedAt || item?.createdAt || Date.now(),
+    statusHistory: Array.isArray(item?.statusHistory)
+      ? item.statusHistory.map((entry) => ({
+          status: String(entry?.status || ""),
+          actorRole: String(entry?.actorRole || ""),
+          actorId: entry?.actorId ? String(entry.actorId) : null,
+          message: entry?.message ? String(entry.message) : null,
+          createdAt: typeof entry?.createdAt === "number" ? entry.createdAt : undefined,
+        }))
+      : [],
   };
   return { ok: true, item: mapped, data: mapped };
 }

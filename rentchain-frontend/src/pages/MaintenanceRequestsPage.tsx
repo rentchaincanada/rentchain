@@ -14,6 +14,7 @@ import {
 import { getContractorProfileById, listContractorInvites } from "../api/workOrdersApi";
 import { colors, radius, spacing, text } from "../styles/tokens";
 import { buildMaintenanceLifecycleView, buildMaintenanceWorkspaceState } from "./maintenanceWorkspaceState";
+import { buildMaintenanceAssignmentRoutingView } from "./maintenanceAssignmentRoutingState";
 
 const FILTERS: Array<{ value: "all" | MaintenanceWorkflowStatus; label: string }> = [
   { value: "all", label: "All requests" },
@@ -276,6 +277,10 @@ export default function MaintenanceRequestsPage() {
     () => (selected ? buildMaintenanceLifecycleView(selected, "landlord") : null),
     [selected]
   );
+  const selectedAssignment = React.useMemo(
+    () => (selected ? buildMaintenanceAssignmentRoutingView(selected, "landlord") : null),
+    [selected]
+  );
 
   const totalOpen = items.filter((item) => !["completed", "cancelled"].includes(item.status)).length;
   const needsReview = items.filter((item) => item.status === "submitted").length;
@@ -365,6 +370,7 @@ export default function MaintenanceRequestsPage() {
                     const tone = statusTone(item.status);
                     const active = item.id === selected?.id;
                     const lifecycle = buildMaintenanceLifecycleView(item, "landlord");
+                    const assignment = buildMaintenanceAssignmentRoutingView(item, "landlord");
                     return (
                       <button
                         key={item.id}
@@ -402,16 +408,17 @@ export default function MaintenanceRequestsPage() {
                           </span>
                           <span
                             style={{
-                              color: lifecycle.needsAttention ? "#b91c1c" : text.muted,
+                              color: assignment.needsAttention || lifecycle.needsAttention ? "#b91c1c" : text.muted,
                               fontSize: 12,
                               fontWeight: 700,
                             }}
                           >
-                            {lifecycle.lifecycleLabel}
+                            {assignment.assignmentLabel}
                           </span>
                           <span style={{ color: text.muted, fontSize: 12 }}>{item.priority}</span>
                           <span style={{ color: text.muted, fontSize: 12 }}>{fmtDate(item.createdAt)}</span>
                         </div>
+                        <div style={{ color: text.secondary, fontSize: 12 }}>{assignment.ownerSummary}</div>
                       </button>
                     );
                   })}
@@ -538,6 +545,40 @@ export default function MaintenanceRequestsPage() {
                       <div style={{ color: text.secondary }}>{selectedLifecycle.summary}</div>
                       <div style={{ fontWeight: 700, color: text.primary }}>Next steps</div>
                       {selectedLifecycle.nextSteps.map((step) => (
+                        <div key={step} style={{ color: text.secondary }}>
+                          {step}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  {selectedAssignment ? (
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: radius.md,
+                        padding: "12px 14px",
+                        background: colors.panel,
+                        display: "grid",
+                        gap: 8,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.primary }}>Assignment / handling</div>
+                      <div style={{ color: text.secondary }}>{selectedAssignment.summary}</div>
+                      <div style={{ fontWeight: 700, color: text.primary }}>Routing status</div>
+                      <div style={{ color: text.secondary }}>{selectedAssignment.routingSummary}</div>
+                      {selectedAssignment.blockers.length ? (
+                        <>
+                          <div style={{ fontWeight: 700, color: text.primary }}>Needs attention</div>
+                          {selectedAssignment.blockers.map((item) => (
+                            <div key={item} style={{ color: text.secondary }}>
+                              {item}
+                            </div>
+                          ))}
+                        </>
+                      ) : null}
+                      <div style={{ fontWeight: 700, color: text.primary }}>Next steps</div>
+                      {selectedAssignment.nextActions.map((step) => (
                         <div key={step} style={{ color: text.secondary }}>
                           {step}
                         </div>

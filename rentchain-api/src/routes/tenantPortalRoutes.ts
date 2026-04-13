@@ -5004,10 +5004,21 @@ router.get("/maintenance-requests/:id", requireTenant, async (req: any, res) => 
       title: data.title ?? "",
       description: data.description ?? "",
       status: data.status ?? "NEW",
+      assignedContractorName: data.assignedContractorName ?? null,
+      contractorStatus: data.contractorStatus ?? null,
       tenantContact: data.tenantContact ?? null,
       createdAt: toMillis(data.createdAt),
       updatedAt: toMillis(data.updatedAt),
       lastUpdatedBy: data.lastUpdatedBy ?? "TENANT",
+      statusHistory: Array.isArray(data.statusHistory)
+        ? data.statusHistory.map((entry: any) => ({
+            status: entry?.status ?? null,
+            actorRole: entry?.actorRole ?? null,
+            actorId: entry?.actorId ?? null,
+            message: entry?.message ?? null,
+            createdAt: toMillis(entry?.createdAt),
+          }))
+        : [],
     };
     return res.json({ ok: true, data: payload });
   } catch (err) {
