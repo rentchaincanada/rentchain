@@ -4983,8 +4983,9 @@ router.get("/maintenance-requests/:id", requireTenant, async (req: any, res) => 
       return res.status(403).json({ ok: false, error: "FORBIDDEN" });
     }
     const workOrderSnap = await db.collection("workOrders").doc(`maintenance_${doc.id}`).get();
+    const workOrderData = workOrderSnap.exists ? ((workOrderSnap.data() as any) || {}) : {};
     const tenantSafeEvidence = workOrderSnap.exists
-      ? await serializeEvidenceForAudience((workOrderSnap.data() as any)?.evidence, "tenant")
+      ? await serializeEvidenceForAudience(workOrderData?.evidence, "tenant")
       : [];
     const payload = {
       id: doc.id,
@@ -5009,6 +5010,42 @@ router.get("/maintenance-requests/:id", requireTenant, async (req: any, res) => 
           : null,
       tenantConfirmationUpdatedAt: toMillis(data.tenantConfirmationUpdatedAt),
       accessAcknowledgedAt: toMillis(data.accessAcknowledgedAt),
+      resolutionStatus:
+        workOrderData?.resolutionStatus === "completed_pending_review" ||
+        workOrderData?.resolutionStatus === "landlord_approved" ||
+        workOrderData?.resolutionStatus === "tenant_pending_signoff" ||
+        workOrderData?.resolutionStatus === "resolved" ||
+        workOrderData?.resolutionStatus === "follow_up_required"
+          ? workOrderData.resolutionStatus
+          : data?.resolutionStatus === "completed_pending_review" ||
+            data?.resolutionStatus === "landlord_approved" ||
+            data?.resolutionStatus === "tenant_pending_signoff" ||
+            data?.resolutionStatus === "resolved" ||
+            data?.resolutionStatus === "follow_up_required"
+          ? data.resolutionStatus
+          : null,
+      landlordApprovedAt: toMillis(workOrderData?.landlordApprovedAt ?? data?.landlordApprovedAt),
+      tenantSignoffStatus:
+        workOrderData?.tenantSignoffStatus === "pending" ||
+        workOrderData?.tenantSignoffStatus === "accepted" ||
+        workOrderData?.tenantSignoffStatus === "declined"
+          ? workOrderData.tenantSignoffStatus
+          : data?.tenantSignoffStatus === "pending" ||
+            data?.tenantSignoffStatus === "accepted" ||
+            data?.tenantSignoffStatus === "declined"
+          ? data.tenantSignoffStatus
+          : null,
+      tenantSignedOffAt: toMillis(workOrderData?.tenantSignedOffAt ?? data?.tenantSignedOffAt),
+      tenantDeclinedAt: toMillis(workOrderData?.tenantDeclinedAt ?? data?.tenantDeclinedAt),
+      tenantDeclineReason: String(workOrderData?.tenantDeclineReason || data?.tenantDeclineReason || "").trim() || null,
+      followUpRequired:
+        typeof workOrderData?.followUpRequired === "boolean"
+          ? workOrderData.followUpRequired
+          : typeof data?.followUpRequired === "boolean"
+          ? data.followUpRequired
+          : null,
+      followUpReason: String(workOrderData?.followUpReason || data?.followUpReason || "").trim() || null,
+      finalResolvedAt: toMillis(workOrderData?.finalResolvedAt ?? data?.finalResolvedAt),
       evidence: tenantSafeEvidence,
       tenantContact: data.tenantContact ?? null,
       createdAt: toMillis(data.createdAt),
@@ -5032,6 +5069,172 @@ router.get("/maintenance-requests/:id", requireTenant, async (req: any, res) => 
       err,
     });
     return res.status(500).json({ ok: false, error: "TENANT_MAINT_REQUEST_READ_FAILED" });
+  }
+});
+
+router.post("/maintenance/:id/signoff", requireTenant, async (req: any, res) => {
+  try {
+    const tenantId = String(req.user?.tenantId || "").trim();
+    const id = String(req.params?.id || "").trim();
+    if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+    const docRef = db.collection("maintenanceRequests").doc(id);
+    const snap = await docRef.get();
+    if (!snap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+    const data = (snap.data() as any) || {};
+    if (String(data.tenantId || "").trim() !== tenantId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const workOrderRef = db.collection("workOrders").doc(`maintenance_${id}`);
+    const workOrderSnap = await workOrderRef.get();
+    if (!workOrderSnap.exists) {
+      return res.status(404).json({ ok: false, error: "WORK_ORDER_NOT_FOUND" });
+    }
+
+    const workOrder = (workOrderSnap.data() as any) || {};
+    if (String(workOrder.status || "").trim().toLowerCase() !== "completed") {
+      return res.status(400).json({ ok: false, error: "WORK_ORDER_NOT_COMPLETED" });
+    }
+    if (String(workOrder.resolutionStatus || "").trim().toLowerCase() !== "tenant_pending_signoff") {
+      return res.status(400).json({ ok: false, error: "TENANT_SIGNOFF_NOT_AVAILABLE" });
+    }
+
+    const decision = req.body?.decision === "resolved" || req.body?.decision === "not_resolved" ? req.body.decision : null;
+    if (!decision) {
+      return res.status(400).json({ ok: false, error: "INVALID_SIGNOFF_DECISION" });
+    }
+    const reason = String(req.body?.reason || "").trim().slice(0, 2000);
+    if (decision === "not_resolved" && !reason) {
+      return res.status(400).json({ ok: false, error: "TENANT_DECLINE_REASON_REQUIRED" });
+    }
+
+    const now = Date.now();
+    const workOrderUpdate: Record<string, unknown> = {
+      updatedAtMs: now,
+      lastExecutionUpdateAt: now,
+    };
+    const maintenanceUpdate: Record<string, unknown> = {
+      updatedAt: now,
+      lastUpdatedBy: "TENANT",
+    };
+    let historyMessage = "";
+    let contractorLastUpdate = "";
+
+    if (decision === "resolved") {
+      Object.assign(workOrderUpdate, {
+        tenantSignoffStatus: "accepted",
+        tenantSignedOffAt: now,
+        tenantDeclinedAt: null,
+        tenantDeclineReason: null,
+        resolutionStatus: "resolved",
+        followUpRequired: false,
+        followUpReason: null,
+        finalResolvedAt: now,
+      });
+      Object.assign(maintenanceUpdate, {
+        tenantSignoffStatus: "accepted",
+        tenantSignedOffAt: now,
+        tenantDeclinedAt: null,
+        tenantDeclineReason: null,
+        resolutionStatus: "resolved",
+        followUpRequired: false,
+        followUpReason: null,
+        finalResolvedAt: now,
+      });
+      historyMessage = "Tenant confirmed that the maintenance issue is resolved.";
+      contractorLastUpdate = "Tenant confirmed that the maintenance issue is resolved.";
+    } else {
+      Object.assign(workOrderUpdate, {
+        tenantSignoffStatus: "declined",
+        tenantSignedOffAt: null,
+        tenantDeclinedAt: now,
+        tenantDeclineReason: reason,
+        resolutionStatus: "follow_up_required",
+        followUpRequired: true,
+        followUpReason: reason,
+        finalResolvedAt: null,
+      });
+      Object.assign(maintenanceUpdate, {
+        tenantSignoffStatus: "declined",
+        tenantSignedOffAt: null,
+        tenantDeclinedAt: now,
+        tenantDeclineReason: reason,
+        resolutionStatus: "follow_up_required",
+        followUpRequired: true,
+        followUpReason: reason,
+        finalResolvedAt: null,
+      });
+      historyMessage = `Tenant reported the issue is not resolved: ${reason}`;
+      contractorLastUpdate = `Tenant requested follow-up: ${reason}`;
+    }
+
+    await Promise.all([
+      workOrderRef.set(workOrderUpdate, { merge: true }),
+      docRef.set(
+        {
+          ...maintenanceUpdate,
+          contractorLastUpdate,
+          statusHistory: FieldValue.arrayUnion({
+            status: String(data.status || "completed"),
+            actorRole: "tenant",
+            actorId: tenantId,
+            message: historyMessage,
+            createdAt: now,
+          }),
+        },
+        { merge: true }
+      ),
+      db.collection("workOrderUpdates").doc().set({
+        workOrderId: workOrderRef.id,
+        actorRole: "tenant",
+        actorId: tenantId,
+        updateType: "confirmed",
+        message: historyMessage,
+        createdAtMs: now,
+      }),
+    ]);
+
+    const [refreshed, refreshedWorkOrder] = await Promise.all([docRef.get(), workOrderRef.get()]);
+    const refreshedWorkOrderData = refreshedWorkOrder.exists ? ((refreshedWorkOrder.data() as any) || {}) : {};
+    return res.json({
+      ok: true,
+      data: {
+        ...projectTenantMaintenance(refreshed.id, refreshed.data() || {}),
+        evidence: refreshedWorkOrder.exists ? await serializeEvidenceForAudience(refreshedWorkOrderData?.evidence, "tenant") : [],
+        resolutionStatus:
+          refreshedWorkOrderData?.resolutionStatus === "completed_pending_review" ||
+          refreshedWorkOrderData?.resolutionStatus === "landlord_approved" ||
+          refreshedWorkOrderData?.resolutionStatus === "tenant_pending_signoff" ||
+          refreshedWorkOrderData?.resolutionStatus === "resolved" ||
+          refreshedWorkOrderData?.resolutionStatus === "follow_up_required"
+            ? refreshedWorkOrderData.resolutionStatus
+            : null,
+        landlordApprovedAt: toMillis(refreshedWorkOrderData?.landlordApprovedAt),
+        tenantSignoffStatus:
+          refreshedWorkOrderData?.tenantSignoffStatus === "pending" ||
+          refreshedWorkOrderData?.tenantSignoffStatus === "accepted" ||
+          refreshedWorkOrderData?.tenantSignoffStatus === "declined"
+            ? refreshedWorkOrderData.tenantSignoffStatus
+            : null,
+        tenantSignedOffAt: toMillis(refreshedWorkOrderData?.tenantSignedOffAt),
+        tenantDeclinedAt: toMillis(refreshedWorkOrderData?.tenantDeclinedAt),
+        tenantDeclineReason: String(refreshedWorkOrderData?.tenantDeclineReason || "").trim() || null,
+        followUpRequired:
+          typeof refreshedWorkOrderData?.followUpRequired === "boolean" ? refreshedWorkOrderData.followUpRequired : null,
+        followUpReason: String(refreshedWorkOrderData?.followUpReason || "").trim() || null,
+        finalResolvedAt: toMillis(refreshedWorkOrderData?.finalResolvedAt),
+      },
+    });
+  } catch (err) {
+    console.error("[tenant/maintenance/:id/signoff] update failed", {
+      tenantId: req.user?.tenantId,
+      id: req.params?.id,
+      err,
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_MAINT_REQUEST_SIGNOFF_FAILED" });
   }
 });
 

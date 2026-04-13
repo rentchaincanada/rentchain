@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import {
   getTenantMaintenance,
   updateTenantMaintenanceConfirmation,
+  updateTenantMaintenanceSignoff,
   type MaintenanceWorkflowItem,
 } from "../../api/maintenanceWorkflowApi";
 import { Button, Card, Section } from "../../components/ui/Ui";
@@ -21,12 +22,30 @@ function fmtDate(ts?: number | null) {
   return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(d);
 }
 
+function resolutionStatusLabel(value?: MaintenanceWorkflowItem["resolutionStatus"]) {
+  switch (value) {
+    case "completed_pending_review":
+      return "Completed and waiting for landlord review.";
+    case "landlord_approved":
+      return "Landlord approved the completed work.";
+    case "tenant_pending_signoff":
+      return "Your review is needed before this request is fully resolved.";
+    case "resolved":
+      return "This request has been marked resolved.";
+    case "follow_up_required":
+      return "This request needs follow-up before it can be fully resolved.";
+    default:
+      return "No resolution decision has been recorded yet.";
+  }
+}
+
 export default function TenantMaintenanceRequestDetailPage() {
   const { id } = useParams();
   const [data, setData] = useState<MaintenanceWorkflowItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [savingAction, setSavingAction] = useState(false);
+  const [signoffReason, setSignoffReason] = useState("");
   const [sessionExpired, setSessionExpired] = useState(false);
   const [hasToken, setHasToken] = useState<boolean>(() =>
     typeof window === "undefined" ? true : !!getTenantToken()
@@ -123,6 +142,31 @@ export default function TenantMaintenanceRequestDetailPage() {
       setData((res as any)?.item || (res as any)?.data || null);
     } catch (err: any) {
       const msg = err?.payload?.error || err?.message || "Unable to update the maintenance confirmation.";
+      setError(String(msg));
+    } finally {
+      setSavingAction(false);
+    }
+  };
+
+  const applyResolutionSignoff = async (decision: "resolved" | "not_resolved") => {
+    if (!id) return;
+    if (decision === "not_resolved" && !signoffReason.trim()) {
+      setError("Add a reason before requesting follow-up.");
+      return;
+    }
+    setSavingAction(true);
+    setError(null);
+    try {
+      const res = await updateTenantMaintenanceSignoff(id, {
+        decision,
+        reason: decision === "not_resolved" ? signoffReason.trim() : undefined,
+      });
+      setData((res as any)?.item || (res as any)?.data || null);
+      if (decision === "resolved") {
+        setSignoffReason("");
+      }
+    } catch (err: any) {
+      const msg = err?.payload?.error || err?.message || "Unable to update the maintenance resolution.";
       setError(String(msg));
     } finally {
       setSavingAction(false);
@@ -342,6 +386,66 @@ export default function TenantMaintenanceRequestDetailPage() {
                   ) : null}
                 </div>
               ) : null}
+              <div
+                style={{
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: radius.md,
+                  padding: "12px 14px",
+                  background: colors.panel,
+                  display: "grid",
+                  gap: 8,
+                }}
+              >
+                <div style={{ fontWeight: 800, color: textTokens.primary }}>Resolution approval</div>
+                <div style={{ color: textTokens.secondary }}>{resolutionStatusLabel(data.resolutionStatus)}</div>
+                {data.landlordApprovedAt ? (
+                  <div style={{ color: textTokens.secondary }}>Landlord approved the completed work on {fmtDate(data.landlordApprovedAt)}.</div>
+                ) : null}
+                {data.finalResolvedAt ? (
+                  <div style={{ color: textTokens.secondary }}>Final resolution recorded on {fmtDate(data.finalResolvedAt)}.</div>
+                ) : null}
+                {data.followUpReason ? (
+                  <>
+                    <div style={{ color: textTokens.primary, fontWeight: 700 }}>Follow-up reason</div>
+                    <div style={{ color: textTokens.secondary }}>{data.followUpReason}</div>
+                  </>
+                ) : null}
+                {data.tenantDeclineReason ? (
+                  <>
+                    <div style={{ color: textTokens.primary, fontWeight: 700 }}>Your latest note</div>
+                    <div style={{ color: textTokens.secondary }}>{data.tenantDeclineReason}</div>
+                  </>
+                ) : null}
+                {data.status === "completed" && data.resolutionStatus === "tenant_pending_signoff" ? (
+                  <>
+                    <div style={{ color: textTokens.primary, fontWeight: 700 }}>Next step</div>
+                    <div style={{ color: textTokens.secondary }}>
+                      Review the completed work and let your landlord know whether the issue is fully resolved.
+                    </div>
+                    <textarea
+                      value={signoffReason}
+                      onChange={(e) => setSignoffReason(e.target.value)}
+                      placeholder="If follow-up is still needed, explain what is incomplete or still not working"
+                      rows={3}
+                      style={{
+                        width: "100%",
+                        borderRadius: 8,
+                        border: `1px solid ${colors.border}`,
+                        padding: 10,
+                        resize: "vertical",
+                      }}
+                    />
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <Button variant="secondary" disabled={savingAction} onClick={() => void applyResolutionSignoff("resolved")}>
+                        {savingAction ? "Saving..." : "Mark resolved"}
+                      </Button>
+                      <Button variant="ghost" disabled={savingAction} onClick={() => void applyResolutionSignoff("not_resolved")}>
+                        {savingAction ? "Saving..." : "Request follow-up"}
+                      </Button>
+                    </div>
+                  </>
+                ) : null}
+              </div>
               {Array.isArray(data.evidence) && data.evidence.length ? (
                 <div
                   style={{

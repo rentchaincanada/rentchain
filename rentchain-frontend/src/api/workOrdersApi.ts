@@ -41,6 +41,16 @@ export type WorkOrderRecord = {
   completedByActorId?: string | null;
   completionConfirmedByLandlordAt?: number | null;
   completionConfirmedByLandlordBy?: string | null;
+  resolutionStatus?: "completed_pending_review" | "landlord_approved" | "tenant_pending_signoff" | "resolved" | "follow_up_required" | null;
+  landlordApprovedAt?: number | null;
+  landlordApprovedBy?: string | null;
+  tenantSignoffStatus?: "pending" | "accepted" | "declined" | null;
+  tenantSignedOffAt?: number | null;
+  tenantDeclinedAt?: number | null;
+  tenantDeclineReason?: string | null;
+  followUpRequired?: boolean | null;
+  followUpReason?: string | null;
+  finalResolvedAt?: number | null;
   reopenedAt?: number | null;
   reopenedByActorId?: string | null;
   reopenedByActorRole?: "landlord" | "admin" | null;
@@ -194,6 +204,27 @@ export async function confirmWorkOrderCompletion(workOrderId: string): Promise<W
     { method: "POST" }
   );
   if (!res?.ok || !res.item) throw new Error("Failed to confirm work order completion");
+  return res.item;
+}
+
+export async function approveWorkOrderResolution(workOrderId: string): Promise<WorkOrderRecord> {
+  const res = await apiFetch<{ ok: boolean; item: WorkOrderRecord }>(
+    `/landlord/work-orders/${encodeURIComponent(workOrderId)}/approve-resolution`,
+    { method: "POST" }
+  );
+  if (!res?.ok || !res.item) throw new Error("Failed to approve work order resolution");
+  return res.item;
+}
+
+export async function markWorkOrderFollowUpRequired(
+  workOrderId: string,
+  payload: { reason: string }
+): Promise<WorkOrderRecord> {
+  const res = await apiFetch<{ ok: boolean; item: WorkOrderRecord }>(
+    `/landlord/work-orders/${encodeURIComponent(workOrderId)}/mark-follow-up-required`,
+    { method: "POST", body: payload }
+  );
+  if (!res?.ok || !res.item) throw new Error("Failed to mark work order follow-up required");
   return res.item;
 }
 

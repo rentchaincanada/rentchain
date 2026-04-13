@@ -4,6 +4,7 @@ import {
   getTenantWorkspaceMaintenance,
   listTenantWorkspaceMaintenance,
   updateTenantWorkspaceMaintenanceConfirmation,
+  updateTenantWorkspaceMaintenanceSignoff,
 } from "./tenantPortal";
 
 export type MaintenanceWorkflowStatus =
@@ -57,6 +58,15 @@ export type MaintenanceWorkflowItem = {
   tenantConfirmationStatus?: "confirmed" | "needs_schedule_change" | null;
   tenantConfirmationUpdatedAt?: number | null;
   accessAcknowledgedAt?: number | null;
+  resolutionStatus?: "completed_pending_review" | "landlord_approved" | "tenant_pending_signoff" | "resolved" | "follow_up_required" | null;
+  landlordApprovedAt?: number | null;
+  tenantSignoffStatus?: "pending" | "accepted" | "declined" | null;
+  tenantSignedOffAt?: number | null;
+  tenantDeclinedAt?: number | null;
+  tenantDeclineReason?: string | null;
+  followUpRequired?: boolean | null;
+  followUpReason?: string | null;
+  finalResolvedAt?: number | null;
   landlordNote?: string | null;
   createdAt: number;
   updatedAt: number;
@@ -266,6 +276,27 @@ export async function getTenantMaintenance(id: string) {
     tenantConfirmationUpdatedAt:
       typeof item?.tenantConfirmationUpdatedAt === "number" ? item.tenantConfirmationUpdatedAt : null,
     accessAcknowledgedAt: typeof item?.accessAcknowledgedAt === "number" ? item.accessAcknowledgedAt : null,
+    resolutionStatus:
+      item?.resolutionStatus === "completed_pending_review" ||
+      item?.resolutionStatus === "landlord_approved" ||
+      item?.resolutionStatus === "tenant_pending_signoff" ||
+      item?.resolutionStatus === "resolved" ||
+      item?.resolutionStatus === "follow_up_required"
+        ? item.resolutionStatus
+        : null,
+    landlordApprovedAt: typeof item?.landlordApprovedAt === "number" ? item.landlordApprovedAt : null,
+    tenantSignoffStatus:
+      item?.tenantSignoffStatus === "pending" ||
+      item?.tenantSignoffStatus === "accepted" ||
+      item?.tenantSignoffStatus === "declined"
+        ? item.tenantSignoffStatus
+        : null,
+    tenantSignedOffAt: typeof item?.tenantSignedOffAt === "number" ? item.tenantSignedOffAt : null,
+    tenantDeclinedAt: typeof item?.tenantDeclinedAt === "number" ? item.tenantDeclinedAt : null,
+    tenantDeclineReason: item?.tenantDeclineReason ? String(item.tenantDeclineReason) : null,
+    followUpRequired: typeof item?.followUpRequired === "boolean" ? item.followUpRequired : null,
+    followUpReason: item?.followUpReason ? String(item.followUpReason) : null,
+    finalResolvedAt: typeof item?.finalResolvedAt === "number" ? item.finalResolvedAt : null,
     createdAt: item?.createdAt || Date.now(),
     updatedAt: item?.updatedAt || item?.createdAt || Date.now(),
     statusHistory: Array.isArray(item?.statusHistory)
@@ -312,6 +343,95 @@ export async function updateTenantMaintenanceConfirmation(
     tenantConfirmationUpdatedAt:
       typeof item?.tenantConfirmationUpdatedAt === "number" ? item.tenantConfirmationUpdatedAt : null,
     accessAcknowledgedAt: typeof item?.accessAcknowledgedAt === "number" ? item.accessAcknowledgedAt : null,
+    resolutionStatus:
+      item?.resolutionStatus === "completed_pending_review" ||
+      item?.resolutionStatus === "landlord_approved" ||
+      item?.resolutionStatus === "tenant_pending_signoff" ||
+      item?.resolutionStatus === "resolved" ||
+      item?.resolutionStatus === "follow_up_required"
+        ? item.resolutionStatus
+        : null,
+    landlordApprovedAt: typeof item?.landlordApprovedAt === "number" ? item.landlordApprovedAt : null,
+    tenantSignoffStatus:
+      item?.tenantSignoffStatus === "pending" ||
+      item?.tenantSignoffStatus === "accepted" ||
+      item?.tenantSignoffStatus === "declined"
+        ? item.tenantSignoffStatus
+        : null,
+    tenantSignedOffAt: typeof item?.tenantSignedOffAt === "number" ? item.tenantSignedOffAt : null,
+    tenantDeclinedAt: typeof item?.tenantDeclinedAt === "number" ? item.tenantDeclinedAt : null,
+    tenantDeclineReason: item?.tenantDeclineReason ? String(item.tenantDeclineReason) : null,
+    followUpRequired: typeof item?.followUpRequired === "boolean" ? item.followUpRequired : null,
+    followUpReason: item?.followUpReason ? String(item.followUpReason) : null,
+    finalResolvedAt: typeof item?.finalResolvedAt === "number" ? item.finalResolvedAt : null,
+    evidence: Array.isArray((item as any)?.evidence) ? (item as any).evidence : [],
+    createdAt: item?.createdAt || Date.now(),
+    updatedAt: item?.updatedAt || item?.createdAt || Date.now(),
+    statusHistory: Array.isArray(item?.statusHistory)
+      ? item.statusHistory.map((entry) => ({
+          status: String(entry?.status || ""),
+          actorRole: String(entry?.actorRole || ""),
+          actorId: entry?.actorId ? String(entry.actorId) : null,
+          message: entry?.message ? String(entry.message) : null,
+          createdAt: typeof entry?.createdAt === "number" ? entry.createdAt : undefined,
+        }))
+      : [],
+  };
+  return { ok: true, item: mapped, data: mapped };
+}
+
+export async function updateTenantMaintenanceSignoff(
+  id: string,
+  payload: {
+    decision: "resolved" | "not_resolved";
+    reason?: string;
+  }
+) {
+  const item = await updateTenantWorkspaceMaintenanceSignoff(id, payload);
+  const mapped: MaintenanceWorkflowItem = {
+    id: item?.requestId || id,
+    tenantId: "",
+    landlordId: "",
+    propertyId: null,
+    unitId: null,
+    title: item?.title || "Maintenance request",
+    description: item?.summary || "",
+    category: String(item?.category || "GENERAL"),
+    priority: String(item?.priority || "normal").toLowerCase() as "low" | "normal" | "urgent",
+    status: String(item?.status || "submitted").toLowerCase() as MaintenanceWorkflowStatus,
+    assignedContractorName: item?.assignedContractorName || null,
+    contractorStatus: item?.contractorStatus || null,
+    serviceWindowStartAt: typeof item?.serviceWindowStartAt === "number" ? item.serviceWindowStartAt : null,
+    serviceWindowEndAt: typeof item?.serviceWindowEndAt === "number" ? item.serviceWindowEndAt : null,
+    accessRequired: typeof item?.accessRequired === "boolean" ? item.accessRequired : null,
+    tenantConfirmationStatus:
+      item?.tenantConfirmationStatus === "confirmed" || item?.tenantConfirmationStatus === "needs_schedule_change"
+        ? item.tenantConfirmationStatus
+        : null,
+    tenantConfirmationUpdatedAt:
+      typeof item?.tenantConfirmationUpdatedAt === "number" ? item.tenantConfirmationUpdatedAt : null,
+    accessAcknowledgedAt: typeof item?.accessAcknowledgedAt === "number" ? item.accessAcknowledgedAt : null,
+    resolutionStatus:
+      item?.resolutionStatus === "completed_pending_review" ||
+      item?.resolutionStatus === "landlord_approved" ||
+      item?.resolutionStatus === "tenant_pending_signoff" ||
+      item?.resolutionStatus === "resolved" ||
+      item?.resolutionStatus === "follow_up_required"
+        ? item.resolutionStatus
+        : null,
+    landlordApprovedAt: typeof item?.landlordApprovedAt === "number" ? item.landlordApprovedAt : null,
+    tenantSignoffStatus:
+      item?.tenantSignoffStatus === "pending" ||
+      item?.tenantSignoffStatus === "accepted" ||
+      item?.tenantSignoffStatus === "declined"
+        ? item.tenantSignoffStatus
+        : null,
+    tenantSignedOffAt: typeof item?.tenantSignedOffAt === "number" ? item.tenantSignedOffAt : null,
+    tenantDeclinedAt: typeof item?.tenantDeclinedAt === "number" ? item.tenantDeclinedAt : null,
+    tenantDeclineReason: item?.tenantDeclineReason ? String(item.tenantDeclineReason) : null,
+    followUpRequired: typeof item?.followUpRequired === "boolean" ? item.followUpRequired : null,
+    followUpReason: item?.followUpReason ? String(item.followUpReason) : null,
+    finalResolvedAt: typeof item?.finalResolvedAt === "number" ? item.finalResolvedAt : null,
     createdAt: item?.createdAt || Date.now(),
     updatedAt: item?.updatedAt || item?.createdAt || Date.now(),
     statusHistory: Array.isArray(item?.statusHistory)

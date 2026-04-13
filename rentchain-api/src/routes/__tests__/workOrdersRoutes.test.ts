@@ -214,6 +214,8 @@ describe("workOrdersRoutes execution completion", () => {
 
     const savedWorkOrder = ensureCollection("workOrders").get("wo-1");
     expect(savedWorkOrder?.completionConfirmedByLandlordBy).toBe("landlord-1");
+    expect(savedWorkOrder?.landlordApprovedBy).toBe("landlord-1");
+    expect(savedWorkOrder?.resolutionStatus).toBe("landlord_approved");
   });
 
   it("rejects completion confirmation when the work order is not completed", async () => {
@@ -232,6 +234,68 @@ describe("workOrdersRoutes execution completion", () => {
 
     expect(res.status).toBe(400);
     expect(res.body?.error).toBe("WORK_ORDER_NOT_COMPLETED");
+  });
+
+  it("approves completed work and advances to tenant signoff when a tenant is attached", async () => {
+    const router = (await import("../workOrdersRoutes")).default;
+    ensureCollection("workOrders").set("wo-1", {
+      ...ensureCollection("workOrders").get("wo-1"),
+      tenantId: "tenant-1",
+      status: "completed",
+      completionSummary: "Completed service visit.",
+      serviceCompletedAt: 500,
+    });
+
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/work-orders/wo-1/approve-resolution",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "landlord-1",
+          role: "landlord",
+          landlordId: "landlord-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.item?.resolutionStatus).toBe("tenant_pending_signoff");
+
+    const savedWorkOrder = ensureCollection("workOrders").get("wo-1");
+    expect(savedWorkOrder?.tenantSignoffStatus).toBe("pending");
+    expect(savedWorkOrder?.landlordApprovedBy).toBe("landlord-1");
+  });
+
+  it("marks follow-up required for completed work with a reason", async () => {
+    const router = (await import("../workOrdersRoutes")).default;
+    ensureCollection("workOrders").set("wo-1", {
+      ...ensureCollection("workOrders").get("wo-1"),
+      status: "completed",
+      completionSummary: "Completed service visit.",
+      serviceCompletedAt: 500,
+    });
+
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/work-orders/wo-1/mark-follow-up-required",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "landlord-1",
+          role: "landlord",
+          landlordId: "landlord-1",
+        }),
+      },
+      body: {
+        reason: "Tenant reported the heat is still inconsistent.",
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.item?.resolutionStatus).toBe("follow_up_required");
+
+    const savedWorkOrder = ensureCollection("workOrders").get("wo-1");
+    expect(savedWorkOrder?.followUpRequired).toBe(true);
+    expect(savedWorkOrder?.followUpReason).toMatch(/still inconsistent/i);
   });
 
   it("reopens a completed work order with a required reason", async () => {
@@ -265,6 +329,7 @@ describe("workOrdersRoutes execution completion", () => {
     const savedWorkOrder = ensureCollection("workOrders").get("wo-1");
     expect(savedWorkOrder?.reopenReason).toMatch(/Heating issue still present/i);
     expect(savedWorkOrder?.executionBlockedReason).toMatch(/Heating issue still present/i);
+    expect(savedWorkOrder?.resolutionStatus).toBe("follow_up_required");
   });
 
   it("allows a landlord to upload evidence and update its visibility", async () => {

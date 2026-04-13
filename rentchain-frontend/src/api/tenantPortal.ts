@@ -65,6 +65,26 @@ export type TenantWorkspaceMaintenance = {
   tenantConfirmationStatus?: "confirmed" | "needs_schedule_change" | null;
   tenantConfirmationUpdatedAt?: number | null;
   accessAcknowledgedAt?: number | null;
+  resolutionStatus?: "completed_pending_review" | "landlord_approved" | "tenant_pending_signoff" | "resolved" | "follow_up_required" | null;
+  landlordApprovedAt?: number | null;
+  tenantSignoffStatus?: "pending" | "accepted" | "declined" | null;
+  tenantSignedOffAt?: number | null;
+  tenantDeclinedAt?: number | null;
+  tenantDeclineReason?: string | null;
+  followUpRequired?: boolean | null;
+  followUpReason?: string | null;
+  finalResolvedAt?: number | null;
+  evidence?: Array<{
+    id: string;
+    url: string | null;
+    filename?: string | null;
+    contentType?: string | null;
+    uploadedAt?: number | null;
+    uploadedByActorRole?: string | null;
+    evidenceType?: string | null;
+    caption?: string | null;
+    visibility?: "tenant_safe";
+  }>;
   createdAt: number | null;
   updatedAt: number | null;
   statusHistory?: Array<{
@@ -136,6 +156,23 @@ export async function updateTenantWorkspaceMaintenanceConfirmation(
 ) {
   const res = await tenantApiFetch<{ ok: boolean; data: TenantWorkspaceMaintenance }>(
     `/tenant/maintenance-requests/${encodeURIComponent(id)}/confirmation`,
+    {
+      method: "POST",
+      body: payload,
+    }
+  );
+  return res?.data;
+}
+
+export async function updateTenantWorkspaceMaintenanceSignoff(
+  id: string,
+  payload: {
+    decision: "resolved" | "not_resolved";
+    reason?: string;
+  }
+) {
+  const res = await tenantApiFetch<{ ok: boolean; data: TenantWorkspaceMaintenance }>(
+    `/tenant/maintenance/${encodeURIComponent(id)}/signoff`,
     {
       method: "POST",
       body: payload,
