@@ -392,58 +392,7 @@ export default function MaintenanceRequestsPage() {
                           {item.tenantName || item.tenantId} • {item.propertyLabel || item.propertyId || "No property"}
                           {item.unitLabel ? ` • ${item.unitLabel}` : ""}
                         </div>
-                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                          <span
-                            style={{
-                              display: "inline-flex",
-                              padding: "4px 8px",
-                              borderRadius: radius.pill,
-                              background: tone.bg,
-                              color: tone.color,
-                              fontSize: 12,
-                              fontWeight: 700,
-                            }}
-                          >
-                            {item.status}
-                          </span>
-                         <span
-  style={{
-    color: assignment.needsAttention || lifecycle.needsAttention ? "#b91c1c" : text.muted,
-    fontSize: 12,
-    fontWeight: 700,
-  }}
->
-  {assignment.assignmentLabel}
-</span>
-<span style={{ color: text.muted, fontSize: 12 }}>{item.priority}</span>
-<span style={{ color: text.muted, fontSize: 12 }}>{fmtDate(item.createdAt)}</span>
-</div>
-<div style={{ color: text.secondary, fontSize: 12 }}>{assignment.ownerSummary}</div>
-</button>
-);
-})}
-            </div>
-          
-          masterDropdown={
-            filtered.length ? (
-              <select
-                value={selected?.id || ""}
-                onChange={(e) => {
-                  const item = filtered.find((entry) => entry.id === e.target.value) || null;
-                  selectRequest(item);
-                }}
-                className="rc-full-width-mobile"
-              >
-                <option value="">Select request</option>
-                {filtered.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.title}
-                  </option>
-                ))}
-              </select>
-            ) : null
-          }
-          hasSelection={Boolean(selected)}
+                       <div style={{ display: "flex",          hasSelection={Boolean(selected)}
           selectedLabel={selected?.title || "Request"}
           onClearSelection={() => selectRequest(null)}
           detail={
