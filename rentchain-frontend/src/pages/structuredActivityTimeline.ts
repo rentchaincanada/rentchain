@@ -4,6 +4,11 @@ import { buildLandlordIntakeAlignmentView } from "./applicationReviewIntakeAlign
 import { buildLandlordDecisionWorkspace } from "./landlordDecisionWorkspace";
 import { buildLandlordDecisionOutcome } from "./landlordDecisionOutcome";
 import { buildLeaseFlowTransitionState } from "./leaseFlowTransitionState";
+import { buildLeasePreparationWorkspaceState } from "./leasePreparationWorkspaceState";
+import { buildMoveInReadinessWorkspaceState } from "./moveInReadinessWorkspaceState";
+import { buildLeaseExecutionReadinessState } from "./leaseExecutionReadinessState";
+import { buildLeaseExecutionWorkspace } from "./leaseExecutionWorkspace";
+import { buildLeaseSigningWorkspaceState } from "./leaseSigningWorkspaceState";
 
 export type StructuredActivityTimelineItem = {
   id: string;
@@ -119,6 +124,33 @@ export function buildLandlordStructuredActivityTimeline(
     audience: "landlord",
     decisionOutcome,
   });
+  const leasePreparation = buildLeasePreparationWorkspaceState({
+    audience: "landlord",
+    decisionOutcome,
+    leaseTransition,
+    packageCategories: intakeView.packageCategories,
+  });
+  const moveInReadiness = buildMoveInReadinessWorkspaceState({
+    audience: "landlord",
+    decisionOutcome,
+    leaseTransition,
+    leasePreparation,
+    packageCategories: intakeView.packageCategories,
+  });
+  const executionWorkspace = buildLeaseExecutionWorkspace({
+    audience: "landlord",
+    executionReadiness: buildLeaseExecutionReadinessState({
+      audience: "landlord",
+      decisionOutcome,
+      leasePreparation,
+      moveInReadiness,
+      packageCategories: intakeView.packageCategories,
+    }),
+  });
+  const signingWorkspace = buildLeaseSigningWorkspaceState({
+    audience: "landlord",
+    executionWorkspace,
+  });
 
   pushTimelineItem(items, {
     id: `review-summary-${summary.applicationId}`,
@@ -215,6 +247,81 @@ export function buildLandlordStructuredActivityTimeline(
         summary.generatedAt,
       actorLabel: "Decision workspace",
       actionRequired: leaseTransition.timelineEvent.actionRequired,
+      relatedPath: null,
+    });
+  }
+
+  if (leasePreparation.timelineEvent) {
+    pushTimelineItem(items, {
+      id: `lease-preparation-${summary.applicationId}`,
+      type:
+        leasePreparation.preparationState === "ready_for_execution"
+          ? "ready_for_rereview"
+          : "review_updated",
+      title: leasePreparation.timelineEvent.title,
+      description: leasePreparation.timelineEvent.description,
+      occurredAt:
+        summary.decisionSummary?.riskSnapshot?.updatedAt ||
+        summary.generatedAt,
+      actorLabel: "Lease preparation",
+      actionRequired: leasePreparation.timelineEvent.actionRequired,
+      relatedPath: null,
+    });
+  }
+
+  if (moveInReadiness.timelineEvent) {
+    pushTimelineItem(items, {
+      id: `move-in-readiness-${summary.applicationId}`,
+      type:
+        moveInReadiness.readinessState === "ready_for_move_in"
+          ? "ready_for_rereview"
+          : "review_updated",
+      title: moveInReadiness.timelineEvent.title,
+      description: moveInReadiness.timelineEvent.description,
+      occurredAt:
+        summary.decisionSummary?.riskSnapshot?.updatedAt ||
+        summary.generatedAt,
+      actorLabel: "Move-in readiness",
+      actionRequired: moveInReadiness.timelineEvent.actionRequired,
+      relatedPath: null,
+    });
+  }
+
+  if (executionWorkspace.timelineEvent) {
+    pushTimelineItem(items, {
+      id: `lease-execution-readiness-${summary.applicationId}`,
+      type:
+        executionWorkspace.executionState === "ready_for_execution" ||
+        executionWorkspace.executionState === "execution_in_progress"
+          ? "ready_for_rereview"
+          : "review_updated",
+      title: executionWorkspace.timelineEvent.title,
+      description: executionWorkspace.timelineEvent.description,
+      occurredAt:
+        summary.decisionSummary?.riskSnapshot?.updatedAt ||
+        summary.generatedAt,
+      actorLabel: "Lease execution readiness",
+      actionRequired: executionWorkspace.timelineEvent.actionRequired,
+      relatedPath: null,
+    });
+  }
+
+  if (signingWorkspace.timelineEvent) {
+    pushTimelineItem(items, {
+      id: `lease-signing-${summary.applicationId}`,
+      type:
+        signingWorkspace.signingState === "ready_for_signing" ||
+        signingWorkspace.signingState === "signing_in_progress" ||
+        signingWorkspace.signingState === "signed_or_completed"
+          ? "ready_for_rereview"
+          : "review_updated",
+      title: signingWorkspace.timelineEvent.title,
+      description: signingWorkspace.timelineEvent.description,
+      occurredAt:
+        summary.decisionSummary?.riskSnapshot?.updatedAt ||
+        summary.generatedAt,
+      actorLabel: "Lease signing",
+      actionRequired: signingWorkspace.timelineEvent.actionRequired,
       relatedPath: null,
     });
   }

@@ -1,9 +1,15 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
-import { redeemTenantWorkspaceInvite } from "../../api/tenantPortal";
+import {
+  getTenantWorkspace,
+  redeemTenantWorkspaceInvite,
+  type TenantWorkspaceContext,
+} from "../../api/tenantPortal";
 import { TenantInfoCard, TenantSurfaceShell } from "./TenantWorkspaceShared";
 import { colors, radius, spacing, text as textTokens } from "../../styles/tokens";
 import { buildTenantApplicationEntryPath } from "./tenantApplicationFlow";
+import { buildTenantWorkspaceModeView } from "./tenantWorkspaceMode";
+import TenantWorkspaceModeBanner from "./TenantWorkspaceModeBanner";
 
 function mapInviteError(input: string | null) {
   const normalized = String(input || "").trim().toLowerCase();
@@ -18,6 +24,7 @@ function mapInviteError(input: string | null) {
 
 export default function TenantInviteRedeemPage() {
   const location = useLocation();
+  const [workspace, setWorkspace] = React.useState<Awaited<ReturnType<typeof getTenantWorkspace>> | null>(null);
   const prefilledToken = React.useMemo(
     () => String(new URLSearchParams(location.search).get("token") || "").trim(),
     [location.search]
@@ -58,15 +65,47 @@ export default function TenantInviteRedeemPage() {
     setToken(prefilledToken);
   }, [prefilledToken]);
 
+  React.useEffect(() => {
+    let cancelled = false;
+    void getTenantWorkspace()
+      .then((next) => {
+        if (!cancelled) {
+          setWorkspace(next);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setWorkspace(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const nextApplicationPath = success
     ? buildTenantApplicationEntryPath({ entry: "invite", token: success.applicationId || success.inviteId || prefilledToken })
     : buildTenantApplicationEntryPath({ entry: "invite", token: prefilledToken });
+  const modeContext: TenantWorkspaceContext = workspace?.context || {
+    authority: "invite",
+    propertyId: null,
+    rc_prop_id: null,
+    applicationId: null,
+    leaseId: null,
+    tenantId: null,
+    unitId: null,
+    invitedEmail: null,
+  };
+  const modeView = buildTenantWorkspaceModeView(modeContext);
 
   return (
     <TenantSurfaceShell
       title="Redeem Invite"
       subtitle="Redeem a one-time tenancy invite from inside your authenticated tenant workspace. Invite redemption stays server-scoped and follows the backend token lifecycle rules."
     >
+      <TenantWorkspaceModeBanner view={modeView} />
+
       <TenantInfoCard heading="Invite Redemption" accent="#0f766e">
         <form onSubmit={submit} style={{ display: "grid", gap: spacing.md }}>
           <label style={{ display: "grid", gap: 8 }}>
