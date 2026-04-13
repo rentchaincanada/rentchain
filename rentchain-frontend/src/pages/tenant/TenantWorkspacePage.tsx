@@ -6,6 +6,7 @@ import { getTenantAttachments } from "../../api/tenantAttachmentsApi";
 import { getTenantProfile } from "../../api/tenantProfile";
 import { getTenantApplicationCompletion } from "../../api/tenantApplicationCompletion";
 import { getTenantNotificationPreferences } from "../../api/tenantNotificationPreferences";
+import { getTenantCommunicationsWorkspace } from "../../api/tenantCommunicationsApi";
 import {
   TenantEmptyState,
   TenantErrorState,
@@ -25,6 +26,7 @@ import { buildTenantDocumentVaultView } from "./tenantDocumentVault";
 import { buildTenantApplicationReuseView } from "./tenantApplicationReuse";
 import { buildTenantWorkspaceModeView } from "./tenantWorkspaceMode";
 import { buildActiveTenancyWorkspaceState } from "./activeTenancyWorkspaceState";
+import { buildTenantCommunicationsWorkspaceState } from "./tenantCommunicationsWorkspaceState";
 import TenantWorkspaceModeBanner from "./TenantWorkspaceModeBanner";
 import StructuredNotificationList from "../StructuredNotificationList";
 import { buildTenantStructuredNotificationTriggers } from "../structuredNotificationTriggers";
@@ -37,6 +39,7 @@ export default function TenantWorkspacePage() {
   const [profileData, setProfileData] = React.useState<Awaited<ReturnType<typeof getTenantProfile>> | null>(null);
   const [completion, setCompletion] = React.useState<Awaited<ReturnType<typeof getTenantApplicationCompletion>> | null>(null);
   const [notificationPreferences, setNotificationPreferences] = React.useState<Awaited<ReturnType<typeof getTenantNotificationPreferences>> | null>(null);
+  const [communications, setCommunications] = React.useState<Awaited<ReturnType<typeof getTenantCommunicationsWorkspace>> | null>(null);
   const [profileLoading, setProfileLoading] = React.useState(true);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -45,12 +48,13 @@ export default function TenantWorkspacePage() {
     setLoading(true);
     setError(null);
     try {
-      const [workspaceResult, accessResult, attachmentsResult, completionResult, preferencesResult] = await Promise.allSettled([
+      const [workspaceResult, accessResult, attachmentsResult, completionResult, preferencesResult, communicationsResult] = await Promise.allSettled([
         getTenantWorkspace(),
         getTenantAccess(),
         getTenantAttachments(),
         getTenantApplicationCompletion(),
         getTenantNotificationPreferences(),
+        getTenantCommunicationsWorkspace(),
       ]);
 
       if (workspaceResult.status === "rejected") {
@@ -62,12 +66,14 @@ export default function TenantWorkspacePage() {
       setAttachments(attachmentsResult.status === "fulfilled" ? attachmentsResult.value : null);
       setCompletion(completionResult.status === "fulfilled" ? completionResult.value : null);
       setNotificationPreferences(preferencesResult.status === "fulfilled" ? preferencesResult.value : null);
+      setCommunications(communicationsResult.status === "fulfilled" ? communicationsResult.value : null);
     } catch (err: any) {
       setData(null);
       setAccess(null);
       setAttachments(null);
       setCompletion(null);
       setNotificationPreferences(null);
+      setCommunications(null);
       setError(err?.payload?.error || err?.message || "Unable to load your tenant workspace.");
     } finally {
       setLoading(false);
@@ -148,6 +154,7 @@ export default function TenantWorkspacePage() {
     context: data?.context,
     lease: data?.lease,
   });
+  const communicationsView = buildTenantCommunicationsWorkspaceState(communications);
   const notificationItems = filterStructuredNotificationsByPreferences(
     buildTenantStructuredNotificationTriggers({
       packageCategories: reuse.packageCategories,
@@ -368,6 +375,31 @@ export default function TenantWorkspacePage() {
               {attachments?.guidance?.headline || "Keep your profile organized by keeping documents ready in one place."}
             </div>
             <Link to="/tenant/attachments">Open document vault</Link>
+          </div>
+        </TenantInfoCard>
+
+        <TenantInfoCard heading="Communications" accent="#0f766e">
+          <div style={{ display: "grid", gap: spacing.sm }}>
+            <div style={{ color: textTokens.secondary }}>
+              <strong>{communicationsView.label}</strong> — {communicationsView.description}
+            </div>
+            {communicationsView.threadSummaries.length ? (
+              <>
+                <div style={{ color: textTokens.secondary }}>
+                  Latest update: {communicationsView.threadSummaries[0].latestPreview}
+                </div>
+                <div style={{ color: textTokens.muted }}>
+                  {communicationsView.threadSummaries[0].needsReply
+                    ? "A landlord message appears to need your reply."
+                    : "Your current tenancy conversation is visible from here."}
+                </div>
+              </>
+            ) : (
+              <div style={{ color: textTokens.muted }}>
+                Your inbox will appear here once tenancy communication starts.
+              </div>
+            )}
+            <Link to="/tenant/messages">Open communications inbox</Link>
           </div>
         </TenantInfoCard>
       </div>

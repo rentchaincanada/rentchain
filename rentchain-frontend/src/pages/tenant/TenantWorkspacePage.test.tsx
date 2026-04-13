@@ -42,6 +42,7 @@ const maintenanceWorkflowApi = vi.hoisted(() => ({
 
 const tenantCommunicationsApi = vi.hoisted(() => ({
   getTenantCommunicationSummary: vi.fn(),
+  getTenantCommunicationsWorkspace: vi.fn(),
 }));
 
 vi.mock("../../api/tenantPortal", () => tenantPortalApi);
@@ -67,6 +68,27 @@ describe("tenant workspace frontend shell", () => {
       unreadMessages: 1,
       unreadNotices: 2,
       unreadScreeningUpdates: 0,
+    });
+    tenantCommunicationsApi.getTenantCommunicationsWorkspace.mockResolvedValue({
+      canSend: true,
+      canSendReason: null,
+      thread: {
+        id: "thread-1",
+        landlordLabel: "Landlord",
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        unreadCount: 1,
+        lastMessageAt: "2026-04-10T00:00:00.000Z",
+        messages: [
+          {
+            id: "msg-1",
+            senderRole: "landlord",
+            body: "Please confirm the final move-in details.",
+            createdAt: "2026-04-10T00:00:00.000Z",
+            createdAtMs: 1,
+          },
+        ],
+      },
     });
     tenantApplicationCompletionApi.getTenantApplicationCompletion.mockResolvedValue({
       status: "in_progress",
@@ -308,6 +330,9 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.getAllByText(/Active tenancy/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/A lease reference is visible in your tenant workspace/i)).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: /Open payments/i }).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Needs reply/i)).toBeInTheDocument();
+    expect(screen.getByText(/Please confirm the final move-in details/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Open communications inbox/i })).toBeInTheDocument();
     expect(screen.getByText(/123 Main St, Unit 4, Halifax, NS/i)).toBeInTheDocument();
     expect(screen.getByText(/finish_profile/i)).toBeInTheDocument();
     expect(screen.getAllByText(/1 active access grant/i).length).toBeGreaterThan(0);
