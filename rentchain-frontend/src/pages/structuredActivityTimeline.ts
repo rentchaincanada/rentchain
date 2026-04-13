@@ -8,6 +8,7 @@ import { buildLeasePreparationWorkspaceState } from "./leasePreparationWorkspace
 import { buildMoveInReadinessWorkspaceState } from "./moveInReadinessWorkspaceState";
 import { buildLeaseExecutionReadinessState } from "./leaseExecutionReadinessState";
 import { buildLeaseExecutionWorkspace } from "./leaseExecutionWorkspace";
+import { buildLeaseSigningWorkspaceState } from "./leaseSigningWorkspaceState";
 
 export type StructuredActivityTimelineItem = {
   id: string;
@@ -145,6 +146,10 @@ export function buildLandlordStructuredActivityTimeline(
       moveInReadiness,
       packageCategories: intakeView.packageCategories,
     }),
+  });
+  const signingWorkspace = buildLeaseSigningWorkspaceState({
+    audience: "landlord",
+    executionWorkspace,
   });
 
   pushTimelineItem(items, {
@@ -297,6 +302,26 @@ export function buildLandlordStructuredActivityTimeline(
         summary.generatedAt,
       actorLabel: "Lease execution readiness",
       actionRequired: executionWorkspace.timelineEvent.actionRequired,
+      relatedPath: null,
+    });
+  }
+
+  if (signingWorkspace.timelineEvent) {
+    pushTimelineItem(items, {
+      id: `lease-signing-${summary.applicationId}`,
+      type:
+        signingWorkspace.signingState === "ready_for_signing" ||
+        signingWorkspace.signingState === "signing_in_progress" ||
+        signingWorkspace.signingState === "signed_or_completed"
+          ? "ready_for_rereview"
+          : "review_updated",
+      title: signingWorkspace.timelineEvent.title,
+      description: signingWorkspace.timelineEvent.description,
+      occurredAt:
+        summary.decisionSummary?.riskSnapshot?.updatedAt ||
+        summary.generatedAt,
+      actorLabel: "Lease signing",
+      actionRequired: signingWorkspace.timelineEvent.actionRequired,
       relatedPath: null,
     });
   }

@@ -31,6 +31,7 @@ import { buildLeasePreparationWorkspaceState } from "../leasePreparationWorkspac
 import { buildMoveInReadinessWorkspaceState } from "../moveInReadinessWorkspaceState";
 import { buildLeaseExecutionReadinessState } from "../leaseExecutionReadinessState";
 import { buildLeaseExecutionWorkspace } from "../leaseExecutionWorkspace";
+import { buildLeaseSigningWorkspaceState } from "../leaseSigningWorkspaceState";
 import StructuredNotificationList from "../StructuredNotificationList";
 import { buildTenantStructuredNotificationTriggers } from "../structuredNotificationTriggers";
 import { filterStructuredNotificationsByPreferences } from "../notificationChannelRouting";
@@ -358,6 +359,23 @@ export default function TenantApplicationStatusPage() {
       : executionWorkspace.executionState === "awaiting_execution_action"
       ? { color: "#1d4ed8", background: "#dbeafe", label: "Preparing to complete your lease" }
       : { color: "#64748b", background: "#e2e8f0", label: "Not ready for execution" };
+  const signingWorkspace = buildLeaseSigningWorkspaceState({
+    audience: "tenant",
+    executionWorkspace,
+    lease,
+  });
+  const signingTone =
+    signingWorkspace.signingState === "signed_or_completed"
+      ? { color: "#166534", background: "#dcfce7", label: "Signed" }
+      : signingWorkspace.signingState === "awaiting_tenant_signature"
+      ? { color: "#1d4ed8", background: "#dbeafe", label: "Awaiting your signature" }
+      : signingWorkspace.signingState === "awaiting_landlord_signature"
+      ? { color: "#7c3aed", background: "#ede9fe", label: "Awaiting landlord signature" }
+      : signingWorkspace.signingState === "signing_in_progress"
+      ? { color: "#0f766e", background: "#ccfbf1", label: "Signing in progress" }
+      : signingWorkspace.signingState === "ready_for_signing"
+      ? { color: "#166534", background: "#dcfce7", label: "Ready for signing" }
+      : { color: "#64748b", background: "#e2e8f0", label: "Not ready for signing" };
 
   return (
     <TenantSurfaceShell
@@ -960,6 +978,70 @@ export default function TenantApplicationStatusPage() {
                 No current blockers are visible in your tenant workspace for this handoff stage.
               </div>
             )}
+            <div style={{ fontWeight: 700, color: textTokens.primary }}>Next steps</div>
+            {executionWorkspace.nextSteps.map((step, index) => (
+              <div key={`${step}-${index}`} style={{ color: textTokens.secondary }}>
+                {step}
+              </div>
+            ))}
+          </div>
+        </div>
+      </TenantInfoCard>
+
+      <TenantInfoCard heading="Lease signing" accent="#7c3aed">
+        <div style={{ display: "grid", gap: spacing.sm }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontWeight: 800, color: textTokens.primary }}>{signingWorkspace.label}</div>
+              <div style={{ color: textTokens.secondary }}>{signingWorkspace.explanation}</div>
+            </div>
+            <div
+              style={{
+                padding: "6px 10px",
+                borderRadius: 999,
+                fontWeight: 700,
+                color: signingTone.color,
+                background: signingTone.background,
+              }}
+            >
+              {signingTone.label}
+            </div>
+          </div>
+
+          <div
+            style={{
+              border: "1px solid rgba(15,23,42,0.08)",
+              borderRadius: 12,
+              padding: "12px 14px",
+              display: "grid",
+              gap: 8,
+            }}
+          >
+            <div style={{ fontWeight: 700, color: textTokens.primary }}>Who is expected to act</div>
+            <div style={{ color: textTokens.secondary }}>{signingWorkspace.currentActorLabel}</div>
+          </div>
+
+          <div
+            style={{
+              border: "1px solid rgba(15,23,42,0.08)",
+              borderRadius: 12,
+              padding: "12px 14px",
+              display: "grid",
+              gap: 8,
+            }}
+          >
+            <div style={{ fontWeight: 700, color: textTokens.primary }}>Blockers</div>
+            {signingWorkspace.blockers.length ? (
+              signingWorkspace.blockers.map((item, index) => (
+                <div key={`${item}-${index}`} style={{ color: textTokens.secondary }}>
+                  {item}
+                </div>
+              ))
+            ) : (
+              <div style={{ color: textTokens.secondary }}>
+                No current signing blockers are visible in your tenant workspace.
+              </div>
+            )}
           </div>
 
           <div
@@ -972,23 +1054,20 @@ export default function TenantApplicationStatusPage() {
             }}
           >
             <div style={{ fontWeight: 700, color: textTokens.primary }}>Next steps</div>
-            {executionWorkspace.nextSteps.map((step, index) => (
+            {signingWorkspace.nextActions.map((step, index) => (
               <div key={`${step}-${index}`} style={{ color: textTokens.secondary }}>
                 {step}
               </div>
             ))}
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <Link to="/tenant/profile" style={{ fontWeight: 700 }}>
-                Review your profile
+              <Link to="/tenant/lease" style={{ fontWeight: 700 }}>
+                Review lease
+              </Link>
+              <Link to="/tenant/application" style={{ fontWeight: 700 }}>
+                Review application
               </Link>
               <Link to="/tenant/attachments" style={{ fontWeight: 700 }}>
                 Open documents
-              </Link>
-              <Link to="/tenant/access" style={{ fontWeight: 700 }}>
-                Review access
-              </Link>
-              <Link to="/tenant/lease" style={{ fontWeight: 700 }}>
-                Open lease details
               </Link>
             </div>
           </div>
