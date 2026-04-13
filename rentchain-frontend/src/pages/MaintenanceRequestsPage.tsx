@@ -15,6 +15,7 @@ import { getContractorProfileById, listContractorInvites } from "../api/workOrde
 import { colors, radius, spacing, text } from "../styles/tokens";
 import { buildMaintenanceLifecycleView, buildMaintenanceWorkspaceState } from "./maintenanceWorkspaceState";
 import { buildMaintenanceAssignmentRoutingView } from "./maintenanceAssignmentRoutingState";
+import { buildMaintenanceConfirmationAccessView } from "./maintenanceConfirmationAccessState";
 import {
   buildMaintenanceSchedulingAccessView,
   buildMaintenanceSchedulingCalendarEvents,
@@ -381,6 +382,10 @@ export default function MaintenanceRequestsPage() {
   );
   const selectedScheduling = React.useMemo(
     () => (selected ? buildMaintenanceSchedulingAccessView(selected, "landlord") : null),
+    [selected]
+  );
+  const selectedConfirmation = React.useMemo(
+    () => (selected ? buildMaintenanceConfirmationAccessView(selected, "landlord") : null),
     [selected]
   );
   const calendarEvents = React.useMemo(() => buildMaintenanceSchedulingCalendarEvents(items), [items]);
@@ -906,6 +911,60 @@ export default function MaintenanceRequestsPage() {
                         <Button variant="secondary" onClick={() => void saveScheduleAccess()} disabled={saving}>
                           {saving ? "Saving..." : "Save scheduling"}
                         </Button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {selectedConfirmation ? (
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: radius.md,
+                        padding: "12px 14px",
+                        background: colors.panel,
+                        display: "grid",
+                        gap: 10,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.primary }}>Confirmation / access</div>
+                      <div style={{ color: text.secondary }}>{selectedConfirmation.summary}</div>
+                      <div style={{ display: "grid", gap: spacing.sm, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+                        <div>
+                          <div style={{ color: text.muted, fontSize: 12 }}>Confirmation status</div>
+                          <div style={{ color: text.primary, fontWeight: 700, marginTop: 6 }}>
+                            {selectedConfirmation.confirmationLabel}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ color: text.muted, fontSize: 12 }}>Access</div>
+                          <div style={{ color: text.primary, fontWeight: 700, marginTop: 6 }}>
+                            {selectedConfirmation.accessLabel}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ color: text.muted, fontSize: 12 }}>Service readiness</div>
+                          <div style={{ color: text.primary, fontWeight: 700, marginTop: 6 }}>
+                            {selectedConfirmation.readinessLabel}
+                          </div>
+                        </div>
+                      </div>
+                      {selectedConfirmation.blockers.length ? (
+                        <div style={{ display: "grid", gap: 4 }}>
+                          <div style={{ fontWeight: 700, color: text.primary }}>Needs attention</div>
+                          {selectedConfirmation.blockers.map((item) => (
+                            <div key={item} style={{ color: text.secondary }}>
+                              {item}
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                      <div style={{ display: "grid", gap: 4 }}>
+                        <div style={{ fontWeight: 700, color: text.primary }}>Next steps</div>
+                        {selectedConfirmation.nextActions.map((item) => (
+                          <div key={item} style={{ color: text.secondary }}>
+                            {item}
+                          </div>
+                        ))}
                       </div>
                     </div>
                   ) : null}

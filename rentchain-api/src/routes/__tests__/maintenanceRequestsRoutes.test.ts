@@ -126,6 +126,9 @@ describe("maintenanceRequestsRoutes scheduling access", () => {
       status: "assigned",
       assignedContractorId: "contractor-1",
       assignedContractorName: "North Shore HVAC",
+      tenantConfirmationStatus: "confirmed",
+      tenantConfirmationUpdatedAt: 150,
+      accessAcknowledgedAt: 160,
       createdAt: 100,
       updatedAt: 200,
       statusHistory: [],
@@ -162,11 +165,14 @@ describe("maintenanceRequestsRoutes scheduling access", () => {
 
     const savedMaintenance = ensureCollection("maintenanceRequests").get("maint-1");
     expect(savedMaintenance?.status).toBe("scheduled");
+    expect(savedMaintenance?.tenantConfirmationStatus).toBeNull();
+    expect(savedMaintenance?.accessAcknowledgedAt).toBeNull();
     expect(savedMaintenance?.statusHistory).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ status: "scheduled" }),
         expect.objectContaining({ message: "Service window updated." }),
         expect.objectContaining({ message: "Access coordination marked as required." }),
+        expect.objectContaining({ message: "Tenant confirmation was reset because the service window changed." }),
       ])
     );
 

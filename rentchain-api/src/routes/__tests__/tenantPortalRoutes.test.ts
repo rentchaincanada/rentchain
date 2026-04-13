@@ -14,6 +14,19 @@ function clone(value: any) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function applyMerge(current: any, incoming: any) {
+  const next = { ...(current || {}) };
+  Object.entries(incoming || {}).forEach(([key, value]) => {
+    if (value && typeof value === "object" && (value as any).__op === "arrayUnion") {
+      const existing = Array.isArray(next[key]) ? next[key] : [];
+      next[key] = [...existing, ...(value as any).values.map((entry: any) => clone(entry))];
+      return;
+    }
+    next[key] = clone(value);
+  });
+  return next;
+}
+
 function queryCollection(name: string, filters: Array<{ field: string; op: string; value: any }>, limitCount?: number) {
   let docs = Array.from(ensureCollection(name).entries())
     .filter(([, data]) =>
@@ -46,7 +59,7 @@ const dbMock = {
         }),
         set: async (value: any, opts?: { merge?: boolean }) => {
           const current = ensureCollection(name).get(docId) || {};
-          ensureCollection(name).set(docId, opts?.merge ? { ...current, ...clone(value) } : clone(value));
+          ensureCollection(name).set(docId, opts?.merge ? applyMerge(current, value) : clone(value));
         },
       };
     },
@@ -63,6 +76,7 @@ vi.mock("../../config/firebase", () => ({
   db: dbMock,
   FieldValue: {
     serverTimestamp: () => "__server_timestamp__",
+    arrayUnion: (...values: any[]) => ({ __op: "arrayUnion", values }),
   },
 }));
 
@@ -169,6 +183,9 @@ describe("tenantPortalRoutes foundation", () => {
       serviceWindowStartAt: 300,
       serviceWindowEndAt: 600,
       accessRequired: true,
+      tenantConfirmationStatus: null,
+      tenantConfirmationUpdatedAt: null,
+      accessAcknowledgedAt: null,
       statusHistory: [
         {
           status: "submitted",
@@ -258,6 +275,7 @@ describe("tenantPortalRoutes foundation", () => {
     expect(res.body?.data?.maintenance?.[0]?.contractorStatus).toBe("assigned");
     expect(res.body?.data?.maintenance?.[0]?.serviceWindowStartAt).toBe(300);
     expect(res.body?.data?.maintenance?.[0]?.accessRequired).toBe(true);
+    expect(res.body?.data?.maintenance?.[0]?.tenantConfirmationStatus).toBeNull();
     expect(res.body?.data?.maintenance?.[0]?.statusHistory?.[0]?.message).toBe("Submitted from tenant workspace.");
     expect(res.body?.data?.maintenance?.[0]?.internalCost).toBeUndefined();
 
@@ -300,6 +318,56 @@ describe("tenantPortalRoutes foundation", () => {
 
     const eventDocs = Array.from(ensureCollection("event_log").values());
     expect(eventDocs.some((event) => event.event_type === "tenant_application_completion_viewed")).toBe(true);
+  });
+
+  it("lets the tenant confirm the service window and acknowledge access", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    ensureCollection("maintenanceRequests").set("maint-2", {
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      status: "scheduled",
+      priority: "NORMAL",
+      category: "GENERAL",
+      title: "Window repair",
+      description: "The latch is broken.",
+      serviceWindowStartAt: 1_000,
+      serviceWindowEndAt: 1_600,
+      accessRequired: true,
+      statusHistory: [],
+      createdAt: 100,
+      updatedAt: 200,
+    });
+
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/maintenance-requests/maint-2/confirmation",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+      body: {
+        confirmationStatus: "confirmed",
+        acknowledgeAccess: true,
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.tenantConfirmationStatus).toBe("confirmed");
+    expect(typeof res.body?.data?.tenantConfirmationUpdatedAt).toBe("number");
+    expect(typeof res.body?.data?.accessAcknowledgedAt).toBe("number");
+
+    const saved = ensureCollection("maintenanceRequests").get("maint-2");
+    expect(saved?.tenantConfirmationStatus).toBe("confirmed");
+    expect(saved?.statusHistory).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ message: "Tenant confirmed the scheduled service window." }),
+        expect.objectContaining({ message: "Tenant acknowledged the access requirement." }),
+      ])
+    );
   });
 
   it("rejects unauthorized application completion access", async () => {

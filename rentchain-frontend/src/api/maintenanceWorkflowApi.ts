@@ -3,6 +3,7 @@ import {
   createTenantWorkspaceMaintenance,
   getTenantWorkspaceMaintenance,
   listTenantWorkspaceMaintenance,
+  updateTenantWorkspaceMaintenanceConfirmation,
 } from "./tenantPortal";
 
 export type MaintenanceWorkflowStatus =
@@ -36,6 +37,9 @@ export type MaintenanceWorkflowItem = {
   serviceWindowStartAt?: number | null;
   serviceWindowEndAt?: number | null;
   accessRequired?: boolean | null;
+  tenantConfirmationStatus?: "confirmed" | "needs_schedule_change" | null;
+  tenantConfirmationUpdatedAt?: number | null;
+  accessAcknowledgedAt?: number | null;
   landlordNote?: string | null;
   createdAt: number;
   updatedAt: number;
@@ -108,6 +112,13 @@ export async function listTenantMaintenance() {
     serviceWindowStartAt: typeof item.serviceWindowStartAt === "number" ? item.serviceWindowStartAt : null,
     serviceWindowEndAt: typeof item.serviceWindowEndAt === "number" ? item.serviceWindowEndAt : null,
     accessRequired: typeof item.accessRequired === "boolean" ? item.accessRequired : null,
+    tenantConfirmationStatus:
+      item.tenantConfirmationStatus === "confirmed" || item.tenantConfirmationStatus === "needs_schedule_change"
+        ? item.tenantConfirmationStatus
+        : null,
+    tenantConfirmationUpdatedAt:
+      typeof item.tenantConfirmationUpdatedAt === "number" ? item.tenantConfirmationUpdatedAt : null,
+    accessAcknowledgedAt: typeof item.accessAcknowledgedAt === "number" ? item.accessAcknowledgedAt : null,
     createdAt: item.createdAt || Date.now(),
     updatedAt: item.updatedAt || item.createdAt || Date.now(),
     statusHistory: Array.isArray(item.statusHistory)
@@ -141,6 +152,59 @@ export async function getTenantMaintenance(id: string) {
     serviceWindowStartAt: typeof item?.serviceWindowStartAt === "number" ? item.serviceWindowStartAt : null,
     serviceWindowEndAt: typeof item?.serviceWindowEndAt === "number" ? item.serviceWindowEndAt : null,
     accessRequired: typeof item?.accessRequired === "boolean" ? item.accessRequired : null,
+    tenantConfirmationStatus:
+      item?.tenantConfirmationStatus === "confirmed" || item?.tenantConfirmationStatus === "needs_schedule_change"
+        ? item.tenantConfirmationStatus
+        : null,
+    tenantConfirmationUpdatedAt:
+      typeof item?.tenantConfirmationUpdatedAt === "number" ? item.tenantConfirmationUpdatedAt : null,
+    accessAcknowledgedAt: typeof item?.accessAcknowledgedAt === "number" ? item.accessAcknowledgedAt : null,
+    createdAt: item?.createdAt || Date.now(),
+    updatedAt: item?.updatedAt || item?.createdAt || Date.now(),
+    statusHistory: Array.isArray(item?.statusHistory)
+      ? item.statusHistory.map((entry) => ({
+          status: String(entry?.status || ""),
+          actorRole: String(entry?.actorRole || ""),
+          actorId: entry?.actorId ? String(entry.actorId) : null,
+          message: entry?.message ? String(entry.message) : null,
+          createdAt: typeof entry?.createdAt === "number" ? entry.createdAt : undefined,
+        }))
+      : [],
+  };
+  return { ok: true, item: mapped, data: mapped };
+}
+
+export async function updateTenantMaintenanceConfirmation(
+  id: string,
+  payload: {
+    confirmationStatus?: "confirmed" | "needs_schedule_change";
+    acknowledgeAccess?: boolean;
+  }
+) {
+  const item = await updateTenantWorkspaceMaintenanceConfirmation(id, payload);
+  const mapped: MaintenanceWorkflowItem = {
+    id: item?.requestId || id,
+    tenantId: "",
+    landlordId: "",
+    propertyId: null,
+    unitId: null,
+    title: item?.title || "Maintenance request",
+    description: item?.summary || "",
+    category: String(item?.category || "GENERAL"),
+    priority: String(item?.priority || "normal").toLowerCase() as "low" | "normal" | "urgent",
+    status: String(item?.status || "submitted").toLowerCase() as MaintenanceWorkflowStatus,
+    assignedContractorName: item?.assignedContractorName || null,
+    contractorStatus: item?.contractorStatus || null,
+    serviceWindowStartAt: typeof item?.serviceWindowStartAt === "number" ? item.serviceWindowStartAt : null,
+    serviceWindowEndAt: typeof item?.serviceWindowEndAt === "number" ? item.serviceWindowEndAt : null,
+    accessRequired: typeof item?.accessRequired === "boolean" ? item.accessRequired : null,
+    tenantConfirmationStatus:
+      item?.tenantConfirmationStatus === "confirmed" || item?.tenantConfirmationStatus === "needs_schedule_change"
+        ? item.tenantConfirmationStatus
+        : null,
+    tenantConfirmationUpdatedAt:
+      typeof item?.tenantConfirmationUpdatedAt === "number" ? item.tenantConfirmationUpdatedAt : null,
+    accessAcknowledgedAt: typeof item?.accessAcknowledgedAt === "number" ? item.accessAcknowledgedAt : null,
     createdAt: item?.createdAt || Date.now(),
     updatedAt: item?.updatedAt || item?.createdAt || Date.now(),
     statusHistory: Array.isArray(item?.statusHistory)

@@ -4931,13 +4931,7 @@ router.get("/maintenance-requests", requireTenant, async (req: any, res) => {
     const items = snap.docs.map((d) => {
       const data = (d.data() as any) || {};
       return {
-        id: d.id,
-        status: data.status ?? "NEW",
-        priority: data.priority ?? "NORMAL",
-        category: data.category ?? "GENERAL",
-        title: data.title ?? "",
-        createdAt: toMillis(data.createdAt),
-        updatedAt: toMillis(data.updatedAt),
+        ...projectTenantMaintenance(d.id, data),
       };
     });
     items.sort((a, b) => (Number(b.updatedAt || 0) || 0) - (Number(a.updatedAt || 0) || 0));
@@ -4959,13 +4953,7 @@ router.get("/maintenance", requireTenant, async (req: any, res) => {
     const items = snap.docs.map((d) => {
       const data = (d.data() as any) || {};
       return {
-        id: d.id,
-        status: data.status ?? "NEW",
-        priority: data.priority ?? "NORMAL",
-        category: data.category ?? "GENERAL",
-        title: data.title ?? "",
-        createdAt: toMillis(data.createdAt),
-        updatedAt: toMillis(data.updatedAt),
+        ...projectTenantMaintenance(d.id, data),
       };
     });
     items.sort((a, b) => (Number(b.updatedAt || 0) || 0) - (Number(a.updatedAt || 0) || 0));
@@ -4995,6 +4983,7 @@ router.get("/maintenance-requests/:id", requireTenant, async (req: any, res) => 
     }
     const payload = {
       id: doc.id,
+      requestId: doc.id,
       landlordId: data.landlordId ?? null,
       tenantId: data.tenantId ?? null,
       propertyId: data.propertyId ?? null,
@@ -5009,6 +4998,12 @@ router.get("/maintenance-requests/:id", requireTenant, async (req: any, res) => 
       serviceWindowStartAt: toMillis(data.serviceWindowStartAt),
       serviceWindowEndAt: toMillis(data.serviceWindowEndAt),
       accessRequired: typeof data.accessRequired === "boolean" ? data.accessRequired : null,
+      tenantConfirmationStatus:
+        data.tenantConfirmationStatus === "confirmed" || data.tenantConfirmationStatus === "needs_schedule_change"
+          ? data.tenantConfirmationStatus
+          : null,
+      tenantConfirmationUpdatedAt: toMillis(data.tenantConfirmationUpdatedAt),
+      accessAcknowledgedAt: toMillis(data.accessAcknowledgedAt),
       tenantContact: data.tenantContact ?? null,
       createdAt: toMillis(data.createdAt),
       updatedAt: toMillis(data.updatedAt),
@@ -5031,6 +5026,108 @@ router.get("/maintenance-requests/:id", requireTenant, async (req: any, res) => 
       err,
     });
     return res.status(500).json({ ok: false, error: "TENANT_MAINT_REQUEST_READ_FAILED" });
+  }
+});
+
+router.post("/maintenance-requests/:id/confirmation", requireTenant, async (req: any, res) => {
+  try {
+    const tenantId = String(req.user?.tenantId || "").trim();
+    const id = String(req.params?.id || "").trim();
+    if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+    const docRef = db.collection("maintenanceRequests").doc(id);
+    const snap = await docRef.get();
+    if (!snap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+    const data = (snap.data() as any) || {};
+    if (String(data.tenantId || "").trim() !== tenantId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const confirmationStatus =
+      req.body?.confirmationStatus === undefined
+        ? undefined
+        : req.body?.confirmationStatus === "confirmed" || req.body?.confirmationStatus === "needs_schedule_change"
+        ? req.body.confirmationStatus
+        : null;
+    if (req.body?.confirmationStatus !== undefined && confirmationStatus === null) {
+      return res.status(400).json({ ok: false, error: "INVALID_CONFIRMATION_STATUS" });
+    }
+
+    const acknowledgeAccess = req.body?.acknowledgeAccess === true;
+    const serviceWindowStartAt = toMillis(data.serviceWindowStartAt);
+    const accessRequired = data.accessRequired === true;
+    if (confirmationStatus && !serviceWindowStartAt) {
+      return res.status(400).json({ ok: false, error: "SERVICE_WINDOW_REQUIRED" });
+    }
+    if (acknowledgeAccess && !accessRequired) {
+      return res.status(400).json({ ok: false, error: "ACCESS_ACKNOWLEDGEMENT_NOT_REQUIRED" });
+    }
+    if (confirmationStatus === undefined && !acknowledgeAccess) {
+      return res.status(400).json({ ok: false, error: "NO_CONFIRMATION_UPDATE" });
+    }
+
+    const now = Date.now();
+    const update: Record<string, unknown> = {
+      updatedAt: now,
+      lastUpdatedBy: "TENANT",
+    };
+    if (confirmationStatus !== undefined) {
+      update.tenantConfirmationStatus = confirmationStatus;
+      update.tenantConfirmationUpdatedAt = now;
+    }
+    if (acknowledgeAccess) {
+      update.accessAcknowledgedAt = now;
+    }
+
+    await docRef.set(update, { merge: true });
+
+    const historyEntries: Array<{ status: string; actorRole: string; actorId: string; message: string; createdAt: number }> = [];
+    if (confirmationStatus === "confirmed") {
+      historyEntries.push({
+        status: String(data.status || "scheduled"),
+        actorRole: "tenant",
+        actorId: tenantId,
+        message: "Tenant confirmed the scheduled service window.",
+        createdAt: now,
+      });
+    } else if (confirmationStatus === "needs_schedule_change") {
+      historyEntries.push({
+        status: String(data.status || "scheduled"),
+        actorRole: "tenant",
+        actorId: tenantId,
+        message: "Tenant requested a schedule change.",
+        createdAt: now,
+      });
+    }
+    if (acknowledgeAccess) {
+      historyEntries.push({
+        status: String(data.status || "scheduled"),
+        actorRole: "tenant",
+        actorId: tenantId,
+        message: "Tenant acknowledged the access requirement.",
+        createdAt: now,
+      });
+    }
+    if (historyEntries.length) {
+      await docRef.set({ statusHistory: FieldValue.arrayUnion(...historyEntries) }, { merge: true });
+    }
+
+    const refreshed = await docRef.get();
+    return res.json({
+      ok: true,
+      data: {
+        ...projectTenantMaintenance(refreshed.id, refreshed.data() || {}),
+      },
+    });
+  } catch (err) {
+    console.error("[tenant/maintenance-requests/:id/confirmation] update failed", {
+      tenantId: req.user?.tenantId,
+      id: req.params?.id,
+      err,
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_MAINT_REQUEST_CONFIRMATION_FAILED" });
   }
 });
 

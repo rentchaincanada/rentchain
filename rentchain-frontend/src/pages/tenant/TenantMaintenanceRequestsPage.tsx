@@ -5,6 +5,7 @@ import { listTenantMaintenance, type MaintenanceWorkflowItem } from "../../api/m
 import { colors, spacing, text as textTokens } from "../../styles/tokens";
 import { buildMaintenanceWorkspaceState } from "../maintenanceWorkspaceState";
 import { buildMaintenanceAssignmentRoutingView } from "../maintenanceAssignmentRoutingState";
+import { buildMaintenanceConfirmationAccessView } from "../maintenanceConfirmationAccessState";
 import { buildMaintenanceSchedulingAccessView } from "../maintenanceSchedulingAccessState";
 import {
   TenantEmptyState,
@@ -134,6 +135,7 @@ export default function TenantMaintenanceRequestsPage() {
               const requestView = workspaceView.requestViews.find((entry) => entry.id === item.id);
               const assignmentView = buildMaintenanceAssignmentRoutingView(item, "tenant");
               const schedulingView = buildMaintenanceSchedulingAccessView(item, "tenant");
+              const confirmationView = buildMaintenanceConfirmationAccessView(item, "tenant");
               return (
                 <TenantInfoCard
                   key={item.id}
@@ -168,6 +170,21 @@ export default function TenantMaintenanceRequestsPage() {
                     </div>
                     <div style={{ color: textTokens.secondary }}>
                       Upcoming service window: {schedulingView.serviceWindowSummary}
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      border: "1px solid rgba(15,23,42,0.08)",
+                      borderRadius: 12,
+                      padding: "12px 14px",
+                      display: "grid",
+                      gap: 8,
+                    }}
+                  >
+                    <div style={{ color: textTokens.primary, fontWeight: 700 }}>Confirmation / access</div>
+                    <div style={{ color: textTokens.secondary }}>{confirmationView.summary}</div>
+                    <div style={{ color: textTokens.secondary }}>
+                      {`${confirmationView.tenantVisibleState} • ${confirmationView.accessLabel}`}
                     </div>
                   </div>
                   {requestView?.nextSteps.length ? (
