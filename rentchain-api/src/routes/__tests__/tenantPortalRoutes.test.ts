@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const getSignedDownloadUrlMock = vi.fn();
+
 const collections = new Map<string, Map<string, any>>();
 
 function ensureCollection(name: string) {
@@ -90,6 +92,10 @@ vi.mock("../../middleware/authMiddleware", () => ({
   },
 }));
 
+vi.mock("../../lib/gcsSignedUrl", () => ({
+  getSignedDownloadUrl: getSignedDownloadUrlMock,
+}));
+
 describe("tenantPortalRoutes foundation", () => {
   async function invokeRouter(router: any, options: {
     method: string;
@@ -133,6 +139,9 @@ describe("tenantPortalRoutes foundation", () => {
 
   beforeEach(() => {
     collections.clear();
+    process.env.GCS_UPLOAD_BUCKET = "test-bucket";
+    getSignedDownloadUrlMock.mockReset();
+    getSignedDownloadUrlMock.mockImplementation(async ({ path }: { path: string }) => `https://signed.example/${path}`);
     ensureCollection("properties").set("prop-1", {
       rc_prop_id: "rc-prop-1",
       street1: "123 Main St",
@@ -197,6 +206,35 @@ describe("tenantPortalRoutes foundation", () => {
       createdAt: 100,
       updatedAt: 200,
       internalCost: 999,
+    });
+    ensureCollection("workOrders").set("maintenance_maint-1", {
+      maintenanceRequestId: "maint-1",
+      evidence: [
+        {
+          id: "evidence-tenant",
+          storagePath: "work-orders/evidence/maintenance_maint-1/tenant.jpg",
+          filename: "tenant.jpg",
+          contentType: "image/jpeg",
+          uploadedAt: 250,
+          uploadedByActorRole: "landlord",
+          uploadedByActorId: "landlord-1",
+          evidenceType: "completion",
+          caption: "Tenant-safe completion photo",
+          visibility: "tenant_safe",
+        },
+        {
+          id: "evidence-internal",
+          storagePath: "work-orders/evidence/maintenance_maint-1/internal.jpg",
+          filename: "internal.jpg",
+          contentType: "image/jpeg",
+          uploadedAt: 260,
+          uploadedByActorRole: "landlord",
+          uploadedByActorId: "landlord-1",
+          evidenceType: "damage",
+          caption: "Internal review photo",
+          visibility: "internal",
+        },
+      ],
     });
     ensureCollection("tenancy_invites").set("invite-1", {
       token_hash: "invite-1",
@@ -368,6 +406,32 @@ describe("tenantPortalRoutes foundation", () => {
         expect.objectContaining({ message: "Tenant acknowledged the access requirement." }),
       ])
     );
+  });
+
+  it("returns only tenant-safe maintenance evidence in the detail payload", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/maintenance-requests/maint-1",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.evidence).toEqual([
+      expect.objectContaining({
+        id: "evidence-tenant",
+        caption: "Tenant-safe completion photo",
+        visibility: "tenant_safe",
+      }),
+    ]);
+    expect(JSON.stringify(res.body?.data?.evidence || [])).not.toMatch(/internal review/i);
   });
 
   it("rejects unauthorized application completion access", async () => {

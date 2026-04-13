@@ -50,6 +50,7 @@ export type MaintenanceWorkflowItem = {
   reopenedByActorId?: string | null;
   reopenedByActorRole?: "landlord" | "admin" | null;
   reopenReason?: string | null;
+  evidence?: WorkOrderEvidenceItem[];
   serviceWindowStartAt?: number | null;
   serviceWindowEndAt?: number | null;
   accessRequired?: boolean | null;
@@ -66,6 +67,21 @@ export type MaintenanceWorkflowItem = {
     message?: string | null;
     createdAt?: number;
   }>;
+};
+
+export type WorkOrderEvidenceType = "before" | "during" | "after" | "completion" | "inspection" | "damage" | "other";
+export type WorkOrderEvidenceVisibility = "internal" | "landlord_contractor" | "tenant_safe";
+export type WorkOrderEvidenceItem = {
+  id: string;
+  url?: string | null;
+  filename?: string | null;
+  contentType?: string | null;
+  uploadedAt: number;
+  uploadedByActorRole: "contractor" | "landlord" | "admin";
+  uploadedByActorId: string;
+  evidenceType: WorkOrderEvidenceType;
+  caption?: string | null;
+  visibility: WorkOrderEvidenceVisibility;
 };
 
 export type LandlordMaintenanceContractor = {
@@ -162,6 +178,7 @@ export async function listTenantMaintenance() {
         ? (item as any).reopenedByActorRole
         : null,
     reopenReason: typeof (item as any).reopenReason === "string" ? (item as any).reopenReason : null,
+    evidence: Array.isArray((item as any).evidence) ? (item as any).evidence : [],
     accessRequired: typeof item.accessRequired === "boolean" ? item.accessRequired : null,
     tenantConfirmationStatus:
       item.tenantConfirmationStatus === "confirmed" || item.tenantConfirmationStatus === "needs_schedule_change"
@@ -240,6 +257,7 @@ export async function getTenantMaintenance(id: string) {
         ? (item as any).reopenedByActorRole
         : null,
     reopenReason: typeof (item as any)?.reopenReason === "string" ? (item as any).reopenReason : null,
+    evidence: Array.isArray((item as any)?.evidence) ? (item as any).evidence : [],
     accessRequired: typeof item?.accessRequired === "boolean" ? item.accessRequired : null,
     tenantConfirmationStatus:
       item?.tenantConfirmationStatus === "confirmed" || item?.tenantConfirmationStatus === "needs_schedule_change"
@@ -378,4 +396,27 @@ export async function patchContractorMaintenanceJobStatus(
       body: payload,
     }
   );
+}
+
+export async function uploadContractorMaintenanceEvidence(
+  maintenanceRequestId: string,
+  payload: {
+    file: File;
+    evidenceType: Extract<WorkOrderEvidenceType, "before" | "during" | "after" | "completion" | "other">;
+    caption?: string;
+  }
+) {
+  const form = new FormData();
+  form.append("file", payload.file);
+  form.append("evidenceType", payload.evidenceType);
+  if (payload.caption) form.append("caption", payload.caption);
+  const res = await apiFetch<{ ok: boolean; item: MaintenanceWorkflowItem }>(
+    `/contractor/jobs/${encodeURIComponent(maintenanceRequestId)}/evidence`,
+    {
+      method: "POST",
+      body: form,
+    }
+  );
+  if (!res?.ok || !res.item) throw new Error("Failed to upload maintenance evidence");
+  return res.item;
 }

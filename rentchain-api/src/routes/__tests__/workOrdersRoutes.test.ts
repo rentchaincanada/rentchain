@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const uploadBufferToGcsMock = vi.fn();
+const getSignedDownloadUrlMock = vi.fn();
+
 const collections = new Map<string, Map<string, any>>();
 
 function ensureCollection(name: string) {
@@ -69,6 +72,26 @@ vi.mock("../../services/emailService", () => ({
   sendEmail: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("multer", () => {
+  const factory = Object.assign(
+    () => ({
+      single: () => (req: any, _res: any, next: any) => next(),
+    }),
+    {
+      memoryStorage: () => ({}),
+    }
+  );
+  return { default: factory };
+});
+
+vi.mock("../../lib/gcs", () => ({
+  uploadBufferToGcs: uploadBufferToGcsMock,
+}));
+
+vi.mock("../../lib/gcsSignedUrl", () => ({
+  getSignedDownloadUrl: getSignedDownloadUrlMock,
+}));
+
 describe("workOrdersRoutes execution completion", () => {
   async function invokeRouter(
     router: any,
@@ -76,6 +99,7 @@ describe("workOrdersRoutes execution completion", () => {
       method: string;
       url: string;
       body?: any;
+      file?: any;
       headers?: Record<string, string>;
     }
   ) {
@@ -86,6 +110,7 @@ describe("workOrdersRoutes execution completion", () => {
         originalUrl: options.url,
         path: options.url,
         body: options.body ?? {},
+        file: options.file,
         headers: options.headers ?? {},
       };
       const res: any = {
@@ -112,6 +137,9 @@ describe("workOrdersRoutes execution completion", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     collections.clear();
+    process.env.GCS_UPLOAD_BUCKET = "test-bucket";
+    uploadBufferToGcsMock.mockResolvedValue(undefined);
+    getSignedDownloadUrlMock.mockImplementation(async ({ path }: { path: string }) => `https://signed.example/${path}`);
     ensureCollection("maintenanceRequests").set("maint-1", {
       id: "maint-1",
       landlordId: "landlord-1",
@@ -237,5 +265,89 @@ describe("workOrdersRoutes execution completion", () => {
     const savedWorkOrder = ensureCollection("workOrders").get("wo-1");
     expect(savedWorkOrder?.reopenReason).toMatch(/Heating issue still present/i);
     expect(savedWorkOrder?.executionBlockedReason).toMatch(/Heating issue still present/i);
+  });
+
+  it("allows a landlord to upload evidence and update its visibility", async () => {
+    const router = (await import("../workOrdersRoutes")).default;
+
+    const uploadRes = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/work-orders/wo-1/evidence",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "landlord-1",
+          role: "landlord",
+          landlordId: "landlord-1",
+        }),
+      },
+      body: {
+        evidenceType: "inspection",
+        caption: "Inspection proof",
+        visibility: "internal",
+      },
+      file: {
+        originalname: "inspection.jpg",
+        mimetype: "image/jpeg",
+        buffer: Buffer.from("photo"),
+      },
+    });
+
+    expect(uploadRes.status).toBe(201);
+    expect(uploadRes.body?.item?.evidence?.[0]?.caption).toBe("Inspection proof");
+    expect(uploadBufferToGcsMock).toHaveBeenCalled();
+
+    const savedWorkOrder = ensureCollection("workOrders").get("wo-1");
+    const savedEvidenceId = savedWorkOrder?.evidence?.[0]?.id;
+    expect(savedEvidenceId).toBeTruthy();
+    expect(Array.from(ensureCollection("workOrderUpdates").values())).toEqual(
+      expect.arrayContaining([expect.objectContaining({ updateType: "photo" })])
+    );
+
+    const patchRes = await invokeRouter(router, {
+      method: "PATCH",
+      url: `/landlord/work-orders/wo-1/evidence/${savedEvidenceId}`,
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "landlord-1",
+          role: "landlord",
+          landlordId: "landlord-1",
+        }),
+      },
+      body: {
+        visibility: "tenant_safe",
+        caption: "Tenant-safe proof",
+      },
+    });
+
+    expect(patchRes.status).toBe(200);
+    expect(patchRes.body?.item?.evidence?.[0]?.visibility).toBe("tenant_safe");
+  });
+
+  it("rejects unsupported evidence file types", async () => {
+    const router = (await import("../workOrdersRoutes")).default;
+
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/work-orders/wo-1/evidence",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "landlord-1",
+          role: "landlord",
+          landlordId: "landlord-1",
+        }),
+      },
+      body: {
+        evidenceType: "inspection",
+        visibility: "internal",
+      },
+      file: {
+        originalname: "notes.txt",
+        mimetype: "text/plain",
+        buffer: Buffer.from("hello"),
+      },
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body?.error).toBe("UNSUPPORTED_FILE_TYPE");
   });
 });

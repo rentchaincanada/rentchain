@@ -342,6 +342,53 @@ export default function TenantMaintenanceRequestDetailPage() {
                   ) : null}
                 </div>
               ) : null}
+              {Array.isArray(data.evidence) && data.evidence.length ? (
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: radius.md,
+                    padding: "12px 14px",
+                    background: colors.panel,
+                    display: "grid",
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ fontWeight: 800, color: textTokens.primary }}>Completion photos</div>
+                  <div style={{ color: textTokens.secondary }}>
+                    These are the tenant-safe photos shared with this maintenance update.
+                  </div>
+                  <div style={{ display: "grid", gap: 10 }}>
+                    {data.evidence.map((item) => (
+                      <div
+                        key={item.id}
+                        style={{
+                          border: `1px solid ${colors.border}`,
+                          borderRadius: radius.md,
+                          padding: "10px",
+                          background: "#fff",
+                          display: "grid",
+                          gap: 8,
+                        }}
+                      >
+                        {item.url ? (
+                          <img
+                            src={item.url}
+                            alt={item.caption || "Maintenance evidence photo"}
+                            style={{ width: "100%", maxHeight: 240, objectFit: "cover", borderRadius: radius.md }}
+                          />
+                        ) : null}
+                        <div style={{ color: textTokens.primary, fontWeight: 700 }}>
+                          {String(item.evidenceType || "completion").replace(/_/g, " ")}
+                        </div>
+                        <div style={{ color: textTokens.muted, fontSize: "0.85rem" }}>
+                          Shared {fmtDate(item.uploadedAt)}
+                        </div>
+                        {item.caption ? <div style={{ color: textTokens.secondary }}>{item.caption}</div> : null}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
               <div style={{ display: "grid", gap: 8, marginTop: spacing.xs }}>
                 <div style={{ fontWeight: 700, color: textTokens.primary }}>Status timeline</div>
                 {Array.isArray(data.statusHistory) && data.statusHistory.length > 0 ? (

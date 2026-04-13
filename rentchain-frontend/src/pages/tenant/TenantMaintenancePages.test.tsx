@@ -97,6 +97,18 @@ describe("tenant maintenance pages", () => {
         serviceWindowStartAt: Date.UTC(2026, 3, 15, 13, 0),
         serviceWindowEndAt: Date.UTC(2026, 3, 15, 15, 0),
         accessRequired: true,
+        evidence: [
+          {
+            id: "evidence-1",
+            url: "https://example.com/completion.jpg",
+            uploadedAt: 250,
+            uploadedByActorRole: "landlord",
+            uploadedByActorId: "landlord-1",
+            evidenceType: "completion",
+            caption: "Heat restored",
+            visibility: "tenant_safe",
+          },
+        ],
         createdAt: 100,
         updatedAt: 200,
         statusHistory: [
@@ -127,6 +139,8 @@ describe("tenant maintenance pages", () => {
     expect(screen.getByRole("button", { name: /Confirm service window/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Request schedule change/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Acknowledge access/i })).toBeInTheDocument();
+    expect(screen.getByText(/Completion photos/i)).toBeInTheDocument();
+    expect(screen.getByText(/Heat restored/i)).toBeInTheDocument();
     expect(screen.getByText(/Status timeline/i)).toBeInTheDocument();
     expect(screen.getByText(/Technician is on site/i)).toBeInTheDocument();
   });

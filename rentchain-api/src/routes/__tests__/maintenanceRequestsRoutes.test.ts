@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const uploadBufferToGcsMock = vi.fn();
+const getSignedDownloadUrlMock = vi.fn();
+
 const collections = new Map<string, Map<string, any>>();
 
 function ensureCollection(name: string) {
@@ -73,11 +76,32 @@ vi.mock("../../services/emailService", () => ({
   sendEmail: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("multer", () => {
+  const factory = Object.assign(
+    () => ({
+      single: () => (req: any, _res: any, next: any) => next(),
+    }),
+    {
+      memoryStorage: () => ({}),
+    }
+  );
+  return { default: factory };
+});
+
+vi.mock("../../lib/gcs", () => ({
+  uploadBufferToGcs: uploadBufferToGcsMock,
+}));
+
+vi.mock("../../lib/gcsSignedUrl", () => ({
+  getSignedDownloadUrl: getSignedDownloadUrlMock,
+}));
+
 describe("maintenanceRequestsRoutes scheduling access", () => {
   async function invokeRouter(router: any, options: {
     method: string;
     url: string;
     body?: any;
+    file?: any;
     headers?: Record<string, string>;
   }) {
     return await new Promise<{ status: number; body: any }>((resolve, reject) => {
@@ -87,6 +111,7 @@ describe("maintenanceRequestsRoutes scheduling access", () => {
         originalUrl: options.url,
         path: options.url,
         body: options.body ?? {},
+        file: options.file,
         headers: options.headers ?? {},
       };
       const res: any = {
@@ -113,6 +138,9 @@ describe("maintenanceRequestsRoutes scheduling access", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     collections.clear();
+    process.env.GCS_UPLOAD_BUCKET = "test-bucket";
+    uploadBufferToGcsMock.mockResolvedValue(undefined);
+    getSignedDownloadUrlMock.mockImplementation(async ({ path }: { path: string }) => `https://signed.example/${path}`);
     ensureCollection("maintenanceRequests").set("maint-1", {
       id: "maint-1",
       landlordId: "landlord-1",
@@ -300,5 +328,91 @@ describe("maintenanceRequestsRoutes scheduling access", () => {
     expect(savedWorkOrder?.completionSummary).toMatch(/Replaced the thermostat/i);
     expect(savedWorkOrder?.completedByActorRole).toBe("contractor");
     expect(savedWorkOrder?.completedByActorId).toBe("contractor-1");
+  });
+
+  it("allows an assigned contractor to upload evidence for their job", async () => {
+    const router = (await import("../maintenanceRequestsRoutes")).default;
+
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/contractor/jobs/maint-1/evidence",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "contractor-1",
+          role: "contractor",
+        }),
+      },
+      body: {
+        evidenceType: "during",
+        caption: "Valve replacement in progress",
+      },
+      file: {
+        originalname: "during.jpg",
+        mimetype: "image/jpeg",
+        buffer: Buffer.from("photo"),
+      },
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body?.item?.evidence?.[0]?.caption).toBe("Valve replacement in progress");
+
+    const savedWorkOrder = ensureCollection("workOrders").get("maintenance_maint-1");
+    expect(savedWorkOrder?.evidence?.[0]?.visibility).toBe("landlord_contractor");
+  });
+
+  it("rejects contractor evidence uploads for unassigned jobs", async () => {
+    const router = (await import("../maintenanceRequestsRoutes")).default;
+    ensureCollection("maintenanceRequests").set("maint-1", {
+      ...ensureCollection("maintenanceRequests").get("maint-1"),
+      assignedContractorId: "contractor-2",
+    });
+
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/contractor/jobs/maint-1/evidence",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "contractor-1",
+          role: "contractor",
+        }),
+      },
+      body: {
+        evidenceType: "during",
+      },
+      file: {
+        originalname: "during.jpg",
+        mimetype: "image/jpeg",
+        buffer: Buffer.from("photo"),
+      },
+    });
+
+    expect(res.status).toBe(403);
+    expect(res.body?.error).toBe("FORBIDDEN");
+  });
+
+  it("rejects unsupported contractor evidence file types", async () => {
+    const router = (await import("../maintenanceRequestsRoutes")).default;
+
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/contractor/jobs/maint-1/evidence",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "contractor-1",
+          role: "contractor",
+        }),
+      },
+      body: {
+        evidenceType: "during",
+      },
+      file: {
+        originalname: "during.txt",
+        mimetype: "text/plain",
+        buffer: Buffer.from("photo"),
+      },
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body?.error).toBe("UNSUPPORTED_FILE_TYPE");
   });
 });

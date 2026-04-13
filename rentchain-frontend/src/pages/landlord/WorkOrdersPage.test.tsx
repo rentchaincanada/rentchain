@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import WorkOrdersPage from "./WorkOrdersPage";
@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   patchWorkOrder: vi.fn(),
   confirmWorkOrderCompletion: vi.fn(),
   reopenWorkOrder: vi.fn(),
+  uploadWorkOrderEvidence: vi.fn(),
+  updateWorkOrderEvidence: vi.fn(),
   addWorkOrderUpdate: vi.fn(),
   getContractorProfileById: vi.fn(),
   fetchProperties: vi.fn(),
@@ -32,6 +34,8 @@ vi.mock("../../api/workOrdersApi", () => ({
   listWorkOrders: mocks.listWorkOrders,
   patchWorkOrder: mocks.patchWorkOrder,
   reopenWorkOrder: mocks.reopenWorkOrder,
+  updateWorkOrderEvidence: mocks.updateWorkOrderEvidence,
+  uploadWorkOrderEvidence: mocks.uploadWorkOrderEvidence,
 }));
 
 vi.mock("../../api/propertiesApi", () => ({
@@ -53,6 +57,7 @@ vi.mock("@/components/billing/LockedFeature", () => ({
 
 describe("WorkOrdersPage", () => {
   beforeEach(() => {
+    cleanup();
     Object.defineProperty(window, "matchMedia", {
       writable: true,
       value: vi.fn().mockImplementation(() => ({
@@ -70,6 +75,8 @@ describe("WorkOrdersPage", () => {
     mocks.patchWorkOrder.mockReset();
     mocks.confirmWorkOrderCompletion.mockReset();
     mocks.reopenWorkOrder.mockReset();
+    mocks.uploadWorkOrderEvidence.mockReset();
+    mocks.updateWorkOrderEvidence.mockReset();
     mocks.addWorkOrderUpdate.mockReset();
     mocks.getContractorProfileById.mockReset();
     mocks.fetchProperties.mockReset();
@@ -208,6 +215,126 @@ describe("WorkOrdersPage", () => {
       expect(mocks.reopenWorkOrder).toHaveBeenCalledWith("wo-1", {
         reason: "Heat output is still inconsistent.",
         status: "blocked",
+      });
+    });
+  });
+
+  it("uploads evidence and lets the landlord mark it tenant-safe", async () => {
+    mocks.canUseWorkOrders = true;
+    const baseItem = {
+      id: "wo-2",
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      title: "Hallway repaint",
+      description: "Repaint the hallway after drywall patching.",
+      category: "Painting",
+      priority: "medium",
+      status: "in_progress",
+      visibility: "private",
+      budgetMinCents: null,
+      budgetMaxCents: null,
+      assignedContractorId: "contractor-1",
+      invitedContractorIds: [],
+      acceptedAtMs: 10,
+      startedAtMs: 20,
+      completedAtMs: null,
+      scheduledFor: 15,
+      serviceStartedAt: 20,
+      serviceCompletedAt: null,
+      completionSummary: null,
+      completionOutcome: null,
+      completedByActorRole: null,
+      completionConfirmedByLandlordAt: null,
+      completionConfirmedByLandlordBy: null,
+      reopenedAt: null,
+      reopenedByActorId: null,
+      reopenedByActorRole: null,
+      reopenReason: null,
+      executionBlockedReason: null,
+      evidence: [
+        {
+          id: "evidence-1",
+          url: "https://example.com/evidence-1.jpg",
+          filename: "before.jpg",
+          contentType: "image/jpeg",
+          uploadedAt: 35,
+          uploadedByActorRole: "contractor",
+          uploadedByActorId: "contractor-1",
+          evidenceType: "before",
+          caption: "Before repainting",
+          visibility: "landlord_contractor",
+        },
+      ],
+      notesInternal: "",
+      linkedExpenseId: null,
+      createdAtMs: 1,
+      updatedAtMs: 35,
+    };
+    mocks.listWorkOrders.mockResolvedValue([baseItem]);
+    mocks.listWorkOrderUpdates.mockResolvedValue([]);
+    mocks.uploadWorkOrderEvidence.mockResolvedValue({
+      ...baseItem,
+      evidence: [
+        ...baseItem.evidence,
+        {
+          id: "evidence-2",
+          url: "https://example.com/evidence-2.jpg",
+          filename: "after.jpg",
+          contentType: "image/jpeg",
+          uploadedAt: 40,
+          uploadedByActorRole: "landlord",
+          uploadedByActorId: "landlord-1",
+          evidenceType: "completion",
+          caption: "Final walkthrough",
+          visibility: "internal",
+        },
+      ],
+    });
+    mocks.updateWorkOrderEvidence.mockResolvedValue({
+      ...baseItem,
+      evidence: [
+        {
+          ...baseItem.evidence[0],
+          visibility: "tenant_safe",
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter>
+        <WorkOrdersPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /timeline/i }));
+
+    fireEvent.change(screen.getByLabelText(/Evidence file/i), {
+      target: {
+        files: [new File(["photo"], "after.jpg", { type: "image/jpeg" })],
+      },
+    });
+    fireEvent.change(screen.getByLabelText(/^Evidence type$/i), { target: { value: "completion" } });
+    fireEvent.change(screen.getByLabelText(/Evidence visibility/i), { target: { value: "internal" } });
+    fireEvent.change(screen.getByLabelText(/Evidence caption/i), { target: { value: "Final walkthrough" } });
+    fireEvent.click(screen.getByRole("button", { name: /Upload evidence/i }));
+
+    await waitFor(() => {
+      expect(mocks.uploadWorkOrderEvidence).toHaveBeenCalledWith(
+        "wo-2",
+        expect.objectContaining({
+          evidenceType: "completion",
+          caption: "Final walkthrough",
+          visibility: "internal",
+        })
+      );
+    });
+
+    fireEvent.click(screen.getAllByRole("button", { name: /Mark tenant-safe/i })[0]);
+
+    await waitFor(() => {
+      expect(mocks.updateWorkOrderEvidence).toHaveBeenCalledWith("wo-2", "evidence-1", {
+        visibility: "tenant_safe",
       });
     });
   });

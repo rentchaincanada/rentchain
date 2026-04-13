@@ -45,10 +45,27 @@ export type WorkOrderRecord = {
   reopenedByActorId?: string | null;
   reopenedByActorRole?: "landlord" | "admin" | null;
   reopenReason?: string | null;
+  evidence?: WorkOrderEvidenceItem[];
   notesInternal: string;
   linkedExpenseId: string | null;
   createdAtMs: number;
   updatedAtMs: number;
+};
+
+export type WorkOrderEvidenceType = "before" | "during" | "after" | "completion" | "inspection" | "damage" | "other";
+export type WorkOrderEvidenceVisibility = "internal" | "landlord_contractor" | "tenant_safe";
+
+export type WorkOrderEvidenceItem = {
+  id: string;
+  url?: string | null;
+  filename?: string | null;
+  contentType?: string | null;
+  uploadedAt: number;
+  uploadedByActorRole: "contractor" | "landlord" | "admin";
+  uploadedByActorId: string;
+  evidenceType: WorkOrderEvidenceType;
+  caption?: string | null;
+  visibility: WorkOrderEvidenceVisibility;
 };
 
 export type WorkOrderUpdateRecord = {
@@ -189,6 +206,45 @@ export async function reopenWorkOrder(
     { method: "POST", body: payload }
   );
   if (!res?.ok || !res.item) throw new Error("Failed to reopen work order");
+  return res.item;
+}
+
+export async function uploadWorkOrderEvidence(
+  workOrderId: string,
+  payload: {
+    file: File;
+    evidenceType: WorkOrderEvidenceType;
+    caption?: string;
+    visibility: WorkOrderEvidenceVisibility;
+  }
+): Promise<WorkOrderRecord> {
+  const form = new FormData();
+  form.append("file", payload.file);
+  form.append("evidenceType", payload.evidenceType);
+  form.append("visibility", payload.visibility);
+  if (payload.caption) form.append("caption", payload.caption);
+  const res = await apiFetch<{ ok: boolean; item: WorkOrderRecord }>(
+    `/landlord/work-orders/${encodeURIComponent(workOrderId)}/evidence`,
+    { method: "POST", body: form }
+  );
+  if (!res?.ok || !res.item) throw new Error("Failed to upload work order evidence");
+  return res.item;
+}
+
+export async function updateWorkOrderEvidence(
+  workOrderId: string,
+  evidenceId: string,
+  payload: {
+    caption?: string;
+    visibility?: WorkOrderEvidenceVisibility;
+    evidenceType?: WorkOrderEvidenceType;
+  }
+): Promise<WorkOrderRecord> {
+  const res = await apiFetch<{ ok: boolean; item: WorkOrderRecord }>(
+    `/landlord/work-orders/${encodeURIComponent(workOrderId)}/evidence/${encodeURIComponent(evidenceId)}`,
+    { method: "PATCH", body: payload }
+  );
+  if (!res?.ok || !res.item) throw new Error("Failed to update work order evidence");
   return res.item;
 }
 
