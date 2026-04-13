@@ -406,24 +406,22 @@ export default function MaintenanceRequestsPage() {
                           >
                             {item.status}
                           </span>
-                          <span
-                            style={{
-                              color: assignment.needsAttention || lifecycle.needsAttention ? "#b91c1c" : text.muted,
-                              fontSize: 12,
-                              fontWeight: 700,
-                            }}
-                          >
-                            {assignment.assignmentLabel}
-                          </span>
-                          <span style={{ color: text.muted, fontSize: 12 }}>{item.priority}</span>
-                          <span style={{ color: text.muted, fontSize: 12 }}>{fmtDate(item.createdAt)}</span>
-                        </div>
-                        <div style={{ color: text.secondary, fontSize: 12 }}>{assignment.ownerSummary}</div>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
+                         <span
+  style={{
+    color: assignment.needsAttention || lifecycle.needsAttention ? "#b91c1c" : text.muted,
+    fontSize: 12,
+    fontWeight: 700,
+  }}
+>
+  {assignment.assignmentLabel}
+</span>
+<span style={{ color: text.muted, fontSize: 12 }}>{item.priority}</span>
+<span style={{ color: text.muted, fontSize: 12 }}>{fmtDate(item.createdAt)}</span>
+</div>
+<div style={{ color: text.secondary, fontSize: 12 }}>{assignment.ownerSummary}</div>
+</button>
+);
+})}
             </div>
           }
           masterDropdown={

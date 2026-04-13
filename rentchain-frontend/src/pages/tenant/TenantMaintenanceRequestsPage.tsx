@@ -146,16 +146,16 @@ export default function TenantMaintenanceRequestsPage() {
                     {requestView?.summary || "This request is visible in your tenant maintenance workspace."}
                   </div>
                   <div style={{ color: textTokens.secondary, fontSize: "0.9rem" }}>
-                    Created {fmtDate(item.createdAt)} • Last update {fmtDate(item.updatedAt)}
-                    {` • Handling: ${assignmentView.tenantVisibleLabel}`}
-                  </div>
-                  <div style={{ color: textTokens.secondary }}>{assignmentView.summary}</div>
-                  {requestView?.nextSteps.length ? (
-                    <div style={{ display: "grid", gap: 4 }}>
-                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Next step</div>
-                      <div style={{ color: textTokens.secondary }}>{requestView.nextSteps[0]}</div>
-                    </div>
-                  ) : null}
+                  Created {fmtDate(item.createdAt)} • Last update {fmtDate(item.updatedAt)}
+{` • Handling: ${assignmentView.tenantVisibleLabel}`}
+</div>
+<div style={{ color: textTokens.secondary }}>{assignmentView.summary}</div>
+{requestView?.nextSteps.length ? (
+  <div style={{ display: "grid", gap: 4 }}>
+    <div style={{ color: textTokens.primary, fontWeight: 700 }}>Next step</div>
+    <div style={{ color: textTokens.secondary }}>{requestView.nextSteps[0]}</div>
+  </div>
+) : null}      ) : null}
                   <div>
                     <Link to={`/tenant/maintenance/${item.id}`}>Open request</Link>
                   </div>
