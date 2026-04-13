@@ -39,6 +39,14 @@ export type TenantWorkspaceLease = {
   monthlyRent: number | null;
   status: string | null;
   documentUrl: string | null;
+  depositCents?: number | null;
+  depositRequired?: boolean | null;
+  depositReceived?: boolean | null;
+  depositReceivedAt?: string | null;
+  paymentMethod?: string | null;
+  paymentStatus?: string | null;
+  paymentRequestedAt?: string | null;
+  paymentCompletedAt?: string | null;
 };
 
 export type TenantWorkspaceMaintenance = {
