@@ -4,6 +4,7 @@ import { buildLandlordIntakeAlignmentView } from "./applicationReviewIntakeAlign
 import { buildLandlordDecisionWorkspace } from "./landlordDecisionWorkspace";
 import { buildLandlordDecisionOutcome } from "./landlordDecisionOutcome";
 import { buildLeaseFlowTransitionState } from "./leaseFlowTransitionState";
+import { buildDepositPaymentFlowState } from "./depositPaymentFlowState";
 import { buildLeasePreparationWorkspaceState } from "./leasePreparationWorkspaceState";
 import { buildMoveInReadinessWorkspaceState } from "./moveInReadinessWorkspaceState";
 import { buildLeaseExecutionReadinessState } from "./leaseExecutionReadinessState";
@@ -150,6 +151,10 @@ export function buildLandlordStructuredActivityTimeline(
   const signingWorkspace = buildLeaseSigningWorkspaceState({
     audience: "landlord",
     executionWorkspace,
+  });
+  const paymentWorkspace = buildDepositPaymentFlowState({
+    audience: "landlord",
+    signingWorkspace,
   });
 
   pushTimelineItem(items, {
@@ -322,6 +327,21 @@ export function buildLandlordStructuredActivityTimeline(
         summary.generatedAt,
       actorLabel: "Lease signing",
       actionRequired: signingWorkspace.timelineEvent.actionRequired,
+      relatedPath: null,
+    });
+  }
+
+  if (paymentWorkspace.timelineEvent) {
+    pushTimelineItem(items, {
+      id: `payment-workspace-${summary.applicationId}`,
+      type: paymentWorkspace.paymentState === "needs_attention" ? "follow_up_requested" : "review_updated",
+      title: paymentWorkspace.timelineEvent.title,
+      description: paymentWorkspace.timelineEvent.description,
+      occurredAt:
+        summary.decisionSummary?.riskSnapshot?.updatedAt ||
+        summary.generatedAt,
+      actorLabel: "Payment workspace",
+      actionRequired: paymentWorkspace.timelineEvent.actionRequired,
       relatedPath: null,
     });
   }

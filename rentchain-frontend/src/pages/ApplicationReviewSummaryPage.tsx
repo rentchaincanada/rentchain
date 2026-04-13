@@ -30,6 +30,7 @@ import { buildMoveInReadinessWorkspaceState } from "./moveInReadinessWorkspaceSt
 import { buildLeaseExecutionReadinessState } from "./leaseExecutionReadinessState";
 import { buildLeaseExecutionWorkspace } from "./leaseExecutionWorkspace";
 import { buildLeaseSigningWorkspaceState } from "./leaseSigningWorkspaceState";
+import { buildDepositPaymentFlowState } from "./depositPaymentFlowState";
 import StructuredNotificationList from "./StructuredNotificationList";
 import { buildLandlordStructuredNotificationTriggers } from "./structuredNotificationTriggers";
 
@@ -204,6 +205,22 @@ function leaseSigningTone(
     return { color: "#166534", background: "#dcfce7", label: "Ready for signing" };
   }
   return { color: "#64748b", background: "#e2e8f0", label: "Not ready for signing" };
+}
+
+function depositPaymentTone(state: "not_requested" | "requested" | "pending" | "paid" | "needs_attention") {
+  if (state === "paid") {
+    return { color: "#166534", background: "#dcfce7", label: "Payment completed" };
+  }
+  if (state === "pending") {
+    return { color: "#0f766e", background: "#ccfbf1", label: "Payment in progress" };
+  }
+  if (state === "requested") {
+    return { color: "#1d4ed8", background: "#dbeafe", label: "Payment requested" };
+  }
+  if (state === "needs_attention") {
+    return { color: "#9a3412", background: "#ffedd5", label: "Needs attention" };
+  }
+  return { color: "#64748b", background: "#e2e8f0", label: "Not requested" };
 }
 
 type SummaryLoadError = {
@@ -475,6 +492,16 @@ function ApplicationReviewSummaryPageBody() {
           })
         : null,
     [executionWorkspace]
+  );
+  const paymentWorkspace = useMemo(
+    () =>
+      signingWorkspace
+        ? buildDepositPaymentFlowState({
+            audience: "landlord",
+            signingWorkspace,
+          })
+        : null,
+    [signingWorkspace]
   );
 
   const recentActivity = useMemo(
@@ -1437,6 +1464,99 @@ function ApplicationReviewSummaryPageBody() {
 
                     <div style={{ fontSize: 12, color: text.subtle }}>
                       This signing workspace is a structured status view only. It does not claim provider-backed e-signing or legal completion unless the current authorized lease state truly shows it.
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {paymentWorkspace ? (
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: 10,
+                    padding: 10,
+                    display: "grid",
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                    <div>
+                      <div style={{ fontWeight: 700, color: text.main }}>Deposit / first payment</div>
+                      <div style={{ fontSize: 13, color: text.subtle, marginTop: 4 }}>
+                        {paymentWorkspace.explanation}
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 999,
+                        fontWeight: 700,
+                        color: depositPaymentTone(paymentWorkspace.paymentState).color,
+                        background: depositPaymentTone(paymentWorkspace.paymentState).background,
+                      }}
+                    >
+                      {depositPaymentTone(paymentWorkspace.paymentState).label}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "grid",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.main }}>Payment status</div>
+                      <div style={{ fontSize: 13, color: text.subtle }}>{paymentWorkspace.label}</div>
+                    </div>
+
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "grid",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.main }}>Next actor</div>
+                      <div style={{ fontSize: 13, color: text.subtle }}>{paymentWorkspace.currentActorLabel}</div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gap: 12 }}>
+                    {paymentWorkspace.amountLabel ? (
+                      <>
+                        <div style={{ fontWeight: 700, color: text.main }}>Requested payment</div>
+                        <div style={{ fontSize: 13, color: text.subtle }}>{paymentWorkspace.amountLabel}</div>
+                      </>
+                    ) : null}
+
+                    <div style={{ fontWeight: 700, color: text.main }}>Blockers</div>
+                    {paymentWorkspace.blockers.length ? (
+                      paymentWorkspace.blockers.map((item, index) => (
+                        <div key={`${item}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
+                          {item}
+                        </div>
+                      ))
+                    ) : (
+                      <div style={{ fontSize: 13, color: text.subtle }}>
+                        No current payment blockers are surfaced from this review-summary view.
+                      </div>
+                    )}
+
+                    <div style={{ fontWeight: 700, color: text.main }}>Next steps</div>
+                    {paymentWorkspace.nextActions.map((step, index) => (
+                      <div key={`${step}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
+                        {step}
+                      </div>
+                    ))}
+
+                    <div style={{ fontSize: 12, color: text.subtle }}>
+                      This payment workspace is a structured request and status view only. It does not imply RentChain is holding funds or operating as the payment processor.
                     </div>
                   </div>
                 </div>

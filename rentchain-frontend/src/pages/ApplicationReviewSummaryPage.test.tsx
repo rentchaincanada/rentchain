@@ -161,7 +161,9 @@ describe("ApplicationReviewSummaryPage", () => {
     expect((await screen.findAllByText("Blockers")).length).toBeGreaterThan(0);
     expect(await screen.findByText("Lease signing")).toBeInTheDocument();
     expect(await screen.findByText("Signing status")).toBeInTheDocument();
-    expect(await screen.findByText("Next actor")).toBeInTheDocument();
+    expect((await screen.findAllByText("Next actor")).length).toBeGreaterThan(0);
+    expect(await screen.findByText("Deposit / first payment")).toBeInTheDocument();
+    expect(await screen.findByText("Payment status")).toBeInTheDocument();
     expect(await screen.findByText("Recent updates")).toBeInTheDocument();
     expect(await screen.findByText(/Tenant updated follow-up items/i)).toBeInTheDocument();
     expect(await screen.findByText(/Follow-up stays organized by aligned package categories/i)).toBeInTheDocument();
