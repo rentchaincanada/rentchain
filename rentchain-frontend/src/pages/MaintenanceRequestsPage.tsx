@@ -13,6 +13,7 @@ import {
 } from "../api/maintenanceWorkflowApi";
 import { getContractorProfileById, listContractorInvites } from "../api/workOrdersApi";
 import { colors, radius, spacing, text } from "../styles/tokens";
+import { buildMaintenanceLifecycleView, buildMaintenanceWorkspaceState } from "./maintenanceWorkspaceState";
 
 const FILTERS: Array<{ value: "all" | MaintenanceWorkflowStatus; label: string }> = [
   { value: "all", label: "All requests" },
@@ -270,6 +271,11 @@ export default function MaintenanceRequestsPage() {
     }
     return actions;
   }, [assignContractor, contractorId, selected, updateStatus]);
+  const workspaceView = React.useMemo(() => buildMaintenanceWorkspaceState(items, "landlord"), [items]);
+  const selectedLifecycle = React.useMemo(
+    () => (selected ? buildMaintenanceLifecycleView(selected, "landlord") : null),
+    [selected]
+  );
 
   const totalOpen = items.filter((item) => !["completed", "cancelled"].includes(item.status)).length;
   const needsReview = items.filter((item) => item.status === "submitted").length;
@@ -294,6 +300,7 @@ export default function MaintenanceRequestsPage() {
             { label: "Open requests", value: totalOpen },
             { label: "Need review", value: needsReview },
             { label: "Active jobs", value: activeJobs },
+            { label: "Needs attention", value: workspaceView.counts.needs_attention },
           ].map((item) => (
             <div
               key={item.label}
@@ -308,6 +315,9 @@ export default function MaintenanceRequestsPage() {
               <div style={{ color: text.primary, fontSize: 24, fontWeight: 800 }}>{item.value}</div>
             </div>
           ))}
+        </div>
+        <div style={{ marginTop: spacing.md, color: text.secondary }}>
+          <strong>{workspaceView.summaryTitle}</strong> — {workspaceView.summaryDescription}
         </div>
       </Card>
 
@@ -354,6 +364,7 @@ export default function MaintenanceRequestsPage() {
                   {filtered.map((item) => {
                     const tone = statusTone(item.status);
                     const active = item.id === selected?.id;
+                    const lifecycle = buildMaintenanceLifecycleView(item, "landlord");
                     return (
                       <button
                         key={item.id}
@@ -388,6 +399,15 @@ export default function MaintenanceRequestsPage() {
                             }}
                           >
                             {item.status}
+                          </span>
+                          <span
+                            style={{
+                              color: lifecycle.needsAttention ? "#b91c1c" : text.muted,
+                              fontSize: 12,
+                              fontWeight: 700,
+                            }}
+                          >
+                            {lifecycle.lifecycleLabel}
                           </span>
                           <span style={{ color: text.muted, fontSize: 12 }}>{item.priority}</span>
                           <span style={{ color: text.muted, fontSize: 12 }}>{fmtDate(item.createdAt)}</span>
@@ -451,6 +471,12 @@ export default function MaintenanceRequestsPage() {
 
                   <div style={{ display: "grid", gap: spacing.sm, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
                     <div>
+                      <div style={{ color: text.muted, fontSize: 12 }}>Lifecycle</div>
+                      <div style={{ color: text.primary, fontWeight: 700, marginTop: 8 }}>
+                        {selectedLifecycle?.lifecycleLabel || "Unknown"}
+                      </div>
+                    </div>
+                    <div>
                       <div style={{ color: text.muted, fontSize: 12 }}>Priority</div>
                       <select
                         value={priority}
@@ -496,6 +522,28 @@ export default function MaintenanceRequestsPage() {
                       <div style={{ color: text.primary, fontWeight: 700, marginTop: 8 }}>{fmtDate(selected.createdAt)}</div>
                     </div>
                   </div>
+
+                  {selectedLifecycle ? (
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: radius.md,
+                        padding: "12px 14px",
+                        background: colors.panel,
+                        display: "grid",
+                        gap: 8,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.primary }}>Lifecycle summary</div>
+                      <div style={{ color: text.secondary }}>{selectedLifecycle.summary}</div>
+                      <div style={{ fontWeight: 700, color: text.primary }}>Next steps</div>
+                      {selectedLifecycle.nextSteps.map((step) => (
+                        <div key={step} style={{ color: text.secondary }}>
+                          {step}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
 
                   <label style={{ display: "grid", gap: 4 }}>
                     <span style={{ color: text.muted, fontSize: 12 }}>Landlord notes</span>

@@ -5,6 +5,7 @@ import { Card, Section } from "../../components/ui/Ui";
 import { clearTenantToken, getTenantToken } from "../../lib/tenantAuth";
 import { colors, radius, spacing, text as textTokens } from "../../styles/tokens";
 import { TenantSurfaceShell, prettyStatus } from "./TenantWorkspaceShared";
+import { buildMaintenanceLifecycleView } from "../maintenanceWorkspaceState";
 
 function fmtDate(ts?: number | null) {
   if (!ts) return "—";
@@ -22,6 +23,7 @@ export default function TenantMaintenanceRequestDetailPage() {
   const [hasToken, setHasToken] = useState<boolean>(() =>
     typeof window === "undefined" ? true : !!getTenantToken()
   );
+  const lifecycleView = data ? buildMaintenanceLifecycleView(data, "tenant") : null;
 
   useEffect(() => {
     const token = getTenantToken();
@@ -172,6 +174,27 @@ export default function TenantMaintenanceRequestDetailPage() {
               <div style={{ color: textTokens.primary, fontSize: "1rem", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
                 {data.description}
               </div>
+              {lifecycleView ? (
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: radius.md,
+                    padding: "12px 14px",
+                    background: colors.panel,
+                    display: "grid",
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ fontWeight: 800, color: textTokens.primary }}>What this status means</div>
+                  <div style={{ color: textTokens.secondary }}>{lifecycleView.summary}</div>
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>What happens next</div>
+                  {lifecycleView.nextSteps.map((step) => (
+                    <div key={step} style={{ color: textTokens.secondary }}>
+                      {step}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
               <div style={{ display: "grid", gap: 8, marginTop: spacing.xs }}>
                 <div style={{ fontWeight: 700, color: textTokens.primary }}>Status timeline</div>
                 {Array.isArray(data.statusHistory) && data.statusHistory.length > 0 ? (
