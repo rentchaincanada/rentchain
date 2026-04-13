@@ -1,12 +1,17 @@
 import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { getTenantMaintenance, type MaintenanceWorkflowItem } from "../../api/maintenanceWorkflowApi";
-import { Card, Section } from "../../components/ui/Ui";
+import {
+  getTenantMaintenance,
+  updateTenantMaintenanceConfirmation,
+  type MaintenanceWorkflowItem,
+} from "../../api/maintenanceWorkflowApi";
+import { Button, Card, Section } from "../../components/ui/Ui";
 import { clearTenantToken, getTenantToken } from "../../lib/tenantAuth";
 import { colors, radius, spacing, text as textTokens } from "../../styles/tokens";
 import { TenantSurfaceShell, prettyStatus } from "./TenantWorkspaceShared";
 import { buildMaintenanceLifecycleView } from "../maintenanceWorkspaceState";
 import { buildMaintenanceAssignmentRoutingView } from "../maintenanceAssignmentRoutingState";
+import { buildMaintenanceConfirmationAccessView } from "../maintenanceConfirmationAccessState";
 import { buildMaintenanceSchedulingAccessView } from "../maintenanceSchedulingAccessState";
 
 function fmtDate(ts?: number | null) {
@@ -21,6 +26,7 @@ export default function TenantMaintenanceRequestDetailPage() {
   const [data, setData] = useState<MaintenanceWorkflowItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [savingAction, setSavingAction] = useState(false);
   const [sessionExpired, setSessionExpired] = useState(false);
   const [hasToken, setHasToken] = useState<boolean>(() =>
     typeof window === "undefined" ? true : !!getTenantToken()
@@ -28,6 +34,7 @@ export default function TenantMaintenanceRequestDetailPage() {
   const lifecycleView = data ? buildMaintenanceLifecycleView(data, "tenant") : null;
   const assignmentView = data ? buildMaintenanceAssignmentRoutingView(data, "tenant") : null;
   const schedulingView = data ? buildMaintenanceSchedulingAccessView(data, "tenant") : null;
+  const confirmationView = data ? buildMaintenanceConfirmationAccessView(data, "tenant") : null;
 
   useEffect(() => {
     const token = getTenantToken();
@@ -103,6 +110,24 @@ export default function TenantMaintenanceRequestDetailPage() {
       </div>
     );
   }
+
+  const applyConfirmationUpdate = async (payload: {
+    confirmationStatus?: "confirmed" | "needs_schedule_change";
+    acknowledgeAccess?: boolean;
+  }) => {
+    if (!id) return;
+    setSavingAction(true);
+    setError(null);
+    try {
+      const res = await updateTenantMaintenanceConfirmation(id, payload);
+      setData((res as any)?.item || (res as any)?.data || null);
+    } catch (err: any) {
+      const msg = err?.payload?.error || err?.message || "Unable to update the maintenance confirmation.";
+      setError(String(msg));
+    } finally {
+      setSavingAction(false);
+    }
+  };
 
   return (
     <TenantSurfaceShell
@@ -253,6 +278,68 @@ export default function TenantMaintenanceRequestDetailPage() {
                       {step}
                     </div>
                   ))}
+                </div>
+              ) : null}
+              {confirmationView ? (
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: radius.md,
+                    padding: "12px 14px",
+                    background: colors.panel,
+                    display: "grid",
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ fontWeight: 800, color: textTokens.primary }}>Confirmation / access</div>
+                  <div style={{ color: textTokens.secondary }}>{confirmationView.summary}</div>
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>Service readiness</div>
+                  <div style={{ color: textTokens.secondary }}>{confirmationView.readinessLabel}</div>
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>Access</div>
+                  <div style={{ color: textTokens.secondary }}>{confirmationView.accessLabel}</div>
+                  {confirmationView.blockers.length ? (
+                    <>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Needs attention</div>
+                      {confirmationView.blockers.map((item) => (
+                        <div key={item} style={{ color: textTokens.secondary }}>
+                          {item}
+                        </div>
+                      ))}
+                    </>
+                  ) : null}
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>Next step</div>
+                  {confirmationView.nextActions.map((step) => (
+                    <div key={step} style={{ color: textTokens.secondary }}>
+                      {step}
+                    </div>
+                  ))}
+                  {data?.status === "scheduled" && schedulingView?.serviceWindowSummary !== "No service window has been confirmed yet." ? (
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
+                      <Button
+                        variant="secondary"
+                        onClick={() => void applyConfirmationUpdate({ confirmationStatus: "confirmed" })}
+                        disabled={savingAction || confirmationView.confirmationState === "confirmed"}
+                      >
+                        {savingAction ? "Saving..." : "Confirm service window"}
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => void applyConfirmationUpdate({ confirmationStatus: "needs_schedule_change" })}
+                        disabled={savingAction || confirmationView.confirmationState === "needs_schedule_change"}
+                      >
+                        {savingAction ? "Saving..." : "Request schedule change"}
+                      </Button>
+                      {data.accessRequired === true ? (
+                        <Button
+                          variant="secondary"
+                          onClick={() => void applyConfirmationUpdate({ acknowledgeAccess: true })}
+                          disabled={savingAction || confirmationView.accessState === "access_acknowledged"}
+                        >
+                          {savingAction ? "Saving..." : "Acknowledge access"}
+                        </Button>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
               <div style={{ display: "grid", gap: 8, marginTop: spacing.xs }}>

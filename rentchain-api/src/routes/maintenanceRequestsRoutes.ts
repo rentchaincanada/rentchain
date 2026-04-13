@@ -1021,6 +1021,13 @@ router.patch("/landlord/maintenance/:id", async (req: any, res) => {
     if (requestedAccessRequired !== undefined) {
       update.accessRequired = requestedAccessRequired;
     }
+    if (req.body?.serviceWindowStartAt !== undefined || req.body?.serviceWindowEndAt !== undefined) {
+      update.tenantConfirmationStatus = null;
+      update.tenantConfirmationUpdatedAt = null;
+      update.accessAcknowledgedAt = null;
+    } else if (requestedAccessRequired !== undefined) {
+      update.accessAcknowledgedAt = null;
+    }
     await ref.set(update, { merge: true });
     if (effectiveNextStatus && effectiveNextStatus !== currentStatus) {
       await appendStatusHistory(id, {
@@ -1054,6 +1061,21 @@ router.patch("/landlord/maintenance/:id", async (req: any, res) => {
             : requestedAccessRequired === false
             ? "Access coordination marked as not required."
             : "Access coordination requirement cleared.",
+      });
+    }
+    if (req.body?.serviceWindowStartAt !== undefined || req.body?.serviceWindowEndAt !== undefined) {
+      await appendStatusHistory(id, {
+        status: effectiveNextStatus || currentStatus,
+        actorRole: role === "admin" ? "admin" : "landlord",
+        actorId,
+        message: "Tenant confirmation was reset because the service window changed.",
+      });
+    } else if (requestedAccessRequired !== undefined) {
+      await appendStatusHistory(id, {
+        status: effectiveNextStatus || currentStatus,
+        actorRole: role === "admin" ? "admin" : "landlord",
+        actorId,
+        message: "Tenant access acknowledgement was reset because the access requirement changed.",
       });
     }
 

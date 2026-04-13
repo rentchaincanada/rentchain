@@ -10,6 +10,7 @@ const maintenanceWorkflowApi = vi.hoisted(() => ({
   listTenantMaintenance: vi.fn(),
   getTenantMaintenance: vi.fn(),
   createTenantMaintenance: vi.fn(),
+  updateTenantMaintenanceConfirmation: vi.fn(),
 }));
 
 const tenantAuth = vi.hoisted(() => ({
@@ -26,6 +27,7 @@ vi.mock("../../api/maintenanceWorkflowApi", async () => {
     listTenantMaintenance: maintenanceWorkflowApi.listTenantMaintenance,
     getTenantMaintenance: maintenanceWorkflowApi.getTenantMaintenance,
     createTenantMaintenance: maintenanceWorkflowApi.createTenantMaintenance,
+    updateTenantMaintenanceConfirmation: maintenanceWorkflowApi.updateTenantMaintenanceConfirmation,
   };
 });
 
@@ -77,19 +79,21 @@ describe("tenant maintenance pages", () => {
     expect(screen.getByText(/Handling: Awaiting Assignment/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Scheduling \/ access/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Upcoming service window: No service window has been confirmed yet/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Confirmation \/ access/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/landlord needs to confirm the service window/i)).toBeInTheDocument();
   });
 
-  it("renders the tenant maintenance detail with next steps and timeline", async () => {
+  it("renders the tenant maintenance detail with confirmation actions and timeline", async () => {
     maintenanceWorkflowApi.getTenantMaintenance.mockResolvedValue({
       item: {
         id: "maint-1",
         title: "Broken heater",
         description: "The heat is not turning on.",
-        status: "in_progress",
+        status: "scheduled",
         priority: "urgent",
         category: "HVAC",
         assignedContractorName: "North Shore HVAC",
-        contractorStatus: "in_progress",
+        contractorStatus: "assigned",
         serviceWindowStartAt: Date.UTC(2026, 3, 15, 13, 0),
         serviceWindowEndAt: Date.UTC(2026, 3, 15, 15, 0),
         accessRequired: true,
@@ -116,13 +120,74 @@ describe("tenant maintenance pages", () => {
 
     expect(await screen.findByText(/Broken heater/i)).toBeInTheDocument();
     expect(screen.getByText(/What this status means/i)).toBeInTheDocument();
-    expect(screen.getByText(/Work is actively underway/i)).toBeInTheDocument();
     expect(screen.getByText(/Handling status/i)).toBeInTheDocument();
-    expect(screen.getByText(/Your request is actively being handled/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Scheduling \/ access/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Access needed/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Confirmation \/ access/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /Confirm service window/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Request schedule change/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Acknowledge access/i })).toBeInTheDocument();
     expect(screen.getByText(/Status timeline/i)).toBeInTheDocument();
     expect(screen.getByText(/Technician is on site/i)).toBeInTheDocument();
+  });
+
+  it("submits tenant confirmation updates from the detail page", async () => {
+    maintenanceWorkflowApi.getTenantMaintenance.mockResolvedValue({
+      item: {
+        id: "maint-1",
+        title: "Broken heater",
+        description: "The heat is not turning on.",
+        status: "scheduled",
+        priority: "urgent",
+        category: "HVAC",
+        assignedContractorName: "North Shore HVAC",
+        contractorStatus: "assigned",
+        serviceWindowStartAt: Date.UTC(2026, 3, 15, 13, 0),
+        serviceWindowEndAt: Date.UTC(2026, 3, 15, 15, 0),
+        accessRequired: true,
+        createdAt: 100,
+        updatedAt: 200,
+        statusHistory: [],
+      },
+    });
+    maintenanceWorkflowApi.updateTenantMaintenanceConfirmation.mockResolvedValue({
+      item: {
+        id: "maint-1",
+        title: "Broken heater",
+        description: "The heat is not turning on.",
+        status: "scheduled",
+        priority: "urgent",
+        category: "HVAC",
+        assignedContractorName: "North Shore HVAC",
+        contractorStatus: "assigned",
+        serviceWindowStartAt: Date.UTC(2026, 3, 15, 13, 0),
+        serviceWindowEndAt: Date.UTC(2026, 3, 15, 15, 0),
+        accessRequired: true,
+        tenantConfirmationStatus: "confirmed",
+        tenantConfirmationUpdatedAt: 300,
+        accessAcknowledgedAt: 301,
+        createdAt: 100,
+        updatedAt: 400,
+        statusHistory: [],
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/tenant/maintenance/maint-1"]}>
+        <Routes>
+          <Route path="/tenant/maintenance/:id" element={<TenantMaintenanceRequestDetailPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /Confirm service window/i }));
+
+    await waitFor(() => {
+      expect(maintenanceWorkflowApi.updateTenantMaintenanceConfirmation).toHaveBeenCalledWith("maint-1", {
+        confirmationStatus: "confirmed",
+      });
+    });
+    expect(await screen.findByText(/The tenant has confirmed the service window and acknowledged the access requirement/i)).toBeInTheDocument();
   });
 
   it("submits the tenant maintenance request form", async () => {

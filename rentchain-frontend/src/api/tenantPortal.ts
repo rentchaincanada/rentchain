@@ -62,6 +62,9 @@ export type TenantWorkspaceMaintenance = {
   serviceWindowStartAt?: number | null;
   serviceWindowEndAt?: number | null;
   accessRequired?: boolean | null;
+  tenantConfirmationStatus?: "confirmed" | "needs_schedule_change" | null;
+  tenantConfirmationUpdatedAt?: number | null;
+  accessAcknowledgedAt?: number | null;
   createdAt: number | null;
   updatedAt: number | null;
   statusHistory?: Array<{
@@ -116,6 +119,23 @@ export async function createTenantWorkspaceMaintenance(payload: {
 }) {
   const res = await tenantApiFetch<{ ok: boolean; data: TenantWorkspaceMaintenance }>(
     "/tenant/maintenance-requests",
+    {
+      method: "POST",
+      body: payload,
+    }
+  );
+  return res?.data;
+}
+
+export async function updateTenantWorkspaceMaintenanceConfirmation(
+  id: string,
+  payload: {
+    confirmationStatus?: "confirmed" | "needs_schedule_change";
+    acknowledgeAccess?: boolean;
+  }
+) {
+  const res = await tenantApiFetch<{ ok: boolean; data: TenantWorkspaceMaintenance }>(
+    `/tenant/maintenance-requests/${encodeURIComponent(id)}/confirmation`,
     {
       method: "POST",
       body: payload,

@@ -39,6 +39,9 @@ type TenantMaintenanceProjection = {
   serviceWindowStartAt: number | null;
   serviceWindowEndAt: number | null;
   accessRequired: boolean | null;
+  tenantConfirmationStatus: "confirmed" | "needs_schedule_change" | null;
+  tenantConfirmationUpdatedAt: number | null;
+  accessAcknowledgedAt: number | null;
   createdAt: number | null;
   updatedAt: number | null;
   statusHistory: Array<{
@@ -156,6 +159,12 @@ export function projectTenantMaintenance(recordId: string, data: any): TenantMai
     serviceWindowStartAt: toMillis(data?.serviceWindowStartAt),
     serviceWindowEndAt: toMillis(data?.serviceWindowEndAt),
     accessRequired: typeof data?.accessRequired === "boolean" ? data.accessRequired : null,
+    tenantConfirmationStatus:
+      data?.tenantConfirmationStatus === "confirmed" || data?.tenantConfirmationStatus === "needs_schedule_change"
+        ? data.tenantConfirmationStatus
+        : null,
+    tenantConfirmationUpdatedAt: toMillis(data?.tenantConfirmationUpdatedAt),
+    accessAcknowledgedAt: toMillis(data?.accessAcknowledgedAt),
     createdAt: toMillis(data?.createdAt),
     updatedAt: toMillis(data?.updatedAt),
     statusHistory,

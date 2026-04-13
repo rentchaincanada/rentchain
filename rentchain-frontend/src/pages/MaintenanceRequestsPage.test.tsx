@@ -102,6 +102,8 @@ describe("landlord maintenance workspace", () => {
     expect(screen.getAllByText(/No handler has been assigned to this request yet/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Scheduling \/ access/i)).toBeInTheDocument();
     expect(screen.getByText(/Awaiting schedule/i)).toBeInTheDocument();
+    expect(screen.getByText(/Confirmation \/ access/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Not ready for service/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Review the request details/i)).toBeInTheDocument();
     expect(screen.getByText(/Mark reviewed/i)).toBeInTheDocument();
   });
@@ -146,6 +148,8 @@ describe("landlord maintenance workspace", () => {
           serviceWindowStartAt: Date.UTC(2026, 3, 15, 13, 0),
           serviceWindowEndAt: Date.UTC(2026, 3, 15, 15, 0),
           accessRequired: false,
+          tenantConfirmationStatus: "confirmed",
+          tenantConfirmationUpdatedAt: Date.UTC(2026, 3, 14, 10, 0),
           createdAt: 100,
           updatedAt: 200,
           statusHistory: [],
@@ -165,6 +169,6 @@ describe("landlord maintenance workspace", () => {
     fireEvent.click(screen.getAllByRole("button", { name: /Leaky pipe/i })[0]);
 
     expect(await screen.findAllByText(/Leaky pipe/i)).not.toHaveLength(0);
-    expect(screen.getByText(/Ready for service/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Ready for service/i).length).toBeGreaterThan(0);
   });
 });
