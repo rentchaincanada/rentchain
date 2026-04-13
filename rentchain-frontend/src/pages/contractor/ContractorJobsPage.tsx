@@ -5,8 +5,10 @@ import { ResponsiveMasterDetail } from "../../components/layout/ResponsiveMaster
 import {
   listContractorMaintenanceJobs,
   patchContractorMaintenanceJobStatus,
+  uploadContractorMaintenanceEvidence,
   type MaintenanceWorkflowItem,
   type MaintenanceWorkflowStatus,
+  type WorkOrderEvidenceType,
 } from "../../api/maintenanceWorkflowApi";
 import { colors, radius, spacing, text } from "../../styles/tokens";
 
@@ -28,6 +30,21 @@ function fromLocalInputValue(value: string) {
   if (!value) return null;
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
+}
+
+function evidenceTypeLabel(value?: WorkOrderEvidenceType | null) {
+  switch (value) {
+    case "before":
+      return "Before";
+    case "during":
+      return "During";
+    case "after":
+      return "After";
+    case "completion":
+      return "Completion";
+    default:
+      return "Other";
+  }
 }
 
 function findScheduledDate(item: MaintenanceWorkflowItem) {
@@ -62,7 +79,8 @@ function normalizeJob(item: any): MaintenanceWorkflowItem | null {
   const title = String(item?.title || "").trim();
   const description = String(item?.description || "").trim();
   if (!id || !title || !description) return null;
-  const status = statusLabel(item?.status) as MaintenanceWorkflowStatus;
+  const rawStatus = String(item?.status || "").trim().toLowerCase();
+  const status = (rawStatus === "in progress" ? "in_progress" : rawStatus || "assigned") as MaintenanceWorkflowStatus;
   return {
     ...item,
     id,
@@ -111,6 +129,11 @@ export default function ContractorJobsPage() {
   const [completionSummary, setCompletionSummary] = React.useState("");
   const [completionOutcome, setCompletionOutcome] = React.useState<"completed" | "partially_completed" | "follow_up_required">("completed");
   const [saving, setSaving] = React.useState(false);
+  const [evidenceFile, setEvidenceFile] = React.useState<File | null>(null);
+  const [evidenceType, setEvidenceType] =
+    React.useState<Extract<WorkOrderEvidenceType, "before" | "during" | "after" | "completion" | "other">>("during");
+  const [evidenceCaption, setEvidenceCaption] = React.useState("");
+  const [uploadingEvidence, setUploadingEvidence] = React.useState(false);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -168,6 +191,9 @@ export default function ContractorJobsPage() {
       setCompletionSummary("");
       setCompletionOutcome("completed");
       setNote("");
+      setEvidenceFile(null);
+      setEvidenceCaption("");
+      setEvidenceType("during");
       return;
     }
     setScheduledForInput(toLocalInputValue(selected.scheduledFor || findScheduledDate(selected)));
@@ -232,6 +258,31 @@ export default function ContractorJobsPage() {
     },
     [completionOutcome, completionSummary, load, note, scheduledForInput, selected]
   );
+
+  const uploadEvidence = React.useCallback(async () => {
+    if (!selected) return;
+    if (!evidenceFile) {
+      setError("Choose an image before uploading evidence.");
+      return;
+    }
+    setUploadingEvidence(true);
+    setError(null);
+    try {
+      await uploadContractorMaintenanceEvidence(selected.id, {
+        file: evidenceFile,
+        evidenceType,
+        caption: evidenceCaption.trim() || undefined,
+      });
+      setEvidenceFile(null);
+      setEvidenceCaption("");
+      setEvidenceType("during");
+      await load();
+    } catch (err: any) {
+      setError(String(err?.message || "Failed to upload evidence"));
+    } finally {
+      setUploadingEvidence(false);
+    }
+  }, [evidenceCaption, evidenceFile, evidenceType, load, selected]);
 
   const actions = React.useMemo(() => {
     if (!selected) return [] as Array<{ label: string; onClick: () => Promise<void> }>;
@@ -509,6 +560,105 @@ export default function ContractorJobsPage() {
                         {saving ? "Saving..." : action.label}
                       </Button>
                     ))}
+                  </div>
+
+                  <div
+                    style={{
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: radius.md,
+                      padding: "12px 14px",
+                      background: colors.panel,
+                      display: "grid",
+                      gap: 8,
+                    }}
+                  >
+                    <div style={{ fontWeight: 700, color: text.primary }}>Evidence photos</div>
+                    <div style={{ color: text.secondary }}>
+                      Add before, during, after, or completion photos so the landlord can review visual proof with the job.
+                    </div>
+                    <input
+                      aria-label="Evidence file"
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      onChange={(e) => setEvidenceFile(e.target.files?.[0] || null)}
+                    />
+                    <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+                      <select
+                        aria-label="Evidence type"
+                        value={evidenceType}
+                        onChange={(e) =>
+                          setEvidenceType(
+                            e.target.value as Extract<WorkOrderEvidenceType, "before" | "during" | "after" | "completion" | "other">
+                          )
+                        }
+                        style={{
+                          padding: "9px 10px",
+                          borderRadius: radius.md,
+                          border: `1px solid ${colors.border}`,
+                          background: colors.panel,
+                          color: text.primary,
+                        }}
+                      >
+                        <option value="before">Before</option>
+                        <option value="during">During</option>
+                        <option value="after">After</option>
+                        <option value="completion">Completion</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+                    <textarea
+                      aria-label="Evidence caption"
+                      rows={2}
+                      value={evidenceCaption}
+                      onChange={(e) => setEvidenceCaption(e.target.value)}
+                      placeholder="Add a short caption for this photo"
+                      style={{
+                        width: "100%",
+                        padding: "10px",
+                        borderRadius: radius.md,
+                        border: `1px solid ${colors.border}`,
+                        background: colors.panel,
+                        color: text.primary,
+                        resize: "vertical",
+                      }}
+                    />
+                    <div>
+                      <Button disabled={uploadingEvidence} onClick={() => void uploadEvidence()}>
+                        {uploadingEvidence ? "Uploading..." : "Upload evidence"}
+                      </Button>
+                    </div>
+                    {selected.evidence?.length ? (
+                      <div style={{ display: "grid", gap: 8 }}>
+                        {selected.evidence.map((item) => (
+                          <div
+                            key={item.id}
+                            style={{
+                              border: `1px solid ${colors.border}`,
+                              borderRadius: radius.md,
+                              padding: "8px 10px",
+                              background: colors.card,
+                              display: "grid",
+                              gap: 6,
+                            }}
+                          >
+                            {item.url ? (
+                              <img
+                                src={item.url}
+                                alt={item.caption || `${evidenceTypeLabel(item.evidenceType)} evidence`}
+                                style={{ width: "100%", maxHeight: 220, objectFit: "cover", borderRadius: radius.md }}
+                              />
+                            ) : null}
+                            <div style={{ color: text.primary, fontWeight: 700 }}>{evidenceTypeLabel(item.evidenceType)}</div>
+                            <div style={{ color: text.muted, fontSize: 12 }}>
+                              {item.visibility === "tenant_safe" ? "Tenant-safe" : "Landlord + contractor"} • {fmtDate(item.uploadedAt)}
+                            </div>
+                            {item.caption ? <div style={{ color: text.secondary }}>{item.caption}</div> : null}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ color: text.muted }}>No evidence photos uploaded yet.</div>
+                    )}
                   </div>
 
                   <div style={{ display: "grid", gap: 8 }}>

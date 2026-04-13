@@ -14,6 +14,10 @@ import {
   listWorkOrders,
   patchWorkOrder,
   reopenWorkOrder,
+  updateWorkOrderEvidence,
+  uploadWorkOrderEvidence,
+  type WorkOrderEvidenceType,
+  type WorkOrderEvidenceVisibility,
   type WorkOrderRecord,
   type WorkOrderUpdateRecord,
 } from "../../api/workOrdersApi";
@@ -49,6 +53,36 @@ function completionOutcomeLabel(value?: WorkOrderRecord["completionOutcome"]) {
   }
 }
 
+function evidenceTypeLabel(value?: WorkOrderEvidenceType | null) {
+  switch (value) {
+    case "before":
+      return "Before";
+    case "during":
+      return "During";
+    case "after":
+      return "After";
+    case "completion":
+      return "Completion";
+    case "inspection":
+      return "Inspection";
+    case "damage":
+      return "Damage";
+    default:
+      return "Other";
+  }
+}
+
+function evidenceVisibilityLabel(value?: WorkOrderEvidenceVisibility | null) {
+  switch (value) {
+    case "internal":
+      return "Internal only";
+    case "tenant_safe":
+      return "Tenant-safe";
+    default:
+      return "Landlord + contractor";
+  }
+}
+
 export default function WorkOrdersPage() {
   const entitlements = useEntitlements();
   const [items, setItems] = React.useState<WorkOrderRecord[]>([]);
@@ -64,10 +98,15 @@ export default function WorkOrdersPage() {
   const [reopenReason, setReopenReason] = React.useState("");
   const [savingNote, setSavingNote] = React.useState(false);
   const [savingAction, setSavingAction] = React.useState(false);
+  const [savingEvidence, setSavingEvidence] = React.useState(false);
   const [properties, setProperties] = React.useState<Array<{ id: string; name: string }>>([]);
   const [convertTarget, setConvertTarget] = React.useState<WorkOrderRecord | null>(null);
   const [convertVendor, setConvertVendor] = React.useState("");
   const [isMobile, setIsMobile] = React.useState(false);
+  const [evidenceFile, setEvidenceFile] = React.useState<File | null>(null);
+  const [evidenceType, setEvidenceType] = React.useState<WorkOrderEvidenceType>("inspection");
+  const [evidenceCaption, setEvidenceCaption] = React.useState("");
+  const [evidenceVisibility, setEvidenceVisibility] = React.useState<WorkOrderEvidenceVisibility>("internal");
   const canUseWorkOrders = entitlements.canUseWorkOrders;
 
   const normalizeCategory = React.useCallback((input: string): ExpenseCategory => {
@@ -114,6 +153,11 @@ export default function WorkOrdersPage() {
     },
     [loadUpdates]
   );
+
+  const syncSelectedItem = React.useCallback((next: WorkOrderRecord) => {
+    setSelected(next);
+    setItems((current) => current.map((item) => (item.id === next.id ? next : item)));
+  }, []);
 
   const markCompleted = React.useCallback(
     async (item: WorkOrderRecord) => {
@@ -181,11 +225,60 @@ export default function WorkOrdersPage() {
     [load, refreshSelected, reopenReason]
   );
 
+  const handleEvidenceUpload = React.useCallback(async () => {
+    if (!selected) return;
+    if (!evidenceFile) {
+      setError("Choose an image before uploading evidence.");
+      return;
+    }
+    setSavingEvidence(true);
+    setError(null);
+    try {
+      const refreshed = await uploadWorkOrderEvidence(selected.id, {
+        file: evidenceFile,
+        evidenceType,
+        caption: evidenceCaption.trim() || undefined,
+        visibility: evidenceVisibility,
+      });
+      syncSelectedItem(refreshed);
+      await loadUpdates(selected.id);
+      setEvidenceFile(null);
+      setEvidenceCaption("");
+      setEvidenceType("inspection");
+      setEvidenceVisibility("internal");
+    } catch (err: any) {
+      setError(String(err?.message || "Failed to upload work order evidence"));
+    } finally {
+      setSavingEvidence(false);
+    }
+  }, [evidenceCaption, evidenceFile, evidenceType, evidenceVisibility, loadUpdates, selected, syncSelectedItem]);
+
+  const markEvidenceTenantSafe = React.useCallback(
+    async (evidenceId: string) => {
+      if (!selected) return;
+      setSavingEvidence(true);
+      setError(null);
+      try {
+        const refreshed = await updateWorkOrderEvidence(selected.id, evidenceId, { visibility: "tenant_safe" });
+        syncSelectedItem(refreshed);
+      } catch (err: any) {
+        setError(String(err?.message || "Failed to update evidence visibility"));
+      } finally {
+        setSavingEvidence(false);
+      }
+    },
+    [selected, syncSelectedItem]
+  );
+
   React.useEffect(() => {
     if (!selected) {
       setCompletionSummary("");
       setCompletionOutcome("completed");
       setReopenReason("");
+      setEvidenceFile(null);
+      setEvidenceCaption("");
+      setEvidenceType("inspection");
+      setEvidenceVisibility("internal");
       return;
     }
     setCompletionSummary(String(selected.completionSummary || ""));
@@ -513,6 +606,108 @@ export default function WorkOrdersPage() {
                   <div style={{ marginTop: 4 }}>{selected.reopenReason}</div>
                 </div>
               ) : null}
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gap: 10,
+                marginBottom: 12,
+                padding: 12,
+                border: "1px solid #e2e8f0",
+                borderRadius: 12,
+                background: "#f8fafc",
+              }}
+            >
+              <div style={{ fontWeight: 700 }}>Evidence photos</div>
+              <div style={{ color: "#64748b", fontSize: 13 }}>
+                Keep before, during, completion, and review photos with the work order so service proof stays attached to the job.
+              </div>
+              <input
+                aria-label="Evidence file"
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={(e) => setEvidenceFile(e.target.files?.[0] || null)}
+              />
+              <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+                <select
+                  aria-label="Evidence type"
+                  value={evidenceType}
+                  onChange={(e) => setEvidenceType(e.target.value as WorkOrderEvidenceType)}
+                  style={{ width: "100%", borderRadius: 8, border: "1px solid #cbd5e1", padding: 8 }}
+                >
+                  <option value="before">Before</option>
+                  <option value="during">During</option>
+                  <option value="after">After</option>
+                  <option value="completion">Completion</option>
+                  <option value="inspection">Inspection</option>
+                  <option value="damage">Damage</option>
+                  <option value="other">Other</option>
+                </select>
+                <select
+                  aria-label="Evidence visibility"
+                  value={evidenceVisibility}
+                  onChange={(e) => setEvidenceVisibility(e.target.value as WorkOrderEvidenceVisibility)}
+                  style={{ width: "100%", borderRadius: 8, border: "1px solid #cbd5e1", padding: 8 }}
+                >
+                  <option value="internal">Internal only</option>
+                  <option value="landlord_contractor">Landlord + contractor</option>
+                  <option value="tenant_safe">Tenant-safe</option>
+                </select>
+              </div>
+              <textarea
+                aria-label="Evidence caption"
+                value={evidenceCaption}
+                onChange={(e) => setEvidenceCaption(e.target.value)}
+                placeholder="Add a short caption for this photo"
+                rows={2}
+                style={{ width: "100%", borderRadius: 8, border: "1px solid #cbd5e1", padding: 8, resize: "vertical" }}
+              />
+              <div>
+                <Button disabled={savingEvidence} onClick={() => void handleEvidenceUpload()}>
+                  {savingEvidence ? "Uploading..." : "Upload evidence"}
+                </Button>
+              </div>
+              {selected.evidence?.length ? (
+                <div style={{ display: "grid", gap: 10 }}>
+                  {selected.evidence.map((item) => (
+                    <div
+                      key={item.id}
+                      style={{
+                        border: "1px solid #e2e8f0",
+                        borderRadius: 12,
+                        padding: 10,
+                        background: "#fff",
+                        display: "grid",
+                        gap: 8,
+                      }}
+                    >
+                      {item.url ? (
+                        <img
+                          src={item.url}
+                          alt={item.caption || `${evidenceTypeLabel(item.evidenceType)} evidence`}
+                          style={{ width: "100%", maxHeight: 220, objectFit: "cover", borderRadius: 10, background: "#e2e8f0" }}
+                        />
+                      ) : null}
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", fontSize: 12, color: "#64748b" }}>
+                        <span>{evidenceTypeLabel(item.evidenceType)}</span>
+                        <span>{evidenceVisibilityLabel(item.visibility)}</span>
+                        <span>Uploaded by {item.uploadedByActorRole}</span>
+                        <span>{formatDate(item.uploadedAt)}</span>
+                      </div>
+                      {item.caption ? <div style={{ whiteSpace: "pre-wrap" }}>{item.caption}</div> : null}
+                      {item.visibility !== "tenant_safe" ? (
+                        <div>
+                          <Button variant="secondary" disabled={savingEvidence} onClick={() => void markEvidenceTenantSafe(item.id)}>
+                            {savingEvidence ? "Saving..." : "Mark tenant-safe"}
+                          </Button>
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ color: "#64748b" }}>No evidence photos uploaded yet.</div>
+              )}
             </div>
             <div style={{ display: "grid", gap: 8, maxHeight: 320, overflow: "auto", paddingRight: 4 }}>
               {updates.length === 0 ? (

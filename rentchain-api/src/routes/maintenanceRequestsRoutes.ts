@@ -1,9 +1,18 @@
 import { Router } from "express";
+import multer from "multer";
 import { db, FieldValue } from "../config/firebase";
 import { authenticateJwt } from "../middleware/authMiddleware";
 import { verifyAuthToken } from "../auth/jwt";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 import { sendEmail } from "../services/emailService";
+import { uploadBufferToGcs } from "../lib/gcs";
+import {
+  buildEvidenceStoragePath,
+  makeEvidenceId,
+  normalizeEvidenceType,
+  serializeEvidenceForAudience,
+  type WorkOrderEvidenceItem,
+} from "../lib/workOrderEvidence";
 
 const router = Router();
 
@@ -74,6 +83,12 @@ const LEGACY_TO_WORKFLOW_STATUS: Record<string, (typeof WORKFLOW_STATUSES)[numbe
   RESOLVED: "completed",
   CLOSED: "completed",
 };
+const MAX_EVIDENCE_BYTES = 10 * 1024 * 1024;
+const evidenceUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_EVIDENCE_BYTES },
+});
+const ALLOWED_EVIDENCE_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 router.use(authenticateJwt);
 
@@ -258,6 +273,11 @@ function cleanString(value: any, max = 200): string | null {
   return text.slice(0, max);
 }
 
+function isAllowedEvidenceFile(file: Express.Multer.File | undefined) {
+  if (!file?.buffer || !file.originalname) return false;
+  return ALLOWED_EVIDENCE_MIME_TYPES.has(String(file.mimetype || "").toLowerCase());
+}
+
 function normalizeOptionalBoolean(value: any): boolean | null | undefined {
   if (value === undefined) return undefined;
   if (value === null || value === "") return null;
@@ -418,6 +438,7 @@ type WorkOrderExecutionUpdateType =
   | "scheduled"
   | "started"
   | "blocked"
+  | "photo"
   | "completed"
   | "confirmed"
   | "reopened";
@@ -720,7 +741,7 @@ async function upsertMaintenanceWorkOrder(input: {
   return { workOrderId, payload };
 }
 
-function shapeContractorJobFromSources(workOrder: any, maintenance: any) {
+async function shapeContractorJobFromSources(workOrder: any, maintenance: any) {
   const maintenanceId =
     String(workOrder?.maintenanceRequestId || maintenance?.id || "").trim() || String(workOrder?.id || "").trim();
   const status = normalizeWorkflowStatus(workOrder?.status || maintenance?.status) || "assigned";
@@ -782,6 +803,7 @@ function shapeContractorJobFromSources(workOrder: any, maintenance: any) {
     updatedAt:
       Number(maintenance?.updatedAt || workOrder?.updatedAt || workOrder?.updatedAtMs || Date.now()) || Date.now(),
     statusHistory: Array.isArray(maintenance?.statusHistory) ? maintenance.statusHistory : [],
+    evidence: await serializeEvidenceForAudience(workOrder?.evidence, "contractor"),
   };
 }
 
@@ -1658,9 +1680,13 @@ router.get("/contractor/jobs", async (req: any, res) => {
       maintenanceDocs.filter((item): item is any => Boolean(item)).map((item) => [String(item.id), item])
     );
 
-    let items = workOrders
-      .map((workOrder) => shapeContractorJobFromSources(workOrder, maintenanceMap.get(String(workOrder.maintenanceRequestId || "").trim()) || null))
-      .filter((item) => Boolean(item?.id) && Boolean(item?.title) && Boolean(item?.description));
+    let items = (
+      await Promise.all(
+        workOrders.map((workOrder) =>
+          shapeContractorJobFromSources(workOrder, maintenanceMap.get(String(workOrder.maintenanceRequestId || "").trim()) || null)
+        )
+      )
+    ).filter((item) => Boolean(item?.id) && Boolean(item?.title) && Boolean(item?.description));
     if (statusFilter) {
       items = items.filter((item) => normalizeWorkflowStatus(item.status) === statusFilter);
     }
@@ -1902,6 +1928,134 @@ router.patch("/contractor/jobs/:id/status", async (req: any, res) => {
     });
     return res.status(500).json({ ok: false, error: "CONTRACTOR_MAINTENANCE_PATCH_FAILED" });
   }
+});
+
+router.post("/contractor/jobs/:id/evidence", async (req: any, res) => {
+  evidenceUpload.single("file")(req, res, async (uploadErr: any) => {
+    try {
+      if (uploadErr) {
+        const message = String(uploadErr?.message || "");
+        if (String(uploadErr?.code || "") === "LIMIT_FILE_SIZE") {
+          return res.status(400).json({ ok: false, error: "FILE_TOO_LARGE", maxBytes: MAX_EVIDENCE_BYTES });
+        }
+        return res.status(400).json({ ok: false, error: "UPLOAD_FAILED", detail: message || "upload_failed" });
+      }
+
+      const access = await resolveContractorAccess(req);
+      if (access.role !== "contractor" && access.role !== "admin") {
+        return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+      }
+      const contractorId = access.contractorId;
+      const id = String(req.params?.id || "").trim();
+      if (!contractorId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+      const actorId = String(req.user?.id || "").trim() || contractorId;
+      if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+      const maintenanceRef = db.collection("maintenanceRequests").doc(id);
+      const maintenanceSnap = await maintenanceRef.get();
+      if (!maintenanceSnap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+      const maintenance = { id: maintenanceSnap.id, ...(maintenanceSnap.data() as any) };
+      if (String(maintenance.assignedContractorId || "") !== contractorId) {
+        return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+      }
+
+      const file = req.file as Express.Multer.File | undefined;
+      if (!file?.buffer || !file.originalname) {
+        return res.status(400).json({ ok: false, error: "FILE_REQUIRED" });
+      }
+      if (!isAllowedEvidenceFile(file)) {
+        return res.status(400).json({ ok: false, error: "UNSUPPORTED_FILE_TYPE" });
+      }
+
+      const evidenceType = normalizeEvidenceType(req.body?.evidenceType);
+      if (!evidenceType || !["before", "during", "after", "completion", "other"].includes(evidenceType)) {
+        return res.status(400).json({ ok: false, error: "INVALID_EVIDENCE_TYPE" });
+      }
+
+      const now = Date.now();
+      const workOrder = await upsertMaintenanceWorkOrder({
+        maintenanceRequestId: id,
+        landlordId: String(maintenance.landlordId || "").trim() || null,
+        propertyId: String(maintenance.propertyId || "").trim() || null,
+        unitId: String(maintenance.unitId || "").trim() || null,
+        tenantId: String(maintenance.tenantId || "").trim() || null,
+        assignedContractorId: contractorId,
+        assignedContractorName: String(maintenance.assignedContractorName || "").trim() || null,
+        title: String(maintenance.title || "").trim() || null,
+        description: String(maintenance.description || "").trim() || null,
+        category: String(maintenance.category || "").trim() || null,
+        priority: String(maintenance.priority || "").trim() || null,
+        status: normalizeWorkflowStatus(maintenance.status) || "assigned",
+        serviceWindowStartAt: toMillis(maintenance.serviceWindowStartAt),
+        serviceWindowEndAt: toMillis(maintenance.serviceWindowEndAt),
+        accessRequired: typeof maintenance.accessRequired === "boolean" ? maintenance.accessRequired : null,
+      });
+
+      const evidenceId = makeEvidenceId();
+      const storagePath = buildEvidenceStoragePath({
+        workOrderId: workOrder.workOrderId,
+        evidenceId,
+        filename: file.originalname,
+      });
+      await uploadBufferToGcs({
+        path: storagePath,
+        contentType: String(file.mimetype || "application/octet-stream"),
+        buffer: file.buffer,
+        metadata: {
+          workOrderId: workOrder.workOrderId,
+          maintenanceRequestId: id,
+          evidenceType,
+          visibility: "landlord_contractor",
+          uploadedAtMs: String(now),
+          actorRole: access.role === "admin" ? "admin" : "contractor",
+          actorId,
+        },
+      });
+
+      const workOrderRef = db.collection("workOrders").doc(workOrder.workOrderId);
+      const currentWorkOrderSnap = await workOrderRef.get();
+      const currentWorkOrder = currentWorkOrderSnap.exists ? ((currentWorkOrderSnap.data() as any) || {}) : {};
+      const evidenceItem: WorkOrderEvidenceItem = {
+        id: evidenceId,
+        storagePath,
+        filename: String(file.originalname || "").trim() || null,
+        contentType: String(file.mimetype || "").trim() || null,
+        uploadedAt: now,
+        uploadedByActorRole: access.role === "admin" ? "admin" : "contractor",
+        uploadedByActorId: actorId,
+        evidenceType,
+        caption: String(req.body?.caption || "").trim().slice(0, 500) || null,
+        visibility: "landlord_contractor",
+      };
+      await workOrderRef.set(
+        {
+          evidence: [...(Array.isArray(currentWorkOrder.evidence) ? currentWorkOrder.evidence : []), evidenceItem],
+          updatedAtMs: now,
+          lastExecutionUpdateAt: now,
+        },
+        { merge: true }
+      );
+
+      await appendWorkOrderUpdate(workOrder.workOrderId, {
+        actorRole: access.role === "admin" ? "admin" : "contractor",
+        actorId,
+        updateType: "photo",
+        message: `Uploaded ${evidenceType} evidence photo${evidenceItem.caption ? `: ${evidenceItem.caption}` : ""}`,
+      });
+
+      const refreshedWorkOrderSnap = await workOrderRef.get();
+      const refreshedJob = await shapeContractorJobFromSources(
+        { id: refreshedWorkOrderSnap.id, ...(refreshedWorkOrderSnap.data() || {}) },
+        maintenance
+      );
+      return res.status(201).json({ ok: true, item: refreshedJob, data: refreshedJob, workOrderId: workOrder.workOrderId });
+    } catch (err: any) {
+      console.error("[maintenance-v2] contractor evidence upload failed", {
+        message: err?.message || "failed",
+      });
+      return res.status(500).json({ ok: false, error: "CONTRACTOR_EVIDENCE_UPLOAD_FAILED" });
+    }
+  });
 });
 
 router.post("/rental-applications/:id/screening/request", async (req: any, res) => {

@@ -1,9 +1,19 @@
 import { Router } from "express";
 import crypto from "crypto";
+import multer from "multer";
 import { db, FieldValue } from "../config/firebase";
 import { requireAuth } from "../middleware/requireAuth";
 import { sendEmail } from "../services/emailService";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
+import { uploadBufferToGcs } from "../lib/gcs";
+import {
+  buildEvidenceStoragePath,
+  makeEvidenceId,
+  normalizeEvidenceType,
+  normalizeEvidenceVisibility,
+  serializeEvidenceForAudience,
+  type WorkOrderEvidenceItem,
+} from "../lib/workOrderEvidence";
 
 const router = Router();
 
@@ -34,6 +44,12 @@ const CONTRACTOR_INVITE_TTL_MS = Math.max(
   60_000,
   Number(process.env.CONTRACTOR_INVITE_TTL_MS || 7 * 24 * 60 * 60 * 1000)
 );
+const MAX_EVIDENCE_BYTES = 10 * 1024 * 1024;
+const evidenceUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_EVIDENCE_BYTES },
+});
+const ALLOWED_EVIDENCE_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 function nowMs() {
   return Date.now();
@@ -129,6 +145,19 @@ function isContractor(req: any): boolean {
 
 function toWorkOrderResponse(id: string, data: any) {
   return { id, ...(data || {}) };
+}
+
+async function toWorkOrderResponseForAudience(id: string, data: any, audience: "landlord" | "contractor") {
+  const item = toWorkOrderResponse(id, data);
+  return {
+    ...item,
+    evidence: await serializeEvidenceForAudience(item.evidence, audience),
+  };
+}
+
+function isAllowedEvidenceFile(file: Express.Multer.File | undefined) {
+  if (!file?.buffer || !file.originalname) return false;
+  return ALLOWED_EVIDENCE_MIME_TYPES.has(String(file.mimetype || "").toLowerCase());
 }
 
 function inviteIsExpired(invite: any, atMs = nowMs()) {
@@ -409,6 +438,28 @@ async function getWorkOrderAuthorized(req: any, workOrderId: string) {
   }
 
   return { ok: false as const, code: "FORBIDDEN" as const };
+}
+
+function buildEvidenceUploadMessage(item: WorkOrderEvidenceItem) {
+  const label = item.evidenceType.replace(/_/g, " ");
+  const caption = asString(item.caption, 180);
+  return caption ? `Uploaded ${label} evidence photo: ${caption}` : `Uploaded ${label} evidence photo`;
+}
+
+function replaceEvidenceItem(
+  current: unknown,
+  evidenceId: string,
+  updater: (item: WorkOrderEvidenceItem) => WorkOrderEvidenceItem
+) {
+  const list = Array.isArray(current) ? current : [];
+  return list.map((entry) => {
+    const normalized = {
+      ...(entry as any),
+      id: asString((entry as any)?.id, 120),
+    } as WorkOrderEvidenceItem;
+    if (normalized.id !== evidenceId) return entry;
+    return updater(normalized);
+  });
 }
 router.post("/contractor/profile", requireAuth, async (req: any, res) => {
   try {
@@ -1002,7 +1053,7 @@ router.get("/work-orders", requireAuth, async (req: any, res) => {
         .where("landlordId", "==", landlordId)
         .limit(500)
         .get();
-      let items = snap.docs.map((d) => toWorkOrderResponse(d.id, d.data()));
+      let items = await Promise.all(snap.docs.map((d) => toWorkOrderResponseForAudience(d.id, d.data(), "landlord")));
       if (statusFilter) items = items.filter((item) => String(item.status || "").toLowerCase() === statusFilter);
       items.sort((a, b) => Number(b.updatedAtMs || 0) - Number(a.updatedAtMs || 0));
       return res.json({ ok: true, items });
@@ -1016,7 +1067,7 @@ router.get("/work-orders", requireAuth, async (req: any, res) => {
 
       const map = new Map<string, any>();
       for (const doc of [...assignedSnap.docs, ...invitedSnap.docs]) {
-        const item = toWorkOrderResponse(doc.id, doc.data());
+        const item = await toWorkOrderResponseForAudience(doc.id, doc.data(), "contractor");
         const assigned = asString(item.assignedContractorId, 120);
         const invited = uniqueStrings(item.invitedContractorIds, 200);
         if (assigned === userId || invited.includes(userId)) {
@@ -1048,7 +1099,7 @@ router.get("/work-orders/:id", requireAuth, async (req: any, res) => {
       return res.status(403).json({ ok: false, error: "FORBIDDEN" });
     }
 
-    return res.json({ ok: true, item: access.item });
+    return res.json({ ok: true, item: await toWorkOrderResponseForAudience(access.item.id, access.item, access.role === "contractor" ? "contractor" : "landlord") });
   } catch (err) {
     console.error("[work-orders] get failed", err);
     return res.status(500).json({ ok: false, error: "WORK_ORDER_GET_FAILED" });
@@ -1190,7 +1241,7 @@ router.patch("/work-orders/:id", requireAuth, async (req: any, res) => {
         message: maintenanceHistoryMessage,
       });
     }
-    return res.json({ ok: true, item: toWorkOrderResponse(refreshed.id, refreshed.data()) });
+    return res.json({ ok: true, item: await toWorkOrderResponseForAudience(refreshed.id, refreshed.data(), "landlord") });
   } catch (err) {
     console.error("[work-orders] patch failed", err);
     return res.status(500).json({ ok: false, error: "WORK_ORDER_PATCH_FAILED" });
@@ -1244,7 +1295,7 @@ router.post("/work-orders/:id/accept", requireAuth, async (req: any, res) => {
     }
 
     const refreshed = await db.collection("workOrders").doc(workOrderId).get();
-    return res.json({ ok: true, item: toWorkOrderResponse(refreshed.id, refreshed.data()) });
+    return res.json({ ok: true, item: await toWorkOrderResponseForAudience(refreshed.id, refreshed.data(), access.role === "contractor" ? "contractor" : "landlord") });
   } catch (err) {
     console.error("[work-orders] accept failed", err);
     return res.status(500).json({ ok: false, error: "WORK_ORDER_ACCEPT_FAILED" });
@@ -1303,7 +1354,7 @@ router.post("/work-orders/:id/decline", requireAuth, async (req: any, res) => {
     }
 
     const refreshed = await db.collection("workOrders").doc(workOrderId).get();
-    return res.json({ ok: true, item: toWorkOrderResponse(refreshed.id, refreshed.data()) });
+    return res.json({ ok: true, item: await toWorkOrderResponseForAudience(refreshed.id, refreshed.data(), access.role === "contractor" ? "contractor" : "landlord") });
   } catch (err) {
     console.error("[work-orders] decline failed", err);
     return res.status(500).json({ ok: false, error: "WORK_ORDER_DECLINE_FAILED" });
@@ -1346,7 +1397,7 @@ router.post("/work-orders/:id/start", requireAuth, async (req: any, res) => {
     });
 
     const refreshed = await db.collection("workOrders").doc(workOrderId).get();
-    return res.json({ ok: true, item: toWorkOrderResponse(refreshed.id, refreshed.data()) });
+    return res.json({ ok: true, item: await toWorkOrderResponseForAudience(refreshed.id, refreshed.data(), access.role === "contractor" ? "contractor" : "landlord") });
   } catch (err) {
     console.error("[work-orders] start failed", err);
     return res.status(500).json({ ok: false, error: "WORK_ORDER_START_FAILED" });
@@ -1400,7 +1451,7 @@ router.post("/work-orders/:id/complete", requireAuth, async (req: any, res) => {
     }
 
     const refreshed = await db.collection("workOrders").doc(workOrderId).get();
-    return res.json({ ok: true, item: toWorkOrderResponse(refreshed.id, refreshed.data()) });
+    return res.json({ ok: true, item: await toWorkOrderResponseForAudience(refreshed.id, refreshed.data(), access.role === "contractor" ? "contractor" : "landlord") });
   } catch (err) {
     console.error("[work-orders] complete failed", err);
     return res.status(500).json({ ok: false, error: "WORK_ORDER_COMPLETE_FAILED" });
@@ -1454,7 +1505,7 @@ router.post("/landlord/work-orders/:id/confirm-completion", requireAuth, async (
     });
 
     const refreshed = await db.collection("workOrders").doc(workOrderId).get();
-    return res.json({ ok: true, item: toWorkOrderResponse(refreshed.id, refreshed.data()) });
+    return res.json({ ok: true, item: await toWorkOrderResponseForAudience(refreshed.id, refreshed.data(), "landlord") });
   } catch (err) {
     console.error("[work-orders] confirm completion failed", err);
     return res.status(500).json({ ok: false, error: "WORK_ORDER_CONFIRM_COMPLETION_FAILED" });
@@ -1519,10 +1570,164 @@ router.post("/landlord/work-orders/:id/reopen", requireAuth, async (req: any, re
     });
 
     const refreshed = await db.collection("workOrders").doc(workOrderId).get();
-    return res.json({ ok: true, item: toWorkOrderResponse(refreshed.id, refreshed.data()) });
+    return res.json({ ok: true, item: await toWorkOrderResponseForAudience(refreshed.id, refreshed.data(), "landlord") });
   } catch (err) {
     console.error("[work-orders] reopen failed", err);
     return res.status(500).json({ ok: false, error: "WORK_ORDER_REOPEN_FAILED" });
+  }
+});
+
+router.post("/landlord/work-orders/:id/evidence", requireAuth, async (req: any, res) => {
+  evidenceUpload.single("file")(req, res, async (uploadErr: any) => {
+    try {
+      if (uploadErr) {
+        const message = String(uploadErr?.message || "");
+        if (String(uploadErr?.code || "") === "LIMIT_FILE_SIZE") {
+          return res.status(400).json({ ok: false, error: "FILE_TOO_LARGE", maxBytes: MAX_EVIDENCE_BYTES });
+        }
+        return res.status(400).json({ ok: false, error: "UPLOAD_FAILED", detail: message || "upload_failed" });
+      }
+
+      if (!isLandlord(req)) return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+
+      const workOrderId = asString(req.params?.id, 120);
+      const access = await getWorkOrderAuthorized(req, workOrderId);
+      if (!access.ok) {
+        if (access.code === "NOT_FOUND") return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+        return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+      }
+
+      const file = req.file as Express.Multer.File | undefined;
+      if (!file?.buffer || !file.originalname) {
+        return res.status(400).json({ ok: false, error: "FILE_REQUIRED" });
+      }
+      if (!isAllowedEvidenceFile(file)) {
+        return res.status(400).json({ ok: false, error: "UNSUPPORTED_FILE_TYPE" });
+      }
+
+      const evidenceType = normalizeEvidenceType(req.body?.evidenceType);
+      const visibility = normalizeEvidenceVisibility(req.body?.visibility);
+      if (!evidenceType) return res.status(400).json({ ok: false, error: "INVALID_EVIDENCE_TYPE" });
+      if (!visibility) return res.status(400).json({ ok: false, error: "INVALID_VISIBILITY" });
+
+      const now = nowMs();
+      const evidenceId = makeEvidenceId();
+      const storagePath = buildEvidenceStoragePath({
+        workOrderId,
+        evidenceId,
+        filename: file.originalname,
+      });
+      await uploadBufferToGcs({
+        path: storagePath,
+        contentType: String(file.mimetype || "application/octet-stream"),
+        buffer: file.buffer,
+        metadata: {
+          workOrderId,
+          evidenceType,
+          visibility,
+          uploadedAtMs: String(now),
+          actorRole: isAdmin(req) ? "admin" : "landlord",
+          actorId: access.userId,
+        },
+      });
+
+      const evidenceItem: WorkOrderEvidenceItem = {
+        id: evidenceId,
+        storagePath,
+        filename: asString(file.originalname, 180),
+        contentType: asString(file.mimetype, 120),
+        uploadedAt: now,
+        uploadedByActorRole: isAdmin(req) ? "admin" : "landlord",
+        uploadedByActorId: access.userId,
+        evidenceType,
+        caption: asOptionalString(req.body?.caption, 500),
+        visibility,
+      };
+
+      const nextEvidence = [...(Array.isArray((access.item as any)?.evidence) ? (access.item as any).evidence : []), evidenceItem];
+      await db.collection("workOrders").doc(workOrderId).set(
+        {
+          evidence: nextEvidence,
+          updatedAtMs: now,
+          lastExecutionUpdateAt: now,
+        },
+        { merge: true }
+      );
+
+      await writeWorkOrderUpdate({
+        workOrderId,
+        actorRole: isAdmin(req) ? "admin" : "landlord",
+        actorId: access.userId,
+        updateType: "photo",
+        message: buildEvidenceUploadMessage(evidenceItem),
+      });
+
+      const refreshed = await db.collection("workOrders").doc(workOrderId).get();
+      return res.status(201).json({ ok: true, item: await toWorkOrderResponseForAudience(refreshed.id, refreshed.data(), "landlord") });
+    } catch (err) {
+      console.error("[work-orders] landlord evidence upload failed", err);
+      return res.status(500).json({ ok: false, error: "WORK_ORDER_EVIDENCE_UPLOAD_FAILED" });
+    }
+  });
+});
+
+router.patch("/landlord/work-orders/:id/evidence/:evidenceId", requireAuth, async (req: any, res) => {
+  try {
+    if (!isLandlord(req)) return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+
+    const workOrderId = asString(req.params?.id, 120);
+    const evidenceId = asString(req.params?.evidenceId, 120);
+    const access = await getWorkOrderAuthorized(req, workOrderId);
+    if (!access.ok) {
+      if (access.code === "NOT_FOUND") return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+    if (!evidenceId) return res.status(404).json({ ok: false, error: "EVIDENCE_NOT_FOUND" });
+
+    const nextVisibility =
+      req.body?.visibility === undefined ? undefined : normalizeEvidenceVisibility(req.body?.visibility);
+    const nextEvidenceType =
+      req.body?.evidenceType === undefined ? undefined : normalizeEvidenceType(req.body?.evidenceType);
+    if (req.body?.visibility !== undefined && !nextVisibility) {
+      return res.status(400).json({ ok: false, error: "INVALID_VISIBILITY" });
+    }
+    if (req.body?.evidenceType !== undefined && !nextEvidenceType) {
+      return res.status(400).json({ ok: false, error: "INVALID_EVIDENCE_TYPE" });
+    }
+
+    const currentEvidence = Array.isArray((access.item as any)?.evidence) ? ((access.item as any).evidence as any[]) : [];
+    if (!currentEvidence.some((entry) => asString(entry?.id, 120) === evidenceId)) {
+      return res.status(404).json({ ok: false, error: "EVIDENCE_NOT_FOUND" });
+    }
+
+    const nextEvidence = replaceEvidenceItem(currentEvidence, evidenceId, (entry) => ({
+      ...entry,
+      caption: req.body?.caption !== undefined ? asOptionalString(req.body?.caption, 500) : entry.caption || null,
+      visibility: nextVisibility || entry.visibility,
+      evidenceType: nextEvidenceType || entry.evidenceType,
+    }));
+
+    await db.collection("workOrders").doc(workOrderId).set(
+      {
+        evidence: nextEvidence,
+        updatedAtMs: nowMs(),
+      },
+      { merge: true }
+    );
+
+    await writeWorkOrderUpdate({
+      workOrderId,
+      actorRole: isAdmin(req) ? "admin" : "landlord",
+      actorId: access.userId,
+      updateType: "photo",
+      message: "Evidence metadata updated",
+    });
+
+    const refreshed = await db.collection("workOrders").doc(workOrderId).get();
+    return res.json({ ok: true, item: await toWorkOrderResponseForAudience(refreshed.id, refreshed.data(), "landlord") });
+  } catch (err) {
+    console.error("[work-orders] evidence update failed", err);
+    return res.status(500).json({ ok: false, error: "WORK_ORDER_EVIDENCE_UPDATE_FAILED" });
   }
 });
 

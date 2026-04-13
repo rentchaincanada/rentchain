@@ -42,6 +42,17 @@ type TenantMaintenanceProjection = {
   tenantConfirmationStatus: "confirmed" | "needs_schedule_change" | null;
   tenantConfirmationUpdatedAt: number | null;
   accessAcknowledgedAt: number | null;
+  evidence: Array<{
+    id: string;
+    url: string | null;
+    filename: string | null;
+    contentType: string | null;
+    uploadedAt: number | null;
+    uploadedByActorRole: string | null;
+    evidenceType: string | null;
+    caption: string | null;
+    visibility: "tenant_safe";
+  }>;
   createdAt: number | null;
   updatedAt: number | null;
   statusHistory: Array<{
@@ -165,6 +176,21 @@ export function projectTenantMaintenance(recordId: string, data: any): TenantMai
         : null,
     tenantConfirmationUpdatedAt: toMillis(data?.tenantConfirmationUpdatedAt),
     accessAcknowledgedAt: toMillis(data?.accessAcknowledgedAt),
+    evidence: Array.isArray(data?.evidence)
+      ? data.evidence
+          .map((entry: any) => ({
+            id: asString(entry?.id),
+            url: asString(entry?.url),
+            filename: asString(entry?.filename),
+            contentType: asString(entry?.contentType),
+            uploadedAt: toMillis(entry?.uploadedAt),
+            uploadedByActorRole: asString(entry?.uploadedByActorRole),
+            evidenceType: asString(entry?.evidenceType),
+            caption: asString(entry?.caption),
+            visibility: entry?.visibility === "tenant_safe" ? "tenant_safe" : null,
+          }))
+          .filter((entry: any) => entry.id && entry.visibility === "tenant_safe")
+      : [],
     createdAt: toMillis(data?.createdAt),
     updatedAt: toMillis(data?.updatedAt),
     statusHistory,

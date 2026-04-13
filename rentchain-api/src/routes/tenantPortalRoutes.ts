@@ -22,6 +22,7 @@ import {
   sendTenantCommunicationMessage,
 } from "../services/tenantPortal/tenantCommunicationsService";
 import { listTenantNotificationFeed } from "../services/tenantPortal/tenantNotificationsService";
+import { serializeEvidenceForAudience } from "../lib/workOrderEvidence";
 
 const router = Router();
 router.use(authenticateJwt);
@@ -4981,6 +4982,10 @@ router.get("/maintenance-requests/:id", requireTenant, async (req: any, res) => 
     if (data.tenantId && data.tenantId !== tenantId) {
       return res.status(403).json({ ok: false, error: "FORBIDDEN" });
     }
+    const workOrderSnap = await db.collection("workOrders").doc(`maintenance_${doc.id}`).get();
+    const tenantSafeEvidence = workOrderSnap.exists
+      ? await serializeEvidenceForAudience((workOrderSnap.data() as any)?.evidence, "tenant")
+      : [];
     const payload = {
       id: doc.id,
       requestId: doc.id,
@@ -5004,6 +5009,7 @@ router.get("/maintenance-requests/:id", requireTenant, async (req: any, res) => 
           : null,
       tenantConfirmationUpdatedAt: toMillis(data.tenantConfirmationUpdatedAt),
       accessAcknowledgedAt: toMillis(data.accessAcknowledgedAt),
+      evidence: tenantSafeEvidence,
       tenantContact: data.tenantContact ?? null,
       createdAt: toMillis(data.createdAt),
       updatedAt: toMillis(data.updatedAt),
