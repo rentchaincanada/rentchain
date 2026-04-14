@@ -1733,6 +1733,727 @@ async function buildTenantScreeningItems(tenantId: string): Promise<TenantCommun
   return items.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 }
 
+function getProviderPriority(config: ReturnType<typeof getScreeningConfig>): ScreeningProviderKey[] {
+  const allowed: ScreeningProviderKey[] = ["transunion_redirect", "equifax", "manual"];
+  const ranked = config.providerPriority.filter((item): item is ScreeningProviderKey => allowed.includes(item));
+  if (!ranked.includes(config.defaultProvider)) ranked.push(config.defaultProvider);
+  if (!ranked.includes("manual")) ranked.push("manual");
+  return ranked;
+}
+
+function selectScreeningProvider(config: ReturnType<typeof getScreeningConfig>): ScreeningProviderKey | null {
+  if (!config.enabled) return null;
+  const ranked = getProviderPriority(config);
+  for (const provider of ranked) {
+    if (provider === "manual" && config.providers.manual) return provider;
+    if (provider === "equifax" && config.providers.equifax) return provider;
+    if (provider === "transunion_redirect" && config.providers.transunion_redirect) return provider;
+  }
+  return null;
+}
+
+type ScreeningAdapterContext = {
+  request: ScreeningRequestRecord;
+  consent: ScreeningConsentRecord;
+  providerKey: ScreeningProviderKey;
+  config: ReturnType<typeof getScreeningConfig>;
+};
+
+type ScreeningAdapterResult = {
+  session: Omit<ScreeningSessionRecord, "id">;
+  result: Omit<ScreeningResultRecord, "id"> | null;
+  requestStatus: ScreeningRequestStatus;
+  nextAction: string;
+};
+
+type ScreeningCallbackContext = {
+  session: ScreeningSessionRecord;
+  request: ScreeningRequestRecord;
+  payload: any;
+};
+
+type NormalizedScreeningResultContract = {
+  status: ScreeningResultStatus;
+  summary: string;
+  normalizedDecision: string | null;
+  identityVerified: boolean | null;
+  creditIncluded: boolean | null;
+  incomeIncluded: boolean | null;
+  fraudFlags: string[];
+  providerStatusMapped: string | null;
+  reportAvailability: {
+    summaryAvailable: boolean;
+    fullReportAvailable: boolean;
+  };
+  reportAvailable: boolean;
+};
+
+type RedirectPreparationResult = {
+  redirectUrl: string | null;
+  returnUrl: string | null;
+  expiresAt: number | null;
+  providerSessionId: string | null;
+  correlationId: string;
+  stateToken: string;
+  stateTokenHash: string;
+  redirectStateId: string;
+  redirectPreparedAt: number;
+  redirectPreparationStatus: "prepared";
+  returnState: ScreeningReturnState;
+};
+
+type ScreeningProviderAdapter = {
+  createSession: (ctx: ScreeningAdapterContext) => Promise<ScreeningAdapterResult>;
+  handleCallback: (ctx: ScreeningCallbackContext) => Promise<{
+    requestStatus: ScreeningRequestStatus;
+    sessionStatus: ScreeningSessionStatus;
+    resultStatus: ScreeningResultStatus;
+    summary: string;
+  }>;
+  normalizeResult: (payload: any) => NormalizedScreeningResultContract;
+};
+
+async function prepareRedirectSession(input: {
+  request: ScreeningRequestRecord;
+  providerKey: ScreeningProviderKey;
+  requestedSessionId: string;
+  existingCorrelationId?: string | null;
+  existingProviderSessionId?: string | null;
+}): Promise<RedirectPreparationResult> {
+  const now = Date.now();
+  const stateToken = makeSecureOpaqueToken();
+  const stateTokenHash = hashOpaqueToken(stateToken);
+  const redirectStateId = makeDeterministicDocId(["redirect_state", stateTokenHash]);
+  return {
+    redirectUrl: null,
+    returnUrl: buildTenantScreeningReturnUrl(input.request.id),
+    expiresAt: now + 1000 * 60 * 30,
+    providerSessionId: input.existingProviderSessionId || null,
+    correlationId: input.existingCorrelationId || makeScreeningCorrelationId(`${input.providerKey}_corr`),
+    stateToken,
+    stateTokenHash,
+    redirectStateId,
+    redirectPreparedAt: now,
+    redirectPreparationStatus: "prepared",
+    returnState: "pending",
+  };
+}
+
+const screeningAdapters: Record<ScreeningProviderKey, ScreeningProviderAdapter> = {
+  manual: {
+    async createSession(ctx) {
+      const now = Date.now();
+      return {
+        session: {
+          requestId: ctx.request.id,
+          providerKey: "manual",
+          status: "pending_review",
+          providerSessionStatus: "manual_review_pending",
+          handoffType: "manual",
+          redirectUrl: null,
+          returnUrl: null,
+          expiresAt: null,
+          correlationId: makeScreeningCorrelationId("manual"),
+          stateToken: null,
+          isActive: true,
+          duplicateOfSessionId: null,
+          callbackReceivedAt: null,
+          normalizedResultStatus: "manual_review_required",
+          createdAt: now,
+          updatedAt: now,
+        },
+        result: {
+          requestId: ctx.request.id,
+          sessionId: "",
+          providerKey: "manual",
+          status: "manual_review_required",
+          summary: "Manual review required while external screening providers are unavailable.",
+          normalizedDecision: "manual_review_required",
+          reportAvailable: false,
+          rawPayloadRef: "manual://screening/manual-review",
+          fullReportStorageRef: null,
+          createdAt: now,
+          updatedAt: now,
+        },
+        requestStatus: "manual_review_required",
+        nextAction: "await_manual_review",
+      };
+    },
+    async handleCallback() {
+      return {
+        requestStatus: "manual_review_required",
+        sessionStatus: "pending_review",
+        resultStatus: "manual_review_required",
+        summary: "Manual review remains active.",
+      };
+    },
+    normalizeResult() {
+      return {
+        status: "manual_review_required",
+        summary: "Manual review required while external screening providers are unavailable.",
+        normalizedDecision: "manual_review_required",
+        identityVerified: null,
+        creditIncluded: false,
+        incomeIncluded: false,
+        fraudFlags: [],
+        providerStatusMapped: "manual_review_required",
+        reportAvailability: {
+          summaryAvailable: true,
+          fullReportAvailable: false,
+        },
+        reportAvailable: false,
+      };
+    },
+  },
+  equifax: {
+    async createSession(ctx) {
+      const redirect = await prepareRedirectSession({
+        request: ctx.request,
+        providerKey: "equifax",
+        requestedSessionId: makeScreeningCorrelationId("eqx_session"),
+      });
+      return {
+        session: {
+          requestId: ctx.request.id,
+          providerKey: "equifax",
+          status: "redirect_pending",
+          providerSessionStatus: "stub_not_enabled",
+          providerSessionId: redirect.providerSessionId,
+          handoffType: "redirect",
+          redirectUrl: redirect.redirectUrl,
+          returnUrl: redirect.returnUrl,
+          expiresAt: redirect.expiresAt,
+          correlationId: redirect.correlationId,
+          stateToken: redirect.stateToken,
+          stateTokenHash: redirect.stateTokenHash,
+          redirectStateId: redirect.redirectStateId,
+          redirectPreparedAt: redirect.redirectPreparedAt,
+          redirectLastUpdatedAt: redirect.redirectPreparedAt,
+          redirectPreparationStatus: redirect.redirectPreparationStatus,
+          returnState: redirect.returnState,
+          returnStateResolvedAt: redirect.redirectPreparedAt,
+          isActive: true,
+          duplicateOfSessionId: null,
+          callbackReceivedAt: null,
+          normalizedResultStatus: "pending",
+          createdAt: redirect.redirectPreparedAt,
+          updatedAt: redirect.redirectPreparedAt,
+        },
+        result: null,
+        requestStatus: "in_progress",
+        nextAction: "provider_activation_pending",
+      };
+    },
+    async handleCallback() {
+      return {
+        requestStatus: "in_progress",
+        sessionStatus: "in_progress",
+        resultStatus: "pending",
+        summary: "Equifax redirect scaffold is not enabled in this environment.",
+      };
+    },
+    normalizeResult(payload: any) {
+      return {
+        status: "pending",
+        summary: "Equifax redirect scaffold is not enabled in this environment.",
+        normalizedDecision: null,
+        identityVerified: null,
+        creditIncluded: false,
+        incomeIncluded: false,
+        fraudFlags: [],
+        providerStatusMapped: "stub_not_enabled",
+        reportAvailability: {
+          summaryAvailable: false,
+          fullReportAvailable: false,
+        },
+        reportAvailable: false,
+      };
+    },
+  },
+  transunion_redirect: {
+    async createSession(ctx) {
+      const redirect = await prepareRedirectSession({
+        request: ctx.request,
+        providerKey: "transunion_redirect",
+        requestedSessionId: makeScreeningCorrelationId("tu_session"),
+      });
+      return {
+        session: {
+          requestId: ctx.request.id,
+          providerKey: "transunion_redirect",
+          status: "redirect_pending",
+          providerSessionStatus: "stub_not_enabled",
+          providerSessionId: redirect.providerSessionId,
+          handoffType: "redirect",
+          redirectUrl: redirect.redirectUrl,
+          returnUrl: redirect.returnUrl,
+          expiresAt: redirect.expiresAt,
+          correlationId: redirect.correlationId,
+          stateToken: redirect.stateToken,
+          stateTokenHash: redirect.stateTokenHash,
+          redirectStateId: redirect.redirectStateId,
+          redirectPreparedAt: redirect.redirectPreparedAt,
+          redirectLastUpdatedAt: redirect.redirectPreparedAt,
+          redirectPreparationStatus: redirect.redirectPreparationStatus,
+          returnState: redirect.returnState,
+          returnStateResolvedAt: redirect.redirectPreparedAt,
+          isActive: true,
+          duplicateOfSessionId: null,
+          callbackReceivedAt: null,
+          normalizedResultStatus: "pending",
+          createdAt: redirect.redirectPreparedAt,
+          updatedAt: redirect.redirectPreparedAt,
+        },
+        result: null,
+        requestStatus: "in_progress",
+        nextAction: "await_redirect_provider_start",
+      };
+    },
+    async handleCallback() {
+      return {
+        requestStatus: "in_progress",
+        sessionStatus: "in_progress",
+        resultStatus: "pending",
+        summary: "TransUnion redirect scaffold is registered but live callbacks are disabled.",
+      };
+    },
+    normalizeResult(payload: any) {
+      const providerStatusMapped =
+        cleanString(payload?.providerStatus || payload?.status || payload?.decision, 160) || "callback_received_stub";
+      return {
+        status: "pending",
+        summary: "TransUnion redirect scaffold is registered but live callbacks are disabled.",
+        normalizedDecision: null,
+        identityVerified: null,
+        creditIncluded: false,
+        incomeIncluded: false,
+        fraudFlags: normalizeStringList(payload?.fraudFlags, 12, 80),
+        providerStatusMapped,
+        reportAvailability: {
+          summaryAvailable: false,
+          fullReportAvailable: false,
+        },
+        reportAvailable: false,
+      };
+    },
+  },
+};
+
+function shapeScreeningResponse(input: {
+  request: ScreeningRequestRecord;
+  consent: ScreeningConsentRecord | null;
+  session: ScreeningSessionRecord | null;
+  result: ScreeningResultRecord | null;
+  auditTrail?: any[];
+}) {
+  const { request, consent, session, result } = input;
+  const returnState = resolveReturnState(request, session, result);
+  return {
+    id: request.id,
+    rentalApplicationId: request.rentalApplicationId,
+    status: request.status,
+    normalizedResultStatus: result?.status || request.normalizedResultStatus,
+    requestedAt: request.requestedAt || request.createdAt || null,
+    consentedAt: request.consentedAt || consent?.acceptedAt || null,
+    startedAt: request.startedAt || session?.createdAt || null,
+    completedAt: request.completedAt || result?.updatedAt || null,
+    provider: session?.providerKey || request.providerSelection || null,
+    packageType: request.packageType,
+    payerType: request.payerType,
+    propertyLabel: request.propertyLabel,
+    unitLabel: request.unitLabel,
+    applicantName: request.applicantName,
+    nextAction: request.nextAction || null,
+    consent: consent
+      ? {
+          id: consent.id,
+          viewedAt: consent.viewedAt,
+          acceptedAt: consent.acceptedAt,
+          providerDisclosure: consent.providerDisclosure,
+          disclosureVersion: consent.disclosureVersion,
+        }
+      : null,
+    session: session
+      ? {
+          id: session.id,
+          providerKey: session.providerKey,
+          status: session.status,
+          providerSessionStatus: session.providerSessionStatus || null,
+          handoffType: session.handoffType,
+          redirectUrl: session.redirectUrl,
+          returnUrl: session.returnUrl,
+          expiresAt: session.expiresAt,
+          redirect: {
+            eligible: session.handoffType === "redirect" && session.isActive !== false,
+            prepared: Boolean(session.redirectPreparedAt),
+            preparedAt: session.redirectPreparedAt || null,
+            lastUpdatedAt: session.redirectLastUpdatedAt || session.updatedAt || null,
+            status: session.redirectPreparationStatus || (session.handoffType === "redirect" ? "prepared" : "not_applicable"),
+            activationEnabled:
+              session.providerKey === "transunion_redirect"
+                ? getScreeningConfig().providers.transunion_redirect
+                : session.providerKey === "equifax"
+                ? getScreeningConfig().providers.equifax
+                : false,
+          },
+          returnState: session.returnState || returnState,
+          callbackReceivedAt: session.callbackReceivedAt || null,
+        }
+      : null,
+    result: result
+      ? {
+          id: result.id,
+          status: result.status,
+          summary: result.summary,
+          normalizedDecision: result.normalizedDecision,
+          identityVerified: result.identityVerified ?? null,
+          creditIncluded: result.creditIncluded ?? null,
+          incomeIncluded: result.incomeIncluded ?? null,
+          fraudFlags: result.fraudFlags || [],
+          providerStatusMapped: result.providerStatusMapped || null,
+          reportAvailability: result.reportAvailability || {
+            summaryAvailable: Boolean(result.summary),
+            fullReportAvailable: Boolean(result.fullReportStorageRef),
+          },
+          reportAvailable: result.reportAvailable,
+        }
+      : null,
+    returnFlow: {
+      state: returnState,
+      callbackReceivedAt: session?.callbackReceivedAt || null,
+      resolvedAt: session?.returnStateResolvedAt || result?.updatedAt || request.updatedAt || null,
+      isFinalized: ["completed", "expired", "unable_to_complete"].includes(returnState),
+    },
+    summary: {
+      status: request.status,
+      provider: session?.providerKey || request.providerSelection || "pending",
+      requestedDate: request.requestedAt || request.createdAt || null,
+      package: request.packageType,
+      summaryResult: screeningSummaryText(request, session, result),
+      nextActions: request.nextAction ? [request.nextAction] : [],
+      returnState,
+    },
+    auditTrail: Array.isArray(input.auditTrail)
+      ? input.auditTrail.map((item) => ({
+          id: item.id,
+          eventType: item.eventType || null,
+          actorRole: item.actorRole || null,
+          createdAt: Number(item.createdAt || 0) || null,
+          metadata: item.metadata || {},
+        }))
+      : [],
+  };
+}
+
+async function buildTenantMaintenanceUpdateItems(tenantId: string): Promise<TenantCommunicationItem[]> {
+  const [maintSnap, readMap] = await Promise.all([
+    db.collection("maintenanceRequests").where("tenantId", "==", tenantId).limit(50).get(),
+    getMaintenanceReadMap(tenantId),
+  ]);
+  const highStatuses = new Set(["URGENT", "BLOCKED", "CANCELLED"]);
+  // keep the rest of your existing buildTenantMaintenanceUpdateItems function body exactly as it is
+}
+
+async function createScreeningSessionSafely(input: {
+  requestId: string;
+  actorRole: string;
+  actorId: string | null;
+  tenantId: string;
+}): Promise<{
+  request: ScreeningRequestRecord;
+  consent: ScreeningConsentRecord;
+  session: ScreeningSessionRecord;
+  result: ScreeningResultRecord | null;
+  created: boolean;
+}> {
+  const config = getScreeningConfig();
+  const requestRef = db.collection("screening_requests").doc(input.requestId);
+  const sessionRef = db.collection("screening_sessions").doc();
+  const resultRef = db.collection("screening_results").doc();
+  // keep the rest of main’s existing createScreeningSessionSafely function body exactly as it is
+}
+
+  const transactionResult = await db.runTransaction(async (tx) => {
+    const requestSnap = await tx.get(requestRef);
+    if (!requestSnap.exists) {
+      throw new Error("NOT_FOUND");
+    }
+    const request = await getScreeningRequestById(input.requestId);
+    if (!request) throw new Error("NOT_FOUND");
+    if (!request.applicantTenantId || request.applicantTenantId !== input.tenantId) {
+      throw new Error("FORBIDDEN");
+    }
+    if (!request.latestConsentId) {
+      throw new Error("CONSENT_REQUIRED");
+    }
+    const consentRef = db.collection("screening_consents").doc(request.latestConsentId);
+    const consentSnap = await tx.get(consentRef);
+    if (!consentSnap.exists) throw new Error("CONSENT_REQUIRED");
+    const consentData = (consentSnap.data() as any) || {};
+    const consent: ScreeningConsentRecord = {
+      id: consentSnap.id,
+      requestId: input.requestId,
+      tenantId: cleanString(consentData.tenantId, 160) || "",
+      viewedAt: Number(consentData.viewedAt || 0) || null,
+      acceptedAt: Number(consentData.acceptedAt || 0) || null,
+      providerDisclosure: cleanString(consentData.providerDisclosure, 200),
+      disclosureVersion: cleanString(consentData.disclosureVersion, 80),
+    };
+    if (!consent.acceptedAt) throw new Error("CONSENT_REQUIRED");
+
+    if (request.activeSessionId) {
+      const existingActiveSnap = await tx.get(db.collection("screening_sessions").doc(request.activeSessionId));
+      if (existingActiveSnap.exists) {
+        const existing = await getScreeningSessionById(request.activeSessionId);
+        if (existing && existing.isActive !== false) {
+          return { request, consent, session: existing, result: await getLatestResult(input.requestId), created: false };
+        }
+      }
+    }
+
+    if (isTerminalScreeningRequestStatus(request.status) && request.activeSessionId) {
+      const terminalSession = await getScreeningSessionById(request.activeSessionId);
+      if (terminalSession) {
+        return { request, consent, session: terminalSession, result: await getLatestResult(input.requestId), created: false };
+      }
+    }
+
+    const providerKey = selectScreeningProvider(config) || "manual";
+    const adapter = screeningAdapters[providerKey];
+    const started = await adapter.createSession({
+      request,
+      consent,
+      providerKey,
+      config,
+    });
+    const now = Date.now();
+    const rawStateToken = started.session.stateToken;
+    const sessionRecord: ScreeningSessionRecord = {
+      id: sessionRef.id,
+      ...started.session,
+      stateToken: null,
+      isActive: true,
+      updatedAt: now,
+    };
+    tx.set(sessionRef, sessionRecord);
+
+    if (sessionRecord.handoffType === "redirect" && sessionRecord.redirectStateId && rawStateToken && sessionRecord.stateTokenHash) {
+      const redirectStateRecord: ScreeningRedirectStateRecord = {
+        id: sessionRecord.redirectStateId,
+        requestId: request.id,
+        sessionId: sessionRef.id,
+        providerKey,
+        correlationId: sessionRecord.correlationId || null,
+        providerSessionId: sessionRecord.providerSessionId || null,
+        stateTokenHash: sessionRecord.stateTokenHash,
+        stateTokenPreview: makeStateTokenPreview(rawStateToken),
+        returnUrl: sessionRecord.returnUrl,
+        expiresAt: sessionRecord.expiresAt,
+        preparedAt: sessionRecord.redirectPreparedAt || now,
+        updatedAt: now,
+        callbackReceivedAt: null,
+        consumedAt: null,
+        callbackCount: 0,
+        status: "prepared",
+        lastOutcome: "redirect_prepared",
+        lastRejectedReason: null,
+      };
+      tx.set(db.collection("screening_redirect_states").doc(sessionRecord.redirectStateId), redirectStateRecord);
+    }
+
+    let resultRecord: ScreeningResultRecord | null = null;
+    if (started.result) {
+      resultRecord = {
+        id: resultRef.id,
+        ...started.result,
+        sessionId: sessionRef.id,
+        updatedAt: now,
+      };
+      tx.set(resultRef, resultRecord);
+    }
+
+    tx.set(
+      requestRef,
+      {
+        status: started.requestStatus,
+        normalizedResultStatus: resultRecord?.status || sessionRecord.normalizedResultStatus,
+        providerSelection: providerKey,
+        activeSessionId: sessionRef.id,
+        latestResultId: resultRecord?.id || null,
+        nextAction: started.nextAction,
+        startedAt: now,
+        updatedAt: now,
+        latestAuditEventType: providerKey === "manual" ? "manual_review_selected" : "provider_session_created",
+      },
+      { merge: true }
+    );
+
+    return {
+      request: {
+        ...request,
+        status: started.requestStatus,
+        normalizedResultStatus: resultRecord?.status || sessionRecord.normalizedResultStatus,
+        providerSelection: providerKey,
+        activeSessionId: sessionRef.id,
+        latestResultId: resultRecord?.id || null,
+        nextAction: started.nextAction,
+        startedAt: now,
+        updatedAt: now,
+      },
+      consent,
+      session: sessionRecord,
+      result: resultRecord,
+      created: true,
+    };
+  });
+
+  return transactionResult;
+}
+
+async function prepareScreeningRetrySafely(input: {
+  requestId: string;
+  actorId: string | null;
+  tenantId: string;
+}): Promise<ScreeningRequestRecord> {
+  const requestRef = db.collection("screening_requests").doc(input.requestId);
+  return db.runTransaction(async (tx) => {
+    const requestSnap = await tx.get(requestRef);
+    if (!requestSnap.exists) throw new Error("NOT_FOUND");
+    const request = await getScreeningRequestById(input.requestId);
+    if (!request) throw new Error("NOT_FOUND");
+    if (!request.applicantTenantId || request.applicantTenantId !== input.tenantId) throw new Error("FORBIDDEN");
+
+    const activeSession = request.activeSessionId ? await getScreeningSessionById(request.activeSessionId) : null;
+    const duplicateRetryPrepared =
+      !request.activeSessionId &&
+      request.status === "consented" &&
+      request.nextAction === "ready_to_start" &&
+      request.latestResultId === null;
+    if (duplicateRetryPrepared) return request;
+    if (activeSession && !isTerminalScreeningSessionStatus(activeSession.status) && request.status === "in_progress") {
+      throw new Error("SCREENING_STILL_IN_PROGRESS");
+    }
+
+    const now = Date.now();
+    if (request.activeSessionId) {
+      if (activeSession?.redirectStateId) {
+        tx.set(
+          db.collection("screening_redirect_states").doc(activeSession.redirectStateId),
+          {
+            status: "rejected",
+            updatedAt: now,
+            lastOutcome: "retry_superseded",
+            lastRejectedReason: "SESSION_RETIRED_ON_RETRY",
+          },
+          { merge: true }
+        );
+      }
+      tx.set(
+        db.collection("screening_sessions").doc(request.activeSessionId),
+        {
+          isActive: false,
+          duplicateOfSessionId: null,
+          updatedAt: now,
+        },
+        { merge: true }
+      );
+    }
+    tx.set(
+      requestRef,
+      {
+        status: "consented",
+        normalizedResultStatus: "pending",
+        activeSessionId: null,
+        latestResultId: null,
+        nextAction: "ready_to_start",
+        retryCount: Number(request.retryCount || 0) + 1,
+        updatedAt: now,
+        latestAuditEventType: "retry_requested",
+      },
+      { merge: true }
+    );
+    return {
+      ...request,
+      status: "consented",
+      normalizedResultStatus: "pending",
+      activeSessionId: null,
+      latestResultId: null,
+      nextAction: "ready_to_start",
+      retryCount: Number(request.retryCount || 0) + 1,
+      updatedAt: now,
+    };
+  });
+}
+
+async function buildTenantScreeningItems(tenantId: string): Promise<TenantCommunicationItem[]> {
+  const [requestSnap, readMap] = await Promise.all([
+    db.collection("screening_requests").where("applicantTenantId", "==", tenantId).limit(50).get(),
+    getTenantScreeningReadMap(tenantId),
+  ]);
+
+  const items = requestSnap.docs.map((doc) => {
+    const data = (doc.data() as any) || {};
+    const request = {
+      id: doc.id,
+      status: normalizeScreeningRequestStatus(data.status),
+      providerSelection: cleanString(data.providerSelection, 80),
+      packageType: cleanString(data.packageType, 80),
+      requestedAt: Number(data.requestedAt || data.createdAt || 0) || Date.now(),
+      applicantName: cleanString(data.applicantName, 200) || "Applicant",
+      nextAction: cleanString(data.nextAction, 120),
+    };
+    const title =
+      request.status === "consent_pending"
+        ? "Screening consent required"
+        : request.status === "manual_review_required"
+        ? "Screening moved to manual review"
+        : request.status === "completed"
+        ? "Screening complete"
+        : "Screening update";
+    const body = screeningSummaryText(
+      {
+        id: request.id,
+        rentalApplicationId: null,
+        landlordId: null,
+        applicantTenantId: tenantId,
+        applicantUserId: null,
+        applicantEmail: null,
+        applicantName: request.applicantName,
+        propertyId: null,
+        unitId: null,
+        propertyLabel: null,
+        unitLabel: null,
+        packageType: request.packageType,
+        payerType: null,
+        addOns: [],
+        status: request.status,
+        normalizedResultStatus: "pending",
+        providerSelection: (request.providerSelection as ScreeningProviderKey | null) || null,
+        latestConsentId: null,
+        activeSessionId: null,
+        latestResultId: null,
+        nextAction: request.nextAction,
+      },
+      null,
+      null
+    );
+    return {
+      id: `screening_${doc.id}`,
+      type: "screening_update" as const,
+      title,
+      body,
+      createdAt: isoFromMs(request.requestedAt),
+      read: readMap.has(doc.id),
+      priority: request.status === "failed" || request.status === "consent_pending" ? ("high" as const) : ("normal" as const),
+      fromLabel: "RentChain" as const,
+      relatedEntityType: "screening" as const,
+      relatedEntityId: doc.id,
+    };
+  });
+
+  return items.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+}
+
 async function buildTenantNoticeItems(tenantId: string): Promise<TenantCommunicationItem[]> {
   const [noticesSnap, readMap] = await Promise.all([
     db.collection("tenantNotices").where("tenantId", "==", tenantId).limit(100).get(),
@@ -2640,8 +3361,7 @@ router.patch("/notification-preferences", requireTenantWorkspaceIdentity, async 
           updatedAt: next.updatedAt,
         },
       },
-      { merge: true }
-    );
+    });
 
     return res.json({ ok: true, data: next });
   } catch (err: any) {
