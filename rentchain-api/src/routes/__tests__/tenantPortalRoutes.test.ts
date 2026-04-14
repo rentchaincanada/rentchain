@@ -480,6 +480,90 @@ describe("tenantPortalRoutes foundation", () => {
     expect(savedWorkOrder?.finalResolvedAt).toBeDefined();
   });
 
+  it("returns tenant-safe rework state and allows signoff again after rework completion", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    ensureCollection("maintenanceRequests").set("maint-3", {
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      status: "completed",
+      priority: "NORMAL",
+      category: "GENERAL",
+      title: "Heater follow-up",
+      description: "Bedroom still cool.",
+      statusHistory: [],
+      createdAt: 100,
+      updatedAt: 200,
+    });
+    ensureCollection("workOrders").set("maintenance_maint-3", {
+      maintenanceRequestId: "maint-3",
+      tenantId: "tenant-1",
+      status: "completed",
+      resolutionStatus: "tenant_pending_signoff",
+      reworkCycle: {
+        cycleNumber: 1,
+        status: "completed",
+        createdAt: 300,
+        createdBy: "landlord-1",
+        startedAt: 320,
+        completedAt: 360,
+        completionSummary: "Balanced vents and re-tested bedroom airflow.",
+      },
+      reworkHistory: [
+        {
+          cycleNumber: 1,
+          startedAt: 320,
+          completedAt: 360,
+          outcome: "resolved",
+          notes: "Second pass complete.",
+        },
+      ],
+    });
+
+    const detailRes = await invokeRouter(router, {
+      method: "GET",
+      url: "/maintenance-requests/maint-3",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(detailRes.status).toBe(200);
+    expect(detailRes.body?.data?.reworkCycle).toEqual(
+      expect.objectContaining({
+        cycleNumber: 1,
+        status: "completed",
+        completionSummary: expect.stringMatching(/Balanced vents/i),
+      })
+    );
+
+    const signoffRes = await invokeRouter(router, {
+      method: "POST",
+      url: "/maintenance/maint-3/signoff",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+      body: {
+        decision: "resolved",
+      },
+    });
+
+    expect(signoffRes.status).toBe(200);
+    expect(signoffRes.body?.data?.resolutionStatus).toBe("resolved");
+    expect(signoffRes.body?.data?.reworkHistory).toEqual(
+      expect.arrayContaining([expect.objectContaining({ cycleNumber: 1, outcome: "resolved" })])
+    );
+  });
+
   it("requires a reason when the tenant reports the issue is not resolved", async () => {
     const router = (await import("../tenantPortalRoutes")).default;
     ensureCollection("maintenanceRequests").set("maint-2", {

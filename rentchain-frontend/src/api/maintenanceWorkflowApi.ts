@@ -67,6 +67,25 @@ export type MaintenanceWorkflowItem = {
   followUpRequired?: boolean | null;
   followUpReason?: string | null;
   finalResolvedAt?: number | null;
+  reworkCycle?: {
+    cycleNumber: number;
+    status: "not_started" | "assigned" | "in_progress" | "completed" | "cancelled";
+    createdAt: number;
+    createdBy: string;
+    assignedContractorId?: string | null;
+    assignedAt?: number | null;
+    startedAt?: number | null;
+    completedAt?: number | null;
+    completionSummary?: string | null;
+    evidenceSnapshot?: string[] | null;
+  } | null;
+  reworkHistory?: Array<{
+    cycleNumber: number;
+    startedAt?: number;
+    completedAt?: number;
+    outcome?: "resolved" | "failed" | "partial";
+    notes?: string;
+  }>;
   landlordNote?: string | null;
   createdAt: number;
   updatedAt: number;
@@ -100,6 +119,46 @@ export type LandlordMaintenanceContractor = {
   contactName?: string | null;
   email?: string | null;
 };
+
+function mapReworkCycle(value: any): MaintenanceWorkflowItem["reworkCycle"] {
+  if (!value || typeof value !== "object") return null;
+  const status =
+    value.status === "not_started" ||
+    value.status === "assigned" ||
+    value.status === "in_progress" ||
+    value.status === "completed" ||
+    value.status === "cancelled"
+      ? value.status
+      : "not_started";
+  return {
+    cycleNumber: typeof value.cycleNumber === "number" ? value.cycleNumber : 1,
+    status,
+    createdAt: typeof value.createdAt === "number" ? value.createdAt : Date.now(),
+    createdBy: typeof value.createdBy === "string" ? value.createdBy : "",
+    assignedContractorId: typeof value.assignedContractorId === "string" ? value.assignedContractorId : null,
+    assignedAt: typeof value.assignedAt === "number" ? value.assignedAt : null,
+    startedAt: typeof value.startedAt === "number" ? value.startedAt : null,
+    completedAt: typeof value.completedAt === "number" ? value.completedAt : null,
+    completionSummary: typeof value.completionSummary === "string" ? value.completionSummary : null,
+    evidenceSnapshot: Array.isArray(value.evidenceSnapshot)
+      ? value.evidenceSnapshot.filter((entry: unknown): entry is string => typeof entry === "string")
+      : null,
+  };
+}
+
+function mapReworkHistory(value: any): MaintenanceWorkflowItem["reworkHistory"] {
+  if (!Array.isArray(value)) return [];
+  return value.map((entry) => ({
+    cycleNumber: typeof entry?.cycleNumber === "number" ? entry.cycleNumber : 1,
+    startedAt: typeof entry?.startedAt === "number" ? entry.startedAt : undefined,
+    completedAt: typeof entry?.completedAt === "number" ? entry.completedAt : undefined,
+    outcome:
+      entry?.outcome === "resolved" || entry?.outcome === "failed" || entry?.outcome === "partial"
+        ? entry.outcome
+        : undefined,
+    notes: typeof entry?.notes === "string" ? entry.notes : undefined,
+  }));
+}
 
 export async function createTenantMaintenance(payload: {
   title: string;
@@ -197,6 +256,8 @@ export async function listTenantMaintenance() {
     tenantConfirmationUpdatedAt:
       typeof item.tenantConfirmationUpdatedAt === "number" ? item.tenantConfirmationUpdatedAt : null,
     accessAcknowledgedAt: typeof item.accessAcknowledgedAt === "number" ? item.accessAcknowledgedAt : null,
+    reworkCycle: mapReworkCycle((item as any).reworkCycle),
+    reworkHistory: mapReworkHistory((item as any).reworkHistory),
     createdAt: item.createdAt || Date.now(),
     updatedAt: item.updatedAt || item.createdAt || Date.now(),
     statusHistory: Array.isArray(item.statusHistory)
@@ -297,6 +358,8 @@ export async function getTenantMaintenance(id: string) {
     followUpRequired: typeof item?.followUpRequired === "boolean" ? item.followUpRequired : null,
     followUpReason: item?.followUpReason ? String(item.followUpReason) : null,
     finalResolvedAt: typeof item?.finalResolvedAt === "number" ? item.finalResolvedAt : null,
+    reworkCycle: mapReworkCycle((item as any)?.reworkCycle),
+    reworkHistory: mapReworkHistory((item as any)?.reworkHistory),
     createdAt: item?.createdAt || Date.now(),
     updatedAt: item?.updatedAt || item?.createdAt || Date.now(),
     statusHistory: Array.isArray(item?.statusHistory)
@@ -365,6 +428,8 @@ export async function updateTenantMaintenanceConfirmation(
     followUpReason: item?.followUpReason ? String(item.followUpReason) : null,
     finalResolvedAt: typeof item?.finalResolvedAt === "number" ? item.finalResolvedAt : null,
     evidence: Array.isArray((item as any)?.evidence) ? (item as any).evidence : [],
+    reworkCycle: mapReworkCycle((item as any)?.reworkCycle),
+    reworkHistory: mapReworkHistory((item as any)?.reworkHistory),
     createdAt: item?.createdAt || Date.now(),
     updatedAt: item?.updatedAt || item?.createdAt || Date.now(),
     statusHistory: Array.isArray(item?.statusHistory)
@@ -432,6 +497,8 @@ export async function updateTenantMaintenanceSignoff(
     followUpRequired: typeof item?.followUpRequired === "boolean" ? item.followUpRequired : null,
     followUpReason: item?.followUpReason ? String(item.followUpReason) : null,
     finalResolvedAt: typeof item?.finalResolvedAt === "number" ? item.finalResolvedAt : null,
+    reworkCycle: mapReworkCycle((item as any)?.reworkCycle),
+    reworkHistory: mapReworkHistory((item as any)?.reworkHistory),
     createdAt: item?.createdAt || Date.now(),
     updatedAt: item?.updatedAt || item?.createdAt || Date.now(),
     statusHistory: Array.isArray(item?.statusHistory)
@@ -511,6 +578,22 @@ export async function patchContractorMaintenanceJobStatus(
 ) {
   return apiFetch<{ ok: boolean; item: MaintenanceWorkflowItem; data?: MaintenanceWorkflowItem }>(
     `/contractor/jobs/${encodeURIComponent(id)}/status`,
+    {
+      method: "PATCH",
+      body: payload,
+    }
+  );
+}
+
+export async function patchContractorMaintenanceReworkStatus(
+  id: string,
+  payload: {
+    status: "in_progress" | "completed";
+    completionSummary?: string;
+  }
+) {
+  return apiFetch<{ ok: boolean; item: MaintenanceWorkflowItem; data?: MaintenanceWorkflowItem }>(
+    `/contractor/jobs/${encodeURIComponent(id)}/rework-status`,
     {
       method: "PATCH",
       body: payload,

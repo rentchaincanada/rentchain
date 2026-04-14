@@ -5046,6 +5046,37 @@ router.get("/maintenance-requests/:id", requireTenant, async (req: any, res) => 
           : null,
       followUpReason: String(workOrderData?.followUpReason || data?.followUpReason || "").trim() || null,
       finalResolvedAt: toMillis(workOrderData?.finalResolvedAt ?? data?.finalResolvedAt),
+      reworkCycle:
+        workOrderData?.reworkCycle && typeof workOrderData.reworkCycle === "object"
+          ? {
+              cycleNumber: Number(workOrderData.reworkCycle.cycleNumber || 1),
+              status:
+                workOrderData.reworkCycle.status === "not_started" ||
+                workOrderData.reworkCycle.status === "assigned" ||
+                workOrderData.reworkCycle.status === "in_progress" ||
+                workOrderData.reworkCycle.status === "completed" ||
+                workOrderData.reworkCycle.status === "cancelled"
+                  ? workOrderData.reworkCycle.status
+                  : "not_started",
+              createdAt: toMillis(workOrderData.reworkCycle.createdAt),
+              assignedAt: toMillis(workOrderData.reworkCycle.assignedAt),
+              startedAt: toMillis(workOrderData.reworkCycle.startedAt),
+              completedAt: toMillis(workOrderData.reworkCycle.completedAt),
+              completionSummary: String(workOrderData.reworkCycle.completionSummary || "").trim() || null,
+            }
+          : null,
+      reworkHistory: Array.isArray(workOrderData?.reworkHistory)
+        ? workOrderData.reworkHistory.map((entry: any) => ({
+            cycleNumber: Number(entry?.cycleNumber || 1),
+            startedAt: toMillis(entry?.startedAt),
+            completedAt: toMillis(entry?.completedAt),
+            outcome:
+              entry?.outcome === "resolved" || entry?.outcome === "failed" || entry?.outcome === "partial"
+                ? entry.outcome
+                : null,
+            notes: String(entry?.notes || "").trim() || null,
+          }))
+        : [],
       evidence: tenantSafeEvidence,
       tenantContact: data.tenantContact ?? null,
       createdAt: toMillis(data.createdAt),
@@ -5226,6 +5257,37 @@ router.post("/maintenance/:id/signoff", requireTenant, async (req: any, res) => 
           typeof refreshedWorkOrderData?.followUpRequired === "boolean" ? refreshedWorkOrderData.followUpRequired : null,
         followUpReason: String(refreshedWorkOrderData?.followUpReason || "").trim() || null,
         finalResolvedAt: toMillis(refreshedWorkOrderData?.finalResolvedAt),
+        reworkCycle:
+          refreshedWorkOrderData?.reworkCycle && typeof refreshedWorkOrderData.reworkCycle === "object"
+            ? {
+                cycleNumber: Number(refreshedWorkOrderData.reworkCycle.cycleNumber || 1),
+                status:
+                  refreshedWorkOrderData.reworkCycle.status === "not_started" ||
+                  refreshedWorkOrderData.reworkCycle.status === "assigned" ||
+                  refreshedWorkOrderData.reworkCycle.status === "in_progress" ||
+                  refreshedWorkOrderData.reworkCycle.status === "completed" ||
+                  refreshedWorkOrderData.reworkCycle.status === "cancelled"
+                    ? refreshedWorkOrderData.reworkCycle.status
+                    : "not_started",
+                createdAt: toMillis(refreshedWorkOrderData.reworkCycle.createdAt),
+                assignedAt: toMillis(refreshedWorkOrderData.reworkCycle.assignedAt),
+                startedAt: toMillis(refreshedWorkOrderData.reworkCycle.startedAt),
+                completedAt: toMillis(refreshedWorkOrderData.reworkCycle.completedAt),
+                completionSummary: String(refreshedWorkOrderData.reworkCycle.completionSummary || "").trim() || null,
+              }
+            : null,
+        reworkHistory: Array.isArray(refreshedWorkOrderData?.reworkHistory)
+          ? refreshedWorkOrderData.reworkHistory.map((entry: any) => ({
+              cycleNumber: Number(entry?.cycleNumber || 1),
+              startedAt: toMillis(entry?.startedAt),
+              completedAt: toMillis(entry?.completedAt),
+              outcome:
+                entry?.outcome === "resolved" || entry?.outcome === "failed" || entry?.outcome === "partial"
+                  ? entry.outcome
+                  : null,
+              notes: String(entry?.notes || "").trim() || null,
+            }))
+          : [],
       },
     });
   } catch (err) {

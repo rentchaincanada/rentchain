@@ -386,6 +386,50 @@ export default function TenantMaintenanceRequestDetailPage() {
                   ) : null}
                 </div>
               ) : null}
+              {data.reworkCycle || data.reworkHistory?.length ? (
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: radius.md,
+                    padding: "12px 14px",
+                    background: colors.panel,
+                    display: "grid",
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ fontWeight: 800, color: textTokens.primary }}>Follow-up / rework</div>
+                  <div style={{ color: textTokens.secondary }}>
+                    {data.reworkCycle
+                      ? `Rework #${data.reworkCycle.cycleNumber} is ${data.reworkCycle.status.replaceAll("_", " ")}.`
+                      : "A follow-up cycle has been recorded for this request."}
+                  </div>
+                  {data.reworkCycle?.completionSummary ? (
+                    <>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Latest rework completion summary</div>
+                      <div style={{ color: textTokens.secondary }}>{data.reworkCycle.completionSummary}</div>
+                    </>
+                  ) : null}
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>What happens next</div>
+                  <div style={{ color: textTokens.secondary }}>
+                    {data.reworkCycle?.status === "completed"
+                      ? "The updated work is back with your landlord for review before final signoff."
+                      : data.reworkCycle
+                      ? "Your maintenance request is in an active follow-up cycle. RentChain will keep the original history while this second pass is completed."
+                      : "Previous follow-up cycles stay attached to this request for a full maintenance record."}
+                  </div>
+                  {data.reworkHistory?.length ? (
+                    <>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Previous rework cycles</div>
+                      {data.reworkHistory.map((entry) => (
+                        <div key={entry.cycleNumber} style={{ color: textTokens.secondary }}>
+                          Rework #{entry.cycleNumber}: {entry.outcome || "recorded"} on {fmtDate(entry.completedAt)}
+                          {entry.notes ? ` — ${entry.notes}` : ""}
+                        </div>
+                      ))}
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
               <div
                 style={{
                   border: `1px solid ${colors.border}`,

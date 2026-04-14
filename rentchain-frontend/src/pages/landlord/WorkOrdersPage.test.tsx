@@ -10,9 +10,12 @@ const mocks = vi.hoisted(() => ({
   getWorkOrder: vi.fn(),
   patchWorkOrder: vi.fn(),
   approveWorkOrderResolution: vi.fn(),
+  assignWorkOrderRework: vi.fn(),
+  completeWorkOrderRework: vi.fn(),
   confirmWorkOrderCompletion: vi.fn(),
   markWorkOrderFollowUpRequired: vi.fn(),
   reopenWorkOrder: vi.fn(),
+  startWorkOrderRework: vi.fn(),
   uploadWorkOrderEvidence: vi.fn(),
   updateWorkOrderEvidence: vi.fn(),
   addWorkOrderUpdate: vi.fn(),
@@ -29,6 +32,8 @@ vi.mock("@/hooks/useEntitlements", () => ({
 vi.mock("../../api/workOrdersApi", () => ({
   addWorkOrderUpdate: mocks.addWorkOrderUpdate,
   approveWorkOrderResolution: mocks.approveWorkOrderResolution,
+  assignWorkOrderRework: mocks.assignWorkOrderRework,
+  completeWorkOrderRework: mocks.completeWorkOrderRework,
   completeWorkOrder: vi.fn(),
   confirmWorkOrderCompletion: mocks.confirmWorkOrderCompletion,
   getContractorProfileById: mocks.getContractorProfileById,
@@ -38,6 +43,7 @@ vi.mock("../../api/workOrdersApi", () => ({
   markWorkOrderFollowUpRequired: mocks.markWorkOrderFollowUpRequired,
   patchWorkOrder: mocks.patchWorkOrder,
   reopenWorkOrder: mocks.reopenWorkOrder,
+  startWorkOrderRework: mocks.startWorkOrderRework,
   updateWorkOrderEvidence: mocks.updateWorkOrderEvidence,
   uploadWorkOrderEvidence: mocks.uploadWorkOrderEvidence,
 }));
@@ -78,9 +84,12 @@ describe("WorkOrdersPage", () => {
     mocks.getWorkOrder.mockReset();
     mocks.patchWorkOrder.mockReset();
     mocks.approveWorkOrderResolution.mockReset();
+    mocks.assignWorkOrderRework.mockReset();
+    mocks.completeWorkOrderRework.mockReset();
     mocks.confirmWorkOrderCompletion.mockReset();
     mocks.markWorkOrderFollowUpRequired.mockReset();
     mocks.reopenWorkOrder.mockReset();
+    mocks.startWorkOrderRework.mockReset();
     mocks.uploadWorkOrderEvidence.mockReset();
     mocks.updateWorkOrderEvidence.mockReset();
     mocks.addWorkOrderUpdate.mockReset();
@@ -367,6 +376,147 @@ describe("WorkOrdersPage", () => {
     await waitFor(() => {
       expect(mocks.updateWorkOrderEvidence).toHaveBeenCalledWith("wo-2", "evidence-1", {
         visibility: "tenant_safe",
+      });
+    });
+  });
+
+  it("renders the rework workflow and lets the landlord start, assign, and complete it", async () => {
+    mocks.canUseWorkOrders = true;
+    mocks.listWorkOrders.mockResolvedValue([
+      {
+        id: "wo-rework",
+        landlordId: "landlord-1",
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        title: "Return visit for heater",
+        description: "Second pass needed to balance airflow.",
+        category: "HVAC",
+        priority: "high",
+        status: "completed",
+        visibility: "private",
+        budgetMinCents: null,
+        budgetMaxCents: null,
+        assignedContractorId: "contractor-1",
+        invitedContractorIds: [],
+        acceptedAtMs: 10,
+        startedAtMs: 20,
+        completedAtMs: 30,
+        resolutionStatus: "follow_up_required",
+        followUpRequired: true,
+        followUpReason: "Bedroom still not heating evenly.",
+        notesInternal: "",
+        linkedExpenseId: null,
+        createdAtMs: 1,
+        updatedAtMs: 35,
+      },
+    ]);
+    mocks.listWorkOrderUpdates.mockResolvedValue([]);
+    mocks.getWorkOrder.mockResolvedValueOnce({
+      id: "wo-rework",
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      title: "Return visit for heater",
+      description: "Second pass needed to balance airflow.",
+      category: "HVAC",
+      priority: "high",
+      status: "assigned",
+      visibility: "private",
+      budgetMinCents: null,
+      budgetMaxCents: null,
+      assignedContractorId: "contractor-1",
+      invitedContractorIds: [],
+      acceptedAtMs: 10,
+      startedAtMs: 20,
+      completedAtMs: 30,
+      resolutionStatus: "completed_pending_review",
+      followUpRequired: false,
+      reworkCycle: {
+        cycleNumber: 1,
+        status: "assigned",
+        createdAt: 40,
+        createdBy: "landlord-1",
+        assignedContractorId: "contractor-1",
+        assignedAt: 41,
+      },
+      reworkHistory: [],
+      notesInternal: "",
+      linkedExpenseId: null,
+      createdAtMs: 1,
+      updatedAtMs: 41,
+    });
+    mocks.getWorkOrder.mockResolvedValueOnce({
+      id: "wo-rework",
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      title: "Return visit for heater",
+      description: "Second pass needed to balance airflow.",
+      category: "HVAC",
+      priority: "high",
+      status: "completed",
+      visibility: "private",
+      budgetMinCents: null,
+      budgetMaxCents: null,
+      assignedContractorId: "contractor-2",
+      invitedContractorIds: [],
+      acceptedAtMs: 10,
+      startedAtMs: 20,
+      completedAtMs: 30,
+      resolutionStatus: "completed_pending_review",
+      followUpRequired: false,
+      reworkCycle: {
+        cycleNumber: 1,
+        status: "completed",
+        createdAt: 40,
+        createdBy: "landlord-1",
+        assignedContractorId: "contractor-2",
+        assignedAt: 41,
+        completedAt: 60,
+        completionSummary: "Adjusted vents and rebalanced output.",
+      },
+      reworkHistory: [],
+      notesInternal: "",
+      linkedExpenseId: null,
+      createdAtMs: 1,
+      updatedAtMs: 60,
+    });
+    mocks.startWorkOrderRework.mockResolvedValue({ ok: true });
+    mocks.assignWorkOrderRework.mockResolvedValue({ ok: true });
+    mocks.completeWorkOrderRework.mockResolvedValue({ ok: true });
+
+    render(
+      <MemoryRouter>
+        <WorkOrdersPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /timeline/i }));
+    expect((await screen.findAllByText(/Rework cycle/i)).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: /Start rework/i }));
+
+    await waitFor(() => {
+      expect(mocks.startWorkOrderRework).toHaveBeenCalledWith("wo-rework");
+    });
+
+    fireEvent.change(await screen.findByPlaceholderText(/Contractor ID for rework assignment/i), {
+      target: { value: "contractor-2" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Assign rework/i }));
+
+    await waitFor(() => {
+      expect(mocks.assignWorkOrderRework).toHaveBeenCalledWith("wo-rework", "contractor-2");
+    });
+
+    fireEvent.change(await screen.findByPlaceholderText(/Add notes for how this rework cycle should close/i), {
+      target: { value: "Follow-up complete after vent balancing." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Complete rework cycle/i }));
+
+    await waitFor(() => {
+      expect(mocks.completeWorkOrderRework).toHaveBeenCalledWith("wo-rework", {
+        outcome: "resolved",
+        notes: "Follow-up complete after vent balancing.",
       });
     });
   });

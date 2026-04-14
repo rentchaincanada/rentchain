@@ -8,6 +8,8 @@ import { fetchProperties } from "../../api/propertiesApi";
 import {
   addWorkOrderUpdate,
   approveWorkOrderResolution,
+  assignWorkOrderRework,
+  completeWorkOrderRework,
   confirmWorkOrderCompletion,
   getWorkOrder,
   getContractorProfileById,
@@ -16,6 +18,7 @@ import {
   markWorkOrderFollowUpRequired,
   patchWorkOrder,
   reopenWorkOrder,
+  startWorkOrderRework,
   updateWorkOrderEvidence,
   uploadWorkOrderEvidence,
   type WorkOrderEvidenceType,
@@ -120,6 +123,9 @@ export default function WorkOrdersPage() {
   );
   const [reopenReason, setReopenReason] = React.useState("");
   const [followUpReason, setFollowUpReason] = React.useState("");
+  const [reworkContractorId, setReworkContractorId] = React.useState("");
+  const [reworkNotes, setReworkNotes] = React.useState("");
+  const [reworkOutcome, setReworkOutcome] = React.useState<"resolved" | "partial">("resolved");
   const [savingNote, setSavingNote] = React.useState(false);
   const [savingAction, setSavingAction] = React.useState(false);
   const [savingEvidence, setSavingEvidence] = React.useState(false);
@@ -289,6 +295,64 @@ export default function WorkOrdersPage() {
     [load, refreshSelected, reopenReason]
   );
 
+  const handleStartRework = React.useCallback(
+    async (item: WorkOrderRecord) => {
+      setSavingAction(true);
+      setError(null);
+      try {
+        await startWorkOrderRework(item.id);
+        await load();
+        await refreshSelected(item.id);
+      } catch (err: any) {
+        setError(String(err?.message || "Failed to start rework"));
+      } finally {
+        setSavingAction(false);
+      }
+    },
+    [load, refreshSelected]
+  );
+
+  const handleAssignRework = React.useCallback(
+    async (item: WorkOrderRecord) => {
+      if (!reworkContractorId.trim()) {
+        setError("Add a contractor ID before assigning the rework cycle.");
+        return;
+      }
+      setSavingAction(true);
+      setError(null);
+      try {
+        await assignWorkOrderRework(item.id, reworkContractorId.trim());
+        await load();
+        await refreshSelected(item.id);
+      } catch (err: any) {
+        setError(String(err?.message || "Failed to assign rework"));
+      } finally {
+        setSavingAction(false);
+      }
+    },
+    [load, refreshSelected, reworkContractorId]
+  );
+
+  const handleCompleteRework = React.useCallback(
+    async (item: WorkOrderRecord) => {
+      setSavingAction(true);
+      setError(null);
+      try {
+        await completeWorkOrderRework(item.id, {
+          outcome: reworkOutcome,
+          notes: reworkNotes.trim() || undefined,
+        });
+        await load();
+        await refreshSelected(item.id);
+      } catch (err: any) {
+        setError(String(err?.message || "Failed to complete rework"));
+      } finally {
+        setSavingAction(false);
+      }
+    },
+    [load, refreshSelected, reworkNotes, reworkOutcome]
+  );
+
   const handleEvidenceUpload = React.useCallback(async () => {
     if (!selected) return;
     if (!evidenceFile) {
@@ -340,6 +404,9 @@ export default function WorkOrdersPage() {
       setCompletionOutcome("completed");
       setReopenReason("");
       setFollowUpReason("");
+      setReworkContractorId("");
+      setReworkNotes("");
+      setReworkOutcome("resolved");
       setEvidenceFile(null);
       setEvidenceCaption("");
       setEvidenceType("inspection");
@@ -354,6 +421,9 @@ export default function WorkOrdersPage() {
     );
     setReopenReason(String(selected.reopenReason || ""));
     setFollowUpReason(String(selected.followUpReason || ""));
+    setReworkContractorId(String(selected.reworkCycle?.assignedContractorId || selected.assignedContractorId || ""));
+    setReworkNotes("");
+    setReworkOutcome("resolved");
   }, [selected]);
 
   React.useEffect(() => {
@@ -680,6 +750,94 @@ export default function WorkOrdersPage() {
                 <div>
                   <div style={{ fontSize: 12, color: "#64748b" }}>Follow-up reason</div>
                   <div style={{ marginTop: 4 }}>{selected.followUpReason}</div>
+                </div>
+              ) : null}
+              {selected.reworkCycle ? (
+                <div>
+                  <div style={{ fontSize: 12, color: "#64748b" }}>Active rework cycle</div>
+                  <div style={{ marginTop: 4 }}>
+                    Rework #{selected.reworkCycle.cycleNumber} • {selected.reworkCycle.status.replaceAll("_", " ")}
+                  </div>
+                  {selected.reworkCycle.completionSummary ? (
+                    <div style={{ marginTop: 4, whiteSpace: "pre-wrap" }}>{selected.reworkCycle.completionSummary}</div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gap: 8,
+                marginBottom: 12,
+                padding: 12,
+                border: "1px solid #e2e8f0",
+                borderRadius: 12,
+                background: "#f8fafc",
+              }}
+            >
+              <div style={{ fontWeight: 700 }}>Rework cycle</div>
+              <div style={{ color: "#64748b" }}>
+                {selected.reworkCycle
+                  ? `Rework #${selected.reworkCycle.cycleNumber} is ${selected.reworkCycle.status.replaceAll("_", " ")}.`
+                  : selected.resolutionStatus === "follow_up_required"
+                  ? "This work order is ready to move into a structured rework cycle."
+                  : "No active rework cycle."}
+              </div>
+              {selected.reworkCycle ? (
+                <>
+                  <div style={{ fontSize: 13, color: "#64748b" }}>
+                    Created {formatDate(selected.reworkCycle.createdAt)} • Assigned {formatDate(selected.reworkCycle.assignedAt)} • Started{" "}
+                    {formatDate(selected.reworkCycle.startedAt)} • Completed {formatDate(selected.reworkCycle.completedAt)}
+                  </div>
+                  <input
+                    value={reworkContractorId}
+                    onChange={(e) => setReworkContractorId(e.target.value)}
+                    placeholder="Contractor ID for rework assignment"
+                    style={{ width: "100%", borderRadius: 8, border: "1px solid #cbd5e1", padding: 8 }}
+                  />
+                  <textarea
+                    value={reworkNotes}
+                    onChange={(e) => setReworkNotes(e.target.value)}
+                    placeholder="Add notes for how this rework cycle should close"
+                    rows={3}
+                    style={{ width: "100%", borderRadius: 8, border: "1px solid #cbd5e1", padding: 8, resize: "vertical" }}
+                  />
+                  <select
+                    value={reworkOutcome}
+                    onChange={(e) => setReworkOutcome(e.target.value as "resolved" | "partial")}
+                    style={{ width: "100%", borderRadius: 8, border: "1px solid #cbd5e1", padding: 8 }}
+                  >
+                    <option value="resolved">Resolved</option>
+                    <option value="partial">Partial</option>
+                  </select>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {selected.reworkCycle.status !== "completed" ? (
+                      <Button variant="secondary" disabled={savingAction} onClick={() => void handleAssignRework(selected)}>
+                        {savingAction ? "Saving..." : "Assign rework"}
+                      </Button>
+                    ) : null}
+                    {selected.reworkCycle.status === "completed" ? (
+                      <Button disabled={savingAction} onClick={() => void handleCompleteRework(selected)}>
+                        {savingAction ? "Saving..." : "Complete rework cycle"}
+                      </Button>
+                    ) : null}
+                  </div>
+                </>
+              ) : selected.resolutionStatus === "follow_up_required" ? (
+                <Button disabled={savingAction} onClick={() => void handleStartRework(selected)}>
+                  {savingAction ? "Saving..." : "Start rework"}
+                </Button>
+              ) : selected.reworkHistory?.length ? (
+                <div style={{ display: "grid", gap: 8 }}>
+                  {selected.reworkHistory.map((entry) => (
+                    <div key={entry.cycleNumber} style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: 10 }}>
+                      <div style={{ fontWeight: 600 }}>Rework #{entry.cycleNumber}</div>
+                      <div style={{ color: "#64748b", fontSize: 13 }}>
+                        Started {formatDate(entry.startedAt)} • Completed {formatDate(entry.completedAt)} • Outcome {entry.outcome || "-"}
+                      </div>
+                      {entry.notes ? <div style={{ marginTop: 4 }}>{entry.notes}</div> : null}
+                    </div>
+                  ))}
                 </div>
               ) : null}
             </div>

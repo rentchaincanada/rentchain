@@ -130,6 +130,28 @@ function normalizeTenantSignoffStatus(value: unknown): "pending" | "accepted" | 
   return null;
 }
 
+function normalizeReworkCycleStatus(
+  value: unknown
+): "not_started" | "assigned" | "in_progress" | "completed" | "cancelled" | null {
+  const next = asString(value, 40).toLowerCase();
+  if (
+    next === "not_started" ||
+    next === "assigned" ||
+    next === "in_progress" ||
+    next === "completed" ||
+    next === "cancelled"
+  ) {
+    return next;
+  }
+  return null;
+}
+
+function normalizeReworkHistoryOutcome(value: unknown): "resolved" | "failed" | "partial" | null {
+  const next = asString(value, 40).toLowerCase();
+  if (next === "resolved" || next === "failed" || next === "partial") return next;
+  return null;
+}
+
 function normalizeRole(req: any): string {
   const actorRole = asString(req.user?.actorRole, 40).toLowerCase();
   const role = asString(req.user?.role, 40).toLowerCase();
@@ -181,6 +203,14 @@ async function toWorkOrderResponseForAudience(id: string, data: any, audience: "
     ...item,
     evidence: await serializeEvidenceForAudience(item.evidence, audience),
   };
+}
+
+function getNextReworkCycleNumber(data: any): number {
+  const currentCycle = Number(data?.reworkCycle?.cycleNumber || 0);
+  const historyMax = Array.isArray(data?.reworkHistory)
+    ? data.reworkHistory.reduce((max: number, entry: any) => Math.max(max, Number(entry?.cycleNumber || 0)), 0)
+    : 0;
+  return Math.max(currentCycle, historyMax) + 1;
 }
 
 function isAllowedEvidenceFile(file: Express.Multer.File | undefined) {
@@ -1727,6 +1757,218 @@ router.post("/landlord/work-orders/:id/mark-follow-up-required", requireAuth, as
   } catch (err) {
     console.error("[work-orders] mark follow-up required failed", err);
     return res.status(500).json({ ok: false, error: "WORK_ORDER_MARK_FOLLOW_UP_FAILED" });
+  }
+});
+
+router.post("/landlord/work-orders/:id/start-rework", requireAuth, async (req: any, res) => {
+  try {
+    if (!isLandlord(req)) return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+
+    const workOrderId = asString(req.params?.id, 120);
+    const access = await getWorkOrderAuthorized(req, workOrderId);
+    if (!access.ok) {
+      if (access.code === "NOT_FOUND") return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const currentResolutionStatus = normalizeResolutionStatus((access.item as any)?.resolutionStatus);
+    if (currentResolutionStatus !== "follow_up_required") {
+      return res.status(400).json({ ok: false, error: "REWORK_REQUIRES_FOLLOW_UP_STATUS" });
+    }
+
+    const currentReworkStatus = normalizeReworkCycleStatus((access.item as any)?.reworkCycle?.status);
+    if (currentReworkStatus && currentReworkStatus !== "completed" && currentReworkStatus !== "cancelled") {
+      return res.status(409).json({ ok: false, error: "REWORK_ALREADY_ACTIVE" });
+    }
+
+    const now = nowMs();
+    const existingAssignedContractorId = asOptionalString((access.item as any)?.assignedContractorId, 120);
+    const cycleNumber = getNextReworkCycleNumber(access.item);
+    const cycleStatus = existingAssignedContractorId ? "assigned" : "not_started";
+
+    await db.collection("workOrders").doc(workOrderId).set(
+      {
+        status: "assigned",
+        resolutionStatus: "completed_pending_review",
+        followUpRequired: false,
+        reworkCycle: {
+          cycleNumber,
+          status: cycleStatus,
+          createdAt: now,
+          createdBy: access.userId,
+          assignedContractorId: existingAssignedContractorId,
+          assignedAt: existingAssignedContractorId ? now : null,
+          startedAt: null,
+          completedAt: null,
+          completionSummary: null,
+          evidenceSnapshot: null,
+        },
+        updatedAtMs: now,
+        lastExecutionUpdateAt: now,
+      },
+      { merge: true }
+    );
+
+    await writeWorkOrderUpdate({
+      workOrderId,
+      actorRole: isAdmin(req) ? "admin" : "landlord",
+      actorId: access.userId,
+      updateType: "reopened",
+      message: `Rework cycle #${cycleNumber} started`,
+    });
+
+    await syncMaintenanceFromWorkOrder(workOrderId, {
+      contractorLastUpdate: `Rework cycle #${cycleNumber} started.`,
+    });
+    await appendMaintenanceStatusHistory({
+      maintenanceRequestId: asOptionalString((access.item as any)?.maintenanceRequestId, 120),
+      status: "assigned",
+      actorRole: isAdmin(req) ? "admin" : "landlord",
+      actorId: access.userId,
+      message: `Rework cycle #${cycleNumber} started.`,
+    });
+
+    const refreshed = await db.collection("workOrders").doc(workOrderId).get();
+    return res.json({ ok: true, item: await toWorkOrderResponseForAudience(refreshed.id, refreshed.data(), "landlord") });
+  } catch (err) {
+    console.error("[work-orders] start rework failed", err);
+    return res.status(500).json({ ok: false, error: "WORK_ORDER_START_REWORK_FAILED" });
+  }
+});
+
+router.post("/landlord/work-orders/:id/assign-rework", requireAuth, async (req: any, res) => {
+  try {
+    if (!isLandlord(req)) return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+
+    const workOrderId = asString(req.params?.id, 120);
+    const access = await getWorkOrderAuthorized(req, workOrderId);
+    if (!access.ok) {
+      if (access.code === "NOT_FOUND") return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const reworkCycle = (access.item as any)?.reworkCycle || null;
+    const cycleStatus = normalizeReworkCycleStatus(reworkCycle?.status);
+    if (!reworkCycle || !cycleStatus || cycleStatus === "completed" || cycleStatus === "cancelled") {
+      return res.status(400).json({ ok: false, error: "REWORK_CYCLE_NOT_ACTIVE" });
+    }
+
+    const contractorId = asOptionalString(req.body?.contractorId, 120);
+    if (!contractorId) {
+      return res.status(400).json({ ok: false, error: "CONTRACTOR_ID_REQUIRED" });
+    }
+
+    const now = nowMs();
+    await db.collection("workOrders").doc(workOrderId).set(
+      {
+        status: "assigned",
+        assignedContractorId: contractorId,
+        reworkCycle: {
+          ...reworkCycle,
+          status: "assigned",
+          assignedContractorId: contractorId,
+          assignedAt: now,
+        },
+        updatedAtMs: now,
+        lastExecutionUpdateAt: now,
+      },
+      { merge: true }
+    );
+
+    await writeWorkOrderUpdate({
+      workOrderId,
+      actorRole: isAdmin(req) ? "admin" : "landlord",
+      actorId: access.userId,
+      updateType: "status_changed",
+      message: `Rework cycle #${Number(reworkCycle?.cycleNumber || 1)} assigned to contractor ${contractorId}`,
+    });
+
+    await syncMaintenanceFromWorkOrder(workOrderId, {
+      contractorLastUpdate: `Rework cycle #${Number(reworkCycle?.cycleNumber || 1)} assigned.`,
+    });
+    await appendMaintenanceStatusHistory({
+      maintenanceRequestId: asOptionalString((access.item as any)?.maintenanceRequestId, 120),
+      status: "assigned",
+      actorRole: isAdmin(req) ? "admin" : "landlord",
+      actorId: access.userId,
+      message: `Rework cycle #${Number(reworkCycle?.cycleNumber || 1)} assigned to contractor.`,
+    });
+
+    const refreshed = await db.collection("workOrders").doc(workOrderId).get();
+    return res.json({ ok: true, item: await toWorkOrderResponseForAudience(refreshed.id, refreshed.data(), "landlord") });
+  } catch (err) {
+    console.error("[work-orders] assign rework failed", err);
+    return res.status(500).json({ ok: false, error: "WORK_ORDER_ASSIGN_REWORK_FAILED" });
+  }
+});
+
+router.post("/landlord/work-orders/:id/complete-rework", requireAuth, async (req: any, res) => {
+  try {
+    if (!isLandlord(req)) return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+
+    const workOrderId = asString(req.params?.id, 120);
+    const access = await getWorkOrderAuthorized(req, workOrderId);
+    if (!access.ok) {
+      if (access.code === "NOT_FOUND") return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const reworkCycle = (access.item as any)?.reworkCycle || null;
+    if (!reworkCycle || normalizeReworkCycleStatus(reworkCycle?.status) !== "completed") {
+      return res.status(400).json({ ok: false, error: "REWORK_NOT_READY_FOR_COMPLETION" });
+    }
+
+    const outcome = normalizeReworkHistoryOutcome(req.body?.outcome) || "resolved";
+    const notes = asOptionalString(req.body?.notes || reworkCycle?.completionSummary, 2000);
+    const now = nowMs();
+    const historyEntry = {
+      cycleNumber: Number(reworkCycle?.cycleNumber || 1),
+      startedAt: typeof reworkCycle?.startedAt === "number" ? reworkCycle.startedAt : null,
+      completedAt: typeof reworkCycle?.completedAt === "number" ? reworkCycle.completedAt : now,
+      outcome,
+      notes,
+    };
+
+    await db.collection("workOrders").doc(workOrderId).set(
+      {
+        status: "completed",
+        resolutionStatus: "completed_pending_review",
+        followUpRequired: false,
+        reworkCycle: {
+          ...reworkCycle,
+          status: "completed",
+        },
+        reworkHistory: FieldValue.arrayUnion(historyEntry),
+        updatedAtMs: now,
+        lastExecutionUpdateAt: now,
+      },
+      { merge: true }
+    );
+
+    await writeWorkOrderUpdate({
+      workOrderId,
+      actorRole: isAdmin(req) ? "admin" : "landlord",
+      actorId: access.userId,
+      updateType: "confirmed",
+      message: `Rework cycle #${Number(reworkCycle?.cycleNumber || 1)} completed and returned for review`,
+    });
+
+    await syncMaintenanceFromWorkOrder(workOrderId, {
+      contractorLastUpdate: `Rework cycle #${Number(reworkCycle?.cycleNumber || 1)} completed and is ready for review.`,
+    });
+    await appendMaintenanceStatusHistory({
+      maintenanceRequestId: asOptionalString((access.item as any)?.maintenanceRequestId, 120),
+      status: "completed",
+      actorRole: isAdmin(req) ? "admin" : "landlord",
+      actorId: access.userId,
+      message: `Rework cycle #${Number(reworkCycle?.cycleNumber || 1)} completed and is ready for review.`,
+    });
+
+    const refreshed = await db.collection("workOrders").doc(workOrderId).get();
+    return res.json({ ok: true, item: await toWorkOrderResponseForAudience(refreshed.id, refreshed.data(), "landlord") });
+  } catch (err) {
+    console.error("[work-orders] complete rework failed", err);
+    return res.status(500).json({ ok: false, error: "WORK_ORDER_COMPLETE_REWORK_FAILED" });
   }
 });
 

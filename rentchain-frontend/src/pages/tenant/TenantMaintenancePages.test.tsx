@@ -99,6 +99,22 @@ describe("tenant maintenance pages", () => {
         serviceWindowStartAt: Date.UTC(2026, 3, 15, 13, 0),
         serviceWindowEndAt: Date.UTC(2026, 3, 15, 15, 0),
         accessRequired: true,
+        reworkCycle: {
+          cycleNumber: 1,
+          status: "in_progress",
+          createdAt: 210,
+          createdBy: "landlord-1",
+          startedAt: 220,
+          completionSummary: null,
+        },
+        reworkHistory: [
+          {
+            cycleNumber: 0,
+            completedAt: 205,
+            outcome: "partial",
+            notes: "Initial completion required a second pass.",
+          },
+        ],
         evidence: [
           {
             id: "evidence-1",
@@ -138,6 +154,8 @@ describe("tenant maintenance pages", () => {
     expect(screen.getAllByText(/Scheduling \/ access/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Access needed/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Confirmation \/ access/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Follow-up \/ rework/i)).toBeInTheDocument();
+    expect(screen.getByText(/Rework #1 is in progress/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Confirm service window/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Request schedule change/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Acknowledge access/i })).toBeInTheDocument();

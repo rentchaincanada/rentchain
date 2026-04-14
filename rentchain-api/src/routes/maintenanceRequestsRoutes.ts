@@ -475,6 +475,20 @@ function normalizeTenantSignoffStatus(value: any): "pending" | "accepted" | "dec
   return null;
 }
 
+function normalizeReworkCycleStatus(value: any): "not_started" | "assigned" | "in_progress" | "completed" | "cancelled" | null {
+  const next = String(value || "").trim().toLowerCase();
+  if (
+    next === "not_started" ||
+    next === "assigned" ||
+    next === "in_progress" ||
+    next === "completed" ||
+    next === "cancelled"
+  ) {
+    return next;
+  }
+  return null;
+}
+
 async function appendWorkOrderUpdate(
   workOrderId: string,
   payload: {
@@ -639,6 +653,25 @@ async function upsertMaintenanceWorkOrder(input: {
   followUpRequired?: boolean | null;
   followUpReason?: string | null;
   finalResolvedAt?: number | null;
+  reworkCycle?: {
+    cycleNumber: number;
+    status: "not_started" | "assigned" | "in_progress" | "completed" | "cancelled";
+    createdAt: number;
+    createdBy: string;
+    assignedContractorId?: string | null;
+    assignedAt?: number | null;
+    startedAt?: number | null;
+    completedAt?: number | null;
+    completionSummary?: string | null;
+    evidenceSnapshot?: string[] | null;
+  } | null;
+  reworkHistory?: Array<{
+    cycleNumber: number;
+    startedAt?: number | null;
+    completedAt?: number | null;
+    outcome?: "resolved" | "failed" | "partial" | null;
+    notes?: string | null;
+  }> | null;
   reopenedAt?: number | null;
   reopenedByActorId?: string | null;
   reopenedByActorRole?: "landlord" | "admin" | null;
@@ -788,6 +821,66 @@ async function upsertMaintenanceWorkOrder(input: {
           ? input.finalResolvedAt
           : null
         : toMillis(existingData.finalResolvedAt),
+    reworkCycle:
+      input.reworkCycle !== undefined
+        ? input.reworkCycle
+          ? {
+              cycleNumber: Number(input.reworkCycle.cycleNumber || 1),
+              status: normalizeReworkCycleStatus(input.reworkCycle.status) || "not_started",
+              createdAt: typeof input.reworkCycle.createdAt === "number" ? input.reworkCycle.createdAt : now,
+              createdBy: String(input.reworkCycle.createdBy || "").trim() || "system",
+              assignedContractorId: String(input.reworkCycle.assignedContractorId || "").trim() || null,
+              assignedAt: typeof input.reworkCycle.assignedAt === "number" ? input.reworkCycle.assignedAt : null,
+              startedAt: typeof input.reworkCycle.startedAt === "number" ? input.reworkCycle.startedAt : null,
+              completedAt: typeof input.reworkCycle.completedAt === "number" ? input.reworkCycle.completedAt : null,
+              completionSummary: String(input.reworkCycle.completionSummary || "").trim() || null,
+              evidenceSnapshot: Array.isArray(input.reworkCycle.evidenceSnapshot)
+                ? input.reworkCycle.evidenceSnapshot.map((entry) => String(entry || "").trim()).filter(Boolean)
+                : null,
+            }
+          : null
+        : existingData.reworkCycle
+        ? {
+            cycleNumber: Number(existingData.reworkCycle.cycleNumber || 1),
+            status: normalizeReworkCycleStatus(existingData.reworkCycle.status) || "not_started",
+            createdAt: toMillis(existingData.reworkCycle.createdAt) || now,
+            createdBy: String(existingData.reworkCycle.createdBy || "").trim() || "system",
+            assignedContractorId: String(existingData.reworkCycle.assignedContractorId || "").trim() || null,
+            assignedAt: toMillis(existingData.reworkCycle.assignedAt),
+            startedAt: toMillis(existingData.reworkCycle.startedAt),
+            completedAt: toMillis(existingData.reworkCycle.completedAt),
+            completionSummary: String(existingData.reworkCycle.completionSummary || "").trim() || null,
+            evidenceSnapshot: Array.isArray(existingData.reworkCycle.evidenceSnapshot)
+              ? existingData.reworkCycle.evidenceSnapshot.map((entry: any) => String(entry || "").trim()).filter(Boolean)
+              : null,
+          }
+        : null,
+    reworkHistory:
+      input.reworkHistory !== undefined
+        ? Array.isArray(input.reworkHistory)
+          ? input.reworkHistory.map((entry) => ({
+              cycleNumber: Number(entry?.cycleNumber || 1),
+              startedAt: typeof entry?.startedAt === "number" ? entry.startedAt : null,
+              completedAt: typeof entry?.completedAt === "number" ? entry.completedAt : null,
+              outcome:
+                entry?.outcome === "resolved" || entry?.outcome === "failed" || entry?.outcome === "partial"
+                  ? entry.outcome
+                  : null,
+              notes: String(entry?.notes || "").trim() || null,
+            }))
+          : null
+        : Array.isArray(existingData.reworkHistory)
+        ? existingData.reworkHistory.map((entry: any) => ({
+            cycleNumber: Number(entry?.cycleNumber || 1),
+            startedAt: toMillis(entry?.startedAt),
+            completedAt: toMillis(entry?.completedAt),
+            outcome:
+              entry?.outcome === "resolved" || entry?.outcome === "failed" || entry?.outcome === "partial"
+                ? entry.outcome
+                : null,
+            notes: String(entry?.notes || "").trim() || null,
+          }))
+        : null,
     reopenedAt:
       input.reopenedAt !== undefined
         ? typeof input.reopenedAt === "number"
@@ -2029,6 +2122,136 @@ router.patch("/contractor/jobs/:id/status", async (req: any, res) => {
       message: err?.message || "failed",
     });
     return res.status(500).json({ ok: false, error: "CONTRACTOR_MAINTENANCE_PATCH_FAILED" });
+  }
+});
+
+router.patch("/contractor/jobs/:id/rework-status", async (req: any, res) => {
+  try {
+    const access = await resolveContractorAccess(req);
+    if (access.role !== "contractor" && access.role !== "admin") {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const contractorId = access.contractorId;
+    const actorId = String(req.user?.id || "").trim() || contractorId;
+    const id = String(req.params?.id || "").trim();
+    if (!contractorId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+    const ref = db.collection("maintenanceRequests").doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    const item = { id: snap.id, ...(snap.data() as any) };
+
+    const workOrderRef = db.collection("workOrders").doc(`maintenance_${id}`);
+    const workOrderSnap = await workOrderRef.get();
+    if (!workOrderSnap.exists) return res.status(404).json({ ok: false, error: "WORK_ORDER_NOT_FOUND" });
+    const workOrder = (workOrderSnap.data() as any) || {};
+    const reworkCycle = workOrder?.reworkCycle || null;
+    if (!reworkCycle) return res.status(400).json({ ok: false, error: "REWORK_CYCLE_NOT_ACTIVE" });
+
+    const assignedContractorId = String(reworkCycle?.assignedContractorId || "").trim();
+    if (!assignedContractorId || assignedContractorId !== contractorId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const nextStatus =
+      req.body?.status === "in_progress" || req.body?.status === "completed" ? req.body.status : null;
+    if (!nextStatus) {
+      return res.status(400).json({ ok: false, error: "INVALID_REWORK_STATUS" });
+    }
+
+    const currentReworkStatus = normalizeReworkCycleStatus(reworkCycle?.status) || "assigned";
+    if (
+      (nextStatus === "in_progress" && !["assigned", "not_started"].includes(currentReworkStatus)) ||
+      (nextStatus === "completed" && !["in_progress", "assigned"].includes(currentReworkStatus))
+    ) {
+      return res.status(400).json({ ok: false, error: "INVALID_REWORK_STATUS_TRANSITION" });
+    }
+
+    const completionSummary = String(req.body?.completionSummary || "").trim().slice(0, 2000);
+    if (nextStatus === "completed" && !completionSummary) {
+      return res.status(400).json({ ok: false, error: "COMPLETION_SUMMARY_REQUIRED" });
+    }
+
+    const now = Date.now();
+    const updatedReworkCycle = {
+      ...reworkCycle,
+      status: nextStatus,
+      startedAt:
+        nextStatus === "in_progress"
+          ? typeof reworkCycle?.startedAt === "number"
+            ? reworkCycle.startedAt
+            : now
+          : typeof reworkCycle?.startedAt === "number"
+          ? reworkCycle.startedAt
+          : null,
+      completedAt: nextStatus === "completed" ? now : typeof reworkCycle?.completedAt === "number" ? reworkCycle.completedAt : null,
+      completionSummary:
+        nextStatus === "completed"
+          ? completionSummary
+          : String(reworkCycle?.completionSummary || "").trim() || null,
+      evidenceSnapshot:
+        nextStatus === "completed" && Array.isArray(workOrder?.evidence)
+          ? workOrder.evidence.map((entry: any) => String(entry?.id || "").trim()).filter(Boolean)
+          : Array.isArray(reworkCycle?.evidenceSnapshot)
+          ? reworkCycle.evidenceSnapshot.map((entry: any) => String(entry || "").trim()).filter(Boolean)
+          : null,
+    };
+
+    await workOrderRef.set(
+      {
+        status: nextStatus === "completed" ? "completed" : "in_progress",
+        assignedContractorId: contractorId,
+        reworkCycle: updatedReworkCycle,
+        updatedAtMs: now,
+        lastExecutionUpdateAt: now,
+      },
+      { merge: true }
+    );
+
+    await ref.set(
+      {
+        status: nextStatus === "completed" ? "completed" : "in_progress",
+        contractorStatus: nextStatus === "completed" ? "completed" : "in_progress",
+        contractorLastUpdate:
+          nextStatus === "completed"
+            ? `Rework cycle #${Number(reworkCycle?.cycleNumber || 1)} completed.`
+            : `Rework cycle #${Number(reworkCycle?.cycleNumber || 1)} started.`,
+        updatedAt: now,
+        lastUpdatedBy: "CONTRACTOR",
+      },
+      { merge: true }
+    );
+
+    const message =
+      nextStatus === "completed"
+        ? `Rework cycle #${Number(reworkCycle?.cycleNumber || 1)} completed: ${completionSummary}`
+        : `Rework cycle #${Number(reworkCycle?.cycleNumber || 1)} started.`;
+
+    await appendStatusHistory(id, {
+      status: nextStatus === "completed" ? "completed" : "in_progress",
+      actorRole: access.role === "admin" ? "admin" : "contractor",
+      actorId,
+      message,
+    });
+    await appendWorkOrderUpdate(workOrderRef.id, {
+      actorRole: access.role === "admin" ? "admin" : "contractor",
+      actorId,
+      updateType: nextStatus === "completed" ? "completed" : "started",
+      message,
+    });
+
+    const refreshedMaintenance = await ref.get();
+    const refreshedWorkOrder = await workOrderRef.get();
+    const refreshed = await shapeContractorJobFromSources(
+      { id: refreshedWorkOrder.id, ...(refreshedWorkOrder.data() as any) },
+      { id: refreshedMaintenance.id, ...(refreshedMaintenance.data() as any) }
+    );
+    return res.json({ ok: true, item: refreshed, data: refreshed });
+  } catch (err: any) {
+    console.error("[maintenance-v2] contractor rework status failed", { message: err?.message || "failed" });
+    return res.status(500).json({ ok: false, error: "CONTRACTOR_REWORK_STATUS_FAILED" });
   }
 });
 
