@@ -4967,6 +4967,131 @@ router.get("/maintenance", requireTenant, async (req: any, res) => {
   }
 });
 
+function projectTenantSafeReworkReview(value: any) {
+  if (!value || typeof value !== "object") return null;
+  return {
+    status:
+      value.status === "pending_review" ||
+      value.status === "landlord_approved" ||
+      value.status === "tenant_pending_signoff" ||
+      value.status === "closed" ||
+      value.status === "follow_up_required"
+        ? value.status
+        : null,
+    reviewedAt: toMillis(value.reviewedAt),
+    tenantSignoffStatus:
+      value.tenantSignoffStatus === "pending" ||
+      value.tenantSignoffStatus === "accepted" ||
+      value.tenantSignoffStatus === "declined"
+        ? value.tenantSignoffStatus
+        : null,
+    tenantSignedOffAt: toMillis(value.tenantSignedOffAt),
+    tenantDeclinedAt: toMillis(value.tenantDeclinedAt),
+    tenantDeclineReason: String(value.tenantDeclineReason || "").trim() || null,
+    closureOutcome:
+      value.closureOutcome === "resolved" ||
+      value.closureOutcome === "partial" ||
+      value.closureOutcome === "needs_more_followup"
+        ? value.closureOutcome
+        : null,
+    closedAt: toMillis(value.closedAt),
+  };
+}
+
+function projectTenantSafeReworkCycle(value: any) {
+  if (!value || typeof value !== "object") return null;
+  return {
+    cycleNumber: Number(value.cycleNumber || 1),
+    status:
+      value.status === "not_started" ||
+      value.status === "assigned" ||
+      value.status === "in_progress" ||
+      value.status === "completed" ||
+      value.status === "cancelled"
+        ? value.status
+        : "not_started",
+    createdAt: toMillis(value.createdAt),
+    assignedAt: toMillis(value.assignedAt),
+    startedAt: toMillis(value.startedAt),
+    completedAt: toMillis(value.completedAt),
+    completionSummary: String(value.completionSummary || "").trim() || null,
+    schedule:
+      value.schedule && typeof value.schedule === "object"
+        ? {
+            scheduledFor: toMillis(value.schedule.scheduledFor),
+            timeWindowStart: toMillis(value.schedule.timeWindowStart),
+            timeWindowEnd: toMillis(value.schedule.timeWindowEnd),
+            status:
+              value.schedule.status === "not_scheduled" ||
+              value.schedule.status === "scheduled" ||
+              value.schedule.status === "contractor_confirmed" ||
+              value.schedule.status === "tenant_pending" ||
+              value.schedule.status === "confirmed" ||
+              value.schedule.status === "reschedule_requested" ||
+              value.schedule.status === "cancelled"
+                ? value.schedule.status
+                : null,
+            requiresTenantAccess:
+              typeof value.schedule.requiresTenantAccess === "boolean" ? value.schedule.requiresTenantAccess : null,
+            tenantAccessStatus:
+              value.schedule.tenantAccessStatus === "pending" ||
+              value.schedule.tenantAccessStatus === "confirmed" ||
+              value.schedule.tenantAccessStatus === "denied" ||
+              value.schedule.tenantAccessStatus === "not_required"
+                ? value.schedule.tenantAccessStatus
+                : null,
+            tenantAccessNote: String(value.schedule.tenantAccessNote || "").trim() || null,
+          }
+        : null,
+  };
+}
+
+function projectTenantSafeReworkHistory(value: any) {
+  return Array.isArray(value)
+    ? value.map((entry: any) => ({
+        cycleNumber: Number(entry?.cycleNumber || 1),
+        startedAt: toMillis(entry?.startedAt),
+        completedAt: toMillis(entry?.completedAt),
+        outcome:
+          entry?.outcome === "resolved" || entry?.outcome === "failed" || entry?.outcome === "partial"
+            ? entry.outcome
+            : null,
+        notes: String(entry?.notes || "").trim() || null,
+      }))
+    : [];
+}
+
+async function buildTenantMaintenanceDetailResponse(docId: string, maintenanceData: any, workOrderData: any, workOrderExists: boolean) {
+  return {
+    ...projectTenantMaintenance(docId, maintenanceData || {}),
+    evidence: workOrderExists ? await serializeEvidenceForAudience(workOrderData?.evidence, "tenant") : [],
+    resolutionStatus:
+      workOrderData?.resolutionStatus === "completed_pending_review" ||
+      workOrderData?.resolutionStatus === "landlord_approved" ||
+      workOrderData?.resolutionStatus === "tenant_pending_signoff" ||
+      workOrderData?.resolutionStatus === "resolved" ||
+      workOrderData?.resolutionStatus === "follow_up_required"
+        ? workOrderData.resolutionStatus
+        : null,
+    landlordApprovedAt: toMillis(workOrderData?.landlordApprovedAt),
+    tenantSignoffStatus:
+      workOrderData?.tenantSignoffStatus === "pending" ||
+      workOrderData?.tenantSignoffStatus === "accepted" ||
+      workOrderData?.tenantSignoffStatus === "declined"
+        ? workOrderData.tenantSignoffStatus
+        : null,
+    tenantSignedOffAt: toMillis(workOrderData?.tenantSignedOffAt),
+    tenantDeclinedAt: toMillis(workOrderData?.tenantDeclinedAt),
+    tenantDeclineReason: String(workOrderData?.tenantDeclineReason || "").trim() || null,
+    followUpRequired: typeof workOrderData?.followUpRequired === "boolean" ? workOrderData.followUpRequired : null,
+    followUpReason: String(workOrderData?.followUpReason || "").trim() || null,
+    finalResolvedAt: toMillis(workOrderData?.finalResolvedAt),
+    reworkCycle: projectTenantSafeReworkCycle(workOrderData?.reworkCycle),
+    reworkHistory: projectTenantSafeReworkHistory(workOrderData?.reworkHistory),
+    reworkReview: projectTenantSafeReworkReview(workOrderData?.reworkReview),
+  };
+}
+
 router.get("/maintenance-requests/:id", requireTenant, async (req: any, res) => {
   try {
     const tenantId = req.user?.tenantId;
@@ -4983,144 +5108,7 @@ router.get("/maintenance-requests/:id", requireTenant, async (req: any, res) => 
     }
     const workOrderSnap = await db.collection("workOrders").doc(`maintenance_${doc.id}`).get();
     const workOrderData = workOrderSnap.exists ? ((workOrderSnap.data() as any) || {}) : {};
-    const tenantSafeEvidence = workOrderSnap.exists
-      ? await serializeEvidenceForAudience(workOrderData?.evidence, "tenant")
-      : [];
-    const payload = {
-      id: doc.id,
-      requestId: doc.id,
-      landlordId: data.landlordId ?? null,
-      tenantId: data.tenantId ?? null,
-      propertyId: data.propertyId ?? null,
-      unitId: data.unitId ?? null,
-      category: data.category ?? "GENERAL",
-      priority: data.priority ?? "NORMAL",
-      title: data.title ?? "",
-      description: data.description ?? "",
-      status: data.status ?? "NEW",
-      assignedContractorName: data.assignedContractorName ?? null,
-      contractorStatus: data.contractorStatus ?? null,
-      serviceWindowStartAt: toMillis(data.serviceWindowStartAt),
-      serviceWindowEndAt: toMillis(data.serviceWindowEndAt),
-      accessRequired: typeof data.accessRequired === "boolean" ? data.accessRequired : null,
-      tenantConfirmationStatus:
-        data.tenantConfirmationStatus === "confirmed" || data.tenantConfirmationStatus === "needs_schedule_change"
-          ? data.tenantConfirmationStatus
-          : null,
-      tenantConfirmationUpdatedAt: toMillis(data.tenantConfirmationUpdatedAt),
-      accessAcknowledgedAt: toMillis(data.accessAcknowledgedAt),
-      resolutionStatus:
-        workOrderData?.resolutionStatus === "completed_pending_review" ||
-        workOrderData?.resolutionStatus === "landlord_approved" ||
-        workOrderData?.resolutionStatus === "tenant_pending_signoff" ||
-        workOrderData?.resolutionStatus === "resolved" ||
-        workOrderData?.resolutionStatus === "follow_up_required"
-          ? workOrderData.resolutionStatus
-          : data?.resolutionStatus === "completed_pending_review" ||
-            data?.resolutionStatus === "landlord_approved" ||
-            data?.resolutionStatus === "tenant_pending_signoff" ||
-            data?.resolutionStatus === "resolved" ||
-            data?.resolutionStatus === "follow_up_required"
-          ? data.resolutionStatus
-          : null,
-      landlordApprovedAt: toMillis(workOrderData?.landlordApprovedAt ?? data?.landlordApprovedAt),
-      tenantSignoffStatus:
-        workOrderData?.tenantSignoffStatus === "pending" ||
-        workOrderData?.tenantSignoffStatus === "accepted" ||
-        workOrderData?.tenantSignoffStatus === "declined"
-          ? workOrderData.tenantSignoffStatus
-          : data?.tenantSignoffStatus === "pending" ||
-            data?.tenantSignoffStatus === "accepted" ||
-            data?.tenantSignoffStatus === "declined"
-          ? data.tenantSignoffStatus
-          : null,
-      tenantSignedOffAt: toMillis(workOrderData?.tenantSignedOffAt ?? data?.tenantSignedOffAt),
-      tenantDeclinedAt: toMillis(workOrderData?.tenantDeclinedAt ?? data?.tenantDeclinedAt),
-      tenantDeclineReason: String(workOrderData?.tenantDeclineReason || data?.tenantDeclineReason || "").trim() || null,
-      followUpRequired:
-        typeof workOrderData?.followUpRequired === "boolean"
-          ? workOrderData.followUpRequired
-          : typeof data?.followUpRequired === "boolean"
-          ? data.followUpRequired
-          : null,
-      followUpReason: String(workOrderData?.followUpReason || data?.followUpReason || "").trim() || null,
-      finalResolvedAt: toMillis(workOrderData?.finalResolvedAt ?? data?.finalResolvedAt),
-      reworkCycle:
-        workOrderData?.reworkCycle && typeof workOrderData.reworkCycle === "object"
-          ? {
-              cycleNumber: Number(workOrderData.reworkCycle.cycleNumber || 1),
-              status:
-                workOrderData.reworkCycle.status === "not_started" ||
-                workOrderData.reworkCycle.status === "assigned" ||
-                workOrderData.reworkCycle.status === "in_progress" ||
-                workOrderData.reworkCycle.status === "completed" ||
-                workOrderData.reworkCycle.status === "cancelled"
-                  ? workOrderData.reworkCycle.status
-                  : "not_started",
-              createdAt: toMillis(workOrderData.reworkCycle.createdAt),
-              assignedAt: toMillis(workOrderData.reworkCycle.assignedAt),
-              startedAt: toMillis(workOrderData.reworkCycle.startedAt),
-              completedAt: toMillis(workOrderData.reworkCycle.completedAt),
-              completionSummary: String(workOrderData.reworkCycle.completionSummary || "").trim() || null,
-              schedule:
-                workOrderData.reworkCycle.schedule && typeof workOrderData.reworkCycle.schedule === "object"
-                  ? {
-                      scheduledFor: toMillis(workOrderData.reworkCycle.schedule.scheduledFor),
-                      timeWindowStart: toMillis(workOrderData.reworkCycle.schedule.timeWindowStart),
-                      timeWindowEnd: toMillis(workOrderData.reworkCycle.schedule.timeWindowEnd),
-                      status:
-                        workOrderData.reworkCycle.schedule.status === "not_scheduled" ||
-                        workOrderData.reworkCycle.schedule.status === "scheduled" ||
-                        workOrderData.reworkCycle.schedule.status === "contractor_confirmed" ||
-                        workOrderData.reworkCycle.schedule.status === "tenant_pending" ||
-                        workOrderData.reworkCycle.schedule.status === "confirmed" ||
-                        workOrderData.reworkCycle.schedule.status === "reschedule_requested" ||
-                        workOrderData.reworkCycle.schedule.status === "cancelled"
-                          ? workOrderData.reworkCycle.schedule.status
-                          : null,
-                      requiresTenantAccess:
-                        typeof workOrderData.reworkCycle.schedule.requiresTenantAccess === "boolean"
-                          ? workOrderData.reworkCycle.schedule.requiresTenantAccess
-                          : null,
-                      tenantAccessStatus:
-                        workOrderData.reworkCycle.schedule.tenantAccessStatus === "pending" ||
-                        workOrderData.reworkCycle.schedule.tenantAccessStatus === "confirmed" ||
-                        workOrderData.reworkCycle.schedule.tenantAccessStatus === "denied" ||
-                        workOrderData.reworkCycle.schedule.tenantAccessStatus === "not_required"
-                          ? workOrderData.reworkCycle.schedule.tenantAccessStatus
-                          : null,
-                      tenantAccessNote: String(workOrderData.reworkCycle.schedule.tenantAccessNote || "").trim() || null,
-                    }
-                  : null,
-            }
-          : null,
-      reworkHistory: Array.isArray(workOrderData?.reworkHistory)
-        ? workOrderData.reworkHistory.map((entry: any) => ({
-            cycleNumber: Number(entry?.cycleNumber || 1),
-            startedAt: toMillis(entry?.startedAt),
-            completedAt: toMillis(entry?.completedAt),
-            outcome:
-              entry?.outcome === "resolved" || entry?.outcome === "failed" || entry?.outcome === "partial"
-                ? entry.outcome
-                : null,
-            notes: String(entry?.notes || "").trim() || null,
-          }))
-        : [],
-      evidence: tenantSafeEvidence,
-      tenantContact: data.tenantContact ?? null,
-      createdAt: toMillis(data.createdAt),
-      updatedAt: toMillis(data.updatedAt),
-      lastUpdatedBy: data.lastUpdatedBy ?? "TENANT",
-      statusHistory: Array.isArray(data.statusHistory)
-        ? data.statusHistory.map((entry: any) => ({
-            status: entry?.status ?? null,
-            actorRole: entry?.actorRole ?? null,
-            actorId: entry?.actorId ?? null,
-            message: entry?.message ?? null,
-            createdAt: toMillis(entry?.createdAt),
-          }))
-        : [],
-    };
+    const payload = await buildTenantMaintenanceDetailResponse(doc.id, data, workOrderData, workOrderSnap.exists);
     return res.json({ ok: true, data: payload });
   } catch (err) {
     console.error("[tenant/maintenance-requests/:id] read failed", {
@@ -5157,6 +5145,9 @@ router.post("/maintenance/:id/signoff", requireTenant, async (req: any, res) => 
     const workOrder = (workOrderSnap.data() as any) || {};
     if (String(workOrder.status || "").trim().toLowerCase() !== "completed") {
       return res.status(400).json({ ok: false, error: "WORK_ORDER_NOT_COMPLETED" });
+    }
+    if (String(workOrder?.reworkReview?.status || "").trim().toLowerCase() === "tenant_pending_signoff") {
+      return res.status(400).json({ ok: false, error: "REWORK_SIGNOFF_REQUIRED" });
     }
     if (String(workOrder.resolutionStatus || "").trim().toLowerCase() !== "tenant_pending_signoff") {
       return res.status(400).json({ ok: false, error: "TENANT_SIGNOFF_NOT_AVAILABLE" });
@@ -5261,94 +5252,7 @@ router.post("/maintenance/:id/signoff", requireTenant, async (req: any, res) => 
     const refreshedWorkOrderData = refreshedWorkOrder.exists ? ((refreshedWorkOrder.data() as any) || {}) : {};
     return res.json({
       ok: true,
-      data: {
-        ...projectTenantMaintenance(refreshed.id, refreshed.data() || {}),
-        evidence: refreshedWorkOrder.exists ? await serializeEvidenceForAudience(refreshedWorkOrderData?.evidence, "tenant") : [],
-        resolutionStatus:
-          refreshedWorkOrderData?.resolutionStatus === "completed_pending_review" ||
-          refreshedWorkOrderData?.resolutionStatus === "landlord_approved" ||
-          refreshedWorkOrderData?.resolutionStatus === "tenant_pending_signoff" ||
-          refreshedWorkOrderData?.resolutionStatus === "resolved" ||
-          refreshedWorkOrderData?.resolutionStatus === "follow_up_required"
-            ? refreshedWorkOrderData.resolutionStatus
-            : null,
-        landlordApprovedAt: toMillis(refreshedWorkOrderData?.landlordApprovedAt),
-        tenantSignoffStatus:
-          refreshedWorkOrderData?.tenantSignoffStatus === "pending" ||
-          refreshedWorkOrderData?.tenantSignoffStatus === "accepted" ||
-          refreshedWorkOrderData?.tenantSignoffStatus === "declined"
-            ? refreshedWorkOrderData.tenantSignoffStatus
-            : null,
-        tenantSignedOffAt: toMillis(refreshedWorkOrderData?.tenantSignedOffAt),
-        tenantDeclinedAt: toMillis(refreshedWorkOrderData?.tenantDeclinedAt),
-        tenantDeclineReason: String(refreshedWorkOrderData?.tenantDeclineReason || "").trim() || null,
-        followUpRequired:
-          typeof refreshedWorkOrderData?.followUpRequired === "boolean" ? refreshedWorkOrderData.followUpRequired : null,
-        followUpReason: String(refreshedWorkOrderData?.followUpReason || "").trim() || null,
-        finalResolvedAt: toMillis(refreshedWorkOrderData?.finalResolvedAt),
-        reworkCycle:
-          refreshedWorkOrderData?.reworkCycle && typeof refreshedWorkOrderData.reworkCycle === "object"
-            ? {
-                cycleNumber: Number(refreshedWorkOrderData.reworkCycle.cycleNumber || 1),
-                status:
-                  refreshedWorkOrderData.reworkCycle.status === "not_started" ||
-                  refreshedWorkOrderData.reworkCycle.status === "assigned" ||
-                  refreshedWorkOrderData.reworkCycle.status === "in_progress" ||
-                  refreshedWorkOrderData.reworkCycle.status === "completed" ||
-                  refreshedWorkOrderData.reworkCycle.status === "cancelled"
-                    ? refreshedWorkOrderData.reworkCycle.status
-                    : "not_started",
-                createdAt: toMillis(refreshedWorkOrderData.reworkCycle.createdAt),
-                assignedAt: toMillis(refreshedWorkOrderData.reworkCycle.assignedAt),
-                startedAt: toMillis(refreshedWorkOrderData.reworkCycle.startedAt),
-                completedAt: toMillis(refreshedWorkOrderData.reworkCycle.completedAt),
-                completionSummary: String(refreshedWorkOrderData.reworkCycle.completionSummary || "").trim() || null,
-                schedule:
-                  refreshedWorkOrderData.reworkCycle.schedule && typeof refreshedWorkOrderData.reworkCycle.schedule === "object"
-                    ? {
-                        scheduledFor: toMillis(refreshedWorkOrderData.reworkCycle.schedule.scheduledFor),
-                        timeWindowStart: toMillis(refreshedWorkOrderData.reworkCycle.schedule.timeWindowStart),
-                        timeWindowEnd: toMillis(refreshedWorkOrderData.reworkCycle.schedule.timeWindowEnd),
-                        status:
-                          refreshedWorkOrderData.reworkCycle.schedule.status === "not_scheduled" ||
-                          refreshedWorkOrderData.reworkCycle.schedule.status === "scheduled" ||
-                          refreshedWorkOrderData.reworkCycle.schedule.status === "contractor_confirmed" ||
-                          refreshedWorkOrderData.reworkCycle.schedule.status === "tenant_pending" ||
-                          refreshedWorkOrderData.reworkCycle.schedule.status === "confirmed" ||
-                          refreshedWorkOrderData.reworkCycle.schedule.status === "reschedule_requested" ||
-                          refreshedWorkOrderData.reworkCycle.schedule.status === "cancelled"
-                            ? refreshedWorkOrderData.reworkCycle.schedule.status
-                            : null,
-                        requiresTenantAccess:
-                          typeof refreshedWorkOrderData.reworkCycle.schedule.requiresTenantAccess === "boolean"
-                            ? refreshedWorkOrderData.reworkCycle.schedule.requiresTenantAccess
-                            : null,
-                        tenantAccessStatus:
-                          refreshedWorkOrderData.reworkCycle.schedule.tenantAccessStatus === "pending" ||
-                          refreshedWorkOrderData.reworkCycle.schedule.tenantAccessStatus === "confirmed" ||
-                          refreshedWorkOrderData.reworkCycle.schedule.tenantAccessStatus === "denied" ||
-                          refreshedWorkOrderData.reworkCycle.schedule.tenantAccessStatus === "not_required"
-                            ? refreshedWorkOrderData.reworkCycle.schedule.tenantAccessStatus
-                            : null,
-                        tenantAccessNote:
-                          String(refreshedWorkOrderData.reworkCycle.schedule.tenantAccessNote || "").trim() || null,
-                      }
-                    : null,
-              }
-            : null,
-        reworkHistory: Array.isArray(refreshedWorkOrderData?.reworkHistory)
-          ? refreshedWorkOrderData.reworkHistory.map((entry: any) => ({
-              cycleNumber: Number(entry?.cycleNumber || 1),
-              startedAt: toMillis(entry?.startedAt),
-              completedAt: toMillis(entry?.completedAt),
-              outcome:
-                entry?.outcome === "resolved" || entry?.outcome === "failed" || entry?.outcome === "partial"
-                  ? entry.outcome
-                  : null,
-              notes: String(entry?.notes || "").trim() || null,
-            }))
-          : [],
-      },
+      data: await buildTenantMaintenanceDetailResponse(refreshed.id, refreshed.data() || {}, refreshedWorkOrderData, refreshedWorkOrder.exists),
     });
   } catch (err) {
     console.error("[tenant/maintenance/:id/signoff] update failed", {
@@ -5357,6 +5261,123 @@ router.post("/maintenance/:id/signoff", requireTenant, async (req: any, res) => 
       err,
     });
     return res.status(500).json({ ok: false, error: "TENANT_MAINT_REQUEST_SIGNOFF_FAILED" });
+  }
+});
+
+router.post("/maintenance/:id/rework-signoff", requireTenant, async (req: any, res) => {
+  try {
+    const tenantId = String(req.user?.tenantId || "").trim();
+    const id = String(req.params?.id || "").trim();
+    if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+    const docRef = db.collection("maintenanceRequests").doc(id);
+    const snap = await docRef.get();
+    if (!snap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    const data = (snap.data() as any) || {};
+    if (String(data.tenantId || "").trim() !== tenantId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const workOrderRef = db.collection("workOrders").doc(`maintenance_${id}`);
+    const workOrderSnap = await workOrderRef.get();
+    if (!workOrderSnap.exists) return res.status(404).json({ ok: false, error: "WORK_ORDER_NOT_FOUND" });
+    const workOrder = (workOrderSnap.data() as any) || {};
+    if (String(workOrder.status || "").trim().toLowerCase() !== "completed") {
+      return res.status(400).json({ ok: false, error: "WORK_ORDER_NOT_COMPLETED" });
+    }
+    if (String(workOrder?.reworkReview?.status || "").trim().toLowerCase() !== "tenant_pending_signoff") {
+      return res.status(400).json({ ok: false, error: "REWORK_SIGNOFF_NOT_AVAILABLE" });
+    }
+
+    const decision = req.body?.decision === "resolved" || req.body?.decision === "not_resolved" ? req.body.decision : null;
+    if (!decision) return res.status(400).json({ ok: false, error: "INVALID_REWORK_SIGNOFF_DECISION" });
+
+    const reason = String(req.body?.reason || "").trim().slice(0, 2000);
+    if (decision === "not_resolved" && !reason) {
+      return res.status(400).json({ ok: false, error: "TENANT_DECLINE_REASON_REQUIRED" });
+    }
+
+    const now = Date.now();
+    const historyMessage =
+      decision === "resolved"
+        ? "Tenant confirmed that the rework return visit resolved the issue."
+        : `Tenant reported the rework return visit is still not resolved: ${reason}`;
+
+    const reworkReviewUpdate =
+      decision === "resolved"
+        ? {
+            ...(workOrder.reworkReview || {}),
+            status: "closed",
+            tenantSignoffStatus: "accepted",
+            tenantSignedOffAt: now,
+            tenantDeclinedAt: null,
+            tenantDeclineReason: null,
+            closureOutcome: "resolved",
+            closedAt: now,
+          }
+        : {
+            ...(workOrder.reworkReview || {}),
+            status: "follow_up_required",
+            tenantSignoffStatus: "declined",
+            tenantSignedOffAt: null,
+            tenantDeclinedAt: now,
+            tenantDeclineReason: reason,
+            closureOutcome: "needs_more_followup",
+            closedAt: null,
+          };
+
+    await Promise.all([
+      workOrderRef.set(
+        {
+          reworkReview: reworkReviewUpdate,
+          resolutionStatus: decision === "resolved" ? "resolved" : "follow_up_required",
+          followUpRequired: decision !== "resolved",
+          followUpReason: decision === "resolved" ? null : reason,
+          finalResolvedAt: decision === "resolved" ? now : null,
+          updatedAtMs: now,
+          lastExecutionUpdateAt: now,
+        },
+        { merge: true }
+      ),
+      docRef.set(
+        {
+          contractorLastUpdate: historyMessage,
+          updatedAt: now,
+          lastUpdatedBy: "TENANT",
+          statusHistory: FieldValue.arrayUnion({
+            status: String(data.status || "completed"),
+            actorRole: "tenant",
+            actorId: tenantId,
+            message: historyMessage,
+            createdAt: now,
+          }),
+        },
+        { merge: true }
+      ),
+      db.collection("workOrderUpdates").doc().set({
+        workOrderId: workOrderRef.id,
+        actorRole: "tenant",
+        actorId: tenantId,
+        updateType: "confirmed",
+        message: historyMessage,
+        createdAtMs: now,
+      }),
+    ]);
+
+    const [refreshed, refreshedWorkOrder] = await Promise.all([docRef.get(), workOrderRef.get()]);
+    const refreshedWorkOrderData = refreshedWorkOrder.exists ? ((refreshedWorkOrder.data() as any) || {}) : {};
+    return res.json({
+      ok: true,
+      data: await buildTenantMaintenanceDetailResponse(refreshed.id, refreshed.data() || {}, refreshedWorkOrderData, refreshedWorkOrder.exists),
+    });
+  } catch (err) {
+    console.error("[tenant/maintenance/:id/rework-signoff] update failed", {
+      tenantId: req.user?.tenantId,
+      id: req.params?.id,
+      err,
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_REWORK_SIGNOFF_FAILED" });
   }
 });
 
@@ -5449,53 +5470,7 @@ router.post("/maintenance/:id/confirm-rework-access", requireTenant, async (req:
     const refreshedWorkOrderData = refreshedWorkOrder.exists ? ((refreshedWorkOrder.data() as any) || {}) : {};
     return res.json({
       ok: true,
-      data: {
-        ...projectTenantMaintenance(refreshed.id, refreshed.data() || {}),
-        evidence: refreshedWorkOrder.exists ? await serializeEvidenceForAudience(refreshedWorkOrderData?.evidence, "tenant") : [],
-        resolutionStatus:
-          refreshedWorkOrderData?.resolutionStatus === "completed_pending_review" ||
-          refreshedWorkOrderData?.resolutionStatus === "landlord_approved" ||
-          refreshedWorkOrderData?.resolutionStatus === "tenant_pending_signoff" ||
-          refreshedWorkOrderData?.resolutionStatus === "resolved" ||
-          refreshedWorkOrderData?.resolutionStatus === "follow_up_required"
-            ? refreshedWorkOrderData.resolutionStatus
-            : null,
-        reworkCycle:
-          refreshedWorkOrderData?.reworkCycle && typeof refreshedWorkOrderData.reworkCycle === "object"
-            ? {
-                cycleNumber: Number(refreshedWorkOrderData.reworkCycle.cycleNumber || 1),
-                status:
-                  refreshedWorkOrderData.reworkCycle.status === "not_started" ||
-                  refreshedWorkOrderData.reworkCycle.status === "assigned" ||
-                  refreshedWorkOrderData.reworkCycle.status === "in_progress" ||
-                  refreshedWorkOrderData.reworkCycle.status === "completed" ||
-                  refreshedWorkOrderData.reworkCycle.status === "cancelled"
-                    ? refreshedWorkOrderData.reworkCycle.status
-                    : "not_started",
-                createdAt: toMillis(refreshedWorkOrderData.reworkCycle.createdAt),
-                assignedAt: toMillis(refreshedWorkOrderData.reworkCycle.assignedAt),
-                startedAt: toMillis(refreshedWorkOrderData.reworkCycle.startedAt),
-                completedAt: toMillis(refreshedWorkOrderData.reworkCycle.completedAt),
-                completionSummary: String(refreshedWorkOrderData.reworkCycle.completionSummary || "").trim() || null,
-                schedule:
-                  refreshedWorkOrderData.reworkCycle.schedule && typeof refreshedWorkOrderData.reworkCycle.schedule === "object"
-                    ? {
-                        scheduledFor: toMillis(refreshedWorkOrderData.reworkCycle.schedule.scheduledFor),
-                        timeWindowStart: toMillis(refreshedWorkOrderData.reworkCycle.schedule.timeWindowStart),
-                        timeWindowEnd: toMillis(refreshedWorkOrderData.reworkCycle.schedule.timeWindowEnd),
-                        status: refreshedWorkOrderData.reworkCycle.schedule.status || null,
-                        requiresTenantAccess:
-                          typeof refreshedWorkOrderData.reworkCycle.schedule.requiresTenantAccess === "boolean"
-                            ? refreshedWorkOrderData.reworkCycle.schedule.requiresTenantAccess
-                            : null,
-                        tenantAccessStatus: refreshedWorkOrderData.reworkCycle.schedule.tenantAccessStatus || null,
-                        tenantAccessNote:
-                          String(refreshedWorkOrderData.reworkCycle.schedule.tenantAccessNote || "").trim() || null,
-                      }
-                    : null,
-              }
-            : null,
-      },
+      data: await buildTenantMaintenanceDetailResponse(refreshed.id, refreshed.data() || {}, refreshedWorkOrderData, refreshedWorkOrder.exists),
     });
   } catch (err) {
     console.error("[tenant/maintenance/:id/confirm-rework-access] update failed", {

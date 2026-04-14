@@ -480,7 +480,7 @@ describe("tenantPortalRoutes foundation", () => {
     expect(savedWorkOrder?.finalResolvedAt).toBeDefined();
   });
 
-  it("returns tenant-safe rework state and allows signoff again after rework completion", async () => {
+  it("returns tenant-safe rework state and allows rework signoff again after rework completion", async () => {
     const router = (await import("../tenantPortalRoutes")).default;
     ensureCollection("maintenanceRequests").set("maint-3", {
       tenantId: "tenant-1",
@@ -517,6 +517,18 @@ describe("tenantPortalRoutes foundation", () => {
           notes: "Second pass complete.",
         },
       ],
+      reworkReview: {
+        status: "tenant_pending_signoff",
+        reviewedAt: 370,
+        reviewedBy: "landlord-1",
+        landlordReviewNote: "Please confirm whether the return visit resolved the issue.",
+        tenantSignoffStatus: "pending",
+        tenantSignedOffAt: null,
+        tenantDeclinedAt: null,
+        tenantDeclineReason: null,
+        closureOutcome: null,
+        closedAt: null,
+      },
     });
 
     const detailRes = await invokeRouter(router, {
@@ -540,10 +552,16 @@ describe("tenantPortalRoutes foundation", () => {
         completionSummary: expect.stringMatching(/Balanced vents/i),
       })
     );
+    expect(detailRes.body?.data?.reworkReview).toEqual(
+      expect.objectContaining({
+        status: "tenant_pending_signoff",
+        tenantSignoffStatus: "pending",
+      })
+    );
 
     const signoffRes = await invokeRouter(router, {
       method: "POST",
-      url: "/maintenance/maint-3/signoff",
+      url: "/maintenance/maint-3/rework-signoff",
       headers: {
         "x-test-user": JSON.stringify({
           id: "user-1",
@@ -559,9 +577,73 @@ describe("tenantPortalRoutes foundation", () => {
 
     expect(signoffRes.status).toBe(200);
     expect(signoffRes.body?.data?.resolutionStatus).toBe("resolved");
-    expect(signoffRes.body?.data?.reworkHistory).toEqual(
-      expect.arrayContaining([expect.objectContaining({ cycleNumber: 1, outcome: "resolved" })])
+    expect(signoffRes.body?.data?.reworkReview).toEqual(
+      expect.objectContaining({
+        status: "closed",
+        tenantSignoffStatus: "accepted",
+        closureOutcome: "resolved",
+      })
     );
+  });
+
+  it("requires the dedicated rework signoff route when a second-pass review is pending", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    ensureCollection("maintenanceRequests").set("maint-3b", {
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      status: "completed",
+      priority: "NORMAL",
+      category: "GENERAL",
+      title: "Heater follow-up",
+      description: "Bedroom still cool.",
+      statusHistory: [],
+      createdAt: 100,
+      updatedAt: 200,
+    });
+    ensureCollection("workOrders").set("maintenance_maint-3b", {
+      maintenanceRequestId: "maint-3b",
+      tenantId: "tenant-1",
+      status: "completed",
+      resolutionStatus: "tenant_pending_signoff",
+      reworkCycle: {
+        cycleNumber: 1,
+        status: "completed",
+        createdAt: 300,
+        createdBy: "landlord-1",
+        completedAt: 360,
+      },
+      reworkReview: {
+        status: "tenant_pending_signoff",
+        reviewedAt: 370,
+        reviewedBy: "landlord-1",
+        landlordReviewNote: null,
+        tenantSignoffStatus: "pending",
+        tenantSignedOffAt: null,
+        tenantDeclinedAt: null,
+        tenantDeclineReason: null,
+        closureOutcome: null,
+        closedAt: null,
+      },
+    });
+
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/maintenance/maint-3b/signoff",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+      body: {
+        decision: "resolved",
+      },
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body?.error).toBe("REWORK_SIGNOFF_REQUIRED");
   });
 
   it("requires a reason when the tenant reports the issue is not resolved", async () => {

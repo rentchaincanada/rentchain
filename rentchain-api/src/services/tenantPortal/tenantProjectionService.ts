@@ -82,6 +82,16 @@ type TenantMaintenanceProjection = {
     outcome: "resolved" | "failed" | "partial" | null;
     notes: string | null;
   }>;
+  reworkReview: {
+    status: "pending_review" | "landlord_approved" | "tenant_pending_signoff" | "closed" | "follow_up_required" | null;
+    reviewedAt: number | null;
+    tenantSignoffStatus: "pending" | "accepted" | "declined" | null;
+    tenantSignedOffAt: number | null;
+    tenantDeclinedAt: number | null;
+    tenantDeclineReason: string | null;
+    closureOutcome: "resolved" | "partial" | "needs_more_followup" | null;
+    closedAt: number | null;
+  } | null;
   evidence: Array<{
     id: string;
     url: string | null;
@@ -298,6 +308,36 @@ export function projectTenantMaintenance(recordId: string, data: any): TenantMai
           notes: asString(entry?.notes),
         }))
       : [],
+    reworkReview:
+      data?.reworkReview && typeof data.reworkReview === "object"
+        ? {
+            status:
+              data.reworkReview.status === "pending_review" ||
+              data.reworkReview.status === "landlord_approved" ||
+              data.reworkReview.status === "tenant_pending_signoff" ||
+              data.reworkReview.status === "closed" ||
+              data.reworkReview.status === "follow_up_required"
+                ? data.reworkReview.status
+                : null,
+            reviewedAt: toMillis(data.reworkReview.reviewedAt),
+            tenantSignoffStatus:
+              data.reworkReview.tenantSignoffStatus === "pending" ||
+              data.reworkReview.tenantSignoffStatus === "accepted" ||
+              data.reworkReview.tenantSignoffStatus === "declined"
+                ? data.reworkReview.tenantSignoffStatus
+                : null,
+            tenantSignedOffAt: toMillis(data.reworkReview.tenantSignedOffAt),
+            tenantDeclinedAt: toMillis(data.reworkReview.tenantDeclinedAt),
+            tenantDeclineReason: asString(data.reworkReview.tenantDeclineReason),
+            closureOutcome:
+              data.reworkReview.closureOutcome === "resolved" ||
+              data.reworkReview.closureOutcome === "partial" ||
+              data.reworkReview.closureOutcome === "needs_more_followup"
+                ? data.reworkReview.closureOutcome
+                : null,
+            closedAt: toMillis(data.reworkReview.closedAt),
+          }
+        : null,
     evidence: Array.isArray(data?.evidence)
       ? data.evidence
           .map((entry: any) => ({

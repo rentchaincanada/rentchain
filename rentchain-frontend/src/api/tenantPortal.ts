@@ -99,6 +99,16 @@ export type TenantWorkspaceMaintenance = {
     outcome?: "resolved" | "failed" | "partial" | null;
     notes?: string | null;
   }>;
+  reworkReview?: {
+    status?: "pending_review" | "landlord_approved" | "tenant_pending_signoff" | "closed" | "follow_up_required" | null;
+    reviewedAt?: number | null;
+    tenantSignoffStatus?: "pending" | "accepted" | "declined" | null;
+    tenantSignedOffAt?: number | null;
+    tenantDeclinedAt?: number | null;
+    tenantDeclineReason?: string | null;
+    closureOutcome?: "resolved" | "partial" | "needs_more_followup" | null;
+    closedAt?: number | null;
+  } | null;
   evidence?: Array<{
     id: string;
     url: string | null;
@@ -215,6 +225,23 @@ export async function updateTenantWorkspaceReworkAccess(
 ) {
   const res = await tenantApiFetch<{ ok: boolean; data: TenantWorkspaceMaintenance }>(
     `/tenant/maintenance/${encodeURIComponent(id)}/confirm-rework-access`,
+    {
+      method: "POST",
+      body: payload,
+    }
+  );
+  return res?.data;
+}
+
+export async function updateTenantWorkspaceReworkSignoff(
+  id: string,
+  payload: {
+    decision: "resolved" | "not_resolved";
+    reason?: string;
+  }
+) {
+  const res = await tenantApiFetch<{ ok: boolean; data: TenantWorkspaceMaintenance }>(
+    `/tenant/maintenance/${encodeURIComponent(id)}/rework-signoff`,
     {
       method: "POST",
       body: payload,

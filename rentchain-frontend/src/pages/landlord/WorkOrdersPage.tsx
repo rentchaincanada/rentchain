@@ -9,7 +9,7 @@ import {
   addWorkOrderUpdate,
   approveWorkOrderResolution,
   assignWorkOrderRework,
-  completeWorkOrderRework,
+  closeWorkOrderReworkDirectly,
   confirmWorkOrderCompletion,
   getWorkOrder,
   getContractorProfileById,
@@ -18,6 +18,7 @@ import {
   markWorkOrderFollowUpRequired,
   patchWorkOrder,
   reopenWorkOrder,
+  reviewWorkOrderReworkResolution,
   rescheduleWorkOrderRework,
   scheduleWorkOrderRework,
   startWorkOrderRework,
@@ -80,7 +81,12 @@ function canConfirmCompletion(item: WorkOrderRecord) {
 }
 
 function canApproveResolution(item: WorkOrderRecord) {
-  return item.status === "completed" && item.resolutionStatus !== "tenant_pending_signoff" && item.resolutionStatus !== "resolved";
+  return (
+    item.status === "completed" &&
+    item.resolutionStatus !== "tenant_pending_signoff" &&
+    item.resolutionStatus !== "resolved" &&
+    item.reworkCycle?.status !== "completed"
+  );
 }
 
 function canReopenWorkOrder(item: WorkOrderRecord) {
@@ -101,6 +107,25 @@ function resolutionStatusLabel(value?: WorkOrderRecord["resolutionStatus"]) {
       return "Follow-up required";
     default:
       return "Not set";
+  }
+}
+
+function reworkReviewStatusLabel(
+  value?: "pending_review" | "landlord_approved" | "tenant_pending_signoff" | "closed" | "follow_up_required" | null
+) {
+  switch (value) {
+    case "pending_review":
+      return "Pending landlord review";
+    case "landlord_approved":
+      return "Landlord approved";
+    case "tenant_pending_signoff":
+      return "Awaiting tenant signoff";
+    case "closed":
+      return "Closed";
+    case "follow_up_required":
+      return "Follow-up required again";
+    default:
+      return "Not started";
   }
 }
 
@@ -163,7 +188,6 @@ export default function WorkOrdersPage() {
   const [followUpReason, setFollowUpReason] = React.useState("");
   const [reworkContractorId, setReworkContractorId] = React.useState("");
   const [reworkNotes, setReworkNotes] = React.useState("");
-  const [reworkOutcome, setReworkOutcome] = React.useState<"resolved" | "partial">("resolved");
   const [reworkScheduledForInput, setReworkScheduledForInput] = React.useState("");
   const [reworkWindowStartInput, setReworkWindowStartInput] = React.useState("");
   const [reworkWindowEndInput, setReworkWindowEndInput] = React.useState("");
@@ -376,24 +400,49 @@ export default function WorkOrdersPage() {
     [load, refreshSelected, reworkContractorId]
   );
 
-  const handleCompleteRework = React.useCallback(
-    async (item: WorkOrderRecord) => {
+  const handleReviewReworkResolution = React.useCallback(
+    async (item: WorkOrderRecord, decision: "approve" | "follow_up_required") => {
+      if (!item.reworkCycle || item.reworkCycle.status !== "completed") return;
+      if (decision === "follow_up_required" && !reworkNotes.trim()) {
+        setError("Add a review note before marking the rework for more follow-up.");
+        return;
+      }
       setSavingAction(true);
       setError(null);
       try {
-        await completeWorkOrderRework(item.id, {
-          outcome: reworkOutcome,
-          notes: reworkNotes.trim() || undefined,
+        await reviewWorkOrderReworkResolution(item.id, {
+          decision,
+          note: reworkNotes.trim() || undefined,
         });
         await load();
         await refreshSelected(item.id);
       } catch (err: any) {
-        setError(String(err?.message || "Failed to complete rework"));
+        setError(String(err?.message || "Failed to review rework resolution"));
       } finally {
         setSavingAction(false);
       }
     },
-    [load, refreshSelected, reworkNotes, reworkOutcome]
+    [load, refreshSelected, reworkNotes]
+  );
+
+  const handleCloseReworkDirectly = React.useCallback(
+    async (item: WorkOrderRecord) => {
+      if (!item.reworkCycle || item.reworkCycle.status !== "completed") return;
+      setSavingAction(true);
+      setError(null);
+      try {
+        await closeWorkOrderReworkDirectly(item.id, {
+          note: reworkNotes.trim() || undefined,
+        });
+        await load();
+        await refreshSelected(item.id);
+      } catch (err: any) {
+        setError(String(err?.message || "Failed to close rework"));
+      } finally {
+        setSavingAction(false);
+      }
+    },
+    [load, refreshSelected, reworkNotes]
   );
 
   const handleScheduleRework = React.useCallback(
@@ -492,7 +541,6 @@ export default function WorkOrdersPage() {
       setFollowUpReason("");
       setReworkContractorId("");
       setReworkNotes("");
-      setReworkOutcome("resolved");
       setReworkScheduledForInput("");
       setReworkWindowStartInput("");
       setReworkWindowEndInput("");
@@ -513,8 +561,7 @@ export default function WorkOrdersPage() {
     setReopenReason(String(selected.reopenReason || ""));
     setFollowUpReason(String(selected.followUpReason || ""));
     setReworkContractorId(String(selected.reworkCycle?.assignedContractorId || selected.assignedContractorId || ""));
-    setReworkNotes("");
-    setReworkOutcome("resolved");
+    setReworkNotes(String(selected.reworkReview?.landlordReviewNote || ""));
     setReworkScheduledForInput(toLocalInputValue(selected.reworkCycle?.schedule?.scheduledFor));
     setReworkWindowStartInput(toLocalInputValue(selected.reworkCycle?.schedule?.timeWindowStart));
     setReworkWindowEndInput(toLocalInputValue(selected.reworkCycle?.schedule?.timeWindowEnd));
@@ -974,21 +1021,42 @@ export default function WorkOrdersPage() {
                     placeholder="Contractor ID for rework assignment"
                     style={{ width: "100%", borderRadius: 8, border: "1px solid #cbd5e1", padding: 8 }}
                   />
+                  {selected.reworkReview ? (
+                    <div
+                      style={{
+                        border: "1px solid #e2e8f0",
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "grid",
+                        gap: 6,
+                        background: "#fff",
+                      }}
+                    >
+                      <div style={{ fontWeight: 600 }}>Second-pass review</div>
+                      <div style={{ color: "#64748b", fontSize: 13 }}>
+                        {reworkReviewStatusLabel(selected.reworkReview.status)}
+                        {selected.reworkReview.reviewedAt ? ` • Reviewed ${formatDate(selected.reworkReview.reviewedAt)}` : ""}
+                        {selected.reworkReview.closedAt ? ` • Closed ${formatDate(selected.reworkReview.closedAt)}` : ""}
+                      </div>
+                      {selected.reworkReview.closureOutcome ? (
+                        <div style={{ color: "#64748b", fontSize: 13 }}>
+                          Closure outcome: {selected.reworkReview.closureOutcome.replaceAll("_", " ")}
+                        </div>
+                      ) : null}
+                      {selected.reworkReview.tenantDeclineReason ? (
+                        <div style={{ color: "#64748b", fontSize: 13 }}>
+                          Tenant follow-up note: {selected.reworkReview.tenantDeclineReason}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                   <textarea
                     value={reworkNotes}
                     onChange={(e) => setReworkNotes(e.target.value)}
-                    placeholder="Add notes for how this rework cycle should close"
+                    placeholder="Add a landlord review note for this second-pass visit"
                     rows={3}
                     style={{ width: "100%", borderRadius: 8, border: "1px solid #cbd5e1", padding: 8, resize: "vertical" }}
                   />
-                  <select
-                    value={reworkOutcome}
-                    onChange={(e) => setReworkOutcome(e.target.value as "resolved" | "partial")}
-                    style={{ width: "100%", borderRadius: 8, border: "1px solid #cbd5e1", padding: 8 }}
-                  >
-                    <option value="resolved">Resolved</option>
-                    <option value="partial">Partial</option>
-                  </select>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     {selected.reworkCycle.status !== "completed" ? (
                       <Button variant="secondary" disabled={savingAction} onClick={() => void handleAssignRework(selected)}>
@@ -996,9 +1064,23 @@ export default function WorkOrdersPage() {
                       </Button>
                     ) : null}
                     {selected.reworkCycle.status === "completed" ? (
-                      <Button disabled={savingAction} onClick={() => void handleCompleteRework(selected)}>
-                        {savingAction ? "Saving..." : "Complete rework cycle"}
-                      </Button>
+                      <>
+                        <Button disabled={savingAction} onClick={() => void handleReviewReworkResolution(selected, "approve")}>
+                          {savingAction ? "Saving..." : "Approve rework resolution"}
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          disabled={savingAction}
+                          onClick={() => void handleReviewReworkResolution(selected, "follow_up_required")}
+                        >
+                          {savingAction ? "Saving..." : "Mark follow-up required again"}
+                        </Button>
+                        {!selected.tenantId ? (
+                          <Button variant="ghost" disabled={savingAction} onClick={() => void handleCloseReworkDirectly(selected)}>
+                            {savingAction ? "Saving..." : "Close rework directly"}
+                          </Button>
+                        ) : null}
+                      </>
                     ) : null}
                   </div>
                 </>
