@@ -2308,7 +2308,7 @@ async function createScreeningSessionSafely(input: {
   });
 
   return transactionResult;
-}
+
 
 async function prepareScreeningRetrySafely(input: {
   requestId: string;
