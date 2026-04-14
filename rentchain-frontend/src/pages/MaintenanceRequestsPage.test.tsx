@@ -166,7 +166,7 @@ describe("landlord maintenance workspace", () => {
     );
 
     expect((await screen.findAllByText(/Scheduled maintenance calendar/i)).length).toBeGreaterThan(0);
-    fireEvent.click(screen.getAllByRole("button", { name: /Leaky pipe/i })[0]);
+    fireEvent.click((await screen.findAllByRole("button", { name: /Leaky pipe/i }))[0]);
 
     expect(await screen.findAllByText(/Leaky pipe/i)).not.toHaveLength(0);
     expect(screen.getAllByText(/Ready for service/i).length).toBeGreaterThan(0);
