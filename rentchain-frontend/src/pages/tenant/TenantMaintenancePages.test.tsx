@@ -12,6 +12,7 @@ const maintenanceWorkflowApi = vi.hoisted(() => ({
   createTenantMaintenance: vi.fn(),
   updateTenantMaintenanceConfirmation: vi.fn(),
   updateTenantMaintenanceReworkAccess: vi.fn(),
+  updateTenantMaintenanceReworkSignoff: vi.fn(),
   updateTenantMaintenanceSignoff: vi.fn(),
 }));
 
@@ -31,6 +32,7 @@ vi.mock("../../api/maintenanceWorkflowApi", async () => {
     createTenantMaintenance: maintenanceWorkflowApi.createTenantMaintenance,
     updateTenantMaintenanceConfirmation: maintenanceWorkflowApi.updateTenantMaintenanceConfirmation,
     updateTenantMaintenanceReworkAccess: maintenanceWorkflowApi.updateTenantMaintenanceReworkAccess,
+    updateTenantMaintenanceReworkSignoff: maintenanceWorkflowApi.updateTenantMaintenanceReworkSignoff,
     updateTenantMaintenanceSignoff: maintenanceWorkflowApi.updateTenantMaintenanceSignoff,
   };
 });
@@ -281,6 +283,85 @@ describe("tenant maintenance pages", () => {
       });
     });
     expect(await screen.findByText(/This request has been marked resolved/i)).toBeInTheDocument();
+  });
+
+  it("submits tenant rework signoff from the detail page when a second-pass review is pending", async () => {
+    maintenanceWorkflowApi.getTenantMaintenance.mockResolvedValue({
+      item: {
+        id: "maint-rework-review",
+        title: "Heater follow-up",
+        description: "Bedroom still feels cool after the return visit.",
+        status: "completed",
+        priority: "urgent",
+        category: "HVAC",
+        resolutionStatus: "tenant_pending_signoff",
+        reworkCycle: {
+          cycleNumber: 1,
+          status: "completed",
+          createdAt: 200,
+          createdBy: "landlord-1",
+          completedAt: 360,
+          completionSummary: "Balanced vents and re-tested the system.",
+        },
+        reworkReview: {
+          status: "tenant_pending_signoff",
+          tenantSignoffStatus: "pending",
+        },
+        createdAt: 100,
+        updatedAt: 400,
+        statusHistory: [],
+      },
+    });
+    maintenanceWorkflowApi.updateTenantMaintenanceReworkSignoff.mockResolvedValue({
+      item: {
+        id: "maint-rework-review",
+        title: "Heater follow-up",
+        description: "Bedroom still feels cool after the return visit.",
+        status: "completed",
+        priority: "urgent",
+        category: "HVAC",
+        resolutionStatus: "resolved",
+        reworkCycle: {
+          cycleNumber: 1,
+          status: "completed",
+          createdAt: 200,
+          createdBy: "landlord-1",
+          completedAt: 360,
+          completionSummary: "Balanced vents and re-tested the system.",
+        },
+        reworkReview: {
+          status: "closed",
+          tenantSignoffStatus: "accepted",
+          tenantSignedOffAt: 500,
+          closureOutcome: "resolved",
+          closedAt: 500,
+        },
+        finalResolvedAt: 500,
+        createdAt: 100,
+        updatedAt: 500,
+        statusHistory: [],
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/tenant/maintenance/maint-rework-review"]}>
+        <Routes>
+          <Route path="/tenant/maintenance/:id" element={<TenantMaintenanceRequestDetailPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Review the return visit/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Mark follow-up resolved/i }));
+
+    await waitFor(() => {
+      expect(maintenanceWorkflowApi.updateTenantMaintenanceReworkSignoff).toHaveBeenCalledWith("maint-rework-review", {
+        decision: "resolved",
+        reason: undefined,
+      });
+    });
+
+    expect(await screen.findByText(/The follow-up work has been closed/i)).toBeInTheDocument();
   });
 
   it("shows return-visit coordination and lets the tenant confirm access", async () => {

@@ -4,6 +4,7 @@ import {
   getTenantMaintenance,
   updateTenantMaintenanceConfirmation,
   updateTenantMaintenanceReworkAccess,
+  updateTenantMaintenanceReworkSignoff,
   updateTenantMaintenanceSignoff,
   type MaintenanceWorkflowItem,
 } from "../../api/maintenanceWorkflowApi";
@@ -37,6 +38,25 @@ function resolutionStatusLabel(value?: MaintenanceWorkflowItem["resolutionStatus
       return "This request needs follow-up before it can be fully resolved.";
     default:
       return "No resolution decision has been recorded yet.";
+  }
+}
+
+function reworkReviewStatusLabel(
+  value?: "pending_review" | "landlord_approved" | "tenant_pending_signoff" | "closed" | "follow_up_required" | null
+) {
+  switch (value) {
+    case "pending_review":
+      return "The return visit is complete and waiting for landlord review.";
+    case "landlord_approved":
+      return "The landlord reviewed the return visit and is preparing final closure.";
+    case "tenant_pending_signoff":
+      return "Your review is needed before the follow-up work can be closed.";
+    case "closed":
+      return "The follow-up work has been closed.";
+    case "follow_up_required":
+      return "The follow-up work still needs more attention.";
+    default:
+      return "No second-pass review has been recorded yet.";
   }
 }
 
@@ -169,6 +189,31 @@ export default function TenantMaintenanceRequestDetailPage() {
       }
     } catch (err: any) {
       const msg = err?.payload?.error || err?.message || "Unable to update the maintenance resolution.";
+      setError(String(msg));
+    } finally {
+      setSavingAction(false);
+    }
+  };
+
+  const applyReworkResolutionSignoff = async (decision: "resolved" | "not_resolved") => {
+    if (!id) return;
+    if (decision === "not_resolved" && !signoffReason.trim()) {
+      setError("Add a reason before asking for more follow-up work.");
+      return;
+    }
+    setSavingAction(true);
+    setError(null);
+    try {
+      const res = await updateTenantMaintenanceReworkSignoff(id, {
+        decision,
+        reason: decision === "not_resolved" ? signoffReason.trim() : undefined,
+      });
+      setData((res as any)?.item || (res as any)?.data || null);
+      if (decision === "resolved") {
+        setSignoffReason("");
+      }
+    } catch (err: any) {
+      const msg = err?.payload?.error || err?.message || "Unable to update the rework review.";
       setError(String(msg));
     } finally {
       setSavingAction(false);
@@ -432,12 +477,26 @@ export default function TenantMaintenanceRequestDetailPage() {
                   ) : null}
                   <div style={{ color: textTokens.primary, fontWeight: 700 }}>What happens next</div>
                   <div style={{ color: textTokens.secondary }}>
-                    {data.reworkCycle?.status === "completed"
+                    {data.reworkReview?.status === "tenant_pending_signoff"
+                      ? "The return visit is complete. Review the updated work and let your landlord know whether the issue is now fully resolved."
+                      : data.reworkCycle?.status === "completed"
                       ? "The updated work is back with your landlord for review before final signoff."
                       : data.reworkCycle
                       ? "Your maintenance request is in an active follow-up cycle. RentChain will keep the original history while this second pass is completed."
                       : "Previous follow-up cycles stay attached to this request for a full maintenance record."}
                   </div>
+                  {data.reworkReview ? (
+                    <>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Second-pass review</div>
+                      <div style={{ color: textTokens.secondary }}>{reworkReviewStatusLabel(data.reworkReview.status)}</div>
+                      {data.reworkReview.closedAt ? (
+                        <div style={{ color: textTokens.secondary }}>Closed {fmtDate(data.reworkReview.closedAt)}.</div>
+                      ) : null}
+                      {data.reworkReview.tenantDeclineReason ? (
+                        <div style={{ color: textTokens.secondary }}>Your latest note: {data.reworkReview.tenantDeclineReason}</div>
+                      ) : null}
+                    </>
+                  ) : null}
                   {data.reworkHistory?.length ? (
                     <>
                       <div style={{ color: textTokens.primary, fontWeight: 700 }}>Previous rework cycles</div>
@@ -499,6 +558,35 @@ export default function TenantMaintenanceRequestDetailPage() {
                       ) : null}
                     </>
                   ) : null}
+                  {data.reworkReview?.status === "tenant_pending_signoff" ? (
+                    <>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Review the return visit</div>
+                      <div style={{ color: textTokens.secondary }}>
+                        Confirm whether the follow-up work fixed the issue, or ask for more follow-up if it still needs attention.
+                      </div>
+                      <textarea
+                        value={signoffReason}
+                        onChange={(e) => setSignoffReason(e.target.value)}
+                        placeholder="If more follow-up is needed, explain what is still incomplete or not working"
+                        rows={3}
+                        style={{
+                          width: "100%",
+                          borderRadius: 8,
+                          border: `1px solid ${colors.border}`,
+                          padding: 10,
+                          resize: "vertical",
+                        }}
+                      />
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <Button variant="secondary" disabled={savingAction} onClick={() => void applyReworkResolutionSignoff("resolved")}>
+                          {savingAction ? "Saving..." : "Mark follow-up resolved"}
+                        </Button>
+                        <Button variant="ghost" disabled={savingAction} onClick={() => void applyReworkResolutionSignoff("not_resolved")}>
+                          {savingAction ? "Saving..." : "Request more follow-up"}
+                        </Button>
+                      </div>
+                    </>
+                  ) : null}
                 </div>
               ) : null}
               <div
@@ -531,7 +619,9 @@ export default function TenantMaintenanceRequestDetailPage() {
                     <div style={{ color: textTokens.secondary }}>{data.tenantDeclineReason}</div>
                   </>
                 ) : null}
-                {data.status === "completed" && data.resolutionStatus === "tenant_pending_signoff" ? (
+                {data.status === "completed" &&
+                data.resolutionStatus === "tenant_pending_signoff" &&
+                data.reworkReview?.status !== "tenant_pending_signoff" ? (
                   <>
                     <div style={{ color: textTokens.primary, fontWeight: 700 }}>Next step</div>
                     <div style={{ color: textTokens.secondary }}>

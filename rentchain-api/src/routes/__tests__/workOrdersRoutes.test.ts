@@ -521,6 +521,114 @@ describe("workOrdersRoutes execution completion", () => {
     );
   });
 
+  it("reviews a completed rework cycle and advances it to tenant signoff when a tenant is attached", async () => {
+    const router = (await import("../workOrdersRoutes")).default;
+    ensureCollection("workOrders").set("wo-1", {
+      ...ensureCollection("workOrders").get("wo-1"),
+      status: "completed",
+      tenantId: "tenant-1",
+      resolutionStatus: "completed_pending_review",
+      reworkCycle: {
+        cycleNumber: 2,
+        status: "completed",
+        createdAt: 1000,
+        createdBy: "landlord-1",
+        startedAt: 1100,
+        completedAt: 1200,
+        completionSummary: "Balanced the vents and sealed the remaining draft.",
+      },
+      reworkReview: {
+        status: "pending_review",
+        reviewedAt: null,
+        reviewedBy: null,
+        landlordReviewNote: null,
+        tenantSignoffStatus: null,
+        tenantSignedOffAt: null,
+        tenantDeclinedAt: null,
+        tenantDeclineReason: null,
+        closureOutcome: null,
+        closedAt: null,
+      },
+    });
+
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/work-orders/wo-1/review-rework-resolution",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "landlord-1",
+          role: "landlord",
+          landlordId: "landlord-1",
+        }),
+      },
+      body: {
+        decision: "approve",
+        note: "Second pass looks good. Sending to the tenant for final confirmation.",
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.item?.resolutionStatus).toBe("tenant_pending_signoff");
+    expect(res.body?.item?.reworkReview?.status).toBe("tenant_pending_signoff");
+
+    const savedWorkOrder = ensureCollection("workOrders").get("wo-1");
+    expect(savedWorkOrder?.reworkReview?.tenantSignoffStatus).toBe("pending");
+    expect(savedWorkOrder?.reworkReview?.landlordReviewNote).toMatch(/final confirmation/i);
+  });
+
+  it("closes a completed rework cycle directly when tenant signoff is not required", async () => {
+    const router = (await import("../workOrdersRoutes")).default;
+    ensureCollection("workOrders").set("wo-1", {
+      ...ensureCollection("workOrders").get("wo-1"),
+      status: "completed",
+      resolutionStatus: "completed_pending_review",
+      reworkCycle: {
+        cycleNumber: 1,
+        status: "completed",
+        createdAt: 1000,
+        createdBy: "landlord-1",
+        startedAt: 1100,
+        completedAt: 1200,
+        completionSummary: "In-house follow-up completed.",
+      },
+      reworkReview: {
+        status: "pending_review",
+        reviewedAt: null,
+        reviewedBy: null,
+        landlordReviewNote: null,
+        tenantSignoffStatus: null,
+        tenantSignedOffAt: null,
+        tenantDeclinedAt: null,
+        tenantDeclineReason: null,
+        closureOutcome: null,
+        closedAt: null,
+      },
+    });
+
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/work-orders/wo-1/close-rework-directly",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "landlord-1",
+          role: "landlord",
+          landlordId: "landlord-1",
+        }),
+      },
+      body: {
+        note: "Closed after in-house follow-up.",
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.item?.resolutionStatus).toBe("resolved");
+    expect(res.body?.item?.reworkReview?.status).toBe("closed");
+
+    const savedWorkOrder = ensureCollection("workOrders").get("wo-1");
+    expect(savedWorkOrder?.reworkReview?.closureOutcome).toBe("resolved");
+    expect(savedWorkOrder?.finalResolvedAt).toBeDefined();
+  });
+
   it("schedules and reschedules an active rework cycle", async () => {
     const router = (await import("../workOrdersRoutes")).default;
     ensureCollection("workOrders").set("wo-1", {

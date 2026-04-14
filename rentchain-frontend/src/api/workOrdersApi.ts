@@ -15,6 +15,7 @@ export type WorkOrderStatus =
 export type WorkOrderRecord = {
   id: string;
   landlordId: string;
+  tenantId?: string | null;
   propertyId: string;
   unitId: string | null;
   title: string;
@@ -85,6 +86,18 @@ export type WorkOrderRecord = {
     outcome?: "resolved" | "failed" | "partial" | null;
     notes?: string | null;
   }> | null;
+  reworkReview?: {
+    status?: "pending_review" | "landlord_approved" | "tenant_pending_signoff" | "closed" | "follow_up_required" | null;
+    reviewedAt?: number | null;
+    reviewedBy?: string | null;
+    landlordReviewNote?: string | null;
+    tenantSignoffStatus?: "pending" | "accepted" | "declined" | null;
+    tenantSignedOffAt?: number | null;
+    tenantDeclinedAt?: number | null;
+    tenantDeclineReason?: string | null;
+    closureOutcome?: "resolved" | "partial" | "needs_more_followup" | null;
+    closedAt?: number | null;
+  } | null;
   reopenedAt?: number | null;
   reopenedByActorId?: string | null;
   reopenedByActorRole?: "landlord" | "admin" | null;
@@ -327,6 +340,30 @@ export async function rescheduleWorkOrderRework(
     { method: "POST", body: payload }
   );
   if (!res?.ok || !res.item) throw new Error("Failed to reschedule rework cycle");
+  return res.item;
+}
+
+export async function reviewWorkOrderReworkResolution(
+  workOrderId: string,
+  payload: { decision: "approve" | "follow_up_required"; note?: string }
+): Promise<WorkOrderRecord> {
+  const res = await apiFetch<{ ok: boolean; item: WorkOrderRecord }>(
+    `/landlord/work-orders/${encodeURIComponent(workOrderId)}/review-rework-resolution`,
+    { method: "POST", body: payload }
+  );
+  if (!res?.ok || !res.item) throw new Error("Failed to review rework resolution");
+  return res.item;
+}
+
+export async function closeWorkOrderReworkDirectly(
+  workOrderId: string,
+  payload?: { note?: string }
+): Promise<WorkOrderRecord> {
+  const res = await apiFetch<{ ok: boolean; item: WorkOrderRecord }>(
+    `/landlord/work-orders/${encodeURIComponent(workOrderId)}/close-rework-directly`,
+    { method: "POST", body: payload || {} }
+  );
+  if (!res?.ok || !res.item) throw new Error("Failed to close rework directly");
   return res.item;
 }
 

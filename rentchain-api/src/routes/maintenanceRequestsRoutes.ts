@@ -2308,11 +2308,53 @@ router.patch("/contractor/jobs/:id/rework-status", async (req: any, res) => {
           : null,
     };
 
+    const nextReworkHistory =
+      nextStatus === "completed"
+        ? [
+            ...(Array.isArray(workOrder?.reworkHistory)
+              ? workOrder.reworkHistory.filter(
+                  (entry: any) => Number(entry?.cycleNumber || 0) !== Number(reworkCycle?.cycleNumber || 1)
+                )
+              : []),
+            {
+              cycleNumber: Number(reworkCycle?.cycleNumber || 1),
+              startedAt:
+                typeof updatedReworkCycle?.startedAt === "number"
+                  ? updatedReworkCycle.startedAt
+                  : typeof reworkCycle?.startedAt === "number"
+                  ? reworkCycle.startedAt
+                  : null,
+              completedAt: now,
+              outcome: "resolved",
+              notes: completionSummary || null,
+            },
+          ]
+        : workOrder?.reworkHistory || [];
+
     await workOrderRef.set(
       {
         status: nextStatus === "completed" ? "completed" : "in_progress",
         assignedContractorId: contractorId,
         reworkCycle: updatedReworkCycle,
+        reworkHistory: nextReworkHistory,
+        reworkReview:
+          nextStatus === "completed"
+            ? {
+                status: "pending_review",
+                reviewedAt: null,
+                reviewedBy: null,
+                landlordReviewNote: null,
+                tenantSignoffStatus: null,
+                tenantSignedOffAt: null,
+                tenantDeclinedAt: null,
+                tenantDeclineReason: null,
+                closureOutcome: null,
+                closedAt: null,
+              }
+            : workOrder?.reworkReview || null,
+        resolutionStatus: nextStatus === "completed" ? "completed_pending_review" : workOrder?.resolutionStatus || "completed_pending_review",
+        followUpRequired: nextStatus === "completed" ? false : workOrder?.followUpRequired ?? false,
+        followUpReason: nextStatus === "completed" ? null : workOrder?.followUpReason || null,
         updatedAtMs: now,
         lastExecutionUpdateAt: now,
       },
