@@ -3361,7 +3361,7 @@ router.patch("/notification-preferences", requireTenantWorkspaceIdentity, async 
           updatedAt: next.updatedAt,
         },
       },
-    });
+    );
 
     return res.json({ ok: true, data: next });
   } catch (err: any) {
