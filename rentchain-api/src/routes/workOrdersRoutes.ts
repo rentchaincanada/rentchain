@@ -2993,6 +2993,198 @@ router.post("/landlord/work-orders/:id/cost-attachment", requireAuth, async (req
   });
 });
 
+router.post("/landlord/work-orders/:id/submit-cost", requireAuth, async (req: any, res) => {
+  try {
+    if (!isLandlord(req)) return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+
+    const workOrderId = asString(req.params?.id, 120);
+    const access = await getWorkOrderAuthorized(req, workOrderId);
+    if (!access.ok) {
+      if (access.code === "NOT_FOUND") return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    if (asString((access.item as any)?.status, 40).toLowerCase() !== "completed") {
+      return res.status(400).json({ ok: false, error: "WORK_ORDER_NOT_COMPLETED" });
+    }
+
+    const actualCostCents = parseMoneyToCents(req.body?.actualCostCents);
+    if (!actualCostCents) return res.status(400).json({ ok: false, error: "INVALID_COST_AMOUNT" });
+    const currency = normalizeCostCurrency(req.body?.currency) || "CAD";
+    const lineItems = normalizeCostLineItems(req.body?.lineItems);
+    const now = nowMs();
+
+    await db.collection("workOrders").doc(workOrderId).set(
+      {
+        cost: {
+          ...(normalizeWorkOrderCost((access.item as any)?.cost) || {}),
+          actualCostCents,
+          currency,
+          submittedByRole: isAdmin(req) ? "admin" : "landlord",
+          submittedById: access.userId,
+          submittedAt: now,
+          reviewedBy: null,
+          reviewedAt: null,
+          reviewStatus: "approved",
+          reviewNote: asOptionalString(req.body?.reviewNote, 1000),
+        },
+        costLineItems: lineItems,
+        updatedAtMs: now,
+      },
+      { merge: true }
+    );
+
+    await writeWorkOrderUpdate({
+      workOrderId,
+      actorRole: isAdmin(req) ? "admin" : "landlord",
+      actorId: access.userId,
+      updateType: "invoice",
+      message: `Landlord recorded ${formatCostForMessage(actualCostCents, currency)} for this work order.`,
+    });
+
+    const refreshed = await db.collection("workOrders").doc(workOrderId).get();
+    return res.json({ ok: true, item: await toWorkOrderResponseForAudience(refreshed.id, refreshed.data(), "landlord") });
+  } catch (err) {
+    console.error("[work-orders] landlord submit cost failed", err);
+    return res.status(500).json({ ok: false, error: "WORK_ORDER_SUBMIT_COST_FAILED" });
+  }
+});
+
+router.post("/landlord/work-orders/:id/review-cost", requireAuth, async (req: any, res) => {
+  try {
+    if (!isLandlord(req)) return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+
+    const workOrderId = asString(req.params?.id, 120);
+    const access = await getWorkOrderAuthorized(req, workOrderId);
+    if (!access.ok) {
+      if (access.code === "NOT_FOUND") return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const currentCost = normalizeWorkOrderCost((access.item as any)?.cost);
+    if (!currentCost?.actualCostCents) {
+      return res.status(400).json({ ok: false, error: "COST_NOT_SUBMITTED" });
+    }
+
+    const decision = req.body?.decision === "approve" || req.body?.decision === "reject" ? req.body.decision : null;
+    if (!decision) return res.status(400).json({ ok: false, error: "INVALID_COST_REVIEW_DECISION" });
+    const note = asOptionalString(req.body?.note, 1000);
+    const now = nowMs();
+
+    await db.collection("workOrders").doc(workOrderId).set(
+      {
+        cost: {
+          ...currentCost,
+          reviewStatus: decision === "approve" ? "approved" : "rejected",
+          reviewedBy: access.userId,
+          reviewedAt: now,
+          reviewNote: note,
+        },
+        updatedAtMs: now,
+      },
+      { merge: true }
+    );
+
+    await writeWorkOrderUpdate({
+      workOrderId,
+      actorRole: isAdmin(req) ? "admin" : "landlord",
+      actorId: access.userId,
+      updateType: "invoice",
+      message: decision === "approve" ? "Cost submission approved." : `Cost submission rejected.${note ? ` ${note}` : ""}`,
+    });
+
+    const refreshed = await db.collection("workOrders").doc(workOrderId).get();
+    return res.json({ ok: true, item: await toWorkOrderResponseForAudience(refreshed.id, refreshed.data(), "landlord") });
+  } catch (err) {
+    console.error("[work-orders] review cost failed", err);
+    return res.status(500).json({ ok: false, error: "WORK_ORDER_REVIEW_COST_FAILED" });
+  }
+});
+
+router.post("/landlord/work-orders/:id/cost-attachment", requireAuth, async (req: any, res) => {
+  costAttachmentUpload.single("file")(req, res, async (uploadErr: any) => {
+    try {
+      if (uploadErr) {
+        const message = String(uploadErr?.message || "");
+        if (String(uploadErr?.code || "") === "LIMIT_FILE_SIZE") {
+          return res.status(400).json({ ok: false, error: "FILE_TOO_LARGE", maxBytes: MAX_COST_ATTACHMENT_BYTES });
+        }
+        return res.status(400).json({ ok: false, error: "UPLOAD_FAILED", detail: message || "upload_failed" });
+      }
+      if (!isLandlord(req)) return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+
+      const workOrderId = asString(req.params?.id, 120);
+      const access = await getWorkOrderAuthorized(req, workOrderId);
+      if (!access.ok) {
+        if (access.code === "NOT_FOUND") return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+        return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+      }
+
+      const file = req.file as Express.Multer.File | undefined;
+      if (!file?.buffer || !file.originalname) return res.status(400).json({ ok: false, error: "FILE_REQUIRED" });
+      if (!isAllowedCostAttachmentFile(file)) {
+        return res.status(400).json({ ok: false, error: "UNSUPPORTED_FILE_TYPE" });
+      }
+
+      const now = nowMs();
+      const attachmentId = makeEvidenceId();
+      const storagePath = buildCostAttachmentStoragePath({
+        workOrderId,
+        attachmentId,
+        filename: file.originalname,
+      });
+      await uploadBufferToGcs({
+        path: storagePath,
+        contentType: String(file.mimetype || "application/octet-stream"),
+        buffer: file.buffer,
+        metadata: {
+          workOrderId,
+          uploadedAtMs: String(now),
+          actorRole: isAdmin(req) ? "admin" : "landlord",
+          actorId: access.userId,
+          visibility: "internal",
+        },
+      });
+
+      const nextAttachments = [
+        ...filterCostAttachmentsForAudience((access.item as any)?.costAttachments, "landlord"),
+        {
+          id: attachmentId,
+          storagePath,
+          fileName: asString(file.originalname, 180),
+          contentType: asString(file.mimetype, 120),
+          uploadedAt: now,
+          uploadedByRole: isAdmin(req) ? "admin" : "landlord",
+          uploadedById: access.userId,
+          visibility: "internal",
+        },
+      ];
+
+      await db.collection("workOrders").doc(workOrderId).set(
+        {
+          costAttachments: nextAttachments,
+          updatedAtMs: now,
+        },
+        { merge: true }
+      );
+
+      await writeWorkOrderUpdate({
+        workOrderId,
+        actorRole: isAdmin(req) ? "admin" : "landlord",
+        actorId: access.userId,
+        updateType: "invoice",
+        message: "Uploaded a cost attachment.",
+      });
+
+      const refreshed = await db.collection("workOrders").doc(workOrderId).get();
+      return res.status(201).json({ ok: true, item: await toWorkOrderResponseForAudience(refreshed.id, refreshed.data(), "landlord") });
+    } catch (err) {
+      console.error("[work-orders] landlord cost attachment upload failed", err);
+      return res.status(500).json({ ok: false, error: "WORK_ORDER_COST_ATTACHMENT_UPLOAD_FAILED" });
+    }
+  });
+});
+
 router.post("/landlord/work-orders/:id/evidence", requireAuth, async (req: any, res) => {
   evidenceUpload.single("file")(req, res, async (uploadErr: any) => {
     try {

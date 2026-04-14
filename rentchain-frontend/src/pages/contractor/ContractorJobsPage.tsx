@@ -948,6 +948,9 @@ export default function ContractorJobsPage() {
                         ))}
                       </div>
                     ) : null}
+                        {savingCost ? "Saving..." : "Submit cost"}
+                      </Button>
+                    </div>
                     <input
                       aria-label="Cost attachment file"
                       type="file"
