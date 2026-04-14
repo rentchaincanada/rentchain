@@ -2170,8 +2170,6 @@ async function createScreeningSessionSafely(input: {
   const requestRef = db.collection("screening_requests").doc(input.requestId);
   const sessionRef = db.collection("screening_sessions").doc();
   const resultRef = db.collection("screening_results").doc();
-  // keep the rest of main’s existing createScreeningSessionSafely function body exactly as it is
-}
 
   const transactionResult = await db.runTransaction(async (tx) => {
     const requestSnap = await tx.get(requestRef);
@@ -2305,11 +2303,10 @@ async function createScreeningSessionSafely(input: {
       result: resultRecord,
       created: true,
     };
-  },
+  });
 
   return transactionResult;
 }
-
 async function prepareScreeningRetrySafely(input: {
   requestId: string;
   actorId: string | null;
