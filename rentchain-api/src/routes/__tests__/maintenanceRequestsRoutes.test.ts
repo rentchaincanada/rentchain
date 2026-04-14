@@ -364,6 +364,72 @@ describe("maintenanceRequestsRoutes scheduling access", () => {
     expect(savedWorkOrder?.evidence?.[0]?.visibility).toBe("landlord_contractor");
   });
 
+  it("allows an assigned contractor to submit cost details and upload a landlord-only receipt", async () => {
+    const router = (await import("../maintenanceRequestsRoutes")).default;
+    ensureCollection("maintenanceRequests").set("maint-1", {
+      ...ensureCollection("maintenanceRequests").get("maint-1"),
+      status: "completed",
+    });
+    ensureCollection("workOrders").set("maintenance_maint-1", {
+      maintenanceRequestId: "maint-1",
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      status: "completed",
+      assignedContractorId: "contractor-1",
+      title: "Broken heater",
+      createdAtMs: 100,
+      updatedAtMs: 100,
+      evidence: [],
+    });
+
+    const submitRes = await invokeRouter(router, {
+      method: "POST",
+      url: "/contractor/jobs/maint-1/submit-cost",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "contractor-1",
+          role: "contractor",
+        }),
+      },
+      body: {
+        actualCostCents: 18750,
+        currency: "usd",
+        lineItems: [
+          { id: "line-1", label: "Labor", amountCents: 15000, category: "labor" },
+          { id: "line-2", label: "Seal kit", amountCents: 3750, category: "materials" },
+        ],
+      },
+    });
+
+    expect(submitRes.status).toBe(200);
+    expect(submitRes.body?.item?.cost?.actualCostCents).toBe(18750);
+    expect(submitRes.body?.item?.cost?.reviewStatus).toBe("pending_review");
+    expect(submitRes.body?.item?.costLineItems).toHaveLength(2);
+
+    const attachmentRes = await invokeRouter(router, {
+      method: "POST",
+      url: "/contractor/jobs/maint-1/cost-attachment",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "contractor-1",
+          role: "contractor",
+        }),
+      },
+      file: {
+        originalname: "receipt.pdf",
+        mimetype: "application/pdf",
+        buffer: Buffer.from("pdf"),
+      },
+    });
+
+    expect(attachmentRes.status).toBe(201);
+    expect(attachmentRes.body?.item?.costAttachments?.[0]?.visibility).toBe("landlord_only");
+
+    const savedWorkOrder = ensureCollection("workOrders").get("maintenance_maint-1");
+    expect(savedWorkOrder?.cost?.submittedByRole).toBe("contractor");
+    expect(savedWorkOrder?.costAttachments?.[0]?.visibility).toBe("landlord_only");
+  });
+
   it("rejects contractor evidence uploads for unassigned jobs", async () => {
     const router = (await import("../maintenanceRequestsRoutes")).default;
     ensureCollection("maintenanceRequests").set("maint-1", {

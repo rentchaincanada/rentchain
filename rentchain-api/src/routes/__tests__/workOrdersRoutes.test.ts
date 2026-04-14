@@ -388,6 +388,95 @@ describe("workOrdersRoutes execution completion", () => {
     expect(patchRes.body?.item?.evidence?.[0]?.visibility).toBe("tenant_safe");
   });
 
+  it("captures landlord-entered cost, reviews contractor cost, and uploads cost attachments", async () => {
+    const router = (await import("../workOrdersRoutes")).default;
+    ensureCollection("workOrders").set("wo-1", {
+      ...ensureCollection("workOrders").get("wo-1"),
+      status: "completed",
+      completionSummary: "Completed service visit.",
+      serviceCompletedAt: 500,
+    });
+
+    const submitRes = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/work-orders/wo-1/submit-cost",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "landlord-1",
+          role: "landlord",
+          landlordId: "landlord-1",
+        }),
+      },
+      body: {
+        actualCostCents: 24500,
+        currency: "cad",
+        lineItems: [
+          { id: "line-1", label: "Labor", amountCents: 20000, category: "labor" },
+          { id: "line-2", label: "Thermostat", amountCents: 4500, category: "materials" },
+        ],
+      },
+    });
+
+    expect(submitRes.status).toBe(200);
+    expect(submitRes.body?.item?.cost?.actualCostCents).toBe(24500);
+    expect(submitRes.body?.item?.cost?.reviewStatus).toBe("approved");
+    expect(submitRes.body?.item?.costLineItems).toHaveLength(2);
+
+    ensureCollection("workOrders").set("wo-1", {
+      ...ensureCollection("workOrders").get("wo-1"),
+      cost: {
+        actualCostCents: 24500,
+        currency: "CAD",
+        submittedByRole: "contractor",
+        submittedById: "contractor-1",
+        submittedAt: 700,
+        reviewStatus: "pending_review",
+      },
+      costLineItems: [{ id: "line-1", label: "Labor", amountCents: 24500, category: "labor" }],
+    });
+
+    const reviewRes = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/work-orders/wo-1/review-cost",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "landlord-1",
+          role: "landlord",
+          landlordId: "landlord-1",
+        }),
+      },
+      body: {
+        decision: "reject",
+        note: "Please break out the materials separately.",
+      },
+    });
+
+    expect(reviewRes.status).toBe(200);
+    expect(reviewRes.body?.item?.cost?.reviewStatus).toBe("rejected");
+    expect(reviewRes.body?.item?.cost?.reviewNote).toMatch(/break out the materials/i);
+
+    const attachmentRes = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/work-orders/wo-1/cost-attachment",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "landlord-1",
+          role: "landlord",
+          landlordId: "landlord-1",
+        }),
+      },
+      file: {
+        originalname: "invoice.pdf",
+        mimetype: "application/pdf",
+        buffer: Buffer.from("pdf"),
+      },
+    });
+
+    expect(attachmentRes.status).toBe(201);
+    expect(attachmentRes.body?.item?.costAttachments?.[0]?.visibility).toBe("internal");
+    expect(uploadBufferToGcsMock).toHaveBeenCalled();
+  });
+
   it("rejects unsupported evidence file types", async () => {
     const router = (await import("../workOrdersRoutes")).default;
 

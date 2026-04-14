@@ -8,6 +8,8 @@ const apiMocks = vi.hoisted(() => ({
   listContractorMaintenanceJobs: vi.fn(),
   patchContractorMaintenanceJobStatus: vi.fn(),
   patchContractorMaintenanceReworkStatus: vi.fn(),
+  submitContractorMaintenanceCost: vi.fn(),
+  uploadContractorMaintenanceCostAttachment: vi.fn(),
   uploadContractorMaintenanceEvidence: vi.fn(),
 }));
 
@@ -19,6 +21,8 @@ vi.mock("../../api/maintenanceWorkflowApi", async () => {
     listContractorMaintenanceJobs: apiMocks.listContractorMaintenanceJobs,
     patchContractorMaintenanceJobStatus: apiMocks.patchContractorMaintenanceJobStatus,
     patchContractorMaintenanceReworkStatus: apiMocks.patchContractorMaintenanceReworkStatus,
+    submitContractorMaintenanceCost: apiMocks.submitContractorMaintenanceCost,
+    uploadContractorMaintenanceCostAttachment: apiMocks.uploadContractorMaintenanceCostAttachment,
     uploadContractorMaintenanceEvidence: apiMocks.uploadContractorMaintenanceEvidence,
   };
 });
@@ -40,6 +44,8 @@ describe("ContractorJobsPage", () => {
     apiMocks.confirmContractorMaintenanceReworkSchedule.mockReset();
     apiMocks.patchContractorMaintenanceJobStatus.mockReset();
     apiMocks.patchContractorMaintenanceReworkStatus.mockReset();
+    apiMocks.submitContractorMaintenanceCost.mockReset();
+    apiMocks.uploadContractorMaintenanceCostAttachment.mockReset();
     apiMocks.uploadContractorMaintenanceEvidence.mockReset();
   });
 
@@ -233,6 +239,55 @@ describe("ContractorJobsPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Complete rework/i }));
     expect(await screen.findByText(/Add a completion summary before finishing the rework/i)).toBeInTheDocument();
+  });
+
+  it("lets the contractor submit cost details after completion", async () => {
+    apiMocks.listContractorMaintenanceJobs.mockResolvedValue({
+      items: [
+        {
+          id: "maint-cost",
+          title: "Boiler tune-up",
+          description: "Seasonal service",
+          status: "completed",
+          priority: "normal",
+          tenantId: "tenant-1",
+          landlordId: "landlord-1",
+          propertyLabel: "Harbour View",
+          unitLabel: "Unit 2",
+          createdAt: 100,
+          updatedAt: 200,
+          statusHistory: [],
+          cost: null,
+          costLineItems: [],
+          costAttachments: [],
+        },
+      ],
+    });
+    apiMocks.submitContractorMaintenanceCost.mockResolvedValue({ id: "maint-cost" });
+
+    render(
+      <MemoryRouter initialEntries={["/contractor/jobs/maint-cost"]}>
+        <Routes>
+          <Route path="/contractor/jobs/:id" element={<ContractorJobsPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Cost submission/i)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/Actual cost/i), { target: { value: "187.50" } });
+    fireEvent.change(screen.getByLabelText(/Cost line items/i), {
+      target: { value: '[{"label":"Labor","amountCents":18750,"category":"labor"}]' },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Submit cost/i }));
+
+    await waitFor(() => {
+      expect(apiMocks.submitContractorMaintenanceCost).toHaveBeenCalledWith(
+        "maint-cost",
+        expect.objectContaining({
+          actualCostCents: 18750,
+        })
+      );
+    });
   });
 
   it("lets the contractor confirm or decline a scheduled rework return visit", async () => {

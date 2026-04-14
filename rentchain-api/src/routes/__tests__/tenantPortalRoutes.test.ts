@@ -209,6 +209,27 @@ describe("tenantPortalRoutes foundation", () => {
     });
     ensureCollection("workOrders").set("maintenance_maint-1", {
       maintenanceRequestId: "maint-1",
+      cost: {
+        actualCostCents: 24500,
+        currency: "CAD",
+        submittedByRole: "contractor",
+        submittedById: "contractor-1",
+        submittedAt: 275,
+        reviewStatus: "approved",
+      },
+      costLineItems: [{ id: "line-1", label: "Labor", amountCents: 24500, category: "labor" }],
+      costAttachments: [
+        {
+          id: "invoice-1",
+          storagePath: "work-orders/cost-attachments/maintenance_maint-1/invoice.pdf",
+          fileName: "invoice.pdf",
+          contentType: "application/pdf",
+          uploadedAt: 280,
+          uploadedByRole: "contractor",
+          uploadedById: "contractor-1",
+          visibility: "landlord_only",
+        },
+      ],
       evidence: [
         {
           id: "evidence-tenant",
@@ -432,6 +453,28 @@ describe("tenantPortalRoutes foundation", () => {
       }),
     ]);
     expect(JSON.stringify(res.body?.data?.evidence || [])).not.toMatch(/internal review/i);
+  });
+
+  it("does not expose internal cost data in the tenant maintenance detail payload", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/maintenance-requests/maint-1",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "tenant-1",
+          role: "tenant",
+          tenantId: "tenant-1",
+          email: "tenant@example.com",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.cost).toBeUndefined();
+    expect(res.body?.data?.costLineItems).toBeUndefined();
+    expect(res.body?.data?.costAttachments).toBeUndefined();
+    expect(JSON.stringify(res.body?.data || {})).not.toMatch(/24500|invoice\.pdf/i);
   });
 
   it("lets the tenant sign off a completed maintenance request as resolved", async () => {

@@ -5402,6 +5402,131 @@ router.post("/maintenance/:id/rework-signoff", requireTenant, async (req: any, r
   }
 });
 
+router.post("/maintenance/:id/rework-signoff", requireTenant, async (req: any, res) => {
+  try {
+    const tenantId = String(req.user?.tenantId || "").trim();
+    const id = String(req.params?.id || "").trim();
+    if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+    const docRef = db.collection("maintenanceRequests").doc(id);
+    const snap = await docRef.get();
+    if (!snap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    const data = (snap.data() as any) || {};
+    if (String(data.tenantId || "").trim() !== tenantId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const workOrderRef = db.collection("workOrders").doc(`maintenance_${id}`);
+    const workOrderSnap = await workOrderRef.get();
+    if (!workOrderSnap.exists) return res.status(404).json({ ok: false, error: "WORK_ORDER_NOT_FOUND" });
+    const workOrder = (workOrderSnap.data() as any) || {};
+    if (String(workOrder.status || "").trim().toLowerCase() !== "completed") {
+      return res.status(400).json({ ok: false, error: "WORK_ORDER_NOT_COMPLETED" });
+    }
+    if (String(workOrder?.reworkReview?.status || "").trim().toLowerCase() !== "tenant_pending_signoff") {
+      return res.status(400).json({ ok: false, error: "REWORK_SIGNOFF_NOT_AVAILABLE" });
+    }
+
+    const decision = req.body?.decision === "resolved" || req.body?.decision === "not_resolved" ? req.body.decision : null;
+    if (!decision) return res.status(400).json({ ok: false, error: "INVALID_REWORK_SIGNOFF_DECISION" });
+
+    const reason = String(req.body?.reason || "").trim().slice(0, 2000);
+    if (decision === "not_resolved" && !reason) {
+      return res.status(400).json({ ok: false, error: "TENANT_DECLINE_REASON_REQUIRED" });
+    }
+
+    const now = Date.now();
+    const historyMessage =
+      decision === "resolved"
+        ? "Tenant confirmed that the rework return visit resolved the issue."
+        : `Tenant reported the rework return visit is still not resolved: ${reason}`;
+
+    const reworkReviewUpdate =
+      decision === "resolved"
+        ? {
+            ...(workOrder.reworkReview || {}),
+            status: "closed",
+            tenantSignoffStatus: "accepted",
+            tenantSignedOffAt: now,
+            tenantDeclinedAt: null,
+            tenantDeclineReason: null,
+            closureOutcome: "resolved",
+            closedAt: now,
+          }
+        : {
+            ...(workOrder.reworkReview || {}),
+            status: "follow_up_required",
+            tenantSignoffStatus: "declined",
+            tenantSignedOffAt: null,
+            tenantDeclinedAt: now,
+            tenantDeclineReason: reason,
+            closureOutcome: "needs_more_followup",
+            closedAt: null,
+          };
+
+    await workOrderRef.set(
+      {
+        reworkReview: reworkReviewUpdate,
+        resolutionStatus: decision === "resolved" ? "resolved" : "follow_up_required",
+        followUpRequired: decision !== "resolved",
+        followUpReason: decision === "resolved" ? null : reason,
+        finalResolvedAt: decision === "resolved" ? now : null,
+        updatedAtMs: now,
+        lastExecutionUpdateAt: now,
+      },
+      { merge: true }
+    );
+    const refreshedReworkSignoffWorkOrder = await workOrderRef.get();
+    const refreshedReworkSignoffWorkOrderData = (refreshedReworkSignoffWorkOrder.data() as any) || {};
+    const reworkNotifications = await applyNotificationUpdate(workOrderRef, refreshedReworkSignoffWorkOrderData, now);
+
+    await Promise.all([
+      docRef.set(
+        {
+          contractorLastUpdate: historyMessage,
+          updatedAt: now,
+          lastUpdatedBy: "TENANT",
+          notifications: buildTenantSafeWorkOrderNotifications({
+            ...refreshedReworkSignoffWorkOrderData,
+            notifications: reworkNotifications,
+          }),
+          statusHistory: FieldValue.arrayUnion({
+            status: String(data.status || "completed"),
+            actorRole: "tenant",
+            actorId: tenantId,
+            message: historyMessage,
+            createdAt: now,
+          }),
+        },
+        { merge: true }
+      ),
+      db.collection("workOrderUpdates").doc().set({
+        workOrderId: workOrderRef.id,
+        actorRole: "tenant",
+        actorId: tenantId,
+        updateType: "confirmed",
+        message: historyMessage,
+        createdAtMs: now,
+      }),
+    ]);
+
+    const [refreshed, refreshedWorkOrder] = await Promise.all([docRef.get(), workOrderRef.get()]);
+    const refreshedWorkOrderData = refreshedWorkOrder.exists ? ((refreshedWorkOrder.data() as any) || {}) : {};
+    return res.json({
+      ok: true,
+      data: await buildTenantMaintenanceDetailResponse(refreshed.id, refreshed.data() || {}, refreshedWorkOrderData, refreshedWorkOrder.exists),
+    });
+  } catch (err) {
+    console.error("[tenant/maintenance/:id/rework-signoff] update failed", {
+      tenantId: req.user?.tenantId,
+      id: req.params?.id,
+      err,
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_REWORK_SIGNOFF_FAILED" });
+  }
+});
+
 router.post("/maintenance/:id/confirm-rework-access", requireTenant, async (req: any, res) => {
   try {
     const tenantId = String(req.user?.tenantId || "").trim();
