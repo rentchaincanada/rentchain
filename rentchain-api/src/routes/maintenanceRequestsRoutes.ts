@@ -24,13 +24,6 @@ import {
   type WorkOrderCostAttachment,
 } from "../lib/maintenanceCost";
 import {
-  buildCostAttachmentStoragePath,
-  normalizeCostCurrency,
-  normalizeCostLineItems,
-  serializeCostAttachmentsForAudience,
-  type WorkOrderCostAttachment,
-} from "../lib/maintenanceCost";
-import {
   applyNotificationUpdate,
   buildTenantSafeWorkOrderNotifications,
   computeWorkOrderNotifications,
@@ -1146,10 +1139,6 @@ async function shapeContractorJobFromSources(workOrder: any, maintenance: any) {
     costReviewHistory: normalizeCostReviewHistory(workOrder?.costReviewHistory),
     expenseLink: normalizeExpenseLink(workOrder?.expenseLink),
   };
-}
-
-function formatCostForMessage(costCents: number, currency: string) {
-  return `${(costCents / 100).toFixed(2)} ${currency}`;
 }
 
 function formatCostForMessage(costCents: number, currency: string) {
