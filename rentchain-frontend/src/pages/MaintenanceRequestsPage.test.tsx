@@ -106,8 +106,54 @@ describe("landlord maintenance workspace", () => {
     expect(screen.getAllByText(/Not ready for service/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Execution \/ completion/i)).toBeInTheDocument();
     expect(screen.getByText(/Current service state/i)).toBeInTheDocument();
+    expect(screen.getByText(/Resolution \/ closure/i)).toBeInTheDocument();
+    expect(screen.getByText(/Verification status/i)).toBeInTheDocument();
     expect(screen.getByText(/Review the request details/i)).toBeInTheDocument();
     expect(screen.getByText(/Mark reviewed/i)).toBeInTheDocument();
+  });
+
+  it("shows pending verification and follow-up state in the landlord closure workspace", async () => {
+    maintenanceWorkflowApi.listLandlordMaintenance.mockResolvedValue({
+      items: [
+        {
+          id: "maint-1",
+          tenantId: "tenant-1",
+          landlordId: "landlord-1",
+          propertyId: "prop-1",
+          unitId: "unit-2",
+          tenantName: "Taylor Tenant",
+          propertyLabel: "123 Main St",
+          unitLabel: "Unit 4",
+          title: "Broken heater",
+          description: "Heat is not turning on.",
+          category: "HVAC",
+          priority: "urgent",
+          status: "completed",
+          assignedContractorName: "North Shore HVAC",
+          completionSummary: "Heat restored and vents balanced.",
+          resolutionStatus: "follow_up_required",
+          followUpRequired: true,
+          followUpReason: "Back bedroom is still cooler than the rest of the unit.",
+          tenantDeclineReason: "Back bedroom is still cooler than the rest of the unit.",
+          tenantDeclinedAt: Date.UTC(2026, 3, 16, 10, 0),
+          createdAt: 100,
+          updatedAt: 200,
+          statusHistory: [],
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/maintenance/maint-1"]}>
+        <Routes>
+          <Route path="/maintenance/:id" element={<MaintenanceRequestsPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Resolution \/ closure/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Still needs attention/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Back bedroom is still cooler than the rest of the unit/i).length).toBeGreaterThan(0);
   });
 
   it("records a landlord start-of-service update from the execution workspace", async () => {

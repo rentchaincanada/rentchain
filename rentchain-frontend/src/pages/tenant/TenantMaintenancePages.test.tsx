@@ -96,6 +96,7 @@ describe("tenant maintenance pages", () => {
     expect(screen.getByText(/Upcoming service window: No service window has been confirmed yet/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Confirmation \/ access/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Execution \/ completion/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Resolution \/ closure/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/landlord needs to confirm the service window/i)).toBeInTheDocument();
   });
 
@@ -196,6 +197,7 @@ describe("tenant maintenance pages", () => {
     expect(screen.getByText(/Access needed/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Confirmation \/ access/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Execution \/ completion/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Resolution \/ closure/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Work in progress/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Completion note/i)).toBeInTheDocument();
     expect(screen.getByText(/Follow-up \/ rework/i)).toBeInTheDocument();
@@ -316,7 +318,7 @@ describe("tenant maintenance pages", () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: /Mark resolved/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirm issue resolved/i }));
 
     await waitFor(() => {
       expect(maintenanceWorkflowApi.updateTenantMaintenanceSignoff).toHaveBeenCalledWith("maint-1", {
@@ -325,6 +327,40 @@ describe("tenant maintenance pages", () => {
       });
     });
     expect(await screen.findByText(/This request has been marked resolved/i)).toBeInTheDocument();
+  });
+
+  it("shows a still-needs-attention closure state in tenant detail", async () => {
+    maintenanceWorkflowApi.getTenantMaintenance.mockResolvedValue({
+      item: {
+        id: "maint-1",
+        title: "Broken heater",
+        description: "The heat is not turning on.",
+        status: "completed",
+        priority: "urgent",
+        category: "HVAC",
+        assignedContractorName: "North Shore HVAC",
+        contractorStatus: "completed",
+        resolutionStatus: "follow_up_required",
+        followUpRequired: true,
+        followUpReason: "Back bedroom still feels cold overnight.",
+        tenantDeclineReason: "Back bedroom still feels cold overnight.",
+        createdAt: 100,
+        updatedAt: 400,
+        statusHistory: [],
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/tenant/maintenance/maint-1"]}>
+        <Routes>
+          <Route path="/tenant/maintenance/:id" element={<TenantMaintenanceRequestDetailPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect((await screen.findAllByText(/Resolution \/ closure/i)).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Still needs attention/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Back bedroom still feels cold overnight/i).length).toBeGreaterThan(0);
   });
 
   it("submits tenant rework signoff from the detail page when a second-pass review is pending", async () => {

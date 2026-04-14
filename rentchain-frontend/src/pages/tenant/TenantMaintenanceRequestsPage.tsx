@@ -7,6 +7,7 @@ import { buildMaintenanceWorkspaceState } from "../maintenanceWorkspaceState";
 import { buildMaintenanceAssignmentRoutingView } from "../maintenanceAssignmentRoutingState";
 import { buildMaintenanceConfirmationAccessView } from "../maintenanceConfirmationAccessState";
 import { buildMaintenanceServiceExecutionView } from "../maintenanceServiceExecutionState";
+import { buildMaintenanceResolutionVerificationView } from "../maintenanceResolutionVerificationState";
 import { buildMaintenanceSchedulingAccessView } from "../maintenanceSchedulingAccessState";
 import {
   TenantEmptyState,
@@ -152,6 +153,7 @@ export default function TenantMaintenanceRequestsPage() {
               const schedulingView = buildMaintenanceSchedulingAccessView(item, "tenant");
               const confirmationView = buildMaintenanceConfirmationAccessView(item, "tenant");
               const executionView = buildMaintenanceServiceExecutionView(item, "tenant");
+              const resolutionView = buildMaintenanceResolutionVerificationView(item, "tenant");
               const notificationMessages = tenantNotificationMessages(item);
               return (
                 <TenantInfoCard
@@ -239,6 +241,24 @@ export default function TenantMaintenanceRequestsPage() {
                     </div>
                     {item.completionSummary ? (
                       <div style={{ color: textTokens.secondary }}>Completion note: {item.completionSummary}</div>
+                    ) : null}
+                  </div>
+                  <div
+                    style={{
+                      border: "1px solid rgba(15,23,42,0.08)",
+                      borderRadius: 12,
+                      padding: "12px 14px",
+                      display: "grid",
+                      gap: 8,
+                    }}
+                  >
+                    <div style={{ color: textTokens.primary, fontWeight: 700 }}>Resolution / closure</div>
+                    <div style={{ color: textTokens.secondary }}>{resolutionView.summary}</div>
+                    <div style={{ color: textTokens.secondary }}>
+                      {`${resolutionView.tenantVisibleLabel} • ${resolutionView.closureLabel}`}
+                    </div>
+                    {item.followUpReason ? (
+                      <div style={{ color: textTokens.secondary }}>Follow-up note: {item.followUpReason}</div>
                     ) : null}
                   </div>
                   {requestView?.nextSteps.length ? (

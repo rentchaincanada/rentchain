@@ -17,6 +17,7 @@ import { buildMaintenanceLifecycleView, buildMaintenanceWorkspaceState } from ".
 import { buildMaintenanceAssignmentRoutingView } from "./maintenanceAssignmentRoutingState";
 import { buildMaintenanceConfirmationAccessView } from "./maintenanceConfirmationAccessState";
 import { buildMaintenanceServiceExecutionView } from "./maintenanceServiceExecutionState";
+import { buildMaintenanceResolutionVerificationView } from "./maintenanceResolutionVerificationState";
 import {
   buildMaintenanceSchedulingAccessView,
   buildMaintenanceSchedulingCalendarEvents,
@@ -395,6 +396,10 @@ export default function MaintenanceRequestsPage() {
     () => (selected ? buildMaintenanceServiceExecutionView(selected, "landlord") : null),
     [selected]
   );
+  const selectedResolution = React.useMemo(
+    () => (selected ? buildMaintenanceResolutionVerificationView(selected, "landlord") : null),
+    [selected]
+  );
   const calendarEvents = React.useMemo(() => buildMaintenanceSchedulingCalendarEvents(items), [items]);
   const calendarDays = React.useMemo(() => buildCalendarDays(calendarMonth), [calendarMonth]);
   const calendarEventMap = React.useMemo(() => {
@@ -598,6 +603,7 @@ export default function MaintenanceRequestsPage() {
                     const lifecycle = buildMaintenanceLifecycleView(item, "landlord");
                     const assignment = buildMaintenanceAssignmentRoutingView(item, "landlord");
                     const execution = buildMaintenanceServiceExecutionView(item, "landlord");
+                    const resolution = buildMaintenanceResolutionVerificationView(item, "landlord");
                     return (
                       <button
                         key={item.id}
@@ -647,6 +653,7 @@ export default function MaintenanceRequestsPage() {
 </div>
 <div style={{ color: text.secondary, fontSize: 12 }}>{assignment.ownerSummary}</div>
 <div style={{ color: text.secondary, fontSize: 12 }}>{execution.executionLabel}</div>
+<div style={{ color: text.secondary, fontSize: 12 }}>{resolution.verificationLabel}</div>
 </button>
 );
 })}
@@ -889,6 +896,64 @@ export default function MaintenanceRequestsPage() {
                           </Button>
                         ) : null}
                       </div>
+                    </div>
+                  ) : null}
+
+                  {selectedResolution ? (
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: radius.md,
+                        padding: "12px 14px",
+                        background: colors.panel,
+                        display: "grid",
+                        gap: 8,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.primary }}>Resolution / closure</div>
+                      <div style={{ color: text.secondary }}>{selectedResolution.summary}</div>
+                      <div style={{ fontWeight: 700, color: text.primary }}>Verification status</div>
+                      <div style={{ color: text.secondary }}>{selectedResolution.verificationLabel}</div>
+                      <div style={{ fontWeight: 700, color: text.primary }}>Closure state</div>
+                      <div style={{ color: text.secondary }}>{selectedResolution.closureLabel}</div>
+                      {selected.followUpReason ? (
+                        <>
+                          <div style={{ fontWeight: 700, color: text.primary }}>Follow-up note</div>
+                          <div style={{ color: text.secondary }}>{selected.followUpReason}</div>
+                        </>
+                      ) : null}
+                      {selected.tenantDeclineReason ? (
+                        <>
+                          <div style={{ fontWeight: 700, color: text.primary }}>Tenant note</div>
+                          <div style={{ color: text.secondary }}>{selected.tenantDeclineReason}</div>
+                        </>
+                      ) : null}
+                      {selectedResolution.timelineEvents.length ? (
+                        <>
+                          <div style={{ fontWeight: 700, color: text.primary }}>Recent closure updates</div>
+                          {selectedResolution.timelineEvents.map((event) => (
+                            <div key={event.key} style={{ color: text.secondary }}>
+                              {event.label} • {fmtDate(event.timestamp)}
+                            </div>
+                          ))}
+                        </>
+                      ) : null}
+                      {selectedResolution.blockers.length ? (
+                        <>
+                          <div style={{ fontWeight: 700, color: text.primary }}>Needs attention</div>
+                          {selectedResolution.blockers.map((item) => (
+                            <div key={item} style={{ color: text.secondary }}>
+                              {item}
+                            </div>
+                          ))}
+                        </>
+                      ) : null}
+                      <div style={{ fontWeight: 700, color: text.primary }}>Next step</div>
+                      {selectedResolution.nextActions.map((step) => (
+                        <div key={step} style={{ color: text.secondary }}>
+                          {step}
+                        </div>
+                      ))}
                     </div>
                   ) : null}
 

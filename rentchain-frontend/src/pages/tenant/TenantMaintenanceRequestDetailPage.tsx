@@ -16,6 +16,7 @@ import { buildMaintenanceLifecycleView } from "../maintenanceWorkspaceState";
 import { buildMaintenanceAssignmentRoutingView } from "../maintenanceAssignmentRoutingState";
 import { buildMaintenanceConfirmationAccessView } from "../maintenanceConfirmationAccessState";
 import { buildMaintenanceServiceExecutionView } from "../maintenanceServiceExecutionState";
+import { buildMaintenanceResolutionVerificationView } from "../maintenanceResolutionVerificationState";
 import { buildMaintenanceSchedulingAccessView } from "../maintenanceSchedulingAccessState";
 
 function fmtDate(ts?: number | null) {
@@ -92,6 +93,7 @@ export default function TenantMaintenanceRequestDetailPage() {
   const schedulingView = data ? buildMaintenanceSchedulingAccessView(data, "tenant") : null;
   const confirmationView = data ? buildMaintenanceConfirmationAccessView(data, "tenant") : null;
   const executionView = data ? buildMaintenanceServiceExecutionView(data, "tenant") : null;
+  const resolutionView = data ? buildMaintenanceResolutionVerificationView(data, "tenant") : null;
   const notificationMessages = tenantNotificationMessages(data);
 
   useEffect(() => {
@@ -676,68 +678,98 @@ export default function TenantMaintenanceRequestDetailPage() {
                   ) : null}
                 </div>
               ) : null}
-              <div
-                style={{
-                  border: `1px solid ${colors.border}`,
-                  borderRadius: radius.md,
-                  padding: "12px 14px",
-                  background: colors.panel,
-                  display: "grid",
-                  gap: 8,
-                }}
-              >
-                <div style={{ fontWeight: 800, color: textTokens.primary }}>Resolution approval</div>
-                <div style={{ color: textTokens.secondary }}>{resolutionStatusLabel(data.resolutionStatus)}</div>
-                {data.landlordApprovedAt ? (
-                  <div style={{ color: textTokens.secondary }}>Landlord approved the completed work on {fmtDate(data.landlordApprovedAt)}.</div>
-                ) : null}
-                {data.finalResolvedAt ? (
-                  <div style={{ color: textTokens.secondary }}>Final resolution recorded on {fmtDate(data.finalResolvedAt)}.</div>
-                ) : null}
-                {data.followUpReason ? (
-                  <>
-                    <div style={{ color: textTokens.primary, fontWeight: 700 }}>Follow-up reason</div>
-                    <div style={{ color: textTokens.secondary }}>{data.followUpReason}</div>
-                  </>
-                ) : null}
-                {data.tenantDeclineReason ? (
-                  <>
-                    <div style={{ color: textTokens.primary, fontWeight: 700 }}>Your latest note</div>
-                    <div style={{ color: textTokens.secondary }}>{data.tenantDeclineReason}</div>
-                  </>
-                ) : null}
-                {data.status === "completed" &&
-                data.resolutionStatus === "tenant_pending_signoff" &&
-                data.reworkReview?.status !== "tenant_pending_signoff" ? (
-                  <>
-                    <div style={{ color: textTokens.primary, fontWeight: 700 }}>Next step</div>
-                    <div style={{ color: textTokens.secondary }}>
-                      Review the completed work and let your landlord know whether the issue is fully resolved.
+              {resolutionView ? (
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: radius.md,
+                    padding: "12px 14px",
+                    background: colors.panel,
+                    display: "grid",
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ fontWeight: 800, color: textTokens.primary }}>Resolution / closure</div>
+                  <div style={{ color: textTokens.secondary }}>{resolutionView.summary}</div>
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>Resolution status</div>
+                  <div style={{ color: textTokens.secondary }}>{resolutionView.verificationLabel}</div>
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>Closure state</div>
+                  <div style={{ color: textTokens.secondary }}>{resolutionView.closureLabel}</div>
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>Current detail</div>
+                  <div style={{ color: textTokens.secondary }}>{resolutionStatusLabel(data.resolutionStatus)}</div>
+                  {data.landlordApprovedAt ? (
+                    <div style={{ color: textTokens.secondary }}>Landlord reviewed the completed work on {fmtDate(data.landlordApprovedAt)}.</div>
+                  ) : null}
+                  {data.finalResolvedAt ? (
+                    <div style={{ color: textTokens.secondary }}>Request closed on {fmtDate(data.finalResolvedAt)}.</div>
+                  ) : null}
+                  {data.followUpReason ? (
+                    <>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Follow-up reason</div>
+                      <div style={{ color: textTokens.secondary }}>{data.followUpReason}</div>
+                    </>
+                  ) : null}
+                  {data.tenantDeclineReason ? (
+                    <>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Your latest note</div>
+                      <div style={{ color: textTokens.secondary }}>{data.tenantDeclineReason}</div>
+                    </>
+                  ) : null}
+                  {resolutionView.timelineEvents.length ? (
+                    <>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Recent closure updates</div>
+                      {resolutionView.timelineEvents.map((event) => (
+                        <div key={event.key} style={{ color: textTokens.secondary }}>
+                          {event.label} • {fmtDate(event.timestamp)}
+                        </div>
+                      ))}
+                    </>
+                  ) : null}
+                  {resolutionView.blockers.length ? (
+                    <>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Needs attention</div>
+                      {resolutionView.blockers.map((item) => (
+                        <div key={item} style={{ color: textTokens.secondary }}>
+                          {item}
+                        </div>
+                      ))}
+                    </>
+                  ) : null}
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>Next step</div>
+                  {resolutionView.nextActions.map((step) => (
+                    <div key={step} style={{ color: textTokens.secondary }}>
+                      {step}
                     </div>
-                    <textarea
-                      value={signoffReason}
-                      onChange={(e) => setSignoffReason(e.target.value)}
-                      placeholder="If follow-up is still needed, explain what is incomplete or still not working"
-                      rows={3}
-                      style={{
-                        width: "100%",
-                        borderRadius: 8,
-                        border: `1px solid ${colors.border}`,
-                        padding: 10,
-                        resize: "vertical",
-                      }}
-                    />
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <Button variant="secondary" disabled={savingAction} onClick={() => void applyResolutionSignoff("resolved")}>
-                        {savingAction ? "Saving..." : "Mark resolved"}
-                      </Button>
-                      <Button variant="ghost" disabled={savingAction} onClick={() => void applyResolutionSignoff("not_resolved")}>
-                        {savingAction ? "Saving..." : "Request follow-up"}
-                      </Button>
-                    </div>
-                  </>
-                ) : null}
-              </div>
+                  ))}
+                  {data.status === "completed" &&
+                  data.resolutionStatus === "tenant_pending_signoff" &&
+                  data.reworkReview?.status !== "tenant_pending_signoff" ? (
+                    <>
+                      <textarea
+                        value={signoffReason}
+                        onChange={(e) => setSignoffReason(e.target.value)}
+                        placeholder="If the issue still needs attention, explain what is incomplete or still not working"
+                        rows={3}
+                        style={{
+                          width: "100%",
+                          borderRadius: 8,
+                          border: `1px solid ${colors.border}`,
+                          padding: 10,
+                          resize: "vertical",
+                        }}
+                      />
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <Button variant="secondary" disabled={savingAction} onClick={() => void applyResolutionSignoff("resolved")}>
+                          {savingAction ? "Saving..." : "Confirm issue resolved"}
+                        </Button>
+                        <Button variant="ghost" disabled={savingAction} onClick={() => void applyResolutionSignoff("not_resolved")}>
+                          {savingAction ? "Saving..." : "Still needs attention"}
+                        </Button>
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
               {Array.isArray(data.evidence) && data.evidence.length ? (
                 <div
                   style={{
