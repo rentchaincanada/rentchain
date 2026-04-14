@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Button, Card, Input, Section } from "../../components/ui/Ui";
 import { ResponsiveMasterDetail } from "../../components/layout/ResponsiveMasterDetail";
 import {
+  confirmContractorMaintenanceReworkSchedule,
   listContractorMaintenanceJobs,
   patchContractorMaintenanceJobStatus,
   patchContractorMaintenanceReworkStatus,
@@ -54,6 +55,21 @@ function isActiveReworkCycle(item?: MaintenanceWorkflowItem | null) {
       item.reworkCycle.status !== "completed" &&
       item.reworkCycle.status !== "cancelled"
   );
+}
+
+function reworkScheduleStatusLabel(value?: string | null) {
+  switch (value) {
+    case "tenant_pending":
+      return "Awaiting tenant confirmation";
+    case "confirmed":
+      return "Confirmed";
+    case "reschedule_requested":
+      return "Reschedule requested";
+    case "scheduled":
+      return "Awaiting contractor confirmation";
+    default:
+      return "Not scheduled";
+  }
 }
 
 function findScheduledDate(item: MaintenanceWorkflowItem) {
@@ -303,6 +319,26 @@ export default function ContractorJobsPage() {
     }
   }, [evidenceCaption, evidenceFile, evidenceType, load, selected]);
 
+  const confirmReworkSchedule = React.useCallback(
+    async (decision: "confirm" | "unavailable") => {
+      if (!selected || !selected.reworkCycle) return;
+      setSaving(true);
+      setError(null);
+      try {
+        await confirmContractorMaintenanceReworkSchedule(selected.id, {
+          decision,
+          note: note.trim() || undefined,
+        });
+        await load();
+      } catch (err: any) {
+        setError(String(err?.message || "Failed to update the rework schedule"));
+      } finally {
+        setSaving(false);
+      }
+    },
+    [load, note, selected]
+  );
+
   const updateReworkStatus = React.useCallback(
     async (status: "in_progress" | "completed") => {
       if (!selected || !selected.reworkCycle) return;
@@ -332,6 +368,21 @@ export default function ContractorJobsPage() {
     if (!selected) return [] as Array<{ label: string; onClick: () => Promise<void> }>;
     const next: Array<{ label: string; onClick: () => Promise<void> }> = [];
     if (isActiveReworkCycle(selected)) {
+      if (
+        selected.reworkCycle?.schedule &&
+        selected.reworkCycle.schedule.status !== "confirmed" &&
+        selected.reworkCycle.schedule.status !== "reschedule_requested" &&
+        selected.reworkCycle.schedule.contractorScheduleStatus !== "confirmed"
+      ) {
+        next.push({
+          label: "Confirm return visit",
+          onClick: () => confirmReworkSchedule("confirm"),
+        });
+        next.push({
+          label: "Mark unavailable",
+          onClick: () => confirmReworkSchedule("unavailable"),
+        });
+      }
       if (selected.reworkCycle?.status === "assigned" || selected.reworkCycle?.status === "not_started") {
         next.push({
           label: "Start rework",
@@ -377,7 +428,7 @@ export default function ContractorJobsPage() {
       });
     }
     return next;
-  }, [selected, updateReworkStatus, updateStatus]);
+  }, [confirmReworkSchedule, selected, updateReworkStatus, updateStatus]);
 
   return (
     <div style={{ display: "grid", gap: spacing.lg }}>
@@ -545,6 +596,13 @@ export default function ContractorJobsPage() {
                       {selected.reworkCycle.completionSummary ? (
                         <div style={{ color: text.secondary }}>
                           Latest rework completion summary: {selected.reworkCycle.completionSummary}
+                        </div>
+                      ) : null}
+                      {selected.reworkCycle.schedule ? (
+                        <div style={{ color: text.secondary }}>
+                          Return visit: {reworkScheduleStatusLabel(selected.reworkCycle.schedule.status)} • Access{" "}
+                          {selected.reworkCycle.schedule.requiresTenantAccess ? "required" : "not required"} •{" "}
+                          {fmtDate(selected.reworkCycle.schedule.scheduledFor || selected.reworkCycle.schedule.timeWindowStart)}
                         </div>
                       ) : null}
                     </div>

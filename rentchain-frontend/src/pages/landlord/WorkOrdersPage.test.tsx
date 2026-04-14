@@ -15,6 +15,8 @@ const mocks = vi.hoisted(() => ({
   confirmWorkOrderCompletion: vi.fn(),
   markWorkOrderFollowUpRequired: vi.fn(),
   reopenWorkOrder: vi.fn(),
+  rescheduleWorkOrderRework: vi.fn(),
+  scheduleWorkOrderRework: vi.fn(),
   startWorkOrderRework: vi.fn(),
   uploadWorkOrderEvidence: vi.fn(),
   updateWorkOrderEvidence: vi.fn(),
@@ -43,6 +45,8 @@ vi.mock("../../api/workOrdersApi", () => ({
   markWorkOrderFollowUpRequired: mocks.markWorkOrderFollowUpRequired,
   patchWorkOrder: mocks.patchWorkOrder,
   reopenWorkOrder: mocks.reopenWorkOrder,
+  rescheduleWorkOrderRework: mocks.rescheduleWorkOrderRework,
+  scheduleWorkOrderRework: mocks.scheduleWorkOrderRework,
   startWorkOrderRework: mocks.startWorkOrderRework,
   updateWorkOrderEvidence: mocks.updateWorkOrderEvidence,
   uploadWorkOrderEvidence: mocks.uploadWorkOrderEvidence,
@@ -89,6 +93,8 @@ describe("WorkOrdersPage", () => {
     mocks.confirmWorkOrderCompletion.mockReset();
     mocks.markWorkOrderFollowUpRequired.mockReset();
     mocks.reopenWorkOrder.mockReset();
+    mocks.rescheduleWorkOrderRework.mockReset();
+    mocks.scheduleWorkOrderRework.mockReset();
     mocks.startWorkOrderRework.mockReset();
     mocks.uploadWorkOrderEvidence.mockReset();
     mocks.updateWorkOrderEvidence.mockReset();
@@ -517,6 +523,195 @@ describe("WorkOrdersPage", () => {
       expect(mocks.completeWorkOrderRework).toHaveBeenCalledWith("wo-rework", {
         outcome: "resolved",
         notes: "Follow-up complete after vent balancing.",
+      });
+    });
+  });
+
+  it("lets the landlord schedule and reschedule a return visit for rework", async () => {
+    mocks.canUseWorkOrders = true;
+    mocks.listWorkOrders.mockResolvedValue([
+      {
+        id: "wo-rework",
+        landlordId: "landlord-1",
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        title: "Return visit for heater",
+        description: "Second pass needed to balance airflow.",
+        category: "HVAC",
+        priority: "high",
+        status: "assigned",
+        visibility: "private",
+        budgetMinCents: null,
+        budgetMaxCents: null,
+        assignedContractorId: "contractor-1",
+        invitedContractorIds: [],
+        acceptedAtMs: 10,
+        startedAtMs: null,
+        completedAtMs: 30,
+        resolutionStatus: "completed_pending_review",
+        followUpRequired: false,
+        reworkCycle: {
+          cycleNumber: 1,
+          status: "assigned",
+          createdAt: 40,
+          createdBy: "landlord-1",
+          assignedContractorId: "contractor-1",
+          assignedAt: 41,
+          schedule: {
+            scheduledFor: Date.UTC(2026, 4, 3, 14, 0),
+            timeWindowStart: null,
+            timeWindowEnd: null,
+            status: "tenant_pending",
+            requiresTenantAccess: true,
+            tenantAccessStatus: "pending",
+            contractorScheduleStatus: "pending",
+            scheduledBy: "landlord-1",
+            scheduledAt: 45,
+            rescheduleReason: null,
+            lastUpdatedAt: 45,
+          },
+        },
+        notesInternal: "",
+        linkedExpenseId: null,
+        createdAtMs: 1,
+        updatedAtMs: 41,
+      },
+    ]);
+    mocks.listWorkOrderUpdates.mockResolvedValue([]);
+    mocks.getWorkOrder.mockResolvedValueOnce({
+      id: "wo-rework",
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      title: "Return visit for heater",
+      description: "Second pass needed to balance airflow.",
+      category: "HVAC",
+      priority: "high",
+      status: "assigned",
+      visibility: "private",
+      budgetMinCents: null,
+      budgetMaxCents: null,
+      assignedContractorId: "contractor-1",
+      invitedContractorIds: [],
+      acceptedAtMs: 10,
+      startedAtMs: null,
+      completedAtMs: 30,
+      resolutionStatus: "completed_pending_review",
+      followUpRequired: false,
+      reworkCycle: {
+        cycleNumber: 1,
+        status: "assigned",
+        createdAt: 40,
+        createdBy: "landlord-1",
+        assignedContractorId: "contractor-1",
+        assignedAt: 41,
+        schedule: {
+          scheduledFor: Date.UTC(2026, 4, 3, 14, 0),
+          timeWindowStart: null,
+          timeWindowEnd: null,
+          status: "tenant_pending",
+          requiresTenantAccess: true,
+          tenantAccessStatus: "pending",
+          contractorScheduleStatus: "pending",
+          scheduledBy: "landlord-1",
+          scheduledAt: 45,
+          rescheduleReason: null,
+          lastUpdatedAt: 45,
+        },
+      },
+      notesInternal: "",
+      linkedExpenseId: null,
+      createdAtMs: 1,
+      updatedAtMs: 41,
+    });
+    mocks.getWorkOrder.mockResolvedValueOnce({
+      id: "wo-rework",
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      title: "Return visit for heater",
+      description: "Second pass needed to balance airflow.",
+      category: "HVAC",
+      priority: "high",
+      status: "assigned",
+      visibility: "private",
+      budgetMinCents: null,
+      budgetMaxCents: null,
+      assignedContractorId: "contractor-1",
+      invitedContractorIds: [],
+      acceptedAtMs: 10,
+      startedAtMs: null,
+      completedAtMs: 30,
+      resolutionStatus: "completed_pending_review",
+      followUpRequired: false,
+      reworkCycle: {
+        cycleNumber: 1,
+        status: "assigned",
+        createdAt: 40,
+        createdBy: "landlord-1",
+        assignedContractorId: "contractor-1",
+        assignedAt: 41,
+        schedule: {
+          scheduledFor: Date.UTC(2026, 4, 4, 14, 0),
+          timeWindowStart: null,
+          timeWindowEnd: null,
+          status: "tenant_pending",
+          requiresTenantAccess: true,
+          tenantAccessStatus: "pending",
+          contractorScheduleStatus: "pending",
+          scheduledBy: "landlord-1",
+          scheduledAt: 50,
+          rescheduleReason: null,
+          lastUpdatedAt: 50,
+        },
+      },
+      notesInternal: "",
+      linkedExpenseId: null,
+      createdAtMs: 1,
+      updatedAtMs: 50,
+    });
+    mocks.scheduleWorkOrderRework.mockResolvedValue({ ok: true });
+    mocks.rescheduleWorkOrderRework.mockResolvedValue({ ok: true });
+
+    const { container } = render(
+      <MemoryRouter>
+        <WorkOrdersPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /timeline/i }));
+
+    const scheduledInput = container.querySelector('input[type="datetime-local"]') as HTMLInputElement | null;
+    expect(scheduledInput).not.toBeNull();
+    fireEvent.change(scheduledInput!, {
+      target: { value: "2026-05-04T14:00" },
+    });
+    fireEvent.click(screen.getByLabelText(/Require tenant access confirmation/i));
+    fireEvent.click(screen.getByRole("button", { name: /^Schedule return visit$/i }));
+
+    await waitFor(() => {
+      expect(mocks.scheduleWorkOrderRework).toHaveBeenCalledWith("wo-rework", {
+        scheduledFor: expect.any(Number),
+        timeWindowStart: undefined,
+        timeWindowEnd: undefined,
+        requiresTenantAccess: false,
+      });
+    });
+
+    expect(screen.getByRole("button", { name: /^Reschedule return visit$/i })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText(/Reason for rescheduling this return visit/i), {
+      target: { value: "Tenant asked for the next afternoon." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^Reschedule return visit$/i }));
+
+    await waitFor(() => {
+      expect(mocks.rescheduleWorkOrderRework).toHaveBeenCalledWith("wo-rework", {
+        scheduledFor: expect.any(Number),
+        timeWindowStart: undefined,
+        timeWindowEnd: undefined,
+        requiresTenantAccess: true,
+        reason: "Tenant asked for the next afternoon.",
       });
     });
   });

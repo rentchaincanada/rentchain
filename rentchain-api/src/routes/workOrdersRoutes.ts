@@ -152,6 +152,36 @@ function normalizeReworkHistoryOutcome(value: unknown): "resolved" | "failed" | 
   return null;
 }
 
+function normalizeReworkScheduleStatus(
+  value: unknown
+): "not_scheduled" | "scheduled" | "contractor_confirmed" | "tenant_pending" | "confirmed" | "reschedule_requested" | "cancelled" | null {
+  const next = asString(value, 40).toLowerCase();
+  if (
+    next === "not_scheduled" ||
+    next === "scheduled" ||
+    next === "contractor_confirmed" ||
+    next === "tenant_pending" ||
+    next === "confirmed" ||
+    next === "reschedule_requested" ||
+    next === "cancelled"
+  ) {
+    return next;
+  }
+  return null;
+}
+
+function normalizeReworkTenantAccessStatus(value: unknown): "pending" | "confirmed" | "denied" | "not_required" | null {
+  const next = asString(value, 40).toLowerCase();
+  if (next === "pending" || next === "confirmed" || next === "denied" || next === "not_required") return next;
+  return null;
+}
+
+function normalizeReworkContractorScheduleStatus(value: unknown): "pending" | "confirmed" | "unavailable" | null {
+  const next = asString(value, 40).toLowerCase();
+  if (next === "pending" || next === "confirmed" || next === "unavailable") return next;
+  return null;
+}
+
 function normalizeRole(req: any): string {
   const actorRole = asString(req.user?.actorRole, 40).toLowerCase();
   const role = asString(req.user?.role, 40).toLowerCase();
@@ -1802,6 +1832,7 @@ router.post("/landlord/work-orders/:id/start-rework", requireAuth, async (req: a
           completedAt: null,
           completionSummary: null,
           evidenceSnapshot: null,
+          schedule: null,
         },
         updatedAtMs: now,
         lastExecutionUpdateAt: now,
@@ -1899,6 +1930,195 @@ router.post("/landlord/work-orders/:id/assign-rework", requireAuth, async (req: 
   } catch (err) {
     console.error("[work-orders] assign rework failed", err);
     return res.status(500).json({ ok: false, error: "WORK_ORDER_ASSIGN_REWORK_FAILED" });
+  }
+});
+
+router.post("/landlord/work-orders/:id/rework-schedule", requireAuth, async (req: any, res) => {
+  try {
+    if (!isLandlord(req)) return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+
+    const workOrderId = asString(req.params?.id, 120);
+    const access = await getWorkOrderAuthorized(req, workOrderId);
+    if (!access.ok) {
+      if (access.code === "NOT_FOUND") return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const reworkCycle = (access.item as any)?.reworkCycle || null;
+    const cycleStatus = normalizeReworkCycleStatus(reworkCycle?.status);
+    if (!reworkCycle || !cycleStatus || cycleStatus === "completed" || cycleStatus === "cancelled") {
+      return res.status(400).json({ ok: false, error: "REWORK_CYCLE_NOT_ACTIVE" });
+    }
+
+    const scheduledFor = req.body?.scheduledFor === undefined ? undefined : toMillis(req.body?.scheduledFor);
+    const timeWindowStart = req.body?.timeWindowStart === undefined ? undefined : toMillis(req.body?.timeWindowStart);
+    const timeWindowEnd = req.body?.timeWindowEnd === undefined ? undefined : toMillis(req.body?.timeWindowEnd);
+    if (req.body?.scheduledFor !== undefined && scheduledFor === null && req.body?.scheduledFor !== null) {
+      return res.status(400).json({ ok: false, error: "INVALID_SCHEDULED_FOR" });
+    }
+    if (req.body?.timeWindowStart !== undefined && timeWindowStart === null && req.body?.timeWindowStart !== null) {
+      return res.status(400).json({ ok: false, error: "INVALID_TIME_WINDOW_START" });
+    }
+    if (req.body?.timeWindowEnd !== undefined && timeWindowEnd === null && req.body?.timeWindowEnd !== null) {
+      return res.status(400).json({ ok: false, error: "INVALID_TIME_WINDOW_END" });
+    }
+    if (!scheduledFor && !(timeWindowStart && timeWindowEnd)) {
+      return res.status(400).json({ ok: false, error: "REWORK_SCHEDULE_TIME_REQUIRED" });
+    }
+    if (timeWindowStart && timeWindowEnd && timeWindowEnd < timeWindowStart) {
+      return res.status(400).json({ ok: false, error: "INVALID_TIME_WINDOW_RANGE" });
+    }
+
+    const requiresTenantAccess = Boolean(req.body?.requiresTenantAccess);
+    const now = nowMs();
+    const nextSchedule = {
+      scheduledFor: scheduledFor ?? null,
+      timeWindowStart: timeWindowStart ?? null,
+      timeWindowEnd: timeWindowEnd ?? null,
+      status: requiresTenantAccess ? "tenant_pending" : "scheduled",
+      requiresTenantAccess,
+      tenantAccessStatus: requiresTenantAccess ? "pending" : "not_required",
+      contractorScheduleStatus: "pending",
+      scheduledBy: access.userId,
+      scheduledAt: now,
+      rescheduleReason: null,
+      tenantAccessNote: null,
+      contractorAvailabilityNote: null,
+      lastUpdatedAt: now,
+    };
+
+    await db.collection("workOrders").doc(workOrderId).set(
+      {
+        reworkCycle: {
+          ...reworkCycle,
+          schedule: nextSchedule,
+        },
+        updatedAtMs: now,
+      },
+      { merge: true }
+    );
+
+    await writeWorkOrderUpdate({
+      workOrderId,
+      actorRole: isAdmin(req) ? "admin" : "landlord",
+      actorId: access.userId,
+      updateType: "scheduled",
+      message: `Rework cycle #${Number(reworkCycle?.cycleNumber || 1)} scheduled for return visit`,
+    });
+    await syncMaintenanceFromWorkOrder(workOrderId, {
+      contractorLastUpdate: requiresTenantAccess
+        ? `Rework return visit scheduled and waiting on access confirmation.`
+        : `Rework return visit scheduled.`,
+    });
+    await appendMaintenanceStatusHistory({
+      maintenanceRequestId: asOptionalString((access.item as any)?.maintenanceRequestId, 120),
+      status: "assigned",
+      actorRole: isAdmin(req) ? "admin" : "landlord",
+      actorId: access.userId,
+      message: requiresTenantAccess
+        ? `Rework return visit scheduled and awaiting tenant access confirmation.`
+        : `Rework return visit scheduled.`,
+    });
+
+    const refreshed = await db.collection("workOrders").doc(workOrderId).get();
+    return res.json({ ok: true, item: await toWorkOrderResponseForAudience(refreshed.id, refreshed.data(), "landlord") });
+  } catch (err) {
+    console.error("[work-orders] schedule rework failed", err);
+    return res.status(500).json({ ok: false, error: "WORK_ORDER_SCHEDULE_REWORK_FAILED" });
+  }
+});
+
+router.post("/landlord/work-orders/:id/reschedule-rework", requireAuth, async (req: any, res) => {
+  try {
+    if (!isLandlord(req)) return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+
+    const workOrderId = asString(req.params?.id, 120);
+    const access = await getWorkOrderAuthorized(req, workOrderId);
+    if (!access.ok) {
+      if (access.code === "NOT_FOUND") return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const reworkCycle = (access.item as any)?.reworkCycle || null;
+    const cycleStatus = normalizeReworkCycleStatus(reworkCycle?.status);
+    if (!reworkCycle || !cycleStatus || cycleStatus === "completed" || cycleStatus === "cancelled") {
+      return res.status(400).json({ ok: false, error: "REWORK_CYCLE_NOT_ACTIVE" });
+    }
+
+    const reason = asOptionalString(req.body?.reason, 2000);
+    if (!reason) return res.status(400).json({ ok: false, error: "RESCHEDULE_REASON_REQUIRED" });
+
+    const scheduledFor = req.body?.scheduledFor === undefined ? undefined : toMillis(req.body?.scheduledFor);
+    const timeWindowStart = req.body?.timeWindowStart === undefined ? undefined : toMillis(req.body?.timeWindowStart);
+    const timeWindowEnd = req.body?.timeWindowEnd === undefined ? undefined : toMillis(req.body?.timeWindowEnd);
+    if (req.body?.scheduledFor !== undefined && scheduledFor === null && req.body?.scheduledFor !== null) {
+      return res.status(400).json({ ok: false, error: "INVALID_SCHEDULED_FOR" });
+    }
+    if (req.body?.timeWindowStart !== undefined && timeWindowStart === null && req.body?.timeWindowStart !== null) {
+      return res.status(400).json({ ok: false, error: "INVALID_TIME_WINDOW_START" });
+    }
+    if (req.body?.timeWindowEnd !== undefined && timeWindowEnd === null && req.body?.timeWindowEnd !== null) {
+      return res.status(400).json({ ok: false, error: "INVALID_TIME_WINDOW_END" });
+    }
+    if (!scheduledFor && !(timeWindowStart && timeWindowEnd)) {
+      return res.status(400).json({ ok: false, error: "REWORK_SCHEDULE_TIME_REQUIRED" });
+    }
+    if (timeWindowStart && timeWindowEnd && timeWindowEnd < timeWindowStart) {
+      return res.status(400).json({ ok: false, error: "INVALID_TIME_WINDOW_RANGE" });
+    }
+
+    const requiresTenantAccess = Boolean(req.body?.requiresTenantAccess);
+    const now = nowMs();
+    const nextSchedule = {
+      scheduledFor: scheduledFor ?? null,
+      timeWindowStart: timeWindowStart ?? null,
+      timeWindowEnd: timeWindowEnd ?? null,
+      status: requiresTenantAccess ? "tenant_pending" : "scheduled",
+      requiresTenantAccess,
+      tenantAccessStatus: requiresTenantAccess ? "pending" : "not_required",
+      contractorScheduleStatus: "pending",
+      scheduledBy: access.userId,
+      scheduledAt: now,
+      rescheduleReason: reason,
+      tenantAccessNote: null,
+      contractorAvailabilityNote: null,
+      lastUpdatedAt: now,
+    };
+
+    await db.collection("workOrders").doc(workOrderId).set(
+      {
+        reworkCycle: {
+          ...reworkCycle,
+          schedule: nextSchedule,
+        },
+        updatedAtMs: now,
+      },
+      { merge: true }
+    );
+
+    await writeWorkOrderUpdate({
+      workOrderId,
+      actorRole: isAdmin(req) ? "admin" : "landlord",
+      actorId: access.userId,
+      updateType: "scheduled",
+      message: `Rework cycle #${Number(reworkCycle?.cycleNumber || 1)} rescheduled: ${reason}`,
+    });
+    await syncMaintenanceFromWorkOrder(workOrderId, {
+      contractorLastUpdate: `Rework return visit rescheduled: ${reason}`,
+    });
+    await appendMaintenanceStatusHistory({
+      maintenanceRequestId: asOptionalString((access.item as any)?.maintenanceRequestId, 120),
+      status: "assigned",
+      actorRole: isAdmin(req) ? "admin" : "landlord",
+      actorId: access.userId,
+      message: `Rework return visit rescheduled: ${reason}`,
+    });
+
+    const refreshed = await db.collection("workOrders").doc(workOrderId).get();
+    return res.json({ ok: true, item: await toWorkOrderResponseForAudience(refreshed.id, refreshed.data(), "landlord") });
+  } catch (err) {
+    console.error("[work-orders] reschedule rework failed", err);
+    return res.status(500).json({ ok: false, error: "WORK_ORDER_RESCHEDULE_REWORK_FAILED" });
   }
 });
 

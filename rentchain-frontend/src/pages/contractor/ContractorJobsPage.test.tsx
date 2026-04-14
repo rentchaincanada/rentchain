@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import ContractorJobsPage from "./ContractorJobsPage";
 
 const apiMocks = vi.hoisted(() => ({
+  confirmContractorMaintenanceReworkSchedule: vi.fn(),
   listContractorMaintenanceJobs: vi.fn(),
   patchContractorMaintenanceJobStatus: vi.fn(),
   patchContractorMaintenanceReworkStatus: vi.fn(),
@@ -14,6 +15,7 @@ vi.mock("../../api/maintenanceWorkflowApi", async () => {
   const actual = await vi.importActual<any>("../../api/maintenanceWorkflowApi");
   return {
     ...actual,
+    confirmContractorMaintenanceReworkSchedule: apiMocks.confirmContractorMaintenanceReworkSchedule,
     listContractorMaintenanceJobs: apiMocks.listContractorMaintenanceJobs,
     patchContractorMaintenanceJobStatus: apiMocks.patchContractorMaintenanceJobStatus,
     patchContractorMaintenanceReworkStatus: apiMocks.patchContractorMaintenanceReworkStatus,
@@ -35,6 +37,7 @@ describe("ContractorJobsPage", () => {
       })),
     });
     apiMocks.listContractorMaintenanceJobs.mockReset();
+    apiMocks.confirmContractorMaintenanceReworkSchedule.mockReset();
     apiMocks.patchContractorMaintenanceJobStatus.mockReset();
     apiMocks.patchContractorMaintenanceReworkStatus.mockReset();
     apiMocks.uploadContractorMaintenanceEvidence.mockReset();
@@ -221,5 +224,74 @@ describe("ContractorJobsPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Complete rework/i }));
     expect(await screen.findByText(/Add a completion summary before finishing the rework/i)).toBeInTheDocument();
+  });
+
+  it("lets the contractor confirm or decline a scheduled rework return visit", async () => {
+    apiMocks.listContractorMaintenanceJobs.mockResolvedValue({
+      items: [
+        {
+          id: "maint-rework",
+          title: "Return visit for heater",
+          description: "Follow-up airflow adjustment.",
+          status: "assigned",
+          priority: "urgent",
+          tenantId: "tenant-1",
+          landlordId: "landlord-1",
+          propertyLabel: "Harbour View",
+          unitLabel: "Unit 2",
+          resolutionStatus: "completed_pending_review",
+          reworkCycle: {
+            cycleNumber: 1,
+            status: "assigned",
+            createdAt: 100,
+            createdBy: "landlord-1",
+            assignedContractorId: "contractor-1",
+            assignedAt: 110,
+            schedule: {
+              scheduledFor: Date.UTC(2026, 4, 4, 14, 0),
+              timeWindowStart: null,
+              timeWindowEnd: null,
+              status: "scheduled",
+              requiresTenantAccess: true,
+              tenantAccessStatus: "pending",
+              contractorScheduleStatus: "pending",
+            },
+          },
+          createdAt: 100,
+          updatedAt: 200,
+          statusHistory: [],
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/contractor/jobs/maint-rework"]}>
+        <Routes>
+          <Route path="/contractor/jobs/:id" element={<ContractorJobsPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Awaiting contractor confirmation/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Confirm return visit/i }));
+
+    await waitFor(() => {
+      expect(apiMocks.confirmContractorMaintenanceReworkSchedule).toHaveBeenCalledWith("maint-rework", {
+        decision: "confirm",
+        note: undefined,
+      });
+    });
+
+    fireEvent.change(screen.getByPlaceholderText(/Add schedule details, a blocked reason, or a progress note/i), {
+      target: { value: "I am unavailable until the following morning." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Mark unavailable/i }));
+
+    await waitFor(() => {
+      expect(apiMocks.confirmContractorMaintenanceReworkSchedule).toHaveBeenCalledWith("maint-rework", {
+        decision: "unavailable",
+        note: "I am unavailable until the following morning.",
+      });
+    });
   });
 });

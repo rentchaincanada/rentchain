@@ -4,6 +4,7 @@ import {
   getTenantWorkspaceMaintenance,
   listTenantWorkspaceMaintenance,
   updateTenantWorkspaceMaintenanceConfirmation,
+  updateTenantWorkspaceReworkAccess,
   updateTenantWorkspaceMaintenanceSignoff,
 } from "./tenantPortal";
 
@@ -78,6 +79,21 @@ export type MaintenanceWorkflowItem = {
     completedAt?: number | null;
     completionSummary?: string | null;
     evidenceSnapshot?: string[] | null;
+    schedule?: {
+      scheduledFor?: number | null;
+      timeWindowStart?: number | null;
+      timeWindowEnd?: number | null;
+      status?: "not_scheduled" | "scheduled" | "contractor_confirmed" | "tenant_pending" | "confirmed" | "reschedule_requested" | "cancelled" | null;
+      requiresTenantAccess?: boolean | null;
+      tenantAccessStatus?: "pending" | "confirmed" | "denied" | "not_required" | null;
+      contractorScheduleStatus?: "pending" | "confirmed" | "unavailable" | null;
+      scheduledBy?: string | null;
+      scheduledAt?: number | null;
+      rescheduleReason?: string | null;
+      tenantAccessNote?: string | null;
+      contractorAvailabilityNote?: string | null;
+      lastUpdatedAt?: number | null;
+    } | null;
   } | null;
   reworkHistory?: Array<{
     cycleNumber: number;
@@ -143,6 +159,46 @@ function mapReworkCycle(value: any): MaintenanceWorkflowItem["reworkCycle"] {
     evidenceSnapshot: Array.isArray(value.evidenceSnapshot)
       ? value.evidenceSnapshot.filter((entry: unknown): entry is string => typeof entry === "string")
       : null,
+    schedule:
+      value.schedule && typeof value.schedule === "object"
+        ? {
+            scheduledFor: typeof value.schedule.scheduledFor === "number" ? value.schedule.scheduledFor : null,
+            timeWindowStart: typeof value.schedule.timeWindowStart === "number" ? value.schedule.timeWindowStart : null,
+            timeWindowEnd: typeof value.schedule.timeWindowEnd === "number" ? value.schedule.timeWindowEnd : null,
+            status:
+              value.schedule.status === "not_scheduled" ||
+              value.schedule.status === "scheduled" ||
+              value.schedule.status === "contractor_confirmed" ||
+              value.schedule.status === "tenant_pending" ||
+              value.schedule.status === "confirmed" ||
+              value.schedule.status === "reschedule_requested" ||
+              value.schedule.status === "cancelled"
+                ? value.schedule.status
+                : null,
+            requiresTenantAccess:
+              typeof value.schedule.requiresTenantAccess === "boolean" ? value.schedule.requiresTenantAccess : null,
+            tenantAccessStatus:
+              value.schedule.tenantAccessStatus === "pending" ||
+              value.schedule.tenantAccessStatus === "confirmed" ||
+              value.schedule.tenantAccessStatus === "denied" ||
+              value.schedule.tenantAccessStatus === "not_required"
+                ? value.schedule.tenantAccessStatus
+                : null,
+            contractorScheduleStatus:
+              value.schedule.contractorScheduleStatus === "pending" ||
+              value.schedule.contractorScheduleStatus === "confirmed" ||
+              value.schedule.contractorScheduleStatus === "unavailable"
+                ? value.schedule.contractorScheduleStatus
+                : null,
+            scheduledBy: typeof value.schedule.scheduledBy === "string" ? value.schedule.scheduledBy : null,
+            scheduledAt: typeof value.schedule.scheduledAt === "number" ? value.schedule.scheduledAt : null,
+            rescheduleReason: typeof value.schedule.rescheduleReason === "string" ? value.schedule.rescheduleReason : null,
+            tenantAccessNote: typeof value.schedule.tenantAccessNote === "string" ? value.schedule.tenantAccessNote : null,
+            contractorAvailabilityNote:
+              typeof value.schedule.contractorAvailabilityNote === "string" ? value.schedule.contractorAvailabilityNote : null,
+            lastUpdatedAt: typeof value.schedule.lastUpdatedAt === "number" ? value.schedule.lastUpdatedAt : null,
+          }
+        : null,
   };
 }
 
@@ -514,6 +570,63 @@ export async function updateTenantMaintenanceSignoff(
   return { ok: true, item: mapped, data: mapped };
 }
 
+export async function updateTenantMaintenanceReworkAccess(
+  id: string,
+  payload: {
+    decision: "confirm" | "deny";
+    note?: string;
+  }
+) {
+  const item = await updateTenantWorkspaceReworkAccess(id, payload);
+  const mapped: MaintenanceWorkflowItem = {
+    id: item?.requestId || id,
+    tenantId: "",
+    landlordId: "",
+    propertyId: null,
+    unitId: null,
+    title: item?.title || "Maintenance request",
+    description: item?.summary || "",
+    category: String(item?.category || "GENERAL"),
+    priority: String(item?.priority || "normal").toLowerCase() as "low" | "normal" | "urgent",
+    status: String(item?.status || "submitted").toLowerCase() as MaintenanceWorkflowStatus,
+    assignedContractorName: item?.assignedContractorName || null,
+    contractorStatus: item?.contractorStatus || null,
+    serviceWindowStartAt: typeof item?.serviceWindowStartAt === "number" ? item.serviceWindowStartAt : null,
+    serviceWindowEndAt: typeof item?.serviceWindowEndAt === "number" ? item.serviceWindowEndAt : null,
+    accessRequired: typeof item?.accessRequired === "boolean" ? item.accessRequired : null,
+    tenantConfirmationStatus:
+      item?.tenantConfirmationStatus === "confirmed" || item?.tenantConfirmationStatus === "needs_schedule_change"
+        ? item.tenantConfirmationStatus
+        : null,
+    tenantConfirmationUpdatedAt:
+      typeof item?.tenantConfirmationUpdatedAt === "number" ? item.tenantConfirmationUpdatedAt : null,
+    accessAcknowledgedAt: typeof item?.accessAcknowledgedAt === "number" ? item.accessAcknowledgedAt : null,
+    resolutionStatus:
+      item?.resolutionStatus === "completed_pending_review" ||
+      item?.resolutionStatus === "landlord_approved" ||
+      item?.resolutionStatus === "tenant_pending_signoff" ||
+      item?.resolutionStatus === "resolved" ||
+      item?.resolutionStatus === "follow_up_required"
+        ? item.resolutionStatus
+        : null,
+    reworkCycle: mapReworkCycle((item as any)?.reworkCycle),
+    reworkHistory: mapReworkHistory((item as any)?.reworkHistory),
+    evidence: Array.isArray((item as any)?.evidence) ? (item as any).evidence : [],
+    createdAt: item?.createdAt || Date.now(),
+    updatedAt: item?.updatedAt || item?.createdAt || Date.now(),
+    statusHistory: Array.isArray(item?.statusHistory)
+      ? item.statusHistory.map((entry) => ({
+          status: String(entry?.status || ""),
+          actorRole: String(entry?.actorRole || ""),
+          actorId: entry?.actorId ? String(entry.actorId) : null,
+          message: entry?.message ? String(entry.message) : null,
+          createdAt: typeof entry?.createdAt === "number" ? entry.createdAt : undefined,
+        }))
+      : [],
+  };
+  return { ok: true, item: mapped, data: mapped };
+}
+
 export async function listLandlordMaintenance(status?: string) {
   const query = status ? `?status=${encodeURIComponent(status)}` : "";
   return apiFetch<{ ok: boolean; items: MaintenanceWorkflowItem[]; data?: MaintenanceWorkflowItem[] }>(
@@ -596,6 +709,22 @@ export async function patchContractorMaintenanceReworkStatus(
     `/contractor/jobs/${encodeURIComponent(id)}/rework-status`,
     {
       method: "PATCH",
+      body: payload,
+    }
+  );
+}
+
+export async function confirmContractorMaintenanceReworkSchedule(
+  id: string,
+  payload: {
+    decision: "confirm" | "unavailable";
+    note?: string;
+  }
+) {
+  return apiFetch<{ ok: boolean; item: MaintenanceWorkflowItem; data?: MaintenanceWorkflowItem }>(
+    `/contractor/jobs/${encodeURIComponent(id)}/confirm-rework-schedule`,
+    {
+      method: "POST",
       body: payload,
     }
   );

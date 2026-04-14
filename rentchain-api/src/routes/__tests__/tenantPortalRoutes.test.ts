@@ -605,6 +605,187 @@ describe("tenantPortalRoutes foundation", () => {
     expect(res.body?.error).toBe("TENANT_DECLINE_REASON_REQUIRED");
   });
 
+  it("lets the tenant confirm rework access for their own request", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    ensureCollection("maintenanceRequests").set("maint-4", {
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      status: "assigned",
+      priority: "NORMAL",
+      category: "GENERAL",
+      title: "Rework visit",
+      description: "A second pass is scheduled.",
+      statusHistory: [],
+      createdAt: 100,
+      updatedAt: 200,
+    });
+    ensureCollection("workOrders").set("maintenance_maint-4", {
+      maintenanceRequestId: "maint-4",
+      tenantId: "tenant-1",
+      status: "assigned",
+      resolutionStatus: "completed_pending_review",
+      reworkCycle: {
+        cycleNumber: 1,
+        status: "assigned",
+        createdAt: 300,
+        createdBy: "landlord-1",
+        assignedContractorId: "contractor-1",
+        assignedAt: 301,
+        schedule: {
+          scheduledFor: 500,
+          timeWindowStart: null,
+          timeWindowEnd: null,
+          status: "tenant_pending",
+          requiresTenantAccess: true,
+          tenantAccessStatus: "pending",
+          contractorScheduleStatus: "confirmed",
+        },
+      },
+    });
+
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/maintenance/maint-4/confirm-rework-access",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+      body: {
+        decision: "confirm",
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.reworkCycle?.schedule).toEqual(
+      expect.objectContaining({
+        status: "confirmed",
+        tenantAccessStatus: "confirmed",
+      })
+    );
+  });
+
+  it("lets the tenant deny rework access and request a reschedule", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    ensureCollection("maintenanceRequests").set("maint-5", {
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      status: "assigned",
+      priority: "NORMAL",
+      category: "GENERAL",
+      title: "Rework visit",
+      description: "A second pass is scheduled.",
+      statusHistory: [],
+      createdAt: 100,
+      updatedAt: 200,
+    });
+    ensureCollection("workOrders").set("maintenance_maint-5", {
+      maintenanceRequestId: "maint-5",
+      tenantId: "tenant-1",
+      status: "assigned",
+      resolutionStatus: "completed_pending_review",
+      reworkCycle: {
+        cycleNumber: 1,
+        status: "assigned",
+        createdAt: 300,
+        createdBy: "landlord-1",
+        assignedContractorId: "contractor-1",
+        assignedAt: 301,
+        schedule: {
+          scheduledFor: 500,
+          timeWindowStart: null,
+          timeWindowEnd: null,
+          status: "tenant_pending",
+          requiresTenantAccess: true,
+          tenantAccessStatus: "pending",
+          contractorScheduleStatus: "pending",
+        },
+      },
+    });
+
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/maintenance/maint-5/confirm-rework-access",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+      body: {
+        decision: "deny",
+        note: "I will be away for the scheduled visit.",
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.reworkCycle?.schedule).toEqual(
+      expect.objectContaining({
+        status: "reschedule_requested",
+        tenantAccessStatus: "denied",
+        tenantAccessNote: "I will be away for the scheduled visit.",
+      })
+    );
+  });
+
+  it("rejects rework access updates for an unrelated tenant request", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    ensureCollection("maintenanceRequests").set("maint-6", {
+      tenantId: "tenant-2",
+      propertyId: "prop-1",
+      status: "assigned",
+      priority: "NORMAL",
+      category: "GENERAL",
+      title: "Rework visit",
+      description: "A second pass is scheduled.",
+      statusHistory: [],
+      createdAt: 100,
+      updatedAt: 200,
+    });
+    ensureCollection("workOrders").set("maintenance_maint-6", {
+      maintenanceRequestId: "maint-6",
+      tenantId: "tenant-2",
+      status: "assigned",
+      reworkCycle: {
+        cycleNumber: 1,
+        status: "assigned",
+        createdAt: 300,
+        createdBy: "landlord-1",
+        schedule: {
+          scheduledFor: 500,
+          status: "tenant_pending",
+          requiresTenantAccess: true,
+          tenantAccessStatus: "pending",
+          contractorScheduleStatus: "pending",
+        },
+      },
+    });
+
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/maintenance/maint-6/confirm-rework-access",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+      body: {
+        decision: "confirm",
+      },
+    });
+
+    expect(res.status).toBe(403);
+    expect(res.body?.error).toBe("FORBIDDEN");
+  });
+
   it("rejects unauthorized application completion access", async () => {
     const router = (await import("../tenantPortalRoutes")).default;
     const res = await invokeRouter(router, {

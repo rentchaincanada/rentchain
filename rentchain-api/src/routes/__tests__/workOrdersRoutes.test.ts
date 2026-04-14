@@ -520,4 +520,78 @@ describe("workOrdersRoutes execution completion", () => {
       ])
     );
   });
+
+  it("schedules and reschedules an active rework cycle", async () => {
+    const router = (await import("../workOrdersRoutes")).default;
+    ensureCollection("workOrders").set("wo-1", {
+      ...ensureCollection("workOrders").get("wo-1"),
+      status: "completed",
+      resolutionStatus: "completed_pending_review",
+      reworkCycle: {
+        cycleNumber: 1,
+        status: "assigned",
+        createdAt: 1000,
+        createdBy: "landlord-1",
+        assignedContractorId: "contractor-22",
+        assignedAt: 1010,
+        schedule: null,
+      },
+    });
+
+    const scheduleRes = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/work-orders/wo-1/rework-schedule",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "landlord-1",
+          role: "landlord",
+          landlordId: "landlord-1",
+        }),
+      },
+      body: {
+        scheduledFor: 2_000,
+        requiresTenantAccess: true,
+      },
+    });
+
+    expect(scheduleRes.status).toBe(200);
+    expect(scheduleRes.body?.item?.reworkCycle?.schedule).toEqual(
+      expect.objectContaining({
+        scheduledFor: 2_000,
+        status: "tenant_pending",
+        requiresTenantAccess: true,
+        tenantAccessStatus: "pending",
+        contractorScheduleStatus: "pending",
+      })
+    );
+
+    const rescheduleRes = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/work-orders/wo-1/reschedule-rework",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "landlord-1",
+          role: "landlord",
+          landlordId: "landlord-1",
+        }),
+      },
+      body: {
+        scheduledFor: 3_000,
+        requiresTenantAccess: false,
+        reason: "Contractor requested a different visit time.",
+      },
+    });
+
+    expect(rescheduleRes.status).toBe(200);
+    expect(rescheduleRes.body?.item?.reworkCycle?.schedule).toEqual(
+      expect.objectContaining({
+        scheduledFor: 3_000,
+        status: "scheduled",
+        requiresTenantAccess: false,
+        tenantAccessStatus: "not_required",
+        contractorScheduleStatus: "pending",
+        rescheduleReason: "Contractor requested a different visit time.",
+      })
+    );
+  });
 });
