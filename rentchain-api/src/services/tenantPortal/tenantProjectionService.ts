@@ -36,6 +36,12 @@ type TenantMaintenanceProjection = {
   summary: string | null;
   assignedContractorName: string | null;
   contractorStatus: string | null;
+  serviceStartedAt: number | null;
+  serviceCompletedAt: number | null;
+  lastExecutionUpdateAt: number | null;
+  completionSummary: string | null;
+  completionOutcome: "completed" | "partially_completed" | "follow_up_required" | null;
+  completionConfirmedByLandlordAt: number | null;
   serviceWindowStartAt: number | null;
   serviceWindowEndAt: number | null;
   accessRequired: boolean | null;
@@ -224,6 +230,17 @@ export function projectTenantMaintenance(recordId: string, data: any): TenantMai
     summary: asString(data?.summary) || asString(data?.description),
     assignedContractorName: asString(data?.assignedContractorName),
     contractorStatus: asString(data?.contractorStatus),
+    serviceStartedAt: toMillis(data?.serviceStartedAt),
+    serviceCompletedAt: toMillis(data?.serviceCompletedAt),
+    lastExecutionUpdateAt: toMillis(data?.lastExecutionUpdateAt),
+    completionSummary: asString(data?.completionSummary),
+    completionOutcome:
+      data?.completionOutcome === "completed" ||
+      data?.completionOutcome === "partially_completed" ||
+      data?.completionOutcome === "follow_up_required"
+        ? data.completionOutcome
+        : null,
+    completionConfirmedByLandlordAt: toMillis(data?.completionConfirmedByLandlordAt),
     serviceWindowStartAt: toMillis(data?.serviceWindowStartAt),
     serviceWindowEndAt: toMillis(data?.serviceWindowEndAt),
     accessRequired: typeof data?.accessRequired === "boolean" ? data.accessRequired : null,

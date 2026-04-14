@@ -104,8 +104,58 @@ describe("landlord maintenance workspace", () => {
     expect(screen.getByText(/Awaiting schedule/i)).toBeInTheDocument();
     expect(screen.getByText(/Confirmation \/ access/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Not ready for service/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Execution \/ completion/i)).toBeInTheDocument();
+    expect(screen.getByText(/Current service state/i)).toBeInTheDocument();
     expect(screen.getByText(/Review the request details/i)).toBeInTheDocument();
     expect(screen.getByText(/Mark reviewed/i)).toBeInTheDocument();
+  });
+
+  it("records a landlord start-of-service update from the execution workspace", async () => {
+    maintenanceWorkflowApi.listLandlordMaintenance.mockResolvedValue({
+      items: [
+        {
+          id: "maint-1",
+          tenantId: "tenant-1",
+          landlordId: "landlord-1",
+          propertyId: "prop-1",
+          unitId: "unit-2",
+          tenantName: "Taylor Tenant",
+          propertyLabel: "123 Main St",
+          unitLabel: "Unit 4",
+          title: "Broken heater",
+          description: "Heat is not turning on.",
+          category: "HVAC",
+          priority: "urgent",
+          status: "scheduled",
+          assignedContractorName: "North Shore HVAC",
+          serviceWindowStartAt: Date.UTC(2026, 3, 15, 13, 0),
+          serviceWindowEndAt: Date.UTC(2026, 3, 15, 15, 0),
+          accessRequired: true,
+          tenantConfirmationStatus: "confirmed",
+          accessAcknowledgedAt: Date.UTC(2026, 3, 14, 11, 0),
+          createdAt: 100,
+          updatedAt: 200,
+          statusHistory: [],
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/maintenance/maint-1"]}>
+        <Routes>
+          <Route path="/maintenance/:id" element={<MaintenanceRequestsPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /Mark service started/i }));
+
+    expect(maintenanceWorkflowApi.patchLandlordMaintenance).toHaveBeenCalledWith("maint-1", {
+      status: "in_progress",
+      priority: "urgent",
+      landlordNote: "",
+      message: "Landlord marked service as started.",
+    });
   });
 
   it("opens the related request from the scheduled maintenance calendar", async () => {

@@ -16,6 +16,7 @@ import { colors, radius, spacing, text } from "../styles/tokens";
 import { buildMaintenanceLifecycleView, buildMaintenanceWorkspaceState } from "./maintenanceWorkspaceState";
 import { buildMaintenanceAssignmentRoutingView } from "./maintenanceAssignmentRoutingState";
 import { buildMaintenanceConfirmationAccessView } from "./maintenanceConfirmationAccessState";
+import { buildMaintenanceServiceExecutionView } from "./maintenanceServiceExecutionState";
 import {
   buildMaintenanceSchedulingAccessView,
   buildMaintenanceSchedulingCalendarEvents,
@@ -121,6 +122,7 @@ export default function MaintenanceRequestsPage() {
   const [filter, setFilter] = React.useState<"all" | MaintenanceWorkflowStatus>("all");
   const [saving, setSaving] = React.useState(false);
   const [landlordNote, setLandlordNote] = React.useState("");
+  const [completionSummary, setCompletionSummary] = React.useState("");
   const [priority, setPriority] = React.useState<"low" | "normal" | "urgent">("normal");
   const [contractorId, setContractorId] = React.useState("");
   const [serviceWindowStart, setServiceWindowStart] = React.useState("");
@@ -214,6 +216,7 @@ export default function MaintenanceRequestsPage() {
   React.useEffect(() => {
     if (selected) {
       setLandlordNote(String(selected.landlordNote || ""));
+      setCompletionSummary(String(selected.completionSummary || ""));
       setPriority(selected.priority || "normal");
       setContractorId(String(selected.assignedContractorId || ""));
       setServiceWindowStart(toLocalInputValue(selected.serviceWindowStartAt));
@@ -227,6 +230,7 @@ export default function MaintenanceRequestsPage() {
       const first = filtered[0];
       setSelectedId(first.id);
       setLandlordNote(String(first.landlordNote || ""));
+      setCompletionSummary(String(first.completionSummary || ""));
       setPriority(first.priority || "normal");
       setContractorId(String(first.assignedContractorId || ""));
       setServiceWindowStart(toLocalInputValue(first.serviceWindowStartAt));
@@ -356,11 +360,10 @@ export default function MaintenanceRequestsPage() {
         onClick: () => updateStatus("scheduled", "Visit scheduled with the assigned contractor."),
       });
     }
-    if (["reviewed", "assigned", "scheduled", "in_progress"].includes(selected.status)) {
+    if (selected.status === "scheduled") {
       actions.push({
-        label: "Mark completed",
-        onClick: () =>
-          updateStatus("completed", "Landlord marked the request completed."),
+        label: "Mark in progress",
+        onClick: () => updateStatus("in_progress", "Landlord marked service as started."),
       });
     }
     if (!["completed", "cancelled"].includes(selected.status)) {
@@ -386,6 +389,10 @@ export default function MaintenanceRequestsPage() {
   );
   const selectedConfirmation = React.useMemo(
     () => (selected ? buildMaintenanceConfirmationAccessView(selected, "landlord") : null),
+    [selected]
+  );
+  const selectedExecution = React.useMemo(
+    () => (selected ? buildMaintenanceServiceExecutionView(selected, "landlord") : null),
     [selected]
   );
   const calendarEvents = React.useMemo(() => buildMaintenanceSchedulingCalendarEvents(items), [items]);
@@ -590,6 +597,7 @@ export default function MaintenanceRequestsPage() {
                     const active = item.id === selected?.id;
                     const lifecycle = buildMaintenanceLifecycleView(item, "landlord");
                     const assignment = buildMaintenanceAssignmentRoutingView(item, "landlord");
+                    const execution = buildMaintenanceServiceExecutionView(item, "landlord");
                     return (
                       <button
                         key={item.id}
@@ -638,6 +646,7 @@ export default function MaintenanceRequestsPage() {
 <span style={{ color: text.muted, fontSize: 12 }}>{fmtDate(item.createdAt)}</span>
 </div>
 <div style={{ color: text.secondary, fontSize: 12 }}>{assignment.ownerSummary}</div>
+<div style={{ color: text.secondary, fontSize: 12 }}>{execution.executionLabel}</div>
 </button>
 );
 })}
@@ -769,6 +778,117 @@ export default function MaintenanceRequestsPage() {
                           {step}
                         </div>
                       ))}
+                    </div>
+                  ) : null}
+
+                  {selectedExecution ? (
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: radius.md,
+                        padding: "12px 14px",
+                        background: colors.panel,
+                        display: "grid",
+                        gap: 8,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.primary }}>Execution / completion</div>
+                      <div style={{ color: text.secondary }}>{selectedExecution.summary}</div>
+                      <div style={{ fontWeight: 700, color: text.primary }}>Current service state</div>
+                      <div style={{ color: text.secondary }}>{selectedExecution.executionLabel}</div>
+                      <div style={{ fontWeight: 700, color: text.primary }}>Completion state</div>
+                      <div style={{ color: text.secondary }}>{selectedExecution.completionLabel}</div>
+                      {selectedExecution.timelineEvents.length ? (
+                        <>
+                          <div style={{ fontWeight: 700, color: text.primary }}>Recent service updates</div>
+                          {selectedExecution.timelineEvents.map((event) => (
+                            <div key={event.key} style={{ color: text.secondary }}>
+                              {event.label} • {fmtDate(event.timestamp)}
+                            </div>
+                          ))}
+                        </>
+                      ) : null}
+                      {selected.completionSummary ? (
+                        <>
+                          <div style={{ fontWeight: 700, color: text.primary }}>Completion note</div>
+                          <div style={{ color: text.secondary }}>{selected.completionSummary}</div>
+                        </>
+                      ) : null}
+                      {selectedExecution.blockers.length ? (
+                        <>
+                          <div style={{ fontWeight: 700, color: text.primary }}>Needs attention</div>
+                          {selectedExecution.blockers.map((item) => (
+                            <div key={item} style={{ color: text.secondary }}>
+                              {item}
+                            </div>
+                          ))}
+                        </>
+                      ) : null}
+                      <div style={{ fontWeight: 700, color: text.primary }}>Next step</div>
+                      {selectedExecution.nextActions.map((step) => (
+                        <div key={step} style={{ color: text.secondary }}>
+                          {step}
+                        </div>
+                      ))}
+                      {selectedExecution.executionState === "in_progress" ? (
+                        <textarea
+                          value={completionSummary}
+                          onChange={(e) => setCompletionSummary(e.target.value)}
+                          placeholder="Add a completion note before closing the request"
+                          rows={3}
+                          style={{
+                            width: "100%",
+                            borderRadius: radius.md,
+                            border: `1px solid ${colors.border}`,
+                            padding: 10,
+                            resize: "vertical",
+                            background: colors.card,
+                            color: text.primary,
+                          }}
+                        />
+                      ) : null}
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        {selectedExecution.executionState === "ready_for_service" ? (
+                          <Button
+                            variant="secondary"
+                            disabled={saving}
+                            onClick={() => void updateStatus("in_progress", "Landlord marked service as started.")}
+                          >
+                            {saving ? "Saving..." : "Mark service started"}
+                          </Button>
+                        ) : null}
+                        {selectedExecution.executionState === "in_progress" ? (
+                          <Button
+                            variant="secondary"
+                            disabled={saving}
+                            onClick={async () => {
+                              if (!selected) return;
+                              if (!completionSummary.trim()) {
+                                setError("Add a completion note before marking service completed.");
+                                return;
+                              }
+                              setSaving(true);
+                              setError(null);
+                              try {
+                                await patchLandlordMaintenance(selected.id, {
+                                  status: "completed",
+                                  completionSummary: completionSummary.trim(),
+                                  completionOutcome: "completed",
+                                  message: "Landlord recorded service completion.",
+                                });
+                                showToast({ message: "Service completion recorded.", variant: "success" });
+                                await load();
+                              } catch (err: any) {
+                                setError(String(err?.message || "Failed to record service completion"));
+                              } finally {
+                                setSaving(false);
+                              }
+                            }}
+                          >
+                            {saving ? "Saving..." : "Mark service completed"}
+                          </Button>
+                        ) : null}
+                      </div>
                     </div>
                   ) : null}
 

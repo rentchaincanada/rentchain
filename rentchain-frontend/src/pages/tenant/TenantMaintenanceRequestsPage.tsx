@@ -6,6 +6,7 @@ import { colors, spacing, text as textTokens } from "../../styles/tokens";
 import { buildMaintenanceWorkspaceState } from "../maintenanceWorkspaceState";
 import { buildMaintenanceAssignmentRoutingView } from "../maintenanceAssignmentRoutingState";
 import { buildMaintenanceConfirmationAccessView } from "../maintenanceConfirmationAccessState";
+import { buildMaintenanceServiceExecutionView } from "../maintenanceServiceExecutionState";
 import { buildMaintenanceSchedulingAccessView } from "../maintenanceSchedulingAccessState";
 import {
   TenantEmptyState,
@@ -150,6 +151,7 @@ export default function TenantMaintenanceRequestsPage() {
               const assignmentView = buildMaintenanceAssignmentRoutingView(item, "tenant");
               const schedulingView = buildMaintenanceSchedulingAccessView(item, "tenant");
               const confirmationView = buildMaintenanceConfirmationAccessView(item, "tenant");
+              const executionView = buildMaintenanceServiceExecutionView(item, "tenant");
               const notificationMessages = tenantNotificationMessages(item);
               return (
                 <TenantInfoCard
@@ -220,6 +222,24 @@ export default function TenantMaintenanceRequestsPage() {
                     <div style={{ color: textTokens.secondary }}>
                       {`${confirmationView.tenantVisibleState} • ${confirmationView.accessLabel}`}
                     </div>
+                  </div>
+                  <div
+                    style={{
+                      border: "1px solid rgba(15,23,42,0.08)",
+                      borderRadius: 12,
+                      padding: "12px 14px",
+                      display: "grid",
+                      gap: 8,
+                    }}
+                  >
+                    <div style={{ color: textTokens.primary, fontWeight: 700 }}>Execution / completion</div>
+                    <div style={{ color: textTokens.secondary }}>{executionView.summary}</div>
+                    <div style={{ color: textTokens.secondary }}>
+                      {`${executionView.tenantVisibleLabel} • ${executionView.completionLabel}`}
+                    </div>
+                    {item.completionSummary ? (
+                      <div style={{ color: textTokens.secondary }}>Completion note: {item.completionSummary}</div>
+                    ) : null}
                   </div>
                   {requestView?.nextSteps.length ? (
                     <div style={{ display: "grid", gap: 4 }}>

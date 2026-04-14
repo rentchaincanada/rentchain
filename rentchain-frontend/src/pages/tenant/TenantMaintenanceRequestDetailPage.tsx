@@ -15,6 +15,7 @@ import { TenantSurfaceShell, prettyStatus } from "./TenantWorkspaceShared";
 import { buildMaintenanceLifecycleView } from "../maintenanceWorkspaceState";
 import { buildMaintenanceAssignmentRoutingView } from "../maintenanceAssignmentRoutingState";
 import { buildMaintenanceConfirmationAccessView } from "../maintenanceConfirmationAccessState";
+import { buildMaintenanceServiceExecutionView } from "../maintenanceServiceExecutionState";
 import { buildMaintenanceSchedulingAccessView } from "../maintenanceSchedulingAccessState";
 
 function fmtDate(ts?: number | null) {
@@ -90,6 +91,7 @@ export default function TenantMaintenanceRequestDetailPage() {
   const assignmentView = data ? buildMaintenanceAssignmentRoutingView(data, "tenant") : null;
   const schedulingView = data ? buildMaintenanceSchedulingAccessView(data, "tenant") : null;
   const confirmationView = data ? buildMaintenanceConfirmationAccessView(data, "tenant") : null;
+  const executionView = data ? buildMaintenanceServiceExecutionView(data, "tenant") : null;
   const notificationMessages = tenantNotificationMessages(data);
 
   useEffect(() => {
@@ -465,6 +467,57 @@ export default function TenantMaintenanceRequestDetailPage() {
                       ) : null}
                     </div>
                   ) : null}
+                </div>
+              ) : null}
+              {executionView ? (
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: radius.md,
+                    padding: "12px 14px",
+                    background: colors.panel,
+                    display: "grid",
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ fontWeight: 800, color: textTokens.primary }}>Execution / completion</div>
+                  <div style={{ color: textTokens.secondary }}>{executionView.summary}</div>
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>Current service state</div>
+                  <div style={{ color: textTokens.secondary }}>{executionView.tenantVisibleLabel}</div>
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>Completion state</div>
+                  <div style={{ color: textTokens.secondary }}>{executionView.completionLabel}</div>
+                  {data.completionSummary ? (
+                    <>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Completion note</div>
+                      <div style={{ color: textTokens.secondary }}>{data.completionSummary}</div>
+                    </>
+                  ) : null}
+                  {executionView.timelineEvents.length ? (
+                    <>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Recent service updates</div>
+                      {executionView.timelineEvents.map((event) => (
+                        <div key={event.key} style={{ color: textTokens.secondary }}>
+                          {event.label} • {fmtDate(event.timestamp)}
+                        </div>
+                      ))}
+                    </>
+                  ) : null}
+                  {executionView.blockers.length ? (
+                    <>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Needs attention</div>
+                      {executionView.blockers.map((item) => (
+                        <div key={item} style={{ color: textTokens.secondary }}>
+                          {item}
+                        </div>
+                      ))}
+                    </>
+                  ) : null}
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>Next step</div>
+                  {executionView.nextActions.map((step) => (
+                    <div key={step} style={{ color: textTokens.secondary }}>
+                      {step}
+                    </div>
+                  ))}
                 </div>
               ) : null}
               {notificationMessages.length ? (

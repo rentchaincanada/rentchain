@@ -59,6 +59,12 @@ export type TenantWorkspaceMaintenance = {
   summary: string | null;
   assignedContractorName?: string | null;
   contractorStatus?: string | null;
+  serviceStartedAt?: number | null;
+  serviceCompletedAt?: number | null;
+  lastExecutionUpdateAt?: number | null;
+  completionSummary?: string | null;
+  completionOutcome?: "completed" | "partially_completed" | "follow_up_required" | null;
+  completionConfirmedByLandlordAt?: number | null;
   serviceWindowStartAt?: number | null;
   serviceWindowEndAt?: number | null;
   accessRequired?: boolean | null;

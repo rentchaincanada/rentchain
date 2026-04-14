@@ -1496,6 +1496,10 @@ router.patch("/landlord/maintenance/:id", async (req: any, res) => {
     const requestedWindowStartAt = req.body?.serviceWindowStartAt === undefined ? undefined : toMillis(req.body?.serviceWindowStartAt);
     const requestedWindowEndAt = req.body?.serviceWindowEndAt === undefined ? undefined : toMillis(req.body?.serviceWindowEndAt);
     const requestedAccessRequired = normalizeOptionalBoolean(req.body?.accessRequired);
+    const requestedCompletionSummary =
+      req.body?.completionSummary === undefined ? undefined : String(req.body?.completionSummary || "").trim().slice(0, 2000);
+    const requestedCompletionOutcome =
+      req.body?.completionOutcome === undefined ? undefined : normalizeCompletionOutcome(req.body?.completionOutcome);
     if (req.body?.serviceWindowStartAt !== undefined && requestedWindowStartAt === null && req.body?.serviceWindowStartAt !== null) {
       return res.status(400).json({ ok: false, error: "INVALID_SERVICE_WINDOW_START" });
     }
@@ -1508,6 +1512,12 @@ router.patch("/landlord/maintenance/:id", async (req: any, res) => {
       requestedWindowEndAt < requestedWindowStartAt
     ) {
       return res.status(400).json({ ok: false, error: "INVALID_SERVICE_WINDOW_RANGE" });
+    }
+    if (requestedCompletionSummary !== undefined && !(currentStatus === "completed" || nextStatus === "completed")) {
+      return res.status(400).json({ ok: false, error: "INVALID_COMPLETION_UPDATE" });
+    }
+    if (requestedCompletionOutcome !== undefined && !(currentStatus === "completed" || nextStatus === "completed")) {
+      return res.status(400).json({ ok: false, error: "INVALID_COMPLETION_UPDATE" });
     }
 
     let effectiveNextStatus = nextStatus;
@@ -1524,8 +1534,20 @@ router.patch("/landlord/maintenance/:id", async (req: any, res) => {
       });
     }
 
+    if (effectiveNextStatus === "completed" && !requestedCompletionSummary && !String(current.completionSummary || "").trim()) {
+      return res.status(400).json({ ok: false, error: "COMPLETION_SUMMARY_REQUIRED" });
+    }
+
+    const now = Date.now();
+    const completionSummary =
+      requestedCompletionSummary !== undefined ? requestedCompletionSummary || null : String(current.completionSummary || "").trim() || null;
+    const completionOutcome =
+      requestedCompletionOutcome !== undefined
+        ? requestedCompletionOutcome || "completed"
+        : normalizeCompletionOutcome(current.completionOutcome) || "completed";
+
     const update: any = {
-      updatedAt: Date.now(),
+      updatedAt: now,
       lastUpdatedBy: "LANDLORD",
     };
     if (effectiveNextStatus) update.status = effectiveNextStatus;
@@ -1544,6 +1566,41 @@ router.patch("/landlord/maintenance/:id", async (req: any, res) => {
     }
     if (requestedAccessRequired !== undefined) {
       update.accessRequired = requestedAccessRequired;
+    }
+    if (effectiveNextStatus === "in_progress") {
+      update.serviceStartedAt = toMillis(current.serviceStartedAt) ?? now;
+      update.lastExecutionUpdateAt = now;
+      update.executionBlockedReason = null;
+    }
+    if (requestedCompletionSummary !== undefined || effectiveNextStatus === "completed") {
+      update.completionSummary = completionSummary;
+    }
+    if (requestedCompletionOutcome !== undefined || effectiveNextStatus === "completed") {
+      update.completionOutcome = completionOutcome;
+    }
+    if (effectiveNextStatus === "completed") {
+      update.serviceStartedAt = toMillis(current.serviceStartedAt) ?? now;
+      update.serviceCompletedAt = now;
+      update.lastExecutionUpdateAt = now;
+      update.executionBlockedReason = null;
+      update.completedByActorRole = role === "admin" ? "admin" : "landlord";
+      update.completedByActorId = actorId;
+      update.completionConfirmedByLandlordAt = now;
+      update.completionConfirmedByLandlordBy = actorId;
+      update.resolutionStatus = "completed_pending_review";
+      update.landlordApprovedAt = null;
+      update.landlordApprovedBy = null;
+      update.tenantSignoffStatus = null;
+      update.tenantSignedOffAt = null;
+      update.tenantDeclinedAt = null;
+      update.tenantDeclineReason = null;
+      update.followUpRequired = false;
+      update.followUpReason = null;
+      update.finalResolvedAt = null;
+      update.reopenedAt = null;
+      update.reopenedByActorId = null;
+      update.reopenedByActorRole = null;
+      update.reopenReason = null;
     }
     if (req.body?.serviceWindowStartAt !== undefined || req.body?.serviceWindowEndAt !== undefined) {
       update.tenantConfirmationStatus = null;
@@ -1602,6 +1659,29 @@ router.patch("/landlord/maintenance/:id", async (req: any, res) => {
         message: "Tenant access acknowledgement was reset because the access requirement changed.",
       });
     }
+    if (effectiveNextStatus === "in_progress" && currentStatus !== "in_progress") {
+      await appendStatusHistory(id, {
+        status: effectiveNextStatus,
+        actorRole: role === "admin" ? "admin" : "landlord",
+        actorId,
+        message: String(req.body?.message || "Service started.").slice(0, 500),
+      });
+    }
+    if (effectiveNextStatus === "completed") {
+      await appendStatusHistory(id, {
+        status: effectiveNextStatus,
+        actorRole: role === "admin" ? "admin" : "landlord",
+        actorId,
+        message: `Service completed${completionSummary ? `: ${completionSummary}` : "."}`.slice(0, 500),
+      });
+    } else if (requestedCompletionSummary !== undefined && completionSummary !== String(current.completionSummary || "").trim()) {
+      await appendStatusHistory(id, {
+        status: effectiveNextStatus || currentStatus,
+        actorRole: role === "admin" ? "admin" : "landlord",
+        actorId,
+        message: "Completion updated.",
+      });
+    }
 
     const refreshedSnap = await ref.get();
     const refreshed = { id: refreshedSnap.id, ...(refreshedSnap.data() as any) };
@@ -1624,11 +1704,31 @@ router.patch("/landlord/maintenance/:id", async (req: any, res) => {
         serviceWindowEndAt: toMillis(refreshed.serviceWindowEndAt),
         accessRequired: typeof refreshed.accessRequired === "boolean" ? refreshed.accessRequired : null,
         scheduledFor: toMillis(refreshed.serviceWindowStartAt) ?? toMillis(refreshed.scheduledFor),
+        serviceStartedAt: toMillis(refreshed.serviceStartedAt),
         serviceCompletedAt: toMillis(refreshed.serviceCompletedAt),
+        lastExecutionUpdateAt: toMillis(refreshed.lastExecutionUpdateAt),
+        executionBlockedReason: String(refreshed.executionBlockedReason || "").trim() || null,
         completionSummary: String(refreshed.completionSummary || "").trim() || null,
         completionOutcome: normalizeCompletionOutcome(refreshed.completionOutcome),
+        completedByActorRole:
+          refreshed.completedByActorRole === "contractor" ||
+          refreshed.completedByActorRole === "landlord" ||
+          refreshed.completedByActorRole === "admin"
+            ? refreshed.completedByActorRole
+            : null,
+        completedByActorId: String(refreshed.completedByActorId || "").trim() || null,
         completionConfirmedByLandlordAt: toMillis(refreshed.completionConfirmedByLandlordAt),
         completionConfirmedByLandlordBy: String(refreshed.completionConfirmedByLandlordBy || "").trim() || null,
+        resolutionStatus: normalizeResolutionStatus(refreshed.resolutionStatus),
+        landlordApprovedAt: toMillis(refreshed.landlordApprovedAt),
+        landlordApprovedBy: String(refreshed.landlordApprovedBy || "").trim() || null,
+        tenantSignoffStatus: normalizeTenantSignoffStatus(refreshed.tenantSignoffStatus),
+        tenantSignedOffAt: toMillis(refreshed.tenantSignedOffAt),
+        tenantDeclinedAt: toMillis(refreshed.tenantDeclinedAt),
+        tenantDeclineReason: String(refreshed.tenantDeclineReason || "").trim() || null,
+        followUpRequired: typeof refreshed.followUpRequired === "boolean" ? refreshed.followUpRequired : null,
+        followUpReason: String(refreshed.followUpReason || "").trim() || null,
+        finalResolvedAt: toMillis(refreshed.finalResolvedAt),
       });
       workOrderId = workOrder.workOrderId;
     }
