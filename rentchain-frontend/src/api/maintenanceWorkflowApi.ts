@@ -871,6 +871,8 @@ export async function patchLandlordMaintenance(
     serviceWindowStartAt?: number | null;
     serviceWindowEndAt?: number | null;
     accessRequired?: boolean | null;
+    completionSummary?: string;
+    completionOutcome?: "completed" | "partially_completed" | "follow_up_required";
     message?: string;
   }
 ) {

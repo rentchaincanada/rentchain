@@ -95,6 +95,7 @@ describe("tenant maintenance pages", () => {
     expect(screen.getAllByText(/Scheduling \/ access/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Upcoming service window: No service window has been confirmed yet/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Confirmation \/ access/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Execution \/ completion/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/landlord needs to confirm the service window/i)).toBeInTheDocument();
   });
 
@@ -109,9 +110,11 @@ describe("tenant maintenance pages", () => {
         category: "HVAC",
         assignedContractorName: "North Shore HVAC",
         contractorStatus: "assigned",
+        serviceStartedAt: Date.UTC(2026, 3, 15, 13, 15),
         serviceWindowStartAt: Date.UTC(2026, 3, 15, 13, 0),
         serviceWindowEndAt: Date.UTC(2026, 3, 15, 15, 0),
         accessRequired: true,
+        completionSummary: "Heat was restored and the thermostat was recalibrated.",
         notifications: {
           tenant: {
             requiresAccessConfirmation: true,
@@ -192,6 +195,9 @@ describe("tenant maintenance pages", () => {
     expect(screen.getAllByText(/Scheduling \/ access/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Access needed/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Confirmation \/ access/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Execution \/ completion/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Work in progress/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Completion note/i)).toBeInTheDocument();
     expect(screen.getByText(/Follow-up \/ rework/i)).toBeInTheDocument();
     expect(screen.getByText(/Rework #1 is in progress/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Confirm service window/i })).toBeInTheDocument();

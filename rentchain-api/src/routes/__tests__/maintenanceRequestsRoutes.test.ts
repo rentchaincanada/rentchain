@@ -209,6 +209,93 @@ describe("maintenanceRequestsRoutes scheduling access", () => {
     expect(savedWorkOrder?.accessRequired).toBe(true);
   });
 
+  it("records landlord-started service through the landlord patch route", async () => {
+    const router = (await import("../maintenanceRequestsRoutes")).default;
+    ensureCollection("maintenanceRequests").set("maint-1", {
+      ...ensureCollection("maintenanceRequests").get("maint-1"),
+      status: "scheduled",
+      serviceWindowStartAt: 500,
+      serviceWindowEndAt: 900,
+      accessRequired: true,
+    });
+
+    const res = await invokeRouter(router, {
+      method: "PATCH",
+      url: "/landlord/maintenance/maint-1",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "landlord-1",
+          role: "landlord",
+          landlordId: "landlord-1",
+        }),
+      },
+      body: {
+        status: "in_progress",
+        message: "Landlord marked service as started.",
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.item?.status).toBe("in_progress");
+    expect(res.body?.item?.serviceStartedAt).toBeDefined();
+
+    const savedMaintenance = ensureCollection("maintenanceRequests").get("maint-1");
+    expect(savedMaintenance?.serviceStartedAt).toBeDefined();
+    expect(savedMaintenance?.lastExecutionUpdateAt).toBeDefined();
+    expect(savedMaintenance?.statusHistory).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ status: "in_progress", message: "Landlord marked service as started." }),
+      ])
+    );
+
+    const savedWorkOrder = ensureCollection("workOrders").get("maintenance_maint-1");
+    expect(savedWorkOrder?.status).toBe("in_progress");
+    expect(savedWorkOrder?.serviceStartedAt).toBeDefined();
+  });
+
+  it("records landlord completion metadata through the landlord patch route", async () => {
+    const router = (await import("../maintenanceRequestsRoutes")).default;
+    ensureCollection("maintenanceRequests").set("maint-1", {
+      ...ensureCollection("maintenanceRequests").get("maint-1"),
+      status: "in_progress",
+      serviceStartedAt: 500,
+    });
+
+    const res = await invokeRouter(router, {
+      method: "PATCH",
+      url: "/landlord/maintenance/maint-1",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "landlord-1",
+          role: "landlord",
+          landlordId: "landlord-1",
+        }),
+      },
+      body: {
+        status: "completed",
+        completionSummary: "Technician restored heat and confirmed stable airflow.",
+        completionOutcome: "completed",
+        message: "Landlord recorded service completion.",
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.item?.status).toBe("completed");
+    expect(res.body?.item?.completionSummary).toMatch(/restored heat/i);
+    expect(res.body?.item?.serviceCompletedAt).toBeDefined();
+    expect(res.body?.item?.completionConfirmedByLandlordAt).toBeDefined();
+
+    const savedMaintenance = ensureCollection("maintenanceRequests").get("maint-1");
+    expect(savedMaintenance?.resolutionStatus).toBe("completed_pending_review");
+    expect(savedMaintenance?.completedByActorRole).toBe("landlord");
+    expect(savedMaintenance?.followUpRequired).toBe(false);
+
+    const savedWorkOrder = ensureCollection("workOrders").get("maintenance_maint-1");
+    expect(savedWorkOrder?.serviceCompletedAt).toBeDefined();
+    expect(savedWorkOrder?.completionSummary).toMatch(/stable airflow/i);
+    expect(savedWorkOrder?.completionConfirmedByLandlordAt).toBeDefined();
+  });
+
   it("allows a contractor to schedule service with structured execution metadata", async () => {
     const router = (await import("../maintenanceRequestsRoutes")).default;
 
