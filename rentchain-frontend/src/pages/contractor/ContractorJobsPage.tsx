@@ -7,6 +7,7 @@ import {
   listContractorMaintenanceJobs,
   patchContractorMaintenanceJobStatus,
   patchContractorMaintenanceReworkStatus,
+  resubmitContractorMaintenanceCost,
   submitContractorMaintenanceCost,
   uploadContractorMaintenanceCostAttachment,
   uploadContractorMaintenanceEvidence,
@@ -378,14 +379,25 @@ export default function ContractorJobsPage() {
     setSavingCost(true);
     setError(null);
     try {
-      await submitContractorMaintenanceCost(selected.id, {
+      const submitFn =
+        selected.cost?.reviewStatus === "rejected" || selected.cost?.reviewStatus === "revision_requested"
+          ? resubmitContractorMaintenanceCost
+          : submitContractorMaintenanceCost;
+      await submitFn(selected.id, {
         actualCostCents: Math.round(normalizedAmount * 100),
         currency: costCurrency.trim() || "CAD",
         lineItems,
       });
       await load();
     } catch (err: any) {
-      setError(String(err?.message || "Failed to submit cost details"));
+      setError(
+        String(
+          err?.message ||
+            (selected.cost?.reviewStatus === "rejected" || selected.cost?.reviewStatus === "revision_requested"
+              ? "Failed to resubmit cost details"
+              : "Failed to submit cost details")
+        )
+      );
     } finally {
       setSavingCost(false);
     }
@@ -839,6 +851,16 @@ export default function ContractorJobsPage() {
                       Current cost: {formatMoney(selected.cost?.actualCostCents, selected.cost?.currency)} • Review{" "}
                       {selected.cost?.reviewStatus?.replaceAll("_", " ") || "not submitted"}
                     </div>
+                    {selected.cost?.reviewNote ? (
+                      <div style={{ color: text.secondary, fontSize: 13 }}>
+                        Landlord note: {selected.cost.reviewNote}
+                      </div>
+                    ) : null}
+                    {selected.cost?.latestRevisionNumber ? (
+                      <div style={{ color: text.secondary, fontSize: 13 }}>
+                        Revision #{selected.cost.latestRevisionNumber}
+                      </div>
+                    ) : null}
                     <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
                       <label style={{ display: "grid", gap: 4 }}>
                         <span style={{ color: text.muted, fontSize: 12 }}>Actual cost</span>
@@ -894,9 +916,38 @@ export default function ContractorJobsPage() {
                     </label>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <Button disabled={savingCost} onClick={() => void submitCost()}>
-                        {savingCost ? "Saving..." : "Submit cost"}
+                        {savingCost
+                          ? "Saving..."
+                          : selected.cost?.reviewStatus === "rejected" || selected.cost?.reviewStatus === "revision_requested"
+                          ? "Resubmit cost"
+                          : "Submit cost"}
                       </Button>
                     </div>
+                    {selected.costReviewHistory?.length ? (
+                      <div style={{ display: "grid", gap: 8 }}>
+                        {selected.costReviewHistory.map((entry) => (
+                          <div
+                            key={entry.id}
+                            style={{
+                              border: `1px solid ${colors.border}`,
+                              borderRadius: radius.md,
+                              padding: "8px 10px",
+                              background: colors.card,
+                            }}
+                          >
+                            <div style={{ color: text.primary, fontWeight: 700 }}>
+                              Revision #{entry.revisionNumber} • {formatMoney(entry.actualCostCents, entry.currency)}
+                            </div>
+                            <div style={{ color: text.muted, fontSize: 12 }}>
+                              {entry.reviewStatus.replaceAll("_", " ")} • {fmtDate(entry.submittedAt)}
+                            </div>
+                            {entry.reviewNote ? (
+                              <div style={{ color: text.secondary, fontSize: 12, marginTop: 4 }}>{entry.reviewNote}</div>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                     <input
                       aria-label="Cost attachment file"
                       type="file"

@@ -404,7 +404,9 @@ describe("maintenanceRequestsRoutes scheduling access", () => {
     expect(submitRes.status).toBe(200);
     expect(submitRes.body?.item?.cost?.actualCostCents).toBe(18750);
     expect(submitRes.body?.item?.cost?.reviewStatus).toBe("pending_review");
+    expect(submitRes.body?.item?.cost?.latestRevisionNumber).toBe(1);
     expect(submitRes.body?.item?.costLineItems).toHaveLength(2);
+    expect(submitRes.body?.item?.costReviewHistory).toHaveLength(1);
 
     const attachmentRes = await invokeRouter(router, {
       method: "POST",
@@ -427,7 +429,70 @@ describe("maintenanceRequestsRoutes scheduling access", () => {
 
     const savedWorkOrder = ensureCollection("workOrders").get("maintenance_maint-1");
     expect(savedWorkOrder?.cost?.submittedByRole).toBe("contractor");
+    expect(savedWorkOrder?.costReviewHistory?.[0]?.revisionNumber).toBe(1);
     expect(savedWorkOrder?.costAttachments?.[0]?.visibility).toBe("landlord_only");
+  });
+
+  it("allows contractor cost resubmission after a revision request", async () => {
+    const router = (await import("../maintenanceRequestsRoutes")).default;
+    ensureCollection("maintenanceRequests").set("maint-1", {
+      ...ensureCollection("maintenanceRequests").get("maint-1"),
+      status: "completed",
+    });
+    ensureCollection("workOrders").set("maintenance_maint-1", {
+      maintenanceRequestId: "maint-1",
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      status: "completed",
+      assignedContractorId: "contractor-1",
+      title: "Broken heater",
+      createdAtMs: 100,
+      updatedAtMs: 100,
+      cost: {
+        actualCostCents: 18750,
+        currency: "CAD",
+        submittedByRole: "contractor",
+        submittedById: "contractor-1",
+        submittedAt: 120,
+        reviewStatus: "revision_requested",
+        reviewNote: "Please break out labor and materials separately.",
+        latestRevisionNumber: 1,
+      },
+      costReviewHistory: [
+        {
+          id: "history-1",
+          revisionNumber: 1,
+          submittedAt: 120,
+          submittedByRole: "contractor",
+          submittedById: "contractor-1",
+          actualCostCents: 18750,
+          currency: "CAD",
+          reviewStatus: "revision_requested",
+          reviewNote: "Please break out labor and materials separately.",
+        },
+      ],
+    });
+
+    const resubmitRes = await invokeRouter(router, {
+      method: "POST",
+      url: "/contractor/jobs/maint-1/resubmit-cost",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "contractor-1",
+          role: "contractor",
+        }),
+      },
+      body: {
+        actualCostCents: 19000,
+        currency: "cad",
+        lineItems: [{ id: "line-1", label: "Labor", amountCents: 19000, category: "labor" }],
+      },
+    });
+
+    expect(resubmitRes.status).toBe(200);
+    expect(resubmitRes.body?.item?.cost?.reviewStatus).toBe("pending_review");
+    expect(resubmitRes.body?.item?.cost?.latestRevisionNumber).toBe(2);
+    expect(resubmitRes.body?.item?.costReviewHistory?.[0]?.revisionNumber).toBe(2);
   });
 
   it("rejects contractor evidence uploads for unassigned jobs", async () => {

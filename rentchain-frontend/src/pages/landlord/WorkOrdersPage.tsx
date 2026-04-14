@@ -13,11 +13,13 @@ import {
   confirmWorkOrderCompletion,
   getWorkOrder,
   getContractorProfileById,
+  linkWorkOrderCostToExpense,
   listWorkOrderUpdates,
   listWorkOrders,
   markWorkOrderFollowUpRequired,
   patchWorkOrder,
   reopenWorkOrder,
+  requestWorkOrderCostRevision,
   reviewWorkOrderReworkResolution,
   reviewWorkOrderCost,
   rescheduleWorkOrderRework,
@@ -191,17 +193,26 @@ function evidenceVisibilityLabel(value?: WorkOrderEvidenceVisibility | null) {
   }
 }
 
-function costReviewStatusLabel(value?: "pending_review" | "approved" | "rejected" | null) {
+function costReviewStatusLabel(value?: "pending_review" | "approved" | "rejected" | "revision_requested" | null) {
   switch (value) {
     case "pending_review":
       return "Pending review";
     case "approved":
       return "Approved";
+    case "revision_requested":
+      return "Revision requested";
     case "rejected":
       return "Rejected";
     default:
       return "Not submitted";
   }
+}
+
+function expenseLinkStatusLabel(item: WorkOrderRecord | null) {
+  if (item?.expenseLink?.status === "linked" || item?.cost?.linkedExpenseStatus === "linked" || item?.linkedExpenseId) {
+    return "Linked to expense";
+  }
+  return "Not linked";
 }
 
 export default function WorkOrdersPage() {
@@ -610,7 +621,7 @@ export default function WorkOrdersPage() {
   }, [costActualInput, costCurrency, costLineItemsJson, costReviewNote, loadUpdates, selected, syncSelectedItem]);
 
   const handleReviewCost = React.useCallback(
-    async (decision: "approve" | "reject") => {
+    async (decision: "approve" | "reject" | "revision_requested") => {
       if (!selected) return;
       setSavingCost(true);
       setError(null);
@@ -629,6 +640,42 @@ export default function WorkOrdersPage() {
     },
     [costReviewNote, loadUpdates, selected, syncSelectedItem]
   );
+
+  const handleRequestCostRevision = React.useCallback(async () => {
+    if (!selected) return;
+    if (!costReviewNote.trim()) {
+      setError("Add a review note before requesting a cost revision.");
+      return;
+    }
+    setSavingCost(true);
+    setError(null);
+    try {
+      const refreshed = await requestWorkOrderCostRevision(selected.id, {
+        note: costReviewNote.trim(),
+      });
+      syncSelectedItem(refreshed);
+      await loadUpdates(selected.id);
+    } catch (err: any) {
+      setError(String(err?.message || "Failed to request a cost revision"));
+    } finally {
+      setSavingCost(false);
+    }
+  }, [costReviewNote, loadUpdates, selected, syncSelectedItem]);
+
+  const handleLinkExpense = React.useCallback(async () => {
+    if (!selected) return;
+    setSavingCost(true);
+    setError(null);
+    try {
+      const refreshed = await linkWorkOrderCostToExpense(selected.id);
+      syncSelectedItem(refreshed);
+      await loadUpdates(selected.id);
+    } catch (err: any) {
+      setError(String(err?.message || "Failed to link cost to expense"));
+    } finally {
+      setSavingCost(false);
+    }
+  }, [loadUpdates, selected, syncSelectedItem]);
 
   const handleCostAttachmentUpload = React.useCallback(async () => {
     if (!selected) return;
@@ -1091,6 +1138,14 @@ export default function WorkOrdersPage() {
                   <div style={{ fontSize: 12, color: "#64748b" }}>Reviewed</div>
                   <div style={{ marginTop: 4, fontWeight: 600 }}>{formatDate(selected.cost?.reviewedAt)}</div>
                 </div>
+                <div>
+                  <div style={{ fontSize: 12, color: "#64748b" }}>Revision #</div>
+                  <div style={{ marginTop: 4, fontWeight: 600 }}>{selected.cost?.latestRevisionNumber || 0}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: "#64748b" }}>Expense linkage</div>
+                  <div style={{ marginTop: 4, fontWeight: 600 }}>{expenseLinkStatusLabel(selected)}</div>
+                </div>
               </div>
               <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
                 <label style={{ display: "grid", gap: 4 }}>
@@ -1148,9 +1203,28 @@ export default function WorkOrdersPage() {
                     <Button variant="ghost" disabled={savingCost} onClick={() => void handleReviewCost("reject")}>
                       {savingCost ? "Saving..." : "Reject cost"}
                     </Button>
+                    <Button variant="ghost" disabled={savingCost} onClick={() => void handleRequestCostRevision()}>
+                      {savingCost ? "Saving..." : "Request revision"}
+                    </Button>
                   </>
                 ) : null}
+                {selected.cost?.reviewStatus === "rejected" ? (
+                  <Button variant="ghost" disabled={savingCost} onClick={() => void handleRequestCostRevision()}>
+                    {savingCost ? "Saving..." : "Request revision"}
+                  </Button>
+                ) : null}
+                {selected.cost?.reviewStatus === "approved" && !selected.linkedExpenseId && selected.cost?.linkedExpenseStatus !== "linked" ? (
+                  <Button variant="secondary" disabled={savingCost} onClick={() => void handleLinkExpense()}>
+                    {savingCost ? "Saving..." : "Link to expense"}
+                  </Button>
+                ) : null}
               </div>
+              {selected.cost?.reviewNote ? (
+                <div style={{ padding: 10, borderRadius: 10, background: "#fff7ed", color: "#9a3412" }}>
+                  <div style={{ fontWeight: 600 }}>Latest review note</div>
+                  <div style={{ marginTop: 4, whiteSpace: "pre-wrap" }}>{selected.cost.reviewNote}</div>
+                </div>
+              ) : null}
               <input
                 aria-label="Cost attachment file"
                 type="file"
@@ -1176,6 +1250,24 @@ export default function WorkOrdersPage() {
               ) : (
                 <div style={{ color: "#64748b" }}>No cost line items recorded yet.</div>
               )}
+              {selected.costReviewHistory?.length ? (
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div style={{ fontWeight: 600 }}>Cost review history</div>
+                  {selected.costReviewHistory.map((entry) => (
+                    <div key={entry.id} style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: 10, background: "#fff" }}>
+                      <div style={{ fontWeight: 600 }}>
+                        Revision #{entry.revisionNumber} • {formatMoney(entry.actualCostCents, entry.currency)}
+                      </div>
+                      <div style={{ color: "#64748b", fontSize: 13 }}>
+                        {costReviewStatusLabel(entry.reviewStatus)} • Submitted {formatDate(entry.submittedAt)}
+                      </div>
+                      {entry.reviewNote ? (
+                        <div style={{ marginTop: 4, color: "#334155", whiteSpace: "pre-wrap" }}>{entry.reviewNote}</div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
               {selected.costAttachments?.length ? (
                 <div style={{ display: "grid", gap: 6 }}>
                   {selected.costAttachments.map((attachment) => (
@@ -1190,6 +1282,11 @@ export default function WorkOrdersPage() {
               ) : (
                 <div style={{ color: "#64748b" }}>No cost attachments uploaded yet.</div>
               )}
+              {selected.expenseLink?.expenseId || selected.linkedExpenseId ? (
+                <div style={{ color: "#166534", fontWeight: 600 }}>
+                  Linked expense: {selected.expenseLink?.expenseId || selected.linkedExpenseId}
+                </div>
+              ) : null}
             </div>
             <div
               style={{

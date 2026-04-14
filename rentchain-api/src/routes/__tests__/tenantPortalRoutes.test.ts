@@ -474,6 +474,8 @@ describe("tenantPortalRoutes foundation", () => {
     expect(res.body?.data?.cost).toBeUndefined();
     expect(res.body?.data?.costLineItems).toBeUndefined();
     expect(res.body?.data?.costAttachments).toBeUndefined();
+    expect(res.body?.data?.costReviewHistory).toBeUndefined();
+    expect(res.body?.data?.expenseLink).toBeUndefined();
     expect(JSON.stringify(res.body?.data || {})).not.toMatch(/24500|invoice\.pdf/i);
   });
 
