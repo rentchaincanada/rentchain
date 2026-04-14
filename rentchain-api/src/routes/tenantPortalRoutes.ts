@@ -5063,6 +5063,36 @@ router.get("/maintenance-requests/:id", requireTenant, async (req: any, res) => 
               startedAt: toMillis(workOrderData.reworkCycle.startedAt),
               completedAt: toMillis(workOrderData.reworkCycle.completedAt),
               completionSummary: String(workOrderData.reworkCycle.completionSummary || "").trim() || null,
+              schedule:
+                workOrderData.reworkCycle.schedule && typeof workOrderData.reworkCycle.schedule === "object"
+                  ? {
+                      scheduledFor: toMillis(workOrderData.reworkCycle.schedule.scheduledFor),
+                      timeWindowStart: toMillis(workOrderData.reworkCycle.schedule.timeWindowStart),
+                      timeWindowEnd: toMillis(workOrderData.reworkCycle.schedule.timeWindowEnd),
+                      status:
+                        workOrderData.reworkCycle.schedule.status === "not_scheduled" ||
+                        workOrderData.reworkCycle.schedule.status === "scheduled" ||
+                        workOrderData.reworkCycle.schedule.status === "contractor_confirmed" ||
+                        workOrderData.reworkCycle.schedule.status === "tenant_pending" ||
+                        workOrderData.reworkCycle.schedule.status === "confirmed" ||
+                        workOrderData.reworkCycle.schedule.status === "reschedule_requested" ||
+                        workOrderData.reworkCycle.schedule.status === "cancelled"
+                          ? workOrderData.reworkCycle.schedule.status
+                          : null,
+                      requiresTenantAccess:
+                        typeof workOrderData.reworkCycle.schedule.requiresTenantAccess === "boolean"
+                          ? workOrderData.reworkCycle.schedule.requiresTenantAccess
+                          : null,
+                      tenantAccessStatus:
+                        workOrderData.reworkCycle.schedule.tenantAccessStatus === "pending" ||
+                        workOrderData.reworkCycle.schedule.tenantAccessStatus === "confirmed" ||
+                        workOrderData.reworkCycle.schedule.tenantAccessStatus === "denied" ||
+                        workOrderData.reworkCycle.schedule.tenantAccessStatus === "not_required"
+                          ? workOrderData.reworkCycle.schedule.tenantAccessStatus
+                          : null,
+                      tenantAccessNote: String(workOrderData.reworkCycle.schedule.tenantAccessNote || "").trim() || null,
+                    }
+                  : null,
             }
           : null,
       reworkHistory: Array.isArray(workOrderData?.reworkHistory)
@@ -5274,6 +5304,37 @@ router.post("/maintenance/:id/signoff", requireTenant, async (req: any, res) => 
                 startedAt: toMillis(refreshedWorkOrderData.reworkCycle.startedAt),
                 completedAt: toMillis(refreshedWorkOrderData.reworkCycle.completedAt),
                 completionSummary: String(refreshedWorkOrderData.reworkCycle.completionSummary || "").trim() || null,
+                schedule:
+                  refreshedWorkOrderData.reworkCycle.schedule && typeof refreshedWorkOrderData.reworkCycle.schedule === "object"
+                    ? {
+                        scheduledFor: toMillis(refreshedWorkOrderData.reworkCycle.schedule.scheduledFor),
+                        timeWindowStart: toMillis(refreshedWorkOrderData.reworkCycle.schedule.timeWindowStart),
+                        timeWindowEnd: toMillis(refreshedWorkOrderData.reworkCycle.schedule.timeWindowEnd),
+                        status:
+                          refreshedWorkOrderData.reworkCycle.schedule.status === "not_scheduled" ||
+                          refreshedWorkOrderData.reworkCycle.schedule.status === "scheduled" ||
+                          refreshedWorkOrderData.reworkCycle.schedule.status === "contractor_confirmed" ||
+                          refreshedWorkOrderData.reworkCycle.schedule.status === "tenant_pending" ||
+                          refreshedWorkOrderData.reworkCycle.schedule.status === "confirmed" ||
+                          refreshedWorkOrderData.reworkCycle.schedule.status === "reschedule_requested" ||
+                          refreshedWorkOrderData.reworkCycle.schedule.status === "cancelled"
+                            ? refreshedWorkOrderData.reworkCycle.schedule.status
+                            : null,
+                        requiresTenantAccess:
+                          typeof refreshedWorkOrderData.reworkCycle.schedule.requiresTenantAccess === "boolean"
+                            ? refreshedWorkOrderData.reworkCycle.schedule.requiresTenantAccess
+                            : null,
+                        tenantAccessStatus:
+                          refreshedWorkOrderData.reworkCycle.schedule.tenantAccessStatus === "pending" ||
+                          refreshedWorkOrderData.reworkCycle.schedule.tenantAccessStatus === "confirmed" ||
+                          refreshedWorkOrderData.reworkCycle.schedule.tenantAccessStatus === "denied" ||
+                          refreshedWorkOrderData.reworkCycle.schedule.tenantAccessStatus === "not_required"
+                            ? refreshedWorkOrderData.reworkCycle.schedule.tenantAccessStatus
+                            : null,
+                        tenantAccessNote:
+                          String(refreshedWorkOrderData.reworkCycle.schedule.tenantAccessNote || "").trim() || null,
+                      }
+                    : null,
               }
             : null,
         reworkHistory: Array.isArray(refreshedWorkOrderData?.reworkHistory)
@@ -5297,6 +5358,153 @@ router.post("/maintenance/:id/signoff", requireTenant, async (req: any, res) => 
       err,
     });
     return res.status(500).json({ ok: false, error: "TENANT_MAINT_REQUEST_SIGNOFF_FAILED" });
+  }
+});
+
+router.post("/maintenance/:id/confirm-rework-access", requireTenant, async (req: any, res) => {
+  try {
+    const tenantId = String(req.user?.tenantId || "").trim();
+    const id = String(req.params?.id || "").trim();
+    if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+    const docRef = db.collection("maintenanceRequests").doc(id);
+    const snap = await docRef.get();
+    if (!snap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    const data = (snap.data() as any) || {};
+    if (String(data.tenantId || "").trim() !== tenantId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const workOrderRef = db.collection("workOrders").doc(`maintenance_${id}`);
+    const workOrderSnap = await workOrderRef.get();
+    if (!workOrderSnap.exists) return res.status(404).json({ ok: false, error: "WORK_ORDER_NOT_FOUND" });
+    const workOrder = (workOrderSnap.data() as any) || {};
+    const reworkCycle = workOrder?.reworkCycle || null;
+    const schedule = reworkCycle?.schedule || null;
+    if (!reworkCycle || !schedule) return res.status(400).json({ ok: false, error: "REWORK_SCHEDULE_NOT_AVAILABLE" });
+    if (schedule.requiresTenantAccess !== true) {
+      return res.status(400).json({ ok: false, error: "REWORK_ACCESS_CONFIRMATION_NOT_REQUIRED" });
+    }
+
+    const decision = req.body?.decision === "confirm" || req.body?.decision === "deny" ? req.body.decision : null;
+    if (!decision) return res.status(400).json({ ok: false, error: "INVALID_REWORK_ACCESS_DECISION" });
+
+    const note = String(req.body?.note || "").trim().slice(0, 2000) || null;
+    const now = Date.now();
+    const nextSchedule = {
+      ...schedule,
+      tenantAccessStatus: decision === "confirm" ? "confirmed" : "denied",
+      tenantAccessNote: note,
+      status:
+        decision === "deny"
+          ? "reschedule_requested"
+          : schedule.contractorScheduleStatus === "confirmed"
+          ? "confirmed"
+          : "tenant_pending",
+      lastUpdatedAt: now,
+    };
+
+    const historyMessage =
+      decision === "confirm"
+        ? "Tenant confirmed access for the rework return visit."
+        : `Tenant denied access for the rework return visit.${note ? ` ${note}` : ""}`;
+
+    await Promise.all([
+      workOrderRef.set(
+        {
+          reworkCycle: {
+            ...reworkCycle,
+            schedule: nextSchedule,
+          },
+          updatedAtMs: now,
+        },
+        { merge: true }
+      ),
+      docRef.set(
+        {
+          contractorLastUpdate: historyMessage,
+          updatedAt: now,
+          lastUpdatedBy: "TENANT",
+          statusHistory: FieldValue.arrayUnion({
+            status: String(data.status || "assigned"),
+            actorRole: "tenant",
+            actorId: tenantId,
+            message: historyMessage,
+            createdAt: now,
+          }),
+        },
+        { merge: true }
+      ),
+      db.collection("workOrderUpdates").doc().set({
+        workOrderId: workOrderRef.id,
+        actorRole: "tenant",
+        actorId: tenantId,
+        updateType: "confirmed",
+        message: historyMessage,
+        createdAtMs: now,
+      }),
+    ]);
+
+    const [refreshed, refreshedWorkOrder] = await Promise.all([docRef.get(), workOrderRef.get()]);
+    const refreshedWorkOrderData = refreshedWorkOrder.exists ? ((refreshedWorkOrder.data() as any) || {}) : {};
+    return res.json({
+      ok: true,
+      data: {
+        ...projectTenantMaintenance(refreshed.id, refreshed.data() || {}),
+        evidence: refreshedWorkOrder.exists ? await serializeEvidenceForAudience(refreshedWorkOrderData?.evidence, "tenant") : [],
+        resolutionStatus:
+          refreshedWorkOrderData?.resolutionStatus === "completed_pending_review" ||
+          refreshedWorkOrderData?.resolutionStatus === "landlord_approved" ||
+          refreshedWorkOrderData?.resolutionStatus === "tenant_pending_signoff" ||
+          refreshedWorkOrderData?.resolutionStatus === "resolved" ||
+          refreshedWorkOrderData?.resolutionStatus === "follow_up_required"
+            ? refreshedWorkOrderData.resolutionStatus
+            : null,
+        reworkCycle:
+          refreshedWorkOrderData?.reworkCycle && typeof refreshedWorkOrderData.reworkCycle === "object"
+            ? {
+                cycleNumber: Number(refreshedWorkOrderData.reworkCycle.cycleNumber || 1),
+                status:
+                  refreshedWorkOrderData.reworkCycle.status === "not_started" ||
+                  refreshedWorkOrderData.reworkCycle.status === "assigned" ||
+                  refreshedWorkOrderData.reworkCycle.status === "in_progress" ||
+                  refreshedWorkOrderData.reworkCycle.status === "completed" ||
+                  refreshedWorkOrderData.reworkCycle.status === "cancelled"
+                    ? refreshedWorkOrderData.reworkCycle.status
+                    : "not_started",
+                createdAt: toMillis(refreshedWorkOrderData.reworkCycle.createdAt),
+                assignedAt: toMillis(refreshedWorkOrderData.reworkCycle.assignedAt),
+                startedAt: toMillis(refreshedWorkOrderData.reworkCycle.startedAt),
+                completedAt: toMillis(refreshedWorkOrderData.reworkCycle.completedAt),
+                completionSummary: String(refreshedWorkOrderData.reworkCycle.completionSummary || "").trim() || null,
+                schedule:
+                  refreshedWorkOrderData.reworkCycle.schedule && typeof refreshedWorkOrderData.reworkCycle.schedule === "object"
+                    ? {
+                        scheduledFor: toMillis(refreshedWorkOrderData.reworkCycle.schedule.scheduledFor),
+                        timeWindowStart: toMillis(refreshedWorkOrderData.reworkCycle.schedule.timeWindowStart),
+                        timeWindowEnd: toMillis(refreshedWorkOrderData.reworkCycle.schedule.timeWindowEnd),
+                        status: refreshedWorkOrderData.reworkCycle.schedule.status || null,
+                        requiresTenantAccess:
+                          typeof refreshedWorkOrderData.reworkCycle.schedule.requiresTenantAccess === "boolean"
+                            ? refreshedWorkOrderData.reworkCycle.schedule.requiresTenantAccess
+                            : null,
+                        tenantAccessStatus: refreshedWorkOrderData.reworkCycle.schedule.tenantAccessStatus || null,
+                        tenantAccessNote:
+                          String(refreshedWorkOrderData.reworkCycle.schedule.tenantAccessNote || "").trim() || null,
+                      }
+                    : null,
+              }
+            : null,
+      },
+    });
+  } catch (err) {
+    console.error("[tenant/maintenance/:id/confirm-rework-access] update failed", {
+      tenantId: req.user?.tenantId,
+      id: req.params?.id,
+      err,
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_REWORK_ACCESS_CONFIRMATION_FAILED" });
   }
 });
 

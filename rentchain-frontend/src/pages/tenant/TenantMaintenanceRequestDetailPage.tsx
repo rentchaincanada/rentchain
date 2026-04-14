@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import {
   getTenantMaintenance,
   updateTenantMaintenanceConfirmation,
+  updateTenantMaintenanceReworkAccess,
   updateTenantMaintenanceSignoff,
   type MaintenanceWorkflowItem,
 } from "../../api/maintenanceWorkflowApi";
@@ -46,6 +47,7 @@ export default function TenantMaintenanceRequestDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [savingAction, setSavingAction] = useState(false);
   const [signoffReason, setSignoffReason] = useState("");
+  const [reworkAccessNote, setReworkAccessNote] = useState("");
   const [sessionExpired, setSessionExpired] = useState(false);
   const [hasToken, setHasToken] = useState<boolean>(() =>
     typeof window === "undefined" ? true : !!getTenantToken()
@@ -167,6 +169,25 @@ export default function TenantMaintenanceRequestDetailPage() {
       }
     } catch (err: any) {
       const msg = err?.payload?.error || err?.message || "Unable to update the maintenance resolution.";
+      setError(String(msg));
+    } finally {
+      setSavingAction(false);
+    }
+  };
+
+  const applyReworkAccessDecision = async (decision: "confirm" | "deny") => {
+    if (!id) return;
+    setSavingAction(true);
+    setError(null);
+    try {
+      const res = await updateTenantMaintenanceReworkAccess(id, {
+        decision,
+        note: reworkAccessNote.trim() || undefined,
+      });
+      setData((res as any)?.item || (res as any)?.data || null);
+      if (decision === "confirm") setReworkAccessNote("");
+    } catch (err: any) {
+      const msg = err?.payload?.error || err?.message || "Unable to update the rework access confirmation.";
       setError(String(msg));
     } finally {
       setSavingAction(false);
@@ -426,6 +447,56 @@ export default function TenantMaintenanceRequestDetailPage() {
                           {entry.notes ? ` — ${entry.notes}` : ""}
                         </div>
                       ))}
+                    </>
+                  ) : null}
+                  {data.reworkCycle?.schedule ? (
+                    <>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Return visit coordination</div>
+                      <div style={{ color: textTokens.secondary }}>
+                        Status: {String(data.reworkCycle.schedule.status || "not_scheduled").replaceAll("_", " ")}
+                      </div>
+                      <div style={{ color: textTokens.secondary }}>
+                        Visit time: {fmtDate(data.reworkCycle.schedule.scheduledFor || data.reworkCycle.schedule.timeWindowStart)}
+                        {data.reworkCycle.schedule.timeWindowEnd
+                          ? ` to ${fmtDate(data.reworkCycle.schedule.timeWindowEnd)}`
+                          : ""}
+                      </div>
+                      <div style={{ color: textTokens.secondary }}>
+                        Access: {data.reworkCycle.schedule.requiresTenantAccess ? "required" : "not required"} • Your status:{" "}
+                        {String(data.reworkCycle.schedule.tenantAccessStatus || "pending").replaceAll("_", " ")}
+                      </div>
+                      {data.reworkCycle.schedule.tenantAccessNote ? (
+                        <div style={{ color: textTokens.secondary }}>{data.reworkCycle.schedule.tenantAccessNote}</div>
+                      ) : null}
+                      {data.reworkCycle.schedule.requiresTenantAccess &&
+                      data.reworkCycle.schedule.tenantAccessStatus !== "confirmed" &&
+                      data.reworkCycle.schedule.status !== "confirmed" ? (
+                        <>
+                          <textarea
+                            value={reworkAccessNote}
+                            onChange={(e) => setReworkAccessNote(e.target.value)}
+                            placeholder="Add an optional note about access for the return visit"
+                            rows={3}
+                            style={{
+                              width: "100%",
+                              padding: "10px",
+                              borderRadius: radius.md,
+                              border: `1px solid ${colors.border}`,
+                              background: colors.panel,
+                              color: textTokens.primary,
+                              resize: "vertical",
+                            }}
+                          />
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <Button variant="secondary" onClick={() => void applyReworkAccessDecision("confirm")} disabled={savingAction}>
+                              {savingAction ? "Saving..." : "Confirm return visit access"}
+                            </Button>
+                            <Button variant="secondary" onClick={() => void applyReworkAccessDecision("deny")} disabled={savingAction}>
+                              {savingAction ? "Saving..." : "Deny access / request reschedule"}
+                            </Button>
+                          </div>
+                        </>
+                      ) : null}
                     </>
                   ) : null}
                 </div>

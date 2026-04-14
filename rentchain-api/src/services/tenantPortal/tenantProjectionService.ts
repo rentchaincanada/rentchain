@@ -65,6 +65,15 @@ type TenantMaintenanceProjection = {
     startedAt: number | null;
     completedAt: number | null;
     completionSummary: string | null;
+    schedule: {
+      scheduledFor: number | null;
+      timeWindowStart: number | null;
+      timeWindowEnd: number | null;
+      status: "not_scheduled" | "scheduled" | "contractor_confirmed" | "tenant_pending" | "confirmed" | "reschedule_requested" | "cancelled" | null;
+      requiresTenantAccess: boolean | null;
+      tenantAccessStatus: "pending" | "confirmed" | "denied" | "not_required" | null;
+      tenantAccessNote: string | null;
+    } | null;
   } | null;
   reworkHistory: Array<{
     cycleNumber: number;
@@ -245,6 +254,36 @@ export function projectTenantMaintenance(recordId: string, data: any): TenantMai
             startedAt: toMillis(data.reworkCycle.startedAt),
             completedAt: toMillis(data.reworkCycle.completedAt),
             completionSummary: asString(data.reworkCycle.completionSummary),
+            schedule:
+              data.reworkCycle.schedule && typeof data.reworkCycle.schedule === "object"
+                ? {
+                    scheduledFor: toMillis(data.reworkCycle.schedule.scheduledFor),
+                    timeWindowStart: toMillis(data.reworkCycle.schedule.timeWindowStart),
+                    timeWindowEnd: toMillis(data.reworkCycle.schedule.timeWindowEnd),
+                    status:
+                      data.reworkCycle.schedule.status === "not_scheduled" ||
+                      data.reworkCycle.schedule.status === "scheduled" ||
+                      data.reworkCycle.schedule.status === "contractor_confirmed" ||
+                      data.reworkCycle.schedule.status === "tenant_pending" ||
+                      data.reworkCycle.schedule.status === "confirmed" ||
+                      data.reworkCycle.schedule.status === "reschedule_requested" ||
+                      data.reworkCycle.schedule.status === "cancelled"
+                        ? data.reworkCycle.schedule.status
+                        : null,
+                    requiresTenantAccess:
+                      typeof data.reworkCycle.schedule.requiresTenantAccess === "boolean"
+                        ? data.reworkCycle.schedule.requiresTenantAccess
+                        : null,
+                    tenantAccessStatus:
+                      data.reworkCycle.schedule.tenantAccessStatus === "pending" ||
+                      data.reworkCycle.schedule.tenantAccessStatus === "confirmed" ||
+                      data.reworkCycle.schedule.tenantAccessStatus === "denied" ||
+                      data.reworkCycle.schedule.tenantAccessStatus === "not_required"
+                        ? data.reworkCycle.schedule.tenantAccessStatus
+                        : null,
+                    tenantAccessNote: asString(data.reworkCycle.schedule.tenantAccessNote),
+                  }
+                : null,
           }
         : null,
     reworkHistory: Array.isArray(data?.reworkHistory)

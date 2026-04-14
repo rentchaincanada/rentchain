@@ -513,4 +513,129 @@ describe("maintenanceRequestsRoutes scheduling access", () => {
     expect(savedWorkOrder?.reworkCycle?.completionSummary).toMatch(/Balanced airflow/i);
     expect(savedWorkOrder?.reworkCycle?.evidenceSnapshot).toEqual(["evidence-1", "evidence-2"]);
   });
+
+  it("updates rework schedule coordination for the assigned contractor", async () => {
+    const router = (await import("../maintenanceRequestsRoutes")).default;
+    ensureCollection("workOrders").set("maintenance_maint-1", {
+      maintenanceRequestId: "maint-1",
+      landlordId: "landlord-1",
+      status: "assigned",
+      assignedContractorId: "contractor-1",
+      evidence: [],
+      reworkCycle: {
+        cycleNumber: 1,
+        status: "assigned",
+        createdAt: 300,
+        createdBy: "landlord-1",
+        assignedContractorId: "contractor-1",
+        assignedAt: 301,
+        schedule: {
+          scheduledFor: 400,
+          timeWindowStart: null,
+          timeWindowEnd: null,
+          status: "tenant_pending",
+          requiresTenantAccess: true,
+          tenantAccessStatus: "pending",
+          contractorScheduleStatus: "pending",
+          scheduledBy: "landlord-1",
+          scheduledAt: 305,
+          lastUpdatedAt: 305,
+        },
+      },
+    });
+
+    const confirmRes = await invokeRouter(router, {
+      method: "POST",
+      url: "/contractor/jobs/maint-1/confirm-rework-schedule",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "contractor-1",
+          role: "contractor",
+        }),
+      },
+      body: {
+        decision: "confirm",
+      },
+    });
+
+    expect(confirmRes.status).toBe(200);
+    expect(confirmRes.body?.item?.reworkCycle?.schedule).toEqual(
+      expect.objectContaining({
+        status: "tenant_pending",
+        contractorScheduleStatus: "confirmed",
+      })
+    );
+
+    const unavailableRes = await invokeRouter(router, {
+      method: "POST",
+      url: "/contractor/jobs/maint-1/confirm-rework-schedule",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "contractor-1",
+          role: "contractor",
+        }),
+      },
+      body: {
+        decision: "unavailable",
+        note: "Running late on another emergency call.",
+      },
+    });
+
+    expect(unavailableRes.status).toBe(200);
+    expect(unavailableRes.body?.item?.reworkCycle?.schedule).toEqual(
+      expect.objectContaining({
+        status: "reschedule_requested",
+        contractorScheduleStatus: "unavailable",
+        contractorAvailabilityNote: "Running late on another emergency call.",
+      })
+    );
+  });
+
+  it("blocks rework execution until return-visit coordination is confirmed", async () => {
+    const router = (await import("../maintenanceRequestsRoutes")).default;
+    ensureCollection("workOrders").set("maintenance_maint-1", {
+      maintenanceRequestId: "maint-1",
+      landlordId: "landlord-1",
+      status: "assigned",
+      assignedContractorId: "contractor-1",
+      evidence: [],
+      reworkCycle: {
+        cycleNumber: 1,
+        status: "assigned",
+        createdAt: 300,
+        createdBy: "landlord-1",
+        assignedContractorId: "contractor-1",
+        assignedAt: 301,
+        schedule: {
+          scheduledFor: 400,
+          timeWindowStart: null,
+          timeWindowEnd: null,
+          status: "tenant_pending",
+          requiresTenantAccess: true,
+          tenantAccessStatus: "pending",
+          contractorScheduleStatus: "pending",
+          scheduledBy: "landlord-1",
+          scheduledAt: 305,
+          lastUpdatedAt: 305,
+        },
+      },
+    });
+
+    const blockedRes = await invokeRouter(router, {
+      method: "PATCH",
+      url: "/contractor/jobs/maint-1/rework-status",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "contractor-1",
+          role: "contractor",
+        }),
+      },
+      body: {
+        status: "in_progress",
+      },
+    });
+
+    expect(blockedRes.status).toBe(400);
+    expect(blockedRes.body?.error).toBe("REWORK_SCHEDULE_NOT_CONFIRMED");
+  });
 });

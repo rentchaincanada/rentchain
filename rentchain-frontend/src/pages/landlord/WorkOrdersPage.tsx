@@ -18,6 +18,8 @@ import {
   markWorkOrderFollowUpRequired,
   patchWorkOrder,
   reopenWorkOrder,
+  rescheduleWorkOrderRework,
+  scheduleWorkOrderRework,
   startWorkOrderRework,
   updateWorkOrderEvidence,
   uploadWorkOrderEvidence,
@@ -31,6 +33,42 @@ import { type ExpenseCategory } from "../../api/expensesApi";
 function formatDate(ms?: number | null) {
   if (!ms) return "-";
   return new Date(ms).toLocaleString();
+}
+
+function toLocalInputValue(ms?: number | null) {
+  if (!ms) return "";
+  const date = new Date(ms);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(
+    date.getMinutes()
+  )}`;
+}
+
+function fromLocalInputValue(value: string) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
+}
+
+function reworkScheduleStatusLabel(value?: string | null) {
+  switch (value) {
+    case "tenant_pending":
+      return "Awaiting tenant confirmation";
+    case "confirmed":
+      return "Confirmed";
+    case "reschedule_requested":
+      return "Reschedule requested";
+    case "scheduled":
+      return "Awaiting contractor confirmation";
+    case "contractor_confirmed":
+      return "Contractor confirmed";
+    case "cancelled":
+      return "Cancelled";
+    case "not_scheduled":
+      return "Not scheduled";
+    default:
+      return "Not scheduled";
+  }
 }
 
 function canCompleteWorkOrder(item: WorkOrderRecord) {
@@ -126,6 +164,11 @@ export default function WorkOrdersPage() {
   const [reworkContractorId, setReworkContractorId] = React.useState("");
   const [reworkNotes, setReworkNotes] = React.useState("");
   const [reworkOutcome, setReworkOutcome] = React.useState<"resolved" | "partial">("resolved");
+  const [reworkScheduledForInput, setReworkScheduledForInput] = React.useState("");
+  const [reworkWindowStartInput, setReworkWindowStartInput] = React.useState("");
+  const [reworkWindowEndInput, setReworkWindowEndInput] = React.useState("");
+  const [reworkRequiresAccess, setReworkRequiresAccess] = React.useState(false);
+  const [reworkRescheduleReason, setReworkRescheduleReason] = React.useState("");
   const [savingNote, setSavingNote] = React.useState(false);
   const [savingAction, setSavingAction] = React.useState(false);
   const [savingEvidence, setSavingEvidence] = React.useState(false);
@@ -353,6 +396,49 @@ export default function WorkOrdersPage() {
     [load, refreshSelected, reworkNotes, reworkOutcome]
   );
 
+  const handleScheduleRework = React.useCallback(
+    async (item: WorkOrderRecord, mode: "schedule" | "reschedule") => {
+      const scheduledFor = fromLocalInputValue(reworkScheduledForInput);
+      const timeWindowStart = fromLocalInputValue(reworkWindowStartInput);
+      const timeWindowEnd = fromLocalInputValue(reworkWindowEndInput);
+      if (!scheduledFor && !(timeWindowStart && timeWindowEnd)) {
+        setError("Add a return-visit time or a full time window before saving the rework schedule.");
+        return;
+      }
+      if (mode === "reschedule" && !reworkRescheduleReason.trim()) {
+        setError("Add a reason before rescheduling the rework visit.");
+        return;
+      }
+      setSavingAction(true);
+      setError(null);
+      try {
+        if (mode === "schedule") {
+          await scheduleWorkOrderRework(item.id, {
+            scheduledFor: scheduledFor ?? undefined,
+            timeWindowStart: timeWindowStart ?? undefined,
+            timeWindowEnd: timeWindowEnd ?? undefined,
+            requiresTenantAccess: reworkRequiresAccess,
+          });
+        } else {
+          await rescheduleWorkOrderRework(item.id, {
+            scheduledFor: scheduledFor ?? undefined,
+            timeWindowStart: timeWindowStart ?? undefined,
+            timeWindowEnd: timeWindowEnd ?? undefined,
+            requiresTenantAccess: reworkRequiresAccess,
+            reason: reworkRescheduleReason.trim(),
+          });
+        }
+        await load();
+        await refreshSelected(item.id);
+      } catch (err: any) {
+        setError(String(err?.message || "Failed to save the rework schedule"));
+      } finally {
+        setSavingAction(false);
+      }
+    },
+    [load, refreshSelected, reworkRequiresAccess, reworkRescheduleReason, reworkScheduledForInput, reworkWindowEndInput, reworkWindowStartInput]
+  );
+
   const handleEvidenceUpload = React.useCallback(async () => {
     if (!selected) return;
     if (!evidenceFile) {
@@ -407,6 +493,11 @@ export default function WorkOrdersPage() {
       setReworkContractorId("");
       setReworkNotes("");
       setReworkOutcome("resolved");
+      setReworkScheduledForInput("");
+      setReworkWindowStartInput("");
+      setReworkWindowEndInput("");
+      setReworkRequiresAccess(false);
+      setReworkRescheduleReason("");
       setEvidenceFile(null);
       setEvidenceCaption("");
       setEvidenceType("inspection");
@@ -424,6 +515,11 @@ export default function WorkOrdersPage() {
     setReworkContractorId(String(selected.reworkCycle?.assignedContractorId || selected.assignedContractorId || ""));
     setReworkNotes("");
     setReworkOutcome("resolved");
+    setReworkScheduledForInput(toLocalInputValue(selected.reworkCycle?.schedule?.scheduledFor));
+    setReworkWindowStartInput(toLocalInputValue(selected.reworkCycle?.schedule?.timeWindowStart));
+    setReworkWindowEndInput(toLocalInputValue(selected.reworkCycle?.schedule?.timeWindowEnd));
+    setReworkRequiresAccess(Boolean(selected.reworkCycle?.schedule?.requiresTenantAccess));
+    setReworkRescheduleReason(String(selected.reworkCycle?.schedule?.rescheduleReason || ""));
   }, [selected]);
 
   React.useEffect(() => {
@@ -788,6 +884,89 @@ export default function WorkOrdersPage() {
                   <div style={{ fontSize: 13, color: "#64748b" }}>
                     Created {formatDate(selected.reworkCycle.createdAt)} • Assigned {formatDate(selected.reworkCycle.assignedAt)} • Started{" "}
                     {formatDate(selected.reworkCycle.startedAt)} • Completed {formatDate(selected.reworkCycle.completedAt)}
+                  </div>
+                  <div
+                    style={{
+                      border: "1px solid #e2e8f0",
+                      borderRadius: 10,
+                      padding: 10,
+                      display: "grid",
+                      gap: 8,
+                      background: "#fff",
+                    }}
+                  >
+                    <div style={{ fontWeight: 600 }}>Return visit coordination</div>
+                    <div style={{ color: "#64748b", fontSize: 13 }}>
+                      {selected.reworkCycle.schedule
+                        ? `${reworkScheduleStatusLabel(selected.reworkCycle.schedule.status)} • Access ${
+                            selected.reworkCycle.schedule.requiresTenantAccess ? "required" : "not required"
+                          }`
+                        : "No return visit has been scheduled for this rework cycle yet."}
+                    </div>
+                    {selected.reworkCycle.schedule ? (
+                      <div style={{ color: "#64748b", fontSize: 13 }}>
+                        Return visit: {formatDate(selected.reworkCycle.schedule.scheduledFor || selected.reworkCycle.schedule.timeWindowStart)}
+                        {selected.reworkCycle.schedule.timeWindowEnd
+                          ? ` to ${formatDate(selected.reworkCycle.schedule.timeWindowEnd)}`
+                          : ""}
+                        {" • "}Tenant access {selected.reworkCycle.schedule.tenantAccessStatus || "pending"}
+                        {" • "}Contractor {selected.reworkCycle.schedule.contractorScheduleStatus || "pending"}
+                      </div>
+                    ) : null}
+                    <label style={{ display: "grid", gap: 4 }}>
+                      <span style={{ fontSize: 12, color: "#64748b" }}>Scheduled visit time</span>
+                      <input
+                        type="datetime-local"
+                        value={reworkScheduledForInput}
+                        onChange={(e) => setReworkScheduledForInput(e.target.value)}
+                        style={{ width: "100%", borderRadius: 8, border: "1px solid #cbd5e1", padding: 8 }}
+                      />
+                    </label>
+                    <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+                      <label style={{ display: "grid", gap: 4 }}>
+                        <span style={{ fontSize: 12, color: "#64748b" }}>Window start</span>
+                        <input
+                          type="datetime-local"
+                          value={reworkWindowStartInput}
+                          onChange={(e) => setReworkWindowStartInput(e.target.value)}
+                          style={{ width: "100%", borderRadius: 8, border: "1px solid #cbd5e1", padding: 8 }}
+                        />
+                      </label>
+                      <label style={{ display: "grid", gap: 4 }}>
+                        <span style={{ fontSize: 12, color: "#64748b" }}>Window end</span>
+                        <input
+                          type="datetime-local"
+                          value={reworkWindowEndInput}
+                          onChange={(e) => setReworkWindowEndInput(e.target.value)}
+                          style={{ width: "100%", borderRadius: 8, border: "1px solid #cbd5e1", padding: 8 }}
+                        />
+                      </label>
+                    </div>
+                    <label style={{ display: "flex", alignItems: "center", gap: 8, color: "#334155" }}>
+                      <input
+                        type="checkbox"
+                        checked={reworkRequiresAccess}
+                        onChange={(e) => setReworkRequiresAccess(e.target.checked)}
+                      />
+                      Require tenant access confirmation
+                    </label>
+                    <textarea
+                      value={reworkRescheduleReason}
+                      onChange={(e) => setReworkRescheduleReason(e.target.value)}
+                      placeholder="Reason for rescheduling this return visit"
+                      rows={2}
+                      style={{ width: "100%", borderRadius: 8, border: "1px solid #cbd5e1", padding: 8, resize: "vertical" }}
+                    />
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <Button variant="secondary" disabled={savingAction} onClick={() => void handleScheduleRework(selected, "schedule")}>
+                        {savingAction ? "Saving..." : "Schedule return visit"}
+                      </Button>
+                      {selected.reworkCycle.schedule ? (
+                        <Button variant="ghost" disabled={savingAction} onClick={() => void handleScheduleRework(selected, "reschedule")}>
+                          {savingAction ? "Saving..." : "Reschedule return visit"}
+                        </Button>
+                      ) : null}
+                    </div>
                   </div>
                   <input
                     value={reworkContractorId}

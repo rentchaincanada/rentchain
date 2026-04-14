@@ -489,6 +489,36 @@ function normalizeReworkCycleStatus(value: any): "not_started" | "assigned" | "i
   return null;
 }
 
+function normalizeReworkScheduleStatus(
+  value: any
+): "not_scheduled" | "scheduled" | "contractor_confirmed" | "tenant_pending" | "confirmed" | "reschedule_requested" | "cancelled" | null {
+  const next = String(value || "").trim().toLowerCase();
+  if (
+    next === "not_scheduled" ||
+    next === "scheduled" ||
+    next === "contractor_confirmed" ||
+    next === "tenant_pending" ||
+    next === "confirmed" ||
+    next === "reschedule_requested" ||
+    next === "cancelled"
+  ) {
+    return next;
+  }
+  return null;
+}
+
+function normalizeReworkTenantAccessStatus(value: any): "pending" | "confirmed" | "denied" | "not_required" | null {
+  const next = String(value || "").trim().toLowerCase();
+  if (next === "pending" || next === "confirmed" || next === "denied" || next === "not_required") return next;
+  return null;
+}
+
+function normalizeReworkContractorScheduleStatus(value: any): "pending" | "confirmed" | "unavailable" | null {
+  const next = String(value || "").trim().toLowerCase();
+  if (next === "pending" || next === "confirmed" || next === "unavailable") return next;
+  return null;
+}
+
 async function appendWorkOrderUpdate(
   workOrderId: string,
   payload: {
@@ -664,6 +694,21 @@ async function upsertMaintenanceWorkOrder(input: {
     completedAt?: number | null;
     completionSummary?: string | null;
     evidenceSnapshot?: string[] | null;
+    schedule?: {
+      scheduledFor?: number | null;
+      timeWindowStart?: number | null;
+      timeWindowEnd?: number | null;
+      status?: "not_scheduled" | "scheduled" | "contractor_confirmed" | "tenant_pending" | "confirmed" | "reschedule_requested" | "cancelled";
+      requiresTenantAccess?: boolean | null;
+      tenantAccessStatus?: "pending" | "confirmed" | "denied" | "not_required" | null;
+      contractorScheduleStatus?: "pending" | "confirmed" | "unavailable" | null;
+      scheduledBy?: string | null;
+      scheduledAt?: number | null;
+      rescheduleReason?: string | null;
+      tenantAccessNote?: string | null;
+      contractorAvailabilityNote?: string | null;
+      lastUpdatedAt?: number | null;
+    } | null;
   } | null;
   reworkHistory?: Array<{
     cycleNumber: number;
@@ -837,6 +882,38 @@ async function upsertMaintenanceWorkOrder(input: {
               evidenceSnapshot: Array.isArray(input.reworkCycle.evidenceSnapshot)
                 ? input.reworkCycle.evidenceSnapshot.map((entry) => String(entry || "").trim()).filter(Boolean)
                 : null,
+              schedule: input.reworkCycle.schedule
+                ? {
+                    scheduledFor:
+                      typeof input.reworkCycle.schedule.scheduledFor === "number" ? input.reworkCycle.schedule.scheduledFor : null,
+                    timeWindowStart:
+                      typeof input.reworkCycle.schedule.timeWindowStart === "number"
+                        ? input.reworkCycle.schedule.timeWindowStart
+                        : null,
+                    timeWindowEnd:
+                      typeof input.reworkCycle.schedule.timeWindowEnd === "number" ? input.reworkCycle.schedule.timeWindowEnd : null,
+                    status: normalizeReworkScheduleStatus(input.reworkCycle.schedule.status) || "not_scheduled",
+                    requiresTenantAccess:
+                      typeof input.reworkCycle.schedule.requiresTenantAccess === "boolean"
+                        ? input.reworkCycle.schedule.requiresTenantAccess
+                        : null,
+                    tenantAccessStatus:
+                      normalizeReworkTenantAccessStatus(input.reworkCycle.schedule.tenantAccessStatus) || null,
+                    contractorScheduleStatus:
+                      normalizeReworkContractorScheduleStatus(input.reworkCycle.schedule.contractorScheduleStatus) || null,
+                    scheduledBy: String(input.reworkCycle.schedule.scheduledBy || "").trim() || null,
+                    scheduledAt:
+                      typeof input.reworkCycle.schedule.scheduledAt === "number" ? input.reworkCycle.schedule.scheduledAt : null,
+                    rescheduleReason: String(input.reworkCycle.schedule.rescheduleReason || "").trim() || null,
+                    tenantAccessNote: String(input.reworkCycle.schedule.tenantAccessNote || "").trim() || null,
+                    contractorAvailabilityNote:
+                      String(input.reworkCycle.schedule.contractorAvailabilityNote || "").trim() || null,
+                    lastUpdatedAt:
+                      typeof input.reworkCycle.schedule.lastUpdatedAt === "number"
+                        ? input.reworkCycle.schedule.lastUpdatedAt
+                        : null,
+                  }
+                : null,
             }
           : null
         : existingData.reworkCycle
@@ -852,6 +929,29 @@ async function upsertMaintenanceWorkOrder(input: {
             completionSummary: String(existingData.reworkCycle.completionSummary || "").trim() || null,
             evidenceSnapshot: Array.isArray(existingData.reworkCycle.evidenceSnapshot)
               ? existingData.reworkCycle.evidenceSnapshot.map((entry: any) => String(entry || "").trim()).filter(Boolean)
+              : null,
+            schedule: existingData.reworkCycle.schedule
+              ? {
+                  scheduledFor: toMillis(existingData.reworkCycle.schedule.scheduledFor),
+                  timeWindowStart: toMillis(existingData.reworkCycle.schedule.timeWindowStart),
+                  timeWindowEnd: toMillis(existingData.reworkCycle.schedule.timeWindowEnd),
+                  status: normalizeReworkScheduleStatus(existingData.reworkCycle.schedule.status) || "not_scheduled",
+                  requiresTenantAccess:
+                    typeof existingData.reworkCycle.schedule.requiresTenantAccess === "boolean"
+                      ? existingData.reworkCycle.schedule.requiresTenantAccess
+                      : null,
+                  tenantAccessStatus:
+                    normalizeReworkTenantAccessStatus(existingData.reworkCycle.schedule.tenantAccessStatus) || null,
+                  contractorScheduleStatus:
+                    normalizeReworkContractorScheduleStatus(existingData.reworkCycle.schedule.contractorScheduleStatus) || null,
+                  scheduledBy: String(existingData.reworkCycle.schedule.scheduledBy || "").trim() || null,
+                  scheduledAt: toMillis(existingData.reworkCycle.schedule.scheduledAt),
+                  rescheduleReason: String(existingData.reworkCycle.schedule.rescheduleReason || "").trim() || null,
+                  tenantAccessNote: String(existingData.reworkCycle.schedule.tenantAccessNote || "").trim() || null,
+                  contractorAvailabilityNote:
+                    String(existingData.reworkCycle.schedule.contractorAvailabilityNote || "").trim() || null,
+                  lastUpdatedAt: toMillis(existingData.reworkCycle.schedule.lastUpdatedAt),
+                }
               : null,
           }
         : null,
@@ -2162,11 +2262,20 @@ router.patch("/contractor/jobs/:id/rework-status", async (req: any, res) => {
     }
 
     const currentReworkStatus = normalizeReworkCycleStatus(reworkCycle?.status) || "assigned";
+    const currentScheduleStatus = normalizeReworkScheduleStatus(reworkCycle?.schedule?.status);
     if (
       (nextStatus === "in_progress" && !["assigned", "not_started"].includes(currentReworkStatus)) ||
       (nextStatus === "completed" && !["in_progress", "assigned"].includes(currentReworkStatus))
     ) {
       return res.status(400).json({ ok: false, error: "INVALID_REWORK_STATUS_TRANSITION" });
+    }
+    if (
+      nextStatus === "in_progress" &&
+      currentScheduleStatus &&
+      currentScheduleStatus !== "confirmed" &&
+      currentScheduleStatus !== "not_scheduled"
+    ) {
+      return res.status(400).json({ ok: false, error: "REWORK_SCHEDULE_NOT_CONFIRMED" });
     }
 
     const completionSummary = String(req.body?.completionSummary || "").trim().slice(0, 2000);
@@ -2252,6 +2361,107 @@ router.patch("/contractor/jobs/:id/rework-status", async (req: any, res) => {
   } catch (err: any) {
     console.error("[maintenance-v2] contractor rework status failed", { message: err?.message || "failed" });
     return res.status(500).json({ ok: false, error: "CONTRACTOR_REWORK_STATUS_FAILED" });
+  }
+});
+
+router.post("/contractor/jobs/:id/confirm-rework-schedule", async (req: any, res) => {
+  try {
+    const access = await resolveContractorAccess(req);
+    if (access.role !== "contractor" && access.role !== "admin") {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const contractorId = access.contractorId;
+    const actorId = String(req.user?.id || "").trim() || contractorId;
+    const id = String(req.params?.id || "").trim();
+    if (!contractorId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+    const ref = db.collection("maintenanceRequests").doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    const item = (snap.data() as any) || {};
+
+    const workOrderRef = db.collection("workOrders").doc(`maintenance_${id}`);
+    const workOrderSnap = await workOrderRef.get();
+    if (!workOrderSnap.exists) return res.status(404).json({ ok: false, error: "WORK_ORDER_NOT_FOUND" });
+    const workOrder = (workOrderSnap.data() as any) || {};
+    const reworkCycle = workOrder?.reworkCycle || null;
+    if (!reworkCycle) return res.status(400).json({ ok: false, error: "REWORK_CYCLE_NOT_ACTIVE" });
+
+    const assignedContractorId = String(reworkCycle?.assignedContractorId || "").trim();
+    if (!assignedContractorId || assignedContractorId !== contractorId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const schedule = reworkCycle?.schedule || null;
+    if (!schedule) return res.status(400).json({ ok: false, error: "REWORK_SCHEDULE_NOT_SET" });
+
+    const decision = req.body?.decision === "confirm" || req.body?.decision === "unavailable" ? req.body.decision : null;
+    if (!decision) return res.status(400).json({ ok: false, error: "INVALID_REWORK_SCHEDULE_DECISION" });
+
+    const note = String(req.body?.note || "").trim().slice(0, 2000) || null;
+    const now = Date.now();
+    const nextSchedule = {
+      ...schedule,
+      contractorScheduleStatus: decision === "confirm" ? "confirmed" : "unavailable",
+      contractorAvailabilityNote: decision === "unavailable" ? note : null,
+      status:
+        decision === "unavailable"
+          ? "reschedule_requested"
+          : schedule.requiresTenantAccess && schedule.tenantAccessStatus !== "confirmed" && schedule.tenantAccessStatus !== "not_required"
+          ? "tenant_pending"
+          : "confirmed",
+      lastUpdatedAt: now,
+    };
+
+    await workOrderRef.set(
+      {
+        reworkCycle: {
+          ...reworkCycle,
+          schedule: nextSchedule,
+        },
+        updatedAtMs: now,
+      },
+      { merge: true }
+    );
+
+    const contractorLastUpdate =
+      decision === "confirm"
+        ? `Contractor confirmed the rework return visit.`
+        : `Contractor is unavailable for the rework return visit.${note ? ` ${note}` : ""}`;
+    await ref.set(
+      {
+        contractorLastUpdate,
+        updatedAt: now,
+        lastUpdatedBy: "CONTRACTOR",
+      },
+      { merge: true }
+    );
+
+    await appendStatusHistory(id, {
+      status: String(item.status || "assigned"),
+      actorRole: access.role === "admin" ? "admin" : "contractor",
+      actorId,
+      message: contractorLastUpdate,
+    });
+    await appendWorkOrderUpdate(workOrderRef.id, {
+      actorRole: access.role === "admin" ? "admin" : "contractor",
+      actorId,
+      updateType: "confirmed",
+      message: contractorLastUpdate,
+    });
+
+    const refreshedMaintenance = await ref.get();
+    const refreshedWorkOrder = await workOrderRef.get();
+    const refreshed = await shapeContractorJobFromSources(
+      { id: refreshedWorkOrder.id, ...(refreshedWorkOrder.data() as any) },
+      { id: refreshedMaintenance.id, ...(refreshedMaintenance.data() as any) }
+    );
+    return res.json({ ok: true, item: refreshed, data: refreshed });
+  } catch (err: any) {
+    console.error("[maintenance-v2] contractor confirm rework schedule failed", { message: err?.message || "failed" });
+    return res.status(500).json({ ok: false, error: "CONTRACTOR_CONFIRM_REWORK_SCHEDULE_FAILED" });
   }
 });
 

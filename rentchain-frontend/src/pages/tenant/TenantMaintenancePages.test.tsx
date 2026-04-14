@@ -11,6 +11,7 @@ const maintenanceWorkflowApi = vi.hoisted(() => ({
   getTenantMaintenance: vi.fn(),
   createTenantMaintenance: vi.fn(),
   updateTenantMaintenanceConfirmation: vi.fn(),
+  updateTenantMaintenanceReworkAccess: vi.fn(),
   updateTenantMaintenanceSignoff: vi.fn(),
 }));
 
@@ -29,6 +30,7 @@ vi.mock("../../api/maintenanceWorkflowApi", async () => {
     getTenantMaintenance: maintenanceWorkflowApi.getTenantMaintenance,
     createTenantMaintenance: maintenanceWorkflowApi.createTenantMaintenance,
     updateTenantMaintenanceConfirmation: maintenanceWorkflowApi.updateTenantMaintenanceConfirmation,
+    updateTenantMaintenanceReworkAccess: maintenanceWorkflowApi.updateTenantMaintenanceReworkAccess,
     updateTenantMaintenanceSignoff: maintenanceWorkflowApi.updateTenantMaintenanceSignoff,
   };
 });
@@ -279,6 +281,187 @@ describe("tenant maintenance pages", () => {
       });
     });
     expect(await screen.findByText(/This request has been marked resolved/i)).toBeInTheDocument();
+  });
+
+  it("shows return-visit coordination and lets the tenant confirm access", async () => {
+    maintenanceWorkflowApi.getTenantMaintenance.mockResolvedValue({
+      item: {
+        id: "maint-rework",
+        title: "Return visit for heater",
+        description: "Second-pass airflow balancing is needed.",
+        status: "assigned",
+        priority: "urgent",
+        category: "HVAC",
+        assignedContractorName: "North Shore HVAC",
+        contractorStatus: "assigned",
+        resolutionStatus: "completed_pending_review",
+        reworkCycle: {
+          cycleNumber: 1,
+          status: "assigned",
+          createdAt: 200,
+          createdBy: "landlord-1",
+          assignedContractorId: "contractor-1",
+          assignedAt: 210,
+          schedule: {
+            scheduledFor: Date.UTC(2026, 4, 2, 13, 30),
+            timeWindowStart: null,
+            timeWindowEnd: null,
+            status: "tenant_pending",
+            requiresTenantAccess: true,
+            tenantAccessStatus: "pending",
+          },
+        },
+        createdAt: 100,
+        updatedAt: 220,
+        statusHistory: [],
+      },
+    });
+    maintenanceWorkflowApi.updateTenantMaintenanceReworkAccess.mockResolvedValue({
+      item: {
+        id: "maint-rework",
+        title: "Return visit for heater",
+        description: "Second-pass airflow balancing is needed.",
+        status: "assigned",
+        priority: "urgent",
+        category: "HVAC",
+        assignedContractorName: "North Shore HVAC",
+        contractorStatus: "assigned",
+        resolutionStatus: "completed_pending_review",
+        reworkCycle: {
+          cycleNumber: 1,
+          status: "assigned",
+          createdAt: 200,
+          createdBy: "landlord-1",
+          assignedContractorId: "contractor-1",
+          assignedAt: 210,
+          schedule: {
+            scheduledFor: Date.UTC(2026, 4, 2, 13, 30),
+            timeWindowStart: null,
+            timeWindowEnd: null,
+            status: "confirmed",
+            requiresTenantAccess: true,
+            tenantAccessStatus: "confirmed",
+          },
+        },
+        createdAt: 100,
+        updatedAt: 225,
+        statusHistory: [],
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/tenant/maintenance/maint-rework"]}>
+        <Routes>
+          <Route path="/tenant/maintenance/:id" element={<TenantMaintenanceRequestDetailPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Return visit coordination/i)).toBeInTheDocument();
+    expect(screen.getByText(/Status: tenant pending/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Confirm return visit access/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Confirm return visit access/i }));
+
+    await waitFor(() => {
+      expect(maintenanceWorkflowApi.updateTenantMaintenanceReworkAccess).toHaveBeenCalledWith("maint-rework", {
+        decision: "confirm",
+        note: undefined,
+      });
+    });
+
+    expect((await screen.findAllByText(/confirmed/i)).length).toBeGreaterThan(0);
+  });
+
+  it("lets the tenant deny return-visit access with a note", async () => {
+    maintenanceWorkflowApi.getTenantMaintenance.mockResolvedValue({
+      item: {
+        id: "maint-rework",
+        title: "Return visit for heater",
+        description: "Second-pass airflow balancing is needed.",
+        status: "assigned",
+        priority: "urgent",
+        category: "HVAC",
+        assignedContractorName: "North Shore HVAC",
+        contractorStatus: "assigned",
+        resolutionStatus: "completed_pending_review",
+        reworkCycle: {
+          cycleNumber: 1,
+          status: "assigned",
+          createdAt: 200,
+          createdBy: "landlord-1",
+          assignedContractorId: "contractor-1",
+          assignedAt: 210,
+          schedule: {
+            scheduledFor: Date.UTC(2026, 4, 2, 13, 30),
+            timeWindowStart: null,
+            timeWindowEnd: null,
+            status: "tenant_pending",
+            requiresTenantAccess: true,
+            tenantAccessStatus: "pending",
+          },
+        },
+        createdAt: 100,
+        updatedAt: 220,
+        statusHistory: [],
+      },
+    });
+    maintenanceWorkflowApi.updateTenantMaintenanceReworkAccess.mockResolvedValue({
+      item: {
+        id: "maint-rework",
+        title: "Return visit for heater",
+        description: "Second-pass airflow balancing is needed.",
+        status: "assigned",
+        priority: "urgent",
+        category: "HVAC",
+        assignedContractorName: "North Shore HVAC",
+        contractorStatus: "assigned",
+        resolutionStatus: "completed_pending_review",
+        reworkCycle: {
+          cycleNumber: 1,
+          status: "assigned",
+          createdAt: 200,
+          createdBy: "landlord-1",
+          assignedContractorId: "contractor-1",
+          assignedAt: 210,
+          schedule: {
+            scheduledFor: Date.UTC(2026, 4, 2, 13, 30),
+            timeWindowStart: null,
+            timeWindowEnd: null,
+            status: "reschedule_requested",
+            requiresTenantAccess: true,
+            tenantAccessStatus: "denied",
+            tenantAccessNote: "I will be away that afternoon.",
+          },
+        },
+        createdAt: 100,
+        updatedAt: 230,
+        statusHistory: [],
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/tenant/maintenance/maint-rework"]}>
+        <Routes>
+          <Route path="/tenant/maintenance/:id" element={<TenantMaintenanceRequestDetailPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.change(await screen.findByPlaceholderText(/Add an optional note about access for the return visit/i), {
+      target: { value: "I will be away that afternoon." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Deny access \/ request reschedule/i }));
+
+    await waitFor(() => {
+      expect(maintenanceWorkflowApi.updateTenantMaintenanceReworkAccess).toHaveBeenCalledWith("maint-rework", {
+        decision: "deny",
+        note: "I will be away that afternoon.",
+      });
+    });
+
+    expect(await screen.findByText(/Status: reschedule requested/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/I will be away that afternoon./i).length).toBeGreaterThan(0);
   });
 
   it("submits the tenant maintenance request form", async () => {

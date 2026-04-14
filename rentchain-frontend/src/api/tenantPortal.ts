@@ -82,6 +82,15 @@ export type TenantWorkspaceMaintenance = {
     startedAt?: number | null;
     completedAt?: number | null;
     completionSummary?: string | null;
+    schedule?: {
+      scheduledFor?: number | null;
+      timeWindowStart?: number | null;
+      timeWindowEnd?: number | null;
+      status?: "not_scheduled" | "scheduled" | "contractor_confirmed" | "tenant_pending" | "confirmed" | "reschedule_requested" | "cancelled" | null;
+      requiresTenantAccess?: boolean | null;
+      tenantAccessStatus?: "pending" | "confirmed" | "denied" | "not_required" | null;
+      tenantAccessNote?: string | null;
+    } | null;
   } | null;
   reworkHistory?: Array<{
     cycleNumber: number;
@@ -189,6 +198,23 @@ export async function updateTenantWorkspaceMaintenanceSignoff(
 ) {
   const res = await tenantApiFetch<{ ok: boolean; data: TenantWorkspaceMaintenance }>(
     `/tenant/maintenance/${encodeURIComponent(id)}/signoff`,
+    {
+      method: "POST",
+      body: payload,
+    }
+  );
+  return res?.data;
+}
+
+export async function updateTenantWorkspaceReworkAccess(
+  id: string,
+  payload: {
+    decision: "confirm" | "deny";
+    note?: string;
+  }
+) {
+  const res = await tenantApiFetch<{ ok: boolean; data: TenantWorkspaceMaintenance }>(
+    `/tenant/maintenance/${encodeURIComponent(id)}/confirm-rework-access`,
     {
       method: "POST",
       body: payload,
