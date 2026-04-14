@@ -420,7 +420,9 @@ describe("workOrdersRoutes execution completion", () => {
     expect(submitRes.status).toBe(200);
     expect(submitRes.body?.item?.cost?.actualCostCents).toBe(24500);
     expect(submitRes.body?.item?.cost?.reviewStatus).toBe("approved");
+    expect(submitRes.body?.item?.cost?.latestRevisionNumber).toBe(1);
     expect(submitRes.body?.item?.costLineItems).toHaveLength(2);
+    expect(submitRes.body?.item?.costReviewHistory).toHaveLength(1);
 
     ensureCollection("workOrders").set("wo-1", {
       ...ensureCollection("workOrders").get("wo-1"),
@@ -454,6 +456,7 @@ describe("workOrdersRoutes execution completion", () => {
     expect(reviewRes.status).toBe(200);
     expect(reviewRes.body?.item?.cost?.reviewStatus).toBe("rejected");
     expect(reviewRes.body?.item?.cost?.reviewNote).toMatch(/break out the materials/i);
+    expect(reviewRes.body?.item?.costReviewHistory?.[0]?.reviewStatus).toBe("rejected");
 
     const attachmentRes = await invokeRouter(router, {
       method: "POST",
@@ -475,6 +478,102 @@ describe("workOrdersRoutes execution completion", () => {
     expect(attachmentRes.status).toBe(201);
     expect(attachmentRes.body?.item?.costAttachments?.[0]?.visibility).toBe("internal");
     expect(uploadBufferToGcsMock).toHaveBeenCalled();
+  });
+
+  it("supports landlord revision requests and approved cost linkage to an expense", async () => {
+    const router = (await import("../workOrdersRoutes")).default;
+    ensureCollection("workOrders").set("wo-1", {
+      ...ensureCollection("workOrders").get("wo-1"),
+      status: "completed",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      title: "Boiler repair",
+      completionSummary: "Replaced failed thermostat.",
+      cost: {
+        actualCostCents: 32000,
+        currency: "CAD",
+        submittedByRole: "contractor",
+        submittedById: "contractor-1",
+        submittedAt: 700,
+        reviewStatus: "pending_review",
+        latestRevisionNumber: 1,
+      },
+      costReviewHistory: [
+        {
+          id: "history-1",
+          revisionNumber: 1,
+          submittedAt: 700,
+          submittedByRole: "contractor",
+          submittedById: "contractor-1",
+          actualCostCents: 32000,
+          currency: "CAD",
+          reviewStatus: "pending_review",
+        },
+      ],
+    });
+
+    const revisionRes = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/work-orders/wo-1/request-cost-revision",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "landlord-1",
+          role: "landlord",
+          landlordId: "landlord-1",
+        }),
+      },
+      body: {
+        note: "Please break out labor and materials separately.",
+      },
+    });
+
+    expect(revisionRes.status).toBe(200);
+    expect(revisionRes.body?.item?.cost?.reviewStatus).toBe("revision_requested");
+    expect(revisionRes.body?.item?.costReviewHistory?.[0]?.reviewStatus).toBe("revision_requested");
+
+    ensureCollection("workOrders").set("wo-1", {
+      ...ensureCollection("workOrders").get("wo-1"),
+      cost: {
+        actualCostCents: 32000,
+        currency: "CAD",
+        submittedByRole: "contractor",
+        submittedById: "contractor-1",
+        submittedAt: 700,
+        reviewStatus: "approved",
+        latestRevisionNumber: 1,
+        linkedExpenseStatus: "not_linked",
+      },
+      costReviewHistory: [
+        {
+          id: "history-1",
+          revisionNumber: 1,
+          submittedAt: 700,
+          submittedByRole: "contractor",
+          submittedById: "contractor-1",
+          actualCostCents: 32000,
+          currency: "CAD",
+          reviewStatus: "approved",
+        },
+      ],
+    });
+
+    const linkRes = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/work-orders/wo-1/link-expense",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "landlord-1",
+          role: "landlord",
+          landlordId: "landlord-1",
+        }),
+      },
+      body: {},
+    });
+
+    expect(linkRes.status).toBe(200);
+    expect(linkRes.body?.item?.cost?.linkedExpenseStatus).toBe("linked");
+    expect(linkRes.body?.item?.expenseLink?.status).toBe("linked");
+    expect(ensureCollection("expenses").size).toBeGreaterThan(0);
   });
 
   it("rejects unsupported evidence file types", async () => {

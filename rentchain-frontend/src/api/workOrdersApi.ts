@@ -125,8 +125,13 @@ export type WorkOrderRecord = {
     submittedAt?: number | null;
     reviewedBy?: string | null;
     reviewedAt?: number | null;
-    reviewStatus?: "pending_review" | "approved" | "rejected" | null;
+    reviewStatus?: "pending_review" | "approved" | "rejected" | "revision_requested" | null;
     reviewNote?: string | null;
+    revisionRequestedAt?: number | null;
+    revisionRequestedBy?: string | null;
+    latestRevisionNumber?: number | null;
+    linkedExpenseId?: string | null;
+    linkedExpenseStatus?: "not_linked" | "linked" | null;
   } | null;
   costLineItems?: Array<{
     id: string;
@@ -144,6 +149,26 @@ export type WorkOrderRecord = {
     uploadedById: string;
     visibility: "internal" | "landlord_only";
   }>;
+  costReviewHistory?: Array<{
+    id: string;
+    revisionNumber: number;
+    submittedAt: number;
+    submittedByRole: "contractor" | "landlord" | "admin";
+    submittedById: string;
+    actualCostCents: number;
+    currency?: string | null;
+    reviewStatus: "pending_review" | "approved" | "rejected" | "revision_requested";
+    reviewedAt?: number | null;
+    reviewedBy?: string | null;
+    reviewNote?: string | null;
+    linkedExpenseId?: string | null;
+  }>;
+  expenseLink?: {
+    expenseId?: string | null;
+    linkedAt?: number | null;
+    linkedBy?: string | null;
+    status?: "not_linked" | "linked" | null;
+  } | null;
   reopenedAt?: number | null;
   reopenedByActorId?: string | null;
   reopenedByActorRole?: "landlord" | "admin" | null;
@@ -471,13 +496,34 @@ export async function submitLandlordWorkOrderCost(
 
 export async function reviewWorkOrderCost(
   workOrderId: string,
-  payload: { decision: "approve" | "reject"; note?: string }
+  payload: { decision: "approve" | "reject" | "revision_requested"; note?: string }
 ): Promise<WorkOrderRecord> {
   const res = await apiFetch<{ ok: boolean; item: WorkOrderRecord }>(
     `/landlord/work-orders/${encodeURIComponent(workOrderId)}/review-cost`,
     { method: "POST", body: payload }
   );
   if (!res?.ok || !res.item) throw new Error("Failed to review work order cost");
+  return res.item;
+}
+
+export async function requestWorkOrderCostRevision(
+  workOrderId: string,
+  payload: { note: string }
+): Promise<WorkOrderRecord> {
+  const res = await apiFetch<{ ok: boolean; item: WorkOrderRecord }>(
+    `/landlord/work-orders/${encodeURIComponent(workOrderId)}/request-cost-revision`,
+    { method: "POST", body: payload }
+  );
+  if (!res?.ok || !res.item) throw new Error("Failed to request cost revision");
+  return res.item;
+}
+
+export async function linkWorkOrderCostToExpense(workOrderId: string): Promise<WorkOrderRecord> {
+  const res = await apiFetch<{ ok: boolean; item: WorkOrderRecord }>(
+    `/landlord/work-orders/${encodeURIComponent(workOrderId)}/link-expense`,
+    { method: "POST", body: {} }
+  );
+  if (!res?.ok || !res.item) throw new Error("Failed to link work order cost to expense");
   return res.item;
 }
 

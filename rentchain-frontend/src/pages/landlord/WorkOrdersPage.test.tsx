@@ -14,7 +14,9 @@ const mocks = vi.hoisted(() => ({
   closeWorkOrderReworkDirectly: vi.fn(),
   confirmWorkOrderCompletion: vi.fn(),
   markWorkOrderFollowUpRequired: vi.fn(),
+  linkWorkOrderCostToExpense: vi.fn(),
   reopenWorkOrder: vi.fn(),
+  requestWorkOrderCostRevision: vi.fn(),
   reviewWorkOrderReworkResolution: vi.fn(),
   reviewWorkOrderCost: vi.fn(),
   rescheduleWorkOrderRework: vi.fn(),
@@ -44,10 +46,12 @@ vi.mock("../../api/workOrdersApi", () => ({
   confirmWorkOrderCompletion: mocks.confirmWorkOrderCompletion,
   getContractorProfileById: mocks.getContractorProfileById,
   getWorkOrder: mocks.getWorkOrder,
+  linkWorkOrderCostToExpense: mocks.linkWorkOrderCostToExpense,
   listWorkOrderUpdates: mocks.listWorkOrderUpdates,
   listWorkOrders: mocks.listWorkOrders,
   markWorkOrderFollowUpRequired: mocks.markWorkOrderFollowUpRequired,
   patchWorkOrder: mocks.patchWorkOrder,
+  requestWorkOrderCostRevision: mocks.requestWorkOrderCostRevision,
   reopenWorkOrder: mocks.reopenWorkOrder,
   reviewWorkOrderReworkResolution: mocks.reviewWorkOrderReworkResolution,
   reviewWorkOrderCost: mocks.reviewWorkOrderCost,
@@ -100,7 +104,9 @@ describe("WorkOrdersPage", () => {
     mocks.closeWorkOrderReworkDirectly.mockReset();
     mocks.confirmWorkOrderCompletion.mockReset();
     mocks.markWorkOrderFollowUpRequired.mockReset();
+    mocks.linkWorkOrderCostToExpense.mockReset();
     mocks.reopenWorkOrder.mockReset();
+    mocks.requestWorkOrderCostRevision.mockReset();
     mocks.reviewWorkOrderReworkResolution.mockReset();
     mocks.reviewWorkOrderCost.mockReset();
     mocks.rescheduleWorkOrderRework.mockReset();
@@ -326,9 +332,24 @@ describe("WorkOrdersPage", () => {
         submittedById: "contractor-1",
         submittedAt: 32,
         reviewStatus: "pending_review",
+        latestRevisionNumber: 1,
       },
       costLineItems: [{ id: "line-1", label: "Labor", amountCents: 24500, category: "labor" }],
       costAttachments: [],
+      costReviewHistory: [
+        {
+          id: "history-1",
+          revisionNumber: 1,
+          submittedAt: 32,
+          submittedByRole: "contractor",
+          submittedById: "contractor-1",
+          actualCostCents: 24500,
+          currency: "CAD",
+          reviewStatus: "pending_review",
+          reviewNote: null,
+        },
+      ],
+      expenseLink: { status: "not_linked", expenseId: null },
       notesInternal: "",
       linkedExpenseId: null,
       createdAtMs: 1,
@@ -375,6 +396,155 @@ describe("WorkOrdersPage", () => {
         decision: "approve",
         note: "Looks good",
       });
+    });
+
+    expect(screen.getAllByText(/Revision #/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Cost review history/i)).toBeInTheDocument();
+  });
+
+  it("lets the landlord request a cost revision", async () => {
+    mocks.canUseWorkOrders = true;
+    const item = {
+      id: "wo-cost-link",
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      title: "Water heater repair",
+      description: "Replace failed thermostat.",
+      category: "Maintenance",
+      priority: "high",
+      status: "completed",
+      visibility: "private",
+      budgetMinCents: null,
+      budgetMaxCents: null,
+      assignedContractorId: "contractor-1",
+      invitedContractorIds: [],
+      statusHistory: [],
+      cost: {
+        actualCostCents: 32000,
+        currency: "CAD",
+        submittedByRole: "contractor",
+        submittedById: "contractor-1",
+        submittedAt: 700,
+        reviewStatus: "pending_review",
+        latestRevisionNumber: 2,
+        linkedExpenseStatus: "not_linked",
+      },
+      costReviewHistory: [
+        {
+          id: "history-2",
+          revisionNumber: 2,
+          submittedAt: 700,
+          submittedByRole: "contractor",
+          submittedById: "contractor-1",
+          actualCostCents: 32000,
+          currency: "CAD",
+          reviewStatus: "pending_review",
+          reviewNote: null,
+        },
+      ],
+      costLineItems: [],
+      costAttachments: [],
+      expenseLink: { status: "not_linked", expenseId: null },
+      notesInternal: "",
+      linkedExpenseId: null,
+      createdAtMs: 1,
+      updatedAtMs: 35,
+    };
+    mocks.listWorkOrders.mockResolvedValue([item]);
+    mocks.listWorkOrderUpdates.mockResolvedValue([]);
+    mocks.getWorkOrder.mockResolvedValue(item);
+    mocks.requestWorkOrderCostRevision.mockResolvedValue({
+      ...item,
+      cost: {
+        ...item.cost,
+        reviewStatus: "revision_requested",
+        reviewNote: "Please break out labor and materials separately.",
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <WorkOrdersPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /timeline/i }));
+    fireEvent.change(screen.getByLabelText(/Cost review note/i), {
+      target: { value: "Please break out labor and materials separately." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Request revision/i }));
+
+    await waitFor(() => {
+      expect(mocks.requestWorkOrderCostRevision).toHaveBeenCalledWith("wo-cost-link", {
+        note: "Please break out labor and materials separately.",
+      });
+    });
+  });
+
+  it("shows expense linkage for approved cost and lets the landlord link it", async () => {
+    mocks.canUseWorkOrders = true;
+    const item = {
+      id: "wo-cost-link-approved",
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      title: "Water heater repair",
+      description: "Replace failed thermostat.",
+      category: "Maintenance",
+      priority: "high",
+      status: "completed",
+      visibility: "private",
+      budgetMinCents: null,
+      budgetMaxCents: null,
+      assignedContractorId: "contractor-1",
+      invitedContractorIds: [],
+      statusHistory: [],
+      cost: {
+        actualCostCents: 32000,
+        currency: "CAD",
+        submittedByRole: "contractor",
+        submittedById: "contractor-1",
+        submittedAt: 700,
+        reviewStatus: "approved",
+        latestRevisionNumber: 2,
+        linkedExpenseStatus: "not_linked",
+      },
+      costReviewHistory: [],
+      costLineItems: [],
+      costAttachments: [],
+      expenseLink: { status: "not_linked", expenseId: null },
+      notesInternal: "",
+      linkedExpenseId: null,
+      createdAtMs: 1,
+      updatedAtMs: 35,
+    };
+    mocks.listWorkOrders.mockResolvedValue([item]);
+    mocks.listWorkOrderUpdates.mockResolvedValue([]);
+    mocks.getWorkOrder.mockResolvedValue(item);
+    mocks.linkWorkOrderCostToExpense.mockResolvedValue({
+      ...item,
+      cost: {
+        ...item.cost,
+        linkedExpenseStatus: "linked",
+        linkedExpenseId: "expense-1",
+      },
+      linkedExpenseId: "expense-1",
+      expenseLink: { status: "linked", expenseId: "expense-1", linkedAt: 900, linkedBy: "landlord-1" },
+    });
+
+    render(
+      <MemoryRouter>
+        <WorkOrdersPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /timeline/i }));
+
+    fireEvent.click(screen.getByRole("button", { name: /Link to expense/i }));
+
+    await waitFor(() => {
+      expect(mocks.linkWorkOrderCostToExpense).toHaveBeenCalledWith("wo-cost-link-approved");
     });
   });
 

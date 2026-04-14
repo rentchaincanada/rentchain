@@ -8,6 +8,7 @@ const apiMocks = vi.hoisted(() => ({
   listContractorMaintenanceJobs: vi.fn(),
   patchContractorMaintenanceJobStatus: vi.fn(),
   patchContractorMaintenanceReworkStatus: vi.fn(),
+  resubmitContractorMaintenanceCost: vi.fn(),
   submitContractorMaintenanceCost: vi.fn(),
   uploadContractorMaintenanceCostAttachment: vi.fn(),
   uploadContractorMaintenanceEvidence: vi.fn(),
@@ -21,6 +22,7 @@ vi.mock("../../api/maintenanceWorkflowApi", async () => {
     listContractorMaintenanceJobs: apiMocks.listContractorMaintenanceJobs,
     patchContractorMaintenanceJobStatus: apiMocks.patchContractorMaintenanceJobStatus,
     patchContractorMaintenanceReworkStatus: apiMocks.patchContractorMaintenanceReworkStatus,
+    resubmitContractorMaintenanceCost: apiMocks.resubmitContractorMaintenanceCost,
     submitContractorMaintenanceCost: apiMocks.submitContractorMaintenanceCost,
     uploadContractorMaintenanceCostAttachment: apiMocks.uploadContractorMaintenanceCostAttachment,
     uploadContractorMaintenanceEvidence: apiMocks.uploadContractorMaintenanceEvidence,
@@ -44,6 +46,7 @@ describe("ContractorJobsPage", () => {
     apiMocks.confirmContractorMaintenanceReworkSchedule.mockReset();
     apiMocks.patchContractorMaintenanceJobStatus.mockReset();
     apiMocks.patchContractorMaintenanceReworkStatus.mockReset();
+    apiMocks.resubmitContractorMaintenanceCost.mockReset();
     apiMocks.submitContractorMaintenanceCost.mockReset();
     apiMocks.uploadContractorMaintenanceCostAttachment.mockReset();
     apiMocks.uploadContractorMaintenanceEvidence.mockReset();
@@ -285,6 +288,75 @@ describe("ContractorJobsPage", () => {
         "maint-cost",
         expect.objectContaining({
           actualCostCents: 18750,
+        })
+      );
+    });
+  });
+
+  it("shows landlord review feedback and allows contractor cost resubmission when requested", async () => {
+    apiMocks.listContractorMaintenanceJobs.mockResolvedValue({
+      items: [
+        {
+          id: "maint-cost-revision",
+          title: "Boiler tune-up",
+          description: "Seasonal service",
+          status: "completed",
+          priority: "normal",
+          tenantId: "tenant-1",
+          landlordId: "landlord-1",
+          propertyLabel: "Harbour View",
+          unitLabel: "Unit 2",
+          createdAt: 100,
+          updatedAt: 200,
+          statusHistory: [],
+          cost: {
+            actualCostCents: 18750,
+            currency: "CAD",
+            reviewStatus: "revision_requested",
+            reviewNote: "Please break out labor and materials separately.",
+            latestRevisionNumber: 1,
+          },
+          costReviewHistory: [
+            {
+              id: "history-1",
+              revisionNumber: 1,
+              submittedAt: 150,
+              submittedByRole: "contractor",
+              submittedById: "contractor-1",
+              actualCostCents: 18750,
+              currency: "CAD",
+              reviewStatus: "revision_requested",
+              reviewNote: "Please break out labor and materials separately.",
+            },
+          ],
+          costLineItems: [],
+          costAttachments: [],
+        },
+      ],
+    });
+    apiMocks.resubmitContractorMaintenanceCost.mockResolvedValue({ id: "maint-cost-revision" });
+
+    render(
+      <MemoryRouter initialEntries={["/contractor/jobs/maint-cost-revision"]}>
+        <Routes>
+          <Route path="/contractor/jobs/:id" element={<ContractorJobsPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Landlord note:/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Please break out labor and materials separately\./i).length).toBeGreaterThan(0);
+    fireEvent.change(screen.getByLabelText(/Actual cost/i), { target: { value: "190.00" } });
+    fireEvent.change(screen.getByLabelText(/Cost line items/i), {
+      target: { value: '[{"label":"Labor","amountCents":19000,"category":"labor"}]' },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Resubmit cost/i }));
+
+    await waitFor(() => {
+      expect(apiMocks.resubmitContractorMaintenanceCost).toHaveBeenCalledWith(
+        "maint-cost-revision",
+        expect.objectContaining({
+          actualCostCents: 19000,
         })
       );
     });

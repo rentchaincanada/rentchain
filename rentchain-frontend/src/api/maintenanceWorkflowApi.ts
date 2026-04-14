@@ -139,8 +139,13 @@ export type MaintenanceWorkflowItem = {
     submittedAt?: number | null;
     reviewedBy?: string | null;
     reviewedAt?: number | null;
-    reviewStatus?: "pending_review" | "approved" | "rejected" | null;
+    reviewStatus?: "pending_review" | "approved" | "rejected" | "revision_requested" | null;
     reviewNote?: string | null;
+    revisionRequestedAt?: number | null;
+    revisionRequestedBy?: string | null;
+    latestRevisionNumber?: number | null;
+    linkedExpenseId?: string | null;
+    linkedExpenseStatus?: "not_linked" | "linked" | null;
   } | null;
   costLineItems?: Array<{
     id: string;
@@ -158,6 +163,26 @@ export type MaintenanceWorkflowItem = {
     uploadedById: string;
     visibility: "internal" | "landlord_only";
   }>;
+  costReviewHistory?: Array<{
+    id: string;
+    revisionNumber: number;
+    submittedAt: number;
+    submittedByRole: "contractor" | "landlord" | "admin";
+    submittedById: string;
+    actualCostCents: number;
+    currency?: string | null;
+    reviewStatus: "pending_review" | "approved" | "rejected" | "revision_requested";
+    reviewedAt?: number | null;
+    reviewedBy?: string | null;
+    reviewNote?: string | null;
+    linkedExpenseId?: string | null;
+  }>;
+  expenseLink?: {
+    expenseId?: string | null;
+    linkedAt?: number | null;
+    linkedBy?: string | null;
+    status?: "not_linked" | "linked" | null;
+  } | null;
   landlordNote?: string | null;
   createdAt: number;
   updatedAt: number;
@@ -971,6 +996,30 @@ export async function submitContractorMaintenanceCost(
     }
   );
   if (!res?.ok || !res.item) throw new Error("Failed to submit maintenance cost");
+  return res.item;
+}
+
+export async function resubmitContractorMaintenanceCost(
+  maintenanceRequestId: string,
+  payload: {
+    actualCostCents: number;
+    currency?: string;
+    lineItems?: Array<{
+      id?: string;
+      label: string;
+      amountCents: number;
+      category?: "labor" | "materials" | "inspection" | "other";
+    }>;
+  }
+) {
+  const res = await apiFetch<{ ok: boolean; item: MaintenanceWorkflowItem }>(
+    `/contractor/jobs/${encodeURIComponent(maintenanceRequestId)}/resubmit-cost`,
+    {
+      method: "POST",
+      body: payload,
+    }
+  );
+  if (!res?.ok || !res.item) throw new Error("Failed to resubmit maintenance cost");
   return res.item;
 }
 

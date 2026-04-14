@@ -18,6 +18,8 @@ import {
   buildCostAttachmentStoragePath,
   filterCostAttachmentsForAudience,
   normalizeCostCurrency,
+  normalizeCostReviewHistory,
+  normalizeExpenseLink,
   normalizeCostLineItems,
   normalizeWorkOrderCost,
   serializeCostAttachmentsForAudience,
@@ -313,6 +315,8 @@ async function toWorkOrderResponseForAudience(id: string, data: any, audience: "
     cost: normalizeWorkOrderCost(item.cost),
     costLineItems: normalizeCostLineItems(item.costLineItems),
     costAttachments: await serializeCostAttachmentsForAudience(item.costAttachments, audience),
+    costReviewHistory: normalizeCostReviewHistory(item.costReviewHistory),
+    expenseLink: normalizeExpenseLink(item.expenseLink),
   };
 }
 
@@ -332,6 +336,48 @@ function isAllowedEvidenceFile(file: Express.Multer.File | undefined) {
 function isAllowedCostAttachmentFile(file: Express.Multer.File | undefined) {
   if (!file?.buffer || !file.originalname) return false;
   return ALLOWED_COST_ATTACHMENT_MIME_TYPES.has(String(file.mimetype || "").toLowerCase());
+}
+
+function makeCostHistoryEntryId() {
+  return `cost_${crypto.randomBytes(8).toString("hex")}`;
+}
+
+function buildCostHistoryEntry(input: {
+  revisionNumber: number;
+  submittedAt: number;
+  submittedByRole: "contractor" | "landlord" | "admin";
+  submittedById: string;
+  actualCostCents: number;
+  currency?: string | null;
+  reviewStatus: "pending_review" | "approved" | "rejected" | "revision_requested";
+  reviewedAt?: number | null;
+  reviewedBy?: string | null;
+  reviewNote?: string | null;
+  linkedExpenseId?: string | null;
+}) {
+  return {
+    id: makeCostHistoryEntryId(),
+    revisionNumber: Math.max(1, Math.round(input.revisionNumber || 1)),
+    submittedAt: Math.round(input.submittedAt),
+    submittedByRole: input.submittedByRole,
+    submittedById: input.submittedById,
+    actualCostCents: Math.round(input.actualCostCents),
+    currency: normalizeCostCurrency(input.currency) || "CAD",
+    reviewStatus: input.reviewStatus,
+    reviewedAt: typeof input.reviewedAt === "number" ? Math.round(input.reviewedAt) : null,
+    reviewedBy: asOptionalString(input.reviewedBy, 120),
+    reviewNote: asOptionalString(input.reviewNote, 1000),
+    linkedExpenseId: asOptionalString(input.linkedExpenseId, 120),
+  };
+}
+
+function getCurrentCostRevisionNumber(data: any) {
+  const current = Number(data?.cost?.latestRevisionNumber || 0);
+  const historyMax = normalizeCostReviewHistory(data?.costReviewHistory).reduce(
+    (max, entry) => Math.max(max, Number(entry.revisionNumber || 0)),
+    0
+  );
+  return Math.max(current, historyMax, 0);
 }
 
 function inviteIsExpired(invite: any, atMs = nowMs()) {
@@ -2562,6 +2608,9 @@ router.post("/landlord/work-orders/:id/submit-cost", requireAuth, async (req: an
     const currency = normalizeCostCurrency(req.body?.currency) || "CAD";
     const lineItems = normalizeCostLineItems(req.body?.lineItems);
     const now = nowMs();
+    const revisionNumber = getCurrentCostRevisionNumber(access.item) + 1;
+    const actorRole = isAdmin(req) ? "admin" : "landlord";
+    const history = normalizeCostReviewHistory((access.item as any)?.costReviewHistory);
 
     await db.collection("workOrders").doc(workOrderId).set(
       {
@@ -2569,15 +2618,42 @@ router.post("/landlord/work-orders/:id/submit-cost", requireAuth, async (req: an
           ...(normalizeWorkOrderCost((access.item as any)?.cost) || {}),
           actualCostCents,
           currency,
-          submittedByRole: isAdmin(req) ? "admin" : "landlord",
+          submittedByRole: actorRole,
           submittedById: access.userId,
           submittedAt: now,
-          reviewedBy: null,
-          reviewedAt: null,
+          reviewedBy: access.userId,
+          reviewedAt: now,
           reviewStatus: "approved",
           reviewNote: asOptionalString(req.body?.reviewNote, 1000),
+          revisionRequestedAt: null,
+          revisionRequestedBy: null,
+          latestRevisionNumber: revisionNumber,
+          linkedExpenseId: null,
+          linkedExpenseStatus: "not_linked",
         },
         costLineItems: lineItems,
+        costReviewHistory: [
+          buildCostHistoryEntry({
+            revisionNumber,
+            submittedAt: now,
+            submittedByRole: actorRole,
+            submittedById: access.userId,
+            actualCostCents,
+            currency,
+            reviewStatus: "approved",
+            reviewedAt: now,
+            reviewedBy: access.userId,
+            reviewNote: asOptionalString(req.body?.reviewNote, 1000),
+          }),
+          ...history,
+        ],
+        expenseLink: {
+          expenseId: null,
+          linkedAt: null,
+          linkedBy: null,
+          status: "not_linked",
+        },
+        linkedExpenseId: null,
         updatedAtMs: now,
       },
       { merge: true }
@@ -2615,20 +2691,43 @@ router.post("/landlord/work-orders/:id/review-cost", requireAuth, async (req: an
       return res.status(400).json({ ok: false, error: "COST_NOT_SUBMITTED" });
     }
 
-    const decision = req.body?.decision === "approve" || req.body?.decision === "reject" ? req.body.decision : null;
+    const decision =
+      req.body?.decision === "approve" || req.body?.decision === "reject" || req.body?.decision === "revision_requested"
+        ? req.body.decision
+        : null;
     if (!decision) return res.status(400).json({ ok: false, error: "INVALID_COST_REVIEW_DECISION" });
     const note = asOptionalString(req.body?.note, 1000);
+    if (decision === "revision_requested" && !note) {
+      return res.status(400).json({ ok: false, error: "COST_REVISION_NOTE_REQUIRED" });
+    }
     const now = nowMs();
+    const currentRevisionNumber = getCurrentCostRevisionNumber(access.item);
+    const history = normalizeCostReviewHistory((access.item as any)?.costReviewHistory);
+    const reviewStatus = decision === "approve" ? "approved" : decision === "reject" ? "rejected" : "revision_requested";
+    const updatedHistory = history.map((entry) =>
+      entry.revisionNumber === currentRevisionNumber
+        ? {
+            ...entry,
+            reviewStatus,
+            reviewedAt: now,
+            reviewedBy: access.userId,
+            reviewNote: note,
+          }
+        : entry
+    );
 
     await db.collection("workOrders").doc(workOrderId).set(
       {
         cost: {
           ...currentCost,
-          reviewStatus: decision === "approve" ? "approved" : "rejected",
+          reviewStatus,
           reviewedBy: access.userId,
           reviewedAt: now,
           reviewNote: note,
+          revisionRequestedAt: decision === "revision_requested" ? now : null,
+          revisionRequestedBy: decision === "revision_requested" ? access.userId : null,
         },
+        costReviewHistory: updatedHistory,
         updatedAtMs: now,
       },
       { merge: true }
@@ -2639,7 +2738,12 @@ router.post("/landlord/work-orders/:id/review-cost", requireAuth, async (req: an
       actorRole: isAdmin(req) ? "admin" : "landlord",
       actorId: access.userId,
       updateType: "invoice",
-      message: decision === "approve" ? "Cost submission approved." : `Cost submission rejected.${note ? ` ${note}` : ""}`,
+      message:
+        decision === "approve"
+          ? "Cost submission approved."
+          : decision === "reject"
+          ? `Cost submission rejected.${note ? ` ${note}` : ""}`
+          : `Cost revision requested.${note ? ` ${note}` : ""}`,
     });
 
     const refreshed = await db.collection("workOrders").doc(workOrderId).get();
@@ -2647,6 +2751,161 @@ router.post("/landlord/work-orders/:id/review-cost", requireAuth, async (req: an
   } catch (err) {
     console.error("[work-orders] review cost failed", err);
     return res.status(500).json({ ok: false, error: "WORK_ORDER_REVIEW_COST_FAILED" });
+  }
+});
+
+router.post("/landlord/work-orders/:id/request-cost-revision", requireAuth, async (req: any, res) => {
+  try {
+    if (!isLandlord(req)) return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+
+    const workOrderId = asString(req.params?.id, 120);
+    const access = await getWorkOrderAuthorized(req, workOrderId);
+    if (!access.ok) {
+      if (access.code === "NOT_FOUND") return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const currentCost = normalizeWorkOrderCost((access.item as any)?.cost);
+    if (!currentCost?.actualCostCents) {
+      return res.status(400).json({ ok: false, error: "COST_NOT_SUBMITTED" });
+    }
+    if (currentCost.reviewStatus !== "pending_review" && currentCost.reviewStatus !== "rejected") {
+      return res.status(400).json({ ok: false, error: "COST_REVISION_NOT_ALLOWED" });
+    }
+    const note = asOptionalString(req.body?.note, 1000);
+    if (!note) return res.status(400).json({ ok: false, error: "COST_REVISION_NOTE_REQUIRED" });
+    const now = nowMs();
+    const currentRevisionNumber = getCurrentCostRevisionNumber(access.item);
+    const history = normalizeCostReviewHistory((access.item as any)?.costReviewHistory).map((entry) =>
+      entry.revisionNumber === currentRevisionNumber
+        ? {
+            ...entry,
+            reviewStatus: "revision_requested" as const,
+            reviewedAt: now,
+            reviewedBy: access.userId,
+            reviewNote: note,
+          }
+        : entry
+    );
+
+    await db.collection("workOrders").doc(workOrderId).set(
+      {
+        cost: {
+          ...currentCost,
+          reviewStatus: "revision_requested",
+          reviewNote: note,
+          reviewedBy: access.userId,
+          reviewedAt: now,
+          revisionRequestedAt: now,
+          revisionRequestedBy: access.userId,
+        },
+        costReviewHistory: history,
+        updatedAtMs: now,
+      },
+      { merge: true }
+    );
+
+    await writeWorkOrderUpdate({
+      workOrderId,
+      actorRole: isAdmin(req) ? "admin" : "landlord",
+      actorId: access.userId,
+      updateType: "invoice",
+      message: `Cost revision requested. ${note}`,
+    });
+
+    const refreshed = await db.collection("workOrders").doc(workOrderId).get();
+    return res.json({ ok: true, item: await toWorkOrderResponseForAudience(refreshed.id, refreshed.data(), "landlord") });
+  } catch (err) {
+    console.error("[work-orders] request cost revision failed", err);
+    return res.status(500).json({ ok: false, error: "WORK_ORDER_REQUEST_COST_REVISION_FAILED" });
+  }
+});
+
+router.post("/landlord/work-orders/:id/link-expense", requireAuth, async (req: any, res) => {
+  try {
+    if (!isLandlord(req)) return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+
+    const workOrderId = asString(req.params?.id, 120);
+    const access = await getWorkOrderAuthorized(req, workOrderId);
+    if (!access.ok) {
+      if (access.code === "NOT_FOUND") return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+    const currentCost = normalizeWorkOrderCost((access.item as any)?.cost);
+    if (!currentCost?.actualCostCents || currentCost.reviewStatus !== "approved") {
+      return res.status(400).json({ ok: false, error: "COST_NOT_APPROVED" });
+    }
+    if (asOptionalString(currentCost.linkedExpenseId, 120) || asOptionalString((access.item as any)?.linkedExpenseId, 120)) {
+      return res.status(400).json({ ok: false, error: "EXPENSE_ALREADY_LINKED" });
+    }
+
+    const propertyId = asString((access.item as any)?.propertyId, 120);
+    if (!propertyId) return res.status(400).json({ ok: false, error: "PROPERTY_REQUIRED" });
+    const now = nowMs();
+    const expenseRef = db.collection("expenses").doc();
+    const landlordId = asString((access.item as any)?.landlordId, 120) || access.landlordId;
+    const unitId = asOptionalString((access.item as any)?.unitId, 120);
+    const completionSummary = asOptionalString((access.item as any)?.completionSummary, 5000);
+    const category = "Maintenance";
+
+    await expenseRef.set({
+      landlordId,
+      propertyId,
+      unitId,
+      category,
+      vendorName:
+        asOptionalString((access.item as any)?.assignedContractorName, 180) ||
+        asOptionalString((access.item as any)?.title, 180) ||
+        "Maintenance work order",
+      amountCents: currentCost.actualCostCents,
+      incurredAtMs: typeof (access.item as any)?.serviceCompletedAt === "number" ? (access.item as any).serviceCompletedAt : now,
+      notes: completionSummary || asOptionalString(currentCost.reviewNote, 5000) || "",
+      status: "recorded",
+      source: "work_order",
+      linkedWorkOrderId: workOrderId,
+      createdAtMs: now,
+      updatedAtMs: now,
+    });
+
+    const history = normalizeCostReviewHistory((access.item as any)?.costReviewHistory).map((entry) =>
+      entry.revisionNumber === getCurrentCostRevisionNumber(access.item)
+        ? { ...entry, linkedExpenseId: expenseRef.id }
+        : entry
+    );
+
+    await db.collection("workOrders").doc(workOrderId).set(
+      {
+        cost: {
+          ...currentCost,
+          linkedExpenseId: expenseRef.id,
+          linkedExpenseStatus: "linked",
+        },
+        costReviewHistory: history,
+        expenseLink: {
+          expenseId: expenseRef.id,
+          linkedAt: now,
+          linkedBy: access.userId,
+          status: "linked",
+        },
+        linkedExpenseId: expenseRef.id,
+        updatedAtMs: now,
+      },
+      { merge: true }
+    );
+
+    await writeWorkOrderUpdate({
+      workOrderId,
+      actorRole: isAdmin(req) ? "admin" : "landlord",
+      actorId: access.userId,
+      updateType: "invoice",
+      message: "Approved maintenance cost linked to an expense record.",
+    });
+
+    const refreshed = await db.collection("workOrders").doc(workOrderId).get();
+    return res.json({ ok: true, item: await toWorkOrderResponseForAudience(refreshed.id, refreshed.data(), "landlord") });
+  } catch (err) {
+    console.error("[work-orders] link expense failed", err);
+    return res.status(500).json({ ok: false, error: "WORK_ORDER_LINK_EXPENSE_FAILED" });
   }
 });
 
