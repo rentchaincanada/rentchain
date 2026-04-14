@@ -334,6 +334,68 @@ function mapNotifications(value: any): MaintenanceWorkflowItem["notifications"] 
   };
 }
 
+function mapReworkReview(value: any): MaintenanceWorkflowItem["reworkReview"] {
+  if (!value || typeof value !== "object") return null;
+  return {
+    status:
+      value.status === "pending_review" ||
+      value.status === "landlord_approved" ||
+      value.status === "tenant_pending_signoff" ||
+      value.status === "closed" ||
+      value.status === "follow_up_required"
+        ? value.status
+        : null,
+    reviewedAt: typeof value.reviewedAt === "number" ? value.reviewedAt : null,
+    tenantSignoffStatus:
+      value.tenantSignoffStatus === "pending" ||
+      value.tenantSignoffStatus === "accepted" ||
+      value.tenantSignoffStatus === "declined"
+        ? value.tenantSignoffStatus
+        : null,
+    tenantSignedOffAt: typeof value.tenantSignedOffAt === "number" ? value.tenantSignedOffAt : null,
+    tenantDeclinedAt: typeof value.tenantDeclinedAt === "number" ? value.tenantDeclinedAt : null,
+    tenantDeclineReason: typeof value.tenantDeclineReason === "string" ? value.tenantDeclineReason : null,
+    closureOutcome:
+      value.closureOutcome === "resolved" ||
+      value.closureOutcome === "partial" ||
+      value.closureOutcome === "needs_more_followup"
+        ? value.closureOutcome
+        : null,
+    closedAt: typeof value.closedAt === "number" ? value.closedAt : null,
+  };
+}
+
+function mapNotifications(value: any): MaintenanceWorkflowItem["notifications"] {
+  if (!value || typeof value !== "object") return undefined;
+  return {
+    landlord:
+      value.landlord && typeof value.landlord === "object"
+        ? {
+            requiresReview: value.landlord.requiresReview === true,
+            requiresReschedule: value.landlord.requiresReschedule === true,
+            lastNotifiedAt: typeof value.landlord.lastNotifiedAt === "number" ? value.landlord.lastNotifiedAt : null,
+          }
+        : undefined,
+    contractor:
+      value.contractor && typeof value.contractor === "object"
+        ? {
+            requiresScheduleConfirmation: value.contractor.requiresScheduleConfirmation === true,
+            requiresExecutionStart: value.contractor.requiresExecutionStart === true,
+            lastNotifiedAt:
+              typeof value.contractor.lastNotifiedAt === "number" ? value.contractor.lastNotifiedAt : null,
+          }
+        : undefined,
+    tenant:
+      value.tenant && typeof value.tenant === "object"
+        ? {
+            requiresAccessConfirmation: value.tenant.requiresAccessConfirmation === true,
+            requiresSignoff: value.tenant.requiresSignoff === true,
+            requiresReworkAwareness: value.tenant.requiresReworkAwareness === true,
+          }
+        : undefined,
+  };
+}
+
 export async function createTenantMaintenance(payload: {
   title: string;
   description: string;
