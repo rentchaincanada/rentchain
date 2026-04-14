@@ -5,6 +5,7 @@ import { ResponsiveMasterDetail } from "../../components/layout/ResponsiveMaster
 import {
   listContractorMaintenanceJobs,
   patchContractorMaintenanceJobStatus,
+  patchContractorMaintenanceReworkStatus,
   uploadContractorMaintenanceEvidence,
   type MaintenanceWorkflowItem,
   type MaintenanceWorkflowStatus,
@@ -45,6 +46,14 @@ function evidenceTypeLabel(value?: WorkOrderEvidenceType | null) {
     default:
       return "Other";
   }
+}
+
+function isActiveReworkCycle(item?: MaintenanceWorkflowItem | null) {
+  return Boolean(
+    item?.reworkCycle &&
+      item.reworkCycle.status !== "completed" &&
+      item.reworkCycle.status !== "cancelled"
+  );
 }
 
 function findScheduledDate(item: MaintenanceWorkflowItem) {
@@ -110,6 +119,16 @@ function normalizeJob(item: any): MaintenanceWorkflowItem | null {
       item?.completionOutcome === "follow_up_required"
         ? item.completionOutcome
         : null,
+    resolutionStatus:
+      item?.resolutionStatus === "completed_pending_review" ||
+      item?.resolutionStatus === "landlord_approved" ||
+      item?.resolutionStatus === "tenant_pending_signoff" ||
+      item?.resolutionStatus === "resolved" ||
+      item?.resolutionStatus === "follow_up_required"
+        ? item.resolutionStatus
+        : null,
+    reworkCycle: item?.reworkCycle || null,
+    reworkHistory: Array.isArray(item?.reworkHistory) ? item.reworkHistory : [],
     createdAt: Number(item?.createdAt || 0),
     updatedAt: Number(item?.updatedAt || 0),
     statusHistory: Array.isArray(item?.statusHistory) ? item.statusHistory : [],
@@ -197,7 +216,7 @@ export default function ContractorJobsPage() {
       return;
     }
     setScheduledForInput(toLocalInputValue(selected.scheduledFor || findScheduledDate(selected)));
-    setCompletionSummary(String(selected.completionSummary || ""));
+    setCompletionSummary(String(selected.reworkCycle?.completionSummary || selected.completionSummary || ""));
     setCompletionOutcome(
       selected.completionOutcome === "partially_completed" || selected.completionOutcome === "follow_up_required"
         ? selected.completionOutcome
@@ -284,9 +303,49 @@ export default function ContractorJobsPage() {
     }
   }, [evidenceCaption, evidenceFile, evidenceType, load, selected]);
 
+  const updateReworkStatus = React.useCallback(
+    async (status: "in_progress" | "completed") => {
+      if (!selected || !selected.reworkCycle) return;
+      if (status === "completed" && !completionSummary.trim()) {
+        setError("Add a completion summary before finishing the rework.");
+        return;
+      }
+      setSaving(true);
+      setError(null);
+      try {
+        await patchContractorMaintenanceReworkStatus(selected.id, {
+          status,
+          completionSummary: status === "completed" ? completionSummary.trim() : undefined,
+        });
+        if (status === "completed") setCompletionSummary("");
+        await load();
+      } catch (err: any) {
+        setError(String(err?.message || "Failed to update rework"));
+      } finally {
+        setSaving(false);
+      }
+    },
+    [completionSummary, load, selected]
+  );
+
   const actions = React.useMemo(() => {
     if (!selected) return [] as Array<{ label: string; onClick: () => Promise<void> }>;
     const next: Array<{ label: string; onClick: () => Promise<void> }> = [];
+    if (isActiveReworkCycle(selected)) {
+      if (selected.reworkCycle?.status === "assigned" || selected.reworkCycle?.status === "not_started") {
+        next.push({
+          label: "Start rework",
+          onClick: () => updateReworkStatus("in_progress"),
+        });
+      }
+      if (selected.reworkCycle?.status === "assigned" || selected.reworkCycle?.status === "in_progress") {
+        next.push({
+          label: "Complete rework",
+          onClick: () => updateReworkStatus("completed"),
+        });
+      }
+      return next;
+    }
     if (selected.status === "assigned" && selected.contractorStatus !== "assigned") {
       next.push({
         label: "Accept job",
@@ -318,7 +377,7 @@ export default function ContractorJobsPage() {
       });
     }
     return next;
-  }, [selected, updateStatus]);
+  }, [selected, updateReworkStatus, updateStatus]);
 
   return (
     <div style={{ display: "grid", gap: spacing.lg }}>
@@ -420,6 +479,11 @@ export default function ContractorJobsPage() {
                         {selected.tenantName || selected.tenantId} • {selected.propertyLabel || selected.propertyId || "No property"}
                         {selected.unitLabel ? ` • ${selected.unitLabel}` : ""}
                       </div>
+                      {selected.reworkCycle ? (
+                        <div style={{ color: text.secondary, marginTop: 6, fontSize: 13 }}>
+                          Rework #{selected.reworkCycle.cycleNumber} • {selected.reworkCycle.status.replaceAll("_", " ")}
+                        </div>
+                      ) : null}
                     </div>
                     <div style={{ color: text.primary, fontWeight: 700 }}>{statusLabel(selected?.status)}</div>
                   </div>
@@ -460,6 +524,31 @@ export default function ContractorJobsPage() {
                       <strong>Landlord notes:</strong> {selected.landlordNote}
                     </div>
                   ) : null}
+                  {selected.reworkCycle ? (
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: radius.md,
+                        padding: "12px 14px",
+                        background: colors.panel,
+                        display: "grid",
+                        gap: 8,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.primary }}>Rework cycle</div>
+                      <div style={{ color: text.secondary }}>
+                        Rework #{selected.reworkCycle.cycleNumber} is {selected.reworkCycle.status.replaceAll("_", " ")}.
+                      </div>
+                      <div style={{ color: text.secondary }}>
+                        Created {fmtDate(selected.reworkCycle.createdAt)} • Assigned {fmtDate(selected.reworkCycle.assignedAt)}
+                      </div>
+                      {selected.reworkCycle.completionSummary ? (
+                        <div style={{ color: text.secondary }}>
+                          Latest rework completion summary: {selected.reworkCycle.completionSummary}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
 
                   <div
                     style={{
@@ -473,7 +562,9 @@ export default function ContractorJobsPage() {
                   >
                     <div style={{ fontWeight: 700, color: text.primary }}>Execution details</div>
                     <div style={{ color: text.secondary }}>
-                      {selected.executionBlockedReason
+                      {selected.reworkCycle?.completionSummary
+                        ? `Rework summary: ${selected.reworkCycle.completionSummary}`
+                        : selected.executionBlockedReason
                         ? `Blocked reason: ${selected.executionBlockedReason}`
                         : selected.completionSummary
                         ? `Completion summary: ${selected.completionSummary}`

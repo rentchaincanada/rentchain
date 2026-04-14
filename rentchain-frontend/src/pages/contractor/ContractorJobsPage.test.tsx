@@ -6,6 +6,7 @@ import ContractorJobsPage from "./ContractorJobsPage";
 const apiMocks = vi.hoisted(() => ({
   listContractorMaintenanceJobs: vi.fn(),
   patchContractorMaintenanceJobStatus: vi.fn(),
+  patchContractorMaintenanceReworkStatus: vi.fn(),
   uploadContractorMaintenanceEvidence: vi.fn(),
 }));
 
@@ -15,6 +16,7 @@ vi.mock("../../api/maintenanceWorkflowApi", async () => {
     ...actual,
     listContractorMaintenanceJobs: apiMocks.listContractorMaintenanceJobs,
     patchContractorMaintenanceJobStatus: apiMocks.patchContractorMaintenanceJobStatus,
+    patchContractorMaintenanceReworkStatus: apiMocks.patchContractorMaintenanceReworkStatus,
     uploadContractorMaintenanceEvidence: apiMocks.uploadContractorMaintenanceEvidence,
   };
 });
@@ -34,6 +36,7 @@ describe("ContractorJobsPage", () => {
     });
     apiMocks.listContractorMaintenanceJobs.mockReset();
     apiMocks.patchContractorMaintenanceJobStatus.mockReset();
+    apiMocks.patchContractorMaintenanceReworkStatus.mockReset();
     apiMocks.uploadContractorMaintenanceEvidence.mockReset();
   });
 
@@ -167,5 +170,56 @@ describe("ContractorJobsPage", () => {
         })
       );
     });
+  });
+
+  it("shows rework actions and requires a summary before completing rework", async () => {
+    apiMocks.listContractorMaintenanceJobs.mockResolvedValue({
+      items: [
+        {
+          id: "maint-rework",
+          title: "Return visit for heater",
+          description: "Follow-up airflow adjustment.",
+          status: "assigned",
+          priority: "urgent",
+          tenantId: "tenant-1",
+          landlordId: "landlord-1",
+          propertyLabel: "Harbour View",
+          unitLabel: "Unit 2",
+          resolutionStatus: "completed_pending_review",
+          reworkCycle: {
+            cycleNumber: 1,
+            status: "assigned",
+            createdAt: 100,
+            createdBy: "landlord-1",
+            assignedContractorId: "contractor-1",
+            assignedAt: 110,
+          },
+          createdAt: 100,
+          updatedAt: 200,
+          statusHistory: [],
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/contractor/jobs/maint-rework"]}>
+        <Routes>
+          <Route path="/contractor/jobs/:id" element={<ContractorJobsPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect((await screen.findAllByText(/Rework #1/i)).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: /Start rework/i }));
+
+    await waitFor(() => {
+      expect(apiMocks.patchContractorMaintenanceReworkStatus).toHaveBeenCalledWith("maint-rework", {
+        status: "in_progress",
+        completionSummary: undefined,
+      });
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Complete rework/i }));
+    expect(await screen.findByText(/Add a completion summary before finishing the rework/i)).toBeInTheDocument();
   });
 });

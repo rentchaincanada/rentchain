@@ -419,4 +419,98 @@ describe("maintenanceRequestsRoutes scheduling access", () => {
     expect(res.status).toBe(400);
     expect(res.body?.error).toBe("UNSUPPORTED_FILE_TYPE");
   });
+
+  it("rejects contractor rework updates when the contractor is not assigned to the active rework cycle", async () => {
+    const router = (await import("../maintenanceRequestsRoutes")).default;
+    ensureCollection("workOrders").set("maintenance_maint-1", {
+      maintenanceRequestId: "maint-1",
+      landlordId: "landlord-1",
+      status: "assigned",
+      assignedContractorId: "contractor-1",
+      reworkCycle: {
+        cycleNumber: 1,
+        status: "assigned",
+        createdAt: 300,
+        createdBy: "landlord-1",
+        assignedContractorId: "contractor-2",
+        assignedAt: 301,
+      },
+      evidence: [],
+    });
+
+    const res = await invokeRouter(router, {
+      method: "PATCH",
+      url: "/contractor/jobs/maint-1/rework-status",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "contractor-1",
+          role: "contractor",
+        }),
+      },
+      body: {
+        status: "in_progress",
+      },
+    });
+
+    expect(res.status).toBe(403);
+    expect(res.body?.error).toBe("FORBIDDEN");
+  });
+
+  it("persists rework execution updates for the assigned contractor", async () => {
+    const router = (await import("../maintenanceRequestsRoutes")).default;
+    ensureCollection("workOrders").set("maintenance_maint-1", {
+      maintenanceRequestId: "maint-1",
+      landlordId: "landlord-1",
+      status: "assigned",
+      assignedContractorId: "contractor-1",
+      evidence: [{ id: "evidence-1" }, { id: "evidence-2" }],
+      reworkCycle: {
+        cycleNumber: 1,
+        status: "assigned",
+        createdAt: 300,
+        createdBy: "landlord-1",
+        assignedContractorId: "contractor-1",
+        assignedAt: 301,
+      },
+    });
+
+    const startRes = await invokeRouter(router, {
+      method: "PATCH",
+      url: "/contractor/jobs/maint-1/rework-status",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "contractor-1",
+          role: "contractor",
+        }),
+      },
+      body: {
+        status: "in_progress",
+      },
+    });
+
+    expect(startRes.status).toBe(200);
+    expect(startRes.body?.item?.reworkCycle?.status).toBe("in_progress");
+
+    const completeRes = await invokeRouter(router, {
+      method: "PATCH",
+      url: "/contractor/jobs/maint-1/rework-status",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "contractor-1",
+          role: "contractor",
+        }),
+      },
+      body: {
+        status: "completed",
+        completionSummary: "Balanced airflow and verified bedroom heat.",
+      },
+    });
+
+    expect(completeRes.status).toBe(200);
+    expect(completeRes.body?.item?.reworkCycle?.status).toBe("completed");
+
+    const savedWorkOrder = ensureCollection("workOrders").get("maintenance_maint-1");
+    expect(savedWorkOrder?.reworkCycle?.completionSummary).toMatch(/Balanced airflow/i);
+    expect(savedWorkOrder?.reworkCycle?.evidenceSnapshot).toEqual(["evidence-1", "evidence-2"]);
+  });
 });

@@ -57,6 +57,22 @@ type TenantMaintenanceProjection = {
   followUpRequired: boolean | null;
   followUpReason: string | null;
   finalResolvedAt: number | null;
+  reworkCycle: {
+    cycleNumber: number;
+    status: "not_started" | "assigned" | "in_progress" | "completed" | "cancelled";
+    createdAt: number | null;
+    assignedAt: number | null;
+    startedAt: number | null;
+    completedAt: number | null;
+    completionSummary: string | null;
+  } | null;
+  reworkHistory: Array<{
+    cycleNumber: number;
+    startedAt: number | null;
+    completedAt: number | null;
+    outcome: "resolved" | "failed" | "partial" | null;
+    notes: string | null;
+  }>;
   evidence: Array<{
     id: string;
     url: string | null;
@@ -212,6 +228,37 @@ export function projectTenantMaintenance(recordId: string, data: any): TenantMai
     followUpRequired: typeof data?.followUpRequired === "boolean" ? data.followUpRequired : null,
     followUpReason: asString(data?.followUpReason),
     finalResolvedAt: toMillis(data?.finalResolvedAt),
+    reworkCycle:
+      data?.reworkCycle && typeof data.reworkCycle === "object"
+        ? {
+            cycleNumber: Number(data.reworkCycle.cycleNumber || 1),
+            status:
+              data.reworkCycle.status === "not_started" ||
+              data.reworkCycle.status === "assigned" ||
+              data.reworkCycle.status === "in_progress" ||
+              data.reworkCycle.status === "completed" ||
+              data.reworkCycle.status === "cancelled"
+                ? data.reworkCycle.status
+                : "not_started",
+            createdAt: toMillis(data.reworkCycle.createdAt),
+            assignedAt: toMillis(data.reworkCycle.assignedAt),
+            startedAt: toMillis(data.reworkCycle.startedAt),
+            completedAt: toMillis(data.reworkCycle.completedAt),
+            completionSummary: asString(data.reworkCycle.completionSummary),
+          }
+        : null,
+    reworkHistory: Array.isArray(data?.reworkHistory)
+      ? data.reworkHistory.map((entry: any) => ({
+          cycleNumber: Number(entry?.cycleNumber || 1),
+          startedAt: toMillis(entry?.startedAt),
+          completedAt: toMillis(entry?.completedAt),
+          outcome:
+            entry?.outcome === "resolved" || entry?.outcome === "failed" || entry?.outcome === "partial"
+              ? entry.outcome
+              : null,
+          notes: asString(entry?.notes),
+        }))
+      : [],
     evidence: Array.isArray(data?.evidence)
       ? data.evidence
           .map((entry: any) => ({

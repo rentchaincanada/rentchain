@@ -415,4 +415,109 @@ describe("workOrdersRoutes execution completion", () => {
     expect(res.status).toBe(400);
     expect(res.body?.error).toBe("UNSUPPORTED_FILE_TYPE");
   });
+
+  it("starts a structured rework cycle only when follow-up is required", async () => {
+    const router = (await import("../workOrdersRoutes")).default;
+    ensureCollection("workOrders").set("wo-1", {
+      ...ensureCollection("workOrders").get("wo-1"),
+      status: "completed",
+      resolutionStatus: "follow_up_required",
+      followUpRequired: true,
+      followUpReason: "Initial repair did not fully resolve the issue.",
+    });
+
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/work-orders/wo-1/start-rework",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "landlord-1",
+          role: "landlord",
+          landlordId: "landlord-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.item?.reworkCycle?.cycleNumber).toBe(1);
+    expect(res.body?.item?.reworkCycle?.status).toBe("not_started");
+    expect(res.body?.item?.resolutionStatus).toBe("completed_pending_review");
+  });
+
+  it("assigns and completes a rework cycle while preserving history", async () => {
+    const router = (await import("../workOrdersRoutes")).default;
+    ensureCollection("workOrders").set("wo-1", {
+      ...ensureCollection("workOrders").get("wo-1"),
+      status: "completed",
+      resolutionStatus: "follow_up_required",
+      followUpRequired: true,
+      reworkCycle: {
+        cycleNumber: 1,
+        status: "assigned",
+        createdAt: 1000,
+        createdBy: "landlord-1",
+      },
+      evidence: [{ id: "ev-1" }],
+    });
+
+    const assignRes = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/work-orders/wo-1/assign-rework",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "landlord-1",
+          role: "landlord",
+          landlordId: "landlord-1",
+        }),
+      },
+      body: {
+        contractorId: "contractor-22",
+      },
+    });
+
+    expect(assignRes.status).toBe(200);
+    expect(assignRes.body?.item?.reworkCycle?.assignedContractorId).toBe("contractor-22");
+
+    ensureCollection("workOrders").set("wo-1", {
+      ...ensureCollection("workOrders").get("wo-1"),
+      status: "completed",
+      reworkCycle: {
+        ...ensureCollection("workOrders").get("wo-1")?.reworkCycle,
+        status: "completed",
+        startedAt: 1100,
+        completedAt: 1200,
+        completionSummary: "Balanced airflow and verified bedroom temperature.",
+      },
+    });
+
+    const completeRes = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/work-orders/wo-1/complete-rework",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "landlord-1",
+          role: "landlord",
+          landlordId: "landlord-1",
+        }),
+      },
+      body: {
+        outcome: "resolved",
+        notes: "Second pass complete.",
+      },
+    });
+
+    expect(completeRes.status).toBe(200);
+    expect(completeRes.body?.item?.resolutionStatus).toBe("completed_pending_review");
+
+    const savedWorkOrder = ensureCollection("workOrders").get("wo-1");
+    expect(savedWorkOrder?.reworkHistory).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          cycleNumber: 1,
+          outcome: "resolved",
+          notes: "Second pass complete.",
+        }),
+      ])
+    );
+  });
 });

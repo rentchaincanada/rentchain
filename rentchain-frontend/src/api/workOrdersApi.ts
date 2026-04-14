@@ -51,6 +51,25 @@ export type WorkOrderRecord = {
   followUpRequired?: boolean | null;
   followUpReason?: string | null;
   finalResolvedAt?: number | null;
+  reworkCycle?: {
+    cycleNumber: number;
+    status: "not_started" | "assigned" | "in_progress" | "completed" | "cancelled";
+    createdAt: number;
+    createdBy: string;
+    assignedContractorId?: string | null;
+    assignedAt?: number | null;
+    startedAt?: number | null;
+    completedAt?: number | null;
+    completionSummary?: string | null;
+    evidenceSnapshot?: string[] | null;
+  } | null;
+  reworkHistory?: Array<{
+    cycleNumber: number;
+    startedAt?: number | null;
+    completedAt?: number | null;
+    outcome?: "resolved" | "failed" | "partial" | null;
+    notes?: string | null;
+  }> | null;
   reopenedAt?: number | null;
   reopenedByActorId?: string | null;
   reopenedByActorRole?: "landlord" | "admin" | null;
@@ -225,6 +244,39 @@ export async function markWorkOrderFollowUpRequired(
     { method: "POST", body: payload }
   );
   if (!res?.ok || !res.item) throw new Error("Failed to mark work order follow-up required");
+  return res.item;
+}
+
+export async function startWorkOrderRework(workOrderId: string): Promise<WorkOrderRecord> {
+  const res = await apiFetch<{ ok: boolean; item: WorkOrderRecord }>(
+    `/landlord/work-orders/${encodeURIComponent(workOrderId)}/start-rework`,
+    { method: "POST" }
+  );
+  if (!res?.ok || !res.item) throw new Error("Failed to start rework cycle");
+  return res.item;
+}
+
+export async function assignWorkOrderRework(
+  workOrderId: string,
+  payload: { contractorId: string }
+): Promise<WorkOrderRecord> {
+  const res = await apiFetch<{ ok: boolean; item: WorkOrderRecord }>(
+    `/landlord/work-orders/${encodeURIComponent(workOrderId)}/assign-rework`,
+    { method: "POST", body: payload }
+  );
+  if (!res?.ok || !res.item) throw new Error("Failed to assign rework cycle");
+  return res.item;
+}
+
+export async function completeWorkOrderRework(
+  workOrderId: string,
+  payload?: { outcome?: "resolved" | "partial"; notes?: string }
+): Promise<WorkOrderRecord> {
+  const res = await apiFetch<{ ok: boolean; item: WorkOrderRecord }>(
+    `/landlord/work-orders/${encodeURIComponent(workOrderId)}/complete-rework`,
+    { method: "POST", body: payload || {} }
+  );
+  if (!res?.ok || !res.item) throw new Error("Failed to complete rework cycle");
   return res.item;
 }
 

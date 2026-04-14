@@ -74,6 +74,22 @@ export type TenantWorkspaceMaintenance = {
   followUpRequired?: boolean | null;
   followUpReason?: string | null;
   finalResolvedAt?: number | null;
+  reworkCycle?: {
+    cycleNumber: number;
+    status: "not_started" | "assigned" | "in_progress" | "completed" | "cancelled";
+    createdAt?: number | null;
+    assignedAt?: number | null;
+    startedAt?: number | null;
+    completedAt?: number | null;
+    completionSummary?: string | null;
+  } | null;
+  reworkHistory?: Array<{
+    cycleNumber: number;
+    startedAt?: number | null;
+    completedAt?: number | null;
+    outcome?: "resolved" | "failed" | "partial" | null;
+    notes?: string | null;
+  }>;
   evidence?: Array<{
     id: string;
     url: string | null;
