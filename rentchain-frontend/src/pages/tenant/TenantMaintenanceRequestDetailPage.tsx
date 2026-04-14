@@ -60,6 +60,20 @@ function reworkReviewStatusLabel(
   }
 }
 
+function tenantNotificationMessages(item?: MaintenanceWorkflowItem | null) {
+  const messages: string[] = [];
+  if (item?.notifications?.tenant?.requiresAccessConfirmation) {
+    messages.push("Confirm access for return visit");
+  }
+  if (item?.notifications?.tenant?.requiresSignoff) {
+    messages.push("Review completed work");
+  }
+  if (item?.notifications?.tenant?.requiresReworkAwareness) {
+    messages.push("Rework in progress");
+  }
+  return messages;
+}
+
 export default function TenantMaintenanceRequestDetailPage() {
   const { id } = useParams();
   const [data, setData] = useState<MaintenanceWorkflowItem | null>(null);
@@ -76,6 +90,7 @@ export default function TenantMaintenanceRequestDetailPage() {
   const assignmentView = data ? buildMaintenanceAssignmentRoutingView(data, "tenant") : null;
   const schedulingView = data ? buildMaintenanceSchedulingAccessView(data, "tenant") : null;
   const confirmationView = data ? buildMaintenanceConfirmationAccessView(data, "tenant") : null;
+  const notificationMessages = tenantNotificationMessages(data);
 
   useEffect(() => {
     const token = getTenantToken();
@@ -450,6 +465,25 @@ export default function TenantMaintenanceRequestDetailPage() {
                       ) : null}
                     </div>
                   ) : null}
+                </div>
+              ) : null}
+              {notificationMessages.length ? (
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: radius.md,
+                    padding: "12px 14px",
+                    background: "#fffbeb",
+                    display: "grid",
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ fontWeight: 800, color: textTokens.primary }}>Action needed</div>
+                  {notificationMessages.map((message) => (
+                    <div key={message} style={{ color: textTokens.secondary }}>
+                      {message}
+                    </div>
+                  ))}
                 </div>
               ) : null}
               {data.reworkCycle || data.reworkHistory?.length ? (

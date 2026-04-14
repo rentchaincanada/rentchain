@@ -23,6 +23,20 @@ function fmtDate(ts?: number | null) {
   return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
+function tenantNotificationMessages(item: MaintenanceWorkflowItem) {
+  const messages: string[] = [];
+  if (item.notifications?.tenant?.requiresAccessConfirmation) {
+    messages.push("Confirm access for return visit");
+  }
+  if (item.notifications?.tenant?.requiresSignoff) {
+    messages.push("Review completed work");
+  }
+  if (item.notifications?.tenant?.requiresReworkAwareness) {
+    messages.push("Rework in progress");
+  }
+  return messages;
+}
+
 export default function TenantMaintenanceRequestsPage() {
   const [items, setItems] = React.useState<MaintenanceWorkflowItem[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -136,6 +150,7 @@ export default function TenantMaintenanceRequestsPage() {
               const assignmentView = buildMaintenanceAssignmentRoutingView(item, "tenant");
               const schedulingView = buildMaintenanceSchedulingAccessView(item, "tenant");
               const confirmationView = buildMaintenanceConfirmationAccessView(item, "tenant");
+              const notificationMessages = tenantNotificationMessages(item);
               return (
                 <TenantInfoCard
                   key={item.id}
@@ -154,6 +169,25 @@ export default function TenantMaintenanceRequestsPage() {
                     {` • Handling: ${assignmentView.tenantVisibleLabel}`}
                   </div>
                   <div style={{ color: textTokens.secondary }}>{assignmentView.summary}</div>
+                  {notificationMessages.length ? (
+                    <div
+                      style={{
+                        border: "1px solid rgba(180, 83, 9, 0.25)",
+                        borderRadius: 12,
+                        padding: "12px 14px",
+                        display: "grid",
+                        gap: 6,
+                        background: "#fffbeb",
+                      }}
+                    >
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Action needed</div>
+                      {notificationMessages.map((message) => (
+                        <div key={message} style={{ color: textTokens.secondary }}>
+                          {message}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                   <div
                     style={{
                       border: "1px solid rgba(15,23,42,0.08)",

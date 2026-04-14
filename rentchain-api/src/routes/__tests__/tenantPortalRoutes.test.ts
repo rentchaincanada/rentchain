@@ -558,6 +558,13 @@ describe("tenantPortalRoutes foundation", () => {
         tenantSignoffStatus: "pending",
       })
     );
+    expect(detailRes.body?.data?.notifications).toEqual({
+      tenant: {
+        requiresAccessConfirmation: false,
+        requiresSignoff: true,
+        requiresReworkAwareness: false,
+      },
+    });
 
     const signoffRes = await invokeRouter(router, {
       method: "POST",
@@ -748,6 +755,13 @@ describe("tenantPortalRoutes foundation", () => {
         tenantAccessStatus: "confirmed",
       })
     );
+    expect(res.body?.data?.notifications).toEqual({
+      tenant: {
+        requiresAccessConfirmation: false,
+        requiresSignoff: false,
+        requiresReworkAwareness: false,
+      },
+    });
   });
 
   it("lets the tenant deny rework access and request a reschedule", async () => {
@@ -813,6 +827,13 @@ describe("tenantPortalRoutes foundation", () => {
         tenantAccessNote: "I will be away for the scheduled visit.",
       })
     );
+    expect(res.body?.data?.notifications).toEqual({
+      tenant: {
+        requiresAccessConfirmation: false,
+        requiresSignoff: false,
+        requiresReworkAwareness: false,
+      },
+    });
   });
 
   it("rejects rework access updates for an unrelated tenant request", async () => {

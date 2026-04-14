@@ -161,6 +161,17 @@ function evidenceTypeLabel(value?: WorkOrderEvidenceType | null) {
   }
 }
 
+function landlordNotificationMessages(item: WorkOrderRecord) {
+  const messages: string[] = [];
+  if (item.notifications?.landlord?.requiresReview) {
+    messages.push("Review completed rework");
+  }
+  if (item.notifications?.landlord?.requiresReschedule) {
+    messages.push("Reschedule required");
+  }
+  return messages;
+}
+
 function evidenceVisibilityLabel(value?: WorkOrderEvidenceVisibility | null) {
   switch (value) {
     case "internal":
@@ -893,6 +904,25 @@ export default function WorkOrdersPage() {
                 <div>
                   <div style={{ fontSize: 12, color: "#64748b" }}>Follow-up reason</div>
                   <div style={{ marginTop: 4 }}>{selected.followUpReason}</div>
+                </div>
+              ) : null}
+              {landlordNotificationMessages(selected).length ? (
+                <div
+                  style={{
+                    display: "grid",
+                    gap: 6,
+                    padding: 12,
+                    border: "1px solid #f59e0b",
+                    borderRadius: 12,
+                    background: "#fffbeb",
+                  }}
+                >
+                  <div style={{ fontWeight: 700, color: "#92400e" }}>Action required</div>
+                  {landlordNotificationMessages(selected).map((message) => (
+                    <div key={message} style={{ color: "#9a3412" }}>
+                      {message}
+                    </div>
+                  ))}
                 </div>
               ) : null}
               {selected.reworkCycle ? (

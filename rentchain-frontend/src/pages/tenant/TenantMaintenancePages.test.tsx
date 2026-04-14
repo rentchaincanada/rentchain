@@ -66,6 +66,13 @@ describe("tenant maintenance pages", () => {
           serviceWindowStartAt: null,
           serviceWindowEndAt: null,
           accessRequired: null,
+          notifications: {
+            tenant: {
+              requiresAccessConfirmation: false,
+              requiresSignoff: false,
+              requiresReworkAwareness: true,
+            },
+          },
           createdAt: 100,
           updatedAt: 200,
         },
@@ -83,6 +90,8 @@ describe("tenant maintenance pages", () => {
     expect(screen.getByText(/Leaky faucet/i)).toBeInTheDocument();
     expect(screen.getByText(/Your request has been submitted and is waiting for landlord review/i)).toBeInTheDocument();
     expect(screen.getByText(/Handling: Awaiting Assignment/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Action needed/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Rework in progress/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Scheduling \/ access/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Upcoming service window: No service window has been confirmed yet/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Confirmation \/ access/i).length).toBeGreaterThan(0);
@@ -103,6 +112,13 @@ describe("tenant maintenance pages", () => {
         serviceWindowStartAt: Date.UTC(2026, 3, 15, 13, 0),
         serviceWindowEndAt: Date.UTC(2026, 3, 15, 15, 0),
         accessRequired: true,
+        notifications: {
+          tenant: {
+            requiresAccessConfirmation: true,
+            requiresSignoff: false,
+            requiresReworkAwareness: true,
+          },
+        },
         reworkCycle: {
           cycleNumber: 1,
           status: "in_progress",
@@ -155,6 +171,8 @@ describe("tenant maintenance pages", () => {
     expect(await screen.findByText(/Broken heater/i)).toBeInTheDocument();
     expect(screen.getByText(/What this status means/i)).toBeInTheDocument();
     expect(screen.getByText(/Handling status/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Action needed/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Confirm access for return visit/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Scheduling \/ access/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Access needed/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Confirmation \/ access/i).length).toBeGreaterThan(0);

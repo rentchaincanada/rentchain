@@ -92,6 +92,13 @@ type TenantMaintenanceProjection = {
     closureOutcome: "resolved" | "partial" | "needs_more_followup" | null;
     closedAt: number | null;
   } | null;
+  notifications: {
+    tenant: {
+      requiresAccessConfirmation: boolean;
+      requiresSignoff: boolean;
+      requiresReworkAwareness: boolean;
+    };
+  };
   evidence: Array<{
     id: string;
     url: string | null;
@@ -338,6 +345,13 @@ export function projectTenantMaintenance(recordId: string, data: any): TenantMai
             closedAt: toMillis(data.reworkReview.closedAt),
           }
         : null,
+    notifications: {
+      tenant: {
+        requiresAccessConfirmation: data?.notifications?.tenant?.requiresAccessConfirmation === true,
+        requiresSignoff: data?.notifications?.tenant?.requiresSignoff === true,
+        requiresReworkAwareness: data?.notifications?.tenant?.requiresReworkAwareness === true,
+      },
+    },
     evidence: Array.isArray(data?.evidence)
       ? data.evidence
           .map((entry: any) => ({

@@ -148,6 +148,13 @@ describe("WorkOrdersPage", () => {
         completionSummary: "Replaced igniter and restored heat.",
         completionOutcome: "completed",
         completedByActorRole: "contractor",
+        notifications: {
+          landlord: {
+            requiresReview: true,
+            requiresReschedule: false,
+            lastNotifiedAt: 39,
+          },
+        },
         completionConfirmedByLandlordAt: null,
         completionConfirmedByLandlordBy: null,
         reopenedAt: null,
@@ -200,6 +207,13 @@ describe("WorkOrdersPage", () => {
       completionConfirmedByLandlordAt: 40,
       completionConfirmedByLandlordBy: "landlord-1",
       resolutionStatus: "completed_pending_review",
+      notifications: {
+        landlord: {
+          requiresReview: true,
+          requiresReschedule: false,
+          lastNotifiedAt: 39,
+        },
+      },
       landlordApprovedAt: null,
       tenantSignoffStatus: null,
       followUpRequired: false,
@@ -229,6 +243,8 @@ describe("WorkOrdersPage", () => {
     fireEvent.click(await screen.findByRole("button", { name: /timeline/i }));
 
     expect(await screen.findByText(/Execution and completion/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Action required/i)).toBeInTheDocument();
+    expect(screen.getByText(/Review completed rework/i)).toBeInTheDocument();
     expect(screen.getByText(/Replaced igniter and restored heat/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /confirm completion/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /approve resolution/i })).toBeInTheDocument();
