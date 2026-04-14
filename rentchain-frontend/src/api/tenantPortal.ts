@@ -109,6 +109,13 @@ export type TenantWorkspaceMaintenance = {
     closureOutcome?: "resolved" | "partial" | "needs_more_followup" | null;
     closedAt?: number | null;
   } | null;
+  notifications?: {
+    tenant: {
+      requiresAccessConfirmation: boolean;
+      requiresSignoff: boolean;
+      requiresReworkAwareness: boolean;
+    };
+  };
   evidence?: Array<{
     id: string;
     url: string | null;

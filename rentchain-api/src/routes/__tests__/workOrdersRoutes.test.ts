@@ -570,10 +570,12 @@ describe("workOrdersRoutes execution completion", () => {
     expect(res.status).toBe(200);
     expect(res.body?.item?.resolutionStatus).toBe("tenant_pending_signoff");
     expect(res.body?.item?.reworkReview?.status).toBe("tenant_pending_signoff");
+    expect(res.body?.item?.notifications?.tenant?.requiresSignoff).toBe(true);
 
     const savedWorkOrder = ensureCollection("workOrders").get("wo-1");
     expect(savedWorkOrder?.reworkReview?.tenantSignoffStatus).toBe("pending");
     expect(savedWorkOrder?.reworkReview?.landlordReviewNote).toMatch(/final confirmation/i);
+    expect(savedWorkOrder?.notifications?.landlord?.requiresReview).toBe(false);
   });
 
   it("closes a completed rework cycle directly when tenant signoff is not required", async () => {
@@ -672,6 +674,8 @@ describe("workOrdersRoutes execution completion", () => {
         contractorScheduleStatus: "pending",
       })
     );
+    expect(scheduleRes.body?.item?.notifications?.contractor?.requiresScheduleConfirmation).toBe(true);
+    expect(scheduleRes.body?.item?.notifications?.tenant?.requiresAccessConfirmation).toBe(true);
 
     const rescheduleRes = await invokeRouter(router, {
       method: "POST",
@@ -701,5 +705,6 @@ describe("workOrdersRoutes execution completion", () => {
         rescheduleReason: "Contractor requested a different visit time.",
       })
     );
+    expect(rescheduleRes.body?.item?.notifications?.contractor?.requiresScheduleConfirmation).toBe(true);
   });
 });

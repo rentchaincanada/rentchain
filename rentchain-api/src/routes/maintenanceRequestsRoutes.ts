@@ -13,6 +13,11 @@ import {
   serializeEvidenceForAudience,
   type WorkOrderEvidenceItem,
 } from "../lib/workOrderEvidence";
+import {
+  applyNotificationUpdate,
+  buildTenantSafeWorkOrderNotifications,
+  computeWorkOrderNotifications,
+} from "../lib/maintenanceNotifications";
 
 const router = Router();
 
@@ -728,7 +733,7 @@ async function upsertMaintenanceWorkOrder(input: {
   const existingData = existing.exists ? ((existing.data() as any) || {}) : {};
   const createdAtMs = Number(existingData.createdAtMs || existingData.createdAt || Date.now()) || Date.now();
   const now = Date.now();
-  const payload = {
+  const payload: Record<string, any> = {
     id: workOrderId,
     maintenanceRequestId: input.maintenanceRequestId,
     landlordId: input.landlordId || null,
@@ -1005,6 +1010,10 @@ async function upsertMaintenanceWorkOrder(input: {
     createdAtMs,
     updatedAtMs: now,
   };
+  payload.notifications = computeWorkOrderNotifications({
+    ...existingData,
+    ...payload,
+  });
   await ref.set(payload, { merge: true });
   console.info("[maintenance-v2] work-order upserted", {
     maintenanceRequestId: input.maintenanceRequestId,
@@ -2361,6 +2370,10 @@ router.patch("/contractor/jobs/:id/rework-status", async (req: any, res) => {
       { merge: true }
     );
 
+    const refreshedWorkOrderSnap = await workOrderRef.get();
+    const refreshedWorkOrderData = (refreshedWorkOrderSnap.data() as any) || {};
+    const notifications = await applyNotificationUpdate(workOrderRef, refreshedWorkOrderData, now);
+
     await ref.set(
       {
         status: nextStatus === "completed" ? "completed" : "in_progress",
@@ -2371,6 +2384,7 @@ router.patch("/contractor/jobs/:id/rework-status", async (req: any, res) => {
             : `Rework cycle #${Number(reworkCycle?.cycleNumber || 1)} started.`,
         updatedAt: now,
         lastUpdatedBy: "CONTRACTOR",
+        notifications: buildTenantSafeWorkOrderNotifications({ ...refreshedWorkOrderData, notifications }),
       },
       { merge: true }
     );
@@ -2468,6 +2482,10 @@ router.post("/contractor/jobs/:id/confirm-rework-schedule", async (req: any, res
       { merge: true }
     );
 
+    const refreshedWorkOrderSnap = await workOrderRef.get();
+    const refreshedWorkOrderData = (refreshedWorkOrderSnap.data() as any) || {};
+    const notifications = await applyNotificationUpdate(workOrderRef, refreshedWorkOrderData, now);
+
     const contractorLastUpdate =
       decision === "confirm"
         ? `Contractor confirmed the rework return visit.`
@@ -2477,6 +2495,7 @@ router.post("/contractor/jobs/:id/confirm-rework-schedule", async (req: any, res
         contractorLastUpdate,
         updatedAt: now,
         lastUpdatedBy: "CONTRACTOR",
+        notifications: buildTenantSafeWorkOrderNotifications({ ...refreshedWorkOrderData, notifications }),
       },
       { merge: true }
     );

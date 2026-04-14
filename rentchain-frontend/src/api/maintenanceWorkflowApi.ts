@@ -113,6 +113,23 @@ export type MaintenanceWorkflowItem = {
     closureOutcome?: "resolved" | "partial" | "needs_more_followup" | null;
     closedAt?: number | null;
   } | null;
+  notifications?: {
+    landlord?: {
+      requiresReview?: boolean;
+      requiresReschedule?: boolean;
+      lastNotifiedAt?: number | null;
+    };
+    contractor?: {
+      requiresScheduleConfirmation?: boolean;
+      requiresExecutionStart?: boolean;
+      lastNotifiedAt?: number | null;
+    };
+    tenant?: {
+      requiresAccessConfirmation?: boolean;
+      requiresSignoff?: boolean;
+      requiresReworkAwareness?: boolean;
+    };
+  };
   landlordNote?: string | null;
   createdAt: number;
   updatedAt: number;
@@ -255,6 +272,37 @@ function mapReworkReview(value: any): MaintenanceWorkflowItem["reworkReview"] {
         ? value.closureOutcome
         : null,
     closedAt: typeof value.closedAt === "number" ? value.closedAt : null,
+  };
+}
+
+function mapNotifications(value: any): MaintenanceWorkflowItem["notifications"] {
+  if (!value || typeof value !== "object") return undefined;
+  return {
+    landlord:
+      value.landlord && typeof value.landlord === "object"
+        ? {
+            requiresReview: value.landlord.requiresReview === true,
+            requiresReschedule: value.landlord.requiresReschedule === true,
+            lastNotifiedAt: typeof value.landlord.lastNotifiedAt === "number" ? value.landlord.lastNotifiedAt : null,
+          }
+        : undefined,
+    contractor:
+      value.contractor && typeof value.contractor === "object"
+        ? {
+            requiresScheduleConfirmation: value.contractor.requiresScheduleConfirmation === true,
+            requiresExecutionStart: value.contractor.requiresExecutionStart === true,
+            lastNotifiedAt:
+              typeof value.contractor.lastNotifiedAt === "number" ? value.contractor.lastNotifiedAt : null,
+          }
+        : undefined,
+    tenant:
+      value.tenant && typeof value.tenant === "object"
+        ? {
+            requiresAccessConfirmation: value.tenant.requiresAccessConfirmation === true,
+            requiresSignoff: value.tenant.requiresSignoff === true,
+            requiresReworkAwareness: value.tenant.requiresReworkAwareness === true,
+          }
+        : undefined,
   };
 }
 
@@ -456,6 +504,7 @@ export async function getTenantMaintenance(id: string) {
     followUpRequired: typeof item?.followUpRequired === "boolean" ? item.followUpRequired : null,
     followUpReason: item?.followUpReason ? String(item.followUpReason) : null,
     finalResolvedAt: typeof item?.finalResolvedAt === "number" ? item.finalResolvedAt : null,
+    notifications: mapNotifications((item as any)?.notifications),
     reworkCycle: mapReworkCycle((item as any)?.reworkCycle),
     reworkHistory: mapReworkHistory((item as any)?.reworkHistory),
     reworkReview: mapReworkReview((item as any)?.reworkReview),
@@ -526,6 +575,7 @@ export async function updateTenantMaintenanceConfirmation(
     followUpRequired: typeof item?.followUpRequired === "boolean" ? item.followUpRequired : null,
     followUpReason: item?.followUpReason ? String(item.followUpReason) : null,
     finalResolvedAt: typeof item?.finalResolvedAt === "number" ? item.finalResolvedAt : null,
+    notifications: mapNotifications((item as any)?.notifications),
     evidence: Array.isArray((item as any)?.evidence) ? (item as any).evidence : [],
     reworkCycle: mapReworkCycle((item as any)?.reworkCycle),
     reworkHistory: mapReworkHistory((item as any)?.reworkHistory),
@@ -597,6 +647,7 @@ export async function updateTenantMaintenanceSignoff(
     followUpRequired: typeof item?.followUpRequired === "boolean" ? item.followUpRequired : null,
     followUpReason: item?.followUpReason ? String(item.followUpReason) : null,
     finalResolvedAt: typeof item?.finalResolvedAt === "number" ? item.finalResolvedAt : null,
+    notifications: mapNotifications((item as any)?.notifications),
     reworkCycle: mapReworkCycle((item as any)?.reworkCycle),
     reworkHistory: mapReworkHistory((item as any)?.reworkHistory),
     reworkReview: mapReworkReview((item as any)?.reworkReview),
@@ -725,6 +776,7 @@ export async function updateTenantMaintenanceReworkSignoff(
     followUpRequired: typeof item?.followUpRequired === "boolean" ? item.followUpRequired : null,
     followUpReason: item?.followUpReason ? String(item.followUpReason) : null,
     finalResolvedAt: typeof item?.finalResolvedAt === "number" ? item.finalResolvedAt : null,
+    notifications: mapNotifications((item as any)?.notifications),
     reworkCycle: mapReworkCycle((item as any)?.reworkCycle),
     reworkHistory: mapReworkHistory((item as any)?.reworkHistory),
     reworkReview: mapReworkReview((item as any)?.reworkReview),

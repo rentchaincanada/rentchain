@@ -508,10 +508,12 @@ describe("maintenanceRequestsRoutes scheduling access", () => {
 
     expect(completeRes.status).toBe(200);
     expect(completeRes.body?.item?.reworkCycle?.status).toBe("completed");
+    expect(completeRes.body?.item?.notifications?.landlord?.requiresReview).toBe(true);
 
     const savedWorkOrder = ensureCollection("workOrders").get("maintenance_maint-1");
     expect(savedWorkOrder?.reworkCycle?.completionSummary).toMatch(/Balanced airflow/i);
     expect(savedWorkOrder?.reworkCycle?.evidenceSnapshot).toEqual(["evidence-1", "evidence-2"]);
+    expect(savedWorkOrder?.notifications?.landlord?.requiresReview).toBe(true);
   });
 
   it("updates rework schedule coordination for the assigned contractor", async () => {
@@ -565,6 +567,7 @@ describe("maintenanceRequestsRoutes scheduling access", () => {
         contractorScheduleStatus: "confirmed",
       })
     );
+    expect(confirmRes.body?.item?.notifications?.contractor?.requiresScheduleConfirmation).toBe(false);
 
     const unavailableRes = await invokeRouter(router, {
       method: "POST",
@@ -589,6 +592,7 @@ describe("maintenanceRequestsRoutes scheduling access", () => {
         contractorAvailabilityNote: "Running late on another emergency call.",
       })
     );
+    expect(unavailableRes.body?.item?.notifications?.landlord?.requiresReschedule).toBe(true);
   });
 
   it("blocks rework execution until return-visit coordination is confirmed", async () => {

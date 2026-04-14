@@ -99,6 +99,17 @@ function statusLabel(status?: MaintenanceWorkflowStatus | string | null) {
   }
 }
 
+function contractorNotificationMessages(item?: MaintenanceWorkflowItem | null) {
+  const messages: string[] = [];
+  if (item?.notifications?.contractor?.requiresScheduleConfirmation) {
+    messages.push("Confirm return visit");
+  }
+  if (item?.notifications?.contractor?.requiresExecutionStart) {
+    messages.push("Start assigned rework");
+  }
+  return messages;
+}
+
 function normalizeJob(item: any): MaintenanceWorkflowItem | null {
   const id = String(item?.id || "").trim();
   const title = String(item?.title || "").trim();
@@ -573,6 +584,25 @@ export default function ContractorJobsPage() {
                   {selected.landlordNote ? (
                     <div style={{ color: text.secondary }}>
                       <strong>Landlord notes:</strong> {selected.landlordNote}
+                    </div>
+                  ) : null}
+                  {contractorNotificationMessages(selected).length ? (
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: radius.md,
+                        padding: "12px 14px",
+                        background: "#fffbeb",
+                        display: "grid",
+                        gap: 8,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.primary }}>Action required</div>
+                      {contractorNotificationMessages(selected).map((message) => (
+                        <div key={message} style={{ color: text.secondary }}>
+                          {message}
+                        </div>
+                      ))}
                     </div>
                   ) : null}
                   {selected.reworkCycle ? (

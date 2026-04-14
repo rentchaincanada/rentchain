@@ -189,6 +189,13 @@ describe("ContractorJobsPage", () => {
           propertyLabel: "Harbour View",
           unitLabel: "Unit 2",
           resolutionStatus: "completed_pending_review",
+          notifications: {
+            contractor: {
+              requiresExecutionStart: true,
+              requiresScheduleConfirmation: false,
+              lastNotifiedAt: 150,
+            },
+          },
           reworkCycle: {
             cycleNumber: 1,
             status: "assigned",
@@ -213,6 +220,8 @@ describe("ContractorJobsPage", () => {
     );
 
     expect((await screen.findAllByText(/Rework #1/i)).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Action required/i)).toBeInTheDocument();
+    expect(screen.getByText(/Start assigned rework/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Start rework/i }));
 
     await waitFor(() => {
@@ -240,6 +249,13 @@ describe("ContractorJobsPage", () => {
           propertyLabel: "Harbour View",
           unitLabel: "Unit 2",
           resolutionStatus: "completed_pending_review",
+          notifications: {
+            contractor: {
+              requiresExecutionStart: false,
+              requiresScheduleConfirmation: true,
+              lastNotifiedAt: 151,
+            },
+          },
           reworkCycle: {
             cycleNumber: 1,
             status: "assigned",
@@ -273,6 +289,7 @@ describe("ContractorJobsPage", () => {
     );
 
     expect(await screen.findByText(/Awaiting contractor confirmation/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Confirm return visit/i })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Confirm return visit/i }));
 
     await waitFor(() => {

@@ -23,6 +23,10 @@ import {
 } from "../services/tenantPortal/tenantCommunicationsService";
 import { listTenantNotificationFeed } from "../services/tenantPortal/tenantNotificationsService";
 import { serializeEvidenceForAudience } from "../lib/workOrderEvidence";
+import {
+  applyNotificationUpdate,
+  buildTenantSafeWorkOrderNotifications,
+} from "../lib/maintenanceNotifications";
 
 const router = Router();
 router.use(authenticateJwt);
@@ -5086,6 +5090,7 @@ async function buildTenantMaintenanceDetailResponse(docId: string, maintenanceDa
     followUpRequired: typeof workOrderData?.followUpRequired === "boolean" ? workOrderData.followUpRequired : null,
     followUpReason: String(workOrderData?.followUpReason || "").trim() || null,
     finalResolvedAt: toMillis(workOrderData?.finalResolvedAt),
+    notifications: buildTenantSafeWorkOrderNotifications(workOrderData),
     reworkCycle: projectTenantSafeReworkCycle(workOrderData?.reworkCycle),
     reworkHistory: projectTenantSafeReworkHistory(workOrderData?.reworkHistory),
     reworkReview: projectTenantSafeReworkReview(workOrderData?.reworkReview),
@@ -5222,11 +5227,19 @@ router.post("/maintenance/:id/signoff", requireTenant, async (req: any, res) => 
       contractorLastUpdate = `Tenant requested follow-up: ${reason}`;
     }
 
+    await workOrderRef.set(workOrderUpdate, { merge: true });
+    const refreshedWorkOrderAfterSignoff = await workOrderRef.get();
+    const refreshedWorkOrderAfterSignoffData = (refreshedWorkOrderAfterSignoff.data() as any) || {};
+    const notifications = await applyNotificationUpdate(workOrderRef, refreshedWorkOrderAfterSignoffData, now);
+
     await Promise.all([
-      workOrderRef.set(workOrderUpdate, { merge: true }),
       docRef.set(
         {
           ...maintenanceUpdate,
+          notifications: buildTenantSafeWorkOrderNotifications({
+            ...refreshedWorkOrderAfterSignoffData,
+            notifications,
+          }),
           contractorLastUpdate,
           statusHistory: FieldValue.arrayUnion({
             status: String(data.status || "completed"),
@@ -5327,24 +5340,32 @@ router.post("/maintenance/:id/rework-signoff", requireTenant, async (req: any, r
             closedAt: null,
           };
 
+    await workOrderRef.set(
+      {
+        reworkReview: reworkReviewUpdate,
+        resolutionStatus: decision === "resolved" ? "resolved" : "follow_up_required",
+        followUpRequired: decision !== "resolved",
+        followUpReason: decision === "resolved" ? null : reason,
+        finalResolvedAt: decision === "resolved" ? now : null,
+        updatedAtMs: now,
+        lastExecutionUpdateAt: now,
+      },
+      { merge: true }
+    );
+    const refreshedReworkSignoffWorkOrder = await workOrderRef.get();
+    const refreshedReworkSignoffWorkOrderData = (refreshedReworkSignoffWorkOrder.data() as any) || {};
+    const reworkNotifications = await applyNotificationUpdate(workOrderRef, refreshedReworkSignoffWorkOrderData, now);
+
     await Promise.all([
-      workOrderRef.set(
-        {
-          reworkReview: reworkReviewUpdate,
-          resolutionStatus: decision === "resolved" ? "resolved" : "follow_up_required",
-          followUpRequired: decision !== "resolved",
-          followUpReason: decision === "resolved" ? null : reason,
-          finalResolvedAt: decision === "resolved" ? now : null,
-          updatedAtMs: now,
-          lastExecutionUpdateAt: now,
-        },
-        { merge: true }
-      ),
       docRef.set(
         {
           contractorLastUpdate: historyMessage,
           updatedAt: now,
           lastUpdatedBy: "TENANT",
+          notifications: buildTenantSafeWorkOrderNotifications({
+            ...refreshedReworkSignoffWorkOrderData,
+            notifications: reworkNotifications,
+          }),
           statusHistory: FieldValue.arrayUnion({
             status: String(data.status || "completed"),
             actorRole: "tenant",
@@ -5430,22 +5451,30 @@ router.post("/maintenance/:id/confirm-rework-access", requireTenant, async (req:
         ? "Tenant confirmed access for the rework return visit."
         : `Tenant denied access for the rework return visit.${note ? ` ${note}` : ""}`;
 
-    await Promise.all([
-      workOrderRef.set(
-        {
-          reworkCycle: {
-            ...reworkCycle,
-            schedule: nextSchedule,
-          },
-          updatedAtMs: now,
+    await workOrderRef.set(
+      {
+        reworkCycle: {
+          ...reworkCycle,
+          schedule: nextSchedule,
         },
-        { merge: true }
-      ),
+        updatedAtMs: now,
+      },
+      { merge: true }
+    );
+    const refreshedAccessWorkOrder = await workOrderRef.get();
+    const refreshedAccessWorkOrderData = (refreshedAccessWorkOrder.data() as any) || {};
+    const accessNotifications = await applyNotificationUpdate(workOrderRef, refreshedAccessWorkOrderData, now);
+
+    await Promise.all([
       docRef.set(
         {
           contractorLastUpdate: historyMessage,
           updatedAt: now,
           lastUpdatedBy: "TENANT",
+          notifications: buildTenantSafeWorkOrderNotifications({
+            ...refreshedAccessWorkOrderData,
+            notifications: accessNotifications,
+          }),
           statusHistory: FieldValue.arrayUnion({
             status: String(data.status || "assigned"),
             actorRole: "tenant",

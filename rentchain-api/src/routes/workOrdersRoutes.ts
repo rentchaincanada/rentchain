@@ -14,6 +14,10 @@ import {
   serializeEvidenceForAudience,
   type WorkOrderEvidenceItem,
 } from "../lib/workOrderEvidence";
+import {
+  applyNotificationUpdate,
+  buildTenantSafeWorkOrderNotifications,
+} from "../lib/maintenanceNotifications";
 
 const router = Router();
 
@@ -531,7 +535,9 @@ async function appendMaintenanceStatusHistory(input: {
 async function syncMaintenanceFromWorkOrder(workOrderId: string, patch: Record<string, unknown>) {
   const snap = await db.collection("workOrders").doc(workOrderId).get();
   if (!snap.exists) return;
-  const workOrder = (snap.data() as any) || {};
+  let workOrder = (snap.data() as any) || {};
+  const notifications = await applyNotificationUpdate(db.collection("workOrders").doc(workOrderId), workOrder);
+  workOrder = { ...workOrder, notifications };
   const maintenanceRequestId = asString(workOrder.maintenanceRequestId, 120);
   if (!maintenanceRequestId) return;
   await db.collection("maintenanceRequests").doc(maintenanceRequestId).set(
@@ -551,6 +557,7 @@ async function syncMaintenanceFromWorkOrder(workOrderId: string, patch: Record<s
       followUpRequired: typeof workOrder.followUpRequired === "boolean" ? workOrder.followUpRequired : null,
       followUpReason: asOptionalString(workOrder.followUpReason, 2000),
       finalResolvedAt: toMillis(workOrder.finalResolvedAt),
+      notifications: buildTenantSafeWorkOrderNotifications(workOrder),
       contractorLastUpdate: asOptionalString(patch.contractorLastUpdate, 500) || asOptionalString(workOrder.completionSummary, 500),
       updatedAt: nowMs(),
       ...patch,

@@ -98,6 +98,24 @@ export type WorkOrderRecord = {
     closureOutcome?: "resolved" | "partial" | "needs_more_followup" | null;
     closedAt?: number | null;
   } | null;
+  notifications?: {
+    landlord?: {
+      requiresReview?: boolean;
+      requiresReschedule?: boolean;
+      lastNotifiedAt?: number | null;
+    };
+    contractor?: {
+      requiresScheduleConfirmation?: boolean;
+      requiresExecutionStart?: boolean;
+      lastNotifiedAt?: number | null;
+    };
+    tenant?: {
+      requiresAccessConfirmation?: boolean;
+      requiresSignoff?: boolean;
+      requiresReworkAwareness?: boolean;
+      lastNotifiedAt?: number | null;
+    };
+  };
   reopenedAt?: number | null;
   reopenedByActorId?: string | null;
   reopenedByActorRole?: "landlord" | "admin" | null;
