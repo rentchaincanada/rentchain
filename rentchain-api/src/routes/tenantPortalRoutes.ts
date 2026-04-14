@@ -2305,10 +2305,10 @@ async function createScreeningSessionSafely(input: {
       result: resultRecord,
       created: true,
     };
-  });
+  }
 
   return transactionResult;
-});
+}
 
 async function prepareScreeningRetrySafely(input: {
   requestId: string;
