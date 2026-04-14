@@ -19,10 +19,13 @@ import {
   patchWorkOrder,
   reopenWorkOrder,
   reviewWorkOrderReworkResolution,
+  reviewWorkOrderCost,
   rescheduleWorkOrderRework,
   scheduleWorkOrderRework,
   startWorkOrderRework,
+  submitLandlordWorkOrderCost,
   updateWorkOrderEvidence,
+  uploadWorkOrderCostAttachment,
   uploadWorkOrderEvidence,
   type WorkOrderEvidenceType,
   type WorkOrderEvidenceVisibility,
@@ -34,6 +37,11 @@ import { type ExpenseCategory } from "../../api/expensesApi";
 function formatDate(ms?: number | null) {
   if (!ms) return "-";
   return new Date(ms).toLocaleString();
+}
+
+function formatMoney(cents?: number | null, currency?: string | null) {
+  if (!cents) return "-";
+  return `${(cents / 100).toFixed(2)} ${currency || "CAD"}`;
 }
 
 function toLocalInputValue(ms?: number | null) {
@@ -183,6 +191,19 @@ function evidenceVisibilityLabel(value?: WorkOrderEvidenceVisibility | null) {
   }
 }
 
+function costReviewStatusLabel(value?: "pending_review" | "approved" | "rejected" | null) {
+  switch (value) {
+    case "pending_review":
+      return "Pending review";
+    case "approved":
+      return "Approved";
+    case "rejected":
+      return "Rejected";
+    default:
+      return "Not submitted";
+  }
+}
+
 export default function WorkOrdersPage() {
   const entitlements = useEntitlements();
   const [items, setItems] = React.useState<WorkOrderRecord[]>([]);
@@ -207,6 +228,7 @@ export default function WorkOrdersPage() {
   const [savingNote, setSavingNote] = React.useState(false);
   const [savingAction, setSavingAction] = React.useState(false);
   const [savingEvidence, setSavingEvidence] = React.useState(false);
+  const [savingCost, setSavingCost] = React.useState(false);
   const [properties, setProperties] = React.useState<Array<{ id: string; name: string }>>([]);
   const [convertTarget, setConvertTarget] = React.useState<WorkOrderRecord | null>(null);
   const [convertVendor, setConvertVendor] = React.useState("");
@@ -215,6 +237,11 @@ export default function WorkOrdersPage() {
   const [evidenceType, setEvidenceType] = React.useState<WorkOrderEvidenceType>("inspection");
   const [evidenceCaption, setEvidenceCaption] = React.useState("");
   const [evidenceVisibility, setEvidenceVisibility] = React.useState<WorkOrderEvidenceVisibility>("internal");
+  const [costActualInput, setCostActualInput] = React.useState("");
+  const [costCurrency, setCostCurrency] = React.useState("CAD");
+  const [costReviewNote, setCostReviewNote] = React.useState("");
+  const [costLineItemsJson, setCostLineItemsJson] = React.useState("");
+  const [costAttachmentFile, setCostAttachmentFile] = React.useState<File | null>(null);
   const canUseWorkOrders = entitlements.canUseWorkOrders;
 
   const normalizeCategory = React.useCallback((input: string): ExpenseCategory => {
@@ -544,6 +571,85 @@ export default function WorkOrdersPage() {
     [selected, syncSelectedItem]
   );
 
+  const handleSubmitCost = React.useCallback(async () => {
+    if (!selected) return;
+    const normalizedAmount = Number(costActualInput);
+    if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
+      setError("Add a valid actual cost before saving.");
+      return;
+    }
+
+    let lineItems: Array<{ id?: string; label: string; amountCents: number; category?: "labor" | "materials" | "inspection" | "other" }> =
+      [];
+    if (costLineItemsJson.trim()) {
+      try {
+        const parsed = JSON.parse(costLineItemsJson);
+        lineItems = Array.isArray(parsed) ? parsed : [];
+      } catch {
+        setError("Line items must be valid JSON.");
+        return;
+      }
+    }
+
+    setSavingCost(true);
+    setError(null);
+    try {
+      const refreshed = await submitLandlordWorkOrderCost(selected.id, {
+        actualCostCents: Math.round(normalizedAmount * 100),
+        currency: costCurrency.trim() || "CAD",
+        lineItems,
+        reviewNote: costReviewNote.trim() || undefined,
+      });
+      syncSelectedItem(refreshed);
+      await loadUpdates(selected.id);
+    } catch (err: any) {
+      setError(String(err?.message || "Failed to save work order cost"));
+    } finally {
+      setSavingCost(false);
+    }
+  }, [costActualInput, costCurrency, costLineItemsJson, costReviewNote, loadUpdates, selected, syncSelectedItem]);
+
+  const handleReviewCost = React.useCallback(
+    async (decision: "approve" | "reject") => {
+      if (!selected) return;
+      setSavingCost(true);
+      setError(null);
+      try {
+        const refreshed = await reviewWorkOrderCost(selected.id, {
+          decision,
+          note: costReviewNote.trim() || undefined,
+        });
+        syncSelectedItem(refreshed);
+        await loadUpdates(selected.id);
+      } catch (err: any) {
+        setError(String(err?.message || "Failed to review work order cost"));
+      } finally {
+        setSavingCost(false);
+      }
+    },
+    [costReviewNote, loadUpdates, selected, syncSelectedItem]
+  );
+
+  const handleCostAttachmentUpload = React.useCallback(async () => {
+    if (!selected) return;
+    if (!costAttachmentFile) {
+      setError("Choose an invoice or receipt before uploading.");
+      return;
+    }
+    setSavingCost(true);
+    setError(null);
+    try {
+      const refreshed = await uploadWorkOrderCostAttachment(selected.id, { file: costAttachmentFile });
+      syncSelectedItem(refreshed);
+      setCostAttachmentFile(null);
+      await loadUpdates(selected.id);
+    } catch (err: any) {
+      setError(String(err?.message || "Failed to upload cost attachment"));
+    } finally {
+      setSavingCost(false);
+    }
+  }, [costAttachmentFile, loadUpdates, selected, syncSelectedItem]);
+
   React.useEffect(() => {
     if (!selected) {
       setCompletionSummary("");
@@ -561,6 +667,11 @@ export default function WorkOrdersPage() {
       setEvidenceCaption("");
       setEvidenceType("inspection");
       setEvidenceVisibility("internal");
+      setCostActualInput("");
+      setCostCurrency("CAD");
+      setCostReviewNote("");
+      setCostLineItemsJson("");
+      setCostAttachmentFile(null);
       return;
     }
     setCompletionSummary(String(selected.completionSummary || ""));
@@ -578,6 +689,15 @@ export default function WorkOrdersPage() {
     setReworkWindowEndInput(toLocalInputValue(selected.reworkCycle?.schedule?.timeWindowEnd));
     setReworkRequiresAccess(Boolean(selected.reworkCycle?.schedule?.requiresTenantAccess));
     setReworkRescheduleReason(String(selected.reworkCycle?.schedule?.rescheduleReason || ""));
+    setCostActualInput(
+      typeof selected.cost?.actualCostCents === "number" ? String((selected.cost.actualCostCents / 100).toFixed(2)) : ""
+    );
+    setCostCurrency(String(selected.cost?.currency || "CAD"));
+    setCostReviewNote(String(selected.cost?.reviewNote || ""));
+    setCostLineItemsJson(
+      selected.costLineItems?.length ? JSON.stringify(selected.costLineItems, null, 2) : ""
+    );
+    setCostAttachmentFile(null);
   }, [selected]);
 
   React.useEffect(() => {
@@ -936,6 +1056,140 @@ export default function WorkOrdersPage() {
                   ) : null}
                 </div>
               ) : null}
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gap: 10,
+                marginBottom: 12,
+                padding: 12,
+                border: "1px solid #e2e8f0",
+                borderRadius: 12,
+                background: "#f8fafc",
+              }}
+            >
+              <div style={{ fontWeight: 700 }}>Cost & Invoice</div>
+              <div style={{ color: "#64748b", fontSize: 13 }}>
+                Keep contractor and in-house cost capture attached to the same work order so completion review has a clean cost trail.
+              </div>
+              <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+                <div>
+                  <div style={{ fontSize: 12, color: "#64748b" }}>Actual cost</div>
+                  <div style={{ marginTop: 4, fontWeight: 600 }}>
+                    {formatMoney(selected.cost?.actualCostCents, selected.cost?.currency)}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: "#64748b" }}>Review status</div>
+                  <div style={{ marginTop: 4, fontWeight: 600 }}>{costReviewStatusLabel(selected.cost?.reviewStatus)}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: "#64748b" }}>Submitted by</div>
+                  <div style={{ marginTop: 4, fontWeight: 600 }}>{selected.cost?.submittedByRole || "-"}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: "#64748b" }}>Reviewed</div>
+                  <div style={{ marginTop: 4, fontWeight: 600 }}>{formatDate(selected.cost?.reviewedAt)}</div>
+                </div>
+              </div>
+              <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+                <label style={{ display: "grid", gap: 4 }}>
+                  <span style={{ fontSize: 12, color: "#64748b" }}>Actual cost</span>
+                  <input
+                    aria-label="Actual cost"
+                    value={costActualInput}
+                    onChange={(e) => setCostActualInput(e.target.value)}
+                    placeholder="245.00"
+                    style={{ width: "100%", borderRadius: 8, border: "1px solid #cbd5e1", padding: 8 }}
+                  />
+                </label>
+                <label style={{ display: "grid", gap: 4 }}>
+                  <span style={{ fontSize: 12, color: "#64748b" }}>Currency</span>
+                  <input
+                    aria-label="Cost currency"
+                    value={costCurrency}
+                    onChange={(e) => setCostCurrency(e.target.value.toUpperCase())}
+                    placeholder="CAD"
+                    style={{ width: "100%", borderRadius: 8, border: "1px solid #cbd5e1", padding: 8 }}
+                  />
+                </label>
+              </div>
+              <label style={{ display: "grid", gap: 4 }}>
+                <span style={{ fontSize: 12, color: "#64748b" }}>Line items JSON</span>
+                <textarea
+                  aria-label="Cost line items"
+                  rows={4}
+                  value={costLineItemsJson}
+                  onChange={(e) => setCostLineItemsJson(e.target.value)}
+                  placeholder='[{"label":"Labor","amountCents":15000,"category":"labor"}]'
+                  style={{ width: "100%", borderRadius: 8, border: "1px solid #cbd5e1", padding: 8, resize: "vertical" }}
+                />
+              </label>
+              <label style={{ display: "grid", gap: 4 }}>
+                <span style={{ fontSize: 12, color: "#64748b" }}>Review note</span>
+                <textarea
+                  aria-label="Cost review note"
+                  rows={2}
+                  value={costReviewNote}
+                  onChange={(e) => setCostReviewNote(e.target.value)}
+                  placeholder="Optional note for the cost record or review"
+                  style={{ width: "100%", borderRadius: 8, border: "1px solid #cbd5e1", padding: 8, resize: "vertical" }}
+                />
+              </label>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <Button disabled={savingCost} onClick={() => void handleSubmitCost()}>
+                  {savingCost ? "Saving..." : "Save cost"}
+                </Button>
+                {selected.cost?.reviewStatus === "pending_review" ? (
+                  <>
+                    <Button variant="secondary" disabled={savingCost} onClick={() => void handleReviewCost("approve")}>
+                      {savingCost ? "Saving..." : "Approve cost"}
+                    </Button>
+                    <Button variant="ghost" disabled={savingCost} onClick={() => void handleReviewCost("reject")}>
+                      {savingCost ? "Saving..." : "Reject cost"}
+                    </Button>
+                  </>
+                ) : null}
+              </div>
+              <input
+                aria-label="Cost attachment file"
+                type="file"
+                accept="application/pdf,image/png,image/jpeg,image/webp"
+                onChange={(e) => setCostAttachmentFile(e.target.files?.[0] || null)}
+              />
+              <div>
+                <Button variant="secondary" disabled={savingCost} onClick={() => void handleCostAttachmentUpload()}>
+                  {savingCost ? "Uploading..." : "Upload cost attachment"}
+                </Button>
+              </div>
+              {selected.costLineItems?.length ? (
+                <div style={{ display: "grid", gap: 6 }}>
+                  {selected.costLineItems.map((line) => (
+                    <div key={line.id} style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: 10, background: "#fff" }}>
+                      <div style={{ fontWeight: 600 }}>{line.label}</div>
+                      <div style={{ color: "#64748b", fontSize: 13 }}>
+                        {formatMoney(line.amountCents, selected.cost?.currency)} • {line.category || "other"}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ color: "#64748b" }}>No cost line items recorded yet.</div>
+              )}
+              {selected.costAttachments?.length ? (
+                <div style={{ display: "grid", gap: 6 }}>
+                  {selected.costAttachments.map((attachment) => (
+                    <div key={attachment.id} style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: 10, background: "#fff" }}>
+                      <div style={{ fontWeight: 600 }}>{attachment.fileName || "Cost attachment"}</div>
+                      <div style={{ color: "#64748b", fontSize: 13 }}>
+                        {attachment.visibility === "internal" ? "Internal only" : "Landlord only"} • {formatDate(attachment.uploadedAt)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ color: "#64748b" }}>No cost attachments uploaded yet.</div>
+              )}
             </div>
             <div
               style={{

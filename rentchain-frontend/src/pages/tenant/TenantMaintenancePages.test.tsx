@@ -147,6 +147,22 @@ describe("tenant maintenance pages", () => {
             visibility: "tenant_safe",
           },
         ],
+        cost: {
+          actualCostCents: 24500,
+          currency: "CAD",
+          reviewStatus: "approved",
+        },
+        costLineItems: [{ id: "line-1", label: "Labor", amountCents: 24500, category: "labor" }],
+        costAttachments: [
+          {
+            id: "invoice-1",
+            fileName: "invoice.pdf",
+            uploadedAt: 260,
+            uploadedByRole: "contractor",
+            uploadedById: "contractor-1",
+            visibility: "landlord_only",
+          },
+        ],
         createdAt: 100,
         updatedAt: 200,
         statusHistory: [
@@ -185,6 +201,8 @@ describe("tenant maintenance pages", () => {
     expect(screen.getByText(/Heat restored/i)).toBeInTheDocument();
     expect(screen.getByText(/Status timeline/i)).toBeInTheDocument();
     expect(screen.getByText(/Technician is on site/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Cost & Invoice/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/245\.00 CAD/i)).not.toBeInTheDocument();
   });
 
   it("submits tenant confirmation updates from the detail page", async () => {

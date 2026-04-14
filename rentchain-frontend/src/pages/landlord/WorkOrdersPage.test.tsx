@@ -16,10 +16,13 @@ const mocks = vi.hoisted(() => ({
   markWorkOrderFollowUpRequired: vi.fn(),
   reopenWorkOrder: vi.fn(),
   reviewWorkOrderReworkResolution: vi.fn(),
+  reviewWorkOrderCost: vi.fn(),
   rescheduleWorkOrderRework: vi.fn(),
   scheduleWorkOrderRework: vi.fn(),
   startWorkOrderRework: vi.fn(),
+  submitLandlordWorkOrderCost: vi.fn(),
   uploadWorkOrderEvidence: vi.fn(),
+  uploadWorkOrderCostAttachment: vi.fn(),
   updateWorkOrderEvidence: vi.fn(),
   addWorkOrderUpdate: vi.fn(),
   getContractorProfileById: vi.fn(),
@@ -47,10 +50,13 @@ vi.mock("../../api/workOrdersApi", () => ({
   patchWorkOrder: mocks.patchWorkOrder,
   reopenWorkOrder: mocks.reopenWorkOrder,
   reviewWorkOrderReworkResolution: mocks.reviewWorkOrderReworkResolution,
+  reviewWorkOrderCost: mocks.reviewWorkOrderCost,
   rescheduleWorkOrderRework: mocks.rescheduleWorkOrderRework,
   scheduleWorkOrderRework: mocks.scheduleWorkOrderRework,
   startWorkOrderRework: mocks.startWorkOrderRework,
+  submitLandlordWorkOrderCost: mocks.submitLandlordWorkOrderCost,
   updateWorkOrderEvidence: mocks.updateWorkOrderEvidence,
+  uploadWorkOrderCostAttachment: mocks.uploadWorkOrderCostAttachment,
   uploadWorkOrderEvidence: mocks.uploadWorkOrderEvidence,
 }));
 
@@ -96,10 +102,13 @@ describe("WorkOrdersPage", () => {
     mocks.markWorkOrderFollowUpRequired.mockReset();
     mocks.reopenWorkOrder.mockReset();
     mocks.reviewWorkOrderReworkResolution.mockReset();
+    mocks.reviewWorkOrderCost.mockReset();
     mocks.rescheduleWorkOrderRework.mockReset();
     mocks.scheduleWorkOrderRework.mockReset();
     mocks.startWorkOrderRework.mockReset();
+    mocks.submitLandlordWorkOrderCost.mockReset();
     mocks.uploadWorkOrderEvidence.mockReset();
+    mocks.uploadWorkOrderCostAttachment.mockReset();
     mocks.updateWorkOrderEvidence.mockReset();
     mocks.addWorkOrderUpdate.mockReset();
     mocks.getContractorProfileById.mockReset();
@@ -281,6 +290,90 @@ describe("WorkOrdersPage", () => {
       expect(mocks.reopenWorkOrder).toHaveBeenCalledWith("wo-1", {
         reason: "Heat output is still inconsistent.",
         status: "blocked",
+      });
+    });
+  });
+
+  it("renders the cost panel and lets the landlord save and review cost details", async () => {
+    mocks.canUseWorkOrders = true;
+    const item = {
+      id: "wo-cost",
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      title: "Boiler tune-up",
+      description: "Seasonal boiler service",
+      category: "HVAC",
+      priority: "medium",
+      status: "completed",
+      visibility: "private",
+      budgetMinCents: null,
+      budgetMaxCents: null,
+      assignedContractorId: null,
+      invitedContractorIds: [],
+      acceptedAtMs: 10,
+      startedAtMs: 20,
+      completedAtMs: 30,
+      serviceCompletedAt: 30,
+      completionSummary: "Completed annual tune-up.",
+      completionOutcome: "completed",
+      completionConfirmedByLandlordAt: 31,
+      completionConfirmedByLandlordBy: "landlord-1",
+      cost: {
+        actualCostCents: 24500,
+        currency: "CAD",
+        submittedByRole: "contractor",
+        submittedById: "contractor-1",
+        submittedAt: 32,
+        reviewStatus: "pending_review",
+      },
+      costLineItems: [{ id: "line-1", label: "Labor", amountCents: 24500, category: "labor" }],
+      costAttachments: [],
+      notesInternal: "",
+      linkedExpenseId: null,
+      createdAtMs: 1,
+      updatedAtMs: 35,
+    };
+    mocks.listWorkOrders.mockResolvedValue([item]);
+    mocks.listWorkOrderUpdates.mockResolvedValue([]);
+    mocks.getWorkOrder.mockResolvedValue(item);
+    mocks.submitLandlordWorkOrderCost.mockResolvedValue(item);
+    mocks.reviewWorkOrderCost.mockResolvedValue({
+      ...item,
+      cost: { ...item.cost, reviewStatus: "approved", reviewNote: "Looks good" },
+    });
+
+    render(
+      <MemoryRouter>
+        <WorkOrdersPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /timeline/i }));
+
+    expect(await screen.findByText(/Cost & Invoice/i)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/Actual cost/i), { target: { value: "245.00" } });
+    fireEvent.change(screen.getByLabelText(/Cost line items/i), {
+      target: { value: '[{"label":"Labor","amountCents":24500,"category":"labor"}]' },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Save cost/i }));
+
+    await waitFor(() => {
+      expect(mocks.submitLandlordWorkOrderCost).toHaveBeenCalledWith(
+        "wo-cost",
+        expect.objectContaining({
+          actualCostCents: 24500,
+        })
+      );
+    });
+
+    fireEvent.change(screen.getByLabelText(/Cost review note/i), { target: { value: "Looks good" } });
+    fireEvent.click(screen.getByRole("button", { name: /Approve cost/i }));
+
+    await waitFor(() => {
+      expect(mocks.reviewWorkOrderCost).toHaveBeenCalledWith("wo-cost", {
+        decision: "approve",
+        note: "Looks good",
       });
     });
   });

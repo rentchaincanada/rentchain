@@ -130,6 +130,34 @@ export type MaintenanceWorkflowItem = {
       requiresReworkAwareness?: boolean;
     };
   };
+  cost?: {
+    estimatedCostCents?: number | null;
+    actualCostCents?: number | null;
+    currency?: string | null;
+    submittedByRole?: "contractor" | "landlord" | "admin" | null;
+    submittedById?: string | null;
+    submittedAt?: number | null;
+    reviewedBy?: string | null;
+    reviewedAt?: number | null;
+    reviewStatus?: "pending_review" | "approved" | "rejected" | null;
+    reviewNote?: string | null;
+  } | null;
+  costLineItems?: Array<{
+    id: string;
+    label: string;
+    amountCents: number;
+    category?: "labor" | "materials" | "inspection" | "other";
+  }>;
+  costAttachments?: Array<{
+    id: string;
+    url?: string | null;
+    fileName?: string | null;
+    contentType?: string | null;
+    uploadedAt: number;
+    uploadedByRole: "contractor" | "landlord" | "admin";
+    uploadedById: string;
+    visibility: "internal" | "landlord_only";
+  }>;
   landlordNote?: string | null;
   createdAt: number;
   updatedAt: number;
@@ -919,5 +947,46 @@ export async function uploadContractorMaintenanceEvidence(
     }
   );
   if (!res?.ok || !res.item) throw new Error("Failed to upload maintenance evidence");
+  return res.item;
+}
+
+export async function submitContractorMaintenanceCost(
+  maintenanceRequestId: string,
+  payload: {
+    actualCostCents: number;
+    currency?: string;
+    lineItems?: Array<{
+      id?: string;
+      label: string;
+      amountCents: number;
+      category?: "labor" | "materials" | "inspection" | "other";
+    }>;
+  }
+) {
+  const res = await apiFetch<{ ok: boolean; item: MaintenanceWorkflowItem }>(
+    `/contractor/jobs/${encodeURIComponent(maintenanceRequestId)}/submit-cost`,
+    {
+      method: "POST",
+      body: payload,
+    }
+  );
+  if (!res?.ok || !res.item) throw new Error("Failed to submit maintenance cost");
+  return res.item;
+}
+
+export async function uploadContractorMaintenanceCostAttachment(
+  maintenanceRequestId: string,
+  payload: { file: File }
+) {
+  const form = new FormData();
+  form.append("file", payload.file);
+  const res = await apiFetch<{ ok: boolean; item: MaintenanceWorkflowItem }>(
+    `/contractor/jobs/${encodeURIComponent(maintenanceRequestId)}/cost-attachment`,
+    {
+      method: "POST",
+      body: form,
+    }
+  );
+  if (!res?.ok || !res.item) throw new Error("Failed to upload maintenance cost attachment");
   return res.item;
 }

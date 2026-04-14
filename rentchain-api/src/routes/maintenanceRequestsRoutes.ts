@@ -14,6 +14,13 @@ import {
   type WorkOrderEvidenceItem,
 } from "../lib/workOrderEvidence";
 import {
+  buildCostAttachmentStoragePath,
+  normalizeCostCurrency,
+  normalizeCostLineItems,
+  serializeCostAttachmentsForAudience,
+  type WorkOrderCostAttachment,
+} from "../lib/maintenanceCost";
+import {
   applyNotificationUpdate,
   buildTenantSafeWorkOrderNotifications,
   computeWorkOrderNotifications,
@@ -94,6 +101,17 @@ const evidenceUpload = multer({
   limits: { fileSize: MAX_EVIDENCE_BYTES },
 });
 const ALLOWED_EVIDENCE_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const MAX_COST_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const costAttachmentUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_COST_ATTACHMENT_BYTES },
+});
+const ALLOWED_COST_ATTACHMENT_MIME_TYPES = new Set([
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
 
 router.use(authenticateJwt);
 
@@ -283,6 +301,11 @@ function isAllowedEvidenceFile(file: Express.Multer.File | undefined) {
   return ALLOWED_EVIDENCE_MIME_TYPES.has(String(file.mimetype || "").toLowerCase());
 }
 
+function isAllowedCostAttachmentFile(file: Express.Multer.File | undefined) {
+  if (!file?.buffer || !file.originalname) return false;
+  return ALLOWED_COST_ATTACHMENT_MIME_TYPES.has(String(file.mimetype || "").toLowerCase());
+}
+
 function normalizeOptionalBoolean(value: any): boolean | null | undefined {
   if (value === undefined) return undefined;
   if (value === null || value === "") return null;
@@ -444,6 +467,7 @@ type WorkOrderExecutionUpdateType =
   | "started"
   | "blocked"
   | "photo"
+  | "invoice"
   | "completed"
   | "confirmed"
   | "reopened";
@@ -1088,7 +1112,54 @@ async function shapeContractorJobFromSources(workOrder: any, maintenance: any) {
       Number(maintenance?.updatedAt || workOrder?.updatedAt || workOrder?.updatedAtMs || Date.now()) || Date.now(),
     statusHistory: Array.isArray(maintenance?.statusHistory) ? maintenance.statusHistory : [],
     evidence: await serializeEvidenceForAudience(workOrder?.evidence, "contractor"),
+    cost:
+      workOrder?.cost && typeof workOrder.cost === "object"
+        ? {
+            estimatedCostCents:
+              typeof workOrder.cost.estimatedCostCents === "number" ? workOrder.cost.estimatedCostCents : null,
+            actualCostCents: typeof workOrder.cost.actualCostCents === "number" ? workOrder.cost.actualCostCents : null,
+            currency: typeof workOrder.cost.currency === "string" ? workOrder.cost.currency : null,
+            submittedByRole:
+              workOrder.cost.submittedByRole === "contractor" ||
+              workOrder.cost.submittedByRole === "landlord" ||
+              workOrder.cost.submittedByRole === "admin"
+                ? workOrder.cost.submittedByRole
+                : null,
+            submittedById: typeof workOrder.cost.submittedById === "string" ? workOrder.cost.submittedById : null,
+            submittedAt: typeof workOrder.cost.submittedAt === "number" ? workOrder.cost.submittedAt : null,
+            reviewedBy: typeof workOrder.cost.reviewedBy === "string" ? workOrder.cost.reviewedBy : null,
+            reviewedAt: typeof workOrder.cost.reviewedAt === "number" ? workOrder.cost.reviewedAt : null,
+            reviewStatus:
+              workOrder.cost.reviewStatus === "pending_review" ||
+              workOrder.cost.reviewStatus === "approved" ||
+              workOrder.cost.reviewStatus === "rejected"
+                ? workOrder.cost.reviewStatus
+                : null,
+            reviewNote: typeof workOrder.cost.reviewNote === "string" ? workOrder.cost.reviewNote : null,
+          }
+        : null,
+    costLineItems: Array.isArray(workOrder?.costLineItems)
+      ? workOrder.costLineItems
+          .map((entry: any) => ({
+            id: String(entry?.id || "").trim(),
+            label: String(entry?.label || "").trim(),
+            amountCents: typeof entry?.amountCents === "number" ? entry.amountCents : null,
+            category:
+              entry?.category === "labor" ||
+              entry?.category === "materials" ||
+              entry?.category === "inspection" ||
+              entry?.category === "other"
+                ? entry.category
+                : "other",
+          }))
+          .filter((entry: any) => entry.id && entry.label && typeof entry.amountCents === "number")
+      : [],
+    costAttachments: await serializeCostAttachmentsForAudience(workOrder?.costAttachments, "contractor"),
   };
+}
+
+function formatCostForMessage(costCents: number, currency: string) {
+  return `${(costCents / 100).toFixed(2)} ${currency}`;
 }
 
 router.get("/maintenance-requests", async (req: any, res) => {
@@ -2524,6 +2595,192 @@ router.post("/contractor/jobs/:id/confirm-rework-schedule", async (req: any, res
     console.error("[maintenance-v2] contractor confirm rework schedule failed", { message: err?.message || "failed" });
     return res.status(500).json({ ok: false, error: "CONTRACTOR_CONFIRM_REWORK_SCHEDULE_FAILED" });
   }
+});
+
+router.post("/contractor/jobs/:id/submit-cost", async (req: any, res) => {
+  try {
+    const access = await resolveContractorAccess(req);
+    if (access.role !== "contractor" && access.role !== "admin") {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const contractorId = access.contractorId;
+    const actorId = (String(req.user?.id || "").trim() || contractorId || "").trim();
+    const id = String(req.params?.id || "").trim();
+    if (!contractorId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+    const maintenanceRef = db.collection("maintenanceRequests").doc(id);
+    const maintenanceSnap = await maintenanceRef.get();
+    if (!maintenanceSnap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    const maintenance = { id: maintenanceSnap.id, ...(maintenanceSnap.data() as any) };
+    if (String(maintenance.assignedContractorId || "").trim() !== contractorId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const workOrderRef = db.collection("workOrders").doc(`maintenance_${id}`);
+    const workOrderSnap = await workOrderRef.get();
+    if (!workOrderSnap.exists) return res.status(404).json({ ok: false, error: "WORK_ORDER_NOT_FOUND" });
+    const workOrder = (workOrderSnap.data() as any) || {};
+    if (String(workOrder.status || "").trim().toLowerCase() !== "completed") {
+      return res.status(400).json({ ok: false, error: "WORK_ORDER_NOT_COMPLETED" });
+    }
+
+    const actualCostCents = typeof req.body?.actualCostCents === "number" ? Math.round(req.body.actualCostCents) : Number(req.body?.actualCostCents);
+    if (!Number.isFinite(actualCostCents) || actualCostCents <= 0) {
+      return res.status(400).json({ ok: false, error: "INVALID_COST_AMOUNT" });
+    }
+    const currency = normalizeCostCurrency(req.body?.currency) || "CAD";
+    const lineItems = normalizeCostLineItems(req.body?.lineItems);
+    const now = Date.now();
+
+    await workOrderRef.set(
+      {
+        cost: {
+          ...(workOrder?.cost && typeof workOrder.cost === "object" ? workOrder.cost : {}),
+          actualCostCents,
+          currency,
+          submittedByRole: access.role === "admin" ? "admin" : "contractor",
+          submittedById: actorId,
+          submittedAt: now,
+          reviewedBy: null,
+          reviewedAt: null,
+          reviewStatus: "pending_review",
+          reviewNote: null,
+        },
+        costLineItems: lineItems,
+        updatedAtMs: now,
+        lastExecutionUpdateAt: now,
+      },
+      { merge: true }
+    );
+
+    await appendWorkOrderUpdate(workOrderRef.id, {
+      actorRole: access.role === "admin" ? "admin" : "contractor",
+      actorId,
+      updateType: "invoice",
+      message: `Submitted cost details totaling ${formatCostForMessage(actualCostCents, currency)}.`,
+    });
+
+    const refreshedWorkOrderSnap = await workOrderRef.get();
+    const refreshedJob = await shapeContractorJobFromSources(
+      { id: refreshedWorkOrderSnap.id, ...(refreshedWorkOrderSnap.data() || {}) },
+      maintenance
+    );
+    return res.json({ ok: true, item: refreshedJob, data: refreshedJob });
+  } catch (err: any) {
+    console.error("[maintenance-v2] contractor submit cost failed", { message: err?.message || "failed" });
+    return res.status(500).json({ ok: false, error: "CONTRACTOR_COST_SUBMIT_FAILED" });
+  }
+});
+
+router.post("/contractor/jobs/:id/cost-attachment", async (req: any, res) => {
+  costAttachmentUpload.single("file")(req, res, async (uploadErr: any) => {
+    try {
+      if (uploadErr) {
+        const message = String(uploadErr?.message || "");
+        if (String(uploadErr?.code || "") === "LIMIT_FILE_SIZE") {
+          return res.status(400).json({ ok: false, error: "FILE_TOO_LARGE", maxBytes: MAX_COST_ATTACHMENT_BYTES });
+        }
+        return res.status(400).json({ ok: false, error: "UPLOAD_FAILED", detail: message || "upload_failed" });
+      }
+
+      const access = await resolveContractorAccess(req);
+      if (access.role !== "contractor" && access.role !== "admin") {
+        return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+      }
+      const contractorId = access.contractorId;
+      const actorId = (String(req.user?.id || "").trim() || contractorId || "").trim();
+      const id = String(req.params?.id || "").trim();
+      if (!contractorId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+      if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+      const maintenanceRef = db.collection("maintenanceRequests").doc(id);
+      const maintenanceSnap = await maintenanceRef.get();
+      if (!maintenanceSnap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+      const maintenance = { id: maintenanceSnap.id, ...(maintenanceSnap.data() as any) };
+      if (String(maintenance.assignedContractorId || "").trim() !== contractorId) {
+        return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+      }
+
+      const workOrderRef = db.collection("workOrders").doc(`maintenance_${id}`);
+      const workOrderSnap = await workOrderRef.get();
+      if (!workOrderSnap.exists) return res.status(404).json({ ok: false, error: "WORK_ORDER_NOT_FOUND" });
+      const workOrder = (workOrderSnap.data() as any) || {};
+
+      const file = req.file as Express.Multer.File | undefined;
+      if (!file?.buffer || !file.originalname) {
+        return res.status(400).json({ ok: false, error: "FILE_REQUIRED" });
+      }
+      if (!isAllowedCostAttachmentFile(file)) {
+        return res.status(400).json({ ok: false, error: "UNSUPPORTED_FILE_TYPE" });
+      }
+
+      const now = Date.now();
+      const attachmentId = makeEvidenceId();
+      const storagePath = buildCostAttachmentStoragePath({
+        workOrderId: workOrderRef.id,
+        attachmentId,
+        filename: file.originalname,
+      });
+
+      await uploadBufferToGcs({
+        path: storagePath,
+        contentType: String(file.mimetype || "application/octet-stream"),
+        buffer: file.buffer,
+        metadata: {
+          workOrderId: workOrderRef.id,
+          maintenanceRequestId: id,
+          uploadedAtMs: String(now),
+          actorRole: access.role === "admin" ? "admin" : "contractor",
+          actorId,
+          visibility: "landlord_only",
+        },
+      });
+
+      const nextAttachments: WorkOrderCostAttachment[] = [
+        ...(Array.isArray(workOrder.costAttachments) ? workOrder.costAttachments : []),
+        {
+          id: attachmentId,
+          storagePath,
+          fileName: String(file.originalname || "").trim() || null,
+          contentType: String(file.mimetype || "").trim() || null,
+          uploadedAt: now,
+          uploadedByRole: access.role === "admin" ? "admin" : "contractor",
+          uploadedById: actorId,
+          visibility: "landlord_only",
+        },
+      ];
+
+      await workOrderRef.set(
+        {
+          costAttachments: nextAttachments,
+          updatedAtMs: now,
+          lastExecutionUpdateAt: now,
+        },
+        { merge: true }
+      );
+
+      await appendWorkOrderUpdate(workOrderRef.id, {
+        actorRole: access.role === "admin" ? "admin" : "contractor",
+        actorId,
+        updateType: "invoice",
+        message: "Uploaded a cost attachment.",
+      });
+
+      const refreshedWorkOrderSnap = await workOrderRef.get();
+      const refreshedJob = await shapeContractorJobFromSources(
+        { id: refreshedWorkOrderSnap.id, ...(refreshedWorkOrderSnap.data() || {}) },
+        maintenance
+      );
+      return res.status(201).json({ ok: true, item: refreshedJob, data: refreshedJob });
+    } catch (err: any) {
+      console.error("[maintenance-v2] contractor cost attachment upload failed", {
+        message: err?.message || "failed",
+      });
+      return res.status(500).json({ ok: false, error: "CONTRACTOR_COST_ATTACHMENT_UPLOAD_FAILED" });
+    }
+  });
 });
 
 router.post("/contractor/jobs/:id/evidence", async (req: any, res) => {

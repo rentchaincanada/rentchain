@@ -116,6 +116,34 @@ export type WorkOrderRecord = {
       lastNotifiedAt?: number | null;
     };
   };
+  cost?: {
+    estimatedCostCents?: number | null;
+    actualCostCents?: number | null;
+    currency?: string | null;
+    submittedByRole?: "contractor" | "landlord" | "admin" | null;
+    submittedById?: string | null;
+    submittedAt?: number | null;
+    reviewedBy?: string | null;
+    reviewedAt?: number | null;
+    reviewStatus?: "pending_review" | "approved" | "rejected" | null;
+    reviewNote?: string | null;
+  } | null;
+  costLineItems?: Array<{
+    id: string;
+    label: string;
+    amountCents: number;
+    category?: "labor" | "materials" | "inspection" | "other";
+  }>;
+  costAttachments?: Array<{
+    id: string;
+    url?: string | null;
+    fileName?: string | null;
+    contentType?: string | null;
+    uploadedAt: number;
+    uploadedByRole: "contractor" | "landlord" | "admin";
+    uploadedById: string;
+    visibility: "internal" | "landlord_only";
+  }>;
   reopenedAt?: number | null;
   reopenedByActorId?: string | null;
   reopenedByActorRole?: "landlord" | "admin" | null;
@@ -416,6 +444,54 @@ export async function uploadWorkOrderEvidence(
     { method: "POST", body: form }
   );
   if (!res?.ok || !res.item) throw new Error("Failed to upload work order evidence");
+  return res.item;
+}
+
+export async function submitLandlordWorkOrderCost(
+  workOrderId: string,
+  payload: {
+    actualCostCents: number;
+    currency?: string;
+    lineItems?: Array<{
+      id?: string;
+      label: string;
+      amountCents: number;
+      category?: "labor" | "materials" | "inspection" | "other";
+    }>;
+    reviewNote?: string;
+  }
+): Promise<WorkOrderRecord> {
+  const res = await apiFetch<{ ok: boolean; item: WorkOrderRecord }>(
+    `/landlord/work-orders/${encodeURIComponent(workOrderId)}/submit-cost`,
+    { method: "POST", body: payload }
+  );
+  if (!res?.ok || !res.item) throw new Error("Failed to submit work order cost");
+  return res.item;
+}
+
+export async function reviewWorkOrderCost(
+  workOrderId: string,
+  payload: { decision: "approve" | "reject"; note?: string }
+): Promise<WorkOrderRecord> {
+  const res = await apiFetch<{ ok: boolean; item: WorkOrderRecord }>(
+    `/landlord/work-orders/${encodeURIComponent(workOrderId)}/review-cost`,
+    { method: "POST", body: payload }
+  );
+  if (!res?.ok || !res.item) throw new Error("Failed to review work order cost");
+  return res.item;
+}
+
+export async function uploadWorkOrderCostAttachment(
+  workOrderId: string,
+  payload: { file: File }
+): Promise<WorkOrderRecord> {
+  const form = new FormData();
+  form.append("file", payload.file);
+  const res = await apiFetch<{ ok: boolean; item: WorkOrderRecord }>(
+    `/landlord/work-orders/${encodeURIComponent(workOrderId)}/cost-attachment`,
+    { method: "POST", body: form }
+  );
+  if (!res?.ok || !res.item) throw new Error("Failed to upload work order cost attachment");
   return res.item;
 }
 
