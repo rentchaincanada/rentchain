@@ -2305,7 +2305,7 @@ async function createScreeningSessionSafely(input: {
       result: resultRecord,
       created: true,
     };
-  }
+  },
 
   return transactionResult;
 }
