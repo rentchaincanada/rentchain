@@ -16,6 +16,7 @@ import { colors, radius, spacing, text } from "../styles/tokens";
 import { buildMaintenanceLifecycleView, buildMaintenanceWorkspaceState } from "./maintenanceWorkspaceState";
 import { buildMaintenanceAssignmentRoutingView } from "./maintenanceAssignmentRoutingState";
 import { buildMaintenanceConfirmationAccessView } from "./maintenanceConfirmationAccessState";
+import { buildMaintenanceReopenEscalationView } from "./maintenanceReopenEscalationState";
 import { buildMaintenanceServiceExecutionView } from "./maintenanceServiceExecutionState";
 import { buildMaintenanceResolutionVerificationView } from "./maintenanceResolutionVerificationState";
 import {
@@ -400,6 +401,10 @@ export default function MaintenanceRequestsPage() {
     () => (selected ? buildMaintenanceResolutionVerificationView(selected, "landlord") : null),
     [selected]
   );
+  const selectedReopen = React.useMemo(
+    () => (selected ? buildMaintenanceReopenEscalationView(selected, "landlord") : null),
+    [selected]
+  );
   const calendarEvents = React.useMemo(() => buildMaintenanceSchedulingCalendarEvents(items), [items]);
   const calendarDays = React.useMemo(() => buildCalendarDays(calendarMonth), [calendarMonth]);
   const calendarEventMap = React.useMemo(() => {
@@ -604,6 +609,7 @@ export default function MaintenanceRequestsPage() {
                     const assignment = buildMaintenanceAssignmentRoutingView(item, "landlord");
                     const execution = buildMaintenanceServiceExecutionView(item, "landlord");
                     const resolution = buildMaintenanceResolutionVerificationView(item, "landlord");
+                    const reopen = buildMaintenanceReopenEscalationView(item, "landlord");
                     return (
                       <button
                         key={item.id}
@@ -639,24 +645,29 @@ export default function MaintenanceRequestsPage() {
                           >
                             {item.status}
                           </span>
-                         <span
-  style={{
-    color: assignment.needsAttention || lifecycle.needsAttention ? "#b91c1c" : text.muted,
-    fontSize: 12,
-    fontWeight: 700,
-  }}
->
-  {assignment.assignmentLabel}
-</span>
-<span style={{ color: text.muted, fontSize: 12 }}>{item.priority}</span>
-<span style={{ color: text.muted, fontSize: 12 }}>{fmtDate(item.createdAt)}</span>
-</div>
-<div style={{ color: text.secondary, fontSize: 12 }}>{assignment.ownerSummary}</div>
-<div style={{ color: text.secondary, fontSize: 12 }}>{execution.executionLabel}</div>
-<div style={{ color: text.secondary, fontSize: 12 }}>{resolution.verificationLabel}</div>
-</button>
-);
-})}
+                          <span
+                            style={{
+                              color: assignment.needsAttention || lifecycle.needsAttention ? "#b91c1c" : text.muted,
+                              fontSize: 12,
+                              fontWeight: 700,
+                            }}
+                          >
+                            {assignment.assignmentLabel}
+                          </span>
+                          <span style={{ color: text.muted, fontSize: 12 }}>{item.priority}</span>
+                          <span style={{ color: text.muted, fontSize: 12 }}>{fmtDate(item.createdAt)}</span>
+                        </div>
+                        <div style={{ color: text.secondary, fontSize: 12 }}>{assignment.ownerSummary}</div>
+                        <div style={{ color: text.secondary, fontSize: 12 }}>{execution.executionLabel}</div>
+                        <div style={{ color: text.secondary, fontSize: 12 }}>{resolution.verificationLabel}</div>
+                        {reopen.reopenState !== "not_applicable" || reopen.escalationState !== "not_escalated" ? (
+                          <div style={{ color: text.secondary, fontSize: 12 }}>
+                            {reopen.escalationState === "escalated" ? reopen.escalationLabel : reopen.reopenLabel}
+                          </div>
+                        ) : null}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -950,6 +961,58 @@ export default function MaintenanceRequestsPage() {
                       ) : null}
                       <div style={{ fontWeight: 700, color: text.primary }}>Next step</div>
                       {selectedResolution.nextActions.map((step) => (
+                        <div key={step} style={{ color: text.secondary }}>
+                          {step}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  {selectedReopen ? (
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: radius.md,
+                        padding: "12px 14px",
+                        background: colors.panel,
+                        display: "grid",
+                        gap: 8,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.primary }}>Reopen / escalation</div>
+                      <div style={{ color: text.secondary }}>{selectedReopen.summary}</div>
+                      <div style={{ fontWeight: 700, color: text.primary }}>Reopen state</div>
+                      <div style={{ color: text.secondary }}>{selectedReopen.reopenLabel}</div>
+                      <div style={{ fontWeight: 700, color: text.primary }}>Escalation state</div>
+                      <div style={{ color: text.secondary }}>{selectedReopen.escalationLabel}</div>
+                      {selected.reopenReason ? (
+                        <>
+                          <div style={{ fontWeight: 700, color: text.primary }}>Reopen note</div>
+                          <div style={{ color: text.secondary }}>{selected.reopenReason}</div>
+                        </>
+                      ) : null}
+                      {selectedReopen.timelineEvents.length ? (
+                        <>
+                          <div style={{ fontWeight: 700, color: text.primary }}>Recent recovery updates</div>
+                          {selectedReopen.timelineEvents.map((event) => (
+                            <div key={event.key} style={{ color: text.secondary }}>
+                              {event.label} • {fmtDate(event.timestamp)}
+                            </div>
+                          ))}
+                        </>
+                      ) : null}
+                      {selectedReopen.blockers.length ? (
+                        <>
+                          <div style={{ fontWeight: 700, color: text.primary }}>Needs attention</div>
+                          {selectedReopen.blockers.map((item) => (
+                            <div key={item} style={{ color: text.secondary }}>
+                              {item}
+                            </div>
+                          ))}
+                        </>
+                      ) : null}
+                      <div style={{ fontWeight: 700, color: text.primary }}>Next step</div>
+                      {selectedReopen.nextActions.map((step) => (
                         <div key={step} style={{ color: text.secondary }}>
                           {step}
                         </div>

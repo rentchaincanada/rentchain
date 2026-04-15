@@ -42,6 +42,10 @@ type TenantMaintenanceProjection = {
   completionSummary: string | null;
   completionOutcome: "completed" | "partially_completed" | "follow_up_required" | null;
   completionConfirmedByLandlordAt: number | null;
+  reopenedAt: number | null;
+  reopenedByActorId: string | null;
+  reopenedByActorRole: "tenant" | "landlord" | "admin" | null;
+  reopenReason: string | null;
   serviceWindowStartAt: number | null;
   serviceWindowEndAt: number | null;
   accessRequired: boolean | null;
@@ -241,6 +245,15 @@ export function projectTenantMaintenance(recordId: string, data: any): TenantMai
         ? data.completionOutcome
         : null,
     completionConfirmedByLandlordAt: toMillis(data?.completionConfirmedByLandlordAt),
+    reopenedAt: toMillis(data?.reopenedAt),
+    reopenedByActorId: asString(data?.reopenedByActorId),
+    reopenedByActorRole:
+      data?.reopenedByActorRole === "tenant" ||
+      data?.reopenedByActorRole === "landlord" ||
+      data?.reopenedByActorRole === "admin"
+        ? data.reopenedByActorRole
+        : null,
+    reopenReason: asString(data?.reopenReason),
     serviceWindowStartAt: toMillis(data?.serviceWindowStartAt),
     serviceWindowEndAt: toMillis(data?.serviceWindowEndAt),
     accessRequired: typeof data?.accessRequired === "boolean" ? data.accessRequired : null,

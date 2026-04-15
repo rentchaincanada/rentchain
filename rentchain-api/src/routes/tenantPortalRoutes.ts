@@ -5069,6 +5069,15 @@ async function buildTenantMaintenanceDetailResponse(docId: string, maintenanceDa
   return {
     ...projectTenantMaintenance(docId, maintenanceData || {}),
     evidence: workOrderExists ? await serializeEvidenceForAudience(workOrderData?.evidence, "tenant") : [],
+    reopenedAt: toMillis(workOrderData?.reopenedAt),
+    reopenedByActorId: String(workOrderData?.reopenedByActorId || "").trim() || null,
+    reopenedByActorRole:
+      workOrderData?.reopenedByActorRole === "tenant" ||
+      workOrderData?.reopenedByActorRole === "landlord" ||
+      workOrderData?.reopenedByActorRole === "admin"
+        ? workOrderData.reopenedByActorRole
+        : null,
+    reopenReason: String(workOrderData?.reopenReason || "").trim() || null,
     resolutionStatus:
       workOrderData?.resolutionStatus === "completed_pending_review" ||
       workOrderData?.resolutionStatus === "landlord_approved" ||
@@ -5122,6 +5131,144 @@ router.get("/maintenance-requests/:id", requireTenant, async (req: any, res) => 
       err,
     });
     return res.status(500).json({ ok: false, error: "TENANT_MAINT_REQUEST_READ_FAILED" });
+  }
+});
+
+router.post("/maintenance/:id/reopen", requireTenant, async (req: any, res) => {
+  try {
+    const tenantId = String(req.user?.tenantId || "").trim();
+    const id = String(req.params?.id || "").trim();
+    if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+    const reason = String(req.body?.reason || "").trim().slice(0, 2000);
+    if (!reason) {
+      return res.status(400).json({ ok: false, error: "REOPEN_REASON_REQUIRED" });
+    }
+
+    const docRef = db.collection("maintenanceRequests").doc(id);
+    const snap = await docRef.get();
+    if (!snap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+    const data = (snap.data() as any) || {};
+    if (String(data.tenantId || "").trim() !== tenantId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const workOrderRef = db.collection("workOrders").doc(`maintenance_${id}`);
+    const workOrderSnap = await workOrderRef.get();
+    if (!workOrderSnap.exists) {
+      return res.status(404).json({ ok: false, error: "WORK_ORDER_NOT_FOUND" });
+    }
+
+    const workOrder = (workOrderSnap.data() as any) || {};
+    if (String(workOrder.status || "").trim().toLowerCase() !== "completed") {
+      return res.status(400).json({ ok: false, error: "REOPEN_NOT_AVAILABLE" });
+    }
+    if (String(workOrder.resolutionStatus || "").trim().toLowerCase() === "tenant_pending_signoff") {
+      return res.status(400).json({ ok: false, error: "TENANT_SIGNOFF_REQUIRED" });
+    }
+    if (String(workOrder?.reworkReview?.status || "").trim().toLowerCase() === "tenant_pending_signoff") {
+      return res.status(400).json({ ok: false, error: "REWORK_SIGNOFF_REQUIRED" });
+    }
+    if (
+      String(workOrder.resolutionStatus || "").trim().toLowerCase() === "follow_up_required" ||
+      workOrder.followUpRequired === true
+    ) {
+      return res.status(400).json({ ok: false, error: "FOLLOW_UP_ALREADY_ACTIVE" });
+    }
+
+    const hasClosedOrResolvedState =
+      typeof toMillis(workOrder.finalResolvedAt) === "number" ||
+      String(workOrder.resolutionStatus || "").trim().toLowerCase() === "resolved" ||
+      String(workOrder.tenantSignoffStatus || "").trim().toLowerCase() === "accepted" ||
+      String(workOrder?.reworkReview?.status || "").trim().toLowerCase() === "closed";
+    if (!hasClosedOrResolvedState) {
+      return res.status(400).json({ ok: false, error: "REOPEN_NOT_AVAILABLE" });
+    }
+
+    const now = Date.now();
+    const historyMessage = `Tenant reopened the request: ${reason}`;
+    const contractorLastUpdate = `Tenant reported the issue still needs attention: ${reason}`;
+
+    await workOrderRef.set(
+      {
+        tenantSignoffStatus: "declined",
+        tenantSignedOffAt: null,
+        tenantDeclinedAt: now,
+        tenantDeclineReason: reason,
+        resolutionStatus: "follow_up_required",
+        followUpRequired: true,
+        followUpReason: reason,
+        finalResolvedAt: null,
+        reopenedAt: now,
+        reopenedByActorId: tenantId,
+        reopenedByActorRole: "tenant",
+        reopenReason: reason,
+        updatedAtMs: now,
+        lastExecutionUpdateAt: now,
+      },
+      { merge: true }
+    );
+    const refreshedReopenWorkOrder = await workOrderRef.get();
+    const refreshedReopenWorkOrderData = (refreshedReopenWorkOrder.data() as any) || {};
+    const reopenNotifications = await applyNotificationUpdate(workOrderRef, refreshedReopenWorkOrderData, now);
+
+    await Promise.all([
+      docRef.set(
+        {
+          updatedAt: now,
+          lastUpdatedBy: "TENANT",
+          contractorLastUpdate,
+          tenantSignoffStatus: "declined",
+          tenantSignedOffAt: null,
+          tenantDeclinedAt: now,
+          tenantDeclineReason: reason,
+          resolutionStatus: "follow_up_required",
+          followUpRequired: true,
+          followUpReason: reason,
+          finalResolvedAt: null,
+          reopenedAt: now,
+          reopenedByActorId: tenantId,
+          reopenedByActorRole: "tenant",
+          reopenReason: reason,
+          notifications: buildTenantSafeWorkOrderNotifications({
+            ...refreshedReopenWorkOrderData,
+            notifications: reopenNotifications,
+          }),
+          statusHistory: FieldValue.arrayUnion({
+            status: String(data.status || "completed"),
+            actorRole: "tenant",
+            actorId: tenantId,
+            message: historyMessage,
+            createdAt: now,
+          }),
+        },
+        { merge: true }
+      ),
+      db.collection("workOrderUpdates").doc().set({
+        workOrderId: workOrderRef.id,
+        actorRole: "tenant",
+        actorId: tenantId,
+        updateType: "reopened",
+        message: historyMessage,
+        createdAtMs: now,
+      }),
+    ]);
+
+    const [refreshed, refreshedWorkOrder] = await Promise.all([docRef.get(), workOrderRef.get()]);
+    const refreshedWorkOrderData = refreshedWorkOrder.exists ? ((refreshedWorkOrder.data() as any) || {}) : {};
+    return res.json({
+      ok: true,
+      data: await buildTenantMaintenanceDetailResponse(refreshed.id, refreshed.data() || {}, refreshedWorkOrderData, refreshedWorkOrder.exists),
+    });
+  } catch (err) {
+    console.error("[tenant/maintenance/:id/reopen] update failed", {
+      tenantId: req.user?.tenantId,
+      id: req.params?.id,
+      err,
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_MAINT_REQUEST_REOPEN_FAILED" });
   }
 });
 

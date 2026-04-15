@@ -156,6 +156,65 @@ describe("landlord maintenance workspace", () => {
     expect(screen.getAllByText(/Back bedroom is still cooler than the rest of the unit/i).length).toBeGreaterThan(0);
   });
 
+  it("shows reopened and escalated recovery state in the landlord reopen workspace", async () => {
+    maintenanceWorkflowApi.listLandlordMaintenance.mockResolvedValue({
+      items: [
+        {
+          id: "maint-1",
+          tenantId: "tenant-1",
+          landlordId: "landlord-1",
+          propertyId: "prop-1",
+          unitId: "unit-2",
+          tenantName: "Taylor Tenant",
+          propertyLabel: "123 Main St",
+          unitLabel: "Unit 4",
+          title: "Broken heater",
+          description: "Heat is not turning on.",
+          category: "HVAC",
+          priority: "urgent",
+          status: "completed",
+          assignedContractorName: "North Shore HVAC",
+          resolutionStatus: "follow_up_required",
+          followUpRequired: true,
+          followUpReason: "The bedroom is cold again after the return visit.",
+          reopenedAt: Date.UTC(2026, 3, 17, 9, 0),
+          reopenReason: "The bedroom is cold again after the return visit.",
+          reworkHistory: [
+            {
+              cycleNumber: 1,
+              completedAt: Date.UTC(2026, 3, 16, 14, 0),
+              outcome: "partial",
+              notes: "Initial return visit improved airflow but did not fully resolve it.",
+            },
+          ],
+          reworkReview: {
+            status: "follow_up_required",
+            tenantSignoffStatus: "declined",
+            tenantDeclinedAt: Date.UTC(2026, 3, 17, 9, 0),
+            tenantDeclineReason: "The bedroom is cold again after the return visit.",
+            closureOutcome: "needs_more_followup",
+            closedAt: null,
+          },
+          createdAt: 100,
+          updatedAt: 200,
+          statusHistory: [],
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/maintenance/maint-1"]}>
+        <Routes>
+          <Route path="/maintenance/:id" element={<MaintenanceRequestsPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect((await screen.findAllByText(/Reopen \/ escalation/i)).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Escalated/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/The bedroom is cold again after the return visit/i).length).toBeGreaterThan(0);
+  });
+
   it("records a landlord start-of-service update from the execution workspace", async () => {
     maintenanceWorkflowApi.listLandlordMaintenance.mockResolvedValue({
       items: [

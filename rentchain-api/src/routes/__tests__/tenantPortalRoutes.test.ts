@@ -525,6 +525,56 @@ describe("tenantPortalRoutes foundation", () => {
     expect(savedWorkOrder?.finalResolvedAt).toBeDefined();
   });
 
+  it("lets the tenant reopen a closed maintenance request with a required reason", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    ensureCollection("maintenanceRequests").set("maint-2b", {
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      status: "completed",
+      priority: "NORMAL",
+      category: "GENERAL",
+      title: "Window repair",
+      description: "The latch failed again after closure.",
+      statusHistory: [],
+      createdAt: 100,
+      updatedAt: 200,
+    });
+    ensureCollection("workOrders").set("maintenance_maint-2b", {
+      maintenanceRequestId: "maint-2b",
+      tenantId: "tenant-1",
+      status: "completed",
+      resolutionStatus: "resolved",
+      tenantSignoffStatus: "accepted",
+      finalResolvedAt: 250,
+    });
+
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/maintenance/maint-2b/reopen",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+      body: {
+        reason: "The latch failed again after closure.",
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.resolutionStatus).toBe("follow_up_required");
+    expect(res.body?.data?.reopenReason).toBe("The latch failed again after closure.");
+    expect(typeof res.body?.data?.reopenedAt).toBe("number");
+
+    const savedWorkOrder = ensureCollection("workOrders").get("maintenance_maint-2b");
+    expect(savedWorkOrder?.followUpRequired).toBe(true);
+    expect(savedWorkOrder?.reopenedByActorRole).toBe("tenant");
+    expect(savedWorkOrder?.finalResolvedAt).toBeNull();
+  });
+
   it("returns tenant-safe rework state and allows rework signoff again after rework completion", async () => {
     const router = (await import("../tenantPortalRoutes")).default;
     ensureCollection("maintenanceRequests").set("maint-3", {
