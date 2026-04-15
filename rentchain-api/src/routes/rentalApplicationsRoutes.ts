@@ -35,6 +35,7 @@ import { getLatestApplicationRisk } from "../services/riskAgent/riskAgentService
 import { rateLimitScreeningIp, rateLimitScreeningUser } from "../middleware/rateLimit";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 import { sendEmail } from "../services/emailService";
+import { recordScreeningPaymentInitiated } from "../services/screeningPaymentTransactionService";
 
 const router = Router();
 
@@ -1503,6 +1504,19 @@ router.post(
         },
         { merge: true }
       );
+
+      await recordScreeningPaymentInitiated({
+        landlordId,
+        propertyId: data?.propertyId || null,
+        unitId: data?.unitId || null,
+        applicationId: id,
+        screeningOrderId: orderId,
+        amountCents: pricing.totalAmountCents,
+        currency: "CAD",
+        stripeCheckoutSessionId: session.id,
+        serviceLevel,
+        recordedAt: now,
+      });
 
       console.log("[screening_checkout] create_session_ok", {
         ...logBase,

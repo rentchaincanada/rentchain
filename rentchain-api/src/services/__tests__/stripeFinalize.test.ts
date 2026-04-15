@@ -37,7 +37,7 @@ const { dbMock, resetDb, upsertDoc, getDoc } = vi.hoisted(() => {
   return {
     dbMock: {
       collection: (name: string) => ({
-        doc: (id: string) => docRef(name, id),
+        doc: (id?: string) => docRef(name, id || `${name}_${Date.now()}`),
         where: (field: string, op: string, value: any) => ({
           limit: (count: number) => ({
             get: async () => {
@@ -132,6 +132,10 @@ describe("finalizeStripePayment", () => {
     const app = getDoc("rentalApplications", "app_1");
     expect(app?.screening?.status).toBe("paid");
     expect(app?.screening?.orderId).toBe("order_1");
+    const transaction = getDoc("financialTransactions", "payment_succeeded_evt_1");
+    expect(transaction?.type).toBe("payment_succeeded");
+    expect(transaction?.status).toBe("completed");
+    expect(transaction?.applicationId).toBe("app_1");
     expect(enqueueScreeningJobMock).toHaveBeenCalledTimes(1);
   });
 

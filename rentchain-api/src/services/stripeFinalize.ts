@@ -1,5 +1,6 @@
 import { db } from "../config/firebase";
 import { enqueueScreeningJob } from "./screeningJobs";
+import { recordScreeningPaymentSucceeded } from "./screeningPaymentTransactionService";
 
 export type FinalizeStripeArgs = {
   eventId: string;
@@ -217,6 +218,28 @@ export async function finalizeStripePayment(
   });
 
   if (result.ok && !result.alreadyFinalized) {
+    try {
+      const orderSnap = await db.collection("screeningOrders").doc(orderRef.id).get();
+      const order = orderSnap.data() as any;
+      await recordScreeningPaymentSucceeded({
+        landlordId: normStr(args.landlordId) || normStr(order?.landlordId) || "",
+        propertyId: normStr(order?.propertyId) || null,
+        unitId: normStr(order?.unitId) || null,
+        applicationId: normStr(args.applicationId) || normStr(order?.applicationId) || null,
+        screeningOrderId: orderRef.id,
+        amountCents: amountTotalCents ?? normInt(order?.amountTotalCents) ?? normInt(order?.totalAmountCents) ?? 0,
+        currency: currency ?? normStr(order?.currency) ?? "cad",
+        stripeCheckoutSessionId:
+          normStr(args.sessionId) || normStr(order?.stripeCheckoutSessionId) || normStr(order?.stripeSessionId) || null,
+        stripePaymentIntentId: normStr(args.paymentIntentId) || normStr(order?.stripePaymentIntentId) || null,
+        stripeChargeId: normStr(args.stripeChargeId) || normStr(order?.stripeChargeId) || null,
+        stripeEventId: eventId,
+        eventType: normStr(args.eventType) || null,
+      });
+    } catch (err: any) {
+      console.warn("[stripe-finalize] failed to record success transaction", err?.message || err);
+    }
+
     try {
       let resolvedApplicationId = normStr(args.applicationId);
       let resolvedLandlordId = normStr(args.landlordId);
