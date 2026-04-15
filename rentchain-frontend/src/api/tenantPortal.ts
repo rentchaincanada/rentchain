@@ -65,6 +65,10 @@ export type TenantWorkspaceMaintenance = {
   completionSummary?: string | null;
   completionOutcome?: "completed" | "partially_completed" | "follow_up_required" | null;
   completionConfirmedByLandlordAt?: number | null;
+  reopenedAt?: number | null;
+  reopenedByActorId?: string | null;
+  reopenedByActorRole?: "tenant" | "landlord" | "admin" | null;
+  reopenReason?: string | null;
   serviceWindowStartAt?: number | null;
   serviceWindowEndAt?: number | null;
   accessRequired?: boolean | null;
@@ -221,6 +225,22 @@ export async function updateTenantWorkspaceMaintenanceSignoff(
 ) {
   const res = await tenantApiFetch<{ ok: boolean; data: TenantWorkspaceMaintenance }>(
     `/tenant/maintenance/${encodeURIComponent(id)}/signoff`,
+    {
+      method: "POST",
+      body: payload,
+    }
+  );
+  return res?.data;
+}
+
+export async function updateTenantWorkspaceMaintenanceReopen(
+  id: string,
+  payload: {
+    reason: string;
+  }
+) {
+  const res = await tenantApiFetch<{ ok: boolean; data: TenantWorkspaceMaintenance }>(
+    `/tenant/maintenance/${encodeURIComponent(id)}/reopen`,
     {
       method: "POST",
       body: payload,

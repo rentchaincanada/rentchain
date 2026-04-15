@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import {
   getTenantMaintenance,
   updateTenantMaintenanceConfirmation,
+  updateTenantMaintenanceReopen,
   updateTenantMaintenanceReworkAccess,
   updateTenantMaintenanceReworkSignoff,
   updateTenantMaintenanceSignoff,
@@ -15,6 +16,7 @@ import { TenantSurfaceShell, prettyStatus } from "./TenantWorkspaceShared";
 import { buildMaintenanceLifecycleView } from "../maintenanceWorkspaceState";
 import { buildMaintenanceAssignmentRoutingView } from "../maintenanceAssignmentRoutingState";
 import { buildMaintenanceConfirmationAccessView } from "../maintenanceConfirmationAccessState";
+import { buildMaintenanceReopenEscalationView } from "../maintenanceReopenEscalationState";
 import { buildMaintenanceServiceExecutionView } from "../maintenanceServiceExecutionState";
 import { buildMaintenanceResolutionVerificationView } from "../maintenanceResolutionVerificationState";
 import { buildMaintenanceSchedulingAccessView } from "../maintenanceSchedulingAccessState";
@@ -83,6 +85,7 @@ export default function TenantMaintenanceRequestDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [savingAction, setSavingAction] = useState(false);
   const [signoffReason, setSignoffReason] = useState("");
+  const [reopenReason, setReopenReason] = useState("");
   const [reworkAccessNote, setReworkAccessNote] = useState("");
   const [sessionExpired, setSessionExpired] = useState(false);
   const [hasToken, setHasToken] = useState<boolean>(() =>
@@ -94,6 +97,7 @@ export default function TenantMaintenanceRequestDetailPage() {
   const confirmationView = data ? buildMaintenanceConfirmationAccessView(data, "tenant") : null;
   const executionView = data ? buildMaintenanceServiceExecutionView(data, "tenant") : null;
   const resolutionView = data ? buildMaintenanceResolutionVerificationView(data, "tenant") : null;
+  const reopenView = data ? buildMaintenanceReopenEscalationView(data, "tenant") : null;
   const notificationMessages = tenantNotificationMessages(data);
 
   useEffect(() => {
@@ -233,6 +237,28 @@ export default function TenantMaintenanceRequestDetailPage() {
       }
     } catch (err: any) {
       const msg = err?.payload?.error || err?.message || "Unable to update the rework review.";
+      setError(String(msg));
+    } finally {
+      setSavingAction(false);
+    }
+  };
+
+  const applyTenantReopen = async () => {
+    if (!id) return;
+    if (!reopenReason.trim()) {
+      setError("Add a note before reopening this request.");
+      return;
+    }
+    setSavingAction(true);
+    setError(null);
+    try {
+      const res = await updateTenantMaintenanceReopen(id, {
+        reason: reopenReason.trim(),
+      });
+      setData((res as any)?.item || (res as any)?.data || null);
+      setReopenReason("");
+    } catch (err: any) {
+      const msg = err?.payload?.error || err?.message || "Unable to reopen this maintenance request.";
       setError(String(msg));
     } finally {
       setSavingAction(false);
@@ -764,6 +790,83 @@ export default function TenantMaintenanceRequestDetailPage() {
                         </Button>
                         <Button variant="ghost" disabled={savingAction} onClick={() => void applyResolutionSignoff("not_resolved")}>
                           {savingAction ? "Saving..." : "Still needs attention"}
+                        </Button>
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
+              {reopenView ? (
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: radius.md,
+                    padding: "12px 14px",
+                    background: colors.panel,
+                    display: "grid",
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ fontWeight: 800, color: textTokens.primary }}>Reopen / follow-up</div>
+                  <div style={{ color: textTokens.secondary }}>{reopenView.summary}</div>
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>Recovery state</div>
+                  <div style={{ color: textTokens.secondary }}>{reopenView.tenantVisibleLabel}</div>
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>Escalation state</div>
+                  <div style={{ color: textTokens.secondary }}>{reopenView.escalationLabel}</div>
+                  {data.reopenReason ? (
+                    <>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Reopen note</div>
+                      <div style={{ color: textTokens.secondary }}>{data.reopenReason}</div>
+                    </>
+                  ) : null}
+                  {reopenView.timelineEvents.length ? (
+                    <>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Recent recovery updates</div>
+                      {reopenView.timelineEvents.map((event) => (
+                        <div key={event.key} style={{ color: textTokens.secondary }}>
+                          {event.label} • {fmtDate(event.timestamp)}
+                        </div>
+                      ))}
+                    </>
+                  ) : null}
+                  {reopenView.blockers.length ? (
+                    <>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Needs attention</div>
+                      {reopenView.blockers.map((item) => (
+                        <div key={item} style={{ color: textTokens.secondary }}>
+                          {item}
+                        </div>
+                      ))}
+                    </>
+                  ) : null}
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>Next step</div>
+                  {reopenView.nextActions.map((step) => (
+                    <div key={step} style={{ color: textTokens.secondary }}>
+                      {step}
+                    </div>
+                  ))}
+                  {reopenView.canTenantReopen ? (
+                    <>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Issue came back?</div>
+                      <div style={{ color: textTokens.secondary }}>
+                        If the problem returned after closure, you can reopen this request instead of starting a new one.
+                      </div>
+                      <textarea
+                        value={reopenReason}
+                        onChange={(e) => setReopenReason(e.target.value)}
+                        placeholder="Explain what still needs attention or what returned after closure"
+                        rows={3}
+                        style={{
+                          width: "100%",
+                          borderRadius: 8,
+                          border: `1px solid ${colors.border}`,
+                          padding: 10,
+                          resize: "vertical",
+                        }}
+                      />
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <Button variant="ghost" disabled={savingAction} onClick={() => void applyTenantReopen()}>
+                          {savingAction ? "Saving..." : "Reopen request"}
                         </Button>
                       </div>
                     </>

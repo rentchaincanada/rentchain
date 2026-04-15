@@ -11,6 +11,7 @@ const maintenanceWorkflowApi = vi.hoisted(() => ({
   getTenantMaintenance: vi.fn(),
   createTenantMaintenance: vi.fn(),
   updateTenantMaintenanceConfirmation: vi.fn(),
+  updateTenantMaintenanceReopen: vi.fn(),
   updateTenantMaintenanceReworkAccess: vi.fn(),
   updateTenantMaintenanceReworkSignoff: vi.fn(),
   updateTenantMaintenanceSignoff: vi.fn(),
@@ -31,6 +32,7 @@ vi.mock("../../api/maintenanceWorkflowApi", async () => {
     getTenantMaintenance: maintenanceWorkflowApi.getTenantMaintenance,
     createTenantMaintenance: maintenanceWorkflowApi.createTenantMaintenance,
     updateTenantMaintenanceConfirmation: maintenanceWorkflowApi.updateTenantMaintenanceConfirmation,
+    updateTenantMaintenanceReopen: maintenanceWorkflowApi.updateTenantMaintenanceReopen,
     updateTenantMaintenanceReworkAccess: maintenanceWorkflowApi.updateTenantMaintenanceReworkAccess,
     updateTenantMaintenanceReworkSignoff: maintenanceWorkflowApi.updateTenantMaintenanceReworkSignoff,
     updateTenantMaintenanceSignoff: maintenanceWorkflowApi.updateTenantMaintenanceSignoff,
@@ -97,6 +99,7 @@ describe("tenant maintenance pages", () => {
     expect(screen.getAllByText(/Confirmation \/ access/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Execution \/ completion/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Resolution \/ closure/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Reopen \/ follow-up/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/landlord needs to confirm the service window/i)).toBeInTheDocument();
   });
 
@@ -213,6 +216,67 @@ describe("tenant maintenance pages", () => {
     expect(screen.queryByText(/245\.00 CAD/i)).not.toBeInTheDocument();
   });
 
+  it("lets the tenant reopen a closed request when the issue comes back", async () => {
+    maintenanceWorkflowApi.getTenantMaintenance.mockResolvedValue({
+      item: {
+        id: "maint-closed",
+        title: "Window latch",
+        description: "The latch was repaired but failed again.",
+        status: "completed",
+        priority: "normal",
+        category: "GENERAL",
+        resolutionStatus: "resolved",
+        tenantSignoffStatus: "accepted",
+        finalResolvedAt: Date.UTC(2026, 3, 16, 12, 0),
+        createdAt: 100,
+        updatedAt: 200,
+        statusHistory: [],
+      },
+    });
+    maintenanceWorkflowApi.updateTenantMaintenanceReopen.mockResolvedValue({
+      item: {
+        id: "maint-closed",
+        title: "Window latch",
+        description: "The latch was repaired but failed again.",
+        status: "completed",
+        priority: "normal",
+        category: "GENERAL",
+        resolutionStatus: "follow_up_required",
+        followUpRequired: true,
+        followUpReason: "The latch failed again after closing.",
+        tenantSignoffStatus: "declined",
+        tenantDeclinedAt: Date.UTC(2026, 3, 17, 9, 0),
+        reopenReason: "The latch failed again after closing.",
+        reopenedAt: Date.UTC(2026, 3, 17, 9, 0),
+        reopenedByActorRole: "tenant",
+        createdAt: 100,
+        updatedAt: 300,
+        statusHistory: [],
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/tenant/maintenance/maint-closed"]}>
+        <Routes>
+          <Route path="/tenant/maintenance/:id" element={<TenantMaintenanceRequestDetailPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect((await screen.findAllByText(/Reopen \/ follow-up/i)).length).toBeGreaterThan(0);
+    fireEvent.change(screen.getByPlaceholderText(/Explain what still needs attention/i), {
+      target: { value: "The latch failed again after closing." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Reopen request/i }));
+
+    await waitFor(() =>
+      expect(maintenanceWorkflowApi.updateTenantMaintenanceReopen).toHaveBeenCalledWith("maint-closed", {
+        reason: "The latch failed again after closing.",
+      })
+    );
+    expect(await screen.findByText(/Your request has been reopened/i)).toBeInTheDocument();
+  });
+
   it("submits tenant confirmation updates from the detail page", async () => {
     maintenanceWorkflowApi.getTenantMaintenance.mockResolvedValue({
       item: {
@@ -326,7 +390,7 @@ describe("tenant maintenance pages", () => {
         reason: undefined,
       });
     });
-    expect(await screen.findByText(/This request has been marked resolved/i)).toBeInTheDocument();
+    expect((await screen.findAllByText(/This request has been marked resolved/i)).length).toBeGreaterThan(0);
   });
 
   it("shows a still-needs-attention closure state in tenant detail", async () => {

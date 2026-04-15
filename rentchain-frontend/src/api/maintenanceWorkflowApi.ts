@@ -4,6 +4,7 @@ import {
   getTenantWorkspaceMaintenance,
   listTenantWorkspaceMaintenance,
   updateTenantWorkspaceMaintenanceConfirmation,
+  updateTenantWorkspaceMaintenanceReopen,
   updateTenantWorkspaceReworkAccess,
   updateTenantWorkspaceReworkSignoff,
   updateTenantWorkspaceMaintenanceSignoff,
@@ -51,7 +52,7 @@ export type MaintenanceWorkflowItem = {
   completedByActorId?: string | null;
   reopenedAt?: number | null;
   reopenedByActorId?: string | null;
-  reopenedByActorRole?: "landlord" | "admin" | null;
+  reopenedByActorRole?: "tenant" | "landlord" | "admin" | null;
   reopenReason?: string | null;
   evidence?: WorkOrderEvidenceItem[];
   serviceWindowStartAt?: number | null;
@@ -442,7 +443,9 @@ export async function listTenantMaintenance() {
     reopenedAt: typeof (item as any).reopenedAt === "number" ? (item as any).reopenedAt : null,
     reopenedByActorId: typeof (item as any).reopenedByActorId === "string" ? (item as any).reopenedByActorId : null,
     reopenedByActorRole:
-      (item as any).reopenedByActorRole === "landlord" || (item as any).reopenedByActorRole === "admin"
+      (item as any).reopenedByActorRole === "tenant" ||
+      (item as any).reopenedByActorRole === "landlord" ||
+      (item as any).reopenedByActorRole === "admin"
         ? (item as any).reopenedByActorRole
         : null,
     reopenReason: typeof (item as any).reopenReason === "string" ? (item as any).reopenReason : null,
@@ -523,7 +526,9 @@ export async function getTenantMaintenance(id: string) {
     reopenedByActorId:
       typeof (item as any)?.reopenedByActorId === "string" ? (item as any).reopenedByActorId : null,
     reopenedByActorRole:
-      (item as any)?.reopenedByActorRole === "landlord" || (item as any)?.reopenedByActorRole === "admin"
+      (item as any)?.reopenedByActorRole === "tenant" ||
+      (item as any)?.reopenedByActorRole === "landlord" ||
+      (item as any)?.reopenedByActorRole === "admin"
         ? (item as any).reopenedByActorRole
         : null,
     reopenReason: typeof (item as any)?.reopenReason === "string" ? (item as any).reopenReason : null,
@@ -633,6 +638,117 @@ export async function updateTenantMaintenanceConfirmation(
     reworkCycle: mapReworkCycle((item as any)?.reworkCycle),
     reworkHistory: mapReworkHistory((item as any)?.reworkHistory),
     reworkReview: mapReworkReview((item as any)?.reworkReview),
+    createdAt: item?.createdAt || Date.now(),
+    updatedAt: item?.updatedAt || item?.createdAt || Date.now(),
+    statusHistory: Array.isArray(item?.statusHistory)
+      ? item.statusHistory.map((entry) => ({
+          status: String(entry?.status || ""),
+          actorRole: String(entry?.actorRole || ""),
+          actorId: entry?.actorId ? String(entry.actorId) : null,
+          message: entry?.message ? String(entry.message) : null,
+          createdAt: typeof entry?.createdAt === "number" ? entry.createdAt : undefined,
+        }))
+      : [],
+  };
+  return { ok: true, item: mapped, data: mapped };
+}
+
+export async function updateTenantMaintenanceReopen(
+  id: string,
+  payload: {
+    reason: string;
+  }
+) {
+  const item = await updateTenantWorkspaceMaintenanceReopen(id, payload);
+  const mapped: MaintenanceWorkflowItem = {
+    id: item?.requestId || id,
+    tenantId: "",
+    landlordId: "",
+    propertyId: null,
+    unitId: null,
+    title: item?.title || "Maintenance request",
+    description: item?.summary || "",
+    category: String(item?.category || "GENERAL"),
+    priority: String(item?.priority || "normal").toLowerCase() as "low" | "normal" | "urgent",
+    status: String(item?.status || "submitted").toLowerCase() as MaintenanceWorkflowStatus,
+    assignedContractorName: item?.assignedContractorName || null,
+    contractorStatus: item?.contractorStatus || null,
+    serviceWindowStartAt: typeof item?.serviceWindowStartAt === "number" ? item.serviceWindowStartAt : null,
+    serviceWindowEndAt: typeof item?.serviceWindowEndAt === "number" ? item.serviceWindowEndAt : null,
+    scheduledFor: typeof (item as any)?.scheduledFor === "number" ? (item as any).scheduledFor : null,
+    serviceStartedAt: typeof (item as any)?.serviceStartedAt === "number" ? (item as any).serviceStartedAt : null,
+    serviceCompletedAt: typeof (item as any)?.serviceCompletedAt === "number" ? (item as any).serviceCompletedAt : null,
+    lastExecutionUpdateAt:
+      typeof (item as any)?.lastExecutionUpdateAt === "number" ? (item as any).lastExecutionUpdateAt : null,
+    executionBlockedReason:
+      typeof (item as any)?.executionBlockedReason === "string" ? (item as any).executionBlockedReason : null,
+    completionSummary: typeof (item as any)?.completionSummary === "string" ? (item as any).completionSummary : null,
+    completionOutcome:
+      (item as any)?.completionOutcome === "completed" ||
+      (item as any)?.completionOutcome === "partially_completed" ||
+      (item as any)?.completionOutcome === "follow_up_required"
+        ? (item as any).completionOutcome
+        : null,
+    completionConfirmedByLandlordAt:
+      typeof (item as any)?.completionConfirmedByLandlordAt === "number"
+        ? (item as any).completionConfirmedByLandlordAt
+        : null,
+    completionConfirmedByLandlordBy:
+      typeof (item as any)?.completionConfirmedByLandlordBy === "string"
+        ? (item as any).completionConfirmedByLandlordBy
+        : null,
+    completedByActorRole:
+      (item as any)?.completedByActorRole === "contractor" ||
+      (item as any)?.completedByActorRole === "landlord" ||
+      (item as any)?.completedByActorRole === "admin"
+        ? (item as any).completedByActorRole
+        : null,
+    completedByActorId:
+      typeof (item as any)?.completedByActorId === "string" ? (item as any).completedByActorId : null,
+    reopenedAt: typeof (item as any)?.reopenedAt === "number" ? (item as any).reopenedAt : null,
+    reopenedByActorId:
+      typeof (item as any)?.reopenedByActorId === "string" ? (item as any).reopenedByActorId : null,
+    reopenedByActorRole:
+      (item as any)?.reopenedByActorRole === "tenant" ||
+      (item as any)?.reopenedByActorRole === "landlord" ||
+      (item as any)?.reopenedByActorRole === "admin"
+        ? (item as any).reopenedByActorRole
+        : null,
+    reopenReason: typeof (item as any)?.reopenReason === "string" ? (item as any).reopenReason : null,
+    accessRequired: typeof item?.accessRequired === "boolean" ? item.accessRequired : null,
+    tenantConfirmationStatus:
+      item?.tenantConfirmationStatus === "confirmed" || item?.tenantConfirmationStatus === "needs_schedule_change"
+        ? item.tenantConfirmationStatus
+        : null,
+    tenantConfirmationUpdatedAt:
+      typeof item?.tenantConfirmationUpdatedAt === "number" ? item.tenantConfirmationUpdatedAt : null,
+    accessAcknowledgedAt: typeof item?.accessAcknowledgedAt === "number" ? item.accessAcknowledgedAt : null,
+    resolutionStatus:
+      item?.resolutionStatus === "completed_pending_review" ||
+      item?.resolutionStatus === "landlord_approved" ||
+      item?.resolutionStatus === "tenant_pending_signoff" ||
+      item?.resolutionStatus === "resolved" ||
+      item?.resolutionStatus === "follow_up_required"
+        ? item.resolutionStatus
+        : null,
+    landlordApprovedAt: typeof item?.landlordApprovedAt === "number" ? item.landlordApprovedAt : null,
+    tenantSignoffStatus:
+      item?.tenantSignoffStatus === "pending" ||
+      item?.tenantSignoffStatus === "accepted" ||
+      item?.tenantSignoffStatus === "declined"
+        ? item.tenantSignoffStatus
+        : null,
+    tenantSignedOffAt: typeof item?.tenantSignedOffAt === "number" ? item.tenantSignedOffAt : null,
+    tenantDeclinedAt: typeof item?.tenantDeclinedAt === "number" ? item.tenantDeclinedAt : null,
+    tenantDeclineReason: item?.tenantDeclineReason ? String(item.tenantDeclineReason) : null,
+    followUpRequired: typeof item?.followUpRequired === "boolean" ? item.followUpRequired : null,
+    followUpReason: item?.followUpReason ? String(item.followUpReason) : null,
+    finalResolvedAt: typeof item?.finalResolvedAt === "number" ? item.finalResolvedAt : null,
+    notifications: mapNotifications((item as any)?.notifications),
+    reworkCycle: mapReworkCycle((item as any)?.reworkCycle),
+    reworkHistory: mapReworkHistory((item as any)?.reworkHistory),
+    reworkReview: mapReworkReview((item as any)?.reworkReview),
+    evidence: Array.isArray((item as any)?.evidence) ? (item as any).evidence : [],
     createdAt: item?.createdAt || Date.now(),
     updatedAt: item?.updatedAt || item?.createdAt || Date.now(),
     statusHistory: Array.isArray(item?.statusHistory)

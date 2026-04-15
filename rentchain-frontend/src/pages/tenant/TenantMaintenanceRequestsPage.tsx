@@ -6,6 +6,7 @@ import { colors, spacing, text as textTokens } from "../../styles/tokens";
 import { buildMaintenanceWorkspaceState } from "../maintenanceWorkspaceState";
 import { buildMaintenanceAssignmentRoutingView } from "../maintenanceAssignmentRoutingState";
 import { buildMaintenanceConfirmationAccessView } from "../maintenanceConfirmationAccessState";
+import { buildMaintenanceReopenEscalationView } from "../maintenanceReopenEscalationState";
 import { buildMaintenanceServiceExecutionView } from "../maintenanceServiceExecutionState";
 import { buildMaintenanceResolutionVerificationView } from "../maintenanceResolutionVerificationState";
 import { buildMaintenanceSchedulingAccessView } from "../maintenanceSchedulingAccessState";
@@ -154,6 +155,7 @@ export default function TenantMaintenanceRequestsPage() {
               const confirmationView = buildMaintenanceConfirmationAccessView(item, "tenant");
               const executionView = buildMaintenanceServiceExecutionView(item, "tenant");
               const resolutionView = buildMaintenanceResolutionVerificationView(item, "tenant");
+              const reopenView = buildMaintenanceReopenEscalationView(item, "tenant");
               const notificationMessages = tenantNotificationMessages(item);
               return (
                 <TenantInfoCard
@@ -259,6 +261,24 @@ export default function TenantMaintenanceRequestsPage() {
                     </div>
                     {item.followUpReason ? (
                       <div style={{ color: textTokens.secondary }}>Follow-up note: {item.followUpReason}</div>
+                    ) : null}
+                  </div>
+                  <div
+                    style={{
+                      border: "1px solid rgba(15,23,42,0.08)",
+                      borderRadius: 12,
+                      padding: "12px 14px",
+                      display: "grid",
+                      gap: 8,
+                    }}
+                  >
+                    <div style={{ color: textTokens.primary, fontWeight: 700 }}>Reopen / follow-up</div>
+                    <div style={{ color: textTokens.secondary }}>{reopenView.summary}</div>
+                    <div style={{ color: textTokens.secondary }}>
+                      {`${reopenView.tenantVisibleLabel} • ${reopenView.escalationLabel}`}
+                    </div>
+                    {item.reopenReason ? (
+                      <div style={{ color: textTokens.secondary }}>Reopen note: {item.reopenReason}</div>
                     ) : null}
                   </div>
                   {requestView?.nextSteps.length ? (
