@@ -29,6 +29,19 @@ const { collections, dbMock } = vi.hoisted(() => {
         };
       },
     }),
+    batch: () => {
+      const ops: Array<() => Promise<void>> = [];
+      return {
+        set(ref: any, value: any, options?: { merge?: boolean }) {
+          ops.push(() => ref.set(value, options));
+        },
+        async commit() {
+          for (const op of ops) {
+            await op();
+          }
+        },
+      };
+    },
   };
 
   return { collections, dbMock };
@@ -51,6 +64,8 @@ vi.mock("../../config/leaseNoticeRules", () => ({
 
 const appendLeaseWorkflowEvent = vi.fn(async () => undefined);
 const buildPreview = vi.fn(async () => undefined);
+const lookupUserEmail = vi.fn(async () => "tenant@example.com");
+const sendLeaseWorkflowEmail = vi.fn(async () => ({ ok: true }));
 const getLeaseForLandlordWorkflow = vi.fn(async () => ({
   ok: true,
   lease: {
@@ -72,9 +87,9 @@ vi.mock("../../services/leaseNoticeWorkflowService", () => ({
   computeNoResponseState: vi.fn(),
   getLeaseForLandlordWorkflow,
   getLeaseNoticeByLeaseId: vi.fn(),
-  lookupUserEmail: vi.fn(),
+  lookupUserEmail,
   normalizeLeaseRecord: vi.fn(),
-  sendLeaseWorkflowEmail: vi.fn(),
+  sendLeaseWorkflowEmail,
 }));
 
 async function invokeRouter(router: any, options: { method: string; url: string; body?: any }) {
@@ -186,5 +201,41 @@ describe("leaseNoticeLandlordRoutes policy integration", () => {
       })
     );
     expect(appendLeaseWorkflowEvent).toHaveBeenCalled();
+  });
+
+  it("auto-sends the notice from preview when automation is requested and policy allows", async () => {
+    const router = (await import("../leaseNoticeLandlordRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/lease-1/notice-preview",
+      body: {
+        newLeaseStartDate: "2026-07-01",
+        newLeaseEndDate: "2027-06-30",
+        responseDeadlineAt: 1700000000000,
+        rentChangeMode: "no_change",
+        automationEnabled: true,
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.automationResult).toEqual(
+      expect.objectContaining({
+        action: "lease.auto_send_notice",
+        executed: true,
+        skipped: false,
+      })
+    );
+    expect(res.body?.noticeId).toBeTruthy();
+    const automationEvent = Array.from((collections.get("canonicalEvents") || new Map()).values()).find(
+      (entry) => entry?.type === "automation.executed"
+    );
+    expect(automationEvent).toEqual(
+      expect.objectContaining({
+        domain: "system",
+        metadata: expect.objectContaining({
+          action: "lease.auto_send_notice",
+        }),
+      })
+    );
   });
 });

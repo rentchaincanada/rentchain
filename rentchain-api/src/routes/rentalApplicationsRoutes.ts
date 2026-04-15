@@ -37,6 +37,7 @@ import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemp
 import { sendEmail } from "../services/emailService";
 import { recordScreeningPaymentInitiated } from "../services/screeningPaymentTransactionService";
 import { writeCanonicalEvent } from "../lib/events/buildEvent";
+import { executeAutomation } from "../lib/automation/automationExecutor";
 import { buildScreeningPolicyRequest } from "../lib/policy/policyAdapters";
 import { evaluatePolicy, toAutopilotPolicySummary, writePolicyEvaluatedEvent } from "../lib/policy/policyEvaluator";
 import {
@@ -144,6 +145,511 @@ function buildRedirectUrl(params: {
     url.searchParams.set("returnTo", params.returnTo);
   }
   return url.toString();
+}
+
+function isAutomationRequested(body: any) {
+  return Boolean(body?.automationEnabled || body?.automation?.enabled);
+}
+
+async function performScreeningCheckoutExecution(params: {
+  req: any;
+  role: string;
+  actorId: string | null;
+  landlordId: string;
+  applicationId: string;
+  application: any;
+  body: any;
+  consent: { timestamp: string; version: string; textHash: string | null };
+  providerHealth: Awaited<ReturnType<typeof getScreeningProviderHealth>>;
+  autopilotPolicy: ReturnType<typeof toAutopilotPolicySummary> | null;
+  logBase: Record<string, unknown>;
+}) {
+  const {
+    req,
+    role,
+    actorId,
+    landlordId,
+    applicationId,
+    application,
+    body,
+    consent,
+    providerHealth,
+    autopilotPolicy,
+    logBase,
+  } = params;
+  const { screeningTier, addons, serviceLevel, scoreAddOn, expeditedAddOn, pricing } =
+    resolvePricingInput(body);
+  const frontendOrigin = resolveFrontendOrigin(req);
+  const rawReturnTo = String(body?.returnTo || "/dashboard");
+  const returnTo = rawReturnTo.startsWith("/") ? rawReturnTo : "/dashboard";
+  const successUrl = buildRedirectUrl({
+    input: body?.successPath,
+    fallbackPath: "/screening/success",
+    frontendOrigin,
+    applicationId,
+    returnTo,
+  });
+  const cancelUrl = buildRedirectUrl({
+    input: body?.cancelPath,
+    fallbackPath: "/screening/cancel",
+    frontendOrigin,
+    applicationId,
+    returnTo,
+  });
+  if (!successUrl || !cancelUrl) {
+    console.warn("[screening_checkout] invalid redirect origin", logBase);
+    return {
+      status: 400,
+      payload: { ok: false, error: "invalid_redirect_origin" },
+    };
+  }
+
+  if (isTransUnionReferralMode()) {
+    const now = Date.now();
+    const orderRef = db.collection("screeningOrders").doc();
+    const orderId = orderRef.id;
+    const referralUrl = buildTransUnionReferralUrl({
+      landlordId: String(landlordId),
+      applicationId,
+      orderId,
+      returnTo,
+      env: process.env.NODE_ENV || "development",
+    });
+
+    const orderPayload: any = {
+      id: orderId,
+      referenceId: buildReferenceId(orderId),
+      landlordId,
+      applicationId,
+      propertyId: application?.propertyId || null,
+      unitId: application?.unitId || null,
+      createdAt: now,
+      updatedAt: now,
+      amountCents: 0,
+      currency: "CAD",
+      status: "external_pending",
+      paymentStatus: "external_pending",
+      finalized: false,
+      finalizedAt: null,
+      lastStripeEventId: null,
+      amountTotalCents: 0,
+      screeningTier,
+      addons,
+      scoreAddOn: false,
+      scoreAddOnCents: 0,
+      expeditedAddOn: false,
+      expeditedAddOnCents: 0,
+      provider: "transunion_referral",
+      inquiryType: "soft",
+      providerRequestId: null,
+      paidAt: null,
+      error: null,
+      serviceLevel,
+      aiVerification: false,
+      aiPriceCents: 0,
+      totalAmountCents: 0,
+      reviewerStatus: "EXTERNAL_PENDING",
+      stripeSessionId: null,
+      stripeCheckoutSessionId: null,
+      stripePaymentIntentId: null,
+      stripeChargeId: null,
+      consentGiven: true,
+      consentTimestamp: consent.timestamp,
+      consentVersion: consent.version,
+      consentTextHash: consent.textHash,
+      externalRedirectUrl: referralUrl,
+      externalProvider: "transunion",
+    };
+    await orderRef.set(orderPayload, { merge: true });
+    await enqueueScreeningJob({
+      orderId,
+      applicationId,
+      landlordId: application?.landlordId || landlordId,
+      provider: "transunion_referral",
+    });
+    await db.collection("rentalApplications").doc(applicationId).set(
+      {
+        screeningStatus: "external_pending",
+        screeningOrderId: orderId,
+        screeningProvider: "transunion_referral",
+        screeningLastUpdatedAt: now,
+        screening: {
+          ...(application?.screening || {}),
+          status: "external_pending",
+          provider: "transunion_referral",
+          orderId,
+        },
+        screeningMonetization: buildScreeningMonetizationPatch({
+          current: application?.screeningMonetization,
+          eligibility: "eligible",
+          paymentStatus: "checkout_created",
+          fulfillmentStatus: "ordered",
+          checkoutSessionId: orderId,
+          checkoutCreatedAt: now,
+          amount: 0,
+          currency: "CAD",
+          lastErrorCode: null,
+          lastErrorMessage: null,
+        }),
+        updatedAt: now,
+      },
+      { merge: true }
+    );
+    await writeReferralInitiated({
+      referralId: orderId,
+      landlordId: String(landlordId),
+      applicationId,
+      orderId,
+      returnTo,
+      tuTrackingParams: extractTuTrackingParams(referralUrl),
+    });
+    logTuReferralEvent({
+      orderId,
+      applicationId,
+      landlordId: String(landlordId),
+      redirectUrl: referralUrl,
+    });
+    await writeCanonicalEvent({
+      domain: "screening",
+      action: "checkout_created",
+      actor: {
+        type: role === "admin" ? "admin" : "landlord",
+        role,
+        id: actorId,
+      },
+      resource: {
+        type: "screening_order",
+        id: orderId,
+        parentType: "rental_application",
+        parentId: applicationId,
+      },
+      occurredAt: now,
+      visibility: "internal",
+      summary: "Screening checkout session created",
+      metadata: {
+        applicationId,
+        landlordId,
+        propertyId: application?.propertyId || null,
+        unitId: application?.unitId || null,
+        serviceLevel,
+        totalAmountCents: 0,
+      },
+    });
+    return {
+      status: 200,
+      payload: {
+        ok: true,
+        mode: "transunion_referral",
+        orderId,
+        applicationId,
+        redirectUrl: referralUrl,
+        checkoutUrl: referralUrl,
+        autopilotPolicy,
+        screeningMonetizationSummary: buildScreeningMonetizationSummary(
+          normalizeScreeningMonetizationState({
+            application: {
+              ...application,
+              screeningMonetization: buildScreeningMonetizationPatch({
+                current: application?.screeningMonetization,
+                eligibility: "eligible",
+                paymentStatus: "checkout_created",
+                fulfillmentStatus: "ordered",
+                checkoutSessionId: orderId,
+                checkoutCreatedAt: now,
+                amount: 0,
+                currency: "CAD",
+              }),
+            },
+            latestOrder: { ...orderPayload, stripeCheckoutSessionId: orderId },
+            eligibility: "eligible",
+            amount: 0,
+            currency: "CAD",
+          })
+        ),
+      },
+    };
+  }
+
+  let stripe: any;
+  try {
+    stripe = getStripeClient();
+  } catch (err: any) {
+    if (err?.code === "stripe_not_configured" || err?.message === "stripe_not_configured") {
+      return {
+        status: 400,
+        payload: { ok: false, error: "stripe_not_configured" },
+      };
+    }
+    throw err;
+  }
+
+  const now = Date.now();
+  const orderRef = db.collection("screeningOrders").doc();
+  const orderId = orderRef.id;
+  const aiVerification = serviceLevel === "VERIFIED_AI";
+  const orderPayload: any = {
+    id: orderId,
+    referenceId: buildReferenceId(orderId),
+    landlordId,
+    applicationId,
+    propertyId: application?.propertyId || null,
+    unitId: application?.unitId || null,
+    createdAt: now,
+    amountCents: pricing.baseAmountCents,
+    currency: "CAD",
+    status: "unpaid",
+    paymentStatus: "unpaid",
+    finalized: false,
+    finalizedAt: null,
+    lastStripeEventId: null,
+    amountTotalCents: pricing.totalAmountCents,
+    screeningTier,
+    addons,
+    scoreAddOn,
+    scoreAddOnCents: pricing.scoreAddOnCents,
+    expeditedAddOn,
+    expeditedAddOnCents: pricing.expeditedAddOnCents,
+    provider: providerHealth.provider,
+    inquiryType: "soft",
+    providerRequestId: null,
+    paidAt: null,
+    error: null,
+    serviceLevel,
+    aiVerification,
+    aiPriceCents: aiVerification ? pricing.aiAddOnCents : 0,
+    totalAmountCents: pricing.totalAmountCents,
+    reviewerStatus: "QUEUED",
+    stripeSessionId: null,
+    stripeCheckoutSessionId: null,
+    stripePaymentIntentId: null,
+    stripeChargeId: null,
+    consentGiven: true,
+    consentTimestamp: consent.timestamp,
+    consentVersion: consent.version,
+    consentTextHash: consent.textHash,
+  };
+
+  await orderRef.set(orderPayload, { merge: true });
+
+  const currency = String(orderPayload.currency || "CAD").toLowerCase();
+  const lineItems: any[] = [
+    {
+      price_data: {
+        currency,
+        product_data: { name: "Rental screening" },
+        unit_amount: pricing.baseAmountCents,
+      },
+      quantity: 1,
+    },
+  ];
+  if (pricing.verifiedAddOnCents) {
+    lineItems.push({
+      price_data: {
+        currency,
+        product_data: { name: "Verified screening add-on" },
+        unit_amount: pricing.verifiedAddOnCents,
+      },
+      quantity: 1,
+    });
+  }
+  if (pricing.aiAddOnCents) {
+    lineItems.push({
+      price_data: {
+        currency,
+        product_data: { name: "AI verification add-on" },
+        unit_amount: pricing.aiAddOnCents,
+      },
+      quantity: 1,
+    });
+  }
+  if (pricing.scoreAddOnCents) {
+    lineItems.push({
+      price_data: {
+        currency,
+        product_data: { name: "Credit score add-on" },
+        unit_amount: pricing.scoreAddOnCents,
+      },
+      quantity: 1,
+    });
+  }
+  if (pricing.expeditedAddOnCents) {
+    lineItems.push({
+      price_data: {
+        currency,
+        product_data: { name: "Expedited processing add-on" },
+        unit_amount: pricing.expeditedAddOnCents,
+      },
+      quantity: 1,
+    });
+  }
+
+  const safeInt = (n: unknown) => {
+    const x = Number(n);
+    if (!Number.isFinite(x)) return 0;
+    return Math.round(x);
+  };
+
+  const normalizedLineItems = lineItems.map((item) => ({
+    ...item,
+    price_data: {
+      ...item.price_data,
+      unit_amount: Math.max(0, safeInt(item.price_data?.unit_amount)),
+      currency: String(item.price_data?.currency || currency).toLowerCase(),
+    },
+  }));
+
+  const session = await stripe.checkout.sessions.create({
+    mode: "payment",
+    line_items: normalizedLineItems,
+    client_reference_id: orderId,
+    success_url: successUrl,
+    cancel_url: cancelUrl,
+    metadata: {
+      orderId,
+      applicationId,
+      landlordId,
+      serviceLevel,
+      scoreAddOn: String(scoreAddOn),
+      screeningTier,
+      addons: addons.join(","),
+      totalAmountCents: String(pricing.totalAmountCents),
+    },
+    payment_intent_data: {
+      metadata: {
+        orderId,
+        applicationId,
+        landlordId,
+        serviceLevel,
+        scoreAddOn: String(scoreAddOn),
+        screeningTier,
+        addons: addons.join(","),
+        totalAmountCents: String(pricing.totalAmountCents),
+      },
+    },
+  });
+
+  await orderRef.set(
+    { stripeSessionId: session.id, stripeCheckoutSessionId: session.id, updatedAt: Date.now() },
+    { merge: true }
+  );
+
+  await db.collection("rentalApplications").doc(applicationId).set(
+    {
+      screening: {
+        requested: true,
+        requestedAt: now,
+        status: "PENDING",
+        provider: "STUB",
+        orderId,
+        amountCents: pricing.baseAmountCents,
+        currency: "CAD",
+        paidAt: null,
+        screeningTier,
+        addons,
+        scoreAddOn,
+        scoreAddOnCents: pricing.scoreAddOnCents,
+        expeditedAddOn,
+        expeditedAddOnCents: pricing.expeditedAddOnCents,
+        totalAmountCents: pricing.totalAmountCents,
+        serviceLevel,
+        aiVerification,
+        consentGiven: true,
+        consentTimestamp: consent.timestamp,
+        consentVersion: consent.version,
+        consentTextHash: consent.textHash,
+        ai: null,
+        result: null,
+      },
+      screeningMonetization: buildScreeningMonetizationPatch({
+        current: application?.screeningMonetization,
+        eligibility: "eligible",
+        paymentStatus: "checkout_created",
+        fulfillmentStatus: "ready",
+        checkoutSessionId: session.id,
+        checkoutCreatedAt: now,
+        amount: pricing.totalAmountCents,
+        currency: "CAD",
+        lastErrorCode: null,
+        lastErrorMessage: null,
+      }),
+      updatedAt: now,
+    },
+    { merge: true }
+  );
+
+  await recordScreeningPaymentInitiated({
+    landlordId,
+    propertyId: application?.propertyId || null,
+    unitId: application?.unitId || null,
+    applicationId,
+    screeningOrderId: orderId,
+    amountCents: pricing.totalAmountCents,
+    currency: "CAD",
+    stripeCheckoutSessionId: session.id,
+    serviceLevel,
+    recordedAt: now,
+  });
+  await writeCanonicalEvent({
+    domain: "screening",
+    action: "checkout_created",
+    actor: {
+      type: role === "admin" ? "admin" : "landlord",
+      role,
+      id: actorId,
+    },
+    resource: {
+      type: "screening_order",
+      id: orderId,
+      parentType: "rental_application",
+      parentId: applicationId,
+    },
+    occurredAt: now,
+    visibility: "internal",
+    summary: "Screening checkout session created",
+    metadata: {
+      applicationId,
+      landlordId,
+      propertyId: application?.propertyId || null,
+      unitId: application?.unitId || null,
+      stripeCheckoutSessionId: session.id,
+      serviceLevel,
+      totalAmountCents: pricing.totalAmountCents,
+    },
+  });
+
+  console.log("[screening_checkout] create_session_ok", {
+    ...logBase,
+    event: "create_session_ok",
+  });
+  return {
+    status: 200,
+    payload: {
+      ok: true,
+      checkoutUrl: session.url,
+      autopilotPolicy,
+      screeningMonetizationSummary: buildScreeningMonetizationSummary(
+        normalizeScreeningMonetizationState({
+          application: {
+            ...application,
+            screeningMonetization: buildScreeningMonetizationPatch({
+              current: application?.screeningMonetization,
+              eligibility: "eligible",
+              paymentStatus: "checkout_created",
+              fulfillmentStatus: "ready",
+              checkoutSessionId: session.id,
+              checkoutCreatedAt: now,
+              amount: pricing.totalAmountCents,
+              currency: "CAD",
+            }),
+          },
+          latestOrder: { ...orderPayload, stripeCheckoutSessionId: session.id },
+          eligibility: "eligible",
+          amount: pricing.totalAmountCents,
+          currency: "CAD",
+        })
+      ),
+    },
+  };
 }
 
 function applicantName(app: any): string {
@@ -1238,8 +1744,7 @@ router.post(
           unitId: data?.unitId || null,
         },
       });
-
-      return res.json({
+      const quoteResponse = {
         ...quoteResult,
         autopilotPolicy,
         screeningMonetizationSummary: buildScreeningMonetizationSummary(
@@ -1251,6 +1756,92 @@ router.post(
             currency: pricing.currency,
           })
         ),
+      };
+      if (!isAutomationRequested(body)) {
+        return res.json(quoteResponse);
+      }
+
+      const providerHealth = await getScreeningProviderHealth();
+      const startCheckoutPolicyRequest = buildScreeningPolicyRequest({
+        action: "start_checkout",
+        actorRole: role,
+        actorUserId: String(req.user?.id || req.user?.landlordId || "").trim() || null,
+        applicationId: id,
+        eligibility,
+        application: data,
+        consentComplete: consentCheck.ok,
+        providerReady:
+          isTransUnionReferralMode() ||
+          process.env.NODE_ENV !== "production" ||
+          (providerHealth.configured && providerHealth.preflightOk),
+      });
+      const startCheckoutPolicyResult = evaluatePolicy(startCheckoutPolicyRequest);
+      await writePolicyEvaluatedEvent({
+        request: startCheckoutPolicyRequest,
+        result: startCheckoutPolicyResult,
+        actorType: role === "admin" ? "admin" : "landlord",
+        metadata: {
+          landlordId: data?.landlordId || landlordId,
+          propertyId: data?.propertyId || null,
+          unitId: data?.unitId || null,
+          initiatedFrom: "screening_quote",
+        },
+      });
+      const automation = await executeAutomation({
+        action: "screening.auto_start_checkout",
+        policyResult: startCheckoutPolicyResult,
+        actor: {
+          type: role === "admin" ? "admin" : "landlord",
+          id: String(req.user?.id || req.user?.landlordId || "").trim() || null,
+          role,
+        },
+        resource: {
+          type: "rental_application",
+          id,
+        },
+        visibility: "internal",
+        metadata: {
+          domain: "screening",
+          initiatedFrom: "quote",
+          landlordId: data?.landlordId || landlordId,
+          propertyId: data?.propertyId || null,
+          unitId: data?.unitId || null,
+          policyAction: "start_checkout",
+        },
+        context: {
+          quoteExists: true,
+          existingCheckout: false,
+          alreadyPaid: false,
+          execute: async () => {
+            const execution = await performScreeningCheckoutExecution({
+              req,
+              role,
+              actorId: String(req.user?.id || req.user?.landlordId || "").trim() || null,
+              landlordId: String(landlordId),
+              applicationId: id,
+              application: { ...data, screeningMonetization: monetizationPatch },
+              body,
+              consent,
+              providerHealth,
+              autopilotPolicy,
+              logBase: { route: "screening_quote_automation", applicationId: id },
+            });
+            if (execution.status !== 200) {
+              const executionPayload = execution.payload as any;
+              const error = new Error(String(executionPayload?.error || "AUTOMATION_EXECUTION_FAILED"));
+              (error as any).code =
+                executionPayload?.errorCode || executionPayload?.error || "AUTOMATION_EXECUTION_FAILED";
+              throw error;
+            }
+            return execution.payload;
+          },
+        },
+      });
+
+      return res.json({
+        ...quoteResponse,
+        ...(automation.data && typeof automation.data === "object" ? automation.data : {}),
+        automationResult: automation.automationResult,
       });
     } catch (err: any) {
       console.error("[rental-applications] screening quote failed", err?.message || err);
@@ -1730,292 +2321,20 @@ router.post(
         });
       }
 
-      let stripe: any;
-      try {
-        stripe = getStripeClient();
-      } catch (err: any) {
-        if (err?.code === "stripe_not_configured" || err?.message === "stripe_not_configured") {
-          return res.status(400).json({ ok: false, error: "stripe_not_configured" });
-        }
-        throw err;
-      }
-
-      const now = Date.now();
-      const orderRef = db.collection("screeningOrders").doc();
-      const orderId = orderRef.id;
-      const aiVerification = serviceLevel === "VERIFIED_AI";
-        const orderPayload: any = {
-          id: orderId,
-          referenceId: buildReferenceId(orderId),
-          landlordId,
-          applicationId: id,
-          propertyId: data?.propertyId || null,
-          unitId: data?.unitId || null,
-          createdAt: now,
-          amountCents: pricing.baseAmountCents,
-          currency: "CAD",
-          status: "unpaid",
-          paymentStatus: "unpaid",
-          finalized: false,
-          finalizedAt: null,
-          lastStripeEventId: null,
-          amountTotalCents: pricing.totalAmountCents,
-          screeningTier,
-          addons,
-          scoreAddOn,
-          scoreAddOnCents: pricing.scoreAddOnCents,
-          expeditedAddOn,
-          expeditedAddOnCents: pricing.expeditedAddOnCents,
-          provider: providerHealth.provider,
-          inquiryType: "soft",
-          providerRequestId: null,
-          paidAt: null,
-          error: null,
-          serviceLevel,
-          aiVerification,
-          aiPriceCents: aiVerification ? pricing.aiAddOnCents : 0,
-          totalAmountCents: pricing.totalAmountCents,
-          reviewerStatus: "QUEUED",
-          stripeSessionId: null,
-          stripeCheckoutSessionId: null,
-          stripePaymentIntentId: null,
-          stripeChargeId: null,
-        consentGiven: true,
-        consentTimestamp: consent.timestamp,
-        consentVersion: consent.version,
-        consentTextHash: consent.textHash,
-      };
-
-      await orderRef.set(orderPayload, { merge: true });
-
-      const currency = String(orderPayload.currency || "CAD").toLowerCase();
-      const lineItems: any[] = [
-        {
-          price_data: {
-            currency,
-            product_data: { name: "Rental screening" },
-            unit_amount: pricing.baseAmountCents,
-          },
-          quantity: 1,
-        },
-      ];
-      if (pricing.verifiedAddOnCents) {
-        lineItems.push({
-          price_data: {
-            currency,
-            product_data: { name: "Verified screening add-on" },
-            unit_amount: pricing.verifiedAddOnCents,
-          },
-          quantity: 1,
-        });
-      }
-      if (pricing.aiAddOnCents) {
-        lineItems.push({
-          price_data: {
-            currency,
-            product_data: { name: "AI verification add-on" },
-            unit_amount: pricing.aiAddOnCents,
-          },
-          quantity: 1,
-        });
-      }
-      if (pricing.scoreAddOnCents) {
-        lineItems.push({
-          price_data: {
-            currency,
-            product_data: { name: "Credit score add-on" },
-            unit_amount: pricing.scoreAddOnCents,
-          },
-          quantity: 1,
-        });
-      }
-      if (pricing.expeditedAddOnCents) {
-        lineItems.push({
-          price_data: {
-            currency,
-            product_data: { name: "Expedited processing add-on" },
-            unit_amount: pricing.expeditedAddOnCents,
-          },
-          quantity: 1,
-        });
-      }
-
-      // Ensure Stripe-safe integers
-      const safeInt = (n: unknown) => {
-        const x = Number(n);
-        if (!Number.isFinite(x)) return 0;
-        return Math.round(x);
-      };
-
-      // (Optional) sanity clamp: avoid negative or zero charges accidentally
-      const normalizeLineItems = (items: any[]) =>
-        items.map((it) => ({
-          ...it,
-          price_data: {
-            ...it.price_data,
-            unit_amount: Math.max(0, safeInt(it.price_data?.unit_amount)),
-            currency: String(it.price_data?.currency || currency).toLowerCase(),
-          },
-        }));
-
-      const normalizedLineItems = normalizeLineItems(lineItems);
-
-      const session = await stripe.checkout.sessions.create({
-        mode: "payment",
-        line_items: normalizedLineItems,
-
-        // Use this to correlate in Stripe dashboard & API searches
-        client_reference_id: orderId,
-
-        success_url: successUrl,
-        cancel_url: cancelUrl,
-
-        // Keep lightweight order context here (shows up on the Session)
-        metadata: {
-          orderId,
-          applicationId: id,
-          landlordId,
-          serviceLevel,
-          scoreAddOn: String(scoreAddOn),
-          screeningTier,
-          addons: addons.join(","),
-          totalAmountCents: String(pricing.totalAmountCents),
-        },
-
-        // Recommended: also stamp the PaymentIntent so webhook handling is simpler
-        payment_intent_data: {
-          metadata: {
-            orderId,
-            applicationId: id,
-            landlordId,
-            serviceLevel,
-            scoreAddOn: String(scoreAddOn),
-            screeningTier,
-            addons: addons.join(","),
-            totalAmountCents: String(pricing.totalAmountCents),
-          },
-        },
-      });
-
-      await orderRef.set(
-        { stripeSessionId: session.id, stripeCheckoutSessionId: session.id, updatedAt: Date.now() },
-        { merge: true }
-      );
-
-      await db.collection("rentalApplications").doc(id).set(
-        {
-          screening: {
-            requested: true,
-            requestedAt: now,
-            status: "PENDING",
-            provider: "STUB",
-            orderId,
-            amountCents: pricing.baseAmountCents,
-            currency: "CAD",
-            paidAt: null,
-            screeningTier,
-            addons,
-            scoreAddOn,
-            scoreAddOnCents: pricing.scoreAddOnCents,
-            expeditedAddOn,
-            expeditedAddOnCents: pricing.expeditedAddOnCents,
-            totalAmountCents: pricing.totalAmountCents,
-            serviceLevel,
-            aiVerification,
-            consentGiven: true,
-            consentTimestamp: consent.timestamp,
-            consentVersion: consent.version,
-            consentTextHash: consent.textHash,
-            ai: null,
-            result: null,
-          },
-          screeningMonetization: buildScreeningMonetizationPatch({
-            current: data?.screeningMonetization,
-            eligibility: "eligible",
-            paymentStatus: "checkout_created",
-            fulfillmentStatus: "ready",
-            checkoutSessionId: session.id,
-            checkoutCreatedAt: now,
-            amount: pricing.totalAmountCents,
-            currency: "CAD",
-            lastErrorCode: null,
-            lastErrorMessage: null,
-          }),
-          updatedAt: now,
-        },
-        { merge: true }
-      );
-
-      await recordScreeningPaymentInitiated({
-        landlordId,
-        propertyId: data?.propertyId || null,
-        unitId: data?.unitId || null,
+      const execution = await performScreeningCheckoutExecution({
+        req,
+        role,
+        actorId: String(req.user?.id || req.user?.landlordId || "").trim() || null,
+        landlordId: String(landlordId),
         applicationId: id,
-        screeningOrderId: orderId,
-        amountCents: pricing.totalAmountCents,
-        currency: "CAD",
-        stripeCheckoutSessionId: session.id,
-        serviceLevel,
-        recordedAt: now,
-      });
-      await writeCanonicalEvent({
-        domain: "screening",
-        action: "checkout_created",
-        actor: {
-          type: role === "admin" ? "admin" : "landlord",
-          role,
-          id: String(req.user?.id || req.user?.landlordId || "").trim() || null,
-        },
-        resource: {
-          type: "screening_order",
-          id: orderId,
-          parentType: "rental_application",
-          parentId: id,
-        },
-        occurredAt: now,
-        visibility: "internal",
-        summary: "Screening checkout session created",
-        metadata: {
-          applicationId: id,
-          landlordId,
-          propertyId: data?.propertyId || null,
-          unitId: data?.unitId || null,
-          stripeCheckoutSessionId: session.id,
-          serviceLevel,
-          totalAmountCents: pricing.totalAmountCents,
-        },
-      });
-
-      console.log("[screening_checkout] create_session_ok", {
-        ...logBase,
-        event: "create_session_ok",
-      });
-      return res.json({
-        ok: true,
-        checkoutUrl: session.url,
+        application: data,
+        body,
+        consent,
+        providerHealth,
         autopilotPolicy,
-        screeningMonetizationSummary: buildScreeningMonetizationSummary(
-          normalizeScreeningMonetizationState({
-            application: {
-              ...data,
-              screeningMonetization: buildScreeningMonetizationPatch({
-                current: data?.screeningMonetization,
-                eligibility: "eligible",
-                paymentStatus: "checkout_created",
-                fulfillmentStatus: "ready",
-                checkoutSessionId: session.id,
-                checkoutCreatedAt: now,
-                amount: pricing.totalAmountCents,
-                currency: "CAD",
-              }),
-            },
-            latestOrder: { ...orderPayload, stripeCheckoutSessionId: session.id },
-            eligibility: "eligible",
-            amount: pricing.totalAmountCents,
-            currency: "CAD",
-          })
-        ),
+        logBase,
       });
+      return res.status(execution.status).json(execution.payload);
     } catch (err: any) {
       console.error("[screening_checkout] create_session_fail", {
         ...logBase,
