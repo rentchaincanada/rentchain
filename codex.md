@@ -96,6 +96,13 @@ Only read sub-docs when specifically prompted for that domain.
 - Do not expand scope
 - Treat repo as execution-only
 
+## Merge gate policy
+
+- Only execute CURRENT_MISSION.md or explicit mission
+- Do not infer future roadmap
+- Do not expand scope
+- Treat repo as execution-only
+
 ## Merge safety note
 
 - Do not treat `merge-gate` as a substitute for required delivery checks.
