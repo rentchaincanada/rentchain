@@ -16,6 +16,8 @@ import {
   normalizeLeaseRecord,
   sendLeaseWorkflowEmail,
 } from "../services/leaseNoticeWorkflowService";
+import { buildLeaseNoticePolicyRequest } from "../lib/policy/policyAdapters";
+import { evaluatePolicy, toAutopilotPolicySummary, writePolicyEvaluatedEvent } from "../lib/policy/policyEvaluator";
 
 const router = Router();
 
@@ -74,6 +76,30 @@ router.post("/:id/notice-preview", async (req: any, res) => {
     if (!leaseResult.ok) {
       return res.status(leaseResult.status).json({ ok: false, error: leaseResult.error });
     }
+    const policyRequest = buildLeaseNoticePolicyRequest({
+      action: "preview_notice",
+      actorRole: String(req.user?.role || "").trim().toLowerCase() || "landlord",
+      actorUserId: actorId,
+      lease: leaseResult.lease,
+      leaseId,
+      requestBody: req.body || {},
+    });
+    const policyResult = evaluatePolicy(policyRequest);
+    const autopilotPolicy = toAutopilotPolicySummary(policyResult);
+    await writePolicyEvaluatedEvent({
+      request: policyRequest,
+      result: policyResult,
+      actorType: "landlord",
+      metadata: {
+        landlordId,
+        tenantId: leaseResult.lease.tenantId,
+        propertyId: leaseResult.lease.propertyId,
+        unitId: leaseResult.lease.unitId,
+      },
+    });
+    if (policyResult.outcome === "block") {
+      return res.status(400).json({ ok: false, error: "LEASE_NOTICE_POLICY_BLOCKED", autopilotPolicy });
+    }
 
     const previewResult = buildPreview(leaseResult.lease, {
       rentChangeMode: String(req.body?.rentChangeMode || "").trim().toLowerCase() as RentChangeMode,
@@ -116,7 +142,7 @@ router.post("/:id/notice-preview", async (req: any, res) => {
       },
     });
 
-    return res.json({ ok: true, preview: previewResult.preview, rule: previewResult.rule });
+    return res.json({ ok: true, preview: previewResult.preview, rule: previewResult.rule, autopilotPolicy });
   } catch (err: any) {
     console.error("[lease-notice] preview failed", { message: err?.message || "failed" });
     return res.status(500).json({ ok: false, error: "LEASE_NOTICE_PREVIEW_FAILED" });
@@ -133,6 +159,30 @@ router.post("/:id/send-notice", async (req: any, res) => {
       return res.status(leaseResult.status).json({ ok: false, error: leaseResult.error });
     }
     const lease = leaseResult.lease;
+    const policyRequest = buildLeaseNoticePolicyRequest({
+      action: "send_notice",
+      actorRole: String(req.user?.role || "").trim().toLowerCase() || "landlord",
+      actorUserId: actorId,
+      lease,
+      leaseId,
+      requestBody: req.body || {},
+    });
+    const policyResult = evaluatePolicy(policyRequest);
+    const autopilotPolicy = toAutopilotPolicySummary(policyResult);
+    await writePolicyEvaluatedEvent({
+      request: policyRequest,
+      result: policyResult,
+      actorType: "landlord",
+      metadata: {
+        landlordId,
+        tenantId: lease.tenantId,
+        propertyId: lease.propertyId,
+        unitId: lease.unitId,
+      },
+    });
+    if (policyResult.outcome === "block") {
+      return res.status(400).json({ ok: false, error: "LEASE_NOTICE_POLICY_BLOCKED", autopilotPolicy });
+    }
     const previewResult = buildPreview(lease, {
       rentChangeMode: String(req.body?.rentChangeMode || "").trim().toLowerCase() as RentChangeMode,
       proposedRent: asNumber(req.body?.proposedRent),
@@ -334,7 +384,7 @@ router.post("/:id/send-notice", async (req: any, res) => {
       deliveryStatus: "sent",
     });
 
-    return res.status(201).json({ ok: true, noticeId: noticeRef.id, delivery: emailResult });
+    return res.status(201).json({ ok: true, noticeId: noticeRef.id, delivery: emailResult, autopilotPolicy });
   } catch (err: any) {
     console.error("[lease-notice] send failed", { message: err?.message || "failed" });
     return res.status(500).json({ ok: false, error: "LEASE_NOTICE_SEND_FAILED" });

@@ -30,6 +30,8 @@ import {
 } from "../lib/maintenanceNotifications";
 import { createTransaction } from "../services/financialTransactionService";
 import { writeCanonicalEvent } from "../lib/events/buildEvent";
+import { buildMaintenancePolicyRequest } from "../lib/policy/policyAdapters";
+import { evaluatePolicy, toAutopilotPolicySummary, writePolicyEvaluatedEvent } from "../lib/policy/policyEvaluator";
 
 const router = Router();
 
@@ -2714,7 +2716,10 @@ router.post("/landlord/work-orders/:id/submit-cost", requireAuth, async (req: an
     });
 
     const refreshed = await db.collection("workOrders").doc(workOrderId).get();
-    return res.json({ ok: true, item: await toWorkOrderResponseForAudience(refreshed.id, refreshed.data(), "landlord") });
+    return res.json({
+      ok: true,
+      item: await toWorkOrderResponseForAudience(refreshed.id, refreshed.data(), "landlord"),
+    });
   } catch (err) {
     console.error("[work-orders] landlord submit cost failed", err);
     return res.status(500).json({ ok: false, error: "WORK_ORDER_SUBMIT_COST_FAILED" });
@@ -2745,6 +2750,34 @@ router.post("/landlord/work-orders/:id/review-cost", requireAuth, async (req: an
     const note = asOptionalString(req.body?.note, 1000);
     if (decision === "revision_requested" && !note) {
       return res.status(400).json({ ok: false, error: "COST_REVISION_NOTE_REQUIRED" });
+    }
+    const policyRequest = buildMaintenancePolicyRequest({
+      action: decision === "approve" ? "approve_cost" : "review_cost",
+      actorRole: isAdmin(req) ? "admin" : "landlord",
+      actorUserId: access.userId,
+      workOrderId,
+      workOrder: access.item,
+      actualCostCents: currentCost.actualCostCents,
+    });
+    const policyResult = evaluatePolicy(policyRequest);
+    const autopilotPolicy = toAutopilotPolicySummary(policyResult);
+    await writePolicyEvaluatedEvent({
+      request: policyRequest,
+      result: policyResult,
+      actorType: isAdmin(req) ? "admin" : "landlord",
+      metadata: {
+        landlordId: asOptionalString((access.item as any)?.landlordId, 120),
+        maintenanceRequestId: asOptionalString((access.item as any)?.maintenanceRequestId, 120),
+        propertyId: asOptionalString((access.item as any)?.propertyId, 120),
+        unitId: asOptionalString((access.item as any)?.unitId, 120),
+      },
+    });
+    if (decision === "approve" && policyResult.outcome === "block") {
+      return res.status(409).json({
+        ok: false,
+        error: "MAINTENANCE_POLICY_BLOCKED",
+        autopilotPolicy,
+      });
     }
     const now = nowMs();
     const currentRevisionNumber = getCurrentCostRevisionNumber(access.item);
@@ -2821,7 +2854,11 @@ router.post("/landlord/work-orders/:id/review-cost", requireAuth, async (req: an
     }
 
     const refreshed = await db.collection("workOrders").doc(workOrderId).get();
-    return res.json({ ok: true, item: await toWorkOrderResponseForAudience(refreshed.id, refreshed.data(), "landlord") });
+    return res.json({
+      ok: true,
+      item: await toWorkOrderResponseForAudience(refreshed.id, refreshed.data(), "landlord"),
+      autopilotPolicy,
+    });
   } catch (err) {
     console.error("[work-orders] review cost failed", err);
     return res.status(500).json({ ok: false, error: "WORK_ORDER_REVIEW_COST_FAILED" });
@@ -3211,6 +3248,34 @@ router.post("/landlord/work-orders/:id/review-cost", requireAuth, async (req: an
     const decision = req.body?.decision === "approve" || req.body?.decision === "reject" ? req.body.decision : null;
     if (!decision) return res.status(400).json({ ok: false, error: "INVALID_COST_REVIEW_DECISION" });
     const note = asOptionalString(req.body?.note, 1000);
+    const policyRequest = buildMaintenancePolicyRequest({
+      action: decision === "approve" ? "approve_cost" : "review_cost",
+      actorRole: isAdmin(req) ? "admin" : "landlord",
+      actorUserId: access.userId,
+      workOrderId,
+      workOrder: access.item,
+      actualCostCents: currentCost.actualCostCents,
+    });
+    const policyResult = evaluatePolicy(policyRequest);
+    const autopilotPolicy = toAutopilotPolicySummary(policyResult);
+    await writePolicyEvaluatedEvent({
+      request: policyRequest,
+      result: policyResult,
+      actorType: isAdmin(req) ? "admin" : "landlord",
+      metadata: {
+        landlordId: asOptionalString((access.item as any)?.landlordId, 120),
+        maintenanceRequestId: asOptionalString((access.item as any)?.maintenanceRequestId, 120),
+        propertyId: asOptionalString((access.item as any)?.propertyId, 120),
+        unitId: asOptionalString((access.item as any)?.unitId, 120),
+      },
+    });
+    if (decision === "approve" && policyResult.outcome === "block") {
+      return res.status(409).json({
+        ok: false,
+        error: "MAINTENANCE_POLICY_BLOCKED",
+        autopilotPolicy,
+      });
+    }
     const now = nowMs();
 
     await db.collection("workOrders").doc(workOrderId).set(
@@ -3236,7 +3301,11 @@ router.post("/landlord/work-orders/:id/review-cost", requireAuth, async (req: an
     });
 
     const refreshed = await db.collection("workOrders").doc(workOrderId).get();
-    return res.json({ ok: true, item: await toWorkOrderResponseForAudience(refreshed.id, refreshed.data(), "landlord") });
+    return res.json({
+      ok: true,
+      item: await toWorkOrderResponseForAudience(refreshed.id, refreshed.data(), "landlord"),
+      autopilotPolicy,
+    });
   } catch (err) {
     console.error("[work-orders] review cost failed", err);
     return res.status(500).json({ ok: false, error: "WORK_ORDER_REVIEW_COST_FAILED" });
