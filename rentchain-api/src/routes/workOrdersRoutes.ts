@@ -30,8 +30,10 @@ import {
 } from "../lib/maintenanceNotifications";
 import { createTransaction } from "../services/financialTransactionService";
 import { writeCanonicalEvent } from "../lib/events/buildEvent";
+import { executeAutomation } from "../lib/automation/automationExecutor";
 import { buildMaintenancePolicyRequest } from "../lib/policy/policyAdapters";
 import { evaluatePolicy, toAutopilotPolicySummary, writePolicyEvaluatedEvent } from "../lib/policy/policyEvaluator";
+import { MAINTENANCE_AUTO_APPROVAL_THRESHOLD_CENTS } from "../lib/policy/policyRules";
 
 const router = Router();
 
@@ -91,6 +93,16 @@ function asString(value: unknown, max = 2000): string {
 function asOptionalString(value: unknown, max = 2000): string | null {
   const v = asString(value, max);
   return v || null;
+}
+
+function isAutomationRequested(body: any) {
+  return Boolean(body?.automationEnabled || body?.automation?.enabled);
+}
+
+function hasSupportingEvidenceForWorkOrder(workOrder: any) {
+  const evidence = Array.isArray(workOrder?.evidence) ? workOrder.evidence : [];
+  const costAttachments = Array.isArray(workOrder?.costAttachments) ? workOrder.costAttachments : [];
+  return evidence.length > 0 || costAttachments.length > 0;
 }
 
 function uniqueStrings(input: unknown, max = 100): string[] {
@@ -2742,10 +2754,12 @@ router.post("/landlord/work-orders/:id/review-cost", requireAuth, async (req: an
       return res.status(400).json({ ok: false, error: "COST_NOT_SUBMITTED" });
     }
 
-    const decision =
+    const requestedDecision =
       req.body?.decision === "approve" || req.body?.decision === "reject" || req.body?.decision === "revision_requested"
         ? req.body.decision
         : null;
+    const automationRequested = isAutomationRequested(req.body) && !requestedDecision;
+    const decision = requestedDecision || (automationRequested ? "approve" : null);
     if (!decision) return res.status(400).json({ ok: false, error: "INVALID_COST_REVIEW_DECISION" });
     const note = asOptionalString(req.body?.note, 1000);
     if (decision === "revision_requested" && !note) {
@@ -2772,91 +2786,135 @@ router.post("/landlord/work-orders/:id/review-cost", requireAuth, async (req: an
         unitId: asOptionalString((access.item as any)?.unitId, 120),
       },
     });
-    if (decision === "approve" && policyResult.outcome === "block") {
+    if (!automationRequested && decision === "approve" && policyResult.outcome === "block") {
       return res.status(409).json({
         ok: false,
         error: "MAINTENANCE_POLICY_BLOCKED",
         autopilotPolicy,
       });
     }
-    const now = nowMs();
-    const currentRevisionNumber = getCurrentCostRevisionNumber(access.item);
-    const history = normalizeCostReviewHistory((access.item as any)?.costReviewHistory);
-    const reviewStatus = decision === "approve" ? "approved" : decision === "reject" ? "rejected" : "revision_requested";
-    const updatedHistory = history.map((entry) =>
-      entry.revisionNumber === currentRevisionNumber
-        ? {
-            ...entry,
+    const executeDecision = async () => {
+      const now = nowMs();
+      const currentRevisionNumber = getCurrentCostRevisionNumber(access.item);
+      const history = normalizeCostReviewHistory((access.item as any)?.costReviewHistory);
+      const reviewStatus = decision === "approve" ? "approved" : decision === "reject" ? "rejected" : "revision_requested";
+      const updatedHistory = history.map((entry) =>
+        entry.revisionNumber === currentRevisionNumber
+          ? {
+              ...entry,
+              reviewStatus,
+              reviewedAt: now,
+              reviewedBy: access.userId,
+              reviewNote: note,
+            }
+          : entry
+      );
+
+      await db.collection("workOrders").doc(workOrderId).set(
+        {
+          cost: {
+            ...currentCost,
             reviewStatus,
-            reviewedAt: now,
             reviewedBy: access.userId,
+            reviewedAt: now,
             reviewNote: note,
-          }
-        : entry
-    );
-
-    await db.collection("workOrders").doc(workOrderId).set(
-      {
-        cost: {
-          ...currentCost,
-          reviewStatus,
-          reviewedBy: access.userId,
-          reviewedAt: now,
-          reviewNote: note,
-          revisionRequestedAt: decision === "revision_requested" ? now : null,
-          revisionRequestedBy: decision === "revision_requested" ? access.userId : null,
+            revisionRequestedAt: decision === "revision_requested" ? now : null,
+            revisionRequestedBy: decision === "revision_requested" ? access.userId : null,
+          },
+          costReviewHistory: updatedHistory,
+          updatedAtMs: now,
         },
-        costReviewHistory: updatedHistory,
-        updatedAtMs: now,
-      },
-      { merge: true }
-    );
+        { merge: true }
+      );
 
-    await writeWorkOrderUpdate({
-      workOrderId,
-      actorRole: isAdmin(req) ? "admin" : "landlord",
-      actorId: access.userId,
-      updateType: "invoice",
-      message:
-        decision === "approve"
-          ? "Cost submission approved."
-          : decision === "reject"
-          ? `Cost submission rejected.${note ? ` ${note}` : ""}`
-          : `Cost revision requested.${note ? ` ${note}` : ""}`,
-    });
-    if (decision === "approve") {
-      await writeCanonicalEvent({
-        domain: "expense",
-        action: "approved",
-        status: "approved",
+      await writeWorkOrderUpdate({
+        workOrderId,
+        actorRole: isAdmin(req) ? "admin" : "landlord",
+        actorId: access.userId,
+        updateType: "invoice",
+        message:
+          decision === "approve"
+            ? "Cost submission approved."
+            : decision === "reject"
+            ? `Cost submission rejected.${note ? ` ${note}` : ""}`
+            : `Cost revision requested.${note ? ` ${note}` : ""}`,
+      });
+      if (decision === "approve") {
+        await writeCanonicalEvent({
+          domain: "expense",
+          action: "approved",
+          status: "approved",
+          actor: {
+            type: isAdmin(req) ? "admin" : "landlord",
+            role: isAdmin(req) ? "admin" : "landlord",
+            id: access.userId,
+          },
+          resource: {
+            type: "work_order_cost",
+            id: workOrderId,
+            parentType: "work_order",
+            parentId: workOrderId,
+          },
+          occurredAt: now,
+          visibility: "internal",
+          summary: "Maintenance cost approved for expense reconciliation",
+          metadata: {
+            maintenanceRequestId: asOptionalString((access.item as any)?.maintenanceRequestId, 120),
+            propertyId: asOptionalString((access.item as any)?.propertyId, 120),
+            unitId: asOptionalString((access.item as any)?.unitId, 120),
+            actualCostCents: currentCost.actualCostCents,
+            currency: currentCost.currency || "CAD",
+          },
+        });
+      }
+
+      const refreshed = await db.collection("workOrders").doc(workOrderId).get();
+      return await toWorkOrderResponseForAudience(refreshed.id, refreshed.data(), "landlord");
+    };
+
+    if (automationRequested) {
+      const automation = await executeAutomation({
+        action: "maintenance.auto_approve_cost",
+        policyResult,
         actor: {
           type: isAdmin(req) ? "admin" : "landlord",
-          role: isAdmin(req) ? "admin" : "landlord",
           id: access.userId,
+          role: isAdmin(req) ? "admin" : "landlord",
         },
         resource: {
-          type: "work_order_cost",
+          type: "work_order",
           id: workOrderId,
-          parentType: "work_order",
-          parentId: workOrderId,
         },
-        occurredAt: now,
         visibility: "internal",
-        summary: "Maintenance cost approved for expense reconciliation",
         metadata: {
+          domain: "maintenance",
+          landlordId: asOptionalString((access.item as any)?.landlordId, 120),
           maintenanceRequestId: asOptionalString((access.item as any)?.maintenanceRequestId, 120),
           propertyId: asOptionalString((access.item as any)?.propertyId, 120),
           unitId: asOptionalString((access.item as any)?.unitId, 120),
-          actualCostCents: currentCost.actualCostCents,
-          currency: currentCost.currency || "CAD",
+          policyAction: "approve_cost",
         },
+        context: {
+          alreadyApproved: String(currentCost.reviewStatus || "").toLowerCase() === "approved",
+          actualCostCents: currentCost.actualCostCents,
+          thresholdCents: MAINTENANCE_AUTO_APPROVAL_THRESHOLD_CENTS,
+          hasSupportingEvidence: hasSupportingEvidenceForWorkOrder(access.item),
+          execute: executeDecision,
+        },
+      });
+      const fallbackItem = await toWorkOrderResponseForAudience(workOrderId, access.item, "landlord");
+      return res.json({
+        ok: true,
+        item: automation.data || fallbackItem,
+        autopilotPolicy,
+        automationResult: automation.automationResult,
       });
     }
 
-    const refreshed = await db.collection("workOrders").doc(workOrderId).get();
+    const item = await executeDecision();
     return res.json({
       ok: true,
-      item: await toWorkOrderResponseForAudience(refreshed.id, refreshed.data(), "landlord"),
+      item,
       autopilotPolicy,
     });
   } catch (err) {

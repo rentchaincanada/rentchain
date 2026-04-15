@@ -1021,6 +1021,81 @@ describe("workOrdersRoutes execution completion", () => {
     );
   });
 
+  it("auto-approves maintenance cost when automation is requested and policy allows", async () => {
+    const router = (await import("../workOrdersRoutes")).default;
+    ensureCollection("workOrders").set("wo-1", {
+      ...ensureCollection("workOrders").get("wo-1"),
+      status: "completed",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      maintenanceRequestId: "maint-1",
+      cost: {
+        actualCostCents: 32000,
+        currency: "CAD",
+        submittedByRole: "contractor",
+        submittedById: "contractor-1",
+        submittedAt: 700,
+        reviewStatus: "pending_review",
+        latestRevisionNumber: 1,
+      },
+      costReviewHistory: [
+        {
+          id: "history-1",
+          revisionNumber: 1,
+          submittedAt: 700,
+          submittedByRole: "contractor",
+          submittedById: "contractor-1",
+          actualCostCents: 32000,
+          currency: "CAD",
+          reviewStatus: "pending_review",
+        },
+      ],
+      costAttachments: [
+        {
+          id: "attachment-1",
+          uploadedAt: 700,
+          uploadedByRole: "contractor",
+          uploadedById: "contractor-1",
+          visibility: "landlord_only",
+          fileName: "invoice.pdf",
+        },
+      ],
+    });
+
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/work-orders/wo-1/review-cost",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "landlord-1",
+          role: "landlord",
+          landlordId: "landlord-1",
+        }),
+      },
+      body: {
+        automationEnabled: true,
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.item?.cost?.reviewStatus).toBe("approved");
+    expect(res.body?.automationResult).toEqual(
+      expect.objectContaining({
+        action: "maintenance.auto_approve_cost",
+        executed: true,
+        skipped: false,
+      })
+    );
+    const automationEvent = Array.from(ensureCollection("canonicalEvents").values()).find(
+      (entry) => entry?.type === "automation.executed" && entry?.metadata?.action === "maintenance.auto_approve_cost"
+    );
+    expect(automationEvent).toEqual(
+      expect.objectContaining({
+        domain: "system",
+      })
+    );
+  });
+
   it("blocks maintenance approval when supporting evidence is missing", async () => {
     const router = (await import("../workOrdersRoutes")).default;
     ensureCollection("workOrders").set("wo-1", {

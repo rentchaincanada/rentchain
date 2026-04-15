@@ -258,6 +258,55 @@ describe("rentalApplicationsRoutes canonical screening events", () => {
     );
   });
 
+  it("auto-starts checkout from quote when automation is requested and policy allows", async () => {
+    const router = (await import("../rentalApplicationsRoutes")).default;
+    const response = await invokeRouter(router, {
+      method: "POST",
+      url: "/rental-applications/app-1/screening/quote",
+      headers: {
+        origin: "http://localhost:5173",
+      },
+      body: {
+        consent: {
+          given: true,
+          timestamp: "2026-03-02T10:00:00.000Z",
+          version: "v1.0",
+        },
+        automationEnabled: true,
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body?.automationResult).toEqual(
+      expect.objectContaining({
+        action: "screening.auto_start_checkout",
+        executed: true,
+        skipped: false,
+      })
+    );
+    expect(response.body?.checkoutUrl).toBe("https://checkout.test/session_1");
+    const events = Array.from((collections.get("canonicalEvents") || new Map()).values());
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "automation.executed",
+          domain: "system",
+          metadata: expect.objectContaining({
+            action: "screening.auto_start_checkout",
+          }),
+        }),
+        expect.objectContaining({
+          type: "policy.evaluated",
+          domain: "policy",
+          metadata: expect.objectContaining({
+            domain: "screening",
+            action: "start_checkout",
+          }),
+        }),
+      ])
+    );
+  });
+
   it("blocks screening checkout when the provider is degraded", async () => {
     process.env.NODE_ENV = "production";
     const { getScreeningProviderHealth } = await import("../../services/screening/providerHealth");
