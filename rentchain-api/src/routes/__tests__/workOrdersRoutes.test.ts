@@ -548,6 +548,16 @@ describe("workOrdersRoutes execution completion", () => {
     expect(revisionRes.status).toBe(200);
     expect(revisionRes.body?.item?.cost?.reviewStatus).toBe("revision_requested");
     expect(revisionRes.body?.item?.costReviewHistory?.[0]?.reviewStatus).toBe("revision_requested");
+    const approvalRequestedEvent = Array.from(ensureCollection("canonicalEvents").values()).find(
+      (entry) => entry?.type === "maintenance.approval_requested"
+    );
+    expect(approvalRequestedEvent).toEqual(
+      expect.objectContaining({
+        type: "maintenance.approval_requested",
+        domain: "maintenance",
+        action: "approval_requested",
+      })
+    );
 
     ensureCollection("workOrders").set("wo-1", {
       ...ensureCollection("workOrders").get("wo-1"),

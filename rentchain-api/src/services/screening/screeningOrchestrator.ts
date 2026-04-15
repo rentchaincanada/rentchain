@@ -1,6 +1,7 @@
 import { db } from "../../config/firebase";
 import type { ScreeningResultSummary } from "./providers/types";
 import { writeScreeningEvent } from "./screeningEvents";
+import { writeCanonicalEvent } from "../../lib/events/buildEvent";
 
 type ScreeningStatus =
   | "unpaid"
@@ -112,6 +113,28 @@ export async function markScreeningComplete(
     at: now,
     meta: { status: "complete" },
     actor: String(actorUser?.role || "").toLowerCase() === "admin" ? "admin" : "system",
+  });
+  await writeCanonicalEvent({
+    domain: "screening",
+    action: "completed",
+    status: "complete",
+    actor: {
+      type: String(actorUser?.role || "").toLowerCase() === "admin" ? "admin" : "system",
+      role: String(actorUser?.role || "").trim() || "system",
+      id: String(actorUser?.id || "").trim() || null,
+    },
+    resource: {
+      type: "rental_application",
+      id: applicationId,
+    },
+    occurredAt: now,
+    visibility: "internal",
+    summary: "Screening completed",
+    metadata: {
+      landlordId: data?.landlordId || null,
+      resultId: resultRef.id,
+      provider: data?.screeningProvider || "manual",
+    },
   });
 
   return { ok: true, resultId: resultRef.id, idempotent: false };

@@ -10,6 +10,7 @@ import { applyScreeningResultsFromOrder } from "../services/stripeScreeningProce
 import { beginScreening } from "../services/screening/screeningOrchestrator";
 import { writeScreeningEvent } from "../services/screening/screeningEvents";
 import { recordScreeningPaymentFailed } from "../services/screeningPaymentTransactionService";
+import { writeCanonicalEvent } from "../lib/events/buildEvent";
 
 interface StripeWebhookRequest extends Request {
   rawBody?: Buffer;
@@ -140,6 +141,29 @@ async function markApplicationScreeningPaid(params: {
     at: paidAt,
     meta: { stripeEventId: eventId, sessionId },
     actor: "system",
+  });
+  await writeCanonicalEvent({
+    domain: "screening",
+    action: "paid",
+    status: "paid",
+    actor: {
+      type: "system",
+      role: "system",
+      id: null,
+    },
+    resource: {
+      type: "rental_application",
+      id: applicationId,
+    },
+    occurredAt: paidAt,
+    visibility: "internal",
+    summary: "Screening payment confirmed",
+    metadata: {
+      landlordId: data?.landlordId || null,
+      stripeEventId: eventId,
+      stripeCheckoutSessionId: sessionId,
+      stripePaymentIntentId: paymentIntentId || null,
+    },
   });
 
   console.log("[stripe_webhook]", {
