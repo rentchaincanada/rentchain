@@ -216,7 +216,11 @@ describe("landlord maintenance workspace", () => {
 
     expect((await screen.findAllByText(/Reopen \/ escalation/i)).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Escalated/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/The bedroom is cold again after the return visit/i).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText((_, element) =>
+        Boolean(element?.textContent?.match(/The bedroom is cold again after the return visit/i))
+      ).length
+    ).toBeGreaterThan(0);
   });
 
   it("records a landlord start-of-service update from the execution workspace", async () => {
@@ -530,6 +534,14 @@ describe("landlord maintenance workspace", () => {
 
     expect(await screen.findAllByText(/Harbour View/i)).not.toHaveLength(0);
     expect(screen.getAllByText(/Maple Court/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Property financial intelligence/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Top maintenance cost/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Top follow-up pressure/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Unlinked cost burden/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Needs expense review/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Some follow-up pressure/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/High maintenance load/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Operational burden/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Unit-level activity/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Unit 101/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Unit 102/i).length).toBeGreaterThan(0);

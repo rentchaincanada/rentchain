@@ -23,6 +23,7 @@ import { buildMaintenanceAssignmentRoutingView } from "./maintenanceAssignmentRo
 import { buildMaintenanceConfirmationAccessView } from "./maintenanceConfirmationAccessState";
 import { buildMaintenancePortfolioCostRollupView } from "./maintenancePortfolioCostRollupState";
 import { buildMaintenanceCostView } from "./maintenanceCostState";
+import { buildPropertyFinancialIntelligenceView } from "./propertyFinancialIntelligenceState";
 import { buildMaintenanceReopenEscalationView } from "./maintenanceReopenEscalationState";
 import { buildMaintenanceServiceExecutionView } from "./maintenanceServiceExecutionState";
 import { buildMaintenanceResolutionVerificationView } from "./maintenanceResolutionVerificationState";
@@ -452,6 +453,7 @@ export default function MaintenanceRequestsPage() {
   const selectedCost = React.useMemo(() => (selected ? buildMaintenanceCostView(selected, "landlord") : null), [selected]);
   const calendarEvents = React.useMemo(() => buildMaintenanceSchedulingCalendarEvents(items), [items]);
   const portfolioRollup = React.useMemo(() => buildMaintenancePortfolioCostRollupView(items), [items]);
+  const propertyIntelligence = React.useMemo(() => buildPropertyFinancialIntelligenceView(items), [items]);
   const calendarDays = React.useMemo(() => buildCalendarDays(calendarMonth), [calendarMonth]);
   const calendarEventMap = React.useMemo(() => {
     const next = new Map<string, typeof calendarEvents>();
@@ -630,6 +632,164 @@ export default function MaintenanceRequestsPage() {
               </option>
             ))}
           </select>
+        </div>
+      </Card>
+
+      <Card elevated>
+        <div style={{ display: "grid", gap: spacing.md }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontWeight: 800, color: text.primary }}>Property financial intelligence</div>
+              <div style={{ color: text.muted, marginTop: 4 }}>{propertyIntelligence.summaryDescription}</div>
+            </div>
+          </div>
+          {!propertyIntelligence.propertySummaries.length ? (
+            <div style={{ color: text.muted }}>Property intelligence will appear here when requests are in view.</div>
+          ) : (
+            <div style={{ display: "grid", gap: spacing.sm }}>
+              <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+                {propertyIntelligence.spotlights.map((spotlight) => (
+                  <div
+                    key={spotlight.label}
+                    style={{
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: radius.md,
+                      padding: "12px 14px",
+                      background: colors.panel,
+                      display: "grid",
+                      gap: 6,
+                    }}
+                  >
+                    <div style={{ color: text.muted, fontSize: 12 }}>{spotlight.label}</div>
+                    <div style={{ color: text.primary, fontWeight: 800 }}>{spotlight.propertyLabel}</div>
+                    <div style={{ color: text.primary, fontWeight: 700 }}>{spotlight.valueLabel}</div>
+                    <div style={{ color: text.secondary }}>{spotlight.supportingLabel}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
+                {[
+                  { label: "High maintenance load", value: propertyIntelligence.highMaintenanceLoadCount },
+                  { label: "Follow-up heavy", value: propertyIntelligence.followUpHeavyCount },
+                  { label: "Needs expense review", value: propertyIntelligence.expenseReviewCount },
+                ].map((item) => (
+                  <div
+                    key={item.label}
+                    style={{
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: radius.md,
+                      padding: "10px 12px",
+                      background: colors.panel,
+                    }}
+                  >
+                    <div style={{ color: text.muted, fontSize: 12 }}>{item.label}</div>
+                    <div style={{ color: text.primary, fontSize: 24, fontWeight: 800 }}>{item.value}</div>
+                  </div>
+                ))}
+              </div>
+              <div
+                style={{
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: radius.md,
+                  padding: "10px 12px",
+                  background: colors.panel,
+                  display: "grid",
+                  gap: 6,
+                }}
+              >
+                <div style={{ fontWeight: 700, color: text.primary }}>{propertyIntelligence.summaryTitle}</div>
+                {propertyIntelligence.nextSteps.map((step) => (
+                  <div key={step} style={{ color: text.secondary }}>
+                    {step}
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: "grid", gap: 10 }}>
+                {propertyIntelligence.rankedAttention.slice(0, 3).map((property) => (
+                  <div
+                    key={`intelligence-${property.propertyId}`}
+                    style={{
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: radius.md,
+                      padding: "12px 14px",
+                      background: colors.panel,
+                      display: "grid",
+                      gap: 10,
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                      <div>
+                        <div style={{ fontWeight: 800, color: text.primary }}>{property.propertyLabel}</div>
+                        <div style={{ color: text.muted, marginTop: 4 }}>
+                          {property.maintenanceLoadLabel} • {property.followUpPressureLabel}
+                        </div>
+                      </div>
+                      <div style={{ color: text.primary, fontWeight: 800 }}>{fmtMoney(property.totalRecordedCostCents)}</div>
+                    </div>
+                    {property.attentionFlags.length ? (
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        {property.attentionFlags.map((flag) => {
+                          const label =
+                            flag === "high_maintenance_load"
+                              ? "High maintenance load"
+                              : flag === "follow_up_heavy"
+                                ? "Follow-up heavy"
+                                : flag === "needs_expense_review"
+                                  ? "Needs expense review"
+                                  : "Cost mostly linked";
+                          return (
+                            <span
+                              key={`${property.propertyId}-${flag}`}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                padding: "4px 8px",
+                                borderRadius: 999,
+                                background: colors.canvas,
+                                border: `1px solid ${colors.border}`,
+                                color: text.primary,
+                                fontSize: 12,
+                                fontWeight: 700,
+                              }}
+                            >
+                              {label}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                    <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
+                      <div>
+                        <div style={{ color: text.muted, fontSize: 12 }}>Unlinked maintenance cost</div>
+                        <div style={{ color: text.primary, fontWeight: 700, marginTop: 6 }}>
+                          {fmtMoney(property.totalUnlinkedCostCents)}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ color: text.muted, fontSize: 12 }}>Open requests</div>
+                        <div style={{ color: text.primary, fontWeight: 700, marginTop: 6 }}>{property.openCount}</div>
+                      </div>
+                      <div>
+                        <div style={{ color: text.muted, fontSize: 12 }}>Reopened / escalated</div>
+                        <div style={{ color: text.primary, fontWeight: 700, marginTop: 6 }}>
+                          {property.reopenedOrEscalatedCount}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ display: "grid", gap: 6 }}>
+                      <div style={{ fontWeight: 700, color: text.primary }}>Operational burden</div>
+                      <div style={{ color: text.secondary }}>{property.unitActivityLabel}</div>
+                      {property.nextSteps.map((step) => (
+                        <div key={step} style={{ color: text.secondary }}>
+                          {step}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </Card>
 
