@@ -13,6 +13,8 @@ const maintenanceWorkflowApi = vi.hoisted(() => ({
 const workOrdersApi = vi.hoisted(() => ({
   listContractorInvites: vi.fn(),
   getContractorProfileById: vi.fn(),
+  submitLandlordWorkOrderCost: vi.fn(),
+  linkWorkOrderCostToExpense: vi.fn(),
 }));
 
 const showToast = vi.fn();
@@ -82,6 +84,8 @@ describe("landlord maintenance workspace", () => {
       ],
     });
     workOrdersApi.listContractorInvites.mockResolvedValue([]);
+    workOrdersApi.submitLandlordWorkOrderCost.mockResolvedValue({});
+    workOrdersApi.linkWorkOrderCostToExpense.mockResolvedValue({});
   });
 
   it("renders the landlord maintenance workspace with lifecycle guidance", async () => {
@@ -325,5 +329,117 @@ describe("landlord maintenance workspace", () => {
 
     expect(await screen.findAllByText(/Leaky pipe/i)).not.toHaveLength(0);
     expect(screen.getAllByText(/Ready for service/i).length).toBeGreaterThan(0);
+  });
+
+  it("records landlord cost on a closed maintenance request", async () => {
+    maintenanceWorkflowApi.listLandlordMaintenance.mockResolvedValue({
+      items: [
+        {
+          id: "maint-1",
+          workOrderId: "maintenance_maint-1",
+          tenantId: "tenant-1",
+          landlordId: "landlord-1",
+          propertyId: "prop-1",
+          unitId: "unit-2",
+          tenantName: "Taylor Tenant",
+          propertyLabel: "123 Main St",
+          unitLabel: "Unit 4",
+          title: "Broken heater",
+          description: "Heat is not turning on.",
+          category: "HVAC",
+          priority: "urgent",
+          status: "completed",
+          assignedContractorName: "North Shore HVAC",
+          resolutionStatus: "resolved",
+          tenantSignoffStatus: "accepted",
+          finalResolvedAt: Date.UTC(2026, 3, 18, 10, 0),
+          createdAt: 100,
+          updatedAt: 200,
+          statusHistory: [],
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/maintenance/maint-1"]}>
+        <Routes>
+          <Route path="/maintenance/:id" element={<MaintenanceRequestsPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByLabelText(/Total cost/i)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/Total cost/i), { target: { value: "245.00" } });
+    fireEvent.change(screen.getByLabelText(/Labor cost/i), { target: { value: "150.00" } });
+    fireEvent.change(screen.getByLabelText(/Material cost/i), { target: { value: "50.00" } });
+    fireEvent.change(screen.getByLabelText(/Vendor cost/i), { target: { value: "45.00" } });
+    fireEvent.change(screen.getByLabelText(/Cost note/i), {
+      target: { value: "Recorded after the final closure update." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Record cost/i }));
+
+    expect(workOrdersApi.submitLandlordWorkOrderCost).toHaveBeenCalledWith("maintenance_maint-1", {
+      actualCostCents: 24500,
+      currency: "CAD",
+      lineItems: [
+        { label: "Labor cost", amountCents: 15000, category: "labor" },
+        { label: "Material cost", amountCents: 5000, category: "materials" },
+        { label: "Vendor cost", amountCents: 4500, category: "other" },
+      ],
+      reviewNote: "Recorded after the final closure update.",
+    });
+  });
+
+  it("links a recorded maintenance cost to an expense when eligible", async () => {
+    maintenanceWorkflowApi.listLandlordMaintenance.mockResolvedValue({
+      items: [
+        {
+          id: "maint-1",
+          workOrderId: "maintenance_maint-1",
+          tenantId: "tenant-1",
+          landlordId: "landlord-1",
+          propertyId: "prop-1",
+          unitId: "unit-2",
+          tenantName: "Taylor Tenant",
+          propertyLabel: "123 Main St",
+          unitLabel: "Unit 4",
+          title: "Broken heater",
+          description: "Heat is not turning on.",
+          category: "HVAC",
+          priority: "urgent",
+          status: "completed",
+          resolutionStatus: "resolved",
+          tenantSignoffStatus: "accepted",
+          finalResolvedAt: Date.UTC(2026, 3, 18, 10, 0),
+          cost: {
+            actualCostCents: 24500,
+            currency: "CAD",
+            reviewStatus: "approved",
+            linkedExpenseStatus: "not_linked",
+          },
+          costLineItems: [
+            { id: "labor", label: "Labor cost", amountCents: 15000, category: "labor" },
+            { id: "materials", label: "Material cost", amountCents: 5000, category: "materials" },
+            { id: "vendor", label: "Vendor cost", amountCents: 4500, category: "other" },
+          ],
+          expenseLink: { status: "not_linked", expenseId: null },
+          createdAt: 100,
+          updatedAt: 200,
+          statusHistory: [],
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/maintenance/maint-1"]}>
+        <Routes>
+          <Route path="/maintenance/:id" element={<MaintenanceRequestsPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /Link to expense/i }));
+
+    expect(workOrdersApi.linkWorkOrderCostToExpense).toHaveBeenCalledWith("maintenance_maint-1");
   });
 });

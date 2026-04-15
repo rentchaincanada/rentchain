@@ -22,6 +22,7 @@ export type MaintenanceWorkflowStatus =
 
 export type MaintenanceWorkflowItem = {
   id: string;
+  workOrderId?: string | null;
   tenantId: string;
   landlordId: string;
   propertyId: string | null;

@@ -11,11 +11,17 @@ import {
   type MaintenanceWorkflowItem,
   type MaintenanceWorkflowStatus,
 } from "../api/maintenanceWorkflowApi";
-import { getContractorProfileById, listContractorInvites } from "../api/workOrdersApi";
+import {
+  getContractorProfileById,
+  linkWorkOrderCostToExpense,
+  listContractorInvites,
+  submitLandlordWorkOrderCost,
+} from "../api/workOrdersApi";
 import { colors, radius, spacing, text } from "../styles/tokens";
 import { buildMaintenanceLifecycleView, buildMaintenanceWorkspaceState } from "./maintenanceWorkspaceState";
 import { buildMaintenanceAssignmentRoutingView } from "./maintenanceAssignmentRoutingState";
 import { buildMaintenanceConfirmationAccessView } from "./maintenanceConfirmationAccessState";
+import { buildMaintenanceCostView } from "./maintenanceCostState";
 import { buildMaintenanceReopenEscalationView } from "./maintenanceReopenEscalationState";
 import { buildMaintenanceServiceExecutionView } from "./maintenanceServiceExecutionState";
 import { buildMaintenanceResolutionVerificationView } from "./maintenanceResolutionVerificationState";
@@ -38,6 +44,14 @@ const FILTERS: Array<{ value: "all" | MaintenanceWorkflowStatus; label: string }
 function fmtDate(ts?: number | null) {
   if (!ts) return "-";
   return new Date(ts).toLocaleString();
+}
+
+function fmtMoney(cents?: number | null, currency = "CAD") {
+  if (typeof cents !== "number") return "-";
+  return new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency: currency || "CAD",
+  }).format(cents / 100);
 }
 
 function statusTone(status: string) {
@@ -130,6 +144,11 @@ export default function MaintenanceRequestsPage() {
   const [serviceWindowStart, setServiceWindowStart] = React.useState("");
   const [serviceWindowEnd, setServiceWindowEnd] = React.useState("");
   const [accessRequired, setAccessRequired] = React.useState<"unknown" | "yes" | "no">("unknown");
+  const [costTotalInput, setCostTotalInput] = React.useState("");
+  const [laborCostInput, setLaborCostInput] = React.useState("");
+  const [materialCostInput, setMaterialCostInput] = React.useState("");
+  const [vendorCostInput, setVendorCostInput] = React.useState("");
+  const [costNote, setCostNote] = React.useState("");
   const [calendarMonth, setCalendarMonth] = React.useState(() => new Date());
 
   const load = React.useCallback(async () => {
@@ -226,6 +245,19 @@ export default function MaintenanceRequestsPage() {
       setAccessRequired(
         selected.accessRequired === true ? "yes" : selected.accessRequired === false ? "no" : "unknown"
       );
+      setCostTotalInput(
+        typeof selected.cost?.actualCostCents === "number" ? (selected.cost.actualCostCents / 100).toFixed(2) : ""
+      );
+      const laborLine = selected.costLineItems?.find((entry) => entry.category === "labor")?.amountCents ?? null;
+      const materialLine = selected.costLineItems?.find((entry) => entry.category === "materials")?.amountCents ?? null;
+      const vendorLine =
+        selected.costLineItems
+          ?.filter((entry) => entry.category !== "labor" && entry.category !== "materials")
+          .reduce((sum, entry) => sum + (typeof entry.amountCents === "number" ? entry.amountCents : 0), 0) ?? null;
+      setLaborCostInput(typeof laborLine === "number" ? (laborLine / 100).toFixed(2) : "");
+      setMaterialCostInput(typeof materialLine === "number" ? (materialLine / 100).toFixed(2) : "");
+      setVendorCostInput(typeof vendorLine === "number" && vendorLine > 0 ? (vendorLine / 100).toFixed(2) : "");
+      setCostNote(String(selected.cost?.reviewNote || ""));
       return;
     }
     if (filtered.length > 0 && !routeId) {
@@ -238,6 +270,17 @@ export default function MaintenanceRequestsPage() {
       setServiceWindowStart(toLocalInputValue(first.serviceWindowStartAt));
       setServiceWindowEnd(toLocalInputValue(first.serviceWindowEndAt));
       setAccessRequired(first.accessRequired === true ? "yes" : first.accessRequired === false ? "no" : "unknown");
+      setCostTotalInput(typeof first.cost?.actualCostCents === "number" ? (first.cost.actualCostCents / 100).toFixed(2) : "");
+      const laborLine = first.costLineItems?.find((entry) => entry.category === "labor")?.amountCents ?? null;
+      const materialLine = first.costLineItems?.find((entry) => entry.category === "materials")?.amountCents ?? null;
+      const vendorLine =
+        first.costLineItems
+          ?.filter((entry) => entry.category !== "labor" && entry.category !== "materials")
+          .reduce((sum, entry) => sum + (typeof entry.amountCents === "number" ? entry.amountCents : 0), 0) ?? null;
+      setLaborCostInput(typeof laborLine === "number" ? (laborLine / 100).toFixed(2) : "");
+      setMaterialCostInput(typeof materialLine === "number" ? (materialLine / 100).toFixed(2) : "");
+      setVendorCostInput(typeof vendorLine === "number" && vendorLine > 0 ? (vendorLine / 100).toFixed(2) : "");
+      setCostNote(String(first.cost?.reviewNote || ""));
     }
   }, [filtered, routeId, selected]);
 
@@ -405,6 +448,7 @@ export default function MaintenanceRequestsPage() {
     () => (selected ? buildMaintenanceReopenEscalationView(selected, "landlord") : null),
     [selected]
   );
+  const selectedCost = React.useMemo(() => (selected ? buildMaintenanceCostView(selected, "landlord") : null), [selected]);
   const calendarEvents = React.useMemo(() => buildMaintenanceSchedulingCalendarEvents(items), [items]);
   const calendarDays = React.useMemo(() => buildCalendarDays(calendarMonth), [calendarMonth]);
   const calendarEventMap = React.useMemo(() => {
@@ -418,6 +462,97 @@ export default function MaintenanceRequestsPage() {
     });
     return next;
   }, [calendarDays, calendarEvents]);
+
+  const saveCost = React.useCallback(async () => {
+    if (!selected || !selected.workOrderId || !selectedCost?.canRecordCost) return;
+
+    const normalizedTotal = Number(costTotalInput);
+    if (!Number.isFinite(normalizedTotal) || normalizedTotal <= 0) {
+      setError("Enter a valid total cost before saving.");
+      return;
+    }
+
+    const parseOptionalMoney = (value: string, label: string) => {
+      if (!value.trim()) return null;
+      const amount = Number(value);
+      if (!Number.isFinite(amount) || amount < 0) {
+        throw new Error(`Enter a valid ${label}.`);
+      }
+      return Math.round(amount * 100);
+    };
+
+    let laborCostCents: number | null = null;
+    let materialCostCents: number | null = null;
+    let vendorCostCents: number | null = null;
+    try {
+      laborCostCents = parseOptionalMoney(laborCostInput, "labor cost");
+      materialCostCents = parseOptionalMoney(materialCostInput, "material cost");
+      vendorCostCents = parseOptionalMoney(vendorCostInput, "vendor cost");
+    } catch (err: any) {
+      setError(String(err?.message || "Enter valid cost amounts."));
+      return;
+    }
+
+    const lineItems = [
+      laborCostCents !== null ? { label: "Labor cost", amountCents: laborCostCents, category: "labor" as const } : null,
+      materialCostCents !== null
+        ? { label: "Material cost", amountCents: materialCostCents, category: "materials" as const }
+        : null,
+      vendorCostCents !== null ? { label: "Vendor cost", amountCents: vendorCostCents, category: "other" as const } : null,
+    ].filter((entry): entry is { label: string; amountCents: number; category: "labor" | "materials" | "other" } => Boolean(entry));
+
+    const totalCostCents = Math.round(normalizedTotal * 100);
+    const lineItemTotalCents = lineItems.reduce((sum, entry) => sum + entry.amountCents, 0);
+    if (lineItems.length > 0 && lineItemTotalCents !== totalCostCents) {
+      setError("The labor, material, and vendor costs need to add up to the total cost.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    try {
+      await submitLandlordWorkOrderCost(selected.workOrderId, {
+        actualCostCents: totalCostCents,
+        currency: selected.cost?.currency || "CAD",
+        lineItems,
+        reviewNote: costNote.trim() || undefined,
+      });
+      showToast({
+        message: selected.cost?.actualCostCents ? "Maintenance cost updated." : "Maintenance cost recorded.",
+        variant: "success",
+      });
+      await load();
+    } catch (err: any) {
+      setError(String(err?.message || "Failed to save maintenance cost"));
+    } finally {
+      setSaving(false);
+    }
+  }, [
+    costNote,
+    costTotalInput,
+    laborCostInput,
+    load,
+    materialCostInput,
+    selected,
+    selectedCost?.canRecordCost,
+    showToast,
+    vendorCostInput,
+  ]);
+
+  const linkExpense = React.useCallback(async () => {
+    if (!selected?.workOrderId || !selectedCost?.canLinkExpense) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await linkWorkOrderCostToExpense(selected.workOrderId);
+      showToast({ message: "Expense link recorded.", variant: "success" });
+      await load();
+    } catch (err: any) {
+      setError(String(err?.message || "Failed to link maintenance cost to an expense"));
+    } finally {
+      setSaving(false);
+    }
+  }, [load, selected?.workOrderId, selectedCost?.canLinkExpense, showToast]);
 
   const totalOpen = items.filter((item) => !["completed", "cancelled"].includes(item.status)).length;
   const needsReview = items.filter((item) => item.status === "submitted").length;
@@ -1017,6 +1152,167 @@ export default function MaintenanceRequestsPage() {
                           {step}
                         </div>
                       ))}
+                    </div>
+                  ) : null}
+
+                  {selectedCost ? (
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: radius.md,
+                        padding: "12px 14px",
+                        background: colors.panel,
+                        display: "grid",
+                        gap: 8,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.primary }}>Cost</div>
+                      <div style={{ color: text.secondary }}>{selectedCost.summary}</div>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
+                        <div>
+                          <div style={{ color: text.muted, fontSize: 12 }}>Cost state</div>
+                          <div style={{ color: text.primary, fontWeight: 700, marginTop: 6 }}>{selectedCost.costLabel}</div>
+                        </div>
+                        <div>
+                          <div style={{ color: text.muted, fontSize: 12 }}>Readiness</div>
+                          <div style={{ color: text.primary, fontWeight: 700, marginTop: 6 }}>
+                            {selectedCost.readinessLabel}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ color: text.muted, fontSize: 12 }}>Total cost</div>
+                          <div style={{ color: text.primary, fontWeight: 700, marginTop: 6 }}>
+                            {fmtMoney(selectedCost.totalCostCents, selectedCost.currency)}
+                          </div>
+                        </div>
+                      </div>
+                      {(selectedCost.breakdown.laborCostCents !== null ||
+                        selectedCost.breakdown.materialCostCents !== null ||
+                        selectedCost.breakdown.vendorCostCents !== null) ? (
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
+                          <div>
+                            <div style={{ color: text.muted, fontSize: 12 }}>Labor cost</div>
+                            <div style={{ color: text.primary, fontWeight: 700, marginTop: 6 }}>
+                              {fmtMoney(selectedCost.breakdown.laborCostCents, selectedCost.currency)}
+                            </div>
+                          </div>
+                          <div>
+                            <div style={{ color: text.muted, fontSize: 12 }}>Material cost</div>
+                            <div style={{ color: text.primary, fontWeight: 700, marginTop: 6 }}>
+                              {fmtMoney(selectedCost.breakdown.materialCostCents, selectedCost.currency)}
+                            </div>
+                          </div>
+                          <div>
+                            <div style={{ color: text.muted, fontSize: 12 }}>Vendor cost</div>
+                            <div style={{ color: text.primary, fontWeight: 700, marginTop: 6 }}>
+                              {fmtMoney(selectedCost.breakdown.vendorCostCents, selectedCost.currency)}
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
+                      {selectedCost.note ? (
+                        <>
+                          <div style={{ fontWeight: 700, color: text.primary }}>Cost note</div>
+                          <div style={{ color: text.secondary }}>{selectedCost.note}</div>
+                        </>
+                      ) : null}
+                      <div style={{ fontWeight: 700, color: text.primary }}>Expense linkage</div>
+                      <div style={{ color: text.secondary }}>
+                        {selectedCost.hasExpenseLink && selectedCost.linkedExpenseId
+                          ? `Linked to expense ${selectedCost.linkedExpenseId}.`
+                          : "No linked expense record yet."}
+                      </div>
+                      {selectedCost.blockers.length ? (
+                        <>
+                          <div style={{ fontWeight: 700, color: text.primary }}>Needs attention</div>
+                          {selectedCost.blockers.map((item) => (
+                            <div key={item} style={{ color: text.secondary }}>
+                              {item}
+                            </div>
+                          ))}
+                        </>
+                      ) : null}
+                      <div style={{ fontWeight: 700, color: text.primary }}>Next step</div>
+                      {selectedCost.nextSteps.map((step) => (
+                        <div key={step} style={{ color: text.secondary }}>
+                          {step}
+                        </div>
+                      ))}
+                      {selectedCost.canRecordCost ? (
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
+                          <label style={{ display: "grid", gap: 4 }}>
+                            <span style={{ color: text.muted, fontSize: 12 }}>Total cost</span>
+                            <Input
+                              aria-label="Total cost"
+                              inputMode="decimal"
+                              value={costTotalInput}
+                              onChange={(e) => setCostTotalInput(e.target.value)}
+                              placeholder="0.00"
+                            />
+                          </label>
+                          <label style={{ display: "grid", gap: 4 }}>
+                            <span style={{ color: text.muted, fontSize: 12 }}>Labor cost</span>
+                            <Input
+                              aria-label="Labor cost"
+                              inputMode="decimal"
+                              value={laborCostInput}
+                              onChange={(e) => setLaborCostInput(e.target.value)}
+                              placeholder="0.00"
+                            />
+                          </label>
+                          <label style={{ display: "grid", gap: 4 }}>
+                            <span style={{ color: text.muted, fontSize: 12 }}>Material cost</span>
+                            <Input
+                              aria-label="Material cost"
+                              inputMode="decimal"
+                              value={materialCostInput}
+                              onChange={(e) => setMaterialCostInput(e.target.value)}
+                              placeholder="0.00"
+                            />
+                          </label>
+                          <label style={{ display: "grid", gap: 4 }}>
+                            <span style={{ color: text.muted, fontSize: 12 }}>Vendor cost</span>
+                            <Input
+                              aria-label="Vendor cost"
+                              inputMode="decimal"
+                              value={vendorCostInput}
+                              onChange={(e) => setVendorCostInput(e.target.value)}
+                              placeholder="0.00"
+                            />
+                          </label>
+                        </div>
+                      ) : null}
+                      {selectedCost.canRecordCost ? (
+                        <label style={{ display: "grid", gap: 4 }}>
+                          <span style={{ color: text.muted, fontSize: 12 }}>Cost note</span>
+                          <textarea
+                            aria-label="Cost note"
+                            value={costNote}
+                            onChange={(e) => setCostNote(e.target.value)}
+                            rows={3}
+                            style={{
+                              padding: "10px",
+                              borderRadius: radius.md,
+                              border: `1px solid ${colors.border}`,
+                              background: colors.card,
+                              color: text.primary,
+                              resize: "vertical",
+                            }}
+                          />
+                        </label>
+                      ) : null}
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        {selectedCost.canRecordCost ? (
+                          <Button variant="secondary" onClick={() => void saveCost()} disabled={saving}>
+                            {saving ? "Saving..." : selectedCost.totalCostCents ? "Update cost" : "Record cost"}
+                          </Button>
+                        ) : null}
+                        {selectedCost.canLinkExpense ? (
+                          <Button variant="secondary" onClick={() => void linkExpense()} disabled={saving}>
+                            {saving ? "Saving..." : "Link to expense"}
+                          </Button>
+                        ) : null}
+                      </div>
                     </div>
                   ) : null}
 
