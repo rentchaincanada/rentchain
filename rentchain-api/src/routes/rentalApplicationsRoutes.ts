@@ -39,6 +39,12 @@ import { recordScreeningPaymentInitiated } from "../services/screeningPaymentTra
 import { writeCanonicalEvent } from "../lib/events/buildEvent";
 import { buildScreeningPolicyRequest } from "../lib/policy/policyAdapters";
 import { evaluatePolicy, toAutopilotPolicySummary, writePolicyEvaluatedEvent } from "../lib/policy/policyEvaluator";
+import {
+  buildQuoteId,
+  buildScreeningMonetizationPatch,
+  buildScreeningMonetizationSummary,
+  normalizeScreeningMonetizationState,
+} from "../services/screening/screeningMonetizationService";
 
 const router = Router();
 
@@ -232,6 +238,37 @@ async function getLatestOrderByApplicationId(applicationId: string) {
     const bTs = Number(bData?.updatedAt || bData?.createdAt || 0);
     return bTs - aTs;
   });
+  return docs[0] || null;
+}
+
+async function getLatestOrderByManualCheckout(params: {
+  landlordId: string;
+  propertyId: string;
+  unitId?: string | null;
+  tenantEmail?: string | null;
+}) {
+  const snap = await db
+    .collection("screeningOrders")
+    .where("landlordId", "==", params.landlordId)
+    .limit(50)
+    .get();
+  const targetUnitId = String(params.unitId || "").trim();
+  const targetTenantEmail = String(params.tenantEmail || "").trim().toLowerCase();
+  const docs = snap.docs
+    .filter((doc) => {
+      const data = doc.data() as any;
+      if (String(data?.propertyId || "").trim() !== params.propertyId) return false;
+      if (String(data?.unitId || "").trim() !== targetUnitId) return false;
+      if (targetTenantEmail && String(data?.tenantEmail || "").trim().toLowerCase() !== targetTenantEmail) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      const aData = a.data() as any;
+      const bData = b.data() as any;
+      const aTs = Number(aData?.updatedAt || aData?.createdAt || 0);
+      const bTs = Number(bData?.updatedAt || bData?.createdAt || 0);
+      return bTs - aTs;
+    });
   return docs[0] || null;
 }
 
@@ -1014,6 +1051,8 @@ router.post(
       if (data?.landlordId && data.landlordId !== landlordId) {
         return res.status(403).json({ ok: false, error: "FORBIDDEN" });
       }
+      const latestOrderDoc = await getLatestOrderByApplicationId(id);
+      const latestOrder = latestOrderDoc?.data?.() || null;
       const seedKey = [id, data?.landlordId || landlordId].filter(Boolean).join(":");
       const eligibility = evaluateEligibility(data);
       const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
@@ -1041,6 +1080,18 @@ router.post(
           unitId: data?.unitId || null,
         },
       });
+      const currentMonetizationState = normalizeScreeningMonetizationState({
+        application: data,
+        latestOrder,
+        eligibility:
+          !eligibility.eligible && eligibility.reasonCode === "MISSING_CONSENT"
+            ? "ineligible"
+            : eligibility.eligible
+            ? "eligible"
+            : "ineligible",
+        amount: null,
+      });
+      const currentMonetizationSummary = buildScreeningMonetizationSummary(currentMonetizationState);
       await writeScreeningEvent({
         applicationId: id,
         landlordId: data?.landlordId || null,
@@ -1055,12 +1106,27 @@ router.post(
           return res.status(400).json({
             ok: false,
             error: "consent_required",
+            errorCode: "SCREENING_MONETIZATION_BLOCKED",
             detail: eligibility.detail,
             autopilotPolicy,
+            screeningMonetizationSummary: {
+              ...currentMonetizationSummary,
+              blockingReason: "SCREENING_MONETIZATION_BLOCKED",
+            },
           });
         }
         logCutoverBlocked({ name: "quote", seedKey, skippedReason: "NOT_ELIGIBLE" });
-        return res.json({ ok: false, error: "NOT_ELIGIBLE", detail: eligibility.detail, autopilotPolicy });
+        return res.json({
+          ok: false,
+          error: "NOT_ELIGIBLE",
+          errorCode: "SCREENING_MONETIZATION_BLOCKED",
+          detail: eligibility.detail,
+          autopilotPolicy,
+          screeningMonetizationSummary: {
+            ...currentMonetizationSummary,
+            blockingReason: "SCREENING_MONETIZATION_BLOCKED",
+          },
+        });
       }
 
       if (!consentCheck.ok) {
@@ -1068,14 +1134,73 @@ router.post(
         return res.status(400).json({
           ok: false,
           error: "consent_required",
+          errorCode: "SCREENING_MONETIZATION_BLOCKED",
           detail: consentCheck.error,
           autopilotPolicy,
+          screeningMonetizationSummary: {
+            ...currentMonetizationSummary,
+            blockingReason: "SCREENING_MONETIZATION_BLOCKED",
+          },
+        });
+      }
+
+      if (currentMonetizationSummary.alreadyPaid) {
+        return res.status(409).json({
+          ok: false,
+          error: "screening_already_paid",
+          errorCode: "SCREENING_ALREADY_PAID",
+          autopilotPolicy,
+          screeningMonetizationSummary: currentMonetizationSummary,
+        });
+      }
+      if (currentMonetizationSummary.blockingReason === "SCREENING_ORDER_ALREADY_CREATED") {
+        return res.status(409).json({
+          ok: false,
+          error: "screening_order_already_created",
+          errorCode: "SCREENING_ORDER_ALREADY_CREATED",
+          autopilotPolicy,
+          screeningMonetizationSummary: currentMonetizationSummary,
+        });
+      }
+      if (currentMonetizationSummary.blockingReason === "SCREENING_CHECKOUT_ALREADY_EXISTS") {
+        return res.status(409).json({
+          ok: false,
+          error: "screening_checkout_already_exists",
+          errorCode: "SCREENING_CHECKOUT_ALREADY_EXISTS",
+          autopilotPolicy,
+          screeningMonetizationSummary: currentMonetizationSummary,
         });
       }
       if (isTransUnionReferralMode()) {
-        return res.json({ ...buildReferralQuotePayload(), autopilotPolicy });
+        const state = normalizeScreeningMonetizationState({
+          application: data,
+          latestOrder,
+          eligibility: "eligible",
+          amount: 0,
+          currency: "CAD",
+        });
+        return res.json({
+          ...buildReferralQuotePayload(),
+          autopilotPolicy,
+          screeningMonetizationSummary: buildScreeningMonetizationSummary(state),
+        });
       }
       const { pricing } = resolvePricingInput(body);
+      const quoteId = buildQuoteId({ applicationId: id });
+      const monetizationPatch = buildScreeningMonetizationPatch({
+        current: data?.screeningMonetization,
+        eligibility: "eligible",
+        quoteStatus: "generated",
+        paymentStatus:
+          currentMonetizationState.paymentStatus === "failed" ? "failed" : currentMonetizationState.paymentStatus,
+        fulfillmentStatus: "ready",
+        quoteId,
+        quoteGeneratedAt: Date.now(),
+        amount: pricing.totalAmountCents,
+        currency: pricing.currency,
+        lastErrorCode: null,
+        lastErrorMessage: null,
+      });
       const quoteResult = await runPrimaryWithFallback({
         name: "quote",
         seedKey,
@@ -1085,6 +1210,13 @@ router.post(
         runAdapter: async () => buildQuotePayload(pricing),
         compare: compareQuoteResponses,
       });
+      await db.collection("rentalApplications").doc(id).set(
+        {
+          screeningMonetization: monetizationPatch,
+          updatedAt: Date.now(),
+        },
+        { merge: true }
+      );
       await writeCanonicalEvent({
         domain: "screening",
         action: "quote_generated",
@@ -1107,7 +1239,19 @@ router.post(
         },
       });
 
-      return res.json({ ...quoteResult, autopilotPolicy });
+      return res.json({
+        ...quoteResult,
+        autopilotPolicy,
+        screeningMonetizationSummary: buildScreeningMonetizationSummary(
+          normalizeScreeningMonetizationState({
+            application: { ...data, screeningMonetization: monetizationPatch },
+            latestOrder,
+            eligibility: "eligible",
+            amount: pricing.totalAmountCents,
+            currency: pricing.currency,
+          })
+        ),
+      });
     } catch (err: any) {
       console.error("[rental-applications] screening quote failed", err?.message || err);
       return res.status(500).json({ ok: false, error: "SCREENING_QUOTE_FAILED" });
@@ -1139,6 +1283,8 @@ router.post(
       if (role !== "admin" && data?.landlordId && data.landlordId !== landlordId) {
         return res.status(401).json({ ok: false, error: "unauthorized" });
       }
+      const latestOrderDoc = await getLatestOrderByApplicationId(id);
+      const latestOrder = latestOrderDoc?.data?.() || null;
       const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
       const consent = resolveConsentPayload(body, data);
       const consentCheck = validateConsent(consent);
@@ -1149,6 +1295,12 @@ router.post(
       });
 
       if (isScreeningAlreadyPaid(data)) {
+        const monetizationState = normalizeScreeningMonetizationState({
+          application: data,
+          latestOrder,
+          eligibility: "eligible",
+        });
+        const screeningMonetizationSummary = buildScreeningMonetizationSummary(monetizationState);
         await writeScreeningEvent({
           applicationId: id,
           landlordId: data?.landlordId || null,
@@ -1179,7 +1331,12 @@ router.post(
             unitId: data?.unitId || null,
           },
         });
-        return res.status(400).json({ ok: false, error: "screening_already_paid" });
+        return res.status(400).json({
+          ok: false,
+          error: "screening_already_paid",
+          errorCode: "SCREENING_ALREADY_PAID",
+          screeningMonetizationSummary,
+        });
       }
 
       const eligibility = evaluateEligibility(data);
@@ -1230,13 +1387,69 @@ router.post(
           unitId: data?.unitId || null,
         },
       });
+      const currentMonetizationState = normalizeScreeningMonetizationState({
+        application: data,
+        latestOrder,
+        eligibility:
+          providerReady === false
+            ? "provider_unavailable"
+            : !eligibility.eligible
+            ? "ineligible"
+            : "eligible",
+      });
+      const currentMonetizationSummary = buildScreeningMonetizationSummary(currentMonetizationState);
       if (!eligibility.eligible) {
+        const blockedPatch = buildScreeningMonetizationPatch({
+          current: data?.screeningMonetization,
+          eligibility: "ineligible",
+          fulfillmentStatus: "blocked",
+          lastErrorCode: "SCREENING_MONETIZATION_BLOCKED",
+          lastErrorMessage: eligibility.detail || "not_eligible",
+        });
+        await db.collection("rentalApplications").doc(id).set({ screeningMonetization: blockedPatch }, { merge: true });
         return res.status(400).json({
           ok: false,
           error: "not_eligible",
+          errorCode: "SCREENING_MONETIZATION_BLOCKED",
           detail: eligibility.detail,
           reasonCode: eligibility.reasonCode,
           autopilotPolicy,
+          screeningMonetizationSummary: {
+            ...currentMonetizationSummary,
+            blockingReason: "SCREENING_MONETIZATION_BLOCKED",
+          },
+        });
+      }
+      if (currentMonetizationSummary.blockingReason === "SCREENING_CHECKOUT_ALREADY_EXISTS") {
+        return res.status(409).json({
+          ok: false,
+          error: "screening_checkout_already_exists",
+          errorCode: "SCREENING_CHECKOUT_ALREADY_EXISTS",
+          autopilotPolicy,
+          screeningMonetizationSummary: currentMonetizationSummary,
+        });
+      }
+      if (
+        currentMonetizationSummary.blockingReason === "SCREENING_ORDER_ALREADY_CREATED" ||
+        currentMonetizationSummary.alreadyPaid
+      ) {
+        return res.status(409).json({
+          ok: false,
+          error: currentMonetizationSummary.alreadyPaid ? "screening_already_paid" : "screening_order_already_created",
+          errorCode: currentMonetizationSummary.alreadyPaid
+            ? "SCREENING_ALREADY_PAID"
+            : "SCREENING_ORDER_ALREADY_CREATED",
+          autopilotPolicy,
+          screeningMonetizationSummary: currentMonetizationSummary,
+        });
+      }
+      if (currentMonetizationSummary.blockingReason === "SCREENING_QUOTE_EXPIRED") {
+        return res.status(409).json({
+          ok: false,
+          error: "screening_quote_expired",
+          errorCode: "SCREENING_QUOTE_EXPIRED",
+          autopilotPolicy,
+          screeningMonetizationSummary: currentMonetizationSummary,
         });
       }
       if (
@@ -1276,11 +1489,42 @@ router.post(
             unitId: data?.unitId || null,
           },
         });
+        await db.collection("rentalApplications").doc(id).set(
+          {
+            screeningMonetization: buildScreeningMonetizationPatch({
+              current: data?.screeningMonetization,
+              eligibility: "provider_unavailable",
+              fulfillmentStatus: "blocked",
+              providerHealthStatus: "provider_unavailable",
+              lastErrorCode: "SCREENING_PROVIDER_UNAVAILABLE",
+              lastErrorMessage: providerHealth.preflightDetail || "provider_not_ready",
+            }),
+          },
+          { merge: true }
+        );
         return res.status(503).json({
           ok: false,
           error: "screening_unavailable",
+          errorCode: "SCREENING_PROVIDER_UNAVAILABLE",
           detail: "provider_not_ready",
           autopilotPolicy,
+          screeningMonetizationSummary: buildScreeningMonetizationSummary(
+            normalizeScreeningMonetizationState({
+              application: {
+                ...data,
+                screeningMonetization: buildScreeningMonetizationPatch({
+                  current: data?.screeningMonetization,
+                  eligibility: "provider_unavailable",
+                  fulfillmentStatus: "blocked",
+                  providerHealthStatus: "provider_unavailable",
+                  lastErrorCode: "SCREENING_PROVIDER_UNAVAILABLE",
+                  lastErrorMessage: providerHealth.preflightDetail || "provider_not_ready",
+                }),
+              },
+              latestOrder,
+              eligibility: "provider_unavailable",
+            })
+          ),
           ...(role === "admin" ? { preflightDetail: providerHealth.preflightDetail || null } : {}),
         });
       }
@@ -1313,7 +1557,17 @@ router.post(
       }
 
       if (!consentCheck.ok) {
-        return res.status(400).json({ ok: false, error: "consent_required", detail: consentCheck.error, autopilotPolicy });
+        return res.status(400).json({
+          ok: false,
+          error: "consent_required",
+          errorCode: "SCREENING_MONETIZATION_BLOCKED",
+          detail: consentCheck.error,
+          autopilotPolicy,
+          screeningMonetizationSummary: {
+            ...currentMonetizationSummary,
+            blockingReason: "SCREENING_MONETIZATION_BLOCKED",
+          },
+        });
       }
       const { screeningTier, addons, serviceLevel, scoreAddOn, expeditedAddOn, pricing } =
         resolvePricingInput(body);
@@ -1414,6 +1668,18 @@ router.post(
               provider: "transunion_referral",
               orderId,
             },
+            screeningMonetization: buildScreeningMonetizationPatch({
+              current: data?.screeningMonetization,
+              eligibility: "eligible",
+              paymentStatus: "checkout_created",
+              fulfillmentStatus: "ordered",
+              checkoutSessionId: orderId,
+              checkoutCreatedAt: now,
+              amount: 0,
+              currency: "CAD",
+              lastErrorCode: null,
+              lastErrorMessage: null,
+            }),
             updatedAt: now,
           },
           { merge: true }
@@ -1440,6 +1706,27 @@ router.post(
           redirectUrl: referralUrl,
           checkoutUrl: referralUrl,
           autopilotPolicy,
+          screeningMonetizationSummary: buildScreeningMonetizationSummary(
+            normalizeScreeningMonetizationState({
+              application: {
+                ...data,
+                screeningMonetization: buildScreeningMonetizationPatch({
+                  current: data?.screeningMonetization,
+                  eligibility: "eligible",
+                  paymentStatus: "checkout_created",
+                  fulfillmentStatus: "ordered",
+                  checkoutSessionId: orderId,
+                  checkoutCreatedAt: now,
+                  amount: 0,
+                  currency: "CAD",
+                }),
+              },
+              latestOrder: { ...orderPayload, stripeCheckoutSessionId: orderId },
+              eligibility: "eligible",
+              amount: 0,
+              currency: "CAD",
+            })
+          ),
         });
       }
 
@@ -1642,6 +1929,18 @@ router.post(
             ai: null,
             result: null,
           },
+          screeningMonetization: buildScreeningMonetizationPatch({
+            current: data?.screeningMonetization,
+            eligibility: "eligible",
+            paymentStatus: "checkout_created",
+            fulfillmentStatus: "ready",
+            checkoutSessionId: session.id,
+            checkoutCreatedAt: now,
+            amount: pricing.totalAmountCents,
+            currency: "CAD",
+            lastErrorCode: null,
+            lastErrorMessage: null,
+          }),
           updatedAt: now,
         },
         { merge: true }
@@ -1691,7 +1990,32 @@ router.post(
         ...logBase,
         event: "create_session_ok",
       });
-      return res.json({ ok: true, checkoutUrl: session.url, autopilotPolicy });
+      return res.json({
+        ok: true,
+        checkoutUrl: session.url,
+        autopilotPolicy,
+        screeningMonetizationSummary: buildScreeningMonetizationSummary(
+          normalizeScreeningMonetizationState({
+            application: {
+              ...data,
+              screeningMonetization: buildScreeningMonetizationPatch({
+                current: data?.screeningMonetization,
+                eligibility: "eligible",
+                paymentStatus: "checkout_created",
+                fulfillmentStatus: "ready",
+                checkoutSessionId: session.id,
+                checkoutCreatedAt: now,
+                amount: pricing.totalAmountCents,
+                currency: "CAD",
+              }),
+            },
+            latestOrder: { ...orderPayload, stripeCheckoutSessionId: session.id },
+            eligibility: "eligible",
+            amount: pricing.totalAmountCents,
+            currency: "CAD",
+          })
+        ),
+      });
     } catch (err: any) {
       console.error("[screening_checkout] create_session_fail", {
         ...logBase,
@@ -1726,7 +2050,9 @@ router.post(
       let applicationId = existingApplicationId;
       const propertyIdInput = String(body?.propertyId || "").trim();
       const unitIdInput = String(body?.unitId || "").trim();
+      const tenantEmailInput = String(body?.tenantEmail || "").trim().toLowerCase();
       let data: any = null;
+      let autopilotPolicy: ReturnType<typeof toAutopilotPolicySummary> | null = null;
 
       if (!applicationId && !propertyIdInput) {
         return res.status(400).json({ ok: false, error: "missing_property" });
@@ -1742,13 +2068,50 @@ router.post(
 
         const eligibility = evaluateEligibility(data);
         if (!eligibility.eligible) {
+          const latestOrderDoc = await getLatestOrderByApplicationId(applicationId);
+          const screeningMonetizationSummary = buildScreeningMonetizationSummary(
+            normalizeScreeningMonetizationState({
+              application: data,
+              latestOrder: latestOrderDoc?.data?.() || null,
+              eligibility: "ineligible",
+            })
+          );
           return res.status(400).json({
             ok: false,
             error: "not_eligible",
+            errorCode: "SCREENING_MONETIZATION_BLOCKED",
             detail: eligibility.detail,
             reasonCode: eligibility.reasonCode,
+            screeningMonetizationSummary: {
+              ...screeningMonetizationSummary,
+              blockingReason: "SCREENING_MONETIZATION_BLOCKED",
+            },
           });
         }
+        const consent = resolveConsentPayload(body, data);
+        const consentCheck = validateConsent(consent);
+        const policyRequest = buildScreeningPolicyRequest({
+          action: "start_checkout",
+          actorRole: role,
+          actorUserId: String(req.user?.id || req.user?.landlordId || "").trim() || null,
+          applicationId,
+          eligibility,
+          application: data,
+          consentComplete: consentCheck.ok,
+          providerReady: true,
+        });
+        const policyResult = evaluatePolicy(policyRequest);
+        autopilotPolicy = toAutopilotPolicySummary(policyResult);
+        await writePolicyEvaluatedEvent({
+          request: policyRequest,
+          result: policyResult,
+          actorType: role === "admin" ? "admin" : "landlord",
+          metadata: {
+            landlordId: data?.landlordId || landlordId,
+            propertyId: data?.propertyId || propertyIdInput || null,
+            unitId: data?.unitId || unitIdInput || null,
+          },
+        });
       } else {
         const manualApp = await createManualApplicationFromOrderBody({
           landlordId: String(landlordId),
@@ -1786,9 +2149,53 @@ router.post(
           return res.status(400).json({
             ok: false,
             error: "consent_required",
+            errorCode: "SCREENING_MONETIZATION_BLOCKED",
             detail: consentCheck.error,
+            autopilotPolicy,
           });
         }
+      }
+      const latestOrderDoc = applicationId
+        ? await getLatestOrderByApplicationId(applicationId)
+        : await getLatestOrderByManualCheckout({
+            landlordId: String(landlordId),
+            propertyId: data?.propertyId || propertyIdInput,
+            unitId: data?.unitId || unitIdInput || null,
+            tenantEmail: tenantEmailInput || data?.applicant?.email || null,
+          });
+      const latestOrder = latestOrderDoc?.data?.() || null;
+      const existingMonetizationState = normalizeScreeningMonetizationState({
+        application: data,
+        latestOrder,
+        eligibility: "eligible",
+      });
+      const existingMonetizationSummary = buildScreeningMonetizationSummary(existingMonetizationState);
+      if (existingMonetizationSummary.alreadyPaid) {
+        return res.status(409).json({
+          ok: false,
+          error: "screening_already_paid",
+          errorCode: "SCREENING_ALREADY_PAID",
+          autopilotPolicy,
+          screeningMonetizationSummary: existingMonetizationSummary,
+        });
+      }
+      if (existingMonetizationSummary.blockingReason === "SCREENING_ORDER_ALREADY_CREATED") {
+        return res.status(409).json({
+          ok: false,
+          error: "screening_order_already_created",
+          errorCode: "SCREENING_ORDER_ALREADY_CREATED",
+          autopilotPolicy,
+          screeningMonetizationSummary: existingMonetizationSummary,
+        });
+      }
+      if (existingMonetizationSummary.blockingReason === "SCREENING_CHECKOUT_ALREADY_EXISTS") {
+        return res.status(409).json({
+          ok: false,
+          error: "screening_checkout_already_exists",
+          errorCode: "SCREENING_CHECKOUT_ALREADY_EXISTS",
+          autopilotPolicy,
+          screeningMonetizationSummary: existingMonetizationSummary,
+        });
       }
 
       const providerHealth = await getScreeningProviderHealth();
@@ -1812,7 +2219,16 @@ router.post(
         return res.status(503).json({
           ok: false,
           error: "screening_unavailable",
+          errorCode: "SCREENING_PROVIDER_UNAVAILABLE",
           detail: "provider_not_ready",
+          autopilotPolicy,
+          screeningMonetizationSummary: buildScreeningMonetizationSummary(
+            normalizeScreeningMonetizationState({
+              application: data,
+              latestOrder,
+              eligibility: "provider_unavailable",
+            })
+          ),
           ...(role === "admin" ? { preflightDetail: providerHealth.preflightDetail || null } : {}),
         });
       }
@@ -1912,6 +2328,18 @@ router.post(
                 provider: "transunion_referral",
                 orderId,
               },
+              screeningMonetization: buildScreeningMonetizationPatch({
+                current: data?.screeningMonetization,
+                eligibility: "eligible",
+                paymentStatus: "checkout_created",
+                fulfillmentStatus: "ordered",
+                checkoutSessionId: orderId,
+                checkoutCreatedAt: now,
+                amount: 0,
+                currency: "CAD",
+                lastErrorCode: null,
+                lastErrorMessage: null,
+              }),
               updatedAt: now,
             },
             { merge: true }
@@ -1938,6 +2366,31 @@ router.post(
           applicationId: applicationId || null,
           redirectUrl: referralUrl,
           checkoutUrl: referralUrl,
+          autopilotPolicy,
+          screeningMonetizationSummary: buildScreeningMonetizationSummary(
+            normalizeScreeningMonetizationState({
+              application:
+                applicationId && data
+                  ? {
+                      ...data,
+                      screeningMonetization: buildScreeningMonetizationPatch({
+                        current: data?.screeningMonetization,
+                        eligibility: "eligible",
+                        paymentStatus: "checkout_created",
+                        fulfillmentStatus: "ordered",
+                        checkoutSessionId: orderId,
+                        checkoutCreatedAt: now,
+                        amount: 0,
+                        currency: "CAD",
+                      }),
+                    }
+                  : data,
+              latestOrder: { ...orderPayload, stripeCheckoutSessionId: orderId },
+              eligibility: "eligible",
+              amount: 0,
+              currency: "CAD",
+            })
+          ),
         });
       }
 
@@ -2039,21 +2492,6 @@ router.post(
 
       await orderRef.set(orderPayload, { merge: true });
 
-      if (applicationId) {
-        await db.collection("rentalApplications").doc(applicationId).set(
-          {
-            screening: {
-              consentGiven: true,
-              consentTimestamp: consent.timestamp,
-              consentVersion: consent.version,
-              consentTextHash: consent.textHash,
-            },
-            updatedAt: now,
-          },
-          { merge: true }
-        );
-      }
-
       const currency = String(orderPayload.currency || "CAD").toLowerCase();
       const lineItems: any[] = [
         {
@@ -2141,6 +2579,33 @@ router.post(
         { merge: true }
       );
 
+      if (applicationId) {
+        await db.collection("rentalApplications").doc(applicationId).set(
+          {
+            screening: {
+              consentGiven: true,
+              consentTimestamp: consent.timestamp,
+              consentVersion: consent.version,
+              consentTextHash: consent.textHash,
+            },
+            screeningMonetization: buildScreeningMonetizationPatch({
+              current: data?.screeningMonetization,
+              eligibility: "eligible",
+              paymentStatus: "checkout_created",
+              fulfillmentStatus: "ready",
+              checkoutSessionId: session.id,
+              checkoutCreatedAt: now,
+              amount: pricing.totalAmountCents,
+              currency: "CAD",
+              lastErrorCode: null,
+              lastErrorMessage: null,
+            }),
+            updatedAt: now,
+          },
+          { merge: true }
+        );
+      }
+
       if (tenantEmail) {
         const apiKey = String(process.env.SENDGRID_API_KEY || "").trim();
         const from =
@@ -2176,7 +2641,37 @@ router.post(
         }
       }
 
-      return res.json({ ok: true, orderId, checkoutUrl: session.url, tenantInviteUrl });
+      return res.json({
+        ok: true,
+        orderId,
+        checkoutUrl: session.url,
+        tenantInviteUrl,
+        autopilotPolicy,
+        screeningMonetizationSummary: buildScreeningMonetizationSummary(
+          normalizeScreeningMonetizationState({
+            application:
+              applicationId && data
+                ? {
+                    ...data,
+                    screeningMonetization: buildScreeningMonetizationPatch({
+                      current: data?.screeningMonetization,
+                      eligibility: "eligible",
+                      paymentStatus: "checkout_created",
+                      fulfillmentStatus: "ready",
+                      checkoutSessionId: session.id,
+                      checkoutCreatedAt: now,
+                      amount: pricing.totalAmountCents,
+                      currency: "CAD",
+                    }),
+                  }
+                : data,
+            latestOrder: { ...orderPayload, stripeCheckoutSessionId: session.id },
+            eligibility: "eligible",
+            amount: pricing.totalAmountCents,
+            currency: "CAD",
+          })
+        ),
+      });
     } catch (err: any) {
       console.error("[screening_orders] failed", {
         ...logBase,
@@ -2210,6 +2705,8 @@ router.get(
       return res.status(403).json({ ok: false, error: "forbidden" });
     }
 
+    const appSnap = data?.applicationId ? await db.collection("rentalApplications").doc(String(data.applicationId)).get() : null;
+    const application = appSnap?.exists ? appSnap.data() : null;
     return res.json({
       ok: true,
       data: {
@@ -2230,6 +2727,12 @@ router.get(
         failureDetail: data?.failureDetail || null,
         stripeIdentitySessionId: data?.stripeIdentitySessionId || null,
         updatedAt: data?.updatedAt || null,
+        screeningMonetizationSummary: buildScreeningMonetizationSummary(
+          normalizeScreeningMonetizationState({
+            application,
+            latestOrder: data,
+          })
+        ),
       },
     });
   }
@@ -2311,11 +2814,13 @@ router.get(
     }
 
     if (!orderDoc) {
+      let authorizedApplicationData: any = null;
       if (applicationId) {
         const access = await loadAuthorizedApplication(req, applicationId);
         if (!access.ok) {
           return res.status(access.status).json({ ok: false, error: access.error });
         }
+        authorizedApplicationData = access.data;
       }
       return res.json({
         ok: true,
@@ -2329,6 +2834,11 @@ router.get(
           stripePaymentIntentId: null,
           stripeCheckoutSessionId: null,
           lastUpdatedAt: null,
+          screeningMonetizationSummary: buildScreeningMonetizationSummary(
+            normalizeScreeningMonetizationState({
+              application: authorizedApplicationData,
+            })
+          ),
         },
       });
     }
@@ -2337,7 +2847,19 @@ router.get(
     if (role !== "admin" && data?.landlordId && data.landlordId !== landlordId) {
       return res.status(403).json({ ok: false, error: "forbidden" });
     }
-    return res.json({ ok: true, data: normalizeOrderView(orderDoc.id, data) });
+    const appSnap = data?.applicationId ? await db.collection("rentalApplications").doc(String(data.applicationId)).get() : null;
+    return res.json({
+      ok: true,
+      data: {
+        ...normalizeOrderView(orderDoc.id, data),
+        screeningMonetizationSummary: buildScreeningMonetizationSummary(
+          normalizeScreeningMonetizationState({
+            application: appSnap?.exists ? appSnap.data() : null,
+            latestOrder: data,
+          })
+        ),
+      },
+    });
   }
 );
 
@@ -2382,6 +2904,9 @@ router.post(
           stripePaymentIntentId: null,
           stripeCheckoutSessionId: null,
           lastUpdatedAt: null,
+          screeningMonetizationSummary: buildScreeningMonetizationSummary(
+            normalizeScreeningMonetizationState({})
+          ),
         },
       });
     }
@@ -2393,12 +2918,40 @@ router.post(
 
     const currentStatus = normalizeOrderStatus(order);
     if (currentStatus === "paid") {
-      return res.json({ ok: true, data: normalizeOrderView(orderDoc.id, order) });
+      const appSnap = order?.applicationId
+        ? await db.collection("rentalApplications").doc(String(order.applicationId)).get()
+        : null;
+      return res.json({
+        ok: true,
+        data: {
+          ...normalizeOrderView(orderDoc.id, order),
+          screeningMonetizationSummary: buildScreeningMonetizationSummary(
+            normalizeScreeningMonetizationState({
+              application: appSnap?.exists ? appSnap.data() : null,
+              latestOrder: order,
+            })
+          ),
+        },
+      });
     }
     const now = Date.now();
     const lastReconcileAt = Number(order?.lastReconcileAt || 0);
     if (lastReconcileAt > 0 && now - lastReconcileAt < 20_000) {
-      return res.json({ ok: true, data: normalizeOrderView(orderDoc.id, order) });
+      const appSnap = order?.applicationId
+        ? await db.collection("rentalApplications").doc(String(order.applicationId)).get()
+        : null;
+      return res.json({
+        ok: true,
+        data: {
+          ...normalizeOrderView(orderDoc.id, order),
+          screeningMonetizationSummary: buildScreeningMonetizationSummary(
+            normalizeScreeningMonetizationState({
+              application: appSnap?.exists ? appSnap.data() : null,
+              latestOrder: order,
+            })
+          ),
+        },
+      });
     }
     await db.collection("screeningOrders").doc(orderDoc.id).set({ lastReconcileAt: now }, { merge: true });
 
@@ -2491,7 +3044,21 @@ router.post(
 
     const refreshed = await db.collection("screeningOrders").doc(orderDoc.id).get();
     const refreshedData = (refreshed.data() as any) || order;
-    return res.json({ ok: true, data: normalizeOrderView(orderDoc.id, refreshedData) });
+    const appSnap = refreshedData?.applicationId
+      ? await db.collection("rentalApplications").doc(String(refreshedData.applicationId)).get()
+      : null;
+    return res.json({
+      ok: true,
+      data: {
+        ...normalizeOrderView(orderDoc.id, refreshedData),
+        screeningMonetizationSummary: buildScreeningMonetizationSummary(
+          normalizeScreeningMonetizationState({
+            application: appSnap?.exists ? appSnap.data() : null,
+            latestOrder: refreshedData,
+          })
+        ),
+      },
+    });
   }
 );
 

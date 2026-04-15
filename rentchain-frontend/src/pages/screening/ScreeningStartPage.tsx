@@ -20,8 +20,12 @@ type CheckoutResponse = {
   ok: boolean;
   checkoutUrl?: string;
   error?: string;
+  errorCode?: string;
   detail?: string;
   reasonCode?: string;
+  screeningMonetizationSummary?: {
+    blockingReason?: string | null;
+  };
 };
 
 const reasonCopy: Record<string, string> = {
@@ -54,6 +58,18 @@ const mapErrorMessage = (code?: string | null) => {
   if (normalized === "screening_already_paid") {
     return "This application’s screening has already been paid. You can view the status in the application.";
   }
+  if (normalized === "screening_checkout_already_exists") {
+    return "A screening checkout already exists for this application. Return to the application to review the current payment state.";
+  }
+  if (normalized === "screening_order_already_created") {
+    return "A screening order already exists for this application. Return to the application to review its status.";
+  }
+  if (normalized === "screening_quote_expired") {
+    return "This screening quote expired. Return to the application to refresh pricing and start checkout again.";
+  }
+  if (normalized === "screening_provider_unavailable") {
+    return "Screening is temporarily unavailable. Please try again shortly.";
+  }
   if (normalized === "forbidden") {
     return "You don’t have access to start screening for this application.";
   }
@@ -73,6 +89,18 @@ const mapErrorTitle = (code?: string | null) => {
   const normalized = String(code || "").toLowerCase();
   if (normalized === "screening_already_paid") {
     return "Screening already paid";
+  }
+  if (normalized === "screening_checkout_already_exists") {
+    return "Checkout already created";
+  }
+  if (normalized === "screening_order_already_created") {
+    return "Screening already in progress";
+  }
+  if (normalized === "screening_quote_expired") {
+    return "Quote expired";
+  }
+  if (normalized === "screening_provider_unavailable") {
+    return "Screening unavailable";
   }
   if (normalized === "transunion_not_connected") {
     return "Connect TransUnion to start screening";
@@ -131,9 +159,11 @@ const ScreeningStartPage: React.FC = () => {
           return;
         }
 
-        const normalizedError = String(res?.error || "").toLowerCase();
+        const normalizedError = String(
+          res?.errorCode || res?.screeningMonetizationSummary?.blockingReason || res?.error || ""
+        ).toLowerCase();
         setErrorCode(normalizedError);
-        setError(mapErrorMessage(res?.error));
+        setError(mapErrorMessage(res?.errorCode || res?.error || res?.screeningMonetizationSummary?.blockingReason));
         if (normalizedError === "not_eligible") {
           setReason(mapReasonCopy(res?.reasonCode) || "Eligibility requirements aren't complete yet.");
         }

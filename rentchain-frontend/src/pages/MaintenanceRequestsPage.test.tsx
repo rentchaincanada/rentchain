@@ -216,11 +216,7 @@ describe("landlord maintenance workspace", () => {
 
     expect((await screen.findAllByText(/Reopen \/ escalation/i)).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Escalated/i).length).toBeGreaterThan(0);
-    expect(
-      screen.getAllByText((_, element) =>
-        Boolean(element?.textContent?.match(/The bedroom is cold again after the return visit/i))
-      ).length
-    ).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/The bedroom is cold again after the return visit/i)).length).toBeGreaterThan(0);
   });
 
   it("records a landlord start-of-service update from the execution workspace", async () => {

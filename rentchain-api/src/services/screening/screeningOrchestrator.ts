@@ -2,6 +2,7 @@ import { db } from "../../config/firebase";
 import type { ScreeningResultSummary } from "./providers/types";
 import { writeScreeningEvent } from "./screeningEvents";
 import { writeCanonicalEvent } from "../../lib/events/buildEvent";
+import { buildScreeningMonetizationPatch } from "./screeningMonetizationService";
 
 type ScreeningStatus =
   | "unpaid"
@@ -44,6 +45,14 @@ export async function beginScreening(
       screeningStartedAt: now,
       screeningProvider: "manual",
       screeningLastUpdatedAt: now,
+      screeningMonetization: buildScreeningMonetizationPatch({
+        current: data?.screeningMonetization,
+        eligibility: "eligible",
+        paymentStatus: "paid",
+        fulfillmentStatus: "ordered",
+        lastErrorCode: null,
+        lastErrorMessage: null,
+      }),
     },
     { merge: true }
   );
@@ -102,6 +111,14 @@ export async function markScreeningComplete(
       screeningResultId: resultRef.id,
       screeningResultSummary: summary,
       screeningLastUpdatedAt: now,
+      screeningMonetization: buildScreeningMonetizationPatch({
+        current: data?.screeningMonetization,
+        eligibility: "eligible",
+        paymentStatus: "paid",
+        fulfillmentStatus: "completed",
+        lastErrorCode: null,
+        lastErrorMessage: null,
+      }),
     },
     { merge: true }
   );
@@ -164,6 +181,14 @@ export async function markScreeningFailed(
       screeningFailureCode: failure.code,
       screeningFailureDetail: failure.detail || null,
       screeningLastUpdatedAt: now,
+      screeningMonetization: buildScreeningMonetizationPatch({
+        current: data?.screeningMonetization,
+        eligibility: "eligible",
+        paymentStatus: "failed",
+        fulfillmentStatus: "blocked",
+        lastErrorCode: "SCREENING_MONETIZATION_BLOCKED",
+        lastErrorMessage: failure.detail || failure.code,
+      }),
     },
     { merge: true }
   );
