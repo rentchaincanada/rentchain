@@ -98,11 +98,12 @@ Only read sub-docs when specifically prompted for that domain.
 
 ## Merge gate policy
 
-When modifying or creating `.github/workflows/merge-gate.yml`, follow these rules:
+- Only execute CURRENT_MISSION.md or explicit mission
+- Do not infer future roadmap
+- Do not expand scope
+- Treat repo as execution-only
 
-- The merge-gate job must fail only when one or more required checks have actually failed, been cancelled, timed out, or require action.
-- The merge-gate job must NOT fail while required checks are still pending, queued, or in progress.
-- Pending checks should produce a neutral informational message only.
-- Merge blocking during pending state is handled by GitHub branch protection, not by intentionally failing merge-gate.
-- Required check names must remain unique across workflows.
-- Do not add noisy failure behavior for pending checks.
+## Merge safety note
+
+- Do not treat `merge-gate` as a substitute for required delivery checks.
+- Follow the required check policy in `CODEX_RULES.md`.
