@@ -88,3 +88,5 @@ If verification cannot be completed:
 - say so clearly
 - explain what blocked it
 - do not claim completion
+
+Merge-gate must only fail on actual failed required checks, not on pending checks.
