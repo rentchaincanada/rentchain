@@ -11,6 +11,7 @@ import { beginScreening } from "../services/screening/screeningOrchestrator";
 import { writeScreeningEvent } from "../services/screening/screeningEvents";
 import { recordScreeningPaymentFailed } from "../services/screeningPaymentTransactionService";
 import { writeCanonicalEvent } from "../lib/events/buildEvent";
+import { buildScreeningMonetizationPatch } from "../services/screening/screeningMonetizationService";
 
 interface StripeWebhookRequest extends Request {
   rawBody?: Buffer;
@@ -130,6 +131,16 @@ async function markApplicationScreeningPaid(params: {
       screeningSessionId: sessionId,
       screeningPaymentIntentId: String(paymentIntentId || ""),
       screeningLastUpdatedAt: paidAt,
+      screeningMonetization: buildScreeningMonetizationPatch({
+        current: data?.screeningMonetization,
+        eligibility: "eligible",
+        paymentStatus: "paid",
+        fulfillmentStatus: "ordered",
+        checkoutSessionId: sessionId,
+        paidAt,
+        lastErrorCode: null,
+        lastErrorMessage: null,
+      }),
     },
     { merge: true }
   );
@@ -406,6 +417,19 @@ async function handleScreeningPaymentFailure(params: {
             orderId: orderRef.id,
             errorCode: normalizeOptionalString(params.failureCode, 120) || null,
           },
+          screeningMonetization: buildScreeningMonetizationPatch({
+            current: (appSnap.data() as any)?.screeningMonetization,
+            eligibility: "eligible",
+            paymentStatus: "failed",
+            fulfillmentStatus: "blocked",
+            checkoutSessionId:
+              normalizeOptionalString(params.sessionId, 120) ||
+              normalizeOptionalString(order?.stripeCheckoutSessionId, 120) ||
+              normalizeOptionalString(order?.stripeSessionId, 120) ||
+              null,
+            lastErrorCode: "SCREENING_MONETIZATION_BLOCKED",
+            lastErrorMessage: normalizeOptionalString(params.failureMessage, 500) || null,
+          }),
           updatedAt: params.occurredAt,
         },
         { merge: true }

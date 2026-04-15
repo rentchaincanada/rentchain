@@ -322,6 +322,20 @@ export type ScreeningQuote = {
   eligible: boolean;
 };
 
+export type ScreeningMonetizationSummary = {
+  eligibility: string;
+  quoteStatus: string;
+  paymentStatus: string;
+  fulfillmentStatus: string;
+  canGenerateQuote: boolean;
+  canStartCheckout: boolean;
+  canRetryCheckout: boolean;
+  alreadyPaid: boolean;
+  blockingReason?: string | null;
+  amount?: number | null;
+  currency?: string | null;
+};
+
 export type ScreeningRunResult = {
   orderId: string;
   status: "COMPLETE" | "FAILED" | "PENDING";
@@ -424,7 +438,14 @@ export async function fetchScreeningQuote(
     serviceLevel?: "SELF_SERVE" | "VERIFIED" | "VERIFIED_AI";
     scoreAddOn?: boolean;
   }
-): Promise<{ ok: boolean; data?: ScreeningQuote; error?: string; detail?: string }> {
+): Promise<{
+  ok: boolean;
+  data?: ScreeningQuote;
+  error?: string;
+  errorCode?: string;
+  detail?: string;
+  screeningMonetizationSummary?: ScreeningMonetizationSummary;
+}> {
   const primaryStart = nowMs();
   const res: any = await apiFetch(`/rental-applications/${encodeURIComponent(id)}/screening/quote`, {
     method: "POST",
@@ -432,7 +453,14 @@ export async function fetchScreeningQuote(
     body: JSON.stringify(params || {}),
   });
   const primaryDurationMs = Math.round(nowMs() - primaryStart);
-  const typed = res as { ok: boolean; data?: ScreeningQuote; error?: string; detail?: string };
+  const typed = res as {
+    ok: boolean;
+    data?: ScreeningQuote;
+    error?: string;
+    errorCode?: string;
+    detail?: string;
+    screeningMonetizationSummary?: ScreeningMonetizationSummary;
+  };
 
   void runShadowTask({
     name: "quote",
@@ -560,7 +588,16 @@ export async function createScreeningOrder(params: {
   returnTo?: string;
   successPath?: string;
   cancelPath?: string;
-}): Promise<{ ok: boolean; checkoutUrl?: string; orderId?: string; tenantInviteUrl?: string; error?: string; detail?: string }> {
+}): Promise<{
+  ok: boolean;
+  checkoutUrl?: string;
+  orderId?: string;
+  tenantInviteUrl?: string;
+  error?: string;
+  errorCode?: string;
+  detail?: string;
+  screeningMonetizationSummary?: ScreeningMonetizationSummary;
+}> {
   const primaryStart = nowMs();
   const res: any = await apiFetch(`/screening/orders`, {
     method: "POST",
@@ -568,7 +605,16 @@ export async function createScreeningOrder(params: {
     body: JSON.stringify(params),
   });
   const primaryDurationMs = Math.round(nowMs() - primaryStart);
-  const typed = res as { ok: boolean; checkoutUrl?: string; orderId?: string; tenantInviteUrl?: string; error?: string; detail?: string };
+  const typed = res as {
+    ok: boolean;
+    checkoutUrl?: string;
+    orderId?: string;
+    tenantInviteUrl?: string;
+    error?: string;
+    errorCode?: string;
+    detail?: string;
+    screeningMonetizationSummary?: ScreeningMonetizationSummary;
+  };
   const appId = String(params.applicationId || "");
   const seed = `checkout:${appId || params.propertyId || "unknown"}`;
 
@@ -675,7 +721,16 @@ export async function createScreeningCheckout(
       version: string;
     };
   }
-): Promise<{ ok: boolean; checkoutUrl?: string; orderId?: string; tenantInviteUrl?: string; error?: string; detail?: string }> {
+): Promise<{
+  ok: boolean;
+  checkoutUrl?: string;
+  orderId?: string;
+  tenantInviteUrl?: string;
+  error?: string;
+  errorCode?: string;
+  detail?: string;
+  screeningMonetizationSummary?: ScreeningMonetizationSummary;
+}> {
   return createScreeningOrder({ applicationId: id, ...params });
 }
 

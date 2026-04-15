@@ -1,6 +1,7 @@
 import { db } from "../config/firebase";
 import { enqueueScreeningJob } from "./screeningJobs";
 import { recordScreeningPaymentSucceeded } from "./screeningPaymentTransactionService";
+import { buildScreeningMonetizationPatch } from "./screening/screeningMonetizationService";
 
 export type FinalizeStripeArgs = {
   eventId: string;
@@ -203,6 +204,19 @@ export async function finalizeStripePayment(
             paidAt: finalizedAt,
             orderId: orderRef.id,
           },
+          screeningMonetization: buildScreeningMonetizationPatch({
+            current: appSnap.data()?.screeningMonetization,
+            eligibility: "eligible",
+            paymentStatus: "paid",
+            fulfillmentStatus: "ordered",
+            checkoutSessionId:
+              normStr(args.sessionId) || order.stripeCheckoutSessionId || order.stripeSessionId || null,
+            paidAt: finalizedAt,
+            amount: amountTotalCents ?? order.amountTotalCents ?? order.totalAmountCents ?? null,
+            currency: currency ?? order.currency ?? null,
+            lastErrorCode: null,
+            lastErrorMessage: null,
+          }),
           updatedAt: finalizedAt,
         },
         { merge: true }

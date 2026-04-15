@@ -168,6 +168,21 @@ export function SendScreeningInviteModal({
         returnTo,
       });
       if (!res.ok || !res.checkoutUrl) {
+        const normalized = String(
+          res.errorCode || res.screeningMonetizationSummary?.blockingReason || res.error || ""
+        ).toLowerCase();
+        if (normalized === "screening_checkout_already_exists") {
+          throw new Error("A screening checkout already exists for this tenant. Review the existing order before retrying.");
+        }
+        if (normalized === "screening_already_paid" || normalized === "screening_order_already_created") {
+          throw new Error("Screening is already paid or in progress for this tenant.");
+        }
+        if (normalized === "screening_provider_unavailable") {
+          throw new Error("Screening is temporarily unavailable. Please try again shortly.");
+        }
+        if (normalized === "screening_quote_expired") {
+          throw new Error("The screening quote expired. Re-open the flow and try again.");
+        }
         throw new Error(res.detail || res.error || "Unable to start checkout");
       }
       if (res.tenantInviteUrl) {
