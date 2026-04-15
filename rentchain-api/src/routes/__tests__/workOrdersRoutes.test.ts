@@ -4,6 +4,7 @@ const uploadBufferToGcsMock = vi.fn();
 const getSignedDownloadUrlMock = vi.fn();
 
 const collections = new Map<string, Map<string, any>>();
+let autoId = 0;
 
 function ensureCollection(name: string) {
   if (!collections.has(name)) {
@@ -31,22 +32,25 @@ function applyMerge(current: any, incoming: any) {
 
 const dbMock = {
   collection: (name: string) => ({
-    doc: (id: string) => ({
-      id,
-      get: async () => ({
-        id,
-        exists: ensureCollection(name).has(id),
-        data: () => clone(ensureCollection(name).get(id)),
-      }),
-      set: async (value: any, opts?: { merge?: boolean }) => {
-        const current = ensureCollection(name).get(id);
-        ensureCollection(name).set(id, opts?.merge ? applyMerge(current, value) : clone(value));
-      },
-      update: async (value: any) => {
-        const current = ensureCollection(name).get(id) || {};
-        ensureCollection(name).set(id, applyMerge(current, value));
-      },
-    }),
+    doc: (id?: string) => {
+      const docId = id || `${name}_${++autoId}`;
+      return {
+        id: docId,
+        get: async () => ({
+          id: docId,
+          exists: ensureCollection(name).has(docId),
+          data: () => clone(ensureCollection(name).get(docId)),
+        }),
+        set: async (value: any, opts?: { merge?: boolean }) => {
+          const current = ensureCollection(name).get(docId);
+          ensureCollection(name).set(docId, opts?.merge ? applyMerge(current, value) : clone(value));
+        },
+        update: async (value: any) => {
+          const current = ensureCollection(name).get(docId) || {};
+          ensureCollection(name).set(docId, applyMerge(current, value));
+        },
+      };
+    },
   }),
 };
 
@@ -137,6 +141,7 @@ describe("workOrdersRoutes execution completion", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     collections.clear();
+    autoId = 0;
     process.env.GCS_UPLOAD_BUCKET = "test-bucket";
     uploadBufferToGcsMock.mockResolvedValue(undefined);
     getSignedDownloadUrlMock.mockImplementation(async ({ path }: { path: string }) => `https://signed.example/${path}`);
@@ -423,6 +428,19 @@ describe("workOrdersRoutes execution completion", () => {
     expect(submitRes.body?.item?.cost?.latestRevisionNumber).toBe(1);
     expect(submitRes.body?.item?.costLineItems).toHaveLength(2);
     expect(submitRes.body?.item?.costReviewHistory).toHaveLength(1);
+    expect(Array.from(ensureCollection("financialTransactions").values())).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          landlordId: "landlord-1",
+          workOrderId: "wo-1",
+          maintenanceRequestId: "maint-1",
+          type: "maintenance_cost_recorded",
+          amountCents: 24500,
+          currency: "CAD",
+          status: "recorded",
+        }),
+      ])
+    );
 
     ensureCollection("workOrders").set("wo-1", {
       ...ensureCollection("workOrders").get("wo-1"),
@@ -574,6 +592,24 @@ describe("workOrdersRoutes execution completion", () => {
     expect(linkRes.body?.item?.cost?.linkedExpenseStatus).toBe("linked");
     expect(linkRes.body?.item?.expenseLink?.status).toBe("linked");
     expect(ensureCollection("expenses").size).toBeGreaterThan(0);
+    expect(Array.from(ensureCollection("financialTransactions").values())).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          landlordId: "landlord-1",
+          propertyId: "prop-1",
+          unitId: "unit-1",
+          maintenanceRequestId: "maint-1",
+          workOrderId: "wo-1",
+          type: "maintenance_cost_linked_to_expense",
+          amountCents: 32000,
+          currency: "CAD",
+          status: "linked",
+          metadata: expect.objectContaining({
+            source: "work_order_link_expense",
+          }),
+        }),
+      ])
+    );
   });
 
   it("rejects unsupported evidence file types", async () => {

@@ -95,6 +95,7 @@ import internalReportsRoutes from "./routes/internalReportsRoutes";
 import identityOracleInternalRoutes from "./routes/identityOracleInternalRoutes";
 import statusRoutes from "./routes/statusRoutes";
 import expensesRoutes from "./routes/expensesRoutes";
+import financialTransactionsRoutes from "./routes/financialTransactionsRoutes";
 import workOrdersRoutes from "./routes/workOrdersRoutes";
 import transunionRoutes from "./services/integrations/transunion/transunionRoutes";
 import viewingRoutes from "./routes/viewingRoutes";
@@ -205,6 +206,8 @@ app.use("/api/status", routeSource("statusRoutes.ts"), statusRoutes);
 app.use(authenticateJwt);
 app.use("/api", routeSource("expensesRoutes.ts"), expensesRoutes);
 console.log("[route-mount] expensesRoutes mounted at /api");
+app.use("/api", routeSource("financialTransactionsRoutes.ts"), financialTransactionsRoutes);
+console.log("[route-mount] financialTransactionsRoutes mounted at /api");
 app.use("/api", routeSource("workOrdersRoutes.ts"), workOrdersRoutes);
 console.log("[route-mount] workOrdersRoutes mounted at /api");
 

@@ -28,6 +28,7 @@ import {
   applyNotificationUpdate,
   buildTenantSafeWorkOrderNotifications,
 } from "../lib/maintenanceNotifications";
+import { createTransaction } from "../services/financialTransactionService";
 
 const router = Router();
 
@@ -2667,6 +2668,24 @@ router.post("/landlord/work-orders/:id/submit-cost", requireAuth, async (req: an
       message: `Landlord recorded ${formatCostForMessage(actualCostCents, currency)} for this work order.`,
     });
 
+    await createTransaction({
+      landlordId: asString((access.item as any)?.landlordId, 120) || access.landlordId,
+      propertyId: asOptionalString((access.item as any)?.propertyId, 120) || undefined,
+      unitId: asOptionalString((access.item as any)?.unitId, 120) || undefined,
+      maintenanceRequestId: asOptionalString((access.item as any)?.maintenanceRequestId, 120) || undefined,
+      workOrderId,
+      type: "maintenance_cost_recorded",
+      amountCents: actualCostCents,
+      currency,
+      status: "recorded",
+      metadata: {
+        source: "work_order_submit_cost",
+        revisionNumber,
+      },
+      createdAt: now,
+      updatedAt: now,
+    });
+
     const refreshed = await db.collection("workOrders").doc(workOrderId).get();
     return res.json({ ok: true, item: await toWorkOrderResponseForAudience(refreshed.id, refreshed.data(), "landlord") });
   } catch (err) {
@@ -2899,6 +2918,24 @@ router.post("/landlord/work-orders/:id/link-expense", requireAuth, async (req: a
       actorId: access.userId,
       updateType: "invoice",
       message: "Approved maintenance cost linked to an expense record.",
+    });
+
+    await createTransaction({
+      landlordId,
+      propertyId,
+      unitId: unitId || undefined,
+      maintenanceRequestId: asOptionalString((access.item as any)?.maintenanceRequestId, 120) || undefined,
+      workOrderId,
+      type: "maintenance_cost_linked_to_expense",
+      amountCents: currentCost.actualCostCents,
+      currency: currentCost.currency || "CAD",
+      status: "linked",
+      metadata: {
+        expenseId: expenseRef.id,
+        source: "work_order_link_expense",
+      },
+      createdAt: now,
+      updatedAt: now,
     });
 
     const refreshed = await db.collection("workOrders").doc(workOrderId).get();
