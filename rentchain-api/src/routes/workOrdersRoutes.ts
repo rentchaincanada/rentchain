@@ -29,6 +29,7 @@ import {
   buildTenantSafeWorkOrderNotifications,
 } from "../lib/maintenanceNotifications";
 import { createTransaction } from "../services/financialTransactionService";
+import { writeCanonicalEvent } from "../lib/events/buildEvent";
 
 const router = Router();
 
@@ -1492,6 +1493,32 @@ router.patch("/work-orders/:id", requireAuth, async (req: any, res) => {
         message: maintenanceHistoryMessage,
       });
     }
+    if (patch.status === "completed" && asOptionalString((refreshed.data() as any)?.maintenanceRequestId, 120)) {
+      await writeCanonicalEvent({
+        domain: "maintenance",
+        action: "completed",
+        status: "completed",
+        actor: {
+          type: access.role === "admin" ? "admin" : "landlord",
+          role: access.role,
+          id: access.userId,
+        },
+        resource: {
+          type: "maintenance_request",
+          id: asOptionalString((refreshed.data() as any)?.maintenanceRequestId, 120) || id,
+        },
+        occurredAt: patch.completedAtMs || nowMs(),
+        visibility: "landlord",
+        summary: "Maintenance request marked completed",
+        metadata: {
+          workOrderId: id,
+          landlordId: asOptionalString((refreshed.data() as any)?.landlordId, 120),
+          propertyId: asOptionalString((refreshed.data() as any)?.propertyId, 120),
+          unitId: asOptionalString((refreshed.data() as any)?.unitId, 120),
+          completionOutcome: patch.completionOutcome || null,
+        },
+      });
+    }
     return res.json({ ok: true, item: await toWorkOrderResponseForAudience(refreshed.id, refreshed.data(), "landlord") });
   } catch (err) {
     console.error("[work-orders] patch failed", err);
@@ -2764,6 +2791,34 @@ router.post("/landlord/work-orders/:id/review-cost", requireAuth, async (req: an
           ? `Cost submission rejected.${note ? ` ${note}` : ""}`
           : `Cost revision requested.${note ? ` ${note}` : ""}`,
     });
+    if (decision === "approve") {
+      await writeCanonicalEvent({
+        domain: "expense",
+        action: "approved",
+        status: "approved",
+        actor: {
+          type: isAdmin(req) ? "admin" : "landlord",
+          role: isAdmin(req) ? "admin" : "landlord",
+          id: access.userId,
+        },
+        resource: {
+          type: "work_order_cost",
+          id: workOrderId,
+          parentType: "work_order",
+          parentId: workOrderId,
+        },
+        occurredAt: now,
+        visibility: "internal",
+        summary: "Maintenance cost approved for expense reconciliation",
+        metadata: {
+          maintenanceRequestId: asOptionalString((access.item as any)?.maintenanceRequestId, 120),
+          propertyId: asOptionalString((access.item as any)?.propertyId, 120),
+          unitId: asOptionalString((access.item as any)?.unitId, 120),
+          actualCostCents: currentCost.actualCostCents,
+          currency: currentCost.currency || "CAD",
+        },
+      });
+    }
 
     const refreshed = await db.collection("workOrders").doc(workOrderId).get();
     return res.json({ ok: true, item: await toWorkOrderResponseForAudience(refreshed.id, refreshed.data(), "landlord") });
@@ -2830,6 +2885,29 @@ router.post("/landlord/work-orders/:id/request-cost-revision", requireAuth, asyn
       actorId: access.userId,
       updateType: "invoice",
       message: `Cost revision requested. ${note}`,
+    });
+    await writeCanonicalEvent({
+      domain: "maintenance",
+      action: "approval_requested",
+      status: "revision_requested",
+      actor: {
+        type: isAdmin(req) ? "admin" : "landlord",
+        role: isAdmin(req) ? "admin" : "landlord",
+        id: access.userId,
+      },
+      resource: {
+        type: "maintenance_request",
+        id: asOptionalString((access.item as any)?.maintenanceRequestId, 120) || workOrderId,
+      },
+      occurredAt: now,
+      visibility: "landlord",
+      summary: "Maintenance cost revision requested",
+      metadata: {
+        workOrderId,
+        propertyId: asOptionalString((access.item as any)?.propertyId, 120),
+        unitId: asOptionalString((access.item as any)?.unitId, 120),
+        note,
+      },
     });
 
     const refreshed = await db.collection("workOrders").doc(workOrderId).get();
@@ -2936,6 +3014,33 @@ router.post("/landlord/work-orders/:id/link-expense", requireAuth, async (req: a
       },
       createdAt: now,
       updatedAt: now,
+    });
+    await writeCanonicalEvent({
+      domain: "expense",
+      action: "linked",
+      status: "linked",
+      actor: {
+        type: isAdmin(req) ? "admin" : "landlord",
+        role: isAdmin(req) ? "admin" : "landlord",
+        id: access.userId,
+      },
+      resource: {
+        type: "expense",
+        id: expenseRef.id,
+        parentType: "work_order",
+        parentId: workOrderId,
+      },
+      occurredAt: now,
+      visibility: "internal",
+      summary: "Expense linked to maintenance work order",
+      metadata: {
+        landlordId,
+        propertyId,
+        unitId,
+        maintenanceRequestId: asOptionalString((access.item as any)?.maintenanceRequestId, 120),
+        amountCents: currentCost.actualCostCents,
+        currency: currentCost.currency || "CAD",
+      },
     });
 
     const refreshed = await db.collection("workOrders").doc(workOrderId).get();

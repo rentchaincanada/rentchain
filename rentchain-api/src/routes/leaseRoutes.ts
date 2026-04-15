@@ -26,6 +26,7 @@ import { loadPropertyLeaseIntegrityDiagnostics } from "../services/leaseIntegrit
 import { buildLeaseRiskPersistenceFields, computeLeaseRiskSnapshot } from "../services/risk/recomputeLeaseRisk";
 import { loadPropertyCredibilitySummary } from "../services/risk/propertyCredibilitySummary";
 import { dedupePropertyScopedLeasesByUnit, filterPropertyScopedLeases } from "../services/risk/propertyLeaseIsolation";
+import { writeCanonicalEvent } from "../lib/events/buildEvent";
 
 const router = Router();
 const LEDGER_COLLECTION = "ledgerEntries";
@@ -528,6 +529,54 @@ router.post("/drafts/:draftId/activate", requireLandlord, async (req: any, res: 
       },
       { merge: false }
     );
+    await writeCanonicalEvent({
+      domain: "lease",
+      action: "created",
+      status: "active",
+      actor: {
+        type: "landlord",
+        role: "landlord",
+        id: landlordId,
+      },
+      resource: {
+        type: "lease",
+        id: leaseRef.id,
+        parentType: "lease_draft",
+        parentId: draftId,
+      },
+      occurredAt: now,
+      visibility: "landlord",
+      summary: "Lease record created from draft",
+      metadata: {
+        propertyId,
+        unitId,
+        tenantIds,
+      },
+    });
+    await writeCanonicalEvent({
+      domain: "lease",
+      action: "activated",
+      status: "active",
+      actor: {
+        type: "landlord",
+        role: "landlord",
+        id: landlordId,
+      },
+      resource: {
+        type: "lease",
+        id: leaseRef.id,
+        parentType: "lease_draft",
+        parentId: draftId,
+      },
+      occurredAt: now,
+      visibility: "landlord",
+      summary: "Lease activated",
+      metadata: {
+        propertyId,
+        unitId,
+        tenantIds,
+      },
+    });
 
     return res.status(200).json({
       ok: true,

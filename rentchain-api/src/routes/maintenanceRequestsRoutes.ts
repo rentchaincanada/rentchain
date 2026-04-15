@@ -28,6 +28,7 @@ import {
   buildTenantSafeWorkOrderNotifications,
   computeWorkOrderNotifications,
 } from "../lib/maintenanceNotifications";
+import { writeCanonicalEvent } from "../lib/events/buildEvent";
 
 const router = Router();
 
@@ -1376,6 +1377,31 @@ router.post("/tenant/maintenance", async (req: any, res) => {
       messages: [],
     };
     await ref.set(data);
+    await writeCanonicalEvent({
+      domain: "maintenance",
+      action: "request_created",
+      status: "submitted",
+      actor: {
+        type: "tenant",
+        role: "tenant",
+        id: tenantId,
+        displayName: tenantName,
+      },
+      resource: {
+        type: "maintenance_request",
+        id: ref.id,
+      },
+      occurredAt: now,
+      visibility: "landlord",
+      summary: "Maintenance request submitted",
+      metadata: {
+        landlordId,
+        propertyId,
+        unitId,
+        category,
+        priority,
+      },
+    });
 
     if (landlordId) {
       const landlordEmail = await lookupEmailFromDoc([
@@ -2040,6 +2066,33 @@ router.post("/landlord/maintenance/:id/assign", async (req: any, res) => {
         workOrderAssignedContractorId,
       });
     }
+    await writeCanonicalEvent({
+      domain: "maintenance",
+      action: "assigned",
+      status: "assigned",
+      actor: {
+        type: role === "admin" ? "admin" : "landlord",
+        role: role === "admin" ? "admin" : "landlord",
+        id: actorId,
+      },
+      resource: {
+        type: "maintenance_request",
+        id,
+      },
+      occurredAt: now,
+      visibility: "landlord",
+      summary: contractorName
+        ? `Maintenance request assigned to ${contractorName}`
+        : "Maintenance request assigned to contractor",
+      metadata: {
+        landlordId,
+        propertyId: refreshed.propertyId || null,
+        unitId: refreshed.unitId || null,
+        workOrderId,
+        assignedContractorId: resolvedContractorId,
+        assignedContractorName: contractorName,
+      },
+    });
 
     const tenantEmail = await lookupEmailFromDoc([
       ["tenants", String(refreshed.tenantId || "")],
@@ -2341,6 +2394,32 @@ router.patch("/contractor/jobs/:id/status", async (req: any, res) => {
 
     const refreshedSnap = await ref.get();
     const refreshed = { id: refreshedSnap.id, ...(refreshedSnap.data() as any) };
+    if (nextStatus === "completed") {
+      await writeCanonicalEvent({
+        domain: "maintenance",
+        action: "completed",
+        status: "completed",
+        actor: {
+          type: access.role === "admin" ? "admin" : "contractor",
+          role: access.role === "admin" ? "admin" : "contractor",
+          id: actorId,
+        },
+        resource: {
+          type: "maintenance_request",
+          id,
+        },
+        occurredAt: now,
+        visibility: "landlord",
+        summary: "Maintenance request marked completed",
+        metadata: {
+          landlordId: refreshed.landlordId || null,
+          propertyId: refreshed.propertyId || null,
+          unitId: refreshed.unitId || null,
+          workOrderId: workOrder.workOrderId,
+          completionOutcome,
+        },
+      });
+    }
 
     let notifications = null;
     if (!isAcknowledgement) {

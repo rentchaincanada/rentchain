@@ -36,6 +36,7 @@ import { rateLimitScreeningIp, rateLimitScreeningUser } from "../middleware/rate
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 import { sendEmail } from "../services/emailService";
 import { recordScreeningPaymentInitiated } from "../services/screeningPaymentTransactionService";
+import { writeCanonicalEvent } from "../lib/events/buildEvent";
 
 const router = Router();
 
@@ -743,6 +744,27 @@ async function createManualApplicationFromOrderBody(opts: {
   };
 
   await appRef.set(record, { merge: false });
+  await writeCanonicalEvent({
+    domain: "application",
+    action: "created",
+    actor: {
+      type: "landlord",
+      role: "landlord",
+      id: opts.landlordId,
+    },
+    resource: {
+      type: "rental_application",
+      id: appRef.id,
+    },
+    occurredAt: now,
+    visibility: "internal",
+    summary: "Manual rental application created for screening",
+    metadata: {
+      propertyId: opts.propertyId,
+      unitId: opts.unitId || null,
+      source: "manual_screening",
+    },
+  });
   return { ok: true as const, applicationId: appRef.id, data: record };
 }
 
@@ -1037,6 +1059,27 @@ router.post(
         runAdapter: async () => buildQuotePayload(pricing),
         compare: compareQuoteResponses,
       });
+      await writeCanonicalEvent({
+        domain: "screening",
+        action: "quote_generated",
+        actor: {
+          type: role === "admin" ? "admin" : "landlord",
+          role,
+          id: String(req.user?.id || req.user?.landlordId || "").trim() || null,
+        },
+        resource: {
+          type: "rental_application",
+          id,
+        },
+        occurredAt: Date.now(),
+        visibility: "internal",
+        summary: "Screening quote generated",
+        metadata: {
+          landlordId: data?.landlordId || landlordId,
+          propertyId: data?.propertyId || null,
+          unitId: data?.unitId || null,
+        },
+      });
 
       return res.json(quoteResult);
     } catch (err: any) {
@@ -1085,6 +1128,28 @@ router.post(
           meta: { status: "already_paid" },
           actor: role === "admin" ? "admin" : "landlord",
         });
+        await writeCanonicalEvent({
+          domain: "screening",
+          action: "blocked",
+          status: "already_paid",
+          actor: {
+            type: role === "admin" ? "admin" : "landlord",
+            role,
+            id: String(req.user?.id || req.user?.landlordId || "").trim() || null,
+          },
+          resource: {
+            type: "rental_application",
+            id,
+          },
+          occurredAt: Date.now(),
+          visibility: "internal",
+          summary: "Screening checkout blocked because the application is already paid",
+          metadata: {
+            reasonCode: "already_paid",
+            propertyId: data?.propertyId || null,
+            unitId: data?.unitId || null,
+          },
+        });
         return res.status(400).json({ ok: false, error: "screening_already_paid" });
       }
 
@@ -1132,6 +1197,28 @@ router.post(
           at: Date.now(),
           meta: { status: "provider_unavailable", reasonCode: providerHealth.preflightDetail || "not_ready" },
           actor: role === "admin" ? "admin" : "landlord",
+        });
+        await writeCanonicalEvent({
+          domain: "screening",
+          action: "blocked",
+          status: "provider_unavailable",
+          actor: {
+            type: role === "admin" ? "admin" : "landlord",
+            role,
+            id: String(req.user?.id || req.user?.landlordId || "").trim() || null,
+          },
+          resource: {
+            type: "rental_application",
+            id,
+          },
+          occurredAt: Date.now(),
+          visibility: "internal",
+          summary: "Screening checkout blocked because the provider is unavailable",
+          metadata: {
+            reasonCode: providerHealth.preflightDetail || "not_ready",
+            propertyId: data?.propertyId || null,
+            unitId: data?.unitId || null,
+          },
         });
         return res.status(503).json({
           ok: false,
@@ -1516,6 +1603,33 @@ router.post(
         stripeCheckoutSessionId: session.id,
         serviceLevel,
         recordedAt: now,
+      });
+      await writeCanonicalEvent({
+        domain: "screening",
+        action: "checkout_created",
+        actor: {
+          type: role === "admin" ? "admin" : "landlord",
+          role,
+          id: String(req.user?.id || req.user?.landlordId || "").trim() || null,
+        },
+        resource: {
+          type: "screening_order",
+          id: orderId,
+          parentType: "rental_application",
+          parentId: id,
+        },
+        occurredAt: now,
+        visibility: "internal",
+        summary: "Screening checkout session created",
+        metadata: {
+          applicationId: id,
+          landlordId,
+          propertyId: data?.propertyId || null,
+          unitId: data?.unitId || null,
+          stripeCheckoutSessionId: session.id,
+          serviceLevel,
+          totalAmountCents: pricing.totalAmountCents,
+        },
       });
 
       console.log("[screening_checkout] create_session_ok", {

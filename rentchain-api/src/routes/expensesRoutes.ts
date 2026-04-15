@@ -21,6 +21,7 @@ import type {
   ExpensePropertyOption,
   ExpenseUnitOption,
 } from "../services/expenses/expenseIngestionTypes";
+import { writeCanonicalEvent } from "../lib/events/buildEvent";
 
 const router = Router();
 
@@ -1217,6 +1218,31 @@ router.post("/expenses", requireAuth, async (req: any, res) => {
     };
 
     const ref = await db.collection("expenses").add(payload);
+    await writeCanonicalEvent({
+      domain: "expense",
+      action: "created",
+      status: payload.status,
+      actor: {
+        type: role === "admin" ? "admin" : "landlord",
+        role: role === "admin" ? "admin" : "landlord",
+        id: propertyCheck.propertyLandlordId,
+      },
+      resource: {
+        type: "expense",
+        id: ref.id,
+      },
+      occurredAt: createdAtMs,
+      visibility: "internal",
+      summary: "Expense created",
+      metadata: {
+        landlordId: propertyCheck.propertyLandlordId,
+        propertyId,
+        unitId,
+        amountCents: payload.amountCents,
+        category,
+        source: payload.source,
+      },
+    });
     return res.json({ ok: true, item: { id: ref.id, ...payload } });
   } catch (err: any) {
     console.error("[expenses] create failed", err?.message || err);
