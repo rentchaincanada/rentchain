@@ -21,6 +21,8 @@ export type FinancialTransaction = {
   landlordId: string;
   propertyId?: string;
   unitId?: string;
+  tenantId?: string;
+  applicationId?: string;
   maintenanceRequestId?: string;
   workOrderId?: string;
   type: FinancialTransactionType;
@@ -33,6 +35,7 @@ export type FinancialTransaction = {
 };
 
 type CreateFinancialTransactionInput = Omit<FinancialTransaction, "id" | "createdAt" | "updatedAt"> & {
+  id?: string;
   createdAt?: number;
   updatedAt?: number;
 };
@@ -98,6 +101,8 @@ function toFinancialTransaction(id: string, data: any): FinancialTransaction {
     landlordId: asString(data?.landlordId, 120),
     propertyId: asOptionalString(data?.propertyId, 120),
     unitId: asOptionalString(data?.unitId, 120),
+    tenantId: asOptionalString(data?.tenantId, 120),
+    applicationId: asOptionalString(data?.applicationId, 120),
     maintenanceRequestId: asOptionalString(data?.maintenanceRequestId, 120),
     workOrderId: asOptionalString(data?.workOrderId, 120),
     type: normalizeTransactionType(data?.type),
@@ -113,12 +118,15 @@ function toFinancialTransaction(id: string, data: any): FinancialTransaction {
 export async function createTransaction(input: CreateFinancialTransactionInput): Promise<FinancialTransaction> {
   const createdAt = normalizeTimestamp(input.createdAt, nowMs());
   const updatedAt = normalizeTimestamp(input.updatedAt, createdAt);
-  const ref = db.collection("financialTransactions").doc();
+  const requestedId = asOptionalString(input.id, 200);
+  const ref = requestedId ? db.collection("financialTransactions").doc(requestedId) : db.collection("financialTransactions").doc();
   const record: FinancialTransaction = {
     id: ref.id,
     landlordId: asString(input.landlordId, 120),
     propertyId: asOptionalString(input.propertyId, 120),
     unitId: asOptionalString(input.unitId, 120),
+    tenantId: asOptionalString(input.tenantId, 120),
+    applicationId: asOptionalString(input.applicationId, 120),
     maintenanceRequestId: asOptionalString(input.maintenanceRequestId, 120),
     workOrderId: asOptionalString(input.workOrderId, 120),
     type: normalizeTransactionType(input.type),
