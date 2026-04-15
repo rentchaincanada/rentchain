@@ -97,6 +97,7 @@ import statusRoutes from "./routes/statusRoutes";
 import expensesRoutes from "./routes/expensesRoutes";
 import financialTransactionsRoutes from "./routes/financialTransactionsRoutes";
 import workOrdersRoutes from "./routes/workOrdersRoutes";
+import timelineRoutes from "./routes/timelineRoutes";
 import transunionRoutes from "./services/integrations/transunion/transunionRoutes";
 import viewingRoutes from "./routes/viewingRoutes";
 import screeningOpsRoutes from "./routes/screeningOpsRoutes";
@@ -210,6 +211,8 @@ app.use("/api", routeSource("financialTransactionsRoutes.ts"), financialTransact
 console.log("[route-mount] financialTransactionsRoutes mounted at /api");
 app.use("/api", routeSource("workOrdersRoutes.ts"), workOrdersRoutes);
 console.log("[route-mount] workOrdersRoutes mounted at /api");
+app.use("/api", routeSource("timelineRoutes.ts"), timelineRoutes);
+console.log("[route-mount] timelineRoutes mounted at /api");
 
 // Current user info
 app.get("/api/me", async (req: any, res: any, next: any) => {
