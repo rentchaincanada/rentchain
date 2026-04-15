@@ -136,6 +136,7 @@ async function invokeRouter(router: any, options: { method: string; url: string;
 describe("rentalApplicationsRoutes canonical screening events", () => {
   beforeEach(() => {
     collections.clear();
+    process.env.NODE_ENV = "test";
     collections.set(
       "rentalApplications",
       new Map([
@@ -186,6 +187,12 @@ describe("rentalApplicationsRoutes canonical screening events", () => {
     });
 
     expect(response.status).toBe(200);
+    expect(response.body?.autopilotPolicy).toEqual(
+      expect.objectContaining({
+        outcome: "allow",
+        canAutopilot: true,
+      })
+    );
     const events = Array.from((collections.get("canonicalEvents") || new Map()).values());
     expect(events).toEqual(
       expect.arrayContaining([
@@ -197,7 +204,51 @@ describe("rentalApplicationsRoutes canonical screening events", () => {
             type: "screening_order",
           }),
         }),
+        expect.objectContaining({
+          type: "policy.evaluated",
+          domain: "policy",
+          metadata: expect.objectContaining({
+            domain: "screening",
+            action: "start_checkout",
+            outcome: "allow",
+          }),
+        }),
       ])
+    );
+  });
+
+  it("blocks screening checkout when the provider is degraded", async () => {
+    process.env.NODE_ENV = "production";
+    const { getScreeningProviderHealth } = await import("../../services/screening/providerHealth");
+    vi.mocked(getScreeningProviderHealth).mockResolvedValueOnce({
+      provider: "singlekey",
+      configured: false,
+      preflightOk: false,
+      preflightDetail: "provider_down",
+    } as any);
+
+    const router = (await import("../rentalApplicationsRoutes")).default;
+    const response = await invokeRouter(router, {
+      method: "POST",
+      url: "/rental-applications/app-1/screening/checkout",
+      headers: {
+        origin: "http://localhost:5173",
+      },
+      body: {
+        consent: {
+          given: true,
+          timestamp: "2026-03-02T10:00:00.000Z",
+          version: "v1.0",
+        },
+      },
+    });
+
+    expect(response.status).toBe(503);
+    expect(response.body?.autopilotPolicy).toEqual(
+      expect.objectContaining({
+        outcome: "block",
+        topReasonCode: "SCREENING_PROVIDER_UNAVAILABLE",
+      })
     );
   });
 });

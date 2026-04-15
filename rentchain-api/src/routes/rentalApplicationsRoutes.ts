@@ -37,6 +37,8 @@ import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemp
 import { sendEmail } from "../services/emailService";
 import { recordScreeningPaymentInitiated } from "../services/screeningPaymentTransactionService";
 import { writeCanonicalEvent } from "../lib/events/buildEvent";
+import { buildScreeningPolicyRequest } from "../lib/policy/policyAdapters";
+import { evaluatePolicy, toAutopilotPolicySummary, writePolicyEvaluatedEvent } from "../lib/policy/policyEvaluator";
 
 const router = Router();
 
@@ -1014,6 +1016,31 @@ router.post(
       }
       const seedKey = [id, data?.landlordId || landlordId].filter(Boolean).join(":");
       const eligibility = evaluateEligibility(data);
+      const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
+      const consent = resolveConsentPayload(body, data);
+      const consentCheck = validateConsent(consent);
+      const policyRequest = buildScreeningPolicyRequest({
+        action: "generate_quote",
+        actorRole: role,
+        actorUserId: String(req.user?.id || req.user?.landlordId || "").trim() || null,
+        applicationId: id,
+        eligibility,
+        application: data,
+        consentComplete: consentCheck.ok,
+        providerReady: true,
+      });
+      const policyResult = evaluatePolicy(policyRequest);
+      const autopilotPolicy = toAutopilotPolicySummary(policyResult);
+      await writePolicyEvaluatedEvent({
+        request: policyRequest,
+        result: policyResult,
+        actorType: role === "admin" ? "admin" : "landlord",
+        metadata: {
+          landlordId: data?.landlordId || landlordId,
+          propertyId: data?.propertyId || null,
+          unitId: data?.unitId || null,
+        },
+      });
       await writeScreeningEvent({
         applicationId: id,
         landlordId: data?.landlordId || null,
@@ -1029,25 +1056,24 @@ router.post(
             ok: false,
             error: "consent_required",
             detail: eligibility.detail,
+            autopilotPolicy,
           });
         }
         logCutoverBlocked({ name: "quote", seedKey, skippedReason: "NOT_ELIGIBLE" });
-        return res.json({ ok: false, error: "NOT_ELIGIBLE", detail: eligibility.detail });
+        return res.json({ ok: false, error: "NOT_ELIGIBLE", detail: eligibility.detail, autopilotPolicy });
       }
 
-      const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
-      const consent = resolveConsentPayload(body, data);
-      const consentCheck = validateConsent(consent);
       if (!consentCheck.ok) {
         logCutoverBlocked({ name: "quote", seedKey, skippedReason: "consent_required" });
         return res.status(400).json({
           ok: false,
           error: "consent_required",
           detail: consentCheck.error,
+          autopilotPolicy,
         });
       }
       if (isTransUnionReferralMode()) {
-        return res.json(buildReferralQuotePayload());
+        return res.json({ ...buildReferralQuotePayload(), autopilotPolicy });
       }
       const { pricing } = resolvePricingInput(body);
       const quoteResult = await runPrimaryWithFallback({
@@ -1081,7 +1107,7 @@ router.post(
         },
       });
 
-      return res.json(quoteResult);
+      return res.json({ ...quoteResult, autopilotPolicy });
     } catch (err: any) {
       console.error("[rental-applications] screening quote failed", err?.message || err);
       return res.status(500).json({ ok: false, error: "SCREENING_QUOTE_FAILED" });
@@ -1113,6 +1139,9 @@ router.post(
       if (role !== "admin" && data?.landlordId && data.landlordId !== landlordId) {
         return res.status(401).json({ ok: false, error: "unauthorized" });
       }
+      const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
+      const consent = resolveConsentPayload(body, data);
+      const consentCheck = validateConsent(consent);
       await runAdapterPrimaryProbe({
         name: "checkout",
         seedKey: [id, data?.landlordId || landlordId].filter(Boolean).join(":"),
@@ -1171,18 +1200,45 @@ router.post(
         },
         { merge: true }
       );
+      const providerHealth = await getScreeningProviderHealth();
+      const referralMode = isTransUnionReferralMode();
+      const allowMockOverride = shouldUseMockCheckoutOverride({ role, seedKey: id });
+      const providerReady =
+        referralMode ||
+        allowMockOverride ||
+        process.env.NODE_ENV !== "production" ||
+        (providerHealth.configured && providerHealth.preflightOk);
+      const policyRequest = buildScreeningPolicyRequest({
+        action: "start_checkout",
+        actorRole: role,
+        actorUserId: String(req.user?.id || req.user?.landlordId || "").trim() || null,
+        applicationId: id,
+        eligibility,
+        application: data,
+        consentComplete: consentCheck.ok,
+        providerReady,
+      });
+      const policyResult = evaluatePolicy(policyRequest);
+      const autopilotPolicy = toAutopilotPolicySummary(policyResult);
+      await writePolicyEvaluatedEvent({
+        request: policyRequest,
+        result: policyResult,
+        actorType: role === "admin" ? "admin" : "landlord",
+        metadata: {
+          landlordId: data?.landlordId || landlordId,
+          propertyId: data?.propertyId || null,
+          unitId: data?.unitId || null,
+        },
+      });
       if (!eligibility.eligible) {
         return res.status(400).json({
           ok: false,
           error: "not_eligible",
           detail: eligibility.detail,
           reasonCode: eligibility.reasonCode,
+          autopilotPolicy,
         });
       }
-
-      const providerHealth = await getScreeningProviderHealth();
-      const referralMode = isTransUnionReferralMode();
-      const allowMockOverride = shouldUseMockCheckoutOverride({ role, seedKey: id });
       if (
         process.env.NODE_ENV === "production" &&
         !referralMode &&
@@ -1224,6 +1280,7 @@ router.post(
           ok: false,
           error: "screening_unavailable",
           detail: "provider_not_ready",
+          autopilotPolicy,
           ...(role === "admin" ? { preflightDetail: providerHealth.preflightDetail || null } : {}),
         });
       }
@@ -1255,11 +1312,8 @@ router.post(
         }
       }
 
-      const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
-      const consent = resolveConsentPayload(body, data);
-      const consentCheck = validateConsent(consent);
       if (!consentCheck.ok) {
-        return res.status(400).json({ ok: false, error: "consent_required", detail: consentCheck.error });
+        return res.status(400).json({ ok: false, error: "consent_required", detail: consentCheck.error, autopilotPolicy });
       }
       const { screeningTier, addons, serviceLevel, scoreAddOn, expeditedAddOn, pricing } =
         resolvePricingInput(body);
@@ -1385,6 +1439,7 @@ router.post(
           applicationId: id,
           redirectUrl: referralUrl,
           checkoutUrl: referralUrl,
+          autopilotPolicy,
         });
       }
 
@@ -1636,7 +1691,7 @@ router.post(
         ...logBase,
         event: "create_session_ok",
       });
-      return res.json({ ok: true, checkoutUrl: session.url });
+      return res.json({ ok: true, checkoutUrl: session.url, autopilotPolicy });
     } catch (err: any) {
       console.error("[screening_checkout] create_session_fail", {
         ...logBase,
