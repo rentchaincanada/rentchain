@@ -21,6 +21,7 @@ import { colors, radius, spacing, text } from "../styles/tokens";
 import { buildMaintenanceLifecycleView, buildMaintenanceWorkspaceState } from "./maintenanceWorkspaceState";
 import { buildMaintenanceAssignmentRoutingView } from "./maintenanceAssignmentRoutingState";
 import { buildMaintenanceConfirmationAccessView } from "./maintenanceConfirmationAccessState";
+import { buildMaintenancePortfolioCostRollupView } from "./maintenancePortfolioCostRollupState";
 import { buildMaintenanceCostView } from "./maintenanceCostState";
 import { buildMaintenanceReopenEscalationView } from "./maintenanceReopenEscalationState";
 import { buildMaintenanceServiceExecutionView } from "./maintenanceServiceExecutionState";
@@ -162,8 +163,8 @@ export default function MaintenanceRequestsPage() {
       const nextItems = Array.isArray(requestsRes?.items)
         ? requestsRes.items
         : Array.isArray((requestsRes as any)?.data)
-        ? (requestsRes as any).data
-        : [];
+          ? (requestsRes as any).data
+          : [];
       const acceptedInvites = Array.isArray(invites)
         ? invites.filter((invite) => invite.status === "accepted" && invite.acceptedByUserId)
         : [];
@@ -450,6 +451,7 @@ export default function MaintenanceRequestsPage() {
   );
   const selectedCost = React.useMemo(() => (selected ? buildMaintenanceCostView(selected, "landlord") : null), [selected]);
   const calendarEvents = React.useMemo(() => buildMaintenanceSchedulingCalendarEvents(items), [items]);
+  const portfolioRollup = React.useMemo(() => buildMaintenancePortfolioCostRollupView(items), [items]);
   const calendarDays = React.useMemo(() => buildCalendarDays(calendarMonth), [calendarMonth]);
   const calendarEventMap = React.useMemo(() => {
     const next = new Map<string, typeof calendarEvents>();
@@ -578,6 +580,10 @@ export default function MaintenanceRequestsPage() {
             { label: "Need review", value: needsReview },
             { label: "Active jobs", value: activeJobs },
             { label: "Needs attention", value: workspaceView.counts.needs_attention },
+            { label: "Recorded maintenance cost", value: fmtMoney(portfolioRollup.totalRecordedCostCents) },
+            { label: "Expense linked", value: fmtMoney(portfolioRollup.totalLinkedExpenseCostCents) },
+            { label: "Unlinked cost", value: fmtMoney(portfolioRollup.totalUnlinkedCostCents) },
+            { label: "Properties in view", value: portfolioRollup.propertyCount },
           ].map((item) => (
             <div
               key={item.label}
@@ -624,6 +630,135 @@ export default function MaintenanceRequestsPage() {
               </option>
             ))}
           </select>
+        </div>
+      </Card>
+
+      <Card elevated>
+        <div style={{ display: "grid", gap: spacing.md }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontWeight: 800, color: text.primary }}>Property insights</div>
+              <div style={{ color: text.muted, marginTop: 4 }}>{portfolioRollup.summaryDescription}</div>
+            </div>
+          </div>
+          {!portfolioRollup.propertySummaries.length ? (
+            <div style={{ color: text.muted }}>Property-level maintenance rollups will appear here when requests are in view.</div>
+          ) : (
+            <div style={{ display: "grid", gap: spacing.sm }}>
+              {portfolioRollup.nextSteps.length ? (
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: radius.md,
+                    padding: "10px 12px",
+                    background: colors.panel,
+                    display: "grid",
+                    gap: 6,
+                  }}
+                >
+                  <div style={{ fontWeight: 700, color: text.primary }}>{portfolioRollup.summaryTitle}</div>
+                  {portfolioRollup.nextSteps.map((step) => (
+                    <div key={step} style={{ color: text.secondary }}>
+                      {step}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {portfolioRollup.propertySummaries.map((property) => (
+                <div
+                  key={property.propertyId}
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: radius.md,
+                    padding: "12px 14px",
+                    background: colors.panel,
+                    display: "grid",
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                    <div>
+                      <div style={{ fontWeight: 800, color: text.primary }}>{property.propertyLabel}</div>
+                      <div style={{ color: text.muted, marginTop: 4 }}>
+                        {property.requestCount} request{property.requestCount === 1 ? "" : "s"} in view
+                      </div>
+                    </div>
+                    <div style={{ color: text.primary, fontWeight: 800 }}>
+                      {fmtMoney(property.totalRecordedCostCents)}
+                    </div>
+                  </div>
+                  <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))" }}>
+                    <div>
+                      <div style={{ color: text.muted, fontSize: 12 }}>Recorded cost</div>
+                      <div style={{ color: text.primary, fontWeight: 700, marginTop: 6 }}>
+                        {fmtMoney(property.totalRecordedCostCents)}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ color: text.muted, fontSize: 12 }}>Expense linked</div>
+                      <div style={{ color: text.primary, fontWeight: 700, marginTop: 6 }}>
+                        {fmtMoney(property.totalLinkedExpenseCostCents)}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ color: text.muted, fontSize: 12 }}>Unlinked cost</div>
+                      <div style={{ color: text.primary, fontWeight: 700, marginTop: 6 }}>
+                        {fmtMoney(property.totalUnlinkedCostCents)}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ color: text.muted, fontSize: 12 }}>Open requests</div>
+                      <div style={{ color: text.primary, fontWeight: 700, marginTop: 6 }}>{property.openCount}</div>
+                    </div>
+                    <div>
+                      <div style={{ color: text.muted, fontSize: 12 }}>In progress</div>
+                      <div style={{ color: text.primary, fontWeight: 700, marginTop: 6 }}>{property.inProgressCount}</div>
+                    </div>
+                    <div>
+                      <div style={{ color: text.muted, fontSize: 12 }}>Completed / closed</div>
+                      <div style={{ color: text.primary, fontWeight: 700, marginTop: 6 }}>{property.completedCount}</div>
+                    </div>
+                    <div>
+                      <div style={{ color: text.muted, fontSize: 12 }}>Reopened / escalated</div>
+                      <div style={{ color: text.primary, fontWeight: 700, marginTop: 6 }}>
+                        {property.reopenedOrEscalatedCount}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: "grid", gap: 6 }}>
+                    <div style={{ fontWeight: 700, color: text.primary }}>Next step</div>
+                    {property.nextActions.map((step) => (
+                      <div key={step} style={{ color: text.secondary }}>
+                        {step}
+                      </div>
+                    ))}
+                  </div>
+                  {property.unitSummaries.length ? (
+                    <div style={{ display: "grid", gap: 6 }}>
+                      <div style={{ fontWeight: 700, color: text.primary }}>Unit-level activity</div>
+                      {property.unitSummaries.slice(0, 3).map((unit) => (
+                        <div
+                          key={`${property.propertyId}-${unit.unitId || unit.unitLabel}`}
+                          style={{
+                            display: "grid",
+                            gap: 6,
+                            gridTemplateColumns: "minmax(0, 1.5fr) repeat(4, minmax(0, 1fr))",
+                            color: text.secondary,
+                          }}
+                        >
+                          <div style={{ fontWeight: 600, color: text.primary }}>{unit.unitLabel}</div>
+                          <div>{unit.activityCount} activity</div>
+                          <div>{unit.openCount} open</div>
+                          <div>{unit.reopenedOrEscalatedCount} follow-up</div>
+                          <div>{fmtMoney(unit.recordedCostCents)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </Card>
 

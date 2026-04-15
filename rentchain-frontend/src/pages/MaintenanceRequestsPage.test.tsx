@@ -442,4 +442,97 @@ describe("landlord maintenance workspace", () => {
 
     expect(workOrdersApi.linkWorkOrderCostToExpense).toHaveBeenCalledWith("maintenance_maint-1");
   });
+
+  it("shows property-level maintenance cost and request insights", async () => {
+    maintenanceWorkflowApi.listLandlordMaintenance.mockResolvedValue({
+      items: [
+        {
+          id: "maint-1",
+          tenantId: "tenant-1",
+          landlordId: "landlord-1",
+          propertyId: "prop-1",
+          unitId: "unit-1",
+          tenantName: "Taylor Tenant",
+          propertyLabel: "Harbour View",
+          unitLabel: "Unit 101",
+          title: "Broken heater",
+          description: "Heat is not turning on.",
+          category: "HVAC",
+          priority: "urgent",
+          status: "completed",
+          cost: {
+            actualCostCents: 24000,
+            currency: "CAD",
+            linkedExpenseStatus: "linked",
+          },
+          expenseLink: {
+            status: "linked",
+            expenseId: "expense-1",
+          },
+          createdAt: 100,
+          updatedAt: 200,
+          statusHistory: [],
+        },
+        {
+          id: "maint-2",
+          tenantId: "tenant-2",
+          landlordId: "landlord-1",
+          propertyId: "prop-1",
+          unitId: "unit-2",
+          tenantName: "Jordan Tenant",
+          propertyLabel: "Harbour View",
+          unitLabel: "Unit 102",
+          title: "Leaky pipe",
+          description: "Pipe is dripping behind the vanity.",
+          category: "PLUMBING",
+          priority: "normal",
+          status: "scheduled",
+          cost: {
+            actualCostCents: 18000,
+            currency: "CAD",
+            linkedExpenseStatus: "not_linked",
+          },
+          createdAt: 100,
+          updatedAt: 200,
+          statusHistory: [],
+        },
+        {
+          id: "maint-3",
+          tenantId: "tenant-3",
+          landlordId: "landlord-1",
+          propertyId: "prop-2",
+          unitId: "unit-8",
+          tenantName: "Morgan Tenant",
+          propertyLabel: "Maple Court",
+          unitLabel: "Unit 8",
+          title: "Hall light out",
+          description: "Shared hallway light is out.",
+          category: "ELECTRICAL",
+          priority: "low",
+          status: "completed",
+          followUpRequired: true,
+          resolutionStatus: "follow_up_required",
+          reopenedAt: Date.UTC(2026, 3, 16, 10, 0),
+          createdAt: 100,
+          updatedAt: 200,
+          statusHistory: [],
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/maintenance/maint-1"]}>
+        <Routes>
+          <Route path="/maintenance/:id" element={<MaintenanceRequestsPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findAllByText(/Harbour View/i)).not.toHaveLength(0);
+    expect(screen.getAllByText(/Maple Court/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Unit-level activity/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Unit 101/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Unit 102/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Reopened \/ escalated/i).length).toBeGreaterThan(0);
+  });
 });
