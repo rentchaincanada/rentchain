@@ -52,10 +52,10 @@ jobs:
             // Define the required contexts/job names here.
             // Keep these names unique across workflows.
             const requiredChecks = [
-              "ci / frontend",
-              "ci / backend",
+              "ci / frontend (pull_request)",
+              "ci / backend (pull_request)",
               "Vercel – rentchain",
-              "merge-gate"
+              "Vercel – rentchain-status",
             ];
 
             // Normalize results from checks API

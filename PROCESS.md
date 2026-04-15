@@ -92,3 +92,4 @@ If verification cannot be completed:
 - do not claim completion
 
 Merge-gate must only fail on actual failed required checks, not on pending checks.
+Merge safety depends on the real required PR delivery checks; `merge-gate` remains supplemental.
