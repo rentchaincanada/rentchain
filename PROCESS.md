@@ -10,6 +10,8 @@ Every mission must follow this loop:
 
 Do not skip steps.
 
+Mission execution follows the Mission Promotion Pipeline: only the active mission is executed; future roadmap remains private.
+
 ---
 
 ## 1. Explore
