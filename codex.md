@@ -89,6 +89,13 @@ gcloud run deploy
 
 Only read sub-docs when specifically prompted for that domain.
 
+## Mission Promotion Pipeline
+
+- Only execute CURRENT_MISSION.md or explicit mission
+- Do not infer future roadmap
+- Do not expand scope
+- Treat repo as execution-only
+
 ## Merge gate policy
 
 When modifying or creating `.github/workflows/merge-gate.yml`, follow these rules:
