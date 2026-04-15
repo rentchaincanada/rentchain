@@ -150,6 +150,7 @@ const AdminAuditPage = lazy(() => import("./pages/admin/AdminAuditPage"));
 const AutomationTimelinePage = lazy(
   () => import("./features/automation/timeline/AutomationTimelinePage")
 );
+const AutomationTimelineV1Page = lazy(() => import("./pages/admin/AutomationTimelineV1Page"));
 
 const AuthLoadingScreen = () => (
   <div
@@ -857,6 +858,16 @@ function App() {
                 <MaintenanceRequestsPage />
               </LandlordNav>
             </RequireAuth>
+          }
+        />
+        <Route
+          path="/timeline"
+          element={
+            <RequireAdmin>
+              <Suspense fallback={null}>
+                <AutomationTimelineV1Page />
+              </Suspense>
+            </RequireAdmin>
           }
         />
         <Route

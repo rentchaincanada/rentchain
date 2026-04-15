@@ -50,6 +50,10 @@ vi.mock("./features/automation/timeline/AutomationTimelinePage", () => ({
   default: () => <h1>Automation Timeline</h1>,
 }));
 
+vi.mock("./pages/admin/AutomationTimelineV1Page", () => ({
+  default: () => <h1>Automation Timeline v1</h1>,
+}));
+
 vi.mock("./pages/tenant/TenantWorkspacePage", () => ({
   default: () => <h1>Tenant Dashboard</h1>,
 }));
@@ -127,6 +131,20 @@ describe("Routes: /automation/timeline", () => {
     );
 
     expect(await screen.findByText(/Automation Timeline/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /timeline", () => {
+  it("renders the canonical automation timeline admin view", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/timeline"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Automation Timeline v1/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });
