@@ -154,6 +154,7 @@ const AutomationTimelineV1Page = lazy(() => import("./pages/admin/AutomationTime
 const SupportDebugConsolePage = lazy(() => import("./pages/admin/SupportDebugConsolePage"));
 const AdminTriageQueuePage = lazy(() => import("./pages/admin/AdminTriageQueuePage"));
 const PortfolioScorePage = lazy(() => import("./pages/admin/PortfolioScorePage"));
+const PortfolioScoreHistoryPage = lazy(() => import("./pages/admin/PortfolioScoreHistoryPage"));
 
 const AuthLoadingScreen = () => (
   <div
@@ -899,6 +900,16 @@ function App() {
             <RequireAdmin>
               <Suspense fallback={null}>
                 <PortfolioScorePage />
+              </Suspense>
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/admin/portfolio-score/history"
+          element={
+            <RequireAdmin>
+              <Suspense fallback={null}>
+                <PortfolioScoreHistoryPage />
               </Suspense>
             </RequireAdmin>
           }

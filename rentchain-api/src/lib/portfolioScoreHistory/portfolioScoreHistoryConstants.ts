@@ -1,0 +1,3 @@
+export const PORTFOLIO_SCORE_SNAPSHOTS_COLLECTION = "portfolioScoreSnapshots";
+export const PORTFOLIO_SCORE_TREND_DELTA_THRESHOLD = 2;
+

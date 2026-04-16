@@ -66,6 +66,10 @@ vi.mock("./pages/admin/PortfolioScorePage", () => ({
   default: () => <h1>Portfolio Score Foundation</h1>,
 }));
 
+vi.mock("./pages/admin/PortfolioScoreHistoryPage", () => ({
+  default: () => <h1>Portfolio Score History</h1>,
+}));
+
 vi.mock("./pages/tenant/TenantWorkspacePage", () => ({
   default: () => <h1>Tenant Dashboard</h1>,
 }));
@@ -199,6 +203,20 @@ describe("Routes: /admin/portfolio-score", () => {
     );
 
     expect(await screen.findByText(/Portfolio Score Foundation/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /admin/portfolio-score/history", () => {
+  it("renders the admin portfolio score history route", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/admin/portfolio-score/history"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Portfolio Score History/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });
