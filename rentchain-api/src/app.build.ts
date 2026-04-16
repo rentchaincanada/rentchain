@@ -111,6 +111,7 @@ import portfolioScoreRoutes from "./routes/portfolioScoreRoutes";
 import portfolioScoreHistoryRoutes from "./routes/portfolioScoreHistoryRoutes";
 import landlordPortfolioHealthRoutes from "./routes/landlordPortfolioHealthRoutes";
 import landlordPortfolioScoreRoutes from "./routes/landlordPortfolioScoreRoutes";
+import landlordActionRecommendationRoutes from "./routes/landlordActionRecommendationRoutes";
 import transunionRoutes from "./services/integrations/transunion/transunionRoutes";
 import viewingRoutes from "./routes/viewingRoutes";
 import screeningOpsRoutes from "./routes/screeningOpsRoutes";
@@ -252,6 +253,8 @@ app.use("/api", routeSource("landlordPortfolioHealthRoutes.ts"), landlordPortfol
 console.log("[route-mount] landlordPortfolioHealthRoutes mounted at /api");
 app.use("/api", routeSource("landlordPortfolioScoreRoutes.ts"), landlordPortfolioScoreRoutes);
 console.log("[route-mount] landlordPortfolioScoreRoutes mounted at /api");
+app.use("/api", routeSource("landlordActionRecommendationRoutes.ts"), landlordActionRecommendationRoutes);
+console.log("[route-mount] landlordActionRecommendationRoutes mounted at /api");
 
 // Current user info
 app.get("/api/me", async (req: any, res: any, next: any) => {

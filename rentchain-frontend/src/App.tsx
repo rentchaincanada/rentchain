@@ -159,6 +159,7 @@ const PortfolioScorePage = lazy(() => import("./pages/admin/PortfolioScorePage")
 const PortfolioScoreHistoryPage = lazy(() => import("./pages/admin/PortfolioScoreHistoryPage"));
 const PortfolioHealthSummaryPage = lazy(() => import("./pages/landlord/PortfolioHealthSummaryPage"));
 const LandlordPortfolioScorePage = lazy(() => import("./pages/landlord/PortfolioScorePage"));
+const ActionRecommendationsPage = lazy(() => import("./pages/landlord/ActionRecommendationsPage"));
 
 const AuthLoadingScreen = () => (
   <div
@@ -476,6 +477,18 @@ function App() {
               <LandlordNav>
                 <Suspense fallback={null}>
                   <LandlordPortfolioScorePage />
+                </Suspense>
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/recommended-actions"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <Suspense fallback={null}>
+                  <ActionRecommendationsPage />
                 </Suspense>
               </LandlordNav>
             </RequireAuth>

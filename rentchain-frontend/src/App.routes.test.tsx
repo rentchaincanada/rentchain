@@ -86,6 +86,10 @@ vi.mock("./pages/landlord/PortfolioScorePage", () => ({
   default: () => <h1>Landlord Portfolio Score</h1>,
 }));
 
+vi.mock("./pages/landlord/ActionRecommendationsPage", () => ({
+  default: () => <h1>Landlord Action Recommendations</h1>,
+}));
+
 vi.mock("./pages/tenant/TenantWorkspacePage", () => ({
   default: () => <h1>Tenant Dashboard</h1>,
 }));
@@ -289,6 +293,20 @@ describe("Routes: /portfolio-score", () => {
     );
 
     expect(await screen.findByText(/Landlord Portfolio Score/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /recommended-actions", () => {
+  it("renders the landlord recommended actions route", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/recommended-actions"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Landlord Action Recommendations/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });
