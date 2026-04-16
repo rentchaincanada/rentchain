@@ -28,6 +28,8 @@ const mocks = vi.hoisted(() => ({
   updateWorkOrderEvidence: vi.fn(),
   addWorkOrderUpdate: vi.fn(),
   getContractorProfileById: vi.fn(),
+  fetchContractors: vi.fn(),
+  assignContractorToWorkOrder: vi.fn(),
   fetchProperties: vi.fn(),
 }));
 
@@ -62,6 +64,11 @@ vi.mock("../../api/workOrdersApi", () => ({
   updateWorkOrderEvidence: mocks.updateWorkOrderEvidence,
   uploadWorkOrderCostAttachment: mocks.uploadWorkOrderCostAttachment,
   uploadWorkOrderEvidence: mocks.uploadWorkOrderEvidence,
+}));
+
+vi.mock("../../api/marketplaceContractorApi", () => ({
+  fetchContractors: mocks.fetchContractors,
+  assignContractorToWorkOrder: mocks.assignContractorToWorkOrder,
 }));
 
 vi.mock("../../api/propertiesApi", () => ({
@@ -118,8 +125,11 @@ describe("WorkOrdersPage", () => {
     mocks.updateWorkOrderEvidence.mockReset();
     mocks.addWorkOrderUpdate.mockReset();
     mocks.getContractorProfileById.mockReset();
+    mocks.fetchContractors.mockReset();
+    mocks.assignContractorToWorkOrder.mockReset();
     mocks.fetchProperties.mockReset();
     mocks.fetchProperties.mockResolvedValue({ items: [] });
+    mocks.fetchContractors.mockResolvedValue({ items: [] });
   });
 
   it("renders the locked free-tier state without crashing", async () => {
@@ -298,6 +308,105 @@ describe("WorkOrdersPage", () => {
         status: "blocked",
       });
     });
+  });
+
+  it("shows contractor marketplace candidates and assigns one to the selected work order", async () => {
+    mocks.canUseWorkOrders = true;
+    mocks.fetchProperties.mockResolvedValue({
+      items: [{ id: "prop-1", name: "Harbor Place", city: "Halifax", province: "NS" }],
+    });
+    mocks.listWorkOrders.mockResolvedValue([
+      {
+        id: "wo-market-1",
+        landlordId: "landlord-1",
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        title: "Kitchen sink leak",
+        description: "Leak under sink",
+        category: "plumbing",
+        priority: "high",
+        status: "open",
+        visibility: "private",
+        budgetMinCents: null,
+        budgetMaxCents: null,
+        assignedContractorId: null,
+        invitedContractorIds: [],
+        notesInternal: "",
+        linkedExpenseId: null,
+        createdAtMs: 1,
+        updatedAtMs: 35,
+      },
+    ]);
+    mocks.listWorkOrderUpdates.mockResolvedValue([]);
+    mocks.fetchContractors.mockResolvedValue({
+      items: [
+        {
+          version: "v1",
+          id: "contractor-22",
+          displayName: "Harbor Plumbing",
+          businessName: "Harbor Plumbing Ltd.",
+          serviceCategories: ["plumbing"],
+          serviceAreas: ["Halifax, NS"],
+          availabilityStatus: "active",
+          contact: { email: "ops@harbor.test" },
+          createdAt: "2026-04-16T00:00:00.000Z",
+          updatedAt: "2026-04-16T00:00:00.000Z",
+        },
+      ],
+    });
+    mocks.assignContractorToWorkOrder.mockResolvedValue({
+      id: "wo-market-1",
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      title: "Kitchen sink leak",
+      description: "Leak under sink",
+      category: "plumbing",
+      priority: "high",
+      status: "assigned",
+      visibility: "private",
+      budgetMinCents: null,
+      budgetMaxCents: null,
+      assignedContractorId: "contractor-22",
+      contractorAssignment: {
+        contractorId: "contractor-22",
+        displayName: "Harbor Plumbing",
+        businessName: "Harbor Plumbing Ltd.",
+        assignedAt: "2026-04-16T12:00:00.000Z",
+      },
+      invitedContractorIds: [],
+      notesInternal: "",
+      linkedExpenseId: null,
+      createdAtMs: 1,
+      updatedAtMs: 40,
+    });
+
+    render(
+      <MemoryRouter>
+        <WorkOrdersPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Kitchen sink leak/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Timeline/i }));
+
+    expect(await screen.findByText(/Marketplace contractor assignment/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Harbor Plumbing Ltd\./i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Assign to work order/i }));
+
+    await waitFor(() => {
+      expect(mocks.assignContractorToWorkOrder).toHaveBeenCalledWith("wo-market-1", {
+        contractorId: "contractor-22",
+      });
+    });
+    expect(
+      (
+        await screen.findAllByText((_, element) =>
+          Boolean(element?.textContent?.includes("Current assignment: Harbor Plumbing"))
+        )
+      ).length
+    ).toBeGreaterThan(0);
   });
 
   it("renders the cost panel and lets the landlord save and review cost details", async () => {

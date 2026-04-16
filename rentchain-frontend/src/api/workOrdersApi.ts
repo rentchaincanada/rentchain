@@ -27,6 +27,12 @@ export type WorkOrderRecord = {
   budgetMinCents: number | null;
   budgetMaxCents: number | null;
   assignedContractorId: string | null;
+  contractorAssignment?: {
+    contractorId: string;
+    displayName?: string | null;
+    businessName?: string | null;
+    assignedAt: string;
+  } | null;
   invitedContractorIds: string[];
   acceptedAtMs: number | null;
   startedAtMs: number | null;
