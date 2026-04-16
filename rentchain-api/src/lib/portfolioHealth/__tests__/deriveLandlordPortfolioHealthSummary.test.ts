@@ -129,4 +129,25 @@ describe("deriveLandlordPortfolioHealthSummary", () => {
     expect(summary.overall.summary).toMatch(/still developing/i);
     expect(summary.trend.summary).toMatch(/Trend visibility will improve/i);
   });
+
+  it("adds landlord-safe feedback summaries without exposing raw feedback", () => {
+    const summary = deriveLandlordPortfolioHealthSummary({
+      portfolioScore: buildScore(),
+      portfolioTrend: buildTrend({ direction: "flat" }),
+      feedbackSignals: [
+        {
+          type: "maintenance_experience",
+          positiveRatio: 0.1,
+          neutralRatio: 0.2,
+          negativeRatio: 0.7,
+          dominant: "negative",
+          signalStrength: "moderate",
+        },
+      ],
+    });
+
+    expect(summary.feedback?.summaries[0]).toMatch(/Some tenants experienced slower maintenance follow-through/i);
+    expect(summary.feedback?.summaries[0]).not.toMatch(/tenant-|slow_response|0\.7|count/i);
+    expect(summary.dimensions.find((dimension) => dimension.key === "maintenance_health")?.status).toBe("watch");
+  });
 });

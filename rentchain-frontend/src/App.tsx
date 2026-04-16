@@ -74,6 +74,7 @@ import TenantInviteRedeemPage from "./pages/tenant/TenantInviteRedeemPage";
 import TenantMaintenanceRequestDetailPage from "./pages/tenant/TenantMaintenanceRequestDetailPage";
 import TenantMaintenanceRequestsPage from "./pages/tenant/TenantMaintenanceRequestsPage";
 import TenantMaintenanceRequestNewPage from "./pages/tenant/TenantMaintenanceRequestNewPage";
+import FeedbackSubmissionPage from "./pages/tenant/FeedbackSubmissionPage";
 import { buildTenantApplicationEntryPath } from "./pages/tenant/tenantApplicationFlow";
 import MonthlyOpsReportPageWithNudge from "./pages/reports/MonthlyOpsReportPageWithNudge";
 import InvitesPage from "./pages/landlord/InvitesPage";
@@ -1141,6 +1142,10 @@ function App() {
         <Route
           path="/tenant/maintenance/:id"
           element={renderTenantShell(<TenantMaintenanceRequestDetailPage />)}
+        />
+        <Route
+          path="/tenant/feedback"
+          element={renderTenantShell(<FeedbackSubmissionPage />)}
         />
         <Route
           path="/tenant/invite/redeem"

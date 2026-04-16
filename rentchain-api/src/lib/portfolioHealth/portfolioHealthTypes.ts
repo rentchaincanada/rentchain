@@ -39,6 +39,9 @@ export type LandlordPortfolioHealthSummaryV1 = {
     label: string;
     summary: string;
   }>;
+  feedback?: {
+    summaries: string[];
+  };
   metadata?: {
     portfolioScoreGrade?: string | null;
     portfolioScoreAvailable: boolean;

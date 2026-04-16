@@ -94,6 +94,10 @@ vi.mock("./pages/tenant/TenantWorkspacePage", () => ({
   default: () => <h1>Tenant Dashboard</h1>,
 }));
 
+vi.mock("./pages/tenant/FeedbackSubmissionPage", () => ({
+  default: () => <h1>Tenant Feedback Submission</h1>,
+}));
+
 vi.mock("./pages/tenant/TenantApplicationStatusPage", () => ({
   default: () => {
     const location = useLocation();
@@ -154,6 +158,20 @@ describe("Routes: /tenant/dashboard", () => {
 
     expect(await screen.findByText(/Tenant Dashboard/i)).toBeInTheDocument();
     expect(screen.queryByText(/DashboardPage/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /tenant/feedback", () => {
+  it("renders the tenant feedback submission route", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/tenant/feedback"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Tenant Feedback Submission/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });
 

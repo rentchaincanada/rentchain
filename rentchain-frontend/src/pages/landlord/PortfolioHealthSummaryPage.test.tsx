@@ -65,6 +65,9 @@ describe("PortfolioHealthSummaryPage", () => {
             summary: "Review outstanding portfolio activity to keep progress steady.",
           },
         ],
+        feedback: {
+          summaries: ["Some tenants experienced slower maintenance follow-through."],
+        },
         metadata: {
           portfolioScoreGrade: null,
           portfolioScoreAvailable: true,
@@ -81,6 +84,7 @@ describe("PortfolioHealthSummaryPage", () => {
 
     expect(await screen.findByText(/stable overall, with a few areas to monitor/i)).toBeInTheDocument();
     expect(screen.getByText(/Screening health/i)).toBeInTheDocument();
+    expect(screen.getByText(/Resident feedback patterns/i)).toBeInTheDocument();
     expect(screen.getByText(/Workflow follow-through/i)).toBeInTheDocument();
   });
 
