@@ -62,7 +62,12 @@ describe("AdminTriageQueuePage", () => {
             surfacedAt: "2026-04-15T12:00:00.000Z",
           },
           navigation: {
-            supportConsolePath: "/admin/support-console?resourceType=application&resourceId=app-1",
+            supportConsolePath:
+              "/admin/support-console?resourceType=application&resourceId=app-1&triageCategory=screening_reconciliation&triageSeverity=critical&reasonCode=TRIAGE_PAID_NOT_FULFILLED",
+          },
+          resolution: {
+            status: "acknowledged",
+            updatedAt: "2026-04-15T12:10:00.000Z",
           },
           tags: ["screening", "revenue"],
         },
@@ -78,9 +83,10 @@ describe("AdminTriageQueuePage", () => {
     expect(await screen.findByText(/Alex Applicant/i)).toBeInTheDocument();
     expect(screen.getByText(/Payment was recorded but screening completion is missing/i)).toBeInTheDocument();
     expect(screen.getAllByText(/critical/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/acknowledged/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open support console/i })).toHaveAttribute(
       "href",
-      "/admin/support-console?resourceType=application&resourceId=app-1"
+      "/admin/support-console?resourceType=application&resourceId=app-1&triageCategory=screening_reconciliation&triageSeverity=critical&reasonCode=TRIAGE_PAID_NOT_FULFILLED"
     );
   });
 

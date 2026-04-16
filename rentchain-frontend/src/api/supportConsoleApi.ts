@@ -31,11 +31,50 @@ export type SupportConsoleResourceResponse = {
     summary?: string | null;
   }>;
   reconciliation?: Record<string, unknown> | null;
+  resolution?: ResolutionRecordV1 | null;
   debug: {
     canonicalEventCount: number;
     domainsPresent: string[];
     identifiers?: Record<string, string | null | undefined>;
   };
+};
+
+export type ResolutionStatus = "open" | "acknowledged" | "in_progress" | "resolved" | "dismissed";
+
+export type ResolutionRecordV1 = {
+  version: "v1";
+  id: string;
+  resource: {
+    type: string;
+    id: string;
+  };
+  triage: {
+    category?: string | null;
+    severity?: string | null;
+    reasonCode?: string | null;
+  };
+  status: ResolutionStatus;
+  createdAt: string;
+  updatedAt: string;
+  resolvedAt?: string | null;
+  dismissedAt?: string | null;
+  notes: Array<{
+    id: string;
+    createdAt: string;
+    authorId?: string | null;
+    authorRole?: string | null;
+    message: string;
+  }>;
+  history: Array<{
+    id: string;
+    timestamp: string;
+    fromStatus?: ResolutionStatus | null;
+    toStatus: ResolutionStatus;
+    authorId?: string | null;
+    authorRole?: string | null;
+    reason?: string | null;
+  }>;
+  metadata?: Record<string, unknown>;
 };
 
 export async function fetchSupportConsoleResource(
@@ -49,4 +88,3 @@ export async function fetchSupportConsoleResource(
     `/admin/support-console/resource?${search.toString()}`
   );
 }
-

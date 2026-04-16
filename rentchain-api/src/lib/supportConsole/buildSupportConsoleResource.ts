@@ -3,6 +3,7 @@ import { CANONICAL_EVENTS_COLLECTION } from "../events/buildEvent";
 import type { CanonicalEventV1 } from "../events/eventTypes";
 import { deriveInsightForResource } from "../insights/deriveInsights";
 import { deriveScreeningReconciliation } from "../reconciliation/deriveScreeningReconciliation";
+import { loadResolutionRecord } from "../resolution/loadResolutionRecord";
 import { canonicalEventToTimelineItem } from "../timeline/timelineAdapter";
 import type {
   SupportConsoleAutomationItem,
@@ -280,6 +281,7 @@ function emptyResponse(spec: NormalizedResourceSpec, resourceId: string): Suppor
     policyDecisions: [],
     automation: [],
     reconciliation: null,
+    resolution: null,
     debug: {
       canonicalEventCount: 0,
       domainsPresent: [],
@@ -312,6 +314,10 @@ export async function buildSupportConsoleResource(input: {
   });
 
   let reconciliation: Record<string, unknown> | null = null;
+  const resolution = await loadResolutionRecord({
+    resourceType: spec.requestedType,
+    resourceId,
+  });
   if (spec.requestedType === "application") {
     const [latestOrder, financialTransactions] = await Promise.all([
       loadLatestScreeningOrder(resourceId),
@@ -338,6 +344,7 @@ export async function buildSupportConsoleResource(input: {
     policyDecisions: buildPolicyDecisions(relatedEvents),
     automation: buildAutomationHistory(relatedEvents),
     reconciliation,
+    resolution,
     debug: {
       canonicalEventCount: relatedEvents.length,
       domainsPresent: domainsPresent(relatedEvents),
@@ -345,4 +352,3 @@ export async function buildSupportConsoleResource(input: {
     },
   };
 }
-

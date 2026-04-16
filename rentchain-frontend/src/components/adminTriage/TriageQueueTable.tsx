@@ -1,6 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import type { AdminTriageItemV1 } from "../../api/adminTriageApi";
+import ResolutionStatusBadge from "../adminResolution/ResolutionStatusBadge";
 import TriageSeverityBadge from "./TriageSeverityBadge";
 
 function formatTimestamp(value: string) {
@@ -55,6 +56,12 @@ export function TriageQueueTable({ items }: { items: AdminTriageItemV1[] }) {
               {signalLine(item) ? (
                 <div style={{ color: "#334155", fontSize: 13 }}>{signalLine(item)}</div>
               ) : null}
+              {item.resolution ? (
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <span style={{ color: "#64748b", fontSize: 13 }}>Resolution</span>
+                  <ResolutionStatusBadge status={item.resolution.status} />
+                </div>
+              ) : null}
             </div>
             <div style={{ display: "grid", gap: 8, justifyItems: "end" }}>
               <div style={{ color: "#64748b", fontSize: 12 }}>Surfaced {formatTimestamp(item.timestamps.surfacedAt)}</div>
@@ -70,4 +77,3 @@ export function TriageQueueTable({ items }: { items: AdminTriageItemV1[] }) {
 }
 
 export default TriageQueueTable;
-

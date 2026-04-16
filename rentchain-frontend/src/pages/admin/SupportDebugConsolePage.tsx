@@ -9,6 +9,7 @@ import SupportConsoleHeader from "../../components/supportConsole/SupportConsole
 import SupportConsoleSection from "../../components/supportConsole/SupportConsoleSection";
 import PolicyDecisionList from "../../components/supportConsole/PolicyDecisionList";
 import AutomationHistoryList from "../../components/supportConsole/AutomationHistoryList";
+import ResolutionPanel from "../../components/adminResolution/ResolutionPanel";
 
 const RESOURCE_OPTIONS = [
   { label: "Application", value: "application" },
@@ -148,6 +149,18 @@ export default function SupportDebugConsolePage() {
               </SupportConsoleSection>
             ) : null}
 
+            <SupportConsoleSection title="Resolution">
+              <ResolutionPanel
+                resourceType={payload.resource.type}
+                resourceId={payload.resource.id}
+                triageCategory={searchParams.get("triageCategory")}
+                triageSeverity={searchParams.get("triageSeverity")}
+                reasonCode={searchParams.get("reasonCode")}
+                resolution={payload.resolution || null}
+                onChange={(resolution) => setPayload((current) => (current ? { ...current, resolution } : current))}
+              />
+            </SupportConsoleSection>
+
             <SupportConsoleSection title="Policy decisions">
               <PolicyDecisionList items={payload.policyDecisions} />
             </SupportConsoleSection>
@@ -173,4 +186,3 @@ export default function SupportDebugConsolePage() {
     </MacShell>
   );
 }
-

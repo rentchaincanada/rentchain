@@ -10,6 +10,12 @@ vi.mock("../../api/supportConsoleApi", () => ({
   fetchSupportConsoleResource: vi.fn(),
 }));
 
+vi.mock("../../api/adminResolutionApi", () => ({
+  createResolution: vi.fn(),
+  updateResolutionStatus: vi.fn(),
+  addResolutionNote: vi.fn(),
+}));
+
 vi.mock("../../components/ui/ToastProvider", () => ({
   useToast: () => ({ showToast }),
 }));
@@ -94,6 +100,17 @@ describe("SupportDebugConsolePage", () => {
         status: "fulfilled",
         reasons: [{ code: "RECON_FULFILLED" }],
       },
+      resolution: {
+        version: "v1",
+        id: "resolution-1",
+        resource: { type: "application", id: "app-1" },
+        triage: { reasonCode: "TRIAGE_PAID_NOT_FULFILLED" },
+        status: "acknowledged",
+        createdAt: "2026-04-12T11:00:00.000Z",
+        updatedAt: "2026-04-12T11:30:00.000Z",
+        notes: [{ id: "note-1", createdAt: "2026-04-12T11:10:00.000Z", message: "Investigating." }],
+        history: [{ id: "hist-1", timestamp: "2026-04-12T11:00:00.000Z", toStatus: "open" }],
+      },
       debug: {
         canonicalEventCount: 4,
         domainsPresent: ["application", "screening"],
@@ -106,6 +123,7 @@ describe("SupportDebugConsolePage", () => {
     expect(await screen.findByText(/Alex Tenant/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Derived insight/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /^Reconciliation$/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /^Resolution$/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Policy decisions/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Automation history/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /^Timeline$/i })).toBeInTheDocument();
@@ -160,6 +178,7 @@ describe("SupportDebugConsolePage", () => {
         },
       ],
       reconciliation: null,
+      resolution: null,
       debug: {
         canonicalEventCount: 2,
         domainsPresent: ["maintenance", "policy", "system"],
@@ -178,5 +197,6 @@ describe("SupportDebugConsolePage", () => {
       expect(screen.getByText(/^maintenance\.auto_approve_cost$/i)).toBeInTheDocument();
     });
     expect(screen.queryByText(/^Reconciliation$/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/No resolution record exists yet for this resource/i)).toBeInTheDocument();
   });
 });

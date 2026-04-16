@@ -138,7 +138,8 @@ describe("adminTriageRoutes", () => {
           category: "screening_reconciliation",
           severity: "critical",
           navigation: expect.objectContaining({
-            supportConsolePath: "/admin/support-console?resourceType=application&resourceId=app-1",
+            supportConsolePath:
+              "/admin/support-console?resourceType=application&resourceId=app-1&triageCategory=screening_reconciliation&triageSeverity=critical&reasonCode=TRIAGE_PAID_NOT_FULFILLED",
           }),
         }),
       ])
