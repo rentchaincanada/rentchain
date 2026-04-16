@@ -6,6 +6,7 @@ import { useToast } from "../../components/ui/ToastProvider";
 import PortfolioHealthStatusCard from "../../components/portfolioHealth/PortfolioHealthStatusCard";
 import PortfolioHealthDimensionList from "../../components/portfolioHealth/PortfolioHealthDimensionList";
 import PortfolioHealthNextFocusList from "../../components/portfolioHealth/PortfolioHealthNextFocusList";
+import PortfolioFeedbackSummary from "../../components/portfolioHealth/PortfolioFeedbackSummary";
 
 export default function PortfolioHealthSummaryPage() {
   const { showToast } = useToast();
@@ -59,6 +60,7 @@ export default function PortfolioHealthSummaryPage() {
           <>
             <PortfolioHealthStatusCard summary={summary} />
             <PortfolioHealthDimensionList dimensions={summary.dimensions} />
+            <PortfolioFeedbackSummary summaries={summary.feedback?.summaries || []} />
             <PortfolioHealthNextFocusList nextFocus={summary.nextFocus} />
           </>
         ) : null}

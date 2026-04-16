@@ -1,5 +1,7 @@
 import type { PortfolioScoreComponent, PortfolioScoreV1 } from "../portfolioScore/portfolioScoreTypes";
 import type { PortfolioScoreTrendV1 } from "../portfolioScoreHistory/portfolioScoreHistoryTypes";
+import type { AggregatedFeedbackSignalV1 } from "../feedback/feedbackTypes";
+import { deriveLandlordFeedbackSummary } from "../feedback/deriveLandlordFeedbackSummary";
 import {
   mapOverallStatus,
   mapTrendDirection,
@@ -26,9 +28,13 @@ function componentScore(
   return components.find((component) => component.key === key)?.normalizedScore ?? fallback;
 }
 
-function screeningDimension(score: PortfolioScoreV1): PortfolioHealthDimensionV1 {
+function screeningDimension(
+  score: PortfolioScoreV1,
+  feedbackAdjustment?: PortfolioHealthStatus | null
+): PortfolioHealthDimensionV1 {
   const screeningScore = componentScore(score.components, "screening_reliability");
-  const status = statusFromComponentScore(screeningScore);
+  const baseStatus = statusFromComponentScore(screeningScore);
+  const status = feedbackAdjustment || baseStatus;
   return {
     key: "screening_health",
     label: "Screening health",
@@ -42,9 +48,13 @@ function screeningDimension(score: PortfolioScoreV1): PortfolioHealthDimensionV1
   };
 }
 
-function maintenanceDimension(score: PortfolioScoreV1): PortfolioHealthDimensionV1 {
+function maintenanceDimension(
+  score: PortfolioScoreV1,
+  feedbackAdjustment?: PortfolioHealthStatus | null
+): PortfolioHealthDimensionV1 {
   const maintenanceScore = componentScore(score.components, "maintenance_stability");
-  const status = statusFromComponentScore(maintenanceScore);
+  const baseStatus = statusFromComponentScore(maintenanceScore);
+  const status = feedbackAdjustment || baseStatus;
   return {
     key: "maintenance_health",
     label: "Maintenance health",
@@ -76,14 +86,19 @@ function workflowDimension(score: PortfolioScoreV1): PortfolioHealthDimensionV1 
   };
 }
 
-function responseDimension(score: PortfolioScoreV1, trend: PortfolioHealthTrend): PortfolioHealthDimensionV1 {
+function responseDimension(
+  score: PortfolioScoreV1,
+  trend: PortfolioHealthTrend,
+  feedbackAdjustment?: PortfolioHealthStatus | null
+): PortfolioHealthDimensionV1 {
   const workflowScore = componentScore(score.components, "workflow_completion");
   const automationScore = componentScore(score.components, "automation_health");
   const blended = Math.round((workflowScore + automationScore) / 2);
-  const status =
+  const baseStatus =
     trend === "declining"
       ? (statusFromComponentScore(Math.max(0, blended - 15)) as PortfolioHealthStatus)
       : statusFromComponentScore(blended);
+  const status = feedbackAdjustment || baseStatus;
 
   return {
     key: "response_health",
@@ -166,18 +181,20 @@ function buildNextFocus(
 export function deriveLandlordPortfolioHealthSummary(input: {
   portfolioScore: PortfolioScoreV1;
   portfolioTrend: PortfolioScoreTrendV1;
+  feedbackSignals?: AggregatedFeedbackSignalV1[];
 }): LandlordPortfolioHealthSummaryV1 {
   const { portfolioScore, portfolioTrend } = input;
   const totalResourcesReviewed = portfolioScore.metrics.totalResourcesReviewed;
   const sparseData = totalResourcesReviewed < PORTFOLIO_HEALTH_SPARSE_DATA_THRESHOLD;
   const overallStatus = mapOverallStatus(portfolioScore.summary.status);
   const trendDirection = mapTrendDirection(portfolioTrend.direction);
+  const feedbackSummary = deriveLandlordFeedbackSummary(input.feedbackSignals || []);
 
   const dimensions: PortfolioHealthDimensionV1[] = [
-    screeningDimension(portfolioScore),
-    maintenanceDimension(portfolioScore),
+    screeningDimension(portfolioScore, feedbackSummary.dimensionAdjustments.screening_health),
+    maintenanceDimension(portfolioScore, feedbackSummary.dimensionAdjustments.maintenance_health),
     workflowDimension(portfolioScore),
-    responseDimension(portfolioScore, trendDirection),
+    responseDimension(portfolioScore, trendDirection, feedbackSummary.dimensionAdjustments.response_health),
   ];
 
   return {
@@ -198,6 +215,12 @@ export function deriveLandlordPortfolioHealthSummary(input: {
     },
     dimensions,
     nextFocus: buildNextFocus(dimensions, trendDirection, sparseData),
+    feedback:
+      feedbackSummary.summaries.length > 0
+        ? {
+            summaries: feedbackSummary.summaries,
+          }
+        : undefined,
     metadata: {
       portfolioScoreGrade: portfolioScore.grade || null,
       portfolioScoreAvailable: true,
