@@ -8,6 +8,12 @@ export type TriageCategory =
 
 export type TriageSeverity = "low" | "medium" | "high" | "critical";
 
+export type AdminTriageItemSla = {
+  stage: "fresh" | "aging" | "due_soon" | "overdue" | "escalated";
+  escalationLevel: "none" | "low" | "medium" | "high" | "critical";
+  ageHours: number;
+};
+
 export type AdminTriageItemV1 = {
   id: string;
   version: "v1";
@@ -43,6 +49,12 @@ export type AdminTriageItemV1 = {
   navigation: {
     supportConsolePath?: string | null;
   };
+  assignment?: {
+    ownerId?: string | null;
+    ownerLabel?: string | null;
+    updatedAt: string;
+  } | null;
+  sla?: AdminTriageItemSla | null;
   resolution?: {
     status: "open" | "acknowledged" | "in_progress" | "resolved" | "dismissed";
     updatedAt: string;

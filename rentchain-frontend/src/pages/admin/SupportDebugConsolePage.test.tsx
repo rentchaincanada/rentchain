@@ -100,6 +100,32 @@ describe("SupportDebugConsolePage", () => {
         status: "fulfilled",
         reasons: [{ code: "RECON_FULFILLED" }],
       },
+      sla: {
+        version: "v1",
+        resource: { type: "application", id: "app-1" },
+        context: {
+          triageCategory: "screening_reconciliation",
+          triageSeverity: "critical",
+          assignmentOwnerId: "admin-1",
+          assignmentOwnerLabel: "Morgan Ops",
+        },
+        age: {
+          firstSeenAt: "2026-04-12T09:00:00.000Z",
+          lastSeenAt: "2026-04-12T11:30:00.000Z",
+          ageMs: 9_000_000,
+          ageHours: 2.5,
+        },
+        sla: {
+          stage: "fresh",
+          escalationLevel: "none",
+          thresholdHours: { aging: 6, dueSoon: 12, overdue: 24, escalated: 36 },
+        },
+        reason: {
+          code: "SLA_FRESH",
+          summary: "This issue is within the initial response window.",
+        },
+        evaluatedAt: "2026-04-12T11:30:00.000Z",
+      },
       assignment: {
         version: "v1",
         id: "assignment-1",
@@ -132,6 +158,7 @@ describe("SupportDebugConsolePage", () => {
     expect(await screen.findByText(/Alex Tenant/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Derived insight/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /^Reconciliation$/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /^SLA$/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /^Assignment$/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /^Resolution$/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Policy decisions/i })).toBeInTheDocument();
@@ -139,6 +166,7 @@ describe("SupportDebugConsolePage", () => {
     expect(screen.getByRole("heading", { name: /^Timeline$/i })).toBeInTheDocument();
     expect(screen.getByText(/Screening completed for this application/i)).toBeInTheDocument();
     expect(screen.getByText(/Assigned:\s*Morgan Ops/i)).toBeInTheDocument();
+    expect(screen.getByText(/This issue is within the initial response window/i)).toBeInTheDocument();
   });
 
   it("renders an empty state before a lookup", async () => {
@@ -189,6 +217,7 @@ describe("SupportDebugConsolePage", () => {
         },
       ],
       reconciliation: null,
+      sla: null,
       assignment: null,
       resolution: null,
       debug: {

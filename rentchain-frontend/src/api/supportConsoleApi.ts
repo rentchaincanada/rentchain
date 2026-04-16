@@ -1,4 +1,5 @@
 import { apiFetch } from "./apiFetch";
+import type { SlaEvaluationV1 } from "./adminSlaApi";
 import type { TimelineItem } from "./timelineApi";
 
 export type SupportConsoleResourceResponse = {
@@ -31,6 +32,7 @@ export type SupportConsoleResourceResponse = {
     summary?: string | null;
   }>;
   reconciliation?: Record<string, unknown> | null;
+  sla?: SlaEvaluationV1 | null;
   assignment?: AssignmentRecordV1 | null;
   resolution?: ResolutionRecordV1 | null;
   watch?: {

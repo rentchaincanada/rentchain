@@ -11,6 +11,7 @@ import PolicyDecisionList from "../../components/supportConsole/PolicyDecisionLi
 import AutomationHistoryList from "../../components/supportConsole/AutomationHistoryList";
 import ResolutionPanel from "../../components/adminResolution/ResolutionPanel";
 import AssignmentPanel from "../../components/adminAssignment/AssignmentPanel";
+import SlaSummaryPanel from "../../components/adminSla/SlaSummaryPanel";
 
 const RESOURCE_OPTIONS = [
   { label: "Application", value: "application" },
@@ -149,6 +150,10 @@ export default function SupportDebugConsolePage() {
                 {renderKeyValueList(payload.reconciliation)}
               </SupportConsoleSection>
             ) : null}
+
+            <SupportConsoleSection title="SLA">
+              <SlaSummaryPanel sla={payload.sla || null} />
+            </SupportConsoleSection>
 
             <SupportConsoleSection title="Watchlist">
               {payload.watch ? (

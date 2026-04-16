@@ -63,6 +63,7 @@ function buildAlert(input: {
   resource: AdminAlertV1["resource"];
   reason: AdminAlertV1["reason"];
   signals?: AdminAlertV1["signals"];
+  sla?: AdminAlertV1["sla"];
   createdAt: string;
   lastSeenAt?: string | null;
   watchlist?: WatchlistEntryV1[];
@@ -86,6 +87,7 @@ function buildAlert(input: {
     resource: input.resource,
     reason: input.reason,
     signals: input.signals || {},
+    sla: input.sla || null,
     state: {
       isActive: true,
       isAcknowledged: Boolean(state?.acknowledged),
@@ -183,6 +185,13 @@ export function deriveAdminAlerts(input: DeriveAdminAlertsInput): AdminAlertV1[]
             resolutionStatus: item.resolution?.status || null,
             inactivityMs: item.signals.inactivityMs ?? null,
           },
+          sla: item.sla
+            ? {
+                stage: item.sla.stage,
+                escalationLevel: item.sla.escalationLevel,
+                ageHours: item.sla.ageHours,
+              }
+            : null,
           createdAt: item.timestamps.surfacedAt,
           lastSeenAt: item.timestamps.lastSeenAt || item.timestamps.surfacedAt,
           watchlist,
@@ -287,6 +296,7 @@ export function deriveAdminAlerts(input: DeriveAdminAlertsInput): AdminAlertV1[]
             resolutionStatus: resolution.status,
             inactivityMs: ageMs,
           },
+          sla: null,
           createdAt: resolution.createdAt,
           lastSeenAt: resolution.updatedAt,
           watchlist,
