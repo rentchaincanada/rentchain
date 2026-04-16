@@ -3,6 +3,7 @@ import { db } from "../config/firebase";
 import { requireAuth } from "../middleware/requireAuth";
 import { CANONICAL_EVENTS_COLLECTION } from "../lib/events/buildEvent";
 import type { CanonicalEventV1 } from "../lib/events/eventTypes";
+import { ADMIN_RESOLUTIONS_COLLECTION } from "../lib/resolution/loadResolutionRecord";
 import { deriveAdminTriageQueue } from "../lib/triage/deriveAdminTriageQueue";
 import type { AdminTriageItemV1, TriageCategory, TriageSeverity } from "../lib/triage/triageTypes";
 
@@ -95,7 +96,7 @@ router.get("/triage", requireAuth, async (req: any, res) => {
     const limit = parseLimit(req.query?.limit);
     const cursor = parseCursor(req.query?.cursor);
 
-    const [applications, maintenanceRequests, leases, canonicalEvents, screeningOrders, financialTransactions] =
+    const [applications, maintenanceRequests, leases, canonicalEvents, screeningOrders, financialTransactions, resolutions] =
       await Promise.all([
         loadCollection("rentalApplications"),
         loadCollection("maintenanceRequests"),
@@ -103,6 +104,7 @@ router.get("/triage", requireAuth, async (req: any, res) => {
         loadCanonicalEvents(),
         loadCollection("screeningOrders"),
         loadCollection("financialTransactions"),
+        loadCollection(ADMIN_RESOLUTIONS_COLLECTION),
       ]);
 
     const allItems = deriveAdminTriageQueue({
@@ -112,6 +114,7 @@ router.get("/triage", requireAuth, async (req: any, res) => {
       canonicalEvents,
       screeningOrders,
       financialTransactions,
+      resolutions,
     })
       .filter((item) => (includeLow ? true : item.severity !== "low"))
       .filter((item) => (category ? item.category === category : true))
@@ -140,4 +143,3 @@ router.get("/triage", requireAuth, async (req: any, res) => {
 });
 
 export default router;
-

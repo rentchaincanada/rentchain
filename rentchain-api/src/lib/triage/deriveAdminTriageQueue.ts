@@ -2,6 +2,7 @@ import type { CanonicalEventV1 } from "../events/eventTypes";
 import { deriveInsightForResource } from "../insights/deriveInsights";
 import { deriveScreeningReconciliation } from "../reconciliation/deriveScreeningReconciliation";
 import type { ScreeningReconciliationV1 } from "../reconciliation/reconciliationTypes";
+import type { ResolutionRecordV1 } from "../resolution/resolutionTypes";
 import type { AdminTriageItemV1, TriageCategory, TriageSeverity } from "./triageTypes";
 
 type ScreeningOrderLike = {
@@ -28,6 +29,7 @@ type DeriveAdminTriageQueueInput = {
   canonicalEvents?: CanonicalEventV1[];
   screeningOrders?: ScreeningOrderLike[];
   financialTransactions?: FinancialTransactionLike[];
+  resolutions?: ResolutionRecordV1[];
   now?: number;
 };
 
@@ -141,8 +143,20 @@ function resourceSummaryFromLease(lease: any) {
   };
 }
 
-function supportConsolePath(resourceType: string, resourceId: string) {
-  return `/admin/support-console?resourceType=${encodeURIComponent(resourceType)}&resourceId=${encodeURIComponent(resourceId)}`;
+function supportConsolePath(
+  resourceType: string,
+  resourceId: string,
+  triageCategory?: string | null,
+  triageSeverity?: string | null,
+  reasonCode?: string | null
+) {
+  const search = new URLSearchParams();
+  search.set("resourceType", resourceType);
+  search.set("resourceId", resourceId);
+  if (triageCategory) search.set("triageCategory", triageCategory);
+  if (triageSeverity) search.set("triageSeverity", triageSeverity);
+  if (reasonCode) search.set("reasonCode", reasonCode);
+  return `/admin/support-console?${search.toString()}`;
 }
 
 function isVisibleToAdmin(event: CanonicalEventV1) {
@@ -237,7 +251,13 @@ function buildItem(input: {
       lastSeenAt: input.lastSeenAt || null,
     },
     navigation: {
-      supportConsolePath: supportConsolePath(input.resource.type, input.resource.id),
+      supportConsolePath: supportConsolePath(
+        input.resource.type,
+        input.resource.id,
+        input.category,
+        input.severity,
+        input.reasonCode
+      ),
     },
     tags: input.tags || [],
   };
@@ -623,6 +643,26 @@ export function deriveAdminTriageQueue(input: DeriveAdminTriageQueueInput): Admi
     })
   );
 
-  return items.sort(compareTriageItems);
-}
+  const resolutions = input.resolutions || [];
+  const enriched = items.map((item) => {
+    const match = resolutions
+      .filter(
+        (record) =>
+          asString(record.resource?.type, 120) === item.resource.type &&
+          asString(record.resource?.id, 240) === item.resource.id &&
+          asString(record.triage?.reasonCode, 160) === item.reason.code
+      )
+      .sort((a, b) => (parseTimestamp(b.updatedAt) ?? 0) - (parseTimestamp(a.updatedAt) ?? 0))[0];
+    return {
+      ...item,
+      resolution: match
+        ? {
+            status: match.status,
+            updatedAt: match.updatedAt,
+          }
+        : null,
+    };
+  });
 
+  return enriched.sort(compareTriageItems);
+}

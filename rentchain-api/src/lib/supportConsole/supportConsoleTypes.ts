@@ -1,4 +1,5 @@
 import type { TimelineItem } from "../timeline/timelineAdapter";
+import type { ResolutionRecordV1 } from "../resolution/resolutionTypes";
 
 export type SupportConsoleResourceSummary = {
   type: string;
@@ -36,10 +37,10 @@ export type SupportConsoleResourceResponse = {
   policyDecisions: SupportConsolePolicyDecision[];
   automation: SupportConsoleAutomationItem[];
   reconciliation?: Record<string, unknown> | null;
+  resolution?: ResolutionRecordV1 | null;
   debug: {
     canonicalEventCount: number;
     domainsPresent: string[];
     identifiers?: Record<string, string | null | undefined>;
   };
 };
-

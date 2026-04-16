@@ -41,6 +41,10 @@ export type AdminTriageItemV1 = {
   navigation: {
     supportConsolePath?: string | null;
   };
+  resolution?: {
+    status: "open" | "acknowledged" | "in_progress" | "resolved" | "dismissed";
+    updatedAt: string;
+  } | null;
   tags?: string[];
 };
 
@@ -67,4 +71,3 @@ export async function fetchAdminTriageQueue(params?: {
   const query = search.toString();
   return await apiFetch<AdminTriageResponse>(`/admin/triage${query ? `?${query}` : ""}`);
 }
-
