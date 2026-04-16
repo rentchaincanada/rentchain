@@ -152,6 +152,7 @@ const AutomationTimelinePage = lazy(
 );
 const AutomationTimelineV1Page = lazy(() => import("./pages/admin/AutomationTimelineV1Page"));
 const SupportDebugConsolePage = lazy(() => import("./pages/admin/SupportDebugConsolePage"));
+const AdminTriageQueuePage = lazy(() => import("./pages/admin/AdminTriageQueuePage"));
 
 const AuthLoadingScreen = () => (
   <div
@@ -877,6 +878,16 @@ function App() {
             <RequireAdmin>
               <Suspense fallback={null}>
                 <SupportDebugConsolePage />
+              </Suspense>
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/admin/triage"
+          element={
+            <RequireAdmin>
+              <Suspense fallback={null}>
+                <AdminTriageQueuePage />
               </Suspense>
             </RequireAdmin>
           }

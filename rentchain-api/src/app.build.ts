@@ -101,6 +101,7 @@ import timelineRoutes from "./routes/timelineRoutes";
 import insightRoutes from "./routes/insightRoutes";
 import screeningReconciliationRoutes from "./routes/screeningReconciliationRoutes";
 import supportConsoleRoutes from "./routes/supportConsoleRoutes";
+import adminTriageRoutes from "./routes/adminTriageRoutes";
 import transunionRoutes from "./services/integrations/transunion/transunionRoutes";
 import viewingRoutes from "./routes/viewingRoutes";
 import screeningOpsRoutes from "./routes/screeningOpsRoutes";
@@ -222,6 +223,8 @@ app.use("/api", routeSource("screeningReconciliationRoutes.ts"), screeningReconc
 console.log("[route-mount] screeningReconciliationRoutes mounted at /api");
 app.use("/api/admin", routeSource("supportConsoleRoutes.ts"), supportConsoleRoutes);
 console.log("[route-mount] supportConsoleRoutes mounted at /api/admin");
+app.use("/api/admin", routeSource("adminTriageRoutes.ts"), adminTriageRoutes);
+console.log("[route-mount] adminTriageRoutes mounted at /api/admin");
 
 // Current user info
 app.get("/api/me", async (req: any, res: any, next: any) => {

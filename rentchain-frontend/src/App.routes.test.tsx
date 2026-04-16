@@ -58,6 +58,10 @@ vi.mock("./pages/admin/SupportDebugConsolePage", () => ({
   default: () => <h1>Support / Debug Console</h1>,
 }));
 
+vi.mock("./pages/admin/AdminTriageQueuePage", () => ({
+  default: () => <h1>Admin Triage Queue</h1>,
+}));
+
 vi.mock("./pages/tenant/TenantWorkspacePage", () => ({
   default: () => <h1>Tenant Dashboard</h1>,
 }));
@@ -166,6 +170,21 @@ describe("Routes: /admin/support-console", () => {
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });
+
+describe("Routes: /admin/triage", () => {
+  it("renders the admin triage queue route", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/admin/triage"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Admin Triage Queue/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
 
 describe("Routes: /tenant/application", () => {
   it("renders the tenant application route without falling into landlord surfaces", async () => {
