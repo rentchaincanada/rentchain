@@ -149,6 +149,18 @@ export default function SupportDebugConsolePage() {
               </SupportConsoleSection>
             ) : null}
 
+            <SupportConsoleSection title="Watchlist">
+              {payload.watch ? (
+                <div style={{ display: "grid", gap: 8 }}>
+                  <div><strong>Status</strong>: {payload.watch.isActive ? "Watched" : "Inactive"}</div>
+                  <div><strong>Watch ID</strong>: {payload.watch.id}</div>
+                  {payload.watch.notes ? <div><strong>Notes</strong>: {payload.watch.notes}</div> : null}
+                </div>
+              ) : (
+                <div style={{ color: "#64748b" }}>This resource is not currently on the watchlist.</div>
+              )}
+            </SupportConsoleSection>
+
             <SupportConsoleSection title="Resolution">
               <ResolutionPanel
                 resourceType={payload.resource.type}

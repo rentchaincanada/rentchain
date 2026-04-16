@@ -4,6 +4,7 @@ import type { CanonicalEventV1 } from "../events/eventTypes";
 import { deriveInsightForResource } from "../insights/deriveInsights";
 import { deriveScreeningReconciliation } from "../reconciliation/deriveScreeningReconciliation";
 import { loadResolutionRecord } from "../resolution/loadResolutionRecord";
+import { loadWatchlistEntries } from "../watchlist/loadWatchlistEntries";
 import { canonicalEventToTimelineItem } from "../timeline/timelineAdapter";
 import type {
   SupportConsoleAutomationItem,
@@ -282,6 +283,7 @@ function emptyResponse(spec: NormalizedResourceSpec, resourceId: string): Suppor
     automation: [],
     reconciliation: null,
     resolution: null,
+    watch: null,
     debug: {
       canonicalEventCount: 0,
       domainsPresent: [],
@@ -314,10 +316,17 @@ export async function buildSupportConsoleResource(input: {
   });
 
   let reconciliation: Record<string, unknown> | null = null;
-  const resolution = await loadResolutionRecord({
-    resourceType: spec.requestedType,
-    resourceId,
-  });
+  const [resolution, watchlist] = await Promise.all([
+    loadResolutionRecord({
+      resourceType: spec.requestedType,
+      resourceId,
+    }),
+    loadWatchlistEntries(),
+  ]);
+  const watch =
+    watchlist.find(
+      (entry) => entry.isActive && entry.target.type === spec.requestedType && entry.target.id === resourceId
+    ) || null;
   if (spec.requestedType === "application") {
     const [latestOrder, financialTransactions] = await Promise.all([
       loadLatestScreeningOrder(resourceId),
@@ -345,6 +354,7 @@ export async function buildSupportConsoleResource(input: {
     automation: buildAutomationHistory(relatedEvents),
     reconciliation,
     resolution,
+    watch,
     debug: {
       canonicalEventCount: relatedEvents.length,
       domainsPresent: domainsPresent(relatedEvents),

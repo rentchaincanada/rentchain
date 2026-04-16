@@ -32,6 +32,21 @@ export type SupportConsoleResourceResponse = {
   }>;
   reconciliation?: Record<string, unknown> | null;
   resolution?: ResolutionRecordV1 | null;
+  watch?: {
+    version: "v1";
+    id: string;
+    target: {
+      type: "portfolio" | "application" | "maintenance" | "lease";
+      id: string;
+      portfolioId?: string | null;
+    };
+    createdAt: string;
+    updatedAt: string;
+    createdBy?: string | null;
+    notes?: string | null;
+    tags?: string[];
+    isActive: boolean;
+  } | null;
   debug: {
     canonicalEventCount: number;
     domainsPresent: string[];

@@ -62,6 +62,9 @@ export function TriageQueueTable({ items }: { items: AdminTriageItemV1[] }) {
                   <ResolutionStatusBadge status={item.resolution.status} />
                 </div>
               ) : null}
+              {item.watch?.isActive ? (
+                <div style={{ color: "#1d4ed8", fontSize: 13, fontWeight: 600 }}>Watched</div>
+              ) : null}
             </div>
             <div style={{ display: "grid", gap: 8, justifyItems: "end" }}>
               <div style={{ color: "#64748b", fontSize: 12 }}>Surfaced {formatTimestamp(item.timestamps.surfacedAt)}</div>

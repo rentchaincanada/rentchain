@@ -6,6 +6,7 @@ import type { CanonicalEventV1 } from "../lib/events/eventTypes";
 import { ADMIN_RESOLUTIONS_COLLECTION } from "../lib/resolution/loadResolutionRecord";
 import { deriveAdminTriageQueue } from "../lib/triage/deriveAdminTriageQueue";
 import type { AdminTriageItemV1, TriageCategory, TriageSeverity } from "../lib/triage/triageTypes";
+import { ADMIN_WATCHLISTS_COLLECTION } from "../lib/watchlist/loadWatchlistEntries";
 
 const router = Router();
 
@@ -96,7 +97,7 @@ router.get("/triage", requireAuth, async (req: any, res) => {
     const limit = parseLimit(req.query?.limit);
     const cursor = parseCursor(req.query?.cursor);
 
-    const [applications, maintenanceRequests, leases, canonicalEvents, screeningOrders, financialTransactions, resolutions] =
+    const [applications, maintenanceRequests, leases, canonicalEvents, screeningOrders, financialTransactions, resolutions, watchlist] =
       await Promise.all([
         loadCollection("rentalApplications"),
         loadCollection("maintenanceRequests"),
@@ -105,6 +106,7 @@ router.get("/triage", requireAuth, async (req: any, res) => {
         loadCollection("screeningOrders"),
         loadCollection("financialTransactions"),
         loadCollection(ADMIN_RESOLUTIONS_COLLECTION),
+        loadCollection(ADMIN_WATCHLISTS_COLLECTION),
       ]);
 
     const allItems = deriveAdminTriageQueue({
@@ -115,6 +117,7 @@ router.get("/triage", requireAuth, async (req: any, res) => {
       screeningOrders,
       financialTransactions,
       resolutions,
+      watchlist,
     })
       .filter((item) => (includeLow ? true : item.severity !== "low"))
       .filter((item) => (category ? item.category === category : true))

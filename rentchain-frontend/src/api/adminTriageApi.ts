@@ -45,6 +45,10 @@ export type AdminTriageItemV1 = {
     status: "open" | "acknowledged" | "in_progress" | "resolved" | "dismissed";
     updatedAt: string;
   } | null;
+  watch?: {
+    isActive: boolean;
+    watchId?: string | null;
+  } | null;
   tags?: string[];
 };
 
