@@ -62,6 +62,10 @@ vi.mock("./pages/admin/AdminTriageQueuePage", () => ({
   default: () => <h1>Admin Triage Queue</h1>,
 }));
 
+vi.mock("./pages/admin/PortfolioScorePage", () => ({
+  default: () => <h1>Portfolio Score Foundation</h1>,
+}));
+
 vi.mock("./pages/tenant/TenantWorkspacePage", () => ({
   default: () => <h1>Tenant Dashboard</h1>,
 }));
@@ -181,6 +185,20 @@ describe("Routes: /admin/triage", () => {
     );
 
     expect(await screen.findByText(/Admin Triage Queue/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /admin/portfolio-score", () => {
+  it("renders the admin portfolio score route", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/admin/portfolio-score"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Portfolio Score Foundation/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });
