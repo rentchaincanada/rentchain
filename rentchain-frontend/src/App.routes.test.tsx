@@ -54,6 +54,10 @@ vi.mock("./pages/admin/AutomationTimelineV1Page", () => ({
   default: () => <h1>Automation Timeline v1</h1>,
 }));
 
+vi.mock("./pages/admin/SupportDebugConsolePage", () => ({
+  default: () => <h1>Support / Debug Console</h1>,
+}));
+
 vi.mock("./pages/tenant/TenantWorkspacePage", () => ({
   default: () => <h1>Tenant Dashboard</h1>,
 }));
@@ -145,6 +149,20 @@ describe("Routes: /timeline", () => {
     );
 
     expect(await screen.findByText(/Automation Timeline v1/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /admin/support-console", () => {
+  it("renders the admin support/debug console route", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/admin/support-console"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Support \/ Debug Console/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });
