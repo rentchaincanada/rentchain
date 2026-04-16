@@ -66,6 +66,10 @@ vi.mock("./pages/admin/AdminAlertingPage", () => ({
   default: () => <h1>Admin Alerts</h1>,
 }));
 
+vi.mock("./pages/admin/AdminNotificationsPage", () => ({
+  default: () => <h1>Admin Notifications</h1>,
+}));
+
 vi.mock("./pages/admin/PortfolioScorePage", () => ({
   default: () => <h1>Portfolio Score Foundation</h1>,
 }));
@@ -215,6 +219,20 @@ describe("Routes: /admin/alerts", () => {
     );
 
     expect(await screen.findByText(/Admin Alerts/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /admin/notifications", () => {
+  it("renders the admin notifications route", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/admin/notifications"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Admin Notifications/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });

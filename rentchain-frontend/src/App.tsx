@@ -154,6 +154,7 @@ const AutomationTimelineV1Page = lazy(() => import("./pages/admin/AutomationTime
 const SupportDebugConsolePage = lazy(() => import("./pages/admin/SupportDebugConsolePage"));
 const AdminTriageQueuePage = lazy(() => import("./pages/admin/AdminTriageQueuePage"));
 const AdminAlertingPage = lazy(() => import("./pages/admin/AdminAlertingPage"));
+const AdminNotificationsPage = lazy(() => import("./pages/admin/AdminNotificationsPage"));
 const PortfolioScorePage = lazy(() => import("./pages/admin/PortfolioScorePage"));
 const PortfolioScoreHistoryPage = lazy(() => import("./pages/admin/PortfolioScoreHistoryPage"));
 const PortfolioHealthSummaryPage = lazy(() => import("./pages/landlord/PortfolioHealthSummaryPage"));
@@ -926,6 +927,14 @@ function App() {
               element={
                 <RequireAdmin>
                   <AdminAlertingPage />
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="/admin/notifications"
+              element={
+                <RequireAdmin>
+                  <AdminNotificationsPage />
                 </RequireAdmin>
               }
             />
