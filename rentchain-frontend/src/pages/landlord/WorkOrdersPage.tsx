@@ -2,9 +2,11 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { Button, Card } from "../../components/ui/Ui";
 import { AddExpenseModal } from "../../components/expenses/AddExpenseModal";
+import ContractorAssignmentPanel from "../../components/marketplace/ContractorAssignmentPanel";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import { LockedFeature } from "@/components/billing/LockedFeature";
 import { fetchProperties } from "../../api/propertiesApi";
+import { assignContractorToWorkOrder, fetchContractors, type ContractorProfileV1 } from "../../api/marketplaceContractorApi";
 import {
   addWorkOrderUpdate,
   approveWorkOrderResolution,
@@ -240,7 +242,10 @@ export default function WorkOrdersPage() {
   const [savingAction, setSavingAction] = React.useState(false);
   const [savingEvidence, setSavingEvidence] = React.useState(false);
   const [savingCost, setSavingCost] = React.useState(false);
-  const [properties, setProperties] = React.useState<Array<{ id: string; name: string }>>([]);
+  const [properties, setProperties] = React.useState<Array<{ id: string; name: string; city?: string | null; province?: string | null }>>([]);
+  const [marketplaceContractors, setMarketplaceContractors] = React.useState<ContractorProfileV1[]>([]);
+  const [loadingMarketplaceContractors, setLoadingMarketplaceContractors] = React.useState(false);
+  const [assigningMarketplaceContractor, setAssigningMarketplaceContractor] = React.useState(false);
   const [convertTarget, setConvertTarget] = React.useState<WorkOrderRecord | null>(null);
   const [convertVendor, setConvertVendor] = React.useState("");
   const [isMobile, setIsMobile] = React.useState(false);
@@ -304,6 +309,18 @@ export default function WorkOrdersPage() {
     setSelected(next);
     setItems((current) => current.map((item) => (item.id === next.id ? next : item)));
   }, []);
+
+  const selectedProperty = React.useMemo(
+    () => (selected ? properties.find((item) => item.id === selected.propertyId) || null : null),
+    [properties, selected]
+  );
+
+  const selectedServiceArea = React.useMemo(() => {
+    if (!selectedProperty) return "";
+    const city = String(selectedProperty.city || "").trim();
+    const province = String(selectedProperty.province || "").trim();
+    return [city, province].filter(Boolean).join(", ") || city || province || "";
+  }, [selectedProperty]);
 
   const markCompleted = React.useCallback(
     async (item: WorkOrderRecord) => {
@@ -447,6 +464,25 @@ export default function WorkOrdersPage() {
       }
     },
     [load, refreshSelected, reworkContractorId]
+  );
+
+  const handleAssignMarketplaceContractor = React.useCallback(
+    async (contractorId: string) => {
+      if (!selected) return;
+      setAssigningMarketplaceContractor(true);
+      setError(null);
+      try {
+        const next = await assignContractorToWorkOrder(selected.id, { contractorId });
+        await load();
+        syncSelectedItem(next);
+        await loadUpdates(selected.id);
+      } catch (err: any) {
+        setError(String(err?.message || "Failed to assign contractor"));
+      } finally {
+        setAssigningMarketplaceContractor(false);
+      }
+    },
+    [load, loadUpdates, selected, syncSelectedItem]
   );
 
   const handleReviewReworkResolution = React.useCallback(
@@ -787,6 +823,8 @@ export default function WorkOrdersPage() {
             .map((p: any) => ({
               id: String(p?.id || ""),
               name: String(p?.name || p?.addressLine1 || "Property"),
+              city: String(p?.city || "").trim() || null,
+              province: String(p?.province || "").trim() || null,
             }))
             .filter((p: any) => p.id)
         );
@@ -796,6 +834,29 @@ export default function WorkOrdersPage() {
     };
     void run();
   }, [canUseWorkOrders]);
+
+  React.useEffect(() => {
+    if (!canUseWorkOrders || !selected) {
+      setMarketplaceContractors([]);
+      return;
+    }
+    const run = async () => {
+      setLoadingMarketplaceContractors(true);
+      try {
+        const result = await fetchContractors({
+          serviceCategory: selected.category || undefined,
+          serviceArea: selectedServiceArea || undefined,
+          limit: 12,
+        });
+        setMarketplaceContractors(result.items);
+      } catch {
+        setMarketplaceContractors([]);
+      } finally {
+        setLoadingMarketplaceContractors(false);
+      }
+    };
+    void run();
+  }, [canUseWorkOrders, selected, selectedServiceArea]);
 
   if (!canUseWorkOrders) {
     return (
@@ -860,7 +921,7 @@ export default function WorkOrdersPage() {
                       <strong>Status:</strong> {item.status}
                     </div>
                     <div>
-                      <strong>Assigned:</strong> {item.assignedContractorId || "-"}
+                      <strong>Assigned:</strong> {item.contractorAssignment?.displayName || item.assignedContractorId || "-"}
                     </div>
                     <div>
                       <strong>Updated:</strong> {formatDate(item.updatedAtMs)}
@@ -937,7 +998,7 @@ export default function WorkOrdersPage() {
                     <td style={{ padding: 8 }}>{item.category || "-"}</td>
                     <td style={{ padding: 8 }}>{item.priority}</td>
                     <td style={{ padding: 8 }}>{item.status}</td>
-                    <td style={{ padding: 8 }}>{item.assignedContractorId || "-"}</td>
+                    <td style={{ padding: 8 }}>{item.contractorAssignment?.displayName || item.assignedContractorId || "-"}</td>
                     <td style={{ padding: 8 }}>{formatDate(item.updatedAtMs)}</td>
                     <td style={{ padding: 8 }}>
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -1104,6 +1165,13 @@ export default function WorkOrdersPage() {
                 </div>
               ) : null}
             </div>
+            <ContractorAssignmentPanel
+              currentAssignment={selected.contractorAssignment || null}
+              contractors={marketplaceContractors}
+              loading={loadingMarketplaceContractors}
+              assigning={assigningMarketplaceContractor}
+              onAssign={(contractorId) => void handleAssignMarketplaceContractor(contractorId)}
+            />
             <div
               style={{
                 display: "grid",

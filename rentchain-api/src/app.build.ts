@@ -115,6 +115,7 @@ import landlordPortfolioScoreSharingRoutes from "./routes/landlordPortfolioScore
 import publicPortfolioScoreRoutes from "./routes/publicPortfolioScoreRoutes";
 import landlordActionRecommendationRoutes from "./routes/landlordActionRecommendationRoutes";
 import tenantFeedbackRoutes from "./routes/tenantFeedbackRoutes";
+import marketplaceContractorRoutes from "./routes/marketplaceContractorRoutes";
 import transunionRoutes from "./services/integrations/transunion/transunionRoutes";
 import viewingRoutes from "./routes/viewingRoutes";
 import screeningOpsRoutes from "./routes/screeningOpsRoutes";
@@ -263,6 +264,8 @@ app.use("/api", routeSource("landlordActionRecommendationRoutes.ts"), landlordAc
 console.log("[route-mount] landlordActionRecommendationRoutes mounted at /api");
 app.use("/api", routeSource("tenantFeedbackRoutes.ts"), tenantFeedbackRoutes);
 console.log("[route-mount] tenantFeedbackRoutes mounted at /api");
+app.use("/api", routeSource("marketplaceContractorRoutes.ts"), marketplaceContractorRoutes);
+console.log("[route-mount] marketplaceContractorRoutes mounted at /api");
 
 // Current user info
 app.get("/api/me", async (req: any, res: any, next: any) => {
