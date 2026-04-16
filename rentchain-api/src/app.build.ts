@@ -108,6 +108,7 @@ import adminAlertingRoutes from "./routes/adminAlertingRoutes";
 import adminAssignmentRoutes from "./routes/adminAssignmentRoutes";
 import portfolioScoreRoutes from "./routes/portfolioScoreRoutes";
 import portfolioScoreHistoryRoutes from "./routes/portfolioScoreHistoryRoutes";
+import landlordPortfolioHealthRoutes from "./routes/landlordPortfolioHealthRoutes";
 import transunionRoutes from "./services/integrations/transunion/transunionRoutes";
 import viewingRoutes from "./routes/viewingRoutes";
 import screeningOpsRoutes from "./routes/screeningOpsRoutes";
@@ -243,6 +244,8 @@ app.use("/api/admin", routeSource("portfolioScoreRoutes.ts"), portfolioScoreRout
 console.log("[route-mount] portfolioScoreRoutes mounted at /api/admin");
 app.use("/api/admin", routeSource("portfolioScoreHistoryRoutes.ts"), portfolioScoreHistoryRoutes);
 console.log("[route-mount] portfolioScoreHistoryRoutes mounted at /api/admin");
+app.use("/api", routeSource("landlordPortfolioHealthRoutes.ts"), landlordPortfolioHealthRoutes);
+console.log("[route-mount] landlordPortfolioHealthRoutes mounted at /api");
 
 // Current user info
 app.get("/api/me", async (req: any, res: any, next: any) => {
