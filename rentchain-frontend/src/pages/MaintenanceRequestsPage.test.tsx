@@ -1,7 +1,7 @@
 import React from "react";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import MaintenanceRequestsPage from "./MaintenanceRequestsPage";
 
 const maintenanceWorkflowApi = vi.hoisted(() => ({
@@ -155,9 +155,11 @@ describe("landlord maintenance workspace", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/Resolution \/ closure/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/Still needs attention/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Back bedroom is still cooler than the rest of the unit/i).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/Resolution \/ closure/i)).length).toBeGreaterThan(0);
+    await waitFor(async () =>
+      expect((await screen.findAllByText(/Still needs attention/i)).length).toBeGreaterThan(0)
+    );
+    expect((await screen.findAllByText(/Back bedroom is still cooler than the rest of the unit/i)).length).toBeGreaterThan(0);
   });
 
   it("shows reopened and escalated recovery state in the landlord reopen workspace", async () => {
@@ -215,7 +217,7 @@ describe("landlord maintenance workspace", () => {
     );
 
     expect((await screen.findAllByText(/Reopen \/ escalation/i)).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Escalated/i).length).toBeGreaterThan(0);
+    await waitFor(async () => expect((await screen.findAllByText(/Escalated/i)).length).toBeGreaterThan(0));
     expect((await screen.findAllByText(/The bedroom is cold again after the return visit/i)).length).toBeGreaterThan(0);
   });
 
@@ -257,14 +259,17 @@ describe("landlord maintenance workspace", () => {
       </MemoryRouter>
     );
 
+    await waitFor(() => expect(screen.getAllByDisplayValue("urgent").length).toBeGreaterThan(0));
     fireEvent.click(await screen.findByRole("button", { name: /Mark service started/i }));
 
-    expect(maintenanceWorkflowApi.patchLandlordMaintenance).toHaveBeenCalledWith("maint-1", {
-      status: "in_progress",
-      priority: "urgent",
-      landlordNote: "",
-      message: "Landlord marked service as started.",
-    });
+    await waitFor(() =>
+      expect(maintenanceWorkflowApi.patchLandlordMaintenance).toHaveBeenCalledWith("maint-1", {
+        status: "in_progress",
+        priority: "urgent",
+        landlordNote: "",
+        message: "Landlord marked service as started.",
+      })
+    );
   });
 
   it("opens the related request from the scheduled maintenance calendar", async () => {
