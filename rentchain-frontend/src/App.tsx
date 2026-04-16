@@ -160,6 +160,7 @@ const PortfolioScorePage = lazy(() => import("./pages/admin/PortfolioScorePage")
 const PortfolioScoreHistoryPage = lazy(() => import("./pages/admin/PortfolioScoreHistoryPage"));
 const PortfolioHealthSummaryPage = lazy(() => import("./pages/landlord/PortfolioHealthSummaryPage"));
 const LandlordPortfolioScorePage = lazy(() => import("./pages/landlord/PortfolioScorePage"));
+const SharedPortfolioScorePage = lazy(() => import("./pages/public/SharedPortfolioScorePage"));
 const ActionRecommendationsPage = lazy(() => import("./pages/landlord/ActionRecommendationsPage"));
 
 const AuthLoadingScreen = () => (
@@ -481,6 +482,14 @@ function App() {
                 </Suspense>
               </LandlordNav>
             </RequireAuth>
+          }
+        />
+        <Route
+          path="/portfolio-score/shared/:token"
+          element={
+            <Suspense fallback={null}>
+              <SharedPortfolioScorePage />
+            </Suspense>
           }
         />
         <Route

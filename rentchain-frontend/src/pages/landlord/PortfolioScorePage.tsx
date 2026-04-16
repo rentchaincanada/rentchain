@@ -1,16 +1,28 @@
 import React from "react";
 import { fetchLandlordPortfolioScore, type PortfolioScoreExternalV1 } from "../../api/landlordPortfolioScoreApi";
+import {
+  fetchPortfolioScoreSharing,
+  rotatePortfolioScoreSharingToken,
+  updatePortfolioScoreSharing,
+  type PortfolioScoreShareRecordV1,
+  type PortfolioScoreVisibility,
+} from "../../api/landlordPortfolioScoreSharingApi";
 import { MacShell } from "../../components/layout/MacShell";
 import { Card, Section } from "../../components/ui/Ui";
 import { useToast } from "../../components/ui/ToastProvider";
 import PortfolioScoreHeader from "../../components/portfolioScoreExternal/PortfolioScoreHeader";
 import PortfolioScoreComponentList from "../../components/portfolioScoreExternal/PortfolioScoreComponentList";
 import PortfolioScoreTrustPanel from "../../components/portfolioScoreExternal/PortfolioScoreTrustPanel";
+import PortfolioScoreVisibilityCard from "../../components/portfolioScoreSharing/PortfolioScoreVisibilityCard";
+import PortfolioScoreShareControls from "../../components/portfolioScoreSharing/PortfolioScoreShareControls";
 
 export default function PortfolioScorePage() {
   const { showToast } = useToast();
   const [portfolioScore, setPortfolioScore] = React.useState<PortfolioScoreExternalV1 | null>(null);
+  const [sharing, setSharing] = React.useState<PortfolioScoreShareRecordV1 | null>(null);
+  const [shareUrl, setShareUrl] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [updatingSharing, setUpdatingSharing] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -19,9 +31,16 @@ export default function PortfolioScorePage() {
       try {
         setLoading(true);
         setError(null);
-        const response = await fetchLandlordPortfolioScore();
+        const [scoreResponse, sharingResponse] = await Promise.all([
+          fetchLandlordPortfolioScore(),
+          fetchPortfolioScoreSharing(),
+        ]);
         if (!mounted) return;
-        setPortfolioScore(response.portfolioScore);
+        setPortfolioScore(scoreResponse.portfolioScore);
+        setSharing(sharingResponse.sharing);
+        setShareUrl(
+          sharingResponse.shareUrl ? `${window.location.origin}${sharingResponse.shareUrl}` : null
+        );
       } catch (err: any) {
         if (!mounted) return;
         const message = err?.message || "Failed to load portfolio score";
@@ -39,6 +58,40 @@ export default function PortfolioScorePage() {
       mounted = false;
     };
   }, [showToast]);
+
+  const handleChangeVisibility = async (visibility: PortfolioScoreVisibility) => {
+    try {
+      setUpdatingSharing(true);
+      const response = await updatePortfolioScoreSharing({ visibility });
+      setSharing(response.sharing);
+      setShareUrl(response.shareUrl ? `${window.location.origin}${response.shareUrl}` : null);
+    } catch (err: any) {
+      showToast({
+        message: "Failed to update sharing",
+        description: err?.message || "Unable to update Portfolio Score™ sharing controls.",
+        variant: "error",
+      });
+    } finally {
+      setUpdatingSharing(false);
+    }
+  };
+
+  const handleRotate = async () => {
+    try {
+      setUpdatingSharing(true);
+      const response = await rotatePortfolioScoreSharingToken();
+      setSharing(response.sharing);
+      setShareUrl(response.shareUrl ? `${window.location.origin}${response.shareUrl}` : null);
+    } catch (err: any) {
+      showToast({
+        message: "Failed to rotate sharing link",
+        description: err?.message || "Unable to rotate Portfolio Score™ share link.",
+        variant: "error",
+      });
+    } finally {
+      setUpdatingSharing(false);
+    }
+  };
 
   return (
     <MacShell title="Portfolio score">
@@ -58,6 +111,14 @@ export default function PortfolioScorePage() {
         {!loading && !error && portfolioScore ? (
           <>
             <PortfolioScoreHeader portfolioScore={portfolioScore} />
+            <PortfolioScoreVisibilityCard sharing={sharing} />
+            <PortfolioScoreShareControls
+              sharing={sharing}
+              shareUrl={shareUrl}
+              updating={updatingSharing}
+              onChangeVisibility={handleChangeVisibility}
+              onRotate={handleRotate}
+            />
             <PortfolioScoreComponentList components={portfolioScore.components} />
             <PortfolioScoreTrustPanel trust={portfolioScore.trust} />
           </>

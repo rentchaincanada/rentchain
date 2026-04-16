@@ -86,6 +86,10 @@ vi.mock("./pages/landlord/PortfolioScorePage", () => ({
   default: () => <h1>Landlord Portfolio Score</h1>,
 }));
 
+vi.mock("./pages/public/SharedPortfolioScorePage", () => ({
+  default: () => <h1>Shared Portfolio Score Page</h1>,
+}));
+
 vi.mock("./pages/landlord/ActionRecommendationsPage", () => ({
   default: () => <h1>Landlord Action Recommendations</h1>,
 }));
@@ -311,6 +315,20 @@ describe("Routes: /portfolio-score", () => {
     );
 
     expect(await screen.findByText(/Landlord Portfolio Score/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /portfolio-score/shared/:token", () => {
+  it("renders the shared portfolio score route", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/portfolio-score/shared/token-1"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Shared Portfolio Score Page/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });

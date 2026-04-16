@@ -111,6 +111,8 @@ import portfolioScoreRoutes from "./routes/portfolioScoreRoutes";
 import portfolioScoreHistoryRoutes from "./routes/portfolioScoreHistoryRoutes";
 import landlordPortfolioHealthRoutes from "./routes/landlordPortfolioHealthRoutes";
 import landlordPortfolioScoreRoutes from "./routes/landlordPortfolioScoreRoutes";
+import landlordPortfolioScoreSharingRoutes from "./routes/landlordPortfolioScoreSharingRoutes";
+import publicPortfolioScoreRoutes from "./routes/publicPortfolioScoreRoutes";
 import landlordActionRecommendationRoutes from "./routes/landlordActionRecommendationRoutes";
 import tenantFeedbackRoutes from "./routes/tenantFeedbackRoutes";
 import transunionRoutes from "./services/integrations/transunion/transunionRoutes";
@@ -205,6 +207,7 @@ app.use("/api", routeSource("paymentsRoutes.ts"), paymentsRoutes);
 // Public + Auth (MUST be before authenticateJwt)
 app.use("/api", routeSource("publicRoutes.ts"), publicRoutes);
 app.use("/api/public", routeSource("publicRoutes.ts"), publicRoutes);
+app.use("/api", routeSource("publicPortfolioScoreRoutes.ts"), publicPortfolioScoreRoutes);
 app.use("/api/public", routeSource("landlordInvitesPublicRoutes.ts"), landlordInvitesPublicRoutes);
 app.use("/api/public", routeSource("landlordInquiryRoutes.ts"), landlordInquiryPublicRoutes);
 app.use("/api/public", tenantHistorySharePublicRouter);
@@ -254,6 +257,8 @@ app.use("/api", routeSource("landlordPortfolioHealthRoutes.ts"), landlordPortfol
 console.log("[route-mount] landlordPortfolioHealthRoutes mounted at /api");
 app.use("/api", routeSource("landlordPortfolioScoreRoutes.ts"), landlordPortfolioScoreRoutes);
 console.log("[route-mount] landlordPortfolioScoreRoutes mounted at /api");
+app.use("/api", routeSource("landlordPortfolioScoreSharingRoutes.ts"), landlordPortfolioScoreSharingRoutes);
+console.log("[route-mount] landlordPortfolioScoreSharingRoutes mounted at /api");
 app.use("/api", routeSource("landlordActionRecommendationRoutes.ts"), landlordActionRecommendationRoutes);
 console.log("[route-mount] landlordActionRecommendationRoutes mounted at /api");
 app.use("/api", routeSource("tenantFeedbackRoutes.ts"), tenantFeedbackRoutes);
