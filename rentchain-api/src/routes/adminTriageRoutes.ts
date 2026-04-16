@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { db } from "../config/firebase";
+import { ADMIN_ASSIGNMENTS_COLLECTION } from "../lib/assignment/loadAssignmentRecord";
 import { requireAuth } from "../middleware/requireAuth";
 import { CANONICAL_EVENTS_COLLECTION } from "../lib/events/buildEvent";
 import type { CanonicalEventV1 } from "../lib/events/eventTypes";
@@ -97,7 +98,7 @@ router.get("/triage", requireAuth, async (req: any, res) => {
     const limit = parseLimit(req.query?.limit);
     const cursor = parseCursor(req.query?.cursor);
 
-    const [applications, maintenanceRequests, leases, canonicalEvents, screeningOrders, financialTransactions, resolutions, watchlist] =
+    const [applications, maintenanceRequests, leases, canonicalEvents, screeningOrders, financialTransactions, resolutions, assignments, watchlist] =
       await Promise.all([
         loadCollection("rentalApplications"),
         loadCollection("maintenanceRequests"),
@@ -106,6 +107,7 @@ router.get("/triage", requireAuth, async (req: any, res) => {
         loadCollection("screeningOrders"),
         loadCollection("financialTransactions"),
         loadCollection(ADMIN_RESOLUTIONS_COLLECTION),
+        loadCollection(ADMIN_ASSIGNMENTS_COLLECTION),
         loadCollection(ADMIN_WATCHLISTS_COLLECTION),
       ]);
 
@@ -117,6 +119,7 @@ router.get("/triage", requireAuth, async (req: any, res) => {
       screeningOrders,
       financialTransactions,
       resolutions,
+      assignments,
       watchlist,
     })
       .filter((item) => (includeLow ? true : item.severity !== "low"))

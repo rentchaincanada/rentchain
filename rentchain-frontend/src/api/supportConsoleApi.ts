@@ -31,6 +31,7 @@ export type SupportConsoleResourceResponse = {
     summary?: string | null;
   }>;
   reconciliation?: Record<string, unknown> | null;
+  assignment?: AssignmentRecordV1 | null;
   resolution?: ResolutionRecordV1 | null;
   watch?: {
     version: "v1";
@@ -55,6 +56,34 @@ export type SupportConsoleResourceResponse = {
 };
 
 export type ResolutionStatus = "open" | "acknowledged" | "in_progress" | "resolved" | "dismissed";
+
+export type AssignmentRecordV1 = {
+  version: "v1";
+  id: string;
+  resource: {
+    type: string;
+    id: string;
+  };
+  currentOwner: {
+    ownerId?: string | null;
+    ownerLabel?: string | null;
+  };
+  createdAt: string;
+  updatedAt: string;
+  history: Array<{
+    id: string;
+    timestamp: string;
+    action: "set" | "changed" | "cleared";
+    fromOwnerId?: string | null;
+    fromOwnerLabel?: string | null;
+    toOwnerId?: string | null;
+    toOwnerLabel?: string | null;
+    authorId?: string | null;
+    authorRole?: string | null;
+    note?: string | null;
+  }>;
+  metadata?: Record<string, unknown>;
+};
 
 export type ResolutionRecordV1 = {
   version: "v1";

@@ -123,6 +123,15 @@ describe("adminTriageRoutes", () => {
       visibility: "internal",
       summary: "Screening paid",
     });
+    seedDoc("adminAssignments", "assignment-1", {
+      version: "v1",
+      id: "assignment-1",
+      resource: { type: "application", id: "app-1" },
+      currentOwner: { ownerId: "admin-1", ownerLabel: "Morgan Ops" },
+      createdAt: "2026-04-15T08:05:00.000Z",
+      updatedAt: "2026-04-15T08:10:00.000Z",
+      history: [],
+    });
 
     const router = (await import("../adminTriageRoutes")).default;
     const response = await invokeRouter(router, {
@@ -137,6 +146,10 @@ describe("adminTriageRoutes", () => {
         expect.objectContaining({
           category: "screening_reconciliation",
           severity: "critical",
+          assignment: expect.objectContaining({
+            ownerId: "admin-1",
+            ownerLabel: "Morgan Ops",
+          }),
           navigation: expect.objectContaining({
             supportConsolePath:
               "/admin/support-console?resourceType=application&resourceId=app-1&triageCategory=screening_reconciliation&triageSeverity=critical&reasonCode=TRIAGE_PAID_NOT_FULFILLED",

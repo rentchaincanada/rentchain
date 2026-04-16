@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { Router } from "express";
 import { db } from "../config/firebase";
+import { ADMIN_ASSIGNMENTS_COLLECTION } from "../lib/assignment/loadAssignmentRecord";
 import { requireAuth } from "../middleware/requireAuth";
 import { deriveAdminAlerts } from "../lib/alerting/deriveAdminAlerts";
 import type { AdminAlertV1, AlertCategory, AlertSeverity } from "../lib/alerting/alertingTypes";
@@ -126,7 +127,7 @@ router.get("/alerts", requireAuth, async (req: any, res) => {
     const limit = parseLimit(req.query?.limit, 20);
     const cursor = parseCursor(req.query?.cursor);
 
-    const [applications, maintenanceRequests, leases, canonicalEvents, screeningOrders, financialTransactions, resolutions, alertStates, watchlist] =
+    const [applications, maintenanceRequests, leases, canonicalEvents, screeningOrders, financialTransactions, resolutions, assignments, alertStates, watchlist] =
       await Promise.all([
         loadCollection("rentalApplications"),
         loadCollection("maintenanceRequests"),
@@ -135,6 +136,7 @@ router.get("/alerts", requireAuth, async (req: any, res) => {
         loadCollection("screeningOrders"),
         loadCollection("financialTransactions"),
         loadCollection(ADMIN_RESOLUTIONS_COLLECTION),
+        loadCollection(ADMIN_ASSIGNMENTS_COLLECTION),
         loadAlertStates(),
         loadWatchlistEntries(),
       ]);
@@ -147,6 +149,7 @@ router.get("/alerts", requireAuth, async (req: any, res) => {
       screeningOrders,
       financialTransactions,
       resolutions,
+      assignments,
     });
     const portfolioTrends = await loadPortfolioTrends(
       latestUniquePortfolioIds([...applications, ...maintenanceRequests, ...leases])
@@ -156,6 +159,7 @@ router.get("/alerts", requireAuth, async (req: any, res) => {
       triageItems,
       portfolioTrends,
       resolutions,
+      assignments,
       alertStates,
       watchlist,
     })

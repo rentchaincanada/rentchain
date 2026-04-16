@@ -69,6 +69,11 @@ describe("AdminTriageQueuePage", () => {
             status: "acknowledged",
             updatedAt: "2026-04-15T12:10:00.000Z",
           },
+          assignment: {
+            ownerId: "admin-1",
+            ownerLabel: "Morgan Ops",
+            updatedAt: "2026-04-15T12:05:00.000Z",
+          },
           tags: ["screening", "revenue"],
         },
       ],
@@ -84,6 +89,7 @@ describe("AdminTriageQueuePage", () => {
     expect(screen.getByText(/Payment was recorded but screening completion is missing/i)).toBeInTheDocument();
     expect(screen.getAllByText(/critical/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/acknowledged/i)).toBeInTheDocument();
+    expect(screen.getByText(/Assigned: Morgan Ops/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open support console/i })).toHaveAttribute(
       "href",
       "/admin/support-console?resourceType=application&resourceId=app-1&triageCategory=screening_reconciliation&triageSeverity=critical&reasonCode=TRIAGE_PAID_NOT_FULFILLED"

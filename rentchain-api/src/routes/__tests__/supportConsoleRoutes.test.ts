@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { assignmentRecordId } from "../../lib/assignment/loadAssignmentRecord";
 
 const { collections, dbMock } = vi.hoisted(() => {
   const collections = new Map<string, Map<string, any>>();
@@ -127,6 +128,14 @@ describe("supportConsoleRoutes", () => {
       visibility: "internal",
       summary: "Application created",
     });
+    seedDoc("adminAssignments", assignmentRecordId("application", "app-1"), {
+      version: "v1",
+      resource: { type: "application", id: "app-1" },
+      currentOwner: { ownerId: "admin-1", ownerLabel: "Morgan Ops" },
+      createdAt: "2026-04-10T09:05:00.000Z",
+      updatedAt: "2026-04-10T09:15:00.000Z",
+      history: [],
+    });
 
     const router = (await import("../supportConsoleRoutes")).default;
     const response = await invokeRouter(router, {
@@ -145,6 +154,12 @@ describe("supportConsoleRoutes", () => {
         timeline: expect.any(Array),
         insight: expect.anything(),
         reconciliation: expect.anything(),
+        assignment: expect.objectContaining({
+          currentOwner: expect.objectContaining({
+            ownerId: "admin-1",
+            ownerLabel: "Morgan Ops",
+          }),
+        }),
         debug: expect.objectContaining({
           canonicalEventCount: 1,
         }),
@@ -264,6 +279,7 @@ describe("supportConsoleRoutes", () => {
         timeline: [],
         policyDecisions: [],
         automation: [],
+        assignment: null,
       })
     );
   });

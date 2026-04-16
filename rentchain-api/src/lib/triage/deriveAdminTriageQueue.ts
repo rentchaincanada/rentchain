@@ -1,3 +1,4 @@
+import type { AssignmentRecordV1 } from "../assignment/assignmentTypes";
 import type { CanonicalEventV1 } from "../events/eventTypes";
 import { deriveInsightForResource } from "../insights/deriveInsights";
 import { deriveScreeningReconciliation } from "../reconciliation/deriveScreeningReconciliation";
@@ -31,6 +32,7 @@ type DeriveAdminTriageQueueInput = {
   screeningOrders?: ScreeningOrderLike[];
   financialTransactions?: FinancialTransactionLike[];
   resolutions?: ResolutionRecordV1[];
+  assignments?: AssignmentRecordV1[];
   watchlist?: WatchlistEntryV1[];
   now?: number;
 };
@@ -646,8 +648,14 @@ export function deriveAdminTriageQueue(input: DeriveAdminTriageQueueInput): Admi
   );
 
   const resolutions = input.resolutions || [];
+  const assignments = input.assignments || [];
   const watchlist = input.watchlist || [];
   const enriched = items.map((item) => {
+    const assignment = assignments.find(
+      (record) =>
+        asString(record.resource?.type, 120) === item.resource.type &&
+        asString(record.resource?.id, 240) === item.resource.id
+    );
     const match = resolutions
       .filter(
         (record) =>
@@ -661,6 +669,13 @@ export function deriveAdminTriageQueue(input: DeriveAdminTriageQueueInput): Admi
     );
     return {
       ...item,
+      assignment: assignment
+        ? {
+            ownerId: asOptionalString(assignment.currentOwner?.ownerId, 240),
+            ownerLabel: asOptionalString(assignment.currentOwner?.ownerLabel, 240),
+            updatedAt: assignment.updatedAt,
+          }
+        : null,
       resolution: match
         ? {
             status: match.status,

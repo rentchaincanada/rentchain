@@ -100,6 +100,15 @@ describe("SupportDebugConsolePage", () => {
         status: "fulfilled",
         reasons: [{ code: "RECON_FULFILLED" }],
       },
+      assignment: {
+        version: "v1",
+        id: "assignment-1",
+        resource: { type: "application", id: "app-1" },
+        currentOwner: { ownerId: "admin-1", ownerLabel: "Morgan Ops" },
+        createdAt: "2026-04-12T11:00:00.000Z",
+        updatedAt: "2026-04-12T11:20:00.000Z",
+        history: [{ id: "assign-1", timestamp: "2026-04-12T11:00:00.000Z", action: "set", toOwnerId: "admin-1", toOwnerLabel: "Morgan Ops" }],
+      },
       resolution: {
         version: "v1",
         id: "resolution-1",
@@ -123,11 +132,13 @@ describe("SupportDebugConsolePage", () => {
     expect(await screen.findByText(/Alex Tenant/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Derived insight/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /^Reconciliation$/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /^Assignment$/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /^Resolution$/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Policy decisions/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Automation history/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /^Timeline$/i })).toBeInTheDocument();
     expect(screen.getByText(/Screening completed for this application/i)).toBeInTheDocument();
+    expect(screen.getByText(/Assigned:\s*Morgan Ops/i)).toBeInTheDocument();
   });
 
   it("renders an empty state before a lookup", async () => {
@@ -178,6 +189,7 @@ describe("SupportDebugConsolePage", () => {
         },
       ],
       reconciliation: null,
+      assignment: null,
       resolution: null,
       debug: {
         canonicalEventCount: 2,

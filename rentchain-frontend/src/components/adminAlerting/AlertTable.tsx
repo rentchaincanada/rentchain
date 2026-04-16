@@ -27,6 +27,11 @@ export default function AlertTable(props: {
                 {alert.resource.type} • {alert.resource.id}
                 {alert.resource.status ? ` • ${alert.resource.status}` : ""}
               </div>
+              {alert.assignment?.ownerId ? (
+                <div style={{ color: "#334155", fontSize: 13 }}>
+                  Owner: {alert.assignment.ownerLabel || alert.assignment.ownerId}
+                </div>
+              ) : null}
             </div>
             <div style={{ display: "grid", gap: 8, justifyItems: "end" }}>
               <button type="button" onClick={() => props.onAcknowledge(alert)}>

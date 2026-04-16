@@ -1,4 +1,5 @@
 import type { TimelineItem } from "../timeline/timelineAdapter";
+import type { AssignmentRecordV1 } from "../assignment/assignmentTypes";
 import type { ResolutionRecordV1 } from "../resolution/resolutionTypes";
 import type { WatchlistEntryV1 } from "../watchlist/watchlistTypes";
 
@@ -38,6 +39,7 @@ export type SupportConsoleResourceResponse = {
   policyDecisions: SupportConsolePolicyDecision[];
   automation: SupportConsoleAutomationItem[];
   reconciliation?: Record<string, unknown> | null;
+  assignment?: AssignmentRecordV1 | null;
   resolution?: ResolutionRecordV1 | null;
   watch?: WatchlistEntryV1 | null;
   debug: {
