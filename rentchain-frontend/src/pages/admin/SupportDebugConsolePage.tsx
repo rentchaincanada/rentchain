@@ -10,6 +10,7 @@ import SupportConsoleSection from "../../components/supportConsole/SupportConsol
 import PolicyDecisionList from "../../components/supportConsole/PolicyDecisionList";
 import AutomationHistoryList from "../../components/supportConsole/AutomationHistoryList";
 import ResolutionPanel from "../../components/adminResolution/ResolutionPanel";
+import AssignmentPanel from "../../components/adminAssignment/AssignmentPanel";
 
 const RESOURCE_OPTIONS = [
   { label: "Application", value: "application" },
@@ -159,6 +160,15 @@ export default function SupportDebugConsolePage() {
               ) : (
                 <div style={{ color: "#64748b" }}>This resource is not currently on the watchlist.</div>
               )}
+            </SupportConsoleSection>
+
+            <SupportConsoleSection title="Assignment">
+              <AssignmentPanel
+                resourceType={payload.resource.type}
+                resourceId={payload.resource.id}
+                assignment={payload.assignment || null}
+                onChange={(assignment) => setPayload((current) => (current ? { ...current, assignment } : current))}
+              />
             </SupportConsoleSection>
 
             <SupportConsoleSection title="Resolution">

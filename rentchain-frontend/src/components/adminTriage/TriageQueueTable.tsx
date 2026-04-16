@@ -2,6 +2,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import type { AdminTriageItemV1 } from "../../api/adminTriageApi";
 import ResolutionStatusBadge from "../adminResolution/ResolutionStatusBadge";
+import AssignmentBadge from "../adminAssignment/AssignmentBadge";
 import TriageSeverityBadge from "./TriageSeverityBadge";
 
 function formatTimestamp(value: string) {
@@ -62,6 +63,13 @@ export function TriageQueueTable({ items }: { items: AdminTriageItemV1[] }) {
                   <ResolutionStatusBadge status={item.resolution.status} />
                 </div>
               ) : null}
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <span style={{ color: "#64748b", fontSize: 13 }}>Owner</span>
+                <AssignmentBadge
+                  ownerId={item.assignment?.ownerId || null}
+                  ownerLabel={item.assignment?.ownerLabel || null}
+                />
+              </div>
               {item.watch?.isActive ? (
                 <div style={{ color: "#1d4ed8", fontSize: 13, fontWeight: 600 }}>Watched</div>
               ) : null}

@@ -55,6 +55,7 @@ describe("AdminAlertingPage", () => {
           resource: { type: "application", id: "app-1", title: "Application app-1" },
           reason: { code: "ALERT_SCREENING_MISMATCH", summary: "Screening reconciliation signals are inconsistent." },
           signals: {},
+          assignment: { ownerId: "admin-1", ownerLabel: "Morgan Ops" },
           state: { isActive: true, isAcknowledged: false },
           timestamps: { createdAt: "2026-04-16T12:00:00.000Z", updatedAt: "2026-04-16T12:00:00.000Z" },
           navigation: { supportConsolePath: "/admin/support-console?resourceType=application&resourceId=app-1" },
@@ -84,6 +85,7 @@ describe("AdminAlertingPage", () => {
 
     expect(await screen.findByText(/Screening reconciliation signals are inconsistent/i)).toBeInTheDocument();
     expect(screen.getByText(/Keep an eye on this workflow/i)).toBeInTheDocument();
+    expect(screen.getByText(/Owner: Morgan Ops/i)).toBeInTheDocument();
   });
 
   it("updates filter requests and acknowledges alerts", async () => {

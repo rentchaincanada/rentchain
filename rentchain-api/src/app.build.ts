@@ -104,6 +104,7 @@ import supportConsoleRoutes from "./routes/supportConsoleRoutes";
 import adminTriageRoutes from "./routes/adminTriageRoutes";
 import adminResolutionRoutes from "./routes/adminResolutionRoutes";
 import adminAlertingRoutes from "./routes/adminAlertingRoutes";
+import adminAssignmentRoutes from "./routes/adminAssignmentRoutes";
 import portfolioScoreRoutes from "./routes/portfolioScoreRoutes";
 import portfolioScoreHistoryRoutes from "./routes/portfolioScoreHistoryRoutes";
 import transunionRoutes from "./services/integrations/transunion/transunionRoutes";
@@ -233,6 +234,8 @@ app.use("/api/admin", routeSource("adminResolutionRoutes.ts"), adminResolutionRo
 console.log("[route-mount] adminResolutionRoutes mounted at /api/admin");
 app.use("/api/admin", routeSource("adminAlertingRoutes.ts"), adminAlertingRoutes);
 console.log("[route-mount] adminAlertingRoutes mounted at /api/admin");
+app.use("/api/admin", routeSource("adminAssignmentRoutes.ts"), adminAssignmentRoutes);
+console.log("[route-mount] adminAssignmentRoutes mounted at /api/admin");
 app.use("/api/admin", routeSource("portfolioScoreRoutes.ts"), portfolioScoreRoutes);
 console.log("[route-mount] portfolioScoreRoutes mounted at /api/admin");
 app.use("/api/admin", routeSource("portfolioScoreHistoryRoutes.ts"), portfolioScoreHistoryRoutes);

@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import type { AssignmentRecordV1 } from "../assignment/assignmentTypes";
 import type { PortfolioScoreTrendV1 } from "../portfolioScoreHistory/portfolioScoreHistoryTypes";
 import type { ResolutionRecordV1 } from "../resolution/resolutionTypes";
 import type { AdminTriageItemV1 } from "../triage/triageTypes";
@@ -16,6 +17,7 @@ type DeriveAdminAlertsInput = {
   triageItems?: AdminTriageItemV1[];
   portfolioTrends?: PortfolioScoreTrendV1[];
   resolutions?: ResolutionRecordV1[];
+  assignments?: AssignmentRecordV1[];
   alertStates?: AdminAlertStateRecord[];
   watchlist?: WatchlistEntryV1[];
   now?: number;
@@ -65,6 +67,7 @@ function buildAlert(input: {
   lastSeenAt?: string | null;
   watchlist?: WatchlistEntryV1[];
   alertState?: AdminAlertStateRecord | null;
+  assignment?: AssignmentRecordV1 | null;
   tags?: string[];
 }): AdminAlertV1 {
   const id = alertId(input.category, input.reason.code, input.resource.type, input.resource.id);
@@ -101,6 +104,12 @@ function buildAlert(input: {
         input.resource.type === "portfolio" ? undefined : triagePath(input.resource.type),
       portfolioScorePath: portfolioScorePath(input.resource.portfolioId || input.resource.id),
     },
+    assignment: input.assignment
+      ? {
+          ownerId: asString(input.assignment.currentOwner?.ownerId, 240) || null,
+          ownerLabel: asString(input.assignment.currentOwner?.ownerLabel, 240) || null,
+        }
+      : null,
     tags: [...(input.tags || []), ...(watched ? ["watched"] : [])],
   };
 }
@@ -108,6 +117,7 @@ function buildAlert(input: {
 export function deriveAdminAlerts(input: DeriveAdminAlertsInput): AdminAlertV1[] {
   const now = typeof input.now === "number" ? input.now : Date.now();
   const triageItems = input.triageItems || [];
+  const assignments = input.assignments || [];
   const alertStatesById = new Map((input.alertStates || []).map((item) => [item.id, item]));
   const watchlist = input.watchlist || [];
   const alerts: AdminAlertV1[] = [];
@@ -142,6 +152,12 @@ export function deriveAdminAlerts(input: DeriveAdminAlertsInput): AdminAlertV1[]
 
     if (!category) continue;
 
+    const assignment =
+      assignments.find(
+        (record) =>
+          asString(record.resource?.type, 120) === item.resource.type &&
+          asString(record.resource?.id, 240) === item.resource.id
+      ) || null;
     const id = alertId(category, reasonCode, item.resource.type, item.resource.id);
     alerts.push(
       {
@@ -171,6 +187,7 @@ export function deriveAdminAlerts(input: DeriveAdminAlertsInput): AdminAlertV1[]
           lastSeenAt: item.timestamps.lastSeenAt || item.timestamps.surfacedAt,
           watchlist,
           alertState: alertStatesById.get(id) || null,
+          assignment,
           tags: item.tags || [],
         }),
         id,
@@ -219,6 +236,7 @@ export function deriveAdminAlerts(input: DeriveAdminAlertsInput): AdminAlertV1[]
           lastSeenAt: latest.snapshotAt,
           watchlist,
           alertState: alertStatesById.get(id) || null,
+          assignment: null,
           tags: ["portfolio"],
         }),
         id,
@@ -242,6 +260,12 @@ export function deriveAdminAlerts(input: DeriveAdminAlertsInput): AdminAlertV1[]
         ? "critical"
         : "high";
     const reasonCode = "ALERT_RESOLUTION_STALE";
+    const assignment =
+      assignments.find(
+        (record) =>
+          asString(record.resource?.type, 120) === resolution.resource.type &&
+          asString(record.resource?.id, 240) === resolution.resource.id
+      ) || null;
     const id = alertId("resolution_attention", reasonCode, resolution.resource.type, resolution.resource.id);
     alerts.push(
       {
@@ -267,6 +291,7 @@ export function deriveAdminAlerts(input: DeriveAdminAlertsInput): AdminAlertV1[]
           lastSeenAt: resolution.updatedAt,
           watchlist,
           alertState: alertStatesById.get(id) || null,
+          assignment,
           tags: ["resolution"],
         }),
         id,

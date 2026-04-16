@@ -59,5 +59,9 @@ export type AdminAlertV1 = {
     triagePath?: string | null;
     portfolioScorePath?: string | null;
   };
+  assignment?: {
+    ownerId?: string | null;
+    ownerLabel?: string | null;
+  } | null;
   tags?: string[];
 };

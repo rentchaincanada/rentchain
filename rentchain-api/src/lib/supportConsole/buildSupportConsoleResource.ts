@@ -1,4 +1,5 @@
 import { db } from "../../config/firebase";
+import { loadAssignmentRecord } from "../assignment/loadAssignmentRecord";
 import { CANONICAL_EVENTS_COLLECTION } from "../events/buildEvent";
 import type { CanonicalEventV1 } from "../events/eventTypes";
 import { deriveInsightForResource } from "../insights/deriveInsights";
@@ -282,6 +283,7 @@ function emptyResponse(spec: NormalizedResourceSpec, resourceId: string): Suppor
     policyDecisions: [],
     automation: [],
     reconciliation: null,
+    assignment: null,
     resolution: null,
     watch: null,
     debug: {
@@ -316,7 +318,11 @@ export async function buildSupportConsoleResource(input: {
   });
 
   let reconciliation: Record<string, unknown> | null = null;
-  const [resolution, watchlist] = await Promise.all([
+  const [assignment, resolution, watchlist] = await Promise.all([
+    loadAssignmentRecord({
+      resourceType: spec.requestedType,
+      resourceId,
+    }),
     loadResolutionRecord({
       resourceType: spec.requestedType,
       resourceId,
@@ -353,6 +359,7 @@ export async function buildSupportConsoleResource(input: {
     policyDecisions: buildPolicyDecisions(relatedEvents),
     automation: buildAutomationHistory(relatedEvents),
     reconciliation,
+    assignment,
     resolution,
     watch,
     debug: {

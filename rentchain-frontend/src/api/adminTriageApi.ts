@@ -41,6 +41,11 @@ export type AdminTriageItemV1 = {
   navigation: {
     supportConsolePath?: string | null;
   };
+  assignment?: {
+    ownerId?: string | null;
+    ownerLabel?: string | null;
+    updatedAt: string;
+  } | null;
   resolution?: {
     status: "open" | "acknowledged" | "in_progress" | "resolved" | "dismissed";
     updatedAt: string;
