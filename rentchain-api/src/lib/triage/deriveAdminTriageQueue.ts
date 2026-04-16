@@ -3,6 +3,7 @@ import { deriveInsightForResource } from "../insights/deriveInsights";
 import { deriveScreeningReconciliation } from "../reconciliation/deriveScreeningReconciliation";
 import type { ScreeningReconciliationV1 } from "../reconciliation/reconciliationTypes";
 import type { ResolutionRecordV1 } from "../resolution/resolutionTypes";
+import type { WatchlistEntryV1 } from "../watchlist/watchlistTypes";
 import type { AdminTriageItemV1, TriageCategory, TriageSeverity } from "./triageTypes";
 
 type ScreeningOrderLike = {
@@ -30,6 +31,7 @@ type DeriveAdminTriageQueueInput = {
   screeningOrders?: ScreeningOrderLike[];
   financialTransactions?: FinancialTransactionLike[];
   resolutions?: ResolutionRecordV1[];
+  watchlist?: WatchlistEntryV1[];
   now?: number;
 };
 
@@ -644,6 +646,7 @@ export function deriveAdminTriageQueue(input: DeriveAdminTriageQueueInput): Admi
   );
 
   const resolutions = input.resolutions || [];
+  const watchlist = input.watchlist || [];
   const enriched = items.map((item) => {
     const match = resolutions
       .filter(
@@ -653,12 +656,21 @@ export function deriveAdminTriageQueue(input: DeriveAdminTriageQueueInput): Admi
           asString(record.triage?.reasonCode, 160) === item.reason.code
       )
       .sort((a, b) => (parseTimestamp(b.updatedAt) ?? 0) - (parseTimestamp(a.updatedAt) ?? 0))[0];
+    const watch = watchlist.find(
+      (entry) => entry.isActive && entry.target.type === item.resource.type && entry.target.id === item.resource.id
+    );
     return {
       ...item,
       resolution: match
         ? {
             status: match.status,
             updatedAt: match.updatedAt,
+          }
+        : null,
+      watch: watch
+        ? {
+            isActive: true,
+            watchId: watch.id,
           }
         : null,
     };

@@ -1,5 +1,6 @@
 import type { TimelineItem } from "../timeline/timelineAdapter";
 import type { ResolutionRecordV1 } from "../resolution/resolutionTypes";
+import type { WatchlistEntryV1 } from "../watchlist/watchlistTypes";
 
 export type SupportConsoleResourceSummary = {
   type: string;
@@ -38,6 +39,7 @@ export type SupportConsoleResourceResponse = {
   automation: SupportConsoleAutomationItem[];
   reconciliation?: Record<string, unknown> | null;
   resolution?: ResolutionRecordV1 | null;
+  watch?: WatchlistEntryV1 | null;
   debug: {
     canonicalEventCount: number;
     domainsPresent: string[];

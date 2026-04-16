@@ -153,6 +153,7 @@ const AutomationTimelinePage = lazy(
 const AutomationTimelineV1Page = lazy(() => import("./pages/admin/AutomationTimelineV1Page"));
 const SupportDebugConsolePage = lazy(() => import("./pages/admin/SupportDebugConsolePage"));
 const AdminTriageQueuePage = lazy(() => import("./pages/admin/AdminTriageQueuePage"));
+const AdminAlertingPage = lazy(() => import("./pages/admin/AdminAlertingPage"));
 const PortfolioScorePage = lazy(() => import("./pages/admin/PortfolioScorePage"));
 const PortfolioScoreHistoryPage = lazy(() => import("./pages/admin/PortfolioScoreHistoryPage"));
 
@@ -894,10 +895,18 @@ function App() {
             </RequireAdmin>
           }
         />
-        <Route
-          path="/admin/portfolio-score"
-          element={
-            <RequireAdmin>
+            <Route
+              path="/admin/alerts"
+              element={
+                <RequireAdmin>
+                  <AdminAlertingPage />
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="/admin/portfolio-score"
+              element={
+                <RequireAdmin>
               <Suspense fallback={null}>
                 <PortfolioScorePage />
               </Suspense>
