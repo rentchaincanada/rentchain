@@ -1,6 +1,8 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import type { AdminAlertV1 } from "../../api/adminAlertingApi";
+import EscalationBadge from "../adminSla/EscalationBadge";
+import SlaStageBadge from "../adminSla/SlaStageBadge";
 import AlertSeverityBadge from "./AlertSeverityBadge";
 
 export default function AlertTable(props: {
@@ -30,6 +32,12 @@ export default function AlertTable(props: {
               {alert.assignment?.ownerId ? (
                 <div style={{ color: "#334155", fontSize: 13 }}>
                   Owner: {alert.assignment.ownerLabel || alert.assignment.ownerId}
+                </div>
+              ) : null}
+              {alert.sla?.stage ? (
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <SlaStageBadge stage={alert.sla.stage} />
+                  <EscalationBadge level={alert.sla.escalationLevel || "none"} />
                 </div>
               ) : null}
             </div>

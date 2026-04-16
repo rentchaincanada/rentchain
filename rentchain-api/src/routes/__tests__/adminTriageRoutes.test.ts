@@ -150,6 +150,11 @@ describe("adminTriageRoutes", () => {
             ownerId: "admin-1",
             ownerLabel: "Morgan Ops",
           }),
+          sla: expect.objectContaining({
+            stage: expect.any(String),
+            escalationLevel: expect.any(String),
+            ageHours: expect.any(Number),
+          }),
           navigation: expect.objectContaining({
             supportConsolePath:
               "/admin/support-console?resourceType=application&resourceId=app-1&triageCategory=screening_reconciliation&triageSeverity=critical&reasonCode=TRIAGE_PAID_NOT_FULFILLED",

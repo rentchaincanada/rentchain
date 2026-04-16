@@ -4,6 +4,7 @@ import { deriveInsightForResource } from "../insights/deriveInsights";
 import { deriveScreeningReconciliation } from "../reconciliation/deriveScreeningReconciliation";
 import type { ScreeningReconciliationV1 } from "../reconciliation/reconciliationTypes";
 import type { ResolutionRecordV1 } from "../resolution/resolutionTypes";
+import { deriveSlaState } from "../sla/deriveSlaState";
 import type { WatchlistEntryV1 } from "../watchlist/watchlistTypes";
 import type { AdminTriageItemV1, TriageCategory, TriageSeverity } from "./triageTypes";
 
@@ -688,6 +689,25 @@ export function deriveAdminTriageQueue(input: DeriveAdminTriageQueueInput): Admi
             watchId: watch.id,
           }
         : null,
+      sla: (() => {
+        const evaluation = deriveSlaState({
+          resourceType: item.resource.type,
+          resourceId: item.resource.id,
+          triageCategory: item.category,
+          triageSeverity: item.severity,
+          resolutionStatus: match?.status || null,
+          assignmentOwnerId: assignment?.currentOwner?.ownerId || null,
+          assignmentOwnerLabel: assignment?.currentOwner?.ownerLabel || null,
+          firstSeenAt: item.timestamps.firstSeenAt || item.timestamps.surfacedAt,
+          lastSeenAt: item.timestamps.lastSeenAt || item.timestamps.surfacedAt,
+          now,
+        });
+        return {
+          stage: evaluation.sla.stage,
+          escalationLevel: evaluation.sla.escalationLevel,
+          ageHours: evaluation.age.ageHours,
+        };
+      })(),
     };
   });
 

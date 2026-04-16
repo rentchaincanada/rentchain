@@ -74,6 +74,11 @@ describe("AdminTriageQueuePage", () => {
             ownerLabel: "Morgan Ops",
             updatedAt: "2026-04-15T12:05:00.000Z",
           },
+          sla: {
+            stage: "overdue",
+            escalationLevel: "high",
+            ageHours: 28,
+          },
           tags: ["screening", "revenue"],
         },
       ],
@@ -90,6 +95,8 @@ describe("AdminTriageQueuePage", () => {
     expect(screen.getAllByText(/critical/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/acknowledged/i)).toBeInTheDocument();
     expect(screen.getByText(/Assigned: Morgan Ops/i)).toBeInTheDocument();
+    expect(screen.getByText(/SLA overdue/i)).toBeInTheDocument();
+    expect(screen.getByText(/Escalation high/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open support console/i })).toHaveAttribute(
       "href",
       "/admin/support-console?resourceType=application&resourceId=app-1&triageCategory=screening_reconciliation&triageSeverity=critical&reasonCode=TRIAGE_PAID_NOT_FULFILLED"

@@ -154,6 +154,7 @@ describe("supportConsoleRoutes", () => {
         timeline: expect.any(Array),
         insight: expect.anything(),
         reconciliation: expect.anything(),
+        sla: null,
         assignment: expect.objectContaining({
           currentOwner: expect.objectContaining({
             ownerId: "admin-1",
@@ -279,6 +280,7 @@ describe("supportConsoleRoutes", () => {
         timeline: [],
         policyDecisions: [],
         automation: [],
+        sla: null,
         assignment: null,
       })
     );

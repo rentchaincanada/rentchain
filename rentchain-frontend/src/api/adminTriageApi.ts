@@ -1,4 +1,5 @@
 import { apiFetch } from "./apiFetch";
+import type { SlaEvaluationV1 } from "./adminSlaApi";
 
 export type AdminTriageItemV1 = {
   id: string;
@@ -45,6 +46,9 @@ export type AdminTriageItemV1 = {
     ownerId?: string | null;
     ownerLabel?: string | null;
     updatedAt: string;
+  } | null;
+  sla?: Pick<SlaEvaluationV1["sla"], "stage" | "escalationLevel"> & {
+    ageHours: number;
   } | null;
   resolution?: {
     status: "open" | "acknowledged" | "in_progress" | "resolved" | "dismissed";

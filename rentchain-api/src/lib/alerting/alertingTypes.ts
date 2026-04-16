@@ -43,6 +43,11 @@ export type AdminAlertV1 = {
     resolutionStatus?: string | null;
     inactivityMs?: number | null;
   };
+  sla?: {
+    stage?: string | null;
+    escalationLevel?: string | null;
+    ageHours?: number | null;
+  } | null;
   state: {
     isActive: boolean;
     isAcknowledged: boolean;

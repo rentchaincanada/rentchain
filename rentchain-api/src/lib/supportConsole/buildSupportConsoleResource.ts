@@ -5,6 +5,8 @@ import type { CanonicalEventV1 } from "../events/eventTypes";
 import { deriveInsightForResource } from "../insights/deriveInsights";
 import { deriveScreeningReconciliation } from "../reconciliation/deriveScreeningReconciliation";
 import { loadResolutionRecord } from "../resolution/loadResolutionRecord";
+import { deriveSlaState } from "../sla/deriveSlaState";
+import { deriveAdminTriageQueue } from "../triage/deriveAdminTriageQueue";
 import { loadWatchlistEntries } from "../watchlist/loadWatchlistEntries";
 import { canonicalEventToTimelineItem } from "../timeline/timelineAdapter";
 import type {
@@ -283,6 +285,7 @@ function emptyResponse(spec: NormalizedResourceSpec, resourceId: string): Suppor
     policyDecisions: [],
     automation: [],
     reconciliation: null,
+    sla: null,
     assignment: null,
     resolution: null,
     watch: null,
@@ -318,6 +321,8 @@ export async function buildSupportConsoleResource(input: {
   });
 
   let reconciliation: Record<string, unknown> | null = null;
+  let latestOrder: any = null;
+  let financialTransactions: any[] = [];
   const [assignment, resolution, watchlist] = await Promise.all([
     loadAssignmentRecord({
       resourceType: spec.requestedType,
@@ -334,7 +339,7 @@ export async function buildSupportConsoleResource(input: {
       (entry) => entry.isActive && entry.target.type === spec.requestedType && entry.target.id === resourceId
     ) || null;
   if (spec.requestedType === "application") {
-    const [latestOrder, financialTransactions] = await Promise.all([
+    [latestOrder, financialTransactions] = await Promise.all([
       loadLatestScreeningOrder(resourceId),
       loadFinancialTransactions(resourceId),
     ]);
@@ -346,6 +351,33 @@ export async function buildSupportConsoleResource(input: {
       financialTransactions,
     }) as Record<string, unknown>;
   }
+
+  const triageItem =
+    deriveAdminTriageQueue({
+      applications: spec.requestedType === "application" ? [{ id: resourceId, ...doc }] : [],
+      maintenanceRequests: spec.requestedType === "maintenance" ? [{ id: resourceId, ...doc }] : [],
+      leases: spec.requestedType === "lease" ? [{ id: resourceId, ...doc }] : [],
+      canonicalEvents: relatedEvents,
+      screeningOrders: latestOrder ? [latestOrder] : [],
+      financialTransactions,
+      resolutions: resolution ? [resolution] : [],
+      assignments: assignment ? [assignment] : [],
+      watchlist: watch ? [watch] : [],
+    }).find((item) => item.resource.type === spec.requestedType && item.resource.id === resourceId) || null;
+
+  const sla = triageItem
+    ? deriveSlaState({
+        resourceType: triageItem.resource.type,
+        resourceId: triageItem.resource.id,
+        triageCategory: triageItem.category,
+        triageSeverity: triageItem.severity,
+        resolutionStatus: resolution?.status || null,
+        assignmentOwnerId: assignment?.currentOwner?.ownerId || null,
+        assignmentOwnerLabel: assignment?.currentOwner?.ownerLabel || null,
+        firstSeenAt: triageItem.timestamps.firstSeenAt || triageItem.timestamps.surfacedAt,
+        lastSeenAt: triageItem.timestamps.lastSeenAt || triageItem.timestamps.surfacedAt,
+      })
+    : null;
 
   return {
     resource:
@@ -359,6 +391,7 @@ export async function buildSupportConsoleResource(input: {
     policyDecisions: buildPolicyDecisions(relatedEvents),
     automation: buildAutomationHistory(relatedEvents),
     reconciliation,
+    sla,
     assignment,
     resolution,
     watch,

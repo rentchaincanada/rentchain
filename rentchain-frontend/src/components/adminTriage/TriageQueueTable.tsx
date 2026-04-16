@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import type { AdminTriageItemV1 } from "../../api/adminTriageApi";
 import ResolutionStatusBadge from "../adminResolution/ResolutionStatusBadge";
 import AssignmentBadge from "../adminAssignment/AssignmentBadge";
+import EscalationBadge from "../adminSla/EscalationBadge";
+import SlaStageBadge from "../adminSla/SlaStageBadge";
 import TriageSeverityBadge from "./TriageSeverityBadge";
 
 function formatTimestamp(value: string) {
@@ -70,6 +72,13 @@ export function TriageQueueTable({ items }: { items: AdminTriageItemV1[] }) {
                   ownerLabel={item.assignment?.ownerLabel || null}
                 />
               </div>
+              {item.sla ? (
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <SlaStageBadge stage={item.sla.stage} />
+                  <EscalationBadge level={item.sla.escalationLevel} />
+                  <span style={{ color: "#64748b", fontSize: 13 }}>{item.sla.ageHours}h</span>
+                </div>
+              ) : null}
               {item.watch?.isActive ? (
                 <div style={{ color: "#1d4ed8", fontSize: 13, fontWeight: 600 }}>Watched</div>
               ) : null}
