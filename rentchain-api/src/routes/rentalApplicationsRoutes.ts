@@ -6,6 +6,16 @@ import { attachAccount } from "../middleware/attachAccount";
 import { getStripeClient, isStripeConfigured } from "../services/stripeService";
 import { requireCapability } from "../services/capabilityGuard";
 import { getScreeningPricing } from "../billing/screeningPricing";
+import {
+  PACKAGE_TO_LEGACY_TIER,
+  SCREENING_ADDONS_V2,
+  SCREENING_PACKAGES_V2,
+} from "../lib/screeningMonetizationV2/screeningPackages";
+import {
+  calculateScreeningPrice,
+  isScreeningAddonKey,
+  isScreeningPackageKey,
+} from "../lib/screeningMonetizationV2/calculateScreeningPrice";
 import { finalizeStripePayment } from "../services/stripeFinalize";
 import { applyScreeningResultsFromOrder } from "../services/stripeScreeningProcessor";
 import { buildScreeningStatusPayload } from "../services/screening/screeningPayload";
@@ -177,7 +187,7 @@ async function performScreeningCheckoutExecution(params: {
     autopilotPolicy,
     logBase,
   } = params;
-  const { screeningTier, addons, serviceLevel, scoreAddOn, expeditedAddOn, pricing } =
+  const { screeningTier, screeningPackage, addons, v2Addons, serviceLevel, scoreAddOn, expeditedAddOn, paymentResponsibility, pricing } =
     resolvePricingInput(body);
   const frontendOrigin = resolveFrontendOrigin(req);
   const rawReturnTo = String(body?.returnTo || "/dashboard");
@@ -233,8 +243,11 @@ async function performScreeningCheckoutExecution(params: {
       finalizedAt: null,
       lastStripeEventId: null,
       amountTotalCents: 0,
+      screeningPackage,
       screeningTier,
-      addons,
+      addons: v2Addons,
+      legacyAddons: addons.filter((value) => value === "credit_score" || value === "expedited"),
+      paymentResponsibility,
       scoreAddOn: false,
       scoreAddOnCents: 0,
       expeditedAddOn: false,
@@ -284,6 +297,9 @@ async function performScreeningCheckoutExecution(params: {
           eligibility: "eligible",
           paymentStatus: "checkout_created",
           fulfillmentStatus: "ordered",
+          package: screeningPackage,
+          addons: v2Addons,
+          paymentResponsibility,
           checkoutSessionId: orderId,
           checkoutCreatedAt: now,
           amount: 0,
@@ -403,8 +419,11 @@ async function performScreeningCheckoutExecution(params: {
     finalizedAt: null,
     lastStripeEventId: null,
     amountTotalCents: pricing.totalAmountCents,
+    screeningPackage,
     screeningTier,
-    addons,
+    addons: v2Addons,
+    legacyAddons: addons.filter((value) => value === "credit_score" || value === "expedited"),
+    paymentResponsibility,
     scoreAddOn,
     scoreAddOnCents: pricing.scoreAddOnCents,
     expeditedAddOn,
@@ -432,56 +451,12 @@ async function performScreeningCheckoutExecution(params: {
   await orderRef.set(orderPayload, { merge: true });
 
   const currency = String(orderPayload.currency || "CAD").toLowerCase();
-  const lineItems: any[] = [
-    {
-      price_data: {
-        currency,
-        product_data: { name: "Rental screening" },
-        unit_amount: pricing.baseAmountCents,
-      },
-      quantity: 1,
-    },
-  ];
-  if (pricing.verifiedAddOnCents) {
-    lineItems.push({
-      price_data: {
-        currency,
-        product_data: { name: "Verified screening add-on" },
-        unit_amount: pricing.verifiedAddOnCents,
-      },
-      quantity: 1,
-    });
-  }
-  if (pricing.aiAddOnCents) {
-    lineItems.push({
-      price_data: {
-        currency,
-        product_data: { name: "AI verification add-on" },
-        unit_amount: pricing.aiAddOnCents,
-      },
-      quantity: 1,
-    });
-  }
-  if (pricing.scoreAddOnCents) {
-    lineItems.push({
-      price_data: {
-        currency,
-        product_data: { name: "Credit score add-on" },
-        unit_amount: pricing.scoreAddOnCents,
-      },
-      quantity: 1,
-    });
-  }
-  if (pricing.expeditedAddOnCents) {
-    lineItems.push({
-      price_data: {
-        currency,
-        product_data: { name: "Expedited processing add-on" },
-        unit_amount: pricing.expeditedAddOnCents,
-      },
-      quantity: 1,
-    });
-  }
+  const lineItems = buildScreeningLineItems({
+    currency,
+    screeningPackage,
+    addons: v2Addons,
+    pricing,
+  });
 
   const safeInt = (n: unknown) => {
     const x = Number(n);
@@ -509,9 +484,11 @@ async function performScreeningCheckoutExecution(params: {
       applicationId,
       landlordId,
       serviceLevel,
+      screeningPackage,
+      paymentResponsibility,
       scoreAddOn: String(scoreAddOn),
       screeningTier,
-      addons: addons.join(","),
+      addons: v2Addons.join(","),
       totalAmountCents: String(pricing.totalAmountCents),
     },
     payment_intent_data: {
@@ -520,9 +497,11 @@ async function performScreeningCheckoutExecution(params: {
         applicationId,
         landlordId,
         serviceLevel,
+        screeningPackage,
+        paymentResponsibility,
         scoreAddOn: String(scoreAddOn),
         screeningTier,
-        addons: addons.join(","),
+        addons: v2Addons.join(","),
         totalAmountCents: String(pricing.totalAmountCents),
       },
     },
@@ -543,9 +522,11 @@ async function performScreeningCheckoutExecution(params: {
         orderId,
         amountCents: pricing.baseAmountCents,
         currency: "CAD",
+        screeningPackage,
         paidAt: null,
         screeningTier,
-        addons,
+        addons: v2Addons,
+        paymentResponsibility,
         scoreAddOn,
         scoreAddOnCents: pricing.scoreAddOnCents,
         expeditedAddOn,
@@ -565,6 +546,9 @@ async function performScreeningCheckoutExecution(params: {
         eligibility: "eligible",
         paymentStatus: "checkout_created",
         fulfillmentStatus: "ready",
+        package: screeningPackage,
+        addons: v2Addons,
+        paymentResponsibility,
         checkoutSessionId: session.id,
         checkoutCreatedAt: now,
         amount: pricing.totalAmountCents,
@@ -1020,6 +1004,12 @@ function resolveScreeningTier(raw?: string | null): "basic" | "verify" | "verify
   return "basic";
 }
 
+function resolveScreeningPackage(raw?: string | null): "basic" | "standard" | "premium" | null {
+  const val = String(raw || "").trim().toLowerCase();
+  if (isScreeningPackageKey(val)) return val;
+  return null;
+}
+
 function normalizeAddons(raw: any): string[] {
   if (!raw) return [];
   if (Array.isArray(raw)) return raw.map((v) => String(v || "").trim().toLowerCase()).filter(Boolean);
@@ -1032,9 +1022,25 @@ function normalizeAddons(raw: any): string[] {
   return [];
 }
 
+function normalizeScreeningV2Addons(raw: any) {
+  return normalizeAddons(raw).filter((value) => isScreeningAddonKey(value));
+}
+
+function resolvePaymentResponsibility(raw?: string | null): "landlord" | "tenant" {
+  return String(raw || "").trim().toLowerCase() === "tenant" ? "tenant" : "landlord";
+}
+
 function resolvePricingInput(body: any) {
-  const screeningTier = resolveScreeningTier(body?.screeningTier);
-  const addons = normalizeAddons(body?.addons);
+  const requestedPackage = resolveScreeningPackage(body?.screeningPackage || body?.package);
+  const v2Addons = normalizeScreeningV2Addons(body?.addons);
+  const screeningTier = resolveScreeningTier(
+    body?.screeningTier || (requestedPackage ? PACKAGE_TO_LEGACY_TIER[requestedPackage] : undefined)
+  );
+  const screeningPackage = requestedPackage || (screeningTier === "verify" ? "standard" : screeningTier === "verify_ai" ? "premium" : "basic");
+  const legacyAddons = normalizeAddons(body?.addons).filter(
+    (value) => value === "credit_score" || value === "expedited"
+  );
+  const addons = [...v2Addons, ...legacyAddons];
   const serviceLevel = resolveServiceLevel(
     body?.serviceLevel ||
       (screeningTier === "basic"
@@ -1045,8 +1051,33 @@ function resolvePricingInput(body: any) {
   );
   const scoreAddOn = addons.includes("credit_score") || body?.scoreAddOn === true;
   const expeditedAddOn = addons.includes("expedited");
-  const pricing = getScreeningPricing({ screeningTier, addons, currency: "CAD" });
-  return { screeningTier, addons, serviceLevel, scoreAddOn, expeditedAddOn, pricing };
+  const paymentResponsibility = resolvePaymentResponsibility(body?.paymentResponsibility || body?.payer);
+  const pricing = getScreeningPricing({
+    screeningTier,
+    packageKey: screeningPackage,
+    addons,
+    currency: "CAD",
+  });
+  const packagePricing = calculateScreeningPrice({
+    packageKey: screeningPackage,
+    addons: v2Addons,
+    currency: "CAD",
+  });
+  return {
+    screeningTier,
+    screeningPackage,
+    addons,
+    v2Addons,
+    serviceLevel,
+    scoreAddOn,
+    expeditedAddOn,
+    paymentResponsibility,
+    pricing: {
+      ...pricing,
+      packageAmountCents: packagePricing.packageAmountCents,
+      addonAmountCents: packagePricing.addonAmountCents,
+    },
+  };
 }
 
 function buildQuotePayload(pricing: any) {
@@ -1063,6 +1094,61 @@ function buildQuotePayload(pricing: any) {
       eligible: true,
     },
   };
+}
+
+function buildScreeningLineItems(params: {
+  currency: string;
+  screeningPackage: string;
+  addons: string[];
+  pricing: any;
+}) {
+  const currency = String(params.currency || "cad").toLowerCase();
+  const packageConfig =
+    SCREENING_PACKAGES_V2[params.screeningPackage as keyof typeof SCREENING_PACKAGES_V2] ||
+    SCREENING_PACKAGES_V2.basic;
+  const items: any[] = [
+    {
+      price_data: {
+        currency,
+        product_data: { name: `${packageConfig.label} screening package` },
+        unit_amount: params.pricing.baseAmountCents,
+      },
+      quantity: 1,
+    },
+  ];
+  for (const addonKey of params.addons) {
+    if (!isScreeningAddonKey(addonKey)) continue;
+    const addon = SCREENING_ADDONS_V2[addonKey];
+    items.push({
+      price_data: {
+        currency,
+        product_data: { name: addon.label },
+        unit_amount: addon.price,
+      },
+      quantity: 1,
+    });
+  }
+  if (params.pricing.scoreAddOnCents) {
+    items.push({
+      price_data: {
+        currency,
+        product_data: { name: "Credit score add-on" },
+        unit_amount: params.pricing.scoreAddOnCents,
+      },
+      quantity: 1,
+    });
+  }
+  if (params.pricing.expeditedAddOnCents) {
+    items.push({
+      price_data: {
+        currency,
+        product_data: { name: "Expedited processing add-on" },
+        unit_amount: params.pricing.expeditedAddOnCents,
+      },
+      quantity: 1,
+    });
+  }
+  return items;
 }
 
 function isTransUnionReferralMode() {
@@ -2160,8 +2246,17 @@ router.post(
           },
         });
       }
-      const { screeningTier, addons, serviceLevel, scoreAddOn, expeditedAddOn, pricing } =
-        resolvePricingInput(body);
+      const {
+        screeningTier,
+        screeningPackage,
+        addons,
+        v2Addons,
+        serviceLevel,
+        scoreAddOn,
+        expeditedAddOn,
+        paymentResponsibility,
+        pricing,
+      } = resolvePricingInput(body);
       const rawReturnTo = String(body?.returnTo || "/dashboard");
       const returnTo = rawReturnTo.startsWith("/") ? rawReturnTo : "/dashboard";
       const frontendOrigin = resolveFrontendOrigin(req);
@@ -2213,8 +2308,11 @@ router.post(
           finalizedAt: null,
           lastStripeEventId: null,
           amountTotalCents: 0,
+          screeningPackage,
           screeningTier,
-          addons,
+          addons: v2Addons,
+          legacyAddons: addons.filter((value) => value === "credit_score" || value === "expedited"),
+          paymentResponsibility,
           scoreAddOn: false,
           scoreAddOnCents: 0,
           expeditedAddOn: false,
@@ -2560,8 +2658,17 @@ router.post(
         logMockProviderCheckout({ name: "checkout", seedKey: applicationId });
       }
 
-      const { screeningTier, addons, serviceLevel, scoreAddOn, expeditedAddOn, pricing } =
-        resolvePricingInput(body);
+      const {
+        screeningTier,
+        screeningPackage,
+        addons,
+        v2Addons,
+        serviceLevel,
+        scoreAddOn,
+        expeditedAddOn,
+        paymentResponsibility,
+        pricing,
+      } = resolvePricingInput(body);
 
       if (isTransUnionReferralMode()) {
         const now = Date.now();
@@ -2594,8 +2701,11 @@ router.post(
           finalizedAt: null,
           lastStripeEventId: null,
           amountTotalCents: 0,
+          screeningPackage,
           screeningTier,
-          addons,
+          addons: v2Addons,
+          legacyAddons: addons.filter((value) => value === "credit_score" || value === "expedited"),
+          paymentResponsibility,
           scoreAddOn: false,
           scoreAddOnCents: 0,
           expeditedAddOn: false,
@@ -2652,6 +2762,9 @@ router.post(
                 eligibility: "eligible",
                 paymentStatus: "checkout_created",
                 fulfillmentStatus: "ordered",
+                package: screeningPackage,
+                addons: v2Addons,
+                paymentResponsibility,
                 checkoutSessionId: orderId,
                 checkoutCreatedAt: now,
                 amount: 0,
@@ -2697,6 +2810,9 @@ router.post(
                         eligibility: "eligible",
                         paymentStatus: "checkout_created",
                         fulfillmentStatus: "ordered",
+                        package: screeningPackage,
+                        addons: v2Addons,
+                        paymentResponsibility,
                         checkoutSessionId: orderId,
                         checkoutCreatedAt: now,
                         amount: 0,
@@ -2778,8 +2894,11 @@ router.post(
         finalizedAt: null,
         lastStripeEventId: null,
         amountTotalCents: pricing.totalAmountCents,
+        screeningPackage,
         screeningTier,
-        addons,
+        addons: v2Addons,
+        legacyAddons: addons.filter((value) => value === "credit_score" || value === "expedited"),
+        paymentResponsibility,
         scoreAddOn,
         scoreAddOnCents: pricing.scoreAddOnCents,
         expeditedAddOn,
@@ -2812,56 +2931,12 @@ router.post(
       await orderRef.set(orderPayload, { merge: true });
 
       const currency = String(orderPayload.currency || "CAD").toLowerCase();
-      const lineItems: any[] = [
-        {
-          price_data: {
-            currency,
-            product_data: { name: "Rental screening" },
-            unit_amount: pricing.baseAmountCents,
-          },
-          quantity: 1,
-        },
-      ];
-      if (pricing.verifiedAddOnCents) {
-        lineItems.push({
-          price_data: {
-            currency,
-            product_data: { name: "Verified screening add-on" },
-            unit_amount: pricing.verifiedAddOnCents,
-          },
-          quantity: 1,
-        });
-      }
-      if (pricing.aiAddOnCents) {
-        lineItems.push({
-          price_data: {
-            currency,
-            product_data: { name: "AI verification add-on" },
-            unit_amount: pricing.aiAddOnCents,
-          },
-          quantity: 1,
-        });
-      }
-      if (pricing.scoreAddOnCents) {
-        lineItems.push({
-          price_data: {
-            currency,
-            product_data: { name: "Credit score add-on" },
-            unit_amount: pricing.scoreAddOnCents,
-          },
-          quantity: 1,
-        });
-      }
-      if (pricing.expeditedAddOnCents) {
-        lineItems.push({
-          price_data: {
-            currency,
-            product_data: { name: "Expedited processing add-on" },
-            unit_amount: pricing.expeditedAddOnCents,
-          },
-          quantity: 1,
-        });
-      }
+      const lineItems = buildScreeningLineItems({
+        currency,
+        screeningPackage,
+        addons: v2Addons,
+        pricing,
+      });
 
       const session = await stripe.checkout.sessions.create({
         mode: "payment",
@@ -2874,9 +2949,11 @@ router.post(
           applicationId,
           landlordId,
           serviceLevel,
+          screeningPackage,
+          paymentResponsibility,
           scoreAddOn: String(scoreAddOn),
           screeningTier,
-          addons: addons.join(","),
+          addons: v2Addons.join(","),
           totalAmountCents: String(pricing.totalAmountCents),
         },
         payment_intent_data: {
@@ -2885,9 +2962,11 @@ router.post(
             applicationId,
             landlordId,
             serviceLevel,
+            screeningPackage,
+            paymentResponsibility,
             scoreAddOn: String(scoreAddOn),
             screeningTier,
-            addons: addons.join(","),
+            addons: v2Addons.join(","),
             totalAmountCents: String(pricing.totalAmountCents),
           },
         },
@@ -2912,6 +2991,9 @@ router.post(
               eligibility: "eligible",
               paymentStatus: "checkout_created",
               fulfillmentStatus: "ready",
+              package: screeningPackage,
+              addons: v2Addons,
+              paymentResponsibility,
               checkoutSessionId: session.id,
               checkoutCreatedAt: now,
               amount: pricing.totalAmountCents,
@@ -2977,6 +3059,9 @@ router.post(
                       eligibility: "eligible",
                       paymentStatus: "checkout_created",
                       fulfillmentStatus: "ready",
+                      package: screeningPackage,
+                      addons: v2Addons,
+                      paymentResponsibility,
                       checkoutSessionId: session.id,
                       checkoutCreatedAt: now,
                       amount: pricing.totalAmountCents,

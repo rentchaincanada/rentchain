@@ -24,10 +24,12 @@ export interface NormalizedScreeningEvent {
 export interface BureauQuoteInput {
   applicationId: string;
   screeningTier?: "basic" | "verify" | "verify_ai";
+  screeningPackage?: "basic" | "standard" | "premium";
   addons?: string[];
   totalAmount?: number;
   serviceLevel?: "SELF_SERVE" | "VERIFIED" | "VERIFIED_AI";
   scoreAddOn?: boolean;
+  paymentResponsibility?: "landlord" | "tenant";
 }
 
 export interface BureauQuoteResult {
@@ -42,10 +44,12 @@ export interface BureauQuoteResult {
 export interface BureauCheckoutInput {
   applicationId: string;
   screeningTier?: "basic" | "verify" | "verify_ai";
+  screeningPackage?: "basic" | "standard" | "premium";
   addons?: string[];
   totalAmount?: number;
   scoreAddOn: boolean;
   serviceLevel: "SELF_SERVE" | "VERIFIED" | "VERIFIED_AI";
+  paymentResponsibility?: "landlord" | "tenant";
   consent?: {
     given: boolean;
     timestamp: string;

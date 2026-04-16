@@ -28,6 +28,9 @@ export type ScreeningMonetizationStateV1 = {
   quoteStatus: ScreeningMonetizationQuoteStatus;
   paymentStatus: ScreeningMonetizationPaymentStatus;
   fulfillmentStatus: ScreeningMonetizationFulfillmentStatus;
+  package?: string | null;
+  addons?: string[] | null;
+  paymentResponsibility?: string | null;
   quoteId?: string | null;
   quoteGeneratedAt?: string | null;
   quoteExpiresAt?: string | null;
@@ -92,6 +95,19 @@ function toMillis(value: unknown): number | null {
 function normalizeCurrency(value: unknown) {
   const next = asString(value, 8).toUpperCase();
   return /^[A-Z]{3}$/.test(next) ? next : null;
+}
+
+function normalizeStringList(value: unknown) {
+  if (!Array.isArray(value)) return [] as string[];
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  for (const entry of value) {
+    const next = asString(entry, 120).toLowerCase();
+    if (!next || seen.has(next)) continue;
+    seen.add(next);
+    normalized.push(next);
+  }
+  return normalized;
 }
 
 function normalizeEligibility(value: unknown): ScreeningMonetizationEligibility {
@@ -240,6 +256,9 @@ export function normalizeScreeningMonetizationState(input: {
     quoteStatus,
     paymentStatus,
     fulfillmentStatus,
+    package: asOptionalString(existing.package, 120),
+    addons: normalizeStringList(existing.addons),
+    paymentResponsibility: asOptionalString(existing.paymentResponsibility, 40),
     quoteId: asOptionalString(existing.quoteId, 200),
     quoteGeneratedAt,
     quoteExpiresAt,
@@ -319,6 +338,9 @@ export function buildScreeningMonetizationPatch(input: {
   quoteStatus?: ScreeningMonetizationQuoteStatus;
   paymentStatus?: ScreeningMonetizationPaymentStatus;
   fulfillmentStatus?: ScreeningMonetizationFulfillmentStatus;
+  package?: string | null;
+  addons?: string[] | null;
+  paymentResponsibility?: string | null;
   quoteId?: string | null;
   quoteGeneratedAt?: string | number | Date | null;
   quoteExpiresAt?: string | number | Date | null;
@@ -348,6 +370,12 @@ export function buildScreeningMonetizationPatch(input: {
     quoteStatus: input.quoteStatus || current.quoteStatus,
     paymentStatus: input.paymentStatus || current.paymentStatus,
     fulfillmentStatus: input.fulfillmentStatus || current.fulfillmentStatus,
+    package: input.package === undefined ? current.package || null : asOptionalString(input.package, 120),
+    addons: input.addons === undefined ? current.addons || [] : normalizeStringList(input.addons),
+    paymentResponsibility:
+      input.paymentResponsibility === undefined
+        ? current.paymentResponsibility || null
+        : asOptionalString(input.paymentResponsibility, 40),
     quoteId: input.quoteId === undefined ? current.quoteId || null : input.quoteId,
     quoteGeneratedAt,
     quoteExpiresAt: quoteExpiresAt || null,

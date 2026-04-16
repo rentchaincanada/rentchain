@@ -15,6 +15,13 @@ import { NUDGE_COPY } from "@/features/upgradeNudges/nudgeTypes";
 import { UpgradeNudgeInlineCard } from "@/features/upgradeNudges/UpgradeNudgeInlineCard";
 import { openUpgradeFlow } from "@/billing/openUpgradeFlow";
 import { logTelemetryEvent } from "@/api/telemetryApi";
+import {
+  calculateScreeningDisplayPrice,
+  formatPriceCents,
+  getScreeningPackageOption,
+  SCREENING_ADDON_OPTIONS,
+  SCREENING_PACKAGE_OPTIONS,
+} from "../../components/screening/screeningMonetizationOptions";
 
 type CheckoutResponse = {
   ok: boolean;
@@ -127,9 +134,36 @@ const ScreeningStartPage: React.FC = () => {
   const returnTo = rawReturnTo.startsWith("/") ? rawReturnTo : "/dashboard";
   const successPath = searchParams.get("successPath") || "/screening/success";
   const cancelPath = searchParams.get("cancelPath") || "/screening/cancel";
+  const configureMode = searchParams.get("configure") === "1";
+  const requestedPackage =
+    searchParams.get("package") === "standard" || searchParams.get("package") === "premium"
+      ? (searchParams.get("package") as "standard" | "premium")
+      : "basic";
+  const requestedAddons = (searchParams.get("addons") || "")
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+  const requestedPaymentResponsibility =
+    searchParams.get("payer") === "tenant" || searchParams.get("paymentResponsibility") === "tenant"
+      ? "tenant"
+      : "landlord";
+  const [screeningPackage, setScreeningPackage] = useState<"basic" | "standard" | "premium">(requestedPackage);
+  const [addons, setAddons] = useState<string[]>(requestedAddons);
+  const [paymentResponsibility, setPaymentResponsibility] = useState<"landlord" | "tenant">(
+    requestedPaymentResponsibility
+  );
+  const packageOption = getScreeningPackageOption(screeningPackage);
+  const totalPriceCents = calculateScreeningDisplayPrice({
+    packageKey: screeningPackage,
+    addons: addons as Array<"income_verification" | "fraud_detection" | "enhanced_background">,
+  });
 
   useEffect(() => {
     if (startedRef.current) return;
+    if (configureMode) {
+      setLoading(false);
+      return;
+    }
     startedRef.current = true;
 
     if (!applicationId) {
@@ -149,7 +183,15 @@ const ScreeningStartPage: React.FC = () => {
           `/rental-applications/${encodeURIComponent(applicationId)}/screening/checkout`,
           {
             method: "POST",
-            body: { successPath, cancelPath, returnTo },
+            body: {
+              successPath,
+              cancelPath,
+              returnTo,
+              screeningTier: packageOption.legacyTier,
+              screeningPackage: packageOption.key,
+              addons,
+              paymentResponsibility,
+            },
             allowStatuses: [400, 401, 403, 404, 409, 500],
           }
         );
@@ -181,7 +223,57 @@ const ScreeningStartPage: React.FC = () => {
     };
 
     void startCheckout();
-  }, [applicationId, cancelPath, returnTo, successPath]);
+  }, [applicationId, cancelPath, configureMode, returnTo, successPath, packageOption.key, packageOption.legacyTier, addons, paymentResponsibility]);
+
+  const startCheckout = async () => {
+    setLoading(true);
+    setError(null);
+    setDetail(null);
+    setReason(null);
+    setErrorCode(null);
+    try {
+      const res = await apiFetch<CheckoutResponse>(
+        `/rental-applications/${encodeURIComponent(applicationId)}/screening/checkout`,
+        {
+          method: "POST",
+          body: {
+            successPath,
+            cancelPath,
+            returnTo,
+            screeningTier: packageOption.legacyTier,
+            screeningPackage: packageOption.key,
+            addons,
+            paymentResponsibility,
+          },
+          allowStatuses: [400, 401, 403, 404, 409, 500],
+        }
+      );
+
+      if (res?.ok && res.checkoutUrl) {
+        window.location.assign(res.checkoutUrl);
+        return;
+      }
+
+      const normalizedError = String(
+        res?.errorCode || res?.screeningMonetizationSummary?.blockingReason || res?.error || ""
+      ).toLowerCase();
+      setErrorCode(normalizedError);
+      setError(mapErrorMessage(res?.errorCode || res?.error || res?.screeningMonetizationSummary?.blockingReason));
+      if (normalizedError === "not_eligible") {
+        setReason(mapReasonCopy(res?.reasonCode) || "Eligibility requirements aren't complete yet.");
+      }
+      if (import.meta.env.DEV && res?.detail) {
+        setDetail(String(res.detail));
+      }
+    } catch (err: any) {
+      setError("Unable to start screening checkout. Please try again.");
+      if (import.meta.env.DEV && err?.message) {
+        setDetail(String(err.message));
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     const roleLower = String(user?.actorRole || user?.role || "").toLowerCase();
@@ -232,14 +324,136 @@ const ScreeningStartPage: React.FC = () => {
               We’re redirecting you to Stripe Checkout to complete payment.
             </div>
           </div>
-        ) : (
+      ) : (
           <div style={{ display: "grid", gap: spacing.sm }}>
+            {configureMode && !error ? (
+              <div style={{ display: "grid", gap: spacing.sm }}>
+                <h1 style={{ margin: 0, fontSize: "1.3rem", fontWeight: 700 }}>Choose a screening package</h1>
+                <div style={{ color: text.muted, fontSize: "0.95rem" }}>
+                  Select the package, optional add-ons, and who pays before starting checkout.
+                </div>
+                <div style={{ display: "grid", gap: 8 }}>
+                  {SCREENING_PACKAGE_OPTIONS.map((option) => (
+                    <label
+                      key={option.key}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 8,
+                        padding: 12,
+                        borderRadius: 12,
+                        border: `1px solid ${
+                          screeningPackage === option.key ? "rgba(37,99,235,0.6)" : "rgba(15,23,42,0.12)"
+                        }`,
+                        background: screeningPackage === option.key ? "rgba(37,99,235,0.06)" : "#fff",
+                      }}
+                    >
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <input
+                          type="radio"
+                          checked={screeningPackage === option.key}
+                          onChange={() => setScreeningPackage(option.key)}
+                        />
+                        <div style={{ display: "grid", gap: 4 }}>
+                          <strong>{option.label}</strong>
+                          <span style={{ color: text.muted, fontSize: "0.9rem" }}>{option.description}</span>
+                        </div>
+                      </div>
+                      <strong>{formatPriceCents(option.priceCents)}</strong>
+                    </label>
+                  ))}
+                </div>
+                <div style={{ display: "grid", gap: 8 }}>
+                  {SCREENING_ADDON_OPTIONS.map((option) => {
+                    const checked = addons.includes(option.key);
+                    return (
+                      <label
+                        key={option.key}
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          gap: 8,
+                          padding: 12,
+                          borderRadius: 12,
+                          border: `1px solid ${checked ? "rgba(37,99,235,0.45)" : "rgba(15,23,42,0.12)"}`,
+                        }}
+                      >
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() =>
+                              setAddons((current) =>
+                                checked ? current.filter((item) => item !== option.key) : [...current, option.key]
+                              )
+                            }
+                          />
+                          <div style={{ display: "grid", gap: 4 }}>
+                            <strong>{option.label}</strong>
+                            <span style={{ color: text.muted, fontSize: "0.9rem" }}>{option.description}</span>
+                          </div>
+                        </div>
+                        <strong>{formatPriceCents(option.priceCents)}</strong>
+                      </label>
+                    );
+                  })}
+                </div>
+                <div style={{ display: "grid", gap: 8 }}>
+                  {[
+                    { key: "landlord", label: "Landlord pays" },
+                    { key: "tenant", label: "Tenant pays" },
+                  ].map((option) => (
+                    <label
+                      key={option.key}
+                      style={{
+                        display: "flex",
+                        gap: 8,
+                        padding: 12,
+                        borderRadius: 12,
+                        border: `1px solid ${
+                          paymentResponsibility === option.key ? "rgba(37,99,235,0.45)" : "rgba(15,23,42,0.12)"
+                        }`,
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        checked={paymentResponsibility === option.key}
+                        onChange={() => setPaymentResponsibility(option.key as "landlord" | "tenant")}
+                      />
+                      <strong>{option.label}</strong>
+                    </label>
+                  ))}
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    padding: 12,
+                    borderRadius: 12,
+                    background: "rgba(15,23,42,0.04)",
+                  }}
+                >
+                  <span>Total</span>
+                  <strong>{formatPriceCents(totalPriceCents)}</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                  <Button onClick={() => void startCheckout()} disabled={loading}>
+                    {loading ? "Starting checkout…" : "Continue to checkout"}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+            {!configureMode || error ? (
             <h1 style={{ margin: 0, fontSize: "1.3rem", fontWeight: 700 }}>
               {mapErrorTitle(errorCode)}
             </h1>
+            ) : null}
+            {!configureMode || error ? (
             <div style={{ color: text.muted, fontSize: "0.95rem" }}>
               {error || "Something went wrong. Please try again."}
             </div>
+            ) : null}
             {errorCode === "transunion_not_connected" ? (
               <div
                 style={{

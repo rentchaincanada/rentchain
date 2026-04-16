@@ -15,7 +15,9 @@ export type BillingRecord = {
   receiptUrl?: string | null;
   createdAt: string;
   screeningTier?: "basic" | "verify" | "verify_ai";
+  screeningPackage?: "basic" | "standard" | "premium";
   addons?: string[];
+  paymentResponsibility?: "landlord" | "tenant";
 };
 
 export async function fetchBillingHistory(): Promise<BillingRecord[]> {

@@ -28,6 +28,13 @@ vi.mock("../../context/UpgradeContext", () => ({
 
 const defaultProperty = { id: "prop-1", name: "Harbour House" };
 
+function clickOptionCard(text: string) {
+  const element = screen.getByText(text);
+  const label = element.closest("label");
+  if (!label) throw new Error(`Missing option card for ${text}`);
+  fireEvent.click(label);
+}
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
@@ -84,6 +91,11 @@ describe("SendScreeningInviteModal", () => {
     await screen.findByRole("option", { name: "Harbour House" });
     fireEvent.change(screen.getByDisplayValue("Select property"), { target: { value: "prop-1" } });
     fireEvent.change(screen.getByLabelText("Tenant email"), { target: { value: "tenant@example.com" } });
+    clickOptionCard("Premium");
+    clickOptionCard("Income verification");
+    clickOptionCard("Tenant pays");
+
+    expect(screen.getByText("$46.98")).toBeInTheDocument();
 
     const button = screen.getByRole("button", { name: "Send invite" });
     fireEvent.click(button);
@@ -94,6 +106,14 @@ describe("SendScreeningInviteModal", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Starting..." }));
     expect(createScreeningOrder).toHaveBeenCalledTimes(1);
+    expect(createScreeningOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        screeningTier: "verify_ai",
+        screeningPackage: "premium",
+        addons: ["income_verification"],
+        paymentResponsibility: "tenant",
+      })
+    );
 
     resolvePromise?.({ ok: false, errorCode: "SCREENING_CHECKOUT_ALREADY_EXISTS" });
     await waitFor(() => {

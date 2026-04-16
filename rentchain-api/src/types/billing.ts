@@ -7,7 +7,9 @@ export interface BillingRecord {
   kind: "screening_purchase";
   screeningRequestId?: string;
   screeningTier?: "basic" | "verify" | "verify_ai";
+  screeningPackage?: "basic" | "standard" | "premium";
   addons?: string[];
+  paymentResponsibility?: "landlord" | "tenant";
   stripeSessionId: string;
   stripePaymentIntentId?: string | null;
   amountCents: number;

@@ -433,10 +433,12 @@ export async function fetchScreeningQuote(
   id: string,
   params?: {
     screeningTier?: "basic" | "verify" | "verify_ai";
+    screeningPackage?: "basic" | "standard" | "premium";
     addons?: string[];
     totalAmount?: number;
     serviceLevel?: "SELF_SERVE" | "VERIFIED" | "VERIFIED_AI";
     scoreAddOn?: boolean;
+    paymentResponsibility?: "landlord" | "tenant";
   }
 ): Promise<{
   ok: boolean;
@@ -473,10 +475,12 @@ export async function fetchScreeningQuote(
       const shadowResult = await adapter.quoteScreening({
         applicationId: id,
         screeningTier: params?.screeningTier,
+        screeningPackage: params?.screeningPackage,
         addons: params?.addons,
         totalAmount: params?.totalAmount,
         serviceLevel: params?.serviceLevel,
         scoreAddOn: params?.scoreAddOn,
+        paymentResponsibility: params?.paymentResponsibility,
       });
       return {
         result: shadowResult,
@@ -555,10 +559,12 @@ export async function runScreening(
   id: string,
   params: {
     screeningTier?: "basic" | "verify" | "verify_ai";
+    screeningPackage?: "basic" | "standard" | "premium";
     addons?: string[];
     totalAmount?: number;
     scoreAddOn: boolean;
     serviceLevel: "SELF_SERVE" | "VERIFIED" | "VERIFIED_AI";
+    paymentResponsibility?: "landlord" | "tenant";
   }
 ): Promise<{ ok: boolean; data?: ScreeningRunResult; error?: string; detail?: string }> {
   const res: any = await apiFetch(`/rental-applications/${encodeURIComponent(id)}/screening/run`, {
@@ -576,10 +582,12 @@ export async function createScreeningOrder(params: {
   tenantEmail?: string | null;
   tenantName?: string | null;
   screeningTier?: "basic" | "verify" | "verify_ai";
+  screeningPackage?: "basic" | "standard" | "premium";
   addons?: string[];
   totalAmount?: number;
   scoreAddOn: boolean;
   serviceLevel: "SELF_SERVE" | "VERIFIED" | "VERIFIED_AI";
+  paymentResponsibility?: "landlord" | "tenant";
   consent?: {
     given: boolean;
     timestamp: string;
@@ -629,10 +637,12 @@ export async function createScreeningOrder(params: {
       const shadowResult = await adapter.createCheckout({
         applicationId: appId,
         screeningTier: params.screeningTier,
+        screeningPackage: params.screeningPackage,
         addons: params.addons,
         totalAmount: params.totalAmount,
         scoreAddOn: params.scoreAddOn,
         serviceLevel: params.serviceLevel,
+        paymentResponsibility: params.paymentResponsibility,
         consent: params.consent,
       });
       return {
@@ -711,10 +721,12 @@ export async function createScreeningCheckout(
   id: string,
   params: {
     screeningTier?: "basic" | "verify" | "verify_ai";
+    screeningPackage?: "basic" | "standard" | "premium";
     addons?: string[];
     totalAmount?: number;
     scoreAddOn: boolean;
     serviceLevel: "SELF_SERVE" | "VERIFIED" | "VERIFIED_AI";
+    paymentResponsibility?: "landlord" | "tenant";
     consent?: {
       given: boolean;
       timestamp: string;

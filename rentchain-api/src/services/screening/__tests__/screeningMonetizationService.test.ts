@@ -86,6 +86,8 @@ describe("screeningMonetizationService", () => {
         quoteGeneratedAt: "2026-01-01T00:00:00.000Z",
         amount: 4900,
         currency: "CAD",
+        package: "standard",
+        addons: ["income_verification"],
       },
       paymentStatus: "checkout_created",
       checkoutSessionId: "sess_1",
@@ -94,5 +96,7 @@ describe("screeningMonetizationService", () => {
     expect(patch.quoteId).toBe("quote_1");
     expect(patch.paymentStatus).toBe("checkout_created");
     expect(patch.checkoutSessionId).toBe("sess_1");
+    expect(patch.package).toBe("standard");
+    expect(patch.addons).toEqual(["income_verification"]);
   });
 });
