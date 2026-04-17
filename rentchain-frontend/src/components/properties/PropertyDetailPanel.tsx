@@ -27,9 +27,8 @@ import { setOnboardingStep } from "../../api/onboardingApi";
 import "../../styles/propertiesMobile.css";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { useEntitlements } from "@/hooks/useEntitlements";
-import { useUpgrade } from "@/context/UpgradeContext";
 import { upgradeStarterButtonStyle } from "../../lib/upgradeButtonStyles";
-import { dispatchUpgradePrompt } from "@/lib/upgradePrompt";
+import { dispatchUpgradePrompt, resolveRequiredPlanLabel } from "@/lib/upgradePrompt";
 import { RiskScoreBadge } from "@/components/leases/RiskScoreBadge";
 import { PropertyCredibilitySummaryCard } from "@/components/properties/PropertyCredibilitySummaryCard";
 import { PropertyRegistryStatusCard } from "@/components/properties/PropertyRegistryStatusCard";
@@ -101,9 +100,14 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   const { showToast } = useToast();
   const { caps, features, loading: capsLoading } = useCapabilities();
   const entitlements = useEntitlements();
-  const { openUpgrade } = useUpgrade();
   const unitsEnabled = features?.unitsTable !== false;
   const currentPlan = entitlements.plan || "free";
+  const applicationsRequiredPlanLabel = resolveRequiredPlanLabel("applications", currentPlan) || "Starter";
+  const unitsRequiredPlanLabel = resolveRequiredPlanLabel("units", currentPlan) || "Starter";
+  const propertyUpgradeRedirect =
+    typeof window !== "undefined"
+      ? `${window.location.pathname}${window.location.search}`
+      : "/properties";
   const applicationsEnabled =
     entitlements.hasCapability("applications") ||
     currentPlan === "starter" ||
@@ -152,6 +156,30 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   const [submissionAssistantOpen, setSubmissionAssistantOpen] = useState(false);
   const unitRowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
   const unitCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  const promptApplicationsUpgrade = useCallback(
+    (source: string, currentPlanOverride?: string | null) => {
+      dispatchUpgradePrompt({
+        featureKey: "applications",
+        currentPlan: currentPlanOverride || caps?.plan || currentPlan,
+        source,
+        redirectTo: propertyUpgradeRedirect,
+      });
+    },
+    [caps?.plan, currentPlan, propertyUpgradeRedirect]
+  );
+
+  const promptUnitsUpgrade = useCallback(
+    (source: string) => {
+      dispatchUpgradePrompt({
+        featureKey: "units",
+        currentPlan: caps?.plan || currentPlan,
+        source,
+        redirectTo: propertyUpgradeRedirect,
+      });
+    },
+    [caps?.plan, currentPlan, propertyUpgradeRedirect]
+  );
 
   const readFileText = useCallback((file: File) => {
     return new Promise<string>((resolve, reject) => {
@@ -238,21 +266,12 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   const handleSendApplication = useCallback(
     (u: any) => {
       if (!applicationsEnabled) {
-        const redirectTo =
-          typeof window !== "undefined"
-            ? `${window.location.pathname}${window.location.search}`
-            : "/properties";
-        dispatchUpgradePrompt({
-          featureKey: "applications",
-          currentPlan: caps?.plan,
-          source: "property_detail_panel",
-          redirectTo,
-        });
+        promptApplicationsUpgrade("property_detail_panel");
         return;
       }
       setSendAppUnit(u);
     },
-    [applicationsEnabled, caps?.plan]
+    [applicationsEnabled, promptApplicationsUpgrade]
   );
 
   const openEditPropertyModal = useCallback(() => {
@@ -274,7 +293,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
 
   const sendApplicationActionLabel = applicationsEnabled
     ? "Send application"
-    : "Upgrade to send application";
+    : `Upgrade to ${applicationsRequiredPlanLabel} to send application`;
   const sendApplicationActionStyle = applicationsEnabled
     ? {
         padding: "6px 10px",
@@ -296,22 +315,13 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
     if (!propertyId) return;
     sendApplicationOpenedRef.current = true;
     if (!applicationsEnabled) {
-      const redirectTo =
-        typeof window !== "undefined"
-          ? `${window.location.pathname}${window.location.search}`
-          : "/properties";
-      dispatchUpgradePrompt({
-        featureKey: "applications",
-        currentPlan: caps?.plan,
-        source: "property_detail_panel",
-        redirectTo,
-      });
+      promptApplicationsUpgrade("property_detail_panel");
       onSendApplicationOpened?.();
       return;
     }
     setSendAppUnit({ id: null });
     onSendApplicationOpened?.();
-  }, [openSendApplication, applicationsEnabled, caps?.plan, onSendApplicationOpened, propertyId]);
+  }, [openSendApplication, applicationsEnabled, onSendApplicationOpened, promptApplicationsUpgrade, propertyId]);
 
   useEffect(() => {
     if (!openEditProperty) return;
@@ -934,17 +944,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
               <button
                 type="button"
                 className="rc-units-action"
-                onClick={() =>
-                  openUpgrade({
-                    reason: "screening",
-                    plan: "Screening",
-                    copy: {
-                      title: "Upgrade to manage your rentals",
-                      body: "RentChain Screening is free. Rental management starts on Starter.",
-                    },
-                    ctaLabel: "Upgrade to Starter",
-                  })
-                }
+                onClick={() => promptUnitsUpgrade("property_detail_panel_units")}
                 style={{
                   padding: "6px 10px",
                   borderRadius: 10,
@@ -1192,24 +1192,14 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
         >
           <div style={{ fontWeight: 700, marginBottom: 6 }}>Upgrade to manage your rentals</div>
           <div style={{ fontSize: "0.9rem", color: "#475569", marginBottom: 10 }}>
-            RentChain Screening is free. Rental management starts on Starter.
+            RentChain Screening is free. Rental management starts on {unitsRequiredPlanLabel}.
           </div>
           <button
             type="button"
-            onClick={() =>
-              openUpgrade({
-                reason: "screening",
-                plan: "Screening",
-                copy: {
-                  title: "Upgrade to manage your rentals",
-                  body: "RentChain Screening is free. Rental management starts on Starter.",
-                },
-                ctaLabel: "Upgrade to Starter",
-              })
-            }
+            onClick={() => promptUnitsUpgrade("property_detail_panel_upgrade_card")}
             style={upgradeStarterButtonStyle}
           >
-            Upgrade to Starter
+            Upgrade to {unitsRequiredPlanLabel}
           </button>
         </div>
       ) : (
@@ -1659,18 +1649,9 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
           .filter((u: any) => u.id)}
         initialUnitId={(sendAppUnit as any)?.id ? String((sendAppUnit as any).id) : null}
         allowGeneration={applicationsEnabled}
-        lockedMessage="Starter unlocks tenant invites and secure application links for each unit."
+        lockedMessage={`${applicationsRequiredPlanLabel} unlocks tenant invites and secure application links for each unit.`}
         onUpgradeRequired={() => {
-          const redirectTo =
-            typeof window !== "undefined"
-              ? `${window.location.pathname}${window.location.search}`
-              : "/properties";
-          dispatchUpgradePrompt({
-            featureKey: "applications",
-            currentPlan: caps?.plan,
-            source: "property_detail_panel",
-            redirectTo,
-          });
+          promptApplicationsUpgrade("property_detail_panel");
           setSendAppUnit(null);
         }}
         unit={sendAppUnit}

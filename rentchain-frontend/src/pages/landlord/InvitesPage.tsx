@@ -8,7 +8,7 @@ import {
 } from "../../api/tenantInvites";
 import { colors, spacing, text } from "../../styles/tokens";
 import { useCapabilities } from "../../hooks/useCapabilities";
-import { dispatchUpgradePrompt } from "../../lib/upgradePrompt";
+import { dispatchUpgradePrompt, resolveRequiredPlanLabel } from "../../lib/upgradePrompt";
 import { useLanguage } from "../../context/LanguageContext";
 
 function deriveInviteUrl(token: string) {
@@ -40,6 +40,12 @@ export default function InvitesPage() {
   const { features } = useCapabilities();
   const { locale } = useLanguage();
   const canInvite = features?.tenant_invites !== false;
+  const inviteRequiredPlanLabel = resolveRequiredPlanLabel("tenant_invites") || "Starter";
+  const inviteUpgradeMessage = `Upgrade to ${inviteRequiredPlanLabel} to send tenant invites.`;
+  const inviteUpgradeRedirect =
+    typeof window !== "undefined"
+      ? `${window.location.pathname}${window.location.search}`
+      : "/landlord/invites";
   const copy = useMemo(
     () =>
       locale === "fr"
@@ -132,9 +138,18 @@ export default function InvitesPage() {
     return !creating && canInvite && propertyId && unitId && tenantEmail;
   }, [creating, canInvite, propertyId, unitId, tenantEmail]);
 
+  const promptInviteUpgrade = (source: string, currentPlan?: string | null) => {
+    dispatchUpgradePrompt({
+      featureKey: "tenant_invites",
+      currentPlan: currentPlan || undefined,
+      source,
+      redirectTo: inviteUpgradeRedirect,
+    });
+  };
+
   async function handleCreate() {
     if (!canInvite) {
-      dispatchUpgradePrompt({ featureKey: "tenant_invites", source: "landlord_invites_page" });
+      promptInviteUpgrade("landlord_invites_page");
       return;
     }
     if (!canCreate) return;
@@ -156,12 +171,8 @@ export default function InvitesPage() {
           plan: res?.plan,
         });
         if (errorCode === "upgrade_required" && capability === "tenant_invites") {
-          dispatchUpgradePrompt({
-            featureKey: "tenant_invites",
-            currentPlan: String(res?.plan || "free"),
-            source: "landlord_invites_page_api_403",
-          });
-          setCreateError("Upgrade to Starter to send tenant invites.");
+          promptInviteUpgrade("landlord_invites_page_api_403", String(res?.plan || "free"));
+          setCreateError(inviteUpgradeMessage);
           if (typeof (window as any)?.toast?.warning === "function") {
             (window as any).toast.warning("Tenant invites require an upgrade");
           }
@@ -195,11 +206,8 @@ export default function InvitesPage() {
       const msg = String(e?.message || "Failed to create invite");
       console.debug("[invites-page] request error", { message: msg, raw: e });
       if (msg.toLowerCase().includes("upgrade_required")) {
-        dispatchUpgradePrompt({
-          featureKey: "tenant_invites",
-          source: "landlord_invites_page_api_catch",
-        });
-        setCreateError("Upgrade to Starter to send tenant invites.");
+        promptInviteUpgrade("landlord_invites_page_api_catch");
+        setCreateError(inviteUpgradeMessage);
         if (typeof (window as any)?.toast?.warning === "function") {
           (window as any).toast.warning("Tenant invites require an upgrade");
         }
@@ -248,7 +256,7 @@ export default function InvitesPage() {
           type="button"
           onClick={() => {
             if (!canInvite) {
-              dispatchUpgradePrompt({ featureKey: "tenant_invites", source: "landlord_invites_page" });
+              promptInviteUpgrade("landlord_invites_page");
               return;
             }
             setCreatedInviteUrl(null);

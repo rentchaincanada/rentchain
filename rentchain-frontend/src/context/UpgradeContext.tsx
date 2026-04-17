@@ -10,6 +10,7 @@ import { UpgradeModal, type UpgradeReason } from "../components/billing/UpgradeM
 import { UpgradePromptModal } from "../components/billing/UpgradePromptModal";
 import { normalizePlanName, resolveRequiredPlan } from "../lib/upgradePrompt";
 import { getCachedCapabilities } from "../lib/entitlements";
+import { isPlanAtLeast, normalizePlan } from "../lib/plan";
 import { useAuth } from "./AuthContext";
 
 type UpgradeContextValue = {
@@ -33,7 +34,7 @@ export function UpgradeProvider({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState<UpgradeReason>("propertiesMax");
   const [copy, setCopy] = useState<{ title?: string; body?: string } | undefined>(undefined);
-  const [plan, setPlan] = useState<string>("Screening");
+  const [plan, setPlan] = useState<string>("free");
   const [ctaLabel, setCtaLabel] = useState<string | undefined>(undefined);
   const [promptOpen, setPromptOpen] = useState(false);
   const [promptFeatureKey, setPromptFeatureKey] = useState<string>("screening");
@@ -47,14 +48,15 @@ export function UpgradeProvider({ children }: { children: React.ReactNode }) {
       setReason(r);
       setCopy(undefined);
       setCtaLabel(undefined);
+      setPlan(normalizePlan(user?.plan || "free"));
     } else {
       setReason(r.reason);
       setCopy(r.copy);
-      if (r.plan) setPlan(r.plan);
+      setPlan(normalizePlan(r.plan || user?.plan || "free"));
       setCtaLabel(r.ctaLabel);
     }
     setOpen(true);
-  }, []);
+  }, [user?.plan]);
 
   const closeUpgradeModal = useCallback(() => {
     setOpen(false);
@@ -73,17 +75,6 @@ export function UpgradeProvider({ children }: { children: React.ReactNode }) {
     setPromptRedirectTo(undefined);
   }, []);
 
-  const isAtLeast = useCallback((current?: string, required?: string) => {
-    const order = ["free", "starter", "pro", "elite"] as const;
-    const currentNorm = normalizePlanName(current);
-    const requiredNorm = normalizePlanName(required);
-    if (!currentNorm || !requiredNorm) return false;
-    return (
-      order.indexOf(currentNorm as (typeof order)[number]) >=
-      order.indexOf(requiredNorm as (typeof order)[number])
-    );
-  }, []);
-
   const handleUpgradeEvent = useCallback((evt: Event) => {
     if (!ready || isLoading || !user?.id) return;
     const roleLower = String(user?.actorRole || user?.role || "").toLowerCase();
@@ -92,10 +83,11 @@ export function UpgradeProvider({ children }: { children: React.ReactNode }) {
     const featureKey = String(detail.featureKey || detail.limitType || detail.capability || "").trim();
     if (!featureKey) return;
     const cachedPlan = getCachedCapabilities()?.plan;
-    const currentPlan = detail.currentPlan || detail.plan || cachedPlan;
-    const requiredPlan = detail.requiredPlan || resolveRequiredPlan(featureKey, currentPlan);
+    const currentPlan = normalizePlan(detail.currentPlan || detail.plan || cachedPlan || user?.plan || "free");
+    const requiredPlan = normalizePlanName(detail.requiredPlan) || resolveRequiredPlan(featureKey, currentPlan);
     if (requiredPlan === "free") return;
-    if (isAtLeast(currentPlan, requiredPlan)) return;
+    if (!requiredPlan) return;
+    if (isPlanAtLeast(currentPlan, normalizePlan(requiredPlan))) return;
     const now = Date.now();
     if (typeof window !== "undefined") {
       const userKey = user?.id ? `upgradePromptLastShown:${user.id}` : "upgradePromptLastShown:anon";
@@ -117,7 +109,7 @@ export function UpgradeProvider({ children }: { children: React.ReactNode }) {
     setPromptSource(source);
     setPromptRedirectTo(redirectTo);
     setPromptOpen(true);
-  }, [isAtLeast, user?.id, user?.role, user?.actorRole, ready, isLoading]);
+  }, [user?.id, user?.role, user?.actorRole, user?.plan, ready, isLoading]);
 
   const ctxValue = useMemo(
     () => ({ openUpgrade, clearUpgradePrompt }),

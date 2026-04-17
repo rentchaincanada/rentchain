@@ -117,6 +117,18 @@ const COPY_MAP: Record<string, UpgradeCopy> = {
     secondaryCta: "Not now",
     requiredPlanLabel: "Starter",
   },
+  screening_workflow: {
+    title: "Upgrade to Starter",
+    subtitle: "Starter includes applicant screening workflow tools inside RentChain.",
+    bullets: [
+      "Send screening requests from the application workflow",
+      "Keep screening activity tied to the applicant record",
+      "Review screening progress without leaving RentChain",
+    ],
+    primaryCta: "Upgrade to Starter",
+    secondaryCta: "Not now",
+    requiredPlanLabel: "Starter",
+  },
   "ai.insights": {
     title: "Upgrade for AI insights",
     subtitle: "Portfolio insights are available on Pro.",
@@ -138,6 +150,7 @@ export function getUpgradeCopy(featureKey?: string): UpgradeCopy {
   if (COPY_MAP[key]) return COPY_MAP[key];
 
   if (key === "unitstable") return COPY_MAP.units;
+  if (key === "screening_workflow") return COPY_MAP.screening_workflow;
   if (key === "tenantportal") return COPY_MAP.screening;
   if (key === "move_in_readiness" || key === "work_orders") return COPY_MAP.maintenance;
   if (key === "pdf_export") return COPY_MAP.exports;
