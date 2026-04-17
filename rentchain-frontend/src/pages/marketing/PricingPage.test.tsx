@@ -1,0 +1,112 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import PricingPage from "./PricingPage";
+
+const mocks = vi.hoisted(() => ({
+  useAuth: vi.fn(),
+  useCapabilities: vi.fn(),
+  useLanguage: vi.fn(),
+  fetchBillingPricing: vi.fn(),
+  startCheckout: vi.fn(),
+  track: vi.fn(),
+}));
+
+vi.mock("../../context/useAuth", () => ({
+  useAuth: mocks.useAuth,
+}));
+
+vi.mock("../../hooks/useCapabilities", () => ({
+  useCapabilities: mocks.useCapabilities,
+}));
+
+vi.mock("../../context/LanguageContext", () => ({
+  useLanguage: mocks.useLanguage,
+}));
+
+vi.mock("../../api/billingApi", () => ({
+  fetchBillingPricing: mocks.fetchBillingPricing,
+}));
+
+vi.mock("../../billing/startCheckout", () => ({
+  startCheckout: mocks.startCheckout,
+}));
+
+vi.mock("../../lib/analytics", () => ({
+  track: mocks.track,
+}));
+
+vi.mock("./MarketingLayout", () => ({
+  MarketingLayout: ({ children }: { children: any }) => <div>{children}</div>,
+}));
+
+describe("Marketing PricingPage analytics", () => {
+  beforeEach(() => {
+    Object.defineProperty(window, "matchMedia", {
+      writable: true,
+      value: vi.fn().mockImplementation(() => ({
+        matches: false,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+      })),
+    });
+    mocks.useAuth.mockReturnValue({
+      user: { id: "u1", plan: "free", role: "landlord" },
+    });
+    mocks.useCapabilities.mockReturnValue({
+      caps: { plan: "free" },
+    });
+    mocks.useLanguage.mockReturnValue({ locale: "en", setLocale: vi.fn(), t: (key: string) => key });
+    mocks.fetchBillingPricing.mockResolvedValue({ ok: true, plans: [] });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("tracks marketing pricing views, interval changes, and plan CTA clicks", async () => {
+    render(
+      <MemoryRouter>
+        <PricingPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() =>
+      expect(mocks.track).toHaveBeenCalledWith("pricing_page_viewed", {
+        surface: "marketing_pricing",
+        currentPlan: "free",
+        interval: "monthly",
+        route: "/",
+      })
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Annual" }));
+
+    expect(mocks.track).toHaveBeenCalledWith("pricing_interval_changed", {
+      surface: "marketing_pricing",
+      currentPlan: "free",
+      interval: "yearly",
+      route: "/",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Upgrade to Pro" }));
+
+    expect(mocks.track).toHaveBeenCalledWith("pricing_plan_cta_clicked", {
+      surface: "marketing_pricing",
+      currentPlan: "free",
+      targetPlan: "pro",
+      interval: "yearly",
+      action: "start_checkout",
+      route: "/",
+    });
+    expect(mocks.startCheckout).toHaveBeenCalledWith({
+      tier: "pro",
+      interval: "monthly",
+      featureKey: "pricing",
+      source: "marketing_pricing",
+      redirectTo: "/billing",
+    });
+  });
+});

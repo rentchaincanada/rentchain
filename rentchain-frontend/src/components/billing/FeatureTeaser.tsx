@@ -30,7 +30,13 @@ export function FeatureTeaser({ featureKey, eyebrow, title, description, ctaLabe
       <div style={{ fontSize: 16, fontWeight: 800, color: text.primary }}>{title}</div>
       <div style={{ color: text.muted, fontSize: 14, lineHeight: 1.6 }}>{description}</div>
       <div>
-        <UpgradeCTA featureKey={featureKey} label={ctaLabel} variant="secondary" />
+        <UpgradeCTA
+          featureKey={featureKey}
+          label={ctaLabel}
+          source="feature_teaser"
+          presentation="teaser"
+          variant="secondary"
+        />
       </div>
     </section>
   );

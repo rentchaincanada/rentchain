@@ -107,6 +107,7 @@ const PricingPage: React.FC = () => {
   const [isCompactDesktop, setIsCompactDesktop] = React.useState(false);
   const [pricingByPlan, setPricingByPlan] = React.useState<Partial<Record<BillingPlanPricing["key"], BillingPlanPricing>>>({});
   const [hoveredPlan, setHoveredPlan] = React.useState<PlanKey | null>(null);
+  const trackedInitialInterval = React.useRef(false);
   const safeTrack = (eventName: string, props: Record<string, unknown>) => {
     try {
       track(eventName, props);
@@ -156,6 +157,29 @@ const PricingPage: React.FC = () => {
       };
     }
   }, []);
+
+  React.useEffect(() => {
+    safeTrack("pricing_page_viewed", {
+      surface: "marketing_pricing",
+      currentPlan,
+      interval,
+      route: typeof window !== "undefined" ? window.location.pathname : undefined,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  React.useEffect(() => {
+    if (!trackedInitialInterval.current) {
+      trackedInitialInterval.current = true;
+      return;
+    }
+    safeTrack("pricing_interval_changed", {
+      surface: "marketing_pricing",
+      currentPlan,
+      interval,
+      route: typeof window !== "undefined" ? window.location.pathname : undefined,
+    });
+  }, [currentPlan, interval]);
 
   React.useEffect(() => {
     let active = true;
@@ -214,6 +238,19 @@ const PricingPage: React.FC = () => {
     if (plan === "pro") {
       safeTrack("pricing_timeline_cta_clicked", { surface: "marketing" });
     }
+    const action = !isAuthed
+      ? "login_redirect"
+      : isAtOrAbove(currentPlan, plan)
+        ? "manage_existing_plan"
+        : "start_checkout";
+    safeTrack("pricing_plan_cta_clicked", {
+      surface: "marketing_pricing",
+      currentPlan,
+      targetPlan: plan,
+      interval,
+      action,
+      route: typeof window !== "undefined" ? window.location.pathname : undefined,
+    });
     if (!isAuthed) {
       navigate("/login?next=/site/pricing");
       return;

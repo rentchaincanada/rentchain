@@ -1,6 +1,3 @@
-import cookieParser from "cookie-parser";
-import express from "express";
-import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type StoredDoc = { id: string; data: any };
@@ -53,17 +50,63 @@ vi.mock("../../services/telemetryService", () => ({
   incrementCounter: telemetryMocks.incrementCounter,
 }));
 
-async function createApp(user?: Record<string, unknown>) {
+async function createRouter() {
   const router = (await import("../eventsRoutes")).default;
-  const app = express();
-  app.use(express.json());
-  app.use(cookieParser());
-  app.use((req: any, _res: any, next: any) => {
-    req.user = user || null;
-    next();
+  return router;
+}
+
+async function invokeRouter(
+  router: any,
+  options: {
+    method: string;
+    url: string;
+    user?: Record<string, unknown> | null;
+    body?: any;
+    cookies?: Record<string, string>;
+  }
+) {
+  return await new Promise<{ status: number; body: any }>((resolve, reject) => {
+    const req: any = {
+      method: options.method,
+      url: options.url,
+      originalUrl: options.url,
+      path: options.url.split("?")[0],
+      query: {},
+      body: options.body ?? {},
+      user: options.user || null,
+      cookies: options.cookies ?? {},
+    };
+    const res: any = {
+      statusCode: 200,
+      headers: {} as Record<string, any>,
+      setHeader(name: string, value: any) {
+        this.headers[name.toLowerCase()] = value;
+      },
+      cookie(name: string, value: string) {
+        req.cookies[name] = value;
+      },
+      status(code: number) {
+        this.statusCode = code;
+        return this;
+      },
+      json(payload: any) {
+        resolve({ status: this.statusCode, body: payload });
+        return this;
+      },
+      send(payload: any) {
+        resolve({ status: this.statusCode, body: payload });
+        return this;
+      },
+    };
+    const [pathOnly, rawQuery] = options.url.split("?");
+    req.path = pathOnly;
+    if (rawQuery) {
+      req.query = Object.fromEntries(new URLSearchParams(rawQuery).entries());
+    }
+    router.handle(req, res, (error: any) => {
+      if (error) reject(error);
+    });
   });
-  app.use("/api/events", router);
-  return app;
 }
 
 describe("eventsRoutes", () => {
@@ -73,10 +116,11 @@ describe("eventsRoutes", () => {
   });
 
   it("accepts registry pricing-funnel events through the lightweight tracker", async () => {
-    const app = await createApp();
-    const res = await request(app)
-      .post("/api/events/track")
-      .send({
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/track",
+      body: {
         name: "registry_ready_created",
         props: {
           propertyId: "prop-1",
@@ -84,11 +128,50 @@ describe("eventsRoutes", () => {
           medium: "cpc",
           campaign: "halifax-ready",
         },
-      });
+      },
+    });
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ ok: true });
     expect(telemetryMocks.incrementCounter).toHaveBeenCalledWith({ name: "registry_ready_created" });
+  });
+
+  it("accepts billing and upgrade prompt analytics events through the generic tracker", async () => {
+    const router = await createRouter();
+
+    const billingRes = await invokeRouter(router, {
+      method: "POST",
+      url: "/track",
+      body: {
+        name: "billing_page_opened",
+        props: {
+          currentPlan: "pro",
+          surface: "billing_page",
+          route: "/billing",
+        },
+      },
+    });
+
+    const promptRes = await invokeRouter(router, {
+      method: "POST",
+      url: "/track",
+      body: {
+        name: "upgrade_prompt_viewed",
+        props: {
+          featureKey: "tenant_invites",
+          currentPlan: "free",
+          requiredPlan: "starter",
+          source: "locked_feature",
+          presentation: "modal",
+          route: "/applications",
+        },
+      },
+    });
+
+    expect(billingRes.status).toBe(200);
+    expect(promptRes.status).toBe(200);
+    expect(telemetryMocks.incrementCounter).toHaveBeenCalledWith({ name: "billing_page_opened" });
+    expect(telemetryMocks.incrementCounter).toHaveBeenCalledWith({ name: "upgrade_prompt_viewed" });
   });
 
   it("returns a grouped registry funnel report for admins", async () => {
@@ -141,10 +224,12 @@ describe("eventsRoutes", () => {
       },
     });
 
-    const app = await createApp({ id: "admin-1", role: "admin" });
-    const res = await request(app)
-      .get("/api/events/registry-funnel-report?from=2026-04-01T00:00:00.000Z&to=2026-04-03T00:00:00.000Z")
-      .send();
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/registry-funnel-report?from=2026-04-01T00:00:00.000Z&to=2026-04-03T00:00:00.000Z",
+      user: { id: "admin-1", role: "admin" },
+    });
 
     expect(res.status).toBe(200);
     expect(res.body?.totals).toEqual({
@@ -195,8 +280,12 @@ describe("eventsRoutes", () => {
   });
 
   it("blocks the funnel report for non-admin users", async () => {
-    const app = await createApp({ id: "landlord-1", role: "landlord" });
-    const res = await request(app).get("/api/events/registry-funnel-report").send();
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/registry-funnel-report",
+      user: { id: "landlord-1", role: "landlord" },
+    });
     expect(res.status).toBe(403);
     expect(res.body?.error).toBe("forbidden");
   });
