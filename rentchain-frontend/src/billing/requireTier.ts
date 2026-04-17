@@ -1,4 +1,6 @@
-export type TierKey = "starter" | "pro" | "elite";
+import { normalizePaidPlan, type PaidPlan } from "@/lib/plan";
+
+export type TierKey = PaidPlan;
 
 const TIER_ORDER: Record<TierKey, number> = {
   starter: 0,
@@ -7,10 +9,7 @@ const TIER_ORDER: Record<TierKey, number> = {
 };
 
 export function normalizeTier(input?: string | null): TierKey {
-  const value = String(input || "").trim().toLowerCase();
-  if (value === "pro" || value === "professional") return "pro";
-  if (value === "business" || value === "elite" || value === "enterprise") return "elite";
-  return "starter";
+  return normalizePaidPlan(input) || "starter";
 }
 
 export function hasTier(userTier?: string | null, requiredTier: TierKey = "pro"): boolean {

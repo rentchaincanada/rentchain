@@ -1,8 +1,9 @@
 import { apiFetch } from "@/lib/apiClient";
+import { normalizePlan, type Plan } from "@/lib/plan";
 
 export type CapabilitiesResponse = {
   ok?: boolean;
-  plan?: string;
+  plan?: Plan | string;
   features: Record<string, boolean>;
   ts?: number;
 };
@@ -45,9 +46,12 @@ export function getCachedCapabilities(): CapabilitiesResponse | null {
 }
 
 export function setCachedCapabilities(next: CapabilitiesResponse) {
-  cachedCapabilities = next;
+  cachedCapabilities = {
+    ...next,
+    plan: normalizePlan(next?.plan),
+  };
   if (typeof window !== "undefined") {
-    window.dispatchEvent(new CustomEvent("capabilities:updated", { detail: next }));
+    window.dispatchEvent(new CustomEvent("capabilities:updated", { detail: cachedCapabilities }));
   }
 }
 
@@ -68,7 +72,7 @@ export async function refreshEntitlements(
     if (caps && typeof caps === "object") {
       setCachedCapabilities({
         ok: caps.ok,
-        plan: caps.plan,
+        plan: normalizePlan(caps.plan),
         features: caps.features || {},
         ts: caps.ts,
       });

@@ -1,3 +1,5 @@
+import { resolveCanonicalPlan, type Plan } from "../services/entitlements/planCapabilities";
+
 export type BillingPlanKey = "starter" | "pro" | "elite";
 type PlanInterval = "monthly" | "yearly";
 type StripeEnv = "live" | "test";
@@ -191,6 +193,16 @@ export function getPricingHealth() {
     amountInvalid,
     used,
   };
+}
+
+export function resolvePaidBillingPlan(input?: string | null): BillingPlanKey | null {
+  const plan = resolveCanonicalPlan(input);
+  if (plan === "starter" || plan === "pro" || plan === "elite") return plan;
+  return null;
+}
+
+export function isCanonicalFreePlan(input?: string | null): boolean {
+  return resolveCanonicalPlan(input) === "free";
 }
 
 export function resolvePlanFromPriceId(priceId?: string | null): BillingPlanKey | null {

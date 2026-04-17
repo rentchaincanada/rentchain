@@ -1,6 +1,6 @@
 export type Plan = "free" | "starter" | "pro" | "elite";
 
-const PLAN_ORDER: Plan[] = ["free", "starter", "pro", "elite"];
+export const CANONICAL_PLAN_ORDER: Plan[] = ["free", "starter", "pro", "elite"];
 
 const PLAN_ADDITIONS: Record<Plan, string[]> = {
   free: [
@@ -63,11 +63,11 @@ export function resolveCanonicalPlan(input?: string | null): Plan {
 
 export function capabilitiesForPlan(planInput?: string | null): string[] {
   const plan = resolveCanonicalPlan(planInput);
-  const maxIndex = PLAN_ORDER.indexOf(plan);
+  const maxIndex = CANONICAL_PLAN_ORDER.indexOf(plan);
   const set = new Set<string>();
 
   for (let i = 0; i <= maxIndex; i += 1) {
-    for (const capability of PLAN_ADDITIONS[PLAN_ORDER[i]]) {
+    for (const capability of PLAN_ADDITIONS[CANONICAL_PLAN_ORDER[i]]) {
       set.add(capability);
     }
   }
@@ -77,4 +77,12 @@ export function capabilitiesForPlan(planInput?: string | null): string[] {
 
 export function allCanonicalCapabilities(): string[] {
   return capabilitiesForPlan("elite");
+}
+
+export function canonicalPlanLabel(planInput?: string | null): "Free" | "Starter" | "Pro" | "Elite" {
+  const plan = resolveCanonicalPlan(planInput);
+  if (plan === "starter") return "Starter";
+  if (plan === "pro") return "Pro";
+  if (plan === "elite") return "Elite";
+  return "Free";
 }

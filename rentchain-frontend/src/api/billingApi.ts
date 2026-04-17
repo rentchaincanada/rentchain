@@ -1,5 +1,6 @@
 import { apiFetch, apiJson } from "@/lib/apiClient";
 import { apiGetJson } from "./http";
+import { normalizePlan, normalizePaidPlan, type Plan, type PaidPlan } from "@/lib/plan";
 
 export type BillingRecord = {
   id: string;
@@ -35,7 +36,7 @@ export async function fetchBillingHistory(): Promise<BillingRecord[]> {
 }
 
 export interface SubscriptionStatus {
-  planId: "free" | "starter" | "pro" | "elite";
+  planId: Plan;
   status: "active" | "past_due" | "canceled";
 }
 
@@ -46,7 +47,11 @@ export async function fetchSubscriptionStatus(): Promise<SubscriptionStatus> {
       return { planId: "free", status: "canceled" } as SubscriptionStatus;
     }
     const data = res.data;
-    return (data?.subscription ?? data) as SubscriptionStatus;
+    const payload = (data?.subscription ?? data) as SubscriptionStatus;
+    return {
+      ...payload,
+      planId: normalizePlan(payload?.planId),
+    };
   } catch {
     return { planId: "free", status: "canceled" } as SubscriptionStatus;
   }
@@ -92,7 +97,7 @@ export async function simulateCreditPull(
 }
 
 export type BillingPlanPricing = {
-  key: "starter" | "pro" | "elite";
+  key: PaidPlan;
   label: string;
   currency: string;
   monthlyAmountCents: number;
@@ -128,7 +133,19 @@ export async function fetchBillingPricing(): Promise<BillingPricingResponse | nu
   try {
     const res = await apiFetch<any>("/billing/pricing", { method: "GET" });
     if (!res?.ok) return null;
-    return res as BillingPricingResponse;
+    const payload = res as BillingPricingResponse;
+    return {
+      ...payload,
+      plans: Array.isArray(payload?.plans)
+        ? payload.plans
+            .map((plan) => {
+              const key = normalizePaidPlan(plan?.key);
+              if (!key) return null;
+              return { ...plan, key };
+            })
+            .filter((plan): plan is BillingPlanPricing => Boolean(plan))
+        : [],
+    };
   } catch {
     return null;
   }

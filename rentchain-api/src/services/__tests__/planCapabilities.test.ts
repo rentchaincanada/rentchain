@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { capabilitiesForPlan } from "../entitlements/planCapabilities";
+import {
+  canonicalPlanLabel,
+  capabilitiesForPlan,
+  resolveCanonicalPlan,
+} from "../entitlements/planCapabilities";
 
 describe("planCapabilities entitlement aliases", () => {
   it("includes operational starter capabilities on starter and above", () => {
@@ -15,5 +19,19 @@ describe("planCapabilities entitlement aliases", () => {
     expect(pro).toContain("screening");
     expect(pro).toContain("registry_filing_access");
     expect(pro).toContain("registry_attempts_history");
+  });
+
+  it("normalizes legacy aliases into canonical plans", () => {
+    expect(resolveCanonicalPlan("screening")).toBe("free");
+    expect(resolveCanonicalPlan("core")).toBe("starter");
+    expect(resolveCanonicalPlan("business")).toBe("elite");
+    expect(resolveCanonicalPlan("enterprise")).toBe("elite");
+  });
+
+  it("returns canonical display labels", () => {
+    expect(canonicalPlanLabel("screening")).toBe("Free");
+    expect(canonicalPlanLabel("core")).toBe("Starter");
+    expect(canonicalPlanLabel("pro")).toBe("Pro");
+    expect(canonicalPlanLabel("elite")).toBe("Elite");
   });
 });
