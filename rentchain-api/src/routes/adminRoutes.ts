@@ -7,6 +7,7 @@ import { getStripeClient, isStripeConfigured } from "../services/stripeService";
 import { getPlanConfig, resolvePlanFromPriceId, type BillingPlanKey } from "../config/planMatrix";
 import { getTuReferralMetricsForMonth } from "../services/metrics/tuReferralReport";
 import { getPublicStatusPayload } from "../services/statusService";
+import { loadAdminSubscriptionConversionFunnel } from "../services/admin/adminSubscriptionConversionView";
 import {
   createStatusIncident,
   resolveStatusIncident,
@@ -827,6 +828,20 @@ router.get("/events/summary", requireAdmin, async (req, res) => {
   } catch (err: any) {
     console.error("[admin] events summary failed", err?.message || err);
     return res.status(500).json({ ok: false, error: "EVENTS_SUMMARY_FAILED" });
+  }
+});
+
+router.get("/analytics/conversion-funnel", requireAdmin, async (req, res) => {
+  try {
+    const days = req.query?.days;
+    const payload = await loadAdminSubscriptionConversionFunnel({ days: typeof days === "string" ? days : undefined });
+    return res.json({
+      ok: true,
+      ...payload,
+    });
+  } catch (err: any) {
+    console.error("[admin] conversion funnel failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "CONVERSION_FUNNEL_FAILED" });
   }
 });
 
