@@ -5,6 +5,8 @@ import WorkOrdersPage from "./WorkOrdersPage";
 
 const mocks = vi.hoisted(() => ({
   canUseWorkOrders: false,
+  canViewMarketplaceDirectory: false,
+  canUseMarketplaceContractorAssignment: false,
   listWorkOrders: vi.fn(),
   listWorkOrderUpdates: vi.fn(),
   getWorkOrder: vi.fn(),
@@ -36,6 +38,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/hooks/useEntitlements", () => ({
   useEntitlements: () => ({
     canUseWorkOrders: mocks.canUseWorkOrders,
+    canViewMarketplaceDirectory: mocks.canViewMarketplaceDirectory,
+    canUseMarketplaceContractorAssignment: mocks.canUseMarketplaceContractorAssignment,
   }),
 }));
 
@@ -88,6 +92,15 @@ vi.mock("@/components/billing/LockedFeature", () => ({
   ),
 }));
 
+vi.mock("@/components/billing/FeatureTeaser", () => ({
+  FeatureTeaser: ({ title, description }: { title: string; description: string }) => (
+    <div>
+      <div>{title}</div>
+      <div>{description}</div>
+    </div>
+  ),
+}));
+
 describe("WorkOrdersPage", () => {
   beforeEach(() => {
     cleanup();
@@ -102,6 +115,8 @@ describe("WorkOrdersPage", () => {
       })),
     });
     mocks.canUseWorkOrders = false;
+    mocks.canViewMarketplaceDirectory = false;
+    mocks.canUseMarketplaceContractorAssignment = false;
     mocks.listWorkOrders.mockReset();
     mocks.listWorkOrderUpdates.mockReset();
     mocks.getWorkOrder.mockReset();
@@ -312,6 +327,8 @@ describe("WorkOrdersPage", () => {
 
   it("shows contractor marketplace candidates and assigns one to the selected work order", async () => {
     mocks.canUseWorkOrders = true;
+    mocks.canViewMarketplaceDirectory = true;
+    mocks.canUseMarketplaceContractorAssignment = true;
     mocks.fetchProperties.mockResolvedValue({
       items: [{ id: "prop-1", name: "Harbor Place", city: "Halifax", province: "NS" }],
     });
@@ -407,6 +424,85 @@ describe("WorkOrdersPage", () => {
         )
       ).length
     ).toBeGreaterThan(0);
+  });
+
+  it("keeps baseline work orders visible while teasing the contractor directory on lower tiers", async () => {
+    mocks.canUseWorkOrders = true;
+    mocks.canViewMarketplaceDirectory = false;
+    mocks.canUseMarketplaceContractorAssignment = false;
+    mocks.listWorkOrders.mockResolvedValue([
+      {
+        id: "wo-plain-1",
+        landlordId: "landlord-1",
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        title: "Hallway light out",
+        description: "Replace hallway bulb and fixture cover",
+        category: "Electrical",
+        priority: "medium",
+        status: "open",
+        visibility: "private",
+        budgetMinCents: null,
+        budgetMaxCents: null,
+        assignedContractorId: null,
+        invitedContractorIds: [],
+        notesInternal: "",
+        linkedExpenseId: null,
+        createdAtMs: 1,
+        updatedAtMs: 2,
+      },
+    ]);
+    mocks.listWorkOrderUpdates.mockResolvedValue([]);
+
+    render(
+      <MemoryRouter>
+        <WorkOrdersPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Work Orders/i)).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: /timeline/i }));
+    expect(await screen.findByText(/Unlock the contractor directory on Pro/i)).toBeInTheDocument();
+    expect(mocks.fetchContractors).not.toHaveBeenCalled();
+  });
+
+  it("shows an assignment teaser when directory access exists but assignment is still premium", async () => {
+    mocks.canUseWorkOrders = true;
+    mocks.canViewMarketplaceDirectory = true;
+    mocks.canUseMarketplaceContractorAssignment = false;
+    mocks.listWorkOrders.mockResolvedValue([
+      {
+        id: "wo-tease-1",
+        landlordId: "landlord-1",
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        title: "Kitchen faucet drip",
+        description: "Check the faucet cartridge",
+        category: "Plumbing",
+        priority: "medium",
+        status: "open",
+        visibility: "private",
+        budgetMinCents: null,
+        budgetMaxCents: null,
+        assignedContractorId: null,
+        invitedContractorIds: [],
+        notesInternal: "",
+        linkedExpenseId: null,
+        createdAtMs: 1,
+        updatedAtMs: 2,
+      },
+    ]);
+    mocks.listWorkOrderUpdates.mockResolvedValue([]);
+
+    render(
+      <MemoryRouter>
+        <WorkOrdersPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /timeline/i }));
+    expect(await screen.findByText(/Unlock contractor assignment on Elite/i)).toBeInTheDocument();
+    expect(mocks.fetchContractors).not.toHaveBeenCalled();
   });
 
   it("renders the cost panel and lets the landlord save and review cost details", async () => {

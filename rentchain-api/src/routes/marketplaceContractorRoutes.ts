@@ -1,5 +1,7 @@
 import { Router } from "express";
 import { db } from "../config/firebase";
+import { capabilitiesForPlan, requiredPlanForCapability } from "../services/entitlements/planCapabilities";
+import { resolveLandlordAndTier } from "../lib/landlordResolver";
 import { requireAuth } from "../middleware/requireAuth";
 import { findContractorsForWorkOrder, normalizeServiceCategory } from "../lib/marketplace/findContractorsForWorkOrder";
 import { loadContractorProfilesForActor, normalizeContractorProfile } from "../lib/marketplace/loadContractorProfiles";
@@ -38,6 +40,27 @@ function getLandlordId(req: any) {
 
 function getUserId(req: any) {
   return asString(req.user?.id, 120);
+}
+
+async function hasMarketplaceCapability(req: any, capability: string) {
+  if (isAdmin(req)) return true;
+  const resolved = await resolveLandlordAndTier(req.user);
+  const features = new Set(capabilitiesForPlan(resolved.tier));
+  return features.has(capability);
+}
+
+async function ensureMarketplaceCapability(req: any, res: any, capability: string) {
+  if (await hasMarketplaceCapability(req, capability)) return true;
+  const resolved = await resolveLandlordAndTier(req.user);
+  res.status(403).json({
+    ok: false,
+    error: "UPGRADE_REQUIRED",
+    upgradeRequired: true,
+    featureKey: capability,
+    requiredPlan: requiredPlanForCapability(capability),
+    plan: resolved.tier,
+  });
+  return false;
 }
 
 function uniqueStrings(input: unknown, max = 50) {
@@ -167,6 +190,7 @@ router.patch("/marketplace/contractors/:contractorId", requireAuth, async (req: 
 router.post("/marketplace/work-orders/:workOrderId/assign-contractor", requireAuth, async (req: any, res) => {
   try {
     if (!isLandlord(req)) return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    if (!(await ensureMarketplaceCapability(req, res, "marketplace_contractor_assignment"))) return;
     const landlordId = getLandlordId(req);
     const actorId = getUserId(req);
     const workOrderId = asString(req.params?.workOrderId, 120);

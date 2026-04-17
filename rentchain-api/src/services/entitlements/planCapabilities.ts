@@ -35,6 +35,7 @@ const PLAN_ADDITIONS: Record<Plan, string[]> = {
     "pdf_export",
     "review_summary",
     "compliance_reports",
+    "marketplace_directory",
     "portfolio_dashboard",
     "portfolio_score",
     "team.invites",
@@ -46,6 +47,7 @@ const PLAN_ADDITIONS: Record<Plan, string[]> = {
     "ai_summaries",
     "exports_advanced",
     "audit_logs",
+    "marketplace_contractor_assignment",
     "portfolio_analytics",
     "portfolio_action_recommendations",
   ],
@@ -88,4 +90,17 @@ export function canonicalPlanLabel(planInput?: string | null): "Free" | "Starter
   if (plan === "pro") return "Pro";
   if (plan === "elite") return "Elite";
   return "Free";
+}
+
+export function requiredPlanForCapability(capabilityInput?: string | null): Plan | null {
+  const capability = String(capabilityInput || "").trim().toLowerCase();
+  if (!capability) return null;
+
+  for (const plan of CANONICAL_PLAN_ORDER) {
+    if (PLAN_ADDITIONS[plan].includes(capability)) {
+      return plan;
+    }
+  }
+
+  return null;
 }
