@@ -33,6 +33,7 @@ import { buildLeaseSigningWorkspaceState } from "./leaseSigningWorkspaceState";
 import { buildDepositPaymentFlowState } from "./depositPaymentFlowState";
 import StructuredNotificationList from "./StructuredNotificationList";
 import { buildLandlordStructuredNotificationTriggers } from "./structuredNotificationTriggers";
+import { resolveRequiredPlanLabel } from "@/lib/upgradePrompt";
 
 function money(cents: number | null): string {
   if (cents == null || !Number.isFinite(cents)) return "Not provided";
@@ -508,16 +509,17 @@ function ApplicationReviewSummaryPageBody() {
     () => (summary ? buildLandlordStructuredActivityTimeline(summary).slice(0, 4) : []),
     [summary]
   );
+  const reviewSummaryRequiredPlanLabel = resolveRequiredPlanLabel("review_summary", entitlements.plan) || "Pro";
 
   return (
     <div style={{ padding: 16, display: "grid", gap: 12 }}>
       {!entitlements.canViewReviewSummary ? (
         <LockedFeature
           featureKey="review_summary"
-          title="Screening decision summaries are available on Pro"
+          title={`Screening decision summaries are available on ${reviewSummaryRequiredPlanLabel}`}
           description="Keep application risk signals, screening recommendation, and landlord-ready review notes in one place once your plan includes review summaries."
-          hint="This page stays stable, but the richer decision-support view unlocks on Pro."
-          ctaLabel="Upgrade to Pro"
+          hint={`This page stays stable, but the richer decision-support view unlocks on ${reviewSummaryRequiredPlanLabel}.`}
+          ctaLabel={`Upgrade to ${reviewSummaryRequiredPlanLabel}`}
         />
       ) : null}
       {entitlements.canViewReviewSummary ? (

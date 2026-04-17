@@ -271,6 +271,8 @@ describe("ApplicationsPage", () => {
   });
 
   it("shows Starter-aligned screening upgrade copy instead of the old Pro gate", async () => {
+    const dispatchSpy = vi.spyOn(window, "dispatchEvent");
+
     render(
       <MemoryRouter>
         <ApplicationsPage />
@@ -280,14 +282,14 @@ describe("ApplicationsPage", () => {
     const button = await screen.findByRole("button", { name: "Send screening invite" });
     button.click();
 
-    expect(mocks.openUpgrade).toHaveBeenCalledWith(
-      expect.objectContaining({
-        ctaLabel: "Upgrade to Starter",
-        copy: expect.objectContaining({
-          title: "Upgrade to Starter",
-          body: "Starter includes applicant screening inside RentChain. Upgrade to continue.",
-        }),
-      })
-    );
+    expect(dispatchSpy).toHaveBeenCalled();
+    const event = dispatchSpy.mock.calls.at(-1)?.[0] as CustomEvent;
+    expect(event.type).toBe("upgrade:prompt");
+    expect(event.detail).toMatchObject({
+      featureKey: "screening_workflow",
+      currentPlan: "free",
+      requiredPlan: "starter",
+      source: "applications_page_screening",
+    });
   });
 });

@@ -4,7 +4,7 @@ import { setOnboardingStep } from "../../api/onboardingApi";
 import { fetchProperties } from "../../api/propertiesApi";
 import { fetchUnitsForProperty } from "../../api/unitsApi";
 import { useCapabilities } from "../../hooks/useCapabilities";
-import { dispatchUpgradePrompt } from "../../lib/upgradePrompt";
+import { dispatchUpgradePrompt, resolveRequiredPlanLabel } from "../../lib/upgradePrompt";
 import { useAuth } from "../../context/useAuth";
 import { useLanguage } from "../../context/LanguageContext";
 import { useToast } from "../ui/ToastProvider";
@@ -47,6 +47,12 @@ export const InviteTenantModal: React.FC<Props> = ({
   const { showToast } = useToast();
   const role = String(user?.role || "").toLowerCase();
   const canInvite = role === "admin" || features?.tenant_invites !== false;
+  const inviteRequiredPlanLabel = resolveRequiredPlanLabel("tenant_invites", user?.plan) || "Starter";
+  const inviteUpgradeMessage = `Upgrade to ${inviteRequiredPlanLabel} to send tenant invites.`;
+  const inviteUpgradeRedirect =
+    typeof window !== "undefined"
+      ? `${window.location.pathname}${window.location.search}`
+      : "/tenants";
   const copy = React.useMemo(
     () =>
       locale === "fr"
@@ -152,6 +158,15 @@ export const InviteTenantModal: React.FC<Props> = ({
   if (!open) return null;
   const selectedUnitRequiresLease = unitId ? units.find((u) => u.id === unitId)?.inviteEligible === false : false;
 
+  const promptInviteUpgrade = (source: string, currentPlan?: string | null) => {
+    dispatchUpgradePrompt({
+      featureKey: "tenant_invites",
+      currentPlan: currentPlan || undefined,
+      source,
+      redirectTo: inviteUpgradeRedirect,
+    });
+  };
+
   async function sendInvite() {
     setErr("");
     setSuccessMsg("");
@@ -160,7 +175,7 @@ export const InviteTenantModal: React.FC<Props> = ({
     setLoading(true);
     try {
       if (!canInvite) {
-        dispatchUpgradePrompt({ featureKey: "tenant_invites", source: "tenants_invite_modal" });
+        promptInviteUpgrade("tenants_invite_modal");
         return;
       }
       if (!propertyId || !unitId) {
@@ -188,14 +203,10 @@ export const InviteTenantModal: React.FC<Props> = ({
           plan: data?.plan,
         });
         if (errorCode === "upgrade_required" && capability === "tenant_invites") {
-          dispatchUpgradePrompt({
-            featureKey: "tenant_invites",
-            currentPlan: String(data?.plan || user?.plan || "free"),
-            source: "tenants_invite_modal_api_403",
-          });
+          promptInviteUpgrade("tenants_invite_modal_api_403", String(data?.plan || user?.plan || "free"));
           showToast({
             message: "Tenant invites require an upgrade",
-            description: "Upgrade to Starter to send tenant invites.",
+            description: inviteUpgradeMessage,
             variant: "warning",
           });
           return;
@@ -234,14 +245,10 @@ export const InviteTenantModal: React.FC<Props> = ({
         raw: e,
       });
       if (msg.toLowerCase().includes("upgrade_required")) {
-        dispatchUpgradePrompt({
-          featureKey: "tenant_invites",
-          currentPlan: String(user?.plan || "free"),
-          source: "tenants_invite_modal_api_catch",
-        });
+        promptInviteUpgrade("tenants_invite_modal_api_catch", String(user?.plan || "free"));
         showToast({
           message: "Tenant invites require an upgrade",
-          description: "Upgrade to Starter to send tenant invites.",
+          description: inviteUpgradeMessage,
           variant: "warning",
         });
         return;

@@ -35,7 +35,6 @@ import { useToast } from "../components/ui/ToastProvider";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import { track } from "@/lib/analytics";
 import { useAuth } from "../context/useAuth";
-import { useUpgrade } from "../context/UpgradeContext";
 import { ResponsiveMasterDetail } from "@/components/layout/ResponsiveMasterDetail";
 import { useOnboardingState } from "../hooks/useOnboardingState";
 import { useUnitsForProperty } from "../hooks/useUnitsForProperty";
@@ -104,7 +103,7 @@ import { ScreeningDetailDrawer } from "@/components/screening/ScreeningDetailDra
 import { FeatureGate } from "@/components/billing/FeatureGate";
 import { FeatureTeaser } from "@/components/billing/FeatureTeaser";
 import { UpgradeCTA } from "@/components/billing/UpgradeCTA";
-import { dispatchUpgradePrompt } from "@/lib/upgradePrompt";
+import { dispatchUpgradePrompt, resolveRequiredPlanLabel } from "@/lib/upgradePrompt";
 const statusOptions: RentalApplicationStatus[] = [
   "SUBMITTED",
   "IN_REVIEW",
@@ -279,7 +278,6 @@ const ApplicationsPage: React.FC = () => {
   const features = entitlements.capabilities;
   const loadingCaps = entitlements.loading;
   const { user } = useAuth();
-  const { openUpgrade } = useUpgrade();
   const [screeningQuote, setScreeningQuote] = useState<ScreeningQuote | null>(null);
   const [screeningQuoteDetail, setScreeningQuoteDetail] = useState<string | null>(null);
   const [screeningLoading, setScreeningLoading] = useState(false);
@@ -429,6 +427,11 @@ const ApplicationsPage: React.FC = () => {
     return `Status: ${formatScreeningStatus(raw)}`;
   })();
   const currentPlan = entitlements.plan || "free";
+  const applicationsRequiredPlanLabel = resolveRequiredPlanLabel("applications", currentPlan) || "Starter";
+  const applicationsUpgradeRedirect =
+    typeof window !== "undefined"
+      ? `${window.location.pathname}${window.location.search}`
+      : "/applications";
   const canRunScreening =
     entitlements.canScreen || currentPlan === "starter" || currentPlan === "pro" || currentPlan === "elite";
   const canCreateApplicationLinks =
@@ -448,6 +451,18 @@ const ApplicationsPage: React.FC = () => {
   const selectedViewingRequest = useMemo(
     () => viewingRequests.find((request) => request.id === selectedViewingId) || null,
     [viewingRequests, selectedViewingId]
+  );
+
+  const promptApplicationsUpgrade = useCallback(
+    (source: string, currentPlanOverride?: string | null) => {
+      dispatchUpgradePrompt({
+        featureKey: "applications",
+        currentPlan: currentPlanOverride || caps?.plan || currentPlan,
+        source,
+        redirectTo: applicationsUpgradeRedirect,
+      });
+    },
+    [applicationsUpgradeRedirect, caps?.plan, currentPlan]
   );
 
   const loadTransUnionIntegration = useCallback(async () => {
@@ -586,25 +601,21 @@ const ApplicationsPage: React.FC = () => {
 
   const openProUpgrade = useCallback(
     (featureName: "screening" | "exports") => {
-      const requiredTier = featureName === "screening" ? "starter" : "pro";
-      track("gating_blocked", { featureName, requiredTier, userTier: currentPlan });
-      openUpgrade({
-        reason: featureName,
-        plan: currentPlan,
-        ctaLabel: requiredTier === "starter" ? "Upgrade to Starter" : "Upgrade to Pro",
-        copy:
-          featureName === "screening"
-            ? {
-                title: "Upgrade to Starter",
-                body: "Starter includes applicant screening inside RentChain. Upgrade to continue.",
-              }
-            : {
-                title: "Upgrade to Pro",
-                body: "Verified exports are available on Pro plans. Upgrade to continue.",
-              },
+      const featureKey = featureName === "screening" ? "screening_workflow" : "pdf_export";
+      const requiredPlanLabel = resolveRequiredPlanLabel(featureKey, currentPlan) || "Pro";
+      track("gating_blocked", {
+        featureName,
+        requiredTier: requiredPlanLabel.toLowerCase(),
+        userTier: currentPlan,
+      });
+      dispatchUpgradePrompt({
+        featureKey,
+        currentPlan,
+        source: `applications_page_${featureName}`,
+        redirectTo: applicationsUpgradeRedirect,
       });
     },
-    [currentPlan, openUpgrade]
+    [applicationsUpgradeRedirect, currentPlan]
   );
 
   const openScreeningReport = useCallback(
@@ -882,16 +893,7 @@ const ApplicationsPage: React.FC = () => {
     const params = new URLSearchParams(location.search);
     if (params.get("openSendApplication") !== "1") return;
     if (!canCreateApplicationLinks) {
-      const redirectTo =
-        typeof window !== "undefined"
-          ? `${window.location.pathname}${window.location.search}`
-          : "/applications";
-      dispatchUpgradePrompt({
-        featureKey: "applications",
-        currentPlan: caps?.plan,
-        source: "applications_page",
-        redirectTo,
-      });
+      promptApplicationsUpgrade("applications_page");
       params.delete("openSendApplication");
       params.delete("autoSelectProperty");
       navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
@@ -943,7 +945,7 @@ const ApplicationsPage: React.FC = () => {
     propertiesReady,
     showToast,
     canCreateApplicationLinks,
-    caps?.plan,
+    promptApplicationsUpgrade,
   ]);
 
   useEffect(() => {
@@ -1158,16 +1160,7 @@ const ApplicationsPage: React.FC = () => {
 
   const handleCreateApplication = (autoSelectProperty: boolean = false) => {
     if (!canCreateApplicationLinks) {
-      const redirectTo =
-        typeof window !== "undefined"
-          ? `${window.location.pathname}${window.location.search}`
-          : "/applications";
-      dispatchUpgradePrompt({
-        featureKey: "applications",
-        currentPlan: caps?.plan,
-        source: "applications_page",
-        redirectTo,
-      });
+      promptApplicationsUpgrade("applications_page");
       return;
     }
     if (!propertiesLoaded) {
@@ -2833,18 +2826,9 @@ const ApplicationsPage: React.FC = () => {
           setModalUnitId(nextId);
         }}
         allowGeneration={canCreateApplicationLinks}
-        lockedMessage="Starter unlocks secure application links so applicants can complete their application inside RentChain."
+        lockedMessage={`${applicationsRequiredPlanLabel} unlocks secure application links so applicants can complete their application inside RentChain.`}
         onUpgradeRequired={() => {
-          const redirectTo =
-            typeof window !== "undefined"
-              ? `${window.location.pathname}${window.location.search}`
-              : "/applications";
-          dispatchUpgradePrompt({
-            featureKey: "applications",
-            currentPlan: caps?.plan,
-            source: "applications_page",
-            redirectTo,
-          });
+          promptApplicationsUpgrade("applications_page");
         }}
         unit={null}
         onClose={() => setSendAppOpen(false)}

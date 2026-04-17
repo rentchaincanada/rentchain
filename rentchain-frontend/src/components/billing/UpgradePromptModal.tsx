@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getUpgradeCopy } from "@/billing/upgradeCopy";
 import { normalizePlanLabel } from "@/billing/planLabel";
+import { normalizePaidPlan } from "@/lib/plan";
+import { resolveRequiredPlan } from "@/lib/upgradePrompt";
 import { startCheckout } from "@/billing/startCheckout";
 
 export function UpgradePromptModal({
@@ -24,9 +26,9 @@ export function UpgradePromptModal({
   if (!open) return null;
 
   const copy = useMemo(() => getUpgradeCopy(featureKey), [featureKey]);
-  const requiredPlanKey = requiredPlan;
-  const requiredLabel = copy.requiredPlanLabel || normalizePlanLabel(requiredPlan || "");
-  const currentLabel = normalizePlanLabel(currentPlan || "");
+  const requiredPlanKey = requiredPlan || resolveRequiredPlan(featureKey, currentPlan) || "pro";
+  const requiredLabel = normalizePlanLabel(requiredPlanKey);
+  const currentLabel = normalizePlanLabel(currentPlan || "free");
   const primaryLabel =
     copy.primaryCta || (requiredLabel ? `Upgrade to ${requiredLabel}` : "Upgrade now");
   const secondaryLabel = copy.secondaryCta || "Not now";
@@ -38,15 +40,7 @@ export function UpgradePromptModal({
   const modalRef = useRef<HTMLDivElement | null>(null);
   const [interval, setInterval] = useState<"monthly" | "yearly">("monthly");
   const navigate = useNavigate();
-
-  const resolveTier = (input?: string) => {
-    const raw = String(input || "").trim().toLowerCase();
-    if (raw === "starter" || raw === "core") return "starter";
-    if (raw === "pro") return "pro";
-    if (raw === "business" || raw === "elite" || raw === "enterprise") return "elite";
-    return "pro";
-  };
-  const requiredTier = resolveTier(requiredPlanKey);
+  const requiredTier = normalizePaidPlan(requiredPlanKey) || "pro";
 
   useEffect(() => {
     if (!open) return;
