@@ -16,6 +16,7 @@ import {
   type PricingPlanKey,
 } from "../constants/pricingPlans";
 import { track } from "@/lib/analytics";
+import { normalizePlan } from "@/lib/plan";
 
 type PlanKey = PricingPlanKey;
 
@@ -46,14 +47,6 @@ function pricingCardShadow(plan: PlanKey, hovered: boolean) {
     return hovered ? "0 22px 42px rgba(37,99,235,0.16)" : "0 16px 34px rgba(37,99,235,0.12)";
   }
   return hovered ? "0 16px 32px rgba(15,23,42,0.10)" : "0 10px 24px rgba(15,23,42,0.06)";
-}
-
-function normalizePlan(input?: string | null): PlanKey {
-  const raw = String(input || "").trim().toLowerCase();
-  if (raw === "starter" || raw === "core") return "starter";
-  if (raw === "pro") return "pro";
-  if (raw === "elite" || raw === "business" || raw === "enterprise") return "elite";
-  return "free";
 }
 
 function ctaLabel(plan: Exclude<PlanKey, "free">) {

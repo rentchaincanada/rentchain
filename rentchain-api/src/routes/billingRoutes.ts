@@ -8,6 +8,8 @@ import { FRONTEND_URL } from "../config/screeningConfig";
 import {
   getPlanMatrix,
   getStripeEnv,
+  isCanonicalFreePlan,
+  resolvePaidBillingPlan,
   resolvePlanPriceId,
   type BillingPlanKey,
 } from "../config/planMatrix";
@@ -23,11 +25,7 @@ type SubscriptionStatusTier = "free" | "starter" | "pro" | "elite";
 type SubscriptionStatusInterval = "month" | "year" | null;
 
 function normalizeSubscriptionStatusTier(input: any): SubscriptionStatusTier {
-  const raw = String(input || "").trim().toLowerCase();
-  if (raw === "pro" || raw === "professional") return "pro";
-  if (raw === "elite" || raw === "business" || raw === "enterprise") return "elite";
-  if (raw === "starter" || raw === "core") return "starter";
-  return "free";
+  return resolvePaidBillingPlan(input) || "free";
 }
 
 function sendSubscriptionStatus(req: any, res: any) {
@@ -93,13 +91,10 @@ type BillingTier = BillingPlanKey;
 type BillingInterval = "monthly" | "yearly";
 
 function normalizeTier(input: any): BillingTier | "free" | null {
-  const raw = String(input || "").trim().toLowerCase();
+  const raw = String(input || "").trim();
   if (!raw) return null;
-  if (raw === "free" || raw === "screening") return "free";
-  if (raw === "starter" || raw === "core") return "starter";
-  if (raw === "pro") return "pro";
-  if (raw === "business" || raw === "elite" || raw === "enterprise") return "elite";
-  return null;
+  if (isCanonicalFreePlan(raw)) return "free";
+  return resolvePaidBillingPlan(raw);
 }
 
 function normalizeInterval(input: any): BillingInterval {

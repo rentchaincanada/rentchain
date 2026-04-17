@@ -6,6 +6,7 @@ import { fetchBillingPricing, fetchPricingHealth } from "@/api/billingApi";
 import { BillingIntervalToggle } from "./BillingIntervalToggle";
 import { getVisiblePlans, type PlanKey } from "@/billing/planVisibility";
 import { track } from "@/lib/analytics";
+import { normalizePlan, planLabel as canonicalPlanLabel } from "@/lib/plan";
 
 export type UpgradeReason =
   | "propertiesMax"
@@ -37,17 +38,10 @@ export function UpgradeModal({
   const [interval, setInterval] = React.useState<"month" | "year">("month");
   const [selectedPlan, setSelectedPlan] = React.useState<PlanKey>("pro");
   const [notifyOpen, setNotifyOpen] = React.useState(false);
-  const [notifyPlan, setNotifyPlan] = React.useState<"core" | "pro" | "elite">("core");
+  const [notifyPlan, setNotifyPlan] = React.useState<"starter" | "pro" | "elite">("starter");
 
   const safeReason = reason ?? ("propertiesMax" as UpgradeReason);
-  const normalizePlan = (input?: string) => {
-    const raw = String(input || "").trim().toLowerCase();
-    if (raw === "starter" || raw === "core") return "starter";
-    if (raw === "pro") return "pro";
-    if (raw === "business" || raw === "elite" || raw === "enterprise") return "elite";
-    return "starter";
-  };
-  const currentPlanKey = normalizePlan(currentPlan);
+  const currentPlanKey = normalizePlan(currentPlan, "starter");
 
   React.useEffect(() => {
     if (!open) return;
@@ -111,16 +105,7 @@ export function UpgradeModal({
     const suffix = interval === "year" ? "year" : "month";
     return `$${Math.round(amountCents / 100)} / ${suffix}`;
   };
-  const planLabel = (planKey: PlanKey) => {
-    switch (planKey) {
-      case "pro":
-        return "Pro";
-      case "elite":
-        return "Elite";
-      default:
-        return "Starter";
-    }
-  };
+  const displayPlanLabel = (planKey: PlanKey) => canonicalPlanLabel(planKey);
   const planDescription = (planKey: PlanKey) => {
     switch (planKey) {
       case "pro":
@@ -199,11 +184,11 @@ export function UpgradeModal({
 
           <div style={{ marginTop: 20, display: "grid", gap: 10 }}>
             {visiblePlans
-              .filter((planKey) => planKey !== "screening")
+              .filter(Boolean)
               .map((planKey) => (
                 <PlanRow
                   key={planKey}
-                  name={planLabel(planKey)}
+                  name={displayPlanLabel(planKey)}
                   description={planDescription(planKey)}
                   active={currentPlanKey === planKey}
                   highlight={selectedPlan === planKey}

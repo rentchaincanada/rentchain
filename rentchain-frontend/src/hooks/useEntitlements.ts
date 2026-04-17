@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 import { useAuth } from "@/context/useAuth";
 import { useCapabilities } from "@/hooks/useCapabilities";
-import { normalizePlanName, resolveRequiredPlan } from "@/lib/upgradePrompt";
+import { normalizePlan } from "@/lib/plan";
+import { resolveRequiredPlan } from "@/lib/upgradePrompt";
 
 function hasFeature(features: Record<string, boolean>, keys: string[]) {
   return keys.some((key) => Boolean(features[key]));
@@ -15,7 +16,7 @@ export function useEntitlements() {
     const role = String(user?.actorRole || user?.role || "").toLowerCase();
     const isAdmin = role === "admin";
     const featureMap = features || {};
-    const plan = normalizePlanName(caps?.plan || user?.plan || null) || "free";
+    const plan = normalizePlan(caps?.plan || user?.plan || null);
     const hasPaidScreeningPlan = plan === "starter" || plan === "pro" || plan === "elite";
 
     const canScreen =

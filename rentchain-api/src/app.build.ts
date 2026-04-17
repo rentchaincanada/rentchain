@@ -6,6 +6,7 @@ import { routeSource } from "./middleware/routeSource";
 import { notFoundHandler, errorHandler } from "./middleware/errorHandler";
 import { corsOptions } from "./lib/cors";
 import { getPricingHealth } from "./config/planMatrix";
+import { resolveCanonicalPlan } from "./services/entitlements/planCapabilities";
 
 import publicRoutes from "./routes/publicRoutes";
 import authRoutes from "./routes/authRoutes";
@@ -278,7 +279,14 @@ app.get("/api/me", async (req: any, res: any, next: any) => {
   if (!req.user) {
     return res.status(401).json({ ok: false, error: "unauthenticated" });
   }
-  return res.json({ ok: true, user: req.user });
+  const user =
+    req.user && typeof req.user === "object"
+      ? {
+          ...req.user,
+          ...(req.user.plan != null ? { plan: resolveCanonicalPlan(req.user.plan) } : {}),
+        }
+      : req.user;
+  return res.json({ ok: true, user });
 });
 
 // Core prefixed APIs must mount before broad /api routers.

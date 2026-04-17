@@ -1,4 +1,10 @@
-export type Plan = "free" | "starter" | "pro" | "elite" | "screening" | "core";
+import {
+  resolveCanonicalPlan,
+  type Plan as CanonicalPlan,
+} from "../services/entitlements/planCapabilities";
+
+export type Plan = CanonicalPlan;
+type PlanAlias = CanonicalPlan | "screening" | "core";
 
 export type Capability =
   | "ai.insights"
@@ -9,11 +15,11 @@ export type Capability =
   | "registry_attempts_history";
 
 export interface PlanSpec {
-  plan: Plan;
+  plan: PlanAlias;
   capabilities: Record<Capability, boolean>;
 }
 
-export const PLANS: Record<Plan, PlanSpec> = {
+export const PLANS: Record<PlanAlias, PlanSpec> = {
   free: {
     plan: "free",
     capabilities: {
@@ -83,10 +89,7 @@ export const PLANS: Record<Plan, PlanSpec> = {
 };
 
 export function resolvePlan(input?: string | null): Plan {
-  const p = (input ?? "").toLowerCase().trim();
-  if (p === "starter" || p === "core") return "starter";
-  if (p === "pro") return "pro";
-  if (p === "business" || p === "elite" || p === "enterprise") return "elite";
-  if (p === "free" || p === "screening") return "free";
-  return (process.env.RENTCHAIN_DEFAULT_PLAN as Plan) || "free";
+  const normalized = resolveCanonicalPlan(input);
+  if (normalized) return normalized;
+  return resolveCanonicalPlan(process.env.RENTCHAIN_DEFAULT_PLAN) || "free";
 }

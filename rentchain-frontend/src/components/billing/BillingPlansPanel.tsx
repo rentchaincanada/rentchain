@@ -3,6 +3,7 @@ import { Button } from "../ui/Ui";
 import { colors, radius, text } from "../../styles/tokens";
 import { PlanIntervalToggle } from "./PlanIntervalToggle";
 import { getVisiblePlans, type PlanKey } from "@/billing/planVisibility";
+import { normalizePlan } from "@/lib/plan";
 import {
   CANONICAL_TIER_MATRIX,
   TIER_MATRIX_AREAS,
@@ -20,14 +21,6 @@ type Props = {
   mode: "billing" | "pricing";
   planActionLoading?: string | null;
   onSelectPlan: (planKey: "starter" | "pro" | "elite") => void;
-};
-
-const normalizePlan = (input?: string | null): PricingPlanKey => {
-  const raw = String(input || "").trim().toLowerCase();
-  if (raw === "starter" || raw === "core") return "starter";
-  if (raw === "pro") return "pro";
-  if (raw === "business" || raw === "elite" || raw === "enterprise") return "elite";
-  return "free";
 };
 
 export function BillingPlansPanel({

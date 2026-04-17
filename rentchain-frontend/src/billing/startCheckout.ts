@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/apiClient";
+import { normalizePlan, normalizePaidPlan } from "@/lib/plan";
 
 export type StartCheckoutArgs = {
   tier?: "starter" | "pro" | "elite";
@@ -10,13 +11,11 @@ export type StartCheckoutArgs = {
 };
 
 function normalizeTier(input?: string): "starter" | "pro" | "elite" | "free" | null {
-  const raw = String(input || "").trim().toLowerCase();
+  const raw = String(input || "").trim();
   if (!raw) return null;
-  if (raw === "free" || raw === "screening") return "free";
-  if (raw === "starter" || raw === "core") return "starter";
-  if (raw === "pro") return "pro";
-  if (raw === "business" || raw === "elite" || raw === "enterprise") return "elite";
-  return null;
+  const paidPlan = normalizePaidPlan(raw);
+  if (paidPlan) return paidPlan;
+  return normalizePlan(raw) === "free" ? "free" : null;
 }
 
 function normalizeInterval(input?: string): "monthly" | "yearly" {

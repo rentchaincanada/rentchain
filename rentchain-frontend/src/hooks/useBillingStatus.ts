@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { fetchSubscriptionStatus } from "@/api/billingApi";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { useAuth } from "@/context/useAuth";
+import { normalizePlan, planLabel, type Plan } from "@/lib/plan";
 
-type PlanTier = "free" | "starter" | "pro" | "elite";
+type PlanTier = Plan;
 type BillingInterval = "month" | "year" | null;
 
 type BillingStatus = {
@@ -25,15 +26,8 @@ const DEFAULT_STATUS: BillingStatus = {
   isLoading: true,
 };
 
-const planFromString = (raw?: string | null): PlanTier | null => {
-  const value = String(raw || "").trim().toLowerCase();
-  if (!value) return null;
-  if (value === "pro" || value === "professional") return "pro";
-  if (value === "elite" || value === "business" || value === "enterprise") return "elite";
-  if (value === "starter" || value === "core") return "starter";
-  if (value === "screening" || value === "free") return "free";
-  return null;
-};
+const planFromString = (raw?: string | null): PlanTier | null =>
+  raw == null || String(raw).trim() === "" ? null : normalizePlan(raw);
 
 const intervalFromString = (raw?: string | null): BillingInterval => {
   const value = String(raw || "").trim().toLowerCase();
@@ -119,9 +113,5 @@ export function useBillingStatus(): BillingStatus {
 }
 
 export function billingTierLabel(tier?: string | null): string {
-  const normalized = planFromString(tier) || "free";
-  if (normalized === "free") return "Free";
-  if (normalized === "starter") return "Starter";
-  if (normalized === "pro") return "Pro";
-  return "Elite";
+  return planLabel(planFromString(tier) || "free");
 }

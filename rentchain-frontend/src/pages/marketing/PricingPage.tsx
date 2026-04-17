@@ -13,6 +13,7 @@ import {
   type PricingInterval,
   type PricingPlanKey,
 } from "../../constants/pricingPlans";
+import { normalizePlan } from "../../lib/plan";
 import { useLanguage } from "../../context/LanguageContext";
 import { marketingCopy } from "../../content/marketingCopy";
 import { track } from "../../lib/analytics";
@@ -32,14 +33,6 @@ const wrappingTextStyle: React.CSSProperties = {
   overflowWrap: "anywhere",
   wordBreak: "break-word",
 };
-
-function normalizePlan(input?: string | null): PlanKey {
-  const raw = String(input || "").trim().toLowerCase();
-  if (raw === "starter" || raw === "core") return "starter";
-  if (raw === "pro") return "pro";
-  if (raw === "elite" || raw === "business" || raw === "enterprise") return "elite";
-  return "free";
-}
 
 function isAtOrAbove(plan: PlanKey, target: PlanKey) {
   return PLAN_ORDER.indexOf(plan) >= PLAN_ORDER.indexOf(target);

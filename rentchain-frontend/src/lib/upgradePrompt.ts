@@ -1,3 +1,5 @@
+import { CANONICAL_PLAN_ORDER, normalizePlan } from "@/lib/plan";
+
 export type UpgradePromptDetail = {
   featureKey: string;
   currentPlan?: string;
@@ -5,8 +7,6 @@ export type UpgradePromptDetail = {
   source?: string;
   redirectTo?: string;
 };
-
-const PLAN_ORDER = ["free", "starter", "pro", "elite"] as const;
 
 const FEATURE_REQUIRED_PLAN: Record<string, string> = {
   applications_manual: "free",
@@ -49,11 +49,7 @@ const FEATURE_REQUIRED_PLAN: Record<string, string> = {
 export function normalizePlanName(input?: any): string | undefined {
   const raw = String(input ?? "").trim().toLowerCase();
   if (!raw) return undefined;
-  if (PLAN_ORDER.includes(raw as (typeof PLAN_ORDER)[number])) return raw;
-  if (raw === "screening") return "free";
-  if (raw === "core") return "starter";
-  if (raw === "business" || raw === "enterprise") return "elite";
-  return undefined;
+  return normalizePlan(raw);
 }
 
 export function resolveRequiredPlan(featureKey?: string, currentPlan?: string): string | undefined {
@@ -63,8 +59,8 @@ export function resolveRequiredPlan(featureKey?: string, currentPlan?: string): 
   if (required) return required;
   const current = normalizePlanName(currentPlan);
   if (!current) return "pro";
-  const idx = PLAN_ORDER.indexOf(current as (typeof PLAN_ORDER)[number]);
-  if (idx >= 0 && idx < PLAN_ORDER.length - 1) return PLAN_ORDER[idx + 1];
+  const idx = CANONICAL_PLAN_ORDER.indexOf(current as (typeof CANONICAL_PLAN_ORDER)[number]);
+  if (idx >= 0 && idx < CANONICAL_PLAN_ORDER.length - 1) return CANONICAL_PLAN_ORDER[idx + 1];
   return current || "pro";
 }
 
