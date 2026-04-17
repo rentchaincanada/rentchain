@@ -24,6 +24,9 @@ describe("useEntitlements", () => {
         move_in_readiness: true,
         work_orders: true,
         review_summary: true,
+        portfolio_health_summary: true,
+        portfolio_score: true,
+        portfolio_action_recommendations: true,
       },
       loading: false,
     } as any);
@@ -40,6 +43,9 @@ describe("useEntitlements", () => {
     expect(result.current.hasMoveInReadiness).toBe(true);
     expect(result.current.canUseWorkOrders).toBe(true);
     expect(result.current.canViewReviewSummary).toBe(true);
+    expect(result.current.canViewPortfolioHealthSummary).toBe(true);
+    expect(result.current.canViewPortfolioScore).toBe(true);
+    expect(result.current.canViewActionRecommendations).toBe(true);
   });
 
   it("uses safe fallbacks when only legacy capability keys are present", async () => {
@@ -53,6 +59,7 @@ describe("useEntitlements", () => {
         tenant_invites: true,
         maintenance: true,
         exports_basic: false,
+        portfolio_health_summary: true,
       },
       loading: false,
     } as any);
@@ -68,6 +75,9 @@ describe("useEntitlements", () => {
     expect(result.current.canUseWorkOrders).toBe(true);
     expect(result.current.canExportPdf).toBe(false);
     expect(result.current.canViewReviewSummary).toBe(false);
+    expect(result.current.canViewPortfolioHealthSummary).toBe(true);
+    expect(result.current.canViewPortfolioScore).toBe(false);
+    expect(result.current.canViewActionRecommendations).toBe(false);
   });
 
   it("keeps Starter screening available even when the capability payload is behind the intended product policy", async () => {
@@ -90,5 +100,8 @@ describe("useEntitlements", () => {
 
     expect(result.current.canScreen).toBe(true);
     expect(result.current.canViewScreeningHistory).toBe(false);
+    expect(result.current.canViewPortfolioHealthSummary).toBe(false);
+    expect(result.current.canViewPortfolioScore).toBe(false);
+    expect(result.current.canViewActionRecommendations).toBe(false);
   });
 });

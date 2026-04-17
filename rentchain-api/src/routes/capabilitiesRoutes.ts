@@ -24,6 +24,13 @@ function buildFeatures(plan: ReturnType<typeof resolvePlanTier>, isAdmin = false
     move_in_readiness: Boolean(planFeatures.move_in_readiness || planFeatures.tenant_invites),
     work_orders: Boolean(planFeatures.work_orders || planFeatures.maintenance),
     review_summary: Boolean(planFeatures.review_summary || planFeatures.pdf_export || planFeatures.exports_basic),
+    portfolio_health_summary: Boolean(planFeatures.portfolio_health_summary),
+    portfolio_score: Boolean(
+      planFeatures.portfolio_score || planFeatures.portfolio_dashboard || planFeatures.portfolio_analytics
+    ),
+    portfolio_action_recommendations: Boolean(
+      planFeatures.portfolio_action_recommendations || planFeatures.ai_summaries || planFeatures.portfolio_analytics
+    ),
     microLive: false,
     tenantPdfReport: Boolean(planFeatures.pdf_export || planFeatures.exports_basic),
     creditHistoryExport: false,

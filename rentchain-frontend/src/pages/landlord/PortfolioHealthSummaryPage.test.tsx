@@ -10,6 +10,10 @@ vi.mock("../../api/landlordPortfolioHealthApi", () => ({
   fetchLandlordPortfolioHealth: vi.fn(),
 }));
 
+vi.mock("@/hooks/useEntitlements", () => ({
+  useEntitlements: vi.fn(),
+}));
+
 vi.mock("../../components/ui/ToastProvider", () => ({
   useToast: () => ({ showToast }),
 }));
@@ -24,8 +28,18 @@ vi.mock("../../components/ui/Ui", () => ({
   Section: ({ children }: any) => <section>{children}</section>,
 }));
 
+vi.mock("@/components/billing/FeatureTeaser", () => ({
+  FeatureTeaser: ({ title, description }: { title: string; description: string }) => (
+    <div>
+      <div>{title}</div>
+      <div>{description}</div>
+    </div>
+  ),
+}));
+
 beforeEach(() => {
   showToast.mockReset();
+  vi.clearAllMocks();
 });
 
 afterEach(() => {
@@ -34,7 +48,20 @@ afterEach(() => {
 });
 
 describe("PortfolioHealthSummaryPage", () => {
+  function mockEntitlements(overrides?: Record<string, any>) {
+    return import("@/hooks/useEntitlements").then(({ useEntitlements }) => {
+      vi.mocked(useEntitlements).mockReturnValue({
+        loading: false,
+        canViewPortfolioHealthSummary: true,
+        canViewPortfolioScore: true,
+        canViewActionRecommendations: true,
+        ...overrides,
+      } as any);
+    });
+  }
+
   it("renders overall status, dimensions, and next-focus items", async () => {
+    await mockEntitlements();
     const { fetchLandlordPortfolioHealth } = await import("../../api/landlordPortfolioHealthApi");
     vi.mocked(fetchLandlordPortfolioHealth).mockResolvedValue({
       portfolioHealth: {
@@ -89,6 +116,7 @@ describe("PortfolioHealthSummaryPage", () => {
   });
 
   it("renders sparse-data messaging", async () => {
+    await mockEntitlements();
     const { fetchLandlordPortfolioHealth } = await import("../../api/landlordPortfolioHealthApi");
     vi.mocked(fetchLandlordPortfolioHealth).mockResolvedValue({
       portfolioHealth: {
@@ -125,6 +153,7 @@ describe("PortfolioHealthSummaryPage", () => {
   });
 
   it("renders an error state cleanly", async () => {
+    await mockEntitlements();
     const { fetchLandlordPortfolioHealth } = await import("../../api/landlordPortfolioHealthApi");
     vi.mocked(fetchLandlordPortfolioHealth).mockRejectedValue(new Error("Boom"));
 
@@ -135,5 +164,44 @@ describe("PortfolioHealthSummaryPage", () => {
     );
 
     expect(await screen.findByText(/Failed to load portfolio health: Boom/i)).toBeInTheDocument();
+  });
+
+  it("shows upgrade teasers when higher intelligence tiers are unavailable", async () => {
+    await mockEntitlements({
+      canViewPortfolioScore: false,
+      canViewActionRecommendations: false,
+    });
+    const { fetchLandlordPortfolioHealth } = await import("../../api/landlordPortfolioHealthApi");
+    vi.mocked(fetchLandlordPortfolioHealth).mockResolvedValue({
+      portfolioHealth: {
+        version: "v1",
+        portfolioId: "landlord-1",
+        generatedAt: "2026-04-16T12:00:00.000Z",
+        overall: {
+          status: "healthy",
+          headline: "Your portfolio health is stable overall.",
+          summary: "Most portfolio activity is progressing normally.",
+        },
+        trend: {
+          direction: "stable",
+          summary: "Portfolio health has remained generally steady in recent history.",
+        },
+        dimensions: [],
+        nextFocus: [],
+        metadata: {
+          portfolioScoreGrade: null,
+          portfolioScoreAvailable: false,
+          trendAvailable: true,
+        },
+      },
+    } as any);
+
+    render(
+      <MemoryRouter>
+        <PortfolioHealthSummaryPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Unlock Portfolio Score™ on Pro/i)).toBeInTheDocument();
   });
 });

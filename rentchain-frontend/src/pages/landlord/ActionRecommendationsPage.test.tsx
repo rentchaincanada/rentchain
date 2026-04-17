@@ -10,6 +10,10 @@ vi.mock("../../api/landlordActionRecommendationsApi", () => ({
   fetchLandlordActionRecommendations: vi.fn(),
 }));
 
+vi.mock("@/hooks/useEntitlements", () => ({
+  useEntitlements: vi.fn(),
+}));
+
 vi.mock("../../components/ui/ToastProvider", () => ({
   useToast: () => ({ showToast }),
 }));
@@ -24,8 +28,27 @@ vi.mock("../../components/ui/Ui", () => ({
   Section: ({ children }: any) => <section>{children}</section>,
 }));
 
+vi.mock("@/components/billing/LockedFeature", () => ({
+  LockedFeature: ({ title, description }: { title: string; description: string }) => (
+    <div>
+      <div>{title}</div>
+      <div>{description}</div>
+    </div>
+  ),
+}));
+
+vi.mock("@/components/billing/FeatureTeaser", () => ({
+  FeatureTeaser: ({ title, description }: { title: string; description: string }) => (
+    <div>
+      <div>{title}</div>
+      <div>{description}</div>
+    </div>
+  ),
+}));
+
 beforeEach(() => {
   showToast.mockReset();
+  vi.clearAllMocks();
 });
 
 afterEach(() => {
@@ -34,7 +57,19 @@ afterEach(() => {
 });
 
 describe("ActionRecommendationsPage", () => {
+  function mockEntitlements(overrides?: Record<string, any>) {
+    return import("@/hooks/useEntitlements").then(({ useEntitlements }) => {
+      vi.mocked(useEntitlements).mockReturnValue({
+        loading: false,
+        canViewPortfolioScore: true,
+        canViewActionRecommendations: true,
+        ...overrides,
+      } as any);
+    });
+  }
+
   it("renders recommendation cards correctly", async () => {
+    await mockEntitlements();
     const { fetchLandlordActionRecommendations } = await import("../../api/landlordActionRecommendationsApi");
     vi.mocked(fetchLandlordActionRecommendations).mockResolvedValue({
       recommendations: [
@@ -68,6 +103,7 @@ describe("ActionRecommendationsPage", () => {
   });
 
   it("renders sparse-data recommendations safely", async () => {
+    await mockEntitlements();
     const { fetchLandlordActionRecommendations } = await import("../../api/landlordActionRecommendationsApi");
     vi.mocked(fetchLandlordActionRecommendations).mockResolvedValue({
       recommendations: [
@@ -94,6 +130,7 @@ describe("ActionRecommendationsPage", () => {
   });
 
   it("renders an error state cleanly", async () => {
+    await mockEntitlements();
     const { fetchLandlordActionRecommendations } = await import("../../api/landlordActionRecommendationsApi");
     vi.mocked(fetchLandlordActionRecommendations).mockRejectedValue(new Error("Boom"));
 
@@ -104,5 +141,33 @@ describe("ActionRecommendationsPage", () => {
     );
 
     expect(await screen.findByText(/Failed to load recommended actions: Boom/i)).toBeInTheDocument();
+  });
+
+  it("renders a teaser when score is available but recommendations are not", async () => {
+    await mockEntitlements({ canViewActionRecommendations: false, canViewPortfolioScore: true });
+    const { fetchLandlordActionRecommendations } = await import("../../api/landlordActionRecommendationsApi");
+
+    render(
+      <MemoryRouter>
+        <ActionRecommendationsPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/Unlock recommended actions on Elite/i)).toBeInTheDocument();
+    expect(vi.mocked(fetchLandlordActionRecommendations)).not.toHaveBeenCalled();
+  });
+
+  it("renders a locked state when higher-tier intelligence is unavailable", async () => {
+    await mockEntitlements({ canViewActionRecommendations: false, canViewPortfolioScore: false });
+    const { fetchLandlordActionRecommendations } = await import("../../api/landlordActionRecommendationsApi");
+
+    render(
+      <MemoryRouter>
+        <ActionRecommendationsPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/Unlock recommended actions on Elite/i)).toBeInTheDocument();
+    expect(vi.mocked(fetchLandlordActionRecommendations)).not.toHaveBeenCalled();
   });
 });

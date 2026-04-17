@@ -3,6 +3,9 @@ import { fetchLandlordPortfolioHealth, type LandlordPortfolioHealthSummaryV1 } f
 import { MacShell } from "../../components/layout/MacShell";
 import { Card, Section } from "../../components/ui/Ui";
 import { useToast } from "../../components/ui/ToastProvider";
+import { useEntitlements } from "@/hooks/useEntitlements";
+import { FeatureTeaser } from "@/components/billing/FeatureTeaser";
+import { resolveRequiredPlanLabel } from "@/lib/upgradePrompt";
 import PortfolioHealthStatusCard from "../../components/portfolioHealth/PortfolioHealthStatusCard";
 import PortfolioHealthDimensionList from "../../components/portfolioHealth/PortfolioHealthDimensionList";
 import PortfolioHealthNextFocusList from "../../components/portfolioHealth/PortfolioHealthNextFocusList";
@@ -10,11 +13,19 @@ import PortfolioFeedbackSummary from "../../components/portfolioHealth/Portfolio
 
 export default function PortfolioHealthSummaryPage() {
   const { showToast } = useToast();
+  const {
+    loading: entitlementLoading,
+    canViewPortfolioHealthSummary,
+    canViewPortfolioScore,
+    canViewActionRecommendations,
+  } = useEntitlements();
   const [summary, setSummary] = React.useState<LandlordPortfolioHealthSummaryV1 | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
+    if (entitlementLoading || !canViewPortfolioHealthSummary) return;
+
     let mounted = true;
     (async () => {
       try {
@@ -39,7 +50,11 @@ export default function PortfolioHealthSummaryPage() {
     return () => {
       mounted = false;
     };
-  }, [showToast]);
+  }, [canViewPortfolioHealthSummary, entitlementLoading, showToast]);
+
+  const scorePlanLabel = resolveRequiredPlanLabel("portfolio_score") || "Pro";
+  const recommendationsPlanLabel =
+    resolveRequiredPlanLabel("portfolio_action_recommendations") || "Elite";
 
   return (
     <MacShell title="Portfolio health">
@@ -53,15 +68,39 @@ export default function PortfolioHealthSummaryPage() {
           </div>
         </Section>
 
-        {loading ? <Card>Loading portfolio health…</Card> : null}
-        {!loading && error ? <Card style={{ color: "#b91c1c" }}>Failed to load portfolio health: {error}</Card> : null}
+        {entitlementLoading ? <Card>Loading portfolio health…</Card> : null}
+        {!entitlementLoading && !canViewPortfolioHealthSummary ? (
+          <Card style={{ color: "#b91c1c" }}>Portfolio health is currently unavailable for this account.</Card>
+        ) : null}
+        {!entitlementLoading && canViewPortfolioHealthSummary && loading ? <Card>Loading portfolio health…</Card> : null}
+        {!entitlementLoading && canViewPortfolioHealthSummary && !loading && error ? (
+          <Card style={{ color: "#b91c1c" }}>Failed to load portfolio health: {error}</Card>
+        ) : null}
 
-        {!loading && !error && summary ? (
+        {!entitlementLoading && canViewPortfolioHealthSummary && !loading && !error && summary ? (
           <>
             <PortfolioHealthStatusCard summary={summary} />
             <PortfolioHealthDimensionList dimensions={summary.dimensions} />
             <PortfolioFeedbackSummary summaries={summary.feedback?.summaries || []} />
             <PortfolioHealthNextFocusList nextFocus={summary.nextFocus} />
+            {!canViewPortfolioScore ? (
+              <FeatureTeaser
+                featureKey="portfolio_score"
+                eyebrow={`${scorePlanLabel} intelligence`}
+                title={`Unlock Portfolio Score™ on ${scorePlanLabel}`}
+                description="Move from a high-level health view into a structured portfolio score with grade, trend, and component-level context."
+                ctaLabel={`Upgrade to ${scorePlanLabel}`}
+              />
+            ) : null}
+            {canViewPortfolioScore && !canViewActionRecommendations ? (
+              <FeatureTeaser
+                featureKey="portfolio_action_recommendations"
+                eyebrow={`${recommendationsPlanLabel} intelligence`}
+                title={`Unlock recommended actions on ${recommendationsPlanLabel}`}
+                description="Add prioritized landlord-safe next steps so your portfolio health and score turn into clearer daily follow-through."
+                ctaLabel={`Upgrade to ${recommendationsPlanLabel}`}
+              />
+            ) : null}
           </>
         ) : null}
       </div>

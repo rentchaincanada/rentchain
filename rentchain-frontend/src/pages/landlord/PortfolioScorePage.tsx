@@ -10,6 +10,10 @@ import {
 import { MacShell } from "../../components/layout/MacShell";
 import { Card, Section } from "../../components/ui/Ui";
 import { useToast } from "../../components/ui/ToastProvider";
+import { useEntitlements } from "@/hooks/useEntitlements";
+import { LockedFeature } from "@/components/billing/LockedFeature";
+import { FeatureTeaser } from "@/components/billing/FeatureTeaser";
+import { resolveRequiredPlanLabel } from "@/lib/upgradePrompt";
 import PortfolioScoreHeader from "../../components/portfolioScoreExternal/PortfolioScoreHeader";
 import PortfolioScoreComponentList from "../../components/portfolioScoreExternal/PortfolioScoreComponentList";
 import PortfolioScoreTrustPanel from "../../components/portfolioScoreExternal/PortfolioScoreTrustPanel";
@@ -18,6 +22,11 @@ import PortfolioScoreShareControls from "../../components/portfolioScoreSharing/
 
 export default function PortfolioScorePage() {
   const { showToast } = useToast();
+  const {
+    loading: entitlementLoading,
+    canViewPortfolioScore,
+    canViewActionRecommendations,
+  } = useEntitlements();
   const [portfolioScore, setPortfolioScore] = React.useState<PortfolioScoreExternalV1 | null>(null);
   const [sharing, setSharing] = React.useState<PortfolioScoreShareRecordV1 | null>(null);
   const [shareUrl, setShareUrl] = React.useState<string | null>(null);
@@ -26,6 +35,8 @@ export default function PortfolioScorePage() {
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
+    if (entitlementLoading || !canViewPortfolioScore) return;
+
     let mounted = true;
     (async () => {
       try {
@@ -57,7 +68,11 @@ export default function PortfolioScorePage() {
     return () => {
       mounted = false;
     };
-  }, [showToast]);
+  }, [canViewPortfolioScore, entitlementLoading, showToast]);
+
+  const scorePlanLabel = resolveRequiredPlanLabel("portfolio_score") || "Pro";
+  const recommendationsPlanLabel =
+    resolveRequiredPlanLabel("portfolio_action_recommendations") || "Elite";
 
   const handleChangeVisibility = async (visibility: PortfolioScoreVisibility) => {
     try {
@@ -105,10 +120,22 @@ export default function PortfolioScorePage() {
           </div>
         </Section>
 
-        {loading ? <Card>Loading portfolio score…</Card> : null}
-        {!loading && error ? <Card style={{ color: "#b91c1c" }}>Failed to load portfolio score: {error}</Card> : null}
+        {entitlementLoading ? <Card>Loading portfolio score…</Card> : null}
+        {!entitlementLoading && !canViewPortfolioScore ? (
+          <LockedFeature
+            featureKey="portfolio_score"
+            title={`Unlock Portfolio Score™ on ${scorePlanLabel}`}
+            description="Portfolio Score™ adds a structured score, grade, and component-level view so you can track operational consistency more clearly."
+            hint="Your portfolio health summary remains available while Portfolio Score™ stays on a higher tier."
+            ctaLabel={`Upgrade to ${scorePlanLabel}`}
+          />
+        ) : null}
+        {!entitlementLoading && canViewPortfolioScore && loading ? <Card>Loading portfolio score…</Card> : null}
+        {!entitlementLoading && canViewPortfolioScore && !loading && error ? (
+          <Card style={{ color: "#b91c1c" }}>Failed to load portfolio score: {error}</Card>
+        ) : null}
 
-        {!loading && !error && portfolioScore ? (
+        {!entitlementLoading && canViewPortfolioScore && !loading && !error && portfolioScore ? (
           <>
             <PortfolioScoreHeader portfolioScore={portfolioScore} />
             <PortfolioScoreVisibilityCard sharing={sharing} />
@@ -121,6 +148,15 @@ export default function PortfolioScorePage() {
             />
             <PortfolioScoreComponentList components={portfolioScore.components} />
             <PortfolioScoreTrustPanel trust={portfolioScore.trust} />
+            {!canViewActionRecommendations ? (
+              <FeatureTeaser
+                featureKey="portfolio_action_recommendations"
+                eyebrow={`${recommendationsPlanLabel} intelligence`}
+                title={`Unlock recommended actions on ${recommendationsPlanLabel}`}
+                description="Add prioritized landlord-safe next steps so your Portfolio Score™ turns into clearer daily operational guidance."
+                ctaLabel={`Upgrade to ${recommendationsPlanLabel}`}
+              />
+            ) : null}
           </>
         ) : null}
       </div>

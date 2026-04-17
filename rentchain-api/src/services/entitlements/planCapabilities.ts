@@ -11,6 +11,7 @@ const PLAN_ADDITIONS: Record<Plan, string[]> = {
     "screening",
     "screening_pay_per_use",
     "screening_history",
+    "portfolio_health_summary",
     "unitsTable",
     "properties.create",
     "units.create",
@@ -35,6 +36,7 @@ const PLAN_ADDITIONS: Record<Plan, string[]> = {
     "review_summary",
     "compliance_reports",
     "portfolio_dashboard",
+    "portfolio_score",
     "team.invites",
     "exports",
     "registry_filing_access",
@@ -45,6 +47,7 @@ const PLAN_ADDITIONS: Record<Plan, string[]> = {
     "exports_advanced",
     "audit_logs",
     "portfolio_analytics",
+    "portfolio_action_recommendations",
   ],
 };
 

@@ -137,6 +137,30 @@ const COPY_MAP: Record<string, UpgradeCopy> = {
     secondaryCta: "Not now",
     requiredPlanLabel: "Pro",
   },
+  portfolio_score: {
+    title: "Upgrade to unlock Portfolio Score™",
+    subtitle: "Pro adds a structured portfolio score so you can see how consistently your rental operations are performing.",
+    bullets: [
+      "Track score, grade, and recent direction",
+      "Review portfolio components in one view",
+      "Use a clearer operational benchmark as your portfolio grows",
+    ],
+    primaryCta: "Upgrade to Pro",
+    secondaryCta: "Not now",
+    requiredPlanLabel: "Pro",
+  },
+  portfolio_action_recommendations: {
+    title: "Upgrade to unlock recommended actions",
+    subtitle: "Elite adds landlord-safe recommended actions based on your portfolio health, score, and recent direction.",
+    bullets: [
+      "See prioritized next steps each day",
+      "Turn portfolio signals into clearer follow-through",
+      "Keep advanced intelligence tied to your portfolio trends",
+    ],
+    primaryCta: "Upgrade to Elite",
+    secondaryCta: "Not now",
+    requiredPlanLabel: "Elite",
+  },
 };
 
 function normalizeKey(featureKey: string) {
@@ -157,6 +181,8 @@ export function getUpgradeCopy(featureKey?: string): UpgradeCopy {
   if (key === "review_summary") return COPY_MAP.tenant_screening;
   if (key === "properties.create") return COPY_MAP.properties;
   if (key === "units.create") return COPY_MAP.units;
+  if (key === "portfolio_score") return COPY_MAP.portfolio_score;
+  if (key === "portfolio_action_recommendations") return COPY_MAP.portfolio_action_recommendations;
   if (key === "portfolio.ai" || key === "ai.summary") return COPY_MAP["ai.insights"];
   if (key.includes("screening")) return COPY_MAP.tenant_screening;
   if (key.includes("application") || key.includes("apply")) return COPY_MAP.applications;
