@@ -63,6 +63,7 @@ const PricingPage: React.FC = () => {
   const [hoveredPlan, setHoveredPlan] = React.useState<PlanKey | null>(null);
   const [isMobile, setIsMobile] = React.useState(false);
   const [isCompactDesktop, setIsCompactDesktop] = React.useState(false);
+  const trackedInitialInterval = React.useRef(false);
   const safeTrack = (eventName: string, props: Record<string, unknown>) => {
     try {
       track(eventName, props);
@@ -95,6 +96,29 @@ const PricingPage: React.FC = () => {
       compactDesktopMedia.removeListener?.(update);
     };
   }, []);
+
+  React.useEffect(() => {
+    safeTrack("pricing_page_viewed", {
+      surface: "workspace_pricing",
+      currentPlan,
+      interval,
+      route: typeof window !== "undefined" ? window.location.pathname : undefined,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  React.useEffect(() => {
+    if (!trackedInitialInterval.current) {
+      trackedInitialInterval.current = true;
+      return;
+    }
+    safeTrack("pricing_interval_changed", {
+      surface: "workspace_pricing",
+      currentPlan,
+      interval,
+      route: typeof window !== "undefined" ? window.location.pathname : undefined,
+    });
+  }, [currentPlan, interval]);
 
   React.useEffect(() => {
     let active = true;
@@ -137,6 +161,18 @@ const PricingPage: React.FC = () => {
     if (target === "pro") {
       safeTrack("pricing_timeline_cta_clicked", { surface: "in_app" });
     }
+    const action =
+      PLAN_ORDER.indexOf(currentPlan) >= PLAN_ORDER.indexOf(target)
+        ? "manage_existing_plan"
+        : "start_checkout";
+    safeTrack("pricing_plan_cta_clicked", {
+      surface: "workspace_pricing",
+      currentPlan,
+      targetPlan: target,
+      interval,
+      action,
+      route: typeof window !== "undefined" ? window.location.pathname : undefined,
+    });
     if (PLAN_ORDER.indexOf(currentPlan) >= PLAN_ORDER.indexOf(target)) {
       try {
         const portal = await createBillingPortalSession();

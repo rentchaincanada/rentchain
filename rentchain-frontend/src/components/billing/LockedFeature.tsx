@@ -37,7 +37,13 @@ export function LockedFeature({
         {hint ? <div style={{ color: text.secondary, fontSize: 12 }}>{hint}</div> : null}
       </div>
       <div>
-        <UpgradeCTA featureKey={featureKey} label={ctaLabel} variant="secondary" />
+        <UpgradeCTA
+          featureKey={featureKey}
+          label={ctaLabel}
+          source="locked_feature"
+          presentation="locked"
+          variant="secondary"
+        />
       </div>
     </Card>
   );

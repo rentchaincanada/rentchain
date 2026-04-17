@@ -6,9 +6,13 @@ import { incrementCounter } from "../services/telemetryService";
 const router = express.Router();
 
 const ALLOWED_EVENT_PATTERNS = [
+  /^billing_/,
+  /^pricing_/,
   /^pricing_cta_/,
   /^demo_/,
   /^gating_/,
+  /^upgrade_cta_/,
+  /^upgrade_prompt_/,
   /^upgrade_modal_/,
   /^registry_/,
 ];

@@ -105,7 +105,11 @@ const BillingPage: React.FC = () => {
   };
 
   useEffect(() => {
-    track("billing_page_opened", { tier: resolvedCurrentPlan });
+    track("billing_page_opened", {
+      currentPlan: resolvedCurrentPlan,
+      surface: "billing_page",
+      route: typeof window !== "undefined" ? window.location.pathname : undefined,
+    });
     void refreshEntitlements(updateUser);
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -138,7 +142,13 @@ const BillingPage: React.FC = () => {
   const handlePlanAction = async (planKey: "starter" | "pro" | "elite") => {
     if (pricingUnavailable) return;
     if (planKey === resolvedCurrentPlan) return;
-    track("billing_upgrade_clicked", { fromTier: resolvedCurrentPlan, toTier: planKey, interval });
+    track("billing_upgrade_clicked", {
+      currentPlan: resolvedCurrentPlan,
+      targetPlan: planKey,
+      interval,
+      surface: "billing_page",
+      route: typeof window !== "undefined" ? window.location.pathname : undefined,
+    });
 
     try {
       setPlanActionLoading(planKey);
@@ -165,7 +175,11 @@ const BillingPage: React.FC = () => {
   };
 
   const handlePortal = async () => {
-    track("billing_manage_subscription_clicked", { tier: resolvedCurrentPlan });
+    track("billing_manage_subscription_clicked", {
+      currentPlan: resolvedCurrentPlan,
+      surface: "billing_page",
+      route: typeof window !== "undefined" ? window.location.pathname : undefined,
+    });
     try {
       setPortalLoading(true);
       const res = await createBillingPortalSession();

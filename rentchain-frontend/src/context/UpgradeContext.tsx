@@ -12,6 +12,7 @@ import { normalizePlanName, resolveRequiredPlan } from "../lib/upgradePrompt";
 import { getCachedCapabilities } from "../lib/entitlements";
 import { isPlanAtLeast, normalizePlan } from "../lib/plan";
 import { useAuth } from "./AuthContext";
+import { track } from "@/lib/analytics";
 
 type UpgradeContextValue = {
   openUpgrade: (
@@ -103,6 +104,14 @@ export function UpgradeProvider({ children }: { children: React.ReactNode }) {
         ? `${window.location.pathname}${window.location.search}`
         : "/dashboard";
     const redirectTo = detail.redirectTo || fallbackRedirect;
+    track("upgrade_prompt_viewed", {
+      featureKey,
+      currentPlan,
+      requiredPlan,
+      source,
+      presentation: "modal",
+      route: typeof window !== "undefined" ? window.location.pathname : undefined,
+    });
     setPromptFeatureKey(featureKey);
     setPromptCurrentPlan(currentPlan);
     setPromptRequiredPlan(requiredPlan);

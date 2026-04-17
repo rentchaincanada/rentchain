@@ -118,5 +118,10 @@ describe("BillingPage", () => {
     expect(screen.getByTestId("billing-plans-panel")).toHaveTextContent("pro");
     expect(screen.getAllByRole("button", { name: "Manage subscription" })).toHaveLength(2);
     expect(screen.getByText(/Pro includes exports, reporting, and team workflows/)).toBeInTheDocument();
+    expect(mocks.trackMock).toHaveBeenCalledWith("billing_page_opened", {
+      currentPlan: "pro",
+      surface: "billing_page",
+      route: "/",
+    });
   });
 });

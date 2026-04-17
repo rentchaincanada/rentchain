@@ -5,6 +5,7 @@ import { normalizePlanLabel } from "@/billing/planLabel";
 import { normalizePaidPlan } from "@/lib/plan";
 import { resolveRequiredPlan } from "@/lib/upgradePrompt";
 import { startCheckout } from "@/billing/startCheckout";
+import { track } from "@/lib/analytics";
 
 export function UpgradePromptModal({
   open,
@@ -41,6 +42,22 @@ export function UpgradePromptModal({
   const [interval, setInterval] = useState<"monthly" | "yearly">("monthly");
   const navigate = useNavigate();
   const requiredTier = normalizePaidPlan(requiredPlanKey) || "pro";
+  const trackPayload = useMemo(
+    () => ({
+      featureKey,
+      currentPlan: currentPlan || "free",
+      requiredPlan: requiredPlanKey,
+      source: source || "unknown",
+      route: typeof window !== "undefined" ? window.location.pathname : undefined,
+      presentation: "modal",
+    }),
+    [currentPlan, featureKey, requiredPlanKey, source]
+  );
+
+  const handleDismiss = React.useCallback(() => {
+    track("upgrade_prompt_dismissed", trackPayload);
+    onClose();
+  }, [onClose, trackPayload]);
 
   useEffect(() => {
     if (!open) return;
@@ -53,7 +70,7 @@ export function UpgradePromptModal({
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
-        onClose();
+        handleDismiss();
         return;
       }
       if (e.key !== "Tab") return;
@@ -87,12 +104,12 @@ export function UpgradePromptModal({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, onClose]);
+  }, [handleDismiss, open]);
 
   return (
     <>
       <div
-        onClick={onClose}
+        onClick={handleDismiss}
         style={{
           position: "fixed",
           inset: 0,
@@ -131,11 +148,10 @@ export function UpgradePromptModal({
                 display: "grid",
                 placeItems: "center",
                 color: "#1d4ed8",
-              fontWeight: 900,
-              fontSize: 18,
-            }}
+                fontWeight: 900,
+                fontSize: 18,
+              }}
           >
-              ^
             </div>
             <div>
               <div style={{ fontWeight: 900, fontSize: 20 }}>{title}</div>
@@ -221,7 +237,12 @@ export function UpgradePromptModal({
           <div style={{ display: "grid", gap: 10 }}>
             <button
               ref={primaryRef}
-              onClick={() =>
+              onClick={() => {
+                track("upgrade_prompt_checkout_clicked", {
+                  ...trackPayload,
+                  interval,
+                  targetPlan: requiredTier,
+                });
                 startCheckout({
                   tier: requiredTier,
                   interval,
@@ -229,8 +250,8 @@ export function UpgradePromptModal({
                   featureKey,
                   source,
                   redirectTo,
-                })
-              }
+                });
+              }}
               style={{
                 padding: "12px 16px",
                 borderRadius: 14,
@@ -247,7 +268,7 @@ export function UpgradePromptModal({
             </button>
             <div className="rc-wrap-row" style={{ justifyContent: "space-between" }}>
               <button
-                onClick={onClose}
+                onClick={handleDismiss}
                 style={{
                   padding: "10px 14px",
                   borderRadius: 12,
