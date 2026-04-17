@@ -1,5 +1,8 @@
 import React from "react";
 import { Button, Card, Input } from "../../components/ui/Ui";
+import { useEntitlements } from "@/hooks/useEntitlements";
+import { FeatureTeaser } from "@/components/billing/FeatureTeaser";
+import { resolveRequiredPlanLabel } from "@/lib/upgradePrompt";
 import {
   createContractorInvite,
   listContractorInvites,
@@ -22,6 +25,7 @@ function formatDate(ms?: number | null) {
 }
 
 export default function ContractorsPage() {
+  const { canViewMarketplaceDirectory, loading: entitlementsLoading } = useEntitlements();
   const [loading, setLoading] = React.useState(true);
   const [savingProfile, setSavingProfile] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -59,8 +63,15 @@ export default function ContractorsPage() {
   }, [availabilityStatus, serviceArea, serviceCategory]);
 
   React.useEffect(() => {
+    if (entitlementsLoading) return;
     void load();
-  }, [load]);
+  }, [entitlementsLoading, load]);
+
+  const marketplacePlanLabel = resolveRequiredPlanLabel("marketplace_directory") || "Pro";
+
+  if (entitlementsLoading) {
+    return <Card>Loading contractor directory...</Card>;
+  }
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
@@ -70,6 +81,16 @@ export default function ContractorsPage() {
           Manage your private contractor network, service coverage, and assignment-ready profiles.
         </div>
       </Card>
+
+      {!canViewMarketplaceDirectory ? (
+        <FeatureTeaser
+          featureKey="marketplace_directory"
+          eyebrow={`${marketplacePlanLabel} marketplace`}
+          title={`Unlock the full contractor directory on ${marketplacePlanLabel}`}
+          description="Preview your existing contractor network now, then upgrade to create profiles, manage invite flows, and use the full marketplace directory experience."
+          ctaLabel={`Upgrade to ${marketplacePlanLabel}`}
+        />
+      ) : null}
 
       <ContractorFilterBar
         serviceCategory={serviceCategory}
@@ -83,27 +104,29 @@ export default function ContractorsPage() {
         onRefresh={() => void load()}
       />
 
-      <ContractorProfileForm
-        initialValue={editing}
-        submitting={savingProfile}
-        onSubmit={async (payload) => {
-          setSavingProfile(true);
-          setError(null);
-          try {
-            if (editing?.id) {
-              await updateContractorProfile(editing.id, payload);
-            } else {
-              await createContractorProfile(payload);
+      {canViewMarketplaceDirectory ? (
+        <ContractorProfileForm
+          initialValue={editing}
+          submitting={savingProfile}
+          onSubmit={async (payload) => {
+            setSavingProfile(true);
+            setError(null);
+            try {
+              if (editing?.id) {
+                await updateContractorProfile(editing.id, payload);
+              } else {
+                await createContractorProfile(payload);
+              }
+              setEditing(null);
+              await load();
+            } catch (err: any) {
+              setError(String(err?.message || "Failed to save contractor profile"));
+            } finally {
+              setSavingProfile(false);
             }
-            setEditing(null);
-            await load();
-          } catch (err: any) {
-            setError(String(err?.message || "Failed to save contractor profile"));
-          } finally {
-            setSavingProfile(false);
-          }
-        }}
-      />
+          }}
+        />
+      ) : null}
 
       {loading ? (
         <Card>Loading contractor directory...</Card>
@@ -115,105 +138,109 @@ export default function ContractorsPage() {
             <ContractorCard
               key={contractor.id}
               contractor={contractor}
-              actionLabel="Edit profile"
-              onAction={() => setEditing(contractor)}
+              actionLabel={canViewMarketplaceDirectory ? "Edit profile" : undefined}
+              onAction={canViewMarketplaceDirectory ? () => setEditing(contractor) : undefined}
             />
           ))}
         </div>
       )}
 
-      <Card style={{ display: "grid", gap: 10 }}>
-        <div style={{ fontWeight: 600 }}>Invite contractor</div>
-        <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))" }}>
-          <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="contractor@email.com" />
-          <Input value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Optional message" />
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <Button
-            disabled={savingInvite || !email.trim()}
-            onClick={async () => {
-              setSavingInvite(true);
-              setError(null);
-              try {
-                await createContractorInvite({ email: email.trim(), message: message.trim() });
-                setEmail("");
-                setMessage("");
-                await load();
-              } catch (err: any) {
-                setError(String(err?.message || "Failed to create invite"));
-              } finally {
-                setSavingInvite(false);
-              }
-            }}
-          >
-            {savingInvite ? "Sending..." : "Send Invite"}
-          </Button>
-        </div>
-      </Card>
+      {canViewMarketplaceDirectory ? (
+        <Card style={{ display: "grid", gap: 10 }}>
+          <div style={{ fontWeight: 600 }}>Invite contractor</div>
+          <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))" }}>
+            <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="contractor@email.com" />
+            <Input value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Optional message" />
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <Button
+              disabled={savingInvite || !email.trim()}
+              onClick={async () => {
+                setSavingInvite(true);
+                setError(null);
+                try {
+                  await createContractorInvite({ email: email.trim(), message: message.trim() });
+                  setEmail("");
+                  setMessage("");
+                  await load();
+                } catch (err: any) {
+                  setError(String(err?.message || "Failed to create invite"));
+                } finally {
+                  setSavingInvite(false);
+                }
+              }}
+            >
+              {savingInvite ? "Sending..." : "Send Invite"}
+            </Button>
+          </div>
+        </Card>
+      ) : null}
 
       {error ? <Card style={{ borderColor: "#ef4444", color: "#991b1b" }}>{error}</Card> : null}
 
-      <Card>
-        <div style={{ fontWeight: 600, marginBottom: 8 }}>Invite history</div>
-        {loading ? (
-          <div>Loading invites...</div>
-        ) : invites.length === 0 ? (
-          <div style={{ color: "#64748b" }}>No invites yet.</div>
-        ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ textAlign: "left", borderBottom: "1px solid #e2e8f0" }}>
-                <th style={{ padding: 8 }}>Email</th>
-                <th style={{ padding: 8 }}>Status</th>
-                <th style={{ padding: 8 }}>Created</th>
-                <th style={{ padding: 8 }}>Expires</th>
-                <th style={{ padding: 8 }}>Accepted</th>
-                <th style={{ padding: 8 }}>Invite Link</th>
-                <th style={{ padding: 8 }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {invites.map((invite) => (
-                <tr key={invite.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
-                  <td style={{ padding: 8 }}>{invite.email}</td>
-                  <td style={{ padding: 8 }}>{invite.status}</td>
-                  <td style={{ padding: 8 }}>{formatDate(invite.createdAtMs)}</td>
-                  <td style={{ padding: 8 }}>{formatDate(invite.expiresAtMs || null)}</td>
-                  <td style={{ padding: 8 }}>{formatDate(invite.acceptedAtMs)}</td>
-                  <td style={{ padding: 8 }}>
-                    {invite.inviteLink ? (
-                      <a href={invite.inviteLink} target="_blank" rel="noreferrer">
-                        Open
-                      </a>
-                    ) : (
-                      "-"
-                    )}
-                  </td>
-                  <td style={{ padding: 8 }}>
-                    {invite.status !== "accepted" ? (
-                      <Button
-                        variant="ghost"
-                        onClick={async () => {
-                          try {
-                            await resendContractorInvite(invite.id);
-                            await load();
-                          } catch (err: any) {
-                            setError(String(err?.message || "Failed to resend invite"));
-                          }
-                        }}
-                      >
-                        Resend
-                      </Button>
-                    ) : (
-                      "-"
-                    )}
-                  </td>
+      {canViewMarketplaceDirectory ? (
+        <Card>
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>Invite history</div>
+          {loading ? (
+            <div>Loading invites...</div>
+          ) : invites.length === 0 ? (
+            <div style={{ color: "#64748b" }}>No invites yet.</div>
+          ) : (
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ textAlign: "left", borderBottom: "1px solid #e2e8f0" }}>
+                  <th style={{ padding: 8 }}>Email</th>
+                  <th style={{ padding: 8 }}>Status</th>
+                  <th style={{ padding: 8 }}>Created</th>
+                  <th style={{ padding: 8 }}>Expires</th>
+                  <th style={{ padding: 8 }}>Accepted</th>
+                  <th style={{ padding: 8 }}>Invite Link</th>
+                  <th style={{ padding: 8 }}>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </Card>
+              </thead>
+              <tbody>
+                {invites.map((invite) => (
+                  <tr key={invite.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                    <td style={{ padding: 8 }}>{invite.email}</td>
+                    <td style={{ padding: 8 }}>{invite.status}</td>
+                    <td style={{ padding: 8 }}>{formatDate(invite.createdAtMs)}</td>
+                    <td style={{ padding: 8 }}>{formatDate(invite.expiresAtMs || null)}</td>
+                    <td style={{ padding: 8 }}>{formatDate(invite.acceptedAtMs)}</td>
+                    <td style={{ padding: 8 }}>
+                      {invite.inviteLink ? (
+                        <a href={invite.inviteLink} target="_blank" rel="noreferrer">
+                          Open
+                        </a>
+                      ) : (
+                        "-"
+                      )}
+                    </td>
+                    <td style={{ padding: 8 }}>
+                      {invite.status !== "accepted" ? (
+                        <Button
+                          variant="ghost"
+                          onClick={async () => {
+                            try {
+                              await resendContractorInvite(invite.id);
+                              await load();
+                            } catch (err: any) {
+                              setError(String(err?.message || "Failed to resend invite"));
+                            }
+                          }}
+                        >
+                          Resend
+                        </Button>
+                      ) : (
+                        "-"
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Card>
+      ) : null}
     </div>
   );
 }

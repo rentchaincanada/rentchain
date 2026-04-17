@@ -161,6 +161,30 @@ const COPY_MAP: Record<string, UpgradeCopy> = {
     secondaryCta: "Not now",
     requiredPlanLabel: "Elite",
   },
+  marketplace_directory: {
+    title: "Upgrade to unlock the contractor directory",
+    subtitle: "Pro adds a private contractor network so you can manage marketplace-ready service profiles inside RentChain.",
+    bullets: [
+      "Build and maintain a private contractor directory",
+      "Filter service providers by category, area, and availability",
+      "Keep contractor invites and profile management in one place",
+    ],
+    primaryCta: "Upgrade to Pro",
+    secondaryCta: "Not now",
+    requiredPlanLabel: "Pro",
+  },
+  marketplace_contractor_assignment: {
+    title: "Upgrade to unlock contractor assignment",
+    subtitle: "Elite adds embedded marketplace assignment inside work orders so you can match maintenance demand to your contractor network faster.",
+    bullets: [
+      "Discover contractor candidates directly from a work order",
+      "Assign the right contractor without leaving the maintenance workflow",
+      "Keep contractor assignment tied to the job record",
+    ],
+    primaryCta: "Upgrade to Elite",
+    secondaryCta: "Not now",
+    requiredPlanLabel: "Elite",
+  },
 };
 
 function normalizeKey(featureKey: string) {
@@ -183,6 +207,8 @@ export function getUpgradeCopy(featureKey?: string): UpgradeCopy {
   if (key === "units.create") return COPY_MAP.units;
   if (key === "portfolio_score") return COPY_MAP.portfolio_score;
   if (key === "portfolio_action_recommendations") return COPY_MAP.portfolio_action_recommendations;
+  if (key === "marketplace_directory") return COPY_MAP.marketplace_directory;
+  if (key === "marketplace_contractor_assignment") return COPY_MAP.marketplace_contractor_assignment;
   if (key === "portfolio.ai" || key === "ai.summary") return COPY_MAP["ai.insights"];
   if (key.includes("screening")) return COPY_MAP.tenant_screening;
   if (key.includes("application") || key.includes("apply")) return COPY_MAP.applications;

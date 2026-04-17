@@ -32,6 +32,8 @@ export const DEFAULT_CAPABILITIES: CapabilitiesResponse = {
     exports_basic: false,
     exports_advanced: false,
     compliance_reports: false,
+    marketplace_directory: false,
+    marketplace_contractor_assignment: false,
     portfolio_health_summary: true,
     portfolio_score: false,
     portfolio_dashboard: false,

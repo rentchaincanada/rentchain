@@ -32,6 +32,8 @@ const FEATURE_REQUIRED_PLAN: Record<string, string> = {
   ledger_verified: "pro",
   ledger: "starter",
   "team.invites": "pro",
+  marketplace_directory: "pro",
+  marketplace_contractor_assignment: "elite",
   portfolio_health_summary: "free",
   portfolio_score: "pro",
   portfolio_action_recommendations: "elite",

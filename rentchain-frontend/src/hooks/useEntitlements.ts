@@ -26,6 +26,9 @@ export function useEntitlements() {
     const canExportPdf = isAdmin || hasFeature(featureMap, ["pdf_export", "exports_basic", "tenantPdfReport"]);
     const hasMoveInReadiness = isAdmin || hasFeature(featureMap, ["move_in_readiness", "tenant_invites"]);
     const canUseWorkOrders = isAdmin || hasFeature(featureMap, ["work_orders", "maintenance"]);
+    const canViewMarketplaceDirectory = isAdmin || hasFeature(featureMap, ["marketplace_directory"]);
+    const canUseMarketplaceContractorAssignment =
+      isAdmin || hasFeature(featureMap, ["marketplace_contractor_assignment"]);
     const canViewReviewSummary = isAdmin || hasFeature(featureMap, ["review_summary", "pdf_export", "exports_basic"]);
     const canViewPortfolioHealthSummary = isAdmin || hasFeature(featureMap, ["portfolio_health_summary"]);
     const canViewPortfolioScore = isAdmin || hasFeature(featureMap, [
@@ -52,6 +55,8 @@ export function useEntitlements() {
       canExportPdf,
       hasMoveInReadiness,
       canUseWorkOrders,
+      canViewMarketplaceDirectory,
+      canUseMarketplaceContractorAssignment,
       canViewReviewSummary,
       canViewPortfolioHealthSummary,
       canViewPortfolioScore,
