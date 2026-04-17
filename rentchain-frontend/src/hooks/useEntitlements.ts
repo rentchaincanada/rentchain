@@ -27,6 +27,17 @@ export function useEntitlements() {
     const hasMoveInReadiness = isAdmin || hasFeature(featureMap, ["move_in_readiness", "tenant_invites"]);
     const canUseWorkOrders = isAdmin || hasFeature(featureMap, ["work_orders", "maintenance"]);
     const canViewReviewSummary = isAdmin || hasFeature(featureMap, ["review_summary", "pdf_export", "exports_basic"]);
+    const canViewPortfolioHealthSummary = isAdmin || hasFeature(featureMap, ["portfolio_health_summary"]);
+    const canViewPortfolioScore = isAdmin || hasFeature(featureMap, [
+      "portfolio_score",
+      "portfolio_dashboard",
+      "portfolio_analytics",
+    ]);
+    const canViewActionRecommendations = isAdmin || hasFeature(featureMap, [
+      "portfolio_action_recommendations",
+      "ai_summaries",
+      "portfolio_analytics",
+    ]);
 
     return {
       loading,
@@ -42,6 +53,9 @@ export function useEntitlements() {
       hasMoveInReadiness,
       canUseWorkOrders,
       canViewReviewSummary,
+      canViewPortfolioHealthSummary,
+      canViewPortfolioScore,
+      canViewActionRecommendations,
     };
   }, [caps?.plan, features, loading, user?.actorRole, user?.plan, user?.role]);
 }

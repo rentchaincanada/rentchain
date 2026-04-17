@@ -3,15 +3,26 @@ import { fetchLandlordActionRecommendations, type LandlordActionRecommendationV1
 import { MacShell } from "../../components/layout/MacShell";
 import { Card, Section } from "../../components/ui/Ui";
 import { useToast } from "../../components/ui/ToastProvider";
+import { useEntitlements } from "@/hooks/useEntitlements";
+import { LockedFeature } from "@/components/billing/LockedFeature";
+import { FeatureTeaser } from "@/components/billing/FeatureTeaser";
+import { resolveRequiredPlanLabel } from "@/lib/upgradePrompt";
 import RecommendationList from "../../components/actionRecommendations/RecommendationList";
 
 export default function ActionRecommendationsPage() {
   const { showToast } = useToast();
+  const {
+    loading: entitlementLoading,
+    canViewPortfolioScore,
+    canViewActionRecommendations,
+  } = useEntitlements();
   const [recommendations, setRecommendations] = React.useState<LandlordActionRecommendationV1[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
+    if (entitlementLoading || !canViewActionRecommendations) return;
+
     let mounted = true;
     (async () => {
       try {
@@ -37,7 +48,10 @@ export default function ActionRecommendationsPage() {
     return () => {
       mounted = false;
     };
-  }, [showToast]);
+  }, [canViewActionRecommendations, entitlementLoading, showToast]);
+
+  const recommendationsPlanLabel =
+    resolveRequiredPlanLabel("portfolio_action_recommendations") || "Elite";
 
   return (
     <MacShell title="Recommended actions">
@@ -51,9 +65,32 @@ export default function ActionRecommendationsPage() {
           </div>
         </Section>
 
-        {loading ? <Card>Loading recommended actions…</Card> : null}
-        {!loading && error ? <Card style={{ color: "#b91c1c" }}>Failed to load recommended actions: {error}</Card> : null}
-        {!loading && !error ? <RecommendationList recommendations={recommendations} /> : null}
+        {entitlementLoading ? <Card>Loading recommended actions…</Card> : null}
+        {!entitlementLoading && !canViewActionRecommendations && canViewPortfolioScore ? (
+          <FeatureTeaser
+            featureKey="portfolio_action_recommendations"
+            eyebrow={`${recommendationsPlanLabel} intelligence`}
+            title={`Unlock recommended actions on ${recommendationsPlanLabel}`}
+            description="Recommended actions turn your portfolio health, score, and recent direction into prioritized next steps for daily follow-through."
+            ctaLabel={`Upgrade to ${recommendationsPlanLabel}`}
+          />
+        ) : null}
+        {!entitlementLoading && !canViewActionRecommendations && !canViewPortfolioScore ? (
+          <LockedFeature
+            featureKey="portfolio_action_recommendations"
+            title={`Unlock recommended actions on ${recommendationsPlanLabel}`}
+            description="Recommended actions sit on top of RentChain's higher-tier intelligence layer and add prioritized next steps based on your portfolio signals."
+            hint="Portfolio health remains available now, while score and recommendations unlock as you move up the intelligence ladder."
+            ctaLabel={`Upgrade to ${recommendationsPlanLabel}`}
+          />
+        ) : null}
+        {!entitlementLoading && canViewActionRecommendations && loading ? <Card>Loading recommended actions…</Card> : null}
+        {!entitlementLoading && canViewActionRecommendations && !loading && error ? (
+          <Card style={{ color: "#b91c1c" }}>Failed to load recommended actions: {error}</Card>
+        ) : null}
+        {!entitlementLoading && canViewActionRecommendations && !loading && !error ? (
+          <RecommendationList recommendations={recommendations} />
+        ) : null}
       </div>
     </MacShell>
   );

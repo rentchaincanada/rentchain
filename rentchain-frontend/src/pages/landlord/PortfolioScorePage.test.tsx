@@ -10,6 +10,10 @@ vi.mock("../../api/landlordPortfolioScoreApi", () => ({
   fetchLandlordPortfolioScore: vi.fn(),
 }));
 
+vi.mock("@/hooks/useEntitlements", () => ({
+  useEntitlements: vi.fn(),
+}));
+
 vi.mock("../../api/landlordPortfolioScoreSharingApi", () => ({
   fetchPortfolioScoreSharing: vi.fn(),
   updatePortfolioScoreSharing: vi.fn(),
@@ -31,8 +35,27 @@ vi.mock("../../components/ui/Ui", () => ({
   Button: ({ children, ...props }: any) => <button {...props}>{children}</button>,
 }));
 
+vi.mock("@/components/billing/LockedFeature", () => ({
+  LockedFeature: ({ title, description }: { title: string; description: string }) => (
+    <div>
+      <div>{title}</div>
+      <div>{description}</div>
+    </div>
+  ),
+}));
+
+vi.mock("@/components/billing/FeatureTeaser", () => ({
+  FeatureTeaser: ({ title, description }: { title: string; description: string }) => (
+    <div>
+      <div>{title}</div>
+      <div>{description}</div>
+    </div>
+  ),
+}));
+
 beforeEach(() => {
   showToast.mockReset();
+  vi.clearAllMocks();
 });
 
 afterEach(() => {
@@ -41,7 +64,19 @@ afterEach(() => {
 });
 
 describe("PortfolioScorePage", () => {
+  function mockEntitlements(overrides?: Record<string, any>) {
+    return import("@/hooks/useEntitlements").then(({ useEntitlements }) => {
+      vi.mocked(useEntitlements).mockReturnValue({
+        loading: false,
+        canViewPortfolioScore: true,
+        canViewActionRecommendations: true,
+        ...overrides,
+      } as any);
+    });
+  }
+
   it("renders a high score safely", async () => {
+    await mockEntitlements();
     const { fetchLandlordPortfolioScore } = await import("../../api/landlordPortfolioScoreApi");
     const { fetchPortfolioScoreSharing } = await import("../../api/landlordPortfolioScoreSharingApi");
     vi.mocked(fetchLandlordPortfolioScore).mockResolvedValue({
@@ -99,6 +134,7 @@ describe("PortfolioScorePage", () => {
   });
 
   it("renders sparse data safely", async () => {
+    await mockEntitlements();
     const { fetchLandlordPortfolioScore } = await import("../../api/landlordPortfolioScoreApi");
     const { fetchPortfolioScoreSharing } = await import("../../api/landlordPortfolioScoreSharingApi");
     vi.mocked(fetchLandlordPortfolioScore).mockResolvedValue({
@@ -145,6 +181,7 @@ describe("PortfolioScorePage", () => {
   });
 
   it("renders an error state cleanly", async () => {
+    await mockEntitlements();
     const { fetchLandlordPortfolioScore } = await import("../../api/landlordPortfolioScoreApi");
     const { fetchPortfolioScoreSharing } = await import("../../api/landlordPortfolioScoreSharingApi");
     vi.mocked(fetchLandlordPortfolioScore).mockRejectedValue(new Error("Boom"));
@@ -169,6 +206,7 @@ describe("PortfolioScorePage", () => {
   });
 
   it("shows share url controls when sharing is enabled", async () => {
+    await mockEntitlements();
     const { fetchLandlordPortfolioScore } = await import("../../api/landlordPortfolioScoreApi");
     const { fetchPortfolioScoreSharing } = await import("../../api/landlordPortfolioScoreSharingApi");
     vi.mocked(fetchLandlordPortfolioScore).mockResolvedValue({
@@ -214,5 +252,67 @@ describe("PortfolioScorePage", () => {
     expect(await screen.findByText(/Share URL/i)).toBeInTheDocument();
     expect(screen.getByText(/token-1/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Rotate link/i })).toBeInTheDocument();
+  });
+
+  it("renders a locked state when portfolio score is unavailable", async () => {
+    await mockEntitlements({ canViewPortfolioScore: false });
+    const { fetchLandlordPortfolioScore } = await import("../../api/landlordPortfolioScoreApi");
+    const { fetchPortfolioScoreSharing } = await import("../../api/landlordPortfolioScoreSharingApi");
+
+    render(
+      <MemoryRouter>
+        <PortfolioScorePage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/Unlock Portfolio Score™ on Pro/i)).toBeInTheDocument();
+    expect(vi.mocked(fetchLandlordPortfolioScore)).not.toHaveBeenCalled();
+    expect(vi.mocked(fetchPortfolioScoreSharing)).not.toHaveBeenCalled();
+  });
+
+  it("shows a recommendations teaser when the score is unlocked but recommendations are not", async () => {
+    await mockEntitlements({ canViewActionRecommendations: false });
+    const { fetchLandlordPortfolioScore } = await import("../../api/landlordPortfolioScoreApi");
+    const { fetchPortfolioScoreSharing } = await import("../../api/landlordPortfolioScoreSharingApi");
+    vi.mocked(fetchLandlordPortfolioScore).mockResolvedValue({
+      portfolioScore: {
+        version: "v1",
+        portfolioId: "landlord-1",
+        generatedAt: "2026-04-16T12:00:00.000Z",
+        score: 88,
+        grade: "B",
+        summary: {
+          headline: "Your portfolio is steady overall.",
+          explanation: "Operations are generally steady overall.",
+        },
+        trend: {
+          direction: "stable",
+          summary: "Your portfolio score has remained generally steady.",
+        },
+        components: [],
+        trust: {
+          explanation: "Your score reflects how consistently your rental operations are performing over time.",
+          methodologyNote: "Scores are based on activity patterns, workflow completion, and operational consistency over time.",
+        },
+      },
+    } as any);
+    vi.mocked(fetchPortfolioScoreSharing).mockResolvedValue({
+      sharing: {
+        version: "v1",
+        portfolioId: "landlord-1",
+        visibility: "private",
+        shareToken: null,
+        updatedAt: "2026-04-16T12:00:00.000Z",
+      },
+      shareUrl: null,
+    } as any);
+
+    render(
+      <MemoryRouter>
+        <PortfolioScorePage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Unlock recommended actions on Elite/i)).toBeInTheDocument();
   });
 });
