@@ -36,24 +36,28 @@ export async function fetchBillingHistory(): Promise<BillingRecord[]> {
 }
 
 export interface SubscriptionStatus {
-  planId: Plan;
+  tier: Plan | null;
+  planId: Plan | null;
   status: "active" | "past_due" | "canceled";
+  interval?: "month" | "year" | null;
+  renewalDate?: string | null;
+  isActive?: boolean;
 }
 
 export async function fetchSubscriptionStatus(): Promise<SubscriptionStatus> {
   try {
-    const res = await apiGetJson<any>("/billing/subscription-status", { allowStatuses: [404, 501] });
-    if (!res.ok) {
-      return { planId: "free", status: "canceled" } as SubscriptionStatus;
-    }
-    const data = res.data;
-    const payload = (data?.subscription ?? data) as SubscriptionStatus;
+    const payload = await apiFetch("/billing/subscription-status", { method: "GET" });
+    const data = ((payload as any)?.subscription ?? payload) as any;
+    const tierValue = data?.tier ?? data?.planId;
+    const tier = tierValue == null || String(tierValue).trim() === "" ? null : normalizePlan(tierValue);
     return {
-      ...payload,
-      planId: normalizePlan(payload?.planId),
+      ...data,
+      tier,
+      planId: tier,
+      status: data?.status === "past_due" ? "past_due" : data?.status === "active" ? "active" : "canceled",
     };
   } catch {
-    return { planId: "free", status: "canceled" } as SubscriptionStatus;
+    return { tier: null, planId: null, status: "canceled" } as SubscriptionStatus;
   }
 }
 

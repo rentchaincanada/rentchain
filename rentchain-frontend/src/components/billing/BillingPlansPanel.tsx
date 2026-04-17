@@ -43,7 +43,7 @@ export function BillingPlansPanel({
     }
     return map;
   }, [pricing]);
-  const currentPlanKey = normalizePlan(currentPlan);
+  const currentPlanKey = currentPlan == null ? null : normalizePlan(currentPlan);
 
   const renderPrice = (planKey: Exclude<PricingPlanKey, "free">) => {
     const fallbackPlan = CANONICAL_TIER_MATRIX[planKey];

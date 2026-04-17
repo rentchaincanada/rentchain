@@ -14,6 +14,7 @@ import {
   type BillingPlanKey,
 } from "../config/planMatrix";
 import { getScreeningPricing } from "../billing/screeningPricing";
+import { resolveLandlordAndTier } from "../lib/landlordResolver";
 
 const router = express.Router();
 
@@ -28,15 +29,19 @@ function normalizeSubscriptionStatusTier(input: any): SubscriptionStatusTier {
   return resolvePaidBillingPlan(input) || "free";
 }
 
-function sendSubscriptionStatus(req: any, res: any) {
-  const tier = normalizeSubscriptionStatusTier(req.user?.plan);
+async function sendSubscriptionStatus(req: any, res: any) {
+  const resolved = await resolveLandlordAndTier(req.user);
+  const tier = normalizeSubscriptionStatusTier(resolved?.tier || req.user?.plan);
   const interval: SubscriptionStatusInterval = null;
   const renewalDate: string | null = null;
   const isActive = tier !== "free";
+  const status = isActive ? "active" : "canceled";
 
   return res.status(200).json({
     ok: true,
     tier,
+    planId: tier,
+    status,
     interval,
     renewalDate,
     isActive,

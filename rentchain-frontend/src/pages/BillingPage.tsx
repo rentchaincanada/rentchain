@@ -77,8 +77,9 @@ const BillingPage: React.FC = () => {
   const [interval, setInterval] = useState<"month" | "year">("month");
   const { user, updateUser } = useAuth();
   const billingStatus = useBillingStatus();
-  const currentPlan = billingStatus.tier;
-  const isPaidPlan = currentPlan !== "free";
+  const currentPlan = billingStatus.isLoading ? null : billingStatus.tier;
+  const resolvedCurrentPlan = currentPlan || "free";
+  const isPaidPlan = resolvedCurrentPlan !== "free";
 
   const getErrorMessage = (error: unknown, fallback: string) => {
     if (error instanceof Error && error.message) return error.message;
@@ -104,7 +105,7 @@ const BillingPage: React.FC = () => {
   };
 
   useEffect(() => {
-    track("billing_page_opened", { tier: currentPlan });
+    track("billing_page_opened", { tier: resolvedCurrentPlan });
     void refreshEntitlements(updateUser);
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -136,8 +137,8 @@ const BillingPage: React.FC = () => {
 
   const handlePlanAction = async (planKey: "starter" | "pro" | "elite") => {
     if (pricingUnavailable) return;
-    if (planKey === currentPlan) return;
-    track("billing_upgrade_clicked", { toTier: planKey, interval });
+    if (planKey === resolvedCurrentPlan) return;
+    track("billing_upgrade_clicked", { fromTier: resolvedCurrentPlan, toTier: planKey, interval });
 
     try {
       setPlanActionLoading(planKey);
@@ -164,7 +165,7 @@ const BillingPage: React.FC = () => {
   };
 
   const handlePortal = async () => {
-    track("billing_manage_subscription_clicked", { tier: currentPlan });
+    track("billing_manage_subscription_clicked", { tier: resolvedCurrentPlan });
     try {
       setPortalLoading(true);
       const res = await createBillingPortalSession();
@@ -180,7 +181,13 @@ const BillingPage: React.FC = () => {
   };
 
   const nextUpgradeTier =
-    currentPlan === "free" ? "starter" : currentPlan === "starter" ? "pro" : currentPlan === "pro" ? "elite" : null;
+    resolvedCurrentPlan === "free"
+      ? "starter"
+      : resolvedCurrentPlan === "starter"
+        ? "pro"
+        : resolvedCurrentPlan === "pro"
+          ? "elite"
+          : null;
   const nextUpgradeLabel = nextUpgradeTier
     ? interval === "year"
       ? `${CANONICAL_TIER_MATRIX[nextUpgradeTier].ctaLabel} (Yearly)`
@@ -219,7 +226,7 @@ const BillingPage: React.FC = () => {
                 type="button"
                 variant="primary"
                 onClick={() => void handlePlanAction("starter")}
-                disabled={planActionLoading === "starter" || pricingUnavailable}
+                disabled={billingStatus.isLoading || planActionLoading === "starter" || pricingUnavailable}
               >
                 {planActionLoading === "starter" ? "Opening..." : "Upgrade plan"}
               </Button>
@@ -234,7 +241,9 @@ const BillingPage: React.FC = () => {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: spacing.sm }}>
             <div>
               <div style={{ color: text.muted, fontSize: 12 }}>Tier</div>
-              <div style={{ fontWeight: 700 }}>{billingTierLabel(currentPlan)}</div>
+              <div style={{ fontWeight: 700 }}>
+                {billingStatus.isLoading ? "Loading..." : billingTierLabel(resolvedCurrentPlan)}
+              </div>
             </div>
             <div>
               <div style={{ color: text.muted, fontSize: 12 }}>Billing interval</div>
@@ -255,7 +264,7 @@ const BillingPage: React.FC = () => {
                 type="button"
                 variant="secondary"
                 onClick={() => void handlePlanAction("starter")}
-                disabled={planActionLoading === "starter" || pricingUnavailable}
+                disabled={billingStatus.isLoading || planActionLoading === "starter" || pricingUnavailable}
               >
                 {planActionLoading === "starter" ? "Opening..." : "Upgrade plan"}
               </Button>
@@ -264,23 +273,23 @@ const BillingPage: React.FC = () => {
               <Button
                 type="button"
                 onClick={() => void handlePlanAction(nextUpgradeTier)}
-                disabled={planActionLoading === nextUpgradeTier || pricingUnavailable}
+                disabled={billingStatus.isLoading || planActionLoading === nextUpgradeTier || pricingUnavailable}
               >
                 {nextUpgradeLabel}
               </Button>
             ) : null}
           </div>
-          {currentPlan === "free" ? (
+          {resolvedCurrentPlan === "free" ? (
             <div style={{ marginTop: spacing.xs, color: text.muted }}>
               Free includes guided setup and pay-per-use screening. Upgrade when you want richer rental operations, communication, exports, and reporting.
             </div>
           ) : null}
-          {currentPlan === "starter" ? (
+          {resolvedCurrentPlan === "starter" ? (
             <div style={{ marginTop: spacing.xs, color: text.muted, fontSize: 14 }}>
               Starter includes messaging, leases, maintenance, and work orders. Pro adds exports, screening summaries, compliance reports, and team workflows.
             </div>
           ) : null}
-          {currentPlan === "pro" ? (
+          {resolvedCurrentPlan === "pro" ? (
             <div style={{ marginTop: spacing.xs, color: text.muted, fontSize: 14 }}>
               Pro includes exports, reporting, and team workflows. Elite adds advanced analytics, AI summaries, and audit visibility.
             </div>
