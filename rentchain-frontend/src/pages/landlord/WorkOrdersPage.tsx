@@ -5,6 +5,8 @@ import { AddExpenseModal } from "../../components/expenses/AddExpenseModal";
 import ContractorAssignmentPanel from "../../components/marketplace/ContractorAssignmentPanel";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import { LockedFeature } from "@/components/billing/LockedFeature";
+import { FeatureTeaser } from "@/components/billing/FeatureTeaser";
+import { resolveRequiredPlanLabel } from "@/lib/upgradePrompt";
 import { fetchProperties } from "../../api/propertiesApi";
 import { assignContractorToWorkOrder, fetchContractors, type ContractorProfileV1 } from "../../api/marketplaceContractorApi";
 import {
@@ -259,6 +261,11 @@ export default function WorkOrdersPage() {
   const [costLineItemsJson, setCostLineItemsJson] = React.useState("");
   const [costAttachmentFile, setCostAttachmentFile] = React.useState<File | null>(null);
   const canUseWorkOrders = entitlements.canUseWorkOrders;
+  const canViewMarketplaceDirectory = entitlements.canViewMarketplaceDirectory;
+  const canUseMarketplaceContractorAssignment = entitlements.canUseMarketplaceContractorAssignment;
+  const marketplaceDirectoryPlanLabel = resolveRequiredPlanLabel("marketplace_directory") || "Pro";
+  const marketplaceAssignmentPlanLabel =
+    resolveRequiredPlanLabel("marketplace_contractor_assignment") || "Elite";
 
   const normalizeCategory = React.useCallback((input: string): ExpenseCategory => {
     const raw = String(input || "").trim().toLowerCase();
@@ -836,7 +843,7 @@ export default function WorkOrdersPage() {
   }, [canUseWorkOrders]);
 
   React.useEffect(() => {
-    if (!canUseWorkOrders || !selected) {
+    if (!canUseWorkOrders || !canUseMarketplaceContractorAssignment || !selected) {
       setMarketplaceContractors([]);
       return;
     }
@@ -856,7 +863,7 @@ export default function WorkOrdersPage() {
       }
     };
     void run();
-  }, [canUseWorkOrders, selected, selectedServiceArea]);
+  }, [canUseMarketplaceContractorAssignment, canUseWorkOrders, selected, selectedServiceArea]);
 
   if (!canUseWorkOrders) {
     return (
@@ -1165,13 +1172,31 @@ export default function WorkOrdersPage() {
                 </div>
               ) : null}
             </div>
-            <ContractorAssignmentPanel
-              currentAssignment={selected.contractorAssignment || null}
-              contractors={marketplaceContractors}
-              loading={loadingMarketplaceContractors}
-              assigning={assigningMarketplaceContractor}
-              onAssign={(contractorId) => void handleAssignMarketplaceContractor(contractorId)}
-            />
+            {canUseMarketplaceContractorAssignment ? (
+              <ContractorAssignmentPanel
+                currentAssignment={selected.contractorAssignment || null}
+                contractors={marketplaceContractors}
+                loading={loadingMarketplaceContractors}
+                assigning={assigningMarketplaceContractor}
+                onAssign={(contractorId) => void handleAssignMarketplaceContractor(contractorId)}
+              />
+            ) : canViewMarketplaceDirectory ? (
+              <FeatureTeaser
+                featureKey="marketplace_contractor_assignment"
+                eyebrow={`${marketplaceAssignmentPlanLabel} marketplace`}
+                title={`Unlock contractor assignment on ${marketplaceAssignmentPlanLabel}`}
+                description="Keep baseline work orders in place, then upgrade to discover contractor candidates and assign them directly from the job workflow."
+                ctaLabel={`Upgrade to ${marketplaceAssignmentPlanLabel}`}
+              />
+            ) : (
+              <FeatureTeaser
+                featureKey="marketplace_directory"
+                eyebrow={`${marketplaceDirectoryPlanLabel} marketplace`}
+                title={`Unlock the contractor directory on ${marketplaceDirectoryPlanLabel}`}
+                description="Upgrade to build a private contractor network first, then unlock embedded contractor assignment inside work orders on higher tiers."
+                ctaLabel={`Upgrade to ${marketplaceDirectoryPlanLabel}`}
+              />
+            )}
             <div
               style={{
                 display: "grid",

@@ -123,7 +123,7 @@ describe("marketplaceContractorRoutes", () => {
       method: "POST",
       url: "/marketplace/contractors",
       headers: {
-        "x-test-user": JSON.stringify({ id: "landlord-1", role: "landlord", landlordId: "landlord-1" }),
+        "x-test-user": JSON.stringify({ id: "landlord-1", role: "landlord", landlordId: "landlord-1", plan: "pro" }),
       },
       body: {
         displayName: "North Shore Electric",
@@ -143,7 +143,7 @@ describe("marketplaceContractorRoutes", () => {
       method: "GET",
       url: "/marketplace/contractors",
       headers: {
-        "x-test-user": JSON.stringify({ id: "landlord-1", role: "landlord", landlordId: "landlord-1" }),
+        "x-test-user": JSON.stringify({ id: "landlord-1", role: "landlord", landlordId: "landlord-1", plan: "pro" }),
       },
       query: {
         serviceCategory: "plumbing",
@@ -162,7 +162,7 @@ describe("marketplaceContractorRoutes", () => {
       method: "PATCH",
       url: "/marketplace/contractors/contractor-1",
       headers: {
-        "x-test-user": JSON.stringify({ id: "landlord-1", role: "landlord", landlordId: "landlord-1" }),
+        "x-test-user": JSON.stringify({ id: "landlord-1", role: "landlord", landlordId: "landlord-1", plan: "pro" }),
       },
       body: {
         availabilityStatus: "limited",
@@ -179,7 +179,7 @@ describe("marketplaceContractorRoutes", () => {
       method: "POST",
       url: "/marketplace/work-orders/wo-1/assign-contractor",
       headers: {
-        "x-test-user": JSON.stringify({ id: "landlord-1", role: "landlord", landlordId: "landlord-1" }),
+        "x-test-user": JSON.stringify({ id: "landlord-1", role: "landlord", landlordId: "landlord-1", plan: "elite" }),
       },
       body: {
         contractorId: "contractor-1",
@@ -203,5 +203,37 @@ describe("marketplaceContractorRoutes", () => {
     });
 
     expect(res.status).toBe(403);
+  });
+
+  it("keeps contractor directory role-protected without premium-blocking it", async () => {
+    const router = (await import("../marketplaceContractorRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/marketplace/contractors",
+      headers: {
+        "x-test-user": JSON.stringify({ id: "landlord-1", role: "landlord", landlordId: "landlord-1", plan: "starter" }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.items?.[0]?.id).toBe("contractor-1");
+  });
+
+  it("requires Elite marketplace access for contractor assignment", async () => {
+    const router = (await import("../marketplaceContractorRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/marketplace/work-orders/wo-1/assign-contractor",
+      headers: {
+        "x-test-user": JSON.stringify({ id: "landlord-1", role: "landlord", landlordId: "landlord-1", plan: "pro" }),
+      },
+      body: {
+        contractorId: "contractor-1",
+      },
+    });
+
+    expect(res.status).toBe(403);
+    expect(res.body?.featureKey).toBe("marketplace_contractor_assignment");
+    expect(res.body?.requiredPlan).toBe("elite");
   });
 });

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   canonicalPlanLabel,
   capabilitiesForPlan,
+  requiredPlanForCapability,
   resolveCanonicalPlan,
 } from "../entitlements/planCapabilities";
 
@@ -15,6 +16,7 @@ describe("planCapabilities entitlement aliases", () => {
 
   it("includes export and review aliases on pro and above", () => {
     const pro = capabilitiesForPlan("pro");
+    expect(pro).toContain("marketplace_directory");
     expect(pro).toContain("portfolio_score");
     expect(pro).toContain("pdf_export");
     expect(pro).toContain("review_summary");
@@ -25,9 +27,15 @@ describe("planCapabilities entitlement aliases", () => {
 
   it("includes advanced recommendation intelligence on elite", () => {
     const elite = capabilitiesForPlan("elite");
+    expect(elite).toContain("marketplace_contractor_assignment");
     expect(elite).toContain("portfolio_action_recommendations");
     expect(elite).toContain("portfolio_score");
     expect(elite).toContain("portfolio_health_summary");
+  });
+
+  it("resolves required plan for marketplace capabilities", () => {
+    expect(requiredPlanForCapability("marketplace_directory")).toBe("pro");
+    expect(requiredPlanForCapability("marketplace_contractor_assignment")).toBe("elite");
   });
 
   it("normalizes legacy aliases into canonical plans", () => {

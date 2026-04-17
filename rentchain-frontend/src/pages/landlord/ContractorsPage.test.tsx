@@ -10,6 +10,20 @@ const mocks = vi.hoisted(() => ({
   fetchContractors: vi.fn(),
   createContractorProfile: vi.fn(),
   updateContractorProfile: vi.fn(),
+  useEntitlements: vi.fn(),
+}));
+
+vi.mock("@/hooks/useEntitlements", () => ({
+  useEntitlements: mocks.useEntitlements,
+}));
+
+vi.mock("@/components/billing/FeatureTeaser", () => ({
+  FeatureTeaser: ({ title, description }: { title: string; description: string }) => (
+    <div>
+      <div>{title}</div>
+      <div>{description}</div>
+    </div>
+  ),
 }));
 
 vi.mock("../../api/workOrdersApi", () => ({
@@ -33,6 +47,11 @@ describe("ContractorsPage", () => {
     mocks.fetchContractors.mockReset();
     mocks.createContractorProfile.mockReset();
     mocks.updateContractorProfile.mockReset();
+    mocks.useEntitlements.mockReset();
+    mocks.useEntitlements.mockReturnValue({
+      loading: false,
+      canViewMarketplaceDirectory: true,
+    });
     mocks.listContractorInvites.mockResolvedValue([]);
     mocks.fetchContractors.mockResolvedValue({
       items: [
@@ -67,6 +86,25 @@ describe("ContractorsPage", () => {
     expect(await screen.findByText(/Contractor directory/i)).toBeInTheDocument();
     expect(screen.getByText(/Harbor Plumbing Ltd\./i)).toBeInTheDocument();
     expect(screen.getByText(/No invites yet\./i)).toBeInTheDocument();
+  });
+
+  it("renders a teaser state when marketplace directory access is unavailable", async () => {
+    mocks.useEntitlements.mockReturnValue({
+      loading: false,
+      canViewMarketplaceDirectory: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <ContractorsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Unlock the full contractor directory on Pro/i)).toBeInTheDocument();
+    expect(mocks.listContractorInvites).toHaveBeenCalled();
+    expect(mocks.fetchContractors).toHaveBeenCalled();
+    expect(screen.queryByText(/Create contractor profile/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Invite contractor/i)).not.toBeInTheDocument();
   });
 
   it("creates a contractor profile from the embedded directory form", async () => {
