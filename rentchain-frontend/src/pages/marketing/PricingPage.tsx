@@ -58,13 +58,24 @@ function buildBillingUpgradePath(target: Exclude<PlanKey, "free">, interval: Pri
 
 const PLAN_AUDIENCE_COPY: Record<PlanKey, string> = {
   free: "For landlords getting started and wanting to try the basics with one property.",
-  starter: "For landlords running day-to-day rental operations across active units.",
-  pro: "For growing operators who want stronger tools, clearer visibility, and more control.",
-  elite: "For portfolios that need deeper oversight, reporting, and portfolio-level visibility.",
+  starter: "For landlords who need one place to run the weekly rental workflow across active units.",
+  pro: "For operators who need stronger operational control, cleaner reporting, and better handoff across tasks and people.",
+  elite: "For portfolios that need insight-led oversight, portfolio trends, and higher-confidence decisions.",
 };
 
 const PLAN_SUPPORT_COPY: Partial<Record<PlanKey, string>> = {
-  starter: "Free helps you get started. Starter is where RentChain becomes your everyday operating system for rental work.",
+  starter:
+    "Free helps you get started. Starter is the first plan built to keep applicant, tenant, and property work together in one operating flow.",
+  pro:
+    "Pro is the step up when operational complexity starts growing and you need exports, reporting, and stronger coordination.",
+  elite:
+    "Elite is for teams that want portfolio-level visibility, intelligence, and higher-confidence oversight on top of Pro.",
+};
+
+const PLAN_BADGE_COPY: Partial<Record<PlanKey, string>> = {
+  starter: "Workflow foundation",
+  pro: "Operations and reporting",
+  elite: "Insights and oversight",
 };
 
 const PLAN_CALLOUT_COPY: Partial<
@@ -79,25 +90,28 @@ const PLAN_CALLOUT_COPY: Partial<
   >
 > = {
   pro: {
-    title: "Built for landlords handling more moving parts",
+    title: "Built for operational control",
     description:
-      "Pro gives growing landlords better visibility, stronger follow-through, and cleaner records as the business gets busier.",
+      "Pro is designed for landlords and teams who need the day-to-day workflow to stay organized, reviewable, and easier to report on.",
     bullets: [
-      "Keep property, tenant, and screening work easier to review",
-      "Stay on top of filing and compliance tasks when they matter",
-      "Share clearer reports with partners, owners, or accountants",
+      "Keep exports and reporting ready for month-end and stakeholder reviews",
+      "Make screening, compliance, and recordkeeping easier to follow through",
+      "Give team workflows clearer structure as more people and properties get involved",
     ],
-    proofLine: "A strong fit when simple tools are no longer enough but full portfolio overhead still feels excessive.",
+    proofLine:
+      "Best when workflow volume is growing and you want cleaner operational control before moving into portfolio intelligence.",
   },
   elite: {
-    title: "For teams that need deeper oversight",
+    title: "Built for insight-led oversight",
     description:
-      "Elite is for portfolio operators who want a higher level view of what is happening across properties, records, and workflows.",
+      "Elite is for portfolio operators who want more than operational control. It adds intelligence, deeper visibility, and portfolio-level context for decisions.",
     bullets: [
-      "See more across the portfolio instead of property by property",
-      "Keep leadership reporting and oversight cleaner",
-      "Support more complex rental operations with stronger visibility",
+      "See portfolio trends and advanced analytics in one place",
+      "Use AI summaries and audit visibility to review the bigger picture faster",
+      "Support leadership and oversight decisions with stronger portfolio context",
     ],
+    proofLine:
+      "Best when the question is no longer just what happened, but what needs attention across the portfolio.",
   },
 };
 
@@ -275,6 +289,12 @@ const PricingPage: React.FC = () => {
     return `Review ${copy.pricing.tierLabels[plan]} plan`;
   };
 
+  const planCtaSupport = (plan: Exclude<PlanKey, "free">) => {
+    if (!isAuthed) return "Sign in first, then review this plan in billing before checkout opens.";
+    if (isAtOrAbove(currentPlan, plan)) return "Open billing to manage your current subscription details.";
+    return `Billing will show the ${copy.pricing.tierLabels[plan]} plan details before secure checkout opens.`;
+  };
+
   return (
     <MarketingLayout>
       <div
@@ -399,24 +419,26 @@ const PricingPage: React.FC = () => {
                 <div style={{ fontSize: 21, fontWeight: 800, lineHeight: 1.15, ...wrappingTextStyle }}>
                   {copy.pricing.tierLabels[plan]}
                 </div>
-                {copy.pricing.tierBadges[plan] ? (
+                {PLAN_BADGE_COPY[plan] ? (
                   <span
                     style={{
                       border:
-                        plan === "pro" ? "1px solid rgba(37,99,235,0.4)" : "1px solid rgba(15,23,42,0.18)",
+                        plan === "pro" || plan === "elite"
+                          ? "1px solid rgba(37,99,235,0.4)"
+                          : "1px solid rgba(15,23,42,0.18)",
                       borderRadius: 999,
                       padding: "4px 12px",
                       fontSize: "0.74rem",
                       fontWeight: 700,
-                      color: plan === "pro" ? "#1d4ed8" : text.primary,
+                      color: plan === "pro" || plan === "elite" ? "#1d4ed8" : text.primary,
                       background:
-                        plan === "pro"
+                        plan === "pro" || plan === "elite"
                           ? "linear-gradient(180deg, rgba(37,99,235,0.14), rgba(37,99,235,0.08))"
                           : "rgba(15,23,42,0.06)",
                       ...wrappingTextStyle,
                     }}
                   >
-                    {copy.pricing.tierBadges[plan]}
+                    {PLAN_BADGE_COPY[plan]}
                   </span>
                 ) : null}
               </div>
@@ -478,9 +500,9 @@ const PricingPage: React.FC = () => {
                       </li>
                     ))}
                   </ul>
-                  {plan === "pro" ? (
+                  {PLAN_CALLOUT_COPY[plan]?.proofLine ? (
                     <div style={{ color: text.muted, fontSize: "0.82rem", lineHeight: 1.55, ...wrappingTextStyle }}>
-                      {PLAN_CALLOUT_COPY[plan]?.proofLine || copy.pricing.timelineSection.proofLine}
+                      {PLAN_CALLOUT_COPY[plan]?.proofLine}
                     </div>
                   ) : null}
                 </div>
@@ -507,9 +529,14 @@ const PricingPage: React.FC = () => {
                     {copy.pricing.ctaStartFree}
                   </Button>
                 ) : (
-                  <Button type="button" onClick={() => handleUpgrade(plan)} style={{ width: "100%" }}>
-                    {planCtaLabel(plan)}
-                  </Button>
+                  <div style={{ display: "grid", gap: 8, width: "100%" }}>
+                    <Button type="button" onClick={() => handleUpgrade(plan)} style={{ width: "100%" }}>
+                      {planCtaLabel(plan)}
+                    </Button>
+                    <div style={{ color: text.muted, fontSize: "0.82rem", lineHeight: 1.55, ...wrappingTextStyle }}>
+                      {planCtaSupport(plan)}
+                    </div>
+                  </div>
                 )}
               </div>
             </Card>

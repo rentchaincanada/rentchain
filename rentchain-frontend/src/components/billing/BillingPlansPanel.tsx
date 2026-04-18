@@ -10,6 +10,18 @@ import {
   type PricingPlanKey,
 } from "@/constants/pricingPlans";
 
+const PLAN_IDENTITY_COPY: Record<Exclude<PricingPlanKey, "free">, string> = {
+  starter: "Workflow foundation for weekly rental operations",
+  pro: "Operational control, exports, and reporting",
+  elite: "Portfolio intelligence, insights, and oversight",
+};
+
+const PLAN_SUPPORT_COPY: Record<Exclude<PricingPlanKey, "free">, string> = {
+  starter: "Best when you want one place to keep applicant, tenant, and property work connected.",
+  pro: "Best when you need cleaner reporting, stronger coordination, and easier operational follow-through.",
+  elite: "Best when you need portfolio-level visibility, analytics, and higher-confidence oversight.",
+};
+
 type Props = {
   pricing: any | null;
   pricingLoading: boolean;
@@ -89,12 +101,12 @@ export function BillingPlansPanel({
       }
     }
     if (isSelected) {
-      return "Selected from pricing. Opens secure checkout for the plan you already chose.";
+      return `Selected from pricing. Opens secure checkout for the ${CANONICAL_TIER_MATRIX[planKey].label} plan you already chose.`;
     }
     if (isRecommended) {
-      return "Recommended next step based on your current plan. Opens secure checkout.";
+      return `Recommended next step based on your current plan. Opens secure checkout for ${PLAN_IDENTITY_COPY[planKey]}.`;
     }
-    return "Opens secure checkout so you can review and confirm this plan.";
+    return `Opens secure checkout so you can review and confirm ${PLAN_IDENTITY_COPY[planKey]}.`;
   };
 
   return (
@@ -148,6 +160,9 @@ export function BillingPlansPanel({
                 <div className="rc-billing-plan-subtitle" style={{ color: text.muted }}>
                   {plan.tagline}
                 </div>
+                <div style={{ marginTop: 4, fontSize: 12, fontWeight: 700, color: text.secondary }}>
+                  {PLAN_IDENTITY_COPY[planId]}
+                </div>
               </div>
               {highlight ? (
                 <span style={{ fontSize: 12, fontWeight: 700, color: colors.accent }}>Current</span>
@@ -160,6 +175,10 @@ export function BillingPlansPanel({
 
             <div className="rc-billing-plan-price" style={{ color: text.muted }}>
               {pricingLoading ? "—" : renderPrice(planId)}
+            </div>
+
+            <div style={{ color: text.muted, fontSize: 12, lineHeight: 1.55 }}>
+              {PLAN_SUPPORT_COPY[planId]}
             </div>
 
             <ul
