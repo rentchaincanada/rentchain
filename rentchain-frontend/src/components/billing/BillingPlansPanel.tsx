@@ -90,12 +90,12 @@ export function BillingPlansPanel({
       }
     }
     if (isSelected) {
-      return `Selected from pricing. Opens secure checkout for the ${CANONICAL_TIER_MATRIX[planKey].label} plan you already chose.`;
+      return `Selected from pricing. Opens secure checkout for the ${CANONICAL_TIER_MATRIX[planKey].label} plan you already chose so you can review details and confirm before billing starts.`;
     }
     if (isRecommended) {
-      return `Recommended next step based on your current plan. Opens secure checkout for ${TIER_POSITIONING_COPY[planKey].badge.toLowerCase()}.`;
+      return `Recommended next step based on your current plan. Opens secure checkout for ${TIER_POSITIONING_COPY[planKey].badge.toLowerCase()} so you can review the plan before confirming any change.`;
     }
-    return `Opens secure checkout so you can review and confirm ${TIER_POSITIONING_COPY[planKey].badge.toLowerCase()}.`;
+    return `Opens secure checkout so you can review the ${CANONICAL_TIER_MATRIX[planKey].label} plan, confirm billing details, and decide whether to complete the change.`;
   };
 
   return (

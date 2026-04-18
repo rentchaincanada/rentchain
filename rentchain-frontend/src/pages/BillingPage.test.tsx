@@ -121,12 +121,28 @@ describe("BillingPage", () => {
     await waitFor(() =>
       expect(screen.getByText(/Pricing selection saved: Pro on the Yearly plan/i)).toBeInTheDocument()
     );
+    expect(screen.getByText(/Billing, plans, and upgrade review/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Opening checkout does not change your plan by itself\. It takes you to a secure review step where you can confirm the upgrade first\./i
+      )
+    ).toBeInTheDocument();
     expect(
       screen.getByText(
         /Starter gives you the workflow foundation, Pro adds operational control and reporting, and Elite adds portfolio intelligence and oversight/i
       )
     ).toBeInTheDocument();
     expect(screen.getByText(/Recommended next plan: Pro from your pricing selection/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /You're continuing the Pro plan you selected on Pricing, so Billing keeps that choice visible before checkout\./i
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /After you click, secure checkout opens so you can review the Yearly Pro plan, confirm billing details, and choose whether to complete the upgrade\./i
+      )
+    ).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Continue to Pro checkout" }).length).toBeGreaterThan(0);
     expect(mocks.billingPlansPanelMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -158,6 +174,16 @@ describe("BillingPage", () => {
       screen.getByText(/Pro focuses on operational control and reporting\. Elite adds the portfolio intelligence layer/i)
     ).toBeInTheDocument();
     expect(screen.getByText(/Recommended next plan: Elite/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /This suggestion follows your current plan and the shared plan ladder, so the next step is clear without changing your current subscription first\./i
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /After you click, secure checkout opens so you can review the Monthly Elite plan, confirm billing details, and choose whether to complete the upgrade\./i
+      )
+    ).toBeInTheDocument();
     expect(mocks.trackMock).toHaveBeenCalledWith("billing_page_opened", {
       currentPlan: "pro",
       surface: "billing_page",

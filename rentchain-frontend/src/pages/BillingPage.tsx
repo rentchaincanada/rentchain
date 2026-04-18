@@ -259,6 +259,14 @@ const BillingPage: React.FC = () => {
         : resolvedCurrentPlan === "pro"
           ? TIER_POSITIONING_COPY.elite.nextStepReason || null
           : null;
+  const recommendationTrustCopy = requestedUpgradePlan
+    ? `You're continuing the ${CANONICAL_TIER_MATRIX[requestedUpgradePlan].label} plan you selected on Pricing, so Billing keeps that choice visible before checkout.`
+    : recommendedUpgradeTier
+      ? `This suggestion follows your current plan and the shared plan ladder, so the next step is clear without changing your current subscription first.`
+      : null;
+  const checkoutReassuranceCopy = nextUpgradeTier
+    ? `After you click, secure checkout opens so you can review the ${interval === "year" ? "Yearly" : "Monthly"} ${CANONICAL_TIER_MATRIX[nextUpgradeTier].label} plan, confirm billing details, and choose whether to complete the upgrade.`
+    : null;
 
   return (
     <Section
@@ -273,8 +281,10 @@ const BillingPage: React.FC = () => {
       <Card elevated>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: spacing.sm }}>
           <div>
-            <h1 style={{ margin: 0, fontSize: "1.3rem", fontWeight: 700 }}>Billing & Receipts</h1>
-            <div style={{ color: text.muted, fontSize: "0.95rem" }}>Current plan, upgrade options, subscription details, and screening receipts.</div>
+            <h1 style={{ margin: 0, fontSize: "1.3rem", fontWeight: 700 }}>Billing, plans, and upgrade review</h1>
+            <div style={{ color: text.muted, fontSize: "0.95rem" }}>
+              Review your current plan, compare the next upgrade options, and open checkout only when you're ready to confirm.
+            </div>
             {requestedUpgradePlan ? (
               <div style={{ color: text.muted, fontSize: "0.9rem", marginTop: 6 }}>
                 Pricing selection saved: {CANONICAL_TIER_MATRIX[requestedUpgradePlan].label} on the {interval === "year" ? "Yearly" : "Monthly"} plan.
@@ -288,6 +298,9 @@ const BillingPage: React.FC = () => {
             ) : null}
             <div style={{ color: text.muted, fontSize: "0.9rem", marginTop: 6 }}>
               Starter gives you the workflow foundation, Pro adds operational control and reporting, and Elite adds portfolio intelligence and oversight.
+            </div>
+            <div style={{ color: text.secondary, fontSize: "0.88rem", marginTop: 6 }}>
+              Opening checkout does not change your plan by itself. It takes you to a secure review step where you can confirm the upgrade first.
             </div>
           </div>
           <div className="rc-wrap-row">
@@ -384,6 +397,9 @@ const BillingPage: React.FC = () => {
                 {recommendedUpgradeReason ? (
                   <div style={{ color: text.muted, fontSize: 14 }}>{recommendedUpgradeReason}</div>
                 ) : null}
+                {recommendationTrustCopy ? (
+                  <div style={{ color: text.secondary, fontSize: 13, lineHeight: 1.5 }}>{recommendationTrustCopy}</div>
+                ) : null}
                 {nextUpgradeHelp ? (
                   <div style={{ color: text.secondary, fontSize: 13, fontWeight: 600 }}>{nextUpgradeHelp}</div>
                 ) : null}
@@ -396,9 +412,9 @@ const BillingPage: React.FC = () => {
                     {nextUpgradeLabel}
                   </Button>
                 </div>
-                <div style={{ color: text.muted, fontSize: 12 }}>
-                  Secure checkout opens next so you can review the selected plan and confirm before any billing starts.
-                </div>
+                {checkoutReassuranceCopy ? (
+                  <div style={{ color: text.muted, fontSize: 12, lineHeight: 1.5 }}>{checkoutReassuranceCopy}</div>
+                ) : null}
               </div>
             ) : null}
           </div>
