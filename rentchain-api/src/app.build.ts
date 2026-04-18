@@ -225,6 +225,7 @@ app.use("/api/status", routeSource("statusRoutes.ts"), statusRoutes);
 
 // Auth decode (non-blocking if header missing)
 app.use(authenticateJwt);
+app.use("/api/events", routeSource("eventsRoutes.ts"), eventsRoutes);
 app.use("/api", routeSource("expensesRoutes.ts"), expensesRoutes);
 console.log("[route-mount] expensesRoutes mounted at /api");
 app.use("/api", routeSource("financialTransactionsRoutes.ts"), financialTransactionsRoutes);
@@ -363,7 +364,6 @@ app.use("/api", routeSource("screeningReportRoutes.ts"), screeningReportRoutes);
 
 // Core APIs
 app.use("/api", tenantOnboardRoutes);
-app.use("/api/events", eventsRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/landlord", landlordMicroLiveRoutes);
 app.get("/api/__probe/tenants-mount", (_req, res) =>
