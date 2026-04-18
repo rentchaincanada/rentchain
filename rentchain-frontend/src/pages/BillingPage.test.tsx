@@ -132,10 +132,25 @@ describe("BillingPage", () => {
         /Starter gives you the workflow foundation, Pro adds operational control and reporting, and Elite adds portfolio intelligence and oversight/i
       )
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Upgrading helps you keep your tenant, application, and property work in one place as your workflow gets more active\./i
+      )
+    ).toBeInTheDocument();
     expect(screen.getByText(/Recommended next plan: Pro from your pricing selection/i)).toBeInTheDocument();
     expect(
       screen.getByText(
+        /This plan helps you keep building in RentChain without switching tools, while adding the next layer of operations and reporting to the workflow you already started\./i
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
         /You're continuing the Pro plan you selected on Pricing, so Billing keeps that choice visible before checkout\./i
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Staying on Free keeps setup usable, but the richer operating workflow stays limited once you need messaging, tenant coordination, and ongoing rental follow-through\./i
       )
     ).toBeInTheDocument();
     expect(
@@ -173,10 +188,25 @@ describe("BillingPage", () => {
     expect(
       screen.getByText(/Pro focuses on operational control and reporting\. Elite adds the portfolio intelligence layer/i)
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Upgrading keeps your operational workflow intact, while adding the portfolio visibility and intelligence layer that helps you make stronger decisions\./i
+      )
+    ).toBeInTheDocument();
     expect(screen.getByText(/Recommended next plan: Elite/i)).toBeInTheDocument();
     expect(
       screen.getByText(
+        /This plan helps you keep building in RentChain without switching tools, while adding the next layer of insights and oversight to the workflow you already started\./i
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
         /This suggestion follows your current plan and the shared plan ladder, so the next step is clear without changing your current subscription first\./i
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Staying on Pro keeps strong operational tooling, but portfolio-level intelligence, advanced oversight, and the clearest trend visibility stay limited\./i
       )
     ).toBeInTheDocument();
     expect(

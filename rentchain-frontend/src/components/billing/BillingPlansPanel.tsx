@@ -90,12 +90,12 @@ export function BillingPlansPanel({
       }
     }
     if (isSelected) {
-      return `Selected from pricing. Opens secure checkout for the ${CANONICAL_TIER_MATRIX[planKey].label} plan you already chose so you can review details and confirm before billing starts.`;
+      return `Selected from pricing. Opens secure checkout for the ${CANONICAL_TIER_MATRIX[planKey].label} plan you already chose so you can keep building in the same workflow, review details, and confirm before billing starts.`;
     }
     if (isRecommended) {
-      return `Recommended next step based on your current plan. Opens secure checkout for ${TIER_POSITIONING_COPY[planKey].badge.toLowerCase()} so you can review the plan before confirming any change.`;
+      return `Recommended next step based on your current plan. Opens secure checkout for ${TIER_POSITIONING_COPY[planKey].badge.toLowerCase()} so you can extend the workflow you already use and review the plan before confirming any change.`;
     }
-    return `Opens secure checkout so you can review the ${CANONICAL_TIER_MATRIX[planKey].label} plan, confirm billing details, and decide whether to complete the change.`;
+    return `Opens secure checkout so you can review the ${CANONICAL_TIER_MATRIX[planKey].label} plan, see what it adds next in RentChain, confirm billing details, and decide whether to complete the change.`;
   };
 
   return (

@@ -267,6 +267,25 @@ const BillingPage: React.FC = () => {
   const checkoutReassuranceCopy = nextUpgradeTier
     ? `After you click, secure checkout opens so you can review the ${interval === "year" ? "Yearly" : "Monthly"} ${CANONICAL_TIER_MATRIX[nextUpgradeTier].label} plan, confirm billing details, and choose whether to complete the upgrade.`
     : null;
+  const billingMomentumCopy =
+    resolvedCurrentPlan === "free"
+      ? "Upgrading helps you keep your tenant, application, and property work in one place as your workflow gets more active."
+      : resolvedCurrentPlan === "starter"
+        ? "Upgrading keeps the workflow you already started in RentChain, while adding the reporting and control layer that reduces manual follow-up."
+        : resolvedCurrentPlan === "pro"
+          ? "Upgrading keeps your operational workflow intact, while adding the portfolio visibility and intelligence layer that helps you make stronger decisions."
+          : null;
+  const limitationCopy =
+    resolvedCurrentPlan === "free"
+      ? "Staying on Free keeps setup usable, but the richer operating workflow stays limited once you need messaging, tenant coordination, and ongoing rental follow-through."
+      : resolvedCurrentPlan === "starter"
+        ? "Staying on Starter keeps the core workflow running, but exports, deeper reporting, and stronger portfolio coordination stay limited."
+        : resolvedCurrentPlan === "pro"
+          ? "Staying on Pro keeps strong operational tooling, but portfolio-level intelligence, advanced oversight, and the clearest trend visibility stay limited."
+          : null;
+  const recommendationOutcomeCopy = recommendedUpgradeTier
+    ? `This plan helps you keep building in RentChain without switching tools, while adding the next layer of ${TIER_POSITIONING_COPY[recommendedUpgradeTier].badge.toLowerCase()} to the workflow you already started.`
+    : null;
 
   return (
     <Section
@@ -299,6 +318,9 @@ const BillingPage: React.FC = () => {
             <div style={{ color: text.muted, fontSize: "0.9rem", marginTop: 6 }}>
               Starter gives you the workflow foundation, Pro adds operational control and reporting, and Elite adds portfolio intelligence and oversight.
             </div>
+            {billingMomentumCopy ? (
+              <div style={{ color: text.secondary, fontSize: "0.88rem", marginTop: 6 }}>{billingMomentumCopy}</div>
+            ) : null}
             <div style={{ color: text.secondary, fontSize: "0.88rem", marginTop: 6 }}>
               Opening checkout does not change your plan by itself. It takes you to a secure review step where you can confirm the upgrade first.
             </div>
@@ -397,8 +419,14 @@ const BillingPage: React.FC = () => {
                 {recommendedUpgradeReason ? (
                   <div style={{ color: text.muted, fontSize: 14 }}>{recommendedUpgradeReason}</div>
                 ) : null}
+                {recommendationOutcomeCopy ? (
+                  <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.5 }}>{recommendationOutcomeCopy}</div>
+                ) : null}
                 {recommendationTrustCopy ? (
                   <div style={{ color: text.secondary, fontSize: 13, lineHeight: 1.5 }}>{recommendationTrustCopy}</div>
+                ) : null}
+                {limitationCopy ? (
+                  <div style={{ color: text.secondary, fontSize: 12, lineHeight: 1.5 }}>{limitationCopy}</div>
                 ) : null}
                 {nextUpgradeHelp ? (
                   <div style={{ color: text.secondary, fontSize: 13, fontWeight: 600 }}>{nextUpgradeHelp}</div>
