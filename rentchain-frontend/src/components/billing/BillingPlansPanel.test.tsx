@@ -38,7 +38,7 @@ describe("BillingPlansPanel", () => {
     expect(screen.getAllByText("Operations and reporting").length).toBeGreaterThan(0);
     expect(
       screen.getByText(
-        "Selected from pricing. Opens secure checkout for the Pro plan you already chose so you can review details and confirm before billing starts."
+        "Selected from pricing. Opens secure checkout for the Pro plan you already chose so you can keep building in the same workflow, review details, and confirm before billing starts."
       )
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Continue to Pro checkout" })).toBeInTheDocument();
@@ -70,7 +70,7 @@ describe("BillingPlansPanel", () => {
     expect(screen.getAllByText("Operations and reporting").length).toBeGreaterThan(0);
     expect(
       screen.getByText(
-        "Recommended next step based on your current plan. Opens secure checkout for operations and reporting so you can review the plan before confirming any change."
+        "Recommended next step based on your current plan. Opens secure checkout for operations and reporting so you can extend the workflow you already use and review the plan before confirming any change."
       )
     ).toBeInTheDocument();
   });
