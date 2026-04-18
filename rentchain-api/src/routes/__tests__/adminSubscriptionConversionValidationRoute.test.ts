@@ -115,7 +115,7 @@ describe("GET /api/admin/analytics/conversion-validation", () => {
     loadAdminSubscriptionConversionValidation.mockResolvedValue({
       window: { days: 30, from: "2026-03-19T00:00:00.000Z", to: "2026-04-18T00:00:00.000Z" },
       segmentation: {
-        strategy: "heuristic_actor_pattern_v1",
+        strategy: "internal_allowlist_plus_heuristics_v1",
         buckets: {
           all_activity: { description: "All Mission 29-style conversion events in the bounded window." },
           likely_internal_or_test: { description: "Testing-like activity." },

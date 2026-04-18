@@ -35,6 +35,15 @@ const { dbMock, resetDb, seedDoc } = vi.hoisted(() => {
     dbMock: {
       collection: (name: string) => ({
         where: (field: string, op: string, value: any) => buildQuery(name, [{ field, op, value }]),
+        doc: (id: string) => ({
+          get: async () => {
+            const row = ensureCollection(name).get(id);
+            return {
+              exists: Boolean(row),
+              data: () => row?.data || undefined,
+            };
+          },
+        }),
       }),
     },
     resetDb: () => {
@@ -56,7 +65,7 @@ describe("adminSubscriptionConversionValidation", () => {
     resetDb();
   });
 
-  it("splits aggregate conversion data into conservative validation segments", async () => {
+  it("classifies allowlisted internal accounts explicitly before falling back to heuristics", async () => {
     const now = Date.now();
     seedDoc("events", "real-1", {
       name: "pricing_page_viewed",
@@ -141,13 +150,16 @@ describe("adminSubscriptionConversionValidation", () => {
       occurredAt: new Date(now - 100).toISOString(),
       payload: {},
     });
+    seedDoc("users", "tester-1", {
+      email: "admin+pro@rentchain.ai",
+    });
 
     const { loadAdminSubscriptionConversionValidation } = await import(
       "../admin/adminSubscriptionConversionValidation"
     );
     const result = await loadAdminSubscriptionConversionValidation({ days: 30 });
 
-    expect(result.segmentation.strategy).toBe("heuristic_actor_pattern_v1");
+    expect(result.segmentation.strategy).toBe("internal_allowlist_plus_heuristics_v1");
     expect(result.segments.all_activity.eventCount).toBe(12);
     expect(result.segments.likely_external_or_real.eventCount).toBe(4);
     expect(result.segments.likely_external_or_real.actorCount).toBe(1);
@@ -173,7 +185,29 @@ describe("adminSubscriptionConversionValidation", () => {
     expect(result.recommendations).toContain(
       "Prompt usage remains negligible outside likely internal or testing activity."
     );
-    expect(result.segmentation.caveats).toHaveLength(3);
+    expect(result.segmentation.caveats).toHaveLength(4);
+    expect(result.segmentation.caveats[0]).toContain("allowlist");
+  });
+
+  it("falls back to account email lookup when the users document does not exist", async () => {
+    const now = Date.now();
+    seedDoc("events", "test-1", {
+      name: "pricing_page_viewed",
+      ts: now - 500,
+      userId: "tester-2",
+      props: { surface: "workspace_pricing", source: "workspace_pricing" },
+    });
+    seedDoc("accounts", "tester-2", {
+      email: "admin+elite@rentchain.ai",
+    });
+
+    const { loadAdminSubscriptionConversionValidation } = await import(
+      "../admin/adminSubscriptionConversionValidation"
+    );
+    const result = await loadAdminSubscriptionConversionValidation({ days: 30 });
+
+    expect(result.segments.likely_internal_or_test.eventCount).toBe(1);
+    expect(result.segments.likely_external_or_real.eventCount).toBe(0);
   });
 
   it("returns safe empty segment output when no matching analytics events exist", async () => {

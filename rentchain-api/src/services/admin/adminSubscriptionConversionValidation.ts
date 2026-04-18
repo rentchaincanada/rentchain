@@ -1,3 +1,4 @@
+import { db } from "../../config/firebase";
 import {
   buildSubscriptionConversionSummary,
   loadAdminSubscriptionConversionDataset,
@@ -46,7 +47,7 @@ export type SubscriptionConversionValidationSegment = SubscriptionConversionSumm
 export type SubscriptionConversionValidationPayload = {
   window: SubscriptionConversionSummary["window"];
   segmentation: {
-    strategy: "heuristic_actor_pattern_v1";
+    strategy: "internal_allowlist_plus_heuristics_v1";
     buckets: Record<SegmentKey, { description: string }>;
     caveats: string[];
   };
@@ -70,6 +71,13 @@ const UPGRADE_INTENT_EVENT_NAMES = new Set([
   "upgrade_cta_clicked",
   "upgrade_prompt_checkout_clicked",
   "billing_upgrade_clicked",
+]);
+
+const INTERNAL_TEST_EMAILS = new Set([
+  "admin+free@rentchain.ai",
+  "admin+starter@rentchain.ai",
+  "admin+pro@rentchain.ai",
+  "admin+elite@rentchain.ai",
 ]);
 
 function toBreakdownKey(value: unknown) {
@@ -198,6 +206,7 @@ type ActorStats = {
   rows: ConversionEventRow[];
   targetPlans: Set<string>;
   eventNames: Set<string>;
+  email: string | null;
 };
 
 function toActorKey(row: ConversionEventRow) {
@@ -207,6 +216,7 @@ function toActorKey(row: ConversionEventRow) {
 }
 
 function classifyActor(stats: ActorStats): Exclude<SegmentKey, "all_activity"> {
+  if (stats.email && INTERNAL_TEST_EMAILS.has(stats.email)) return "likely_internal_or_test";
   if (stats.actorKey === "unknown") return "likely_internal_or_test";
   if (stats.targetPlans.size >= 3) return "likely_internal_or_test";
   if (stats.targetPlans.size >= 2 && stats.rows.length >= 8) return "likely_internal_or_test";
@@ -214,7 +224,35 @@ function classifyActor(stats: ActorStats): Exclude<SegmentKey, "all_activity"> {
   return "likely_external_or_real";
 }
 
-function buildActorStats(rows: ConversionEventRow[]) {
+function toNormalizedEmail(value: unknown) {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  return normalized || null;
+}
+
+async function loadActorEmails(userIds: string[]) {
+  const uniqueUserIds = Array.from(new Set(userIds.filter(Boolean)));
+  const emailByUserId = new Map<string, string | null>();
+
+  await Promise.all(
+    uniqueUserIds.map(async (userId) => {
+      const [userSnap, accountSnap] = await Promise.all([
+        db.collection("users").doc(userId).get(),
+        db.collection("accounts").doc(userId).get(),
+      ]);
+      const email =
+        toNormalizedEmail(userSnap.data()?.email) ||
+        toNormalizedEmail(accountSnap.data()?.email) ||
+        null;
+      emailByUserId.set(userId, email);
+    })
+  );
+
+  return emailByUserId;
+}
+
+async function buildActorStats(rows: ConversionEventRow[]) {
+  const emailByUserId = await loadActorEmails(rows.map((row) => row.userId).filter((id): id is string => Boolean(id)));
   const actorMap = new Map<string, ActorStats>();
   for (const row of rows) {
     const actorKey = toActorKey(row);
@@ -223,6 +261,7 @@ function buildActorStats(rows: ConversionEventRow[]) {
       rows: [],
       targetPlans: new Set<string>(),
       eventNames: new Set<string>(),
+      email: row.userId ? emailByUserId.get(row.userId) || null : null,
     };
     existing.rows.push(row);
     existing.eventNames.add(row.name);
@@ -273,7 +312,7 @@ export async function loadAdminSubscriptionConversionValidation(params?: {
   const dataset = await loadAdminSubscriptionConversionDataset(params);
   const from = Date.parse(dataset.window.from);
   const to = Date.parse(dataset.window.to);
-  const actorStats = buildActorStats(dataset.rows);
+  const actorStats = await buildActorStats(dataset.rows);
 
   const segmentedRows: Record<Exclude<SegmentKey, "all_activity">, ConversionEventRow[]> = {
     likely_internal_or_test: [],
@@ -330,22 +369,23 @@ export async function loadAdminSubscriptionConversionValidation(params?: {
   return {
     window: dataset.window,
     segmentation: {
-      strategy: "heuristic_actor_pattern_v1",
+      strategy: "internal_allowlist_plus_heuristics_v1",
       buckets: {
         all_activity: {
           description: "All Mission 29-style conversion events in the bounded window.",
         },
         likely_internal_or_test: {
           description:
-            "Activity from actors showing repeated multi-plan or high-volume exploration patterns consistent with testing.",
+            "Activity from allowlisted internal actors or from actors showing repeated multi-plan or high-volume exploration patterns consistent with testing.",
         },
         likely_external_or_real: {
           description:
-            "Remaining activity after conservative internal/testing heuristics are applied. This is directional, not authoritative identity truth.",
+            "Remaining activity after explicit internal allowlist checks and conservative internal/testing heuristics are applied. This is directional, not authoritative identity truth.",
         },
       },
       caveats: [
-        "Segmentation is heuristic and actor-pattern based, not verified identity truth.",
+        "Known internal test accounts are classified explicitly through an internal allowlist when their userId resolves to a matching email.",
+        "All remaining segmentation is heuristic and actor-pattern based, not verified identity truth.",
         "The model is intentionally conservative and may leave some testing activity in likely_external_or_real.",
         "Output is aggregate only and should be used as a confidence lens before making stronger optimization decisions.",
       ],
