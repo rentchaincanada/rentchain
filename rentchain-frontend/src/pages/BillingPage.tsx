@@ -253,11 +253,11 @@ const BillingPage: React.FC = () => {
     : null;
   const recommendedUpgradeReason =
     resolvedCurrentPlan === "free"
-      ? "Starter is the first paid plan and the fastest path into the full rental workflow."
+      ? "Starter is the first paid plan and the clearest move into the full workflow foundation for active rental operations."
       : resolvedCurrentPlan === "starter"
-        ? "Pro is the next logical step when you need stronger reporting, exports, and team workflow control."
+        ? "Pro is the next logical step when you need stronger operational control, cleaner reporting, and better coordination as work gets busier."
         : resolvedCurrentPlan === "pro"
-          ? "Elite is the next logical step when you need deeper portfolio visibility and advanced oversight."
+          ? "Elite is the next logical step when you need portfolio intelligence, analytics, and oversight that sit above the operational tools already in Pro."
           : null;
 
   return (
@@ -350,12 +350,12 @@ const BillingPage: React.FC = () => {
               ) : null}
               {resolvedCurrentPlan === "starter" ? (
                 <div style={{ marginTop: spacing.xs, color: text.muted, fontSize: 14 }}>
-                  Starter includes messaging, leases, maintenance, and work orders. Pro adds exports, screening summaries, compliance reports, and team workflows.
+                  Starter keeps the day-to-day workflow connected. Pro adds the operational control layer with stronger exports, reporting, screening summaries, compliance review, and team workflows.
                 </div>
               ) : null}
               {resolvedCurrentPlan === "pro" ? (
                 <div style={{ marginTop: spacing.xs, color: text.muted, fontSize: 14 }}>
-                  Pro includes exports, reporting, and team workflows. Elite adds advanced analytics, AI summaries, and audit visibility.
+                  Pro focuses on operational control and reporting. Elite adds the portfolio intelligence layer with advanced analytics, AI summaries, and audit visibility.
                 </div>
               ) : null}
             </div>

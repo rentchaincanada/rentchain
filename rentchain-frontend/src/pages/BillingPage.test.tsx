@@ -149,7 +149,9 @@ describe("BillingPage", () => {
     await waitFor(() => expect(screen.getByText("Pro")).toBeInTheDocument());
     expect(screen.getByTestId("billing-plans-panel")).toHaveTextContent("pro");
     expect(screen.getAllByRole("button", { name: "Manage subscription" })).toHaveLength(2);
-    expect(screen.getByText(/Pro includes exports, reporting, and team workflows/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Pro focuses on operational control and reporting\. Elite adds the portfolio intelligence layer/i)
+    ).toBeInTheDocument();
     expect(screen.getByText(/Recommended next plan: Elite/i)).toBeInTheDocument();
     expect(mocks.trackMock).toHaveBeenCalledWith("billing_page_opened", {
       currentPlan: "pro",

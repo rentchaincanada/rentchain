@@ -36,9 +36,61 @@ const PLAN_FEATURES: Record<PlanKey, string[]> = Object.fromEntries(
 
 const PLAN_AUDIENCE_COPY: Record<PlanKey, string> = {
   free: "For landlords getting started with one property and wanting to try the basics.",
-  starter: "For landlords running the day-to-day work across active rentals.",
-  pro: "For growing operators who want stronger visibility and cleaner control.",
-  elite: "For portfolios that need deeper oversight, reporting, and decision support.",
+  starter: "For landlords who need one place to run the weekly rental workflow across active rentals.",
+  pro: "For operators who need stronger operational control, cleaner reporting, and better handoff between people and tasks.",
+  elite: "For portfolios that need insight-led oversight, portfolio trends, and higher-confidence decisions.",
+};
+
+const PLAN_BADGE_COPY: Partial<Record<PlanKey, string>> = {
+  starter: "Workflow foundation",
+  pro: "Operations and reporting",
+  elite: "Insights and oversight",
+};
+
+const PLAN_SUPPORT_COPY: Partial<Record<PlanKey, string>> = {
+  starter:
+    "Free helps you get started. Starter is the first plan built to keep applicant, tenant, and property work together in one operating flow.",
+  pro:
+    "Pro is the step up when operational complexity starts growing and you need exports, reporting, and stronger internal coordination.",
+  elite:
+    "Elite is for teams that want portfolio-level visibility, intelligence, and higher-confidence oversight on top of the operational tools in Pro.",
+};
+
+const PLAN_CALLOUT_COPY: Partial<
+  Record<
+    PlanKey,
+    {
+      title: string;
+      description: string;
+      bullets: string[];
+      proofLine?: string;
+    }
+  >
+> = {
+  pro: {
+    title: "Built for operational control",
+    description:
+      "Pro is designed for landlords and teams who need the day-to-day workflow to stay organized, reviewable, and easier to report on.",
+    bullets: [
+      "Keep exports and reporting ready for month-end and stakeholder reviews",
+      "Make screening, compliance, and recordkeeping easier to follow through",
+      "Give team workflows clearer structure as more people and properties get involved",
+    ],
+    proofLine:
+      "Best when workflow volume is growing and you want cleaner operational control before moving into portfolio intelligence.",
+  },
+  elite: {
+    title: "Built for insight-led oversight",
+    description:
+      "Elite is for portfolio operators who want more than operational control. It adds intelligence, deeper visibility, and portfolio-level context for decisions.",
+    bullets: [
+      "See portfolio trends and advanced analytics in one place",
+      "Use AI summaries and audit visibility to review the bigger picture faster",
+      "Support leadership and oversight decisions with stronger portfolio context",
+    ],
+    proofLine:
+      "Best when the question is no longer just what happened, but what needs attention across the portfolio.",
+  },
 };
 
 function pricingCardShadow(plan: PlanKey, hovered: boolean) {
@@ -198,6 +250,13 @@ const PricingPage: React.FC = () => {
     return `Review ${CANONICAL_TIER_MATRIX[target].label} plan`;
   };
 
+  const planCtaSupport = (target: Exclude<PlanKey, "free">) => {
+    if (PLAN_ORDER.indexOf(currentPlan) >= PLAN_ORDER.indexOf(target)) {
+      return "Open billing to manage your current subscription details.";
+    }
+    return `Billing will show the ${CANONICAL_TIER_MATRIX[target].label} plan details before secure checkout opens.`;
+  };
+
   return (
     <MacShell title="RentChain · Pricing" showTopNav={false}>
       <Section
@@ -304,23 +363,30 @@ const PricingPage: React.FC = () => {
                 <div style={{ fontWeight: 800, fontSize: 20, lineHeight: 1.15, ...wrappingTextStyle }}>
                   {CANONICAL_TIER_MATRIX[plan].label}
                 </div>
-                {plan === "pro" ? (
+                {PLAN_BADGE_COPY[plan] ? (
                   <span
                     style={{
-                      border: "1px solid rgba(37,99,235,0.4)",
+                      border:
+                        plan === "pro" || plan === "elite"
+                          ? "1px solid rgba(37,99,235,0.4)"
+                          : "1px solid rgba(15,23,42,0.18)",
                       borderRadius: 999,
                       padding: "4px 12px",
                       fontSize: 11,
                       fontWeight: 700,
-                      color: "#1d4ed8",
-                      background: "linear-gradient(180deg, rgba(37,99,235,0.14), rgba(37,99,235,0.08))",
+                      color: plan === "pro" || plan === "elite" ? "#1d4ed8" : text.primary,
+                      background:
+                        plan === "pro" || plan === "elite"
+                          ? "linear-gradient(180deg, rgba(37,99,235,0.14), rgba(37,99,235,0.08))"
+                          : "rgba(15,23,42,0.06)",
                       maxWidth: "100%",
                       overflowWrap: "anywhere",
                       letterSpacing: 0.2,
-                      boxShadow: "0 8px 20px rgba(37,99,235,0.12)",
+                      boxShadow:
+                        plan === "pro" || plan === "elite" ? "0 8px 20px rgba(37,99,235,0.12)" : "none",
                     }}
                   >
-                    Most Popular for growing landlords
+                    {PLAN_BADGE_COPY[plan]}
                   </span>
                 ) : null}
               </div>
@@ -346,7 +412,7 @@ const PricingPage: React.FC = () => {
                   </li>
                 ))}
               </ul>
-              {plan === "starter" ? (
+              {plan === "starter" && PLAN_SUPPORT_COPY[plan] ? (
                 <div
                   style={{
                     color: text.muted,
@@ -361,10 +427,10 @@ const PricingPage: React.FC = () => {
                     ...wrappingTextStyle,
                   }}
                 >
-                  Free is there to help you get started. Starter is where RentChain becomes a real day-to-day operating tool for active rentals.
+                  {PLAN_SUPPORT_COPY[plan]}
                 </div>
               ) : null}
-              {plan === "pro" ? (
+              {plan === "pro" || plan === "elite" ? (
                 <div
                   style={{
                     border: "1px solid rgba(37,99,235,0.28)",
@@ -377,7 +443,12 @@ const PricingPage: React.FC = () => {
                     flex: "0 0 auto",
                   }}
                 >
-                  <div style={{ fontWeight: 800, lineHeight: 1.25, ...wrappingTextStyle }}>Built for landlords handling more moving parts</div>
+                  <div style={{ fontWeight: 800, lineHeight: 1.25, ...wrappingTextStyle }}>
+                    {PLAN_CALLOUT_COPY[plan]?.title}
+                  </div>
+                  <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.6, ...wrappingTextStyle }}>
+                    {PLAN_CALLOUT_COPY[plan]?.description}
+                  </div>
                   <ul
                     style={{
                       margin: 0,
@@ -389,14 +460,17 @@ const PricingPage: React.FC = () => {
                       gap: 6,
                     }}
                   >
-                    <li style={{ overflowWrap: "anywhere" }}>Keep property records cleaner as the portfolio grows</li>
-                    <li style={{ overflowWrap: "anywhere" }}>Share clearer reports with partners, owners, or accountants</li>
-                    <li style={{ overflowWrap: "anywhere" }}>Get stronger visibility into screening and compliance work</li>
-                    <li style={{ overflowWrap: "anywhere" }}>Spend less time piecing together month-end information</li>
+                    {(PLAN_CALLOUT_COPY[plan]?.bullets || []).map((bullet) => (
+                      <li key={`${plan}-${bullet}`} style={{ overflowWrap: "anywhere" }}>
+                        {bullet}
+                      </li>
+                    ))}
                   </ul>
-                  <div style={{ color: text.muted, fontSize: 12, lineHeight: 1.55, ...wrappingTextStyle }}>
-                    A strong fit when simple tools are no longer enough, but you still want RentChain to feel calm and easy to run.
-                  </div>
+                  {PLAN_CALLOUT_COPY[plan]?.proofLine ? (
+                    <div style={{ color: text.muted, fontSize: 12, lineHeight: 1.55, ...wrappingTextStyle }}>
+                      {PLAN_CALLOUT_COPY[plan]?.proofLine}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
               {plan !== "free" ? (
@@ -424,9 +498,14 @@ const PricingPage: React.FC = () => {
                     Start Free
                   </Button>
                 ) : (
-                  <Button type="button" onClick={() => void handleUpgrade(plan)} style={{ width: "100%" }}>
-                    {planCtaLabel(plan)}
-                  </Button>
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <Button type="button" onClick={() => void handleUpgrade(plan)} style={{ width: "100%" }}>
+                      {planCtaLabel(plan)}
+                    </Button>
+                    <div style={{ color: text.muted, fontSize: 12, lineHeight: 1.55, ...wrappingTextStyle }}>
+                      {planCtaSupport(plan)}
+                    </div>
+                  </div>
                 )}
               </div>
             </Card>
