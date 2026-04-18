@@ -16,6 +16,11 @@ export interface AuthenticatedUser {
   actorLandlordId?: string | null;
 }
 
+function isOptionalAuthPath(req: { originalUrl?: string; path?: string }) {
+  const raw = String(req.originalUrl || req.path || "").trim();
+  return /^\/api\/events\/track(?:[/?#]|$)/.test(raw);
+}
+
 export const authenticateJwt: RequestHandler = (req, res, next): void => {
   // Allow auth routes and health to be public
   if (req.path.startsWith("/api/auth/") || req.path === "/api/health") {
@@ -70,6 +75,9 @@ export const authenticateJwt: RequestHandler = (req, res, next): void => {
   }
 
   if (!authHeader.startsWith("Bearer ")) {
+    if (isOptionalAuthPath(req)) {
+      return next();
+    }
     jsonError(res, 401, "UNAUTHORIZED", "UNAUTHORIZED", undefined, (req as any).requestId);
     return;
   }
@@ -82,6 +90,9 @@ export const authenticateJwt: RequestHandler = (req, res, next): void => {
       decoded as any;
 
     if (!sub || !email) {
+      if (isOptionalAuthPath(req)) {
+        return next();
+      }
       jsonError(res, 401, "UNAUTHORIZED", "UNAUTHORIZED", undefined, (req as any).requestId);
       return;
     }
@@ -100,6 +111,9 @@ export const authenticateJwt: RequestHandler = (req, res, next): void => {
 
     next();
   } catch (err) {
+    if (isOptionalAuthPath(req)) {
+      return next();
+    }
     console.error("[authenticateJwt] verification failed", err);
     jsonError(res, 401, "UNAUTHORIZED", "UNAUTHORIZED", undefined, (req as any).requestId);
   }

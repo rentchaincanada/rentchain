@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type StoredDoc = { id: string; data: any };
 
-const { dbMock, resetDb, seedEvent } = vi.hoisted(() => {
+const { dbMock, resetDb, seedEvent, getCollectionDocs } = vi.hoisted(() => {
   const collections = new Map<string, Map<string, StoredDoc>>();
   let autoId = 0;
 
@@ -35,6 +35,8 @@ const { dbMock, resetDb, seedEvent } = vi.hoisted(() => {
     seedEvent: (id: string, data: any) => {
       ensureCollection("events").set(id, { id, data });
     },
+    getCollectionDocs: (name: string) =>
+      Array.from(ensureCollection(name).values()).map((entry) => ({ id: entry.id, ...(entry.data || {}) })),
   };
 });
 
@@ -134,6 +136,13 @@ describe("eventsRoutes", () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ ok: true });
     expect(telemetryMocks.incrementCounter).toHaveBeenCalledWith({ name: "registry_ready_created" });
+    expect(getCollectionDocs("events")).toEqual([
+      expect.objectContaining({
+        name: "registry_ready_created",
+        userId: null,
+        sessionId: expect.any(String),
+      }),
+    ]);
   });
 
   it("accepts billing and upgrade prompt analytics events through the generic tracker", async () => {
@@ -172,6 +181,44 @@ describe("eventsRoutes", () => {
     expect(promptRes.status).toBe(200);
     expect(telemetryMocks.incrementCounter).toHaveBeenCalledWith({ name: "billing_page_opened" });
     expect(telemetryMocks.incrementCounter).toHaveBeenCalledWith({ name: "upgrade_prompt_viewed" });
+  });
+
+  it("persists authenticated events with userId and no sessionId", async () => {
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/track",
+      user: { id: "user-123", role: "landlord" },
+      body: {
+        name: "billing_page_opened",
+        props: { surface: "billing_page" },
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(getCollectionDocs("events")).toEqual([
+      expect.objectContaining({
+        name: "billing_page_opened",
+        userId: "user-123",
+        sessionId: null,
+      }),
+    ]);
+  });
+
+  it("rejects invalid event names", async () => {
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/track",
+      body: {
+        name: "not_allowed_event",
+        props: {},
+      },
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ ok: false, error: "invalid_event_name" });
+    expect(getCollectionDocs("events")).toEqual([]);
   });
 
   it("returns a grouped registry funnel report for admins", async () => {
