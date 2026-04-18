@@ -121,11 +121,13 @@ describe("BillingPage", () => {
     await waitFor(() =>
       expect(screen.getByText(/Pricing selection saved: Pro on the Yearly plan/i)).toBeInTheDocument()
     );
+    expect(screen.getByText(/Recommended next plan: Pro from your pricing selection/i)).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Continue to Pro checkout" }).length).toBeGreaterThan(0);
     expect(mocks.billingPlansPanelMock).toHaveBeenCalledWith(
       expect.objectContaining({
         interval: "year",
         selectedPlan: "pro",
+        recommendedPlan: "pro",
       })
     );
   });
@@ -148,10 +150,17 @@ describe("BillingPage", () => {
     expect(screen.getByTestId("billing-plans-panel")).toHaveTextContent("pro");
     expect(screen.getAllByRole("button", { name: "Manage subscription" })).toHaveLength(2);
     expect(screen.getByText(/Pro includes exports, reporting, and team workflows/)).toBeInTheDocument();
+    expect(screen.getByText(/Recommended next plan: Elite/i)).toBeInTheDocument();
     expect(mocks.trackMock).toHaveBeenCalledWith("billing_page_opened", {
       currentPlan: "pro",
       surface: "billing_page",
       route: "/",
     });
+    expect(mocks.billingPlansPanelMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        currentPlan: "pro",
+        recommendedPlan: "elite",
+      })
+    );
   });
 });

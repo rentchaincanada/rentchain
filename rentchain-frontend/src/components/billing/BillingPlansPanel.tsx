@@ -18,6 +18,7 @@ type Props = {
   onIntervalChange: (value: "month" | "year") => void;
   currentPlan?: string | null;
   selectedPlan?: "starter" | "pro" | "elite" | null;
+  recommendedPlan?: "starter" | "pro" | "elite" | null;
   role?: string | null;
   mode: "billing" | "pricing";
   planActionLoading?: string | null;
@@ -32,6 +33,7 @@ export function BillingPlansPanel({
   onIntervalChange,
   currentPlan,
   selectedPlan,
+  recommendedPlan,
   role,
   mode,
   planActionLoading,
@@ -73,6 +75,28 @@ export function BillingPlansPanel({
     return `Continue to ${CANONICAL_TIER_MATRIX[planKey].label} checkout`;
   };
 
+  const ctaSupportCopy = (
+    planKey: Exclude<PricingPlanKey, "free">,
+    isCurrent: boolean,
+    isSelected: boolean,
+    isRecommended: boolean
+  ) => {
+    if (isCurrent) return "Your current plan is already active.";
+    if (currentPlanKey && currentPlanKey !== "free") {
+      const paidPlanOrder: Exclude<PricingPlanKey, "free">[] = ["starter", "pro", "elite"];
+      if (paidPlanOrder.indexOf(currentPlanKey as Exclude<PricingPlanKey, "free">) >= paidPlanOrder.indexOf(planKey)) {
+        return "Opens the billing portal to manage your existing subscription.";
+      }
+    }
+    if (isSelected) {
+      return "Selected from pricing. Opens secure checkout for the plan you already chose.";
+    }
+    if (isRecommended) {
+      return "Recommended next step based on your current plan. Opens secure checkout.";
+    }
+    return "Opens secure checkout so you can review and confirm this plan.";
+  };
+
   return (
     <div style={{ display: "grid", gap: 10 }}>
       <PlanIntervalToggle value={interval} onChange={onIntervalChange} />
@@ -83,6 +107,7 @@ export function BillingPlansPanel({
         const plan = CANONICAL_TIER_MATRIX[planId];
         const highlight = currentPlanKey === planId;
         const selected = selectedPlan === planId;
+        const recommended = !highlight && recommendedPlan === planId;
         const topAreas = TIER_MATRIX_AREAS.slice(0, 4);
 
         return (
@@ -94,15 +119,20 @@ export function BillingPlansPanel({
                 ? "1px solid rgba(59,130,246,0.45)"
                 : selected
                   ? "1px solid rgba(37,99,235,0.45)"
+                  : recommended
+                    ? "1px solid rgba(14,116,144,0.42)"
                   : "1px solid rgba(148,163,184,0.25)",
               background: highlight
                 ? "rgba(59,130,246,0.08)"
                 : selected
                   ? "rgba(37,99,235,0.08)"
+                  : recommended
+                    ? "rgba(14,116,144,0.08)"
                   : "rgba(148,163,184,0.06)",
               padding: 12,
               display: "grid",
               gap: 12,
+              boxShadow: recommended ? "0 14px 28px rgba(14,116,144,0.10)" : "none",
             }}
           >
             <div
@@ -122,7 +152,9 @@ export function BillingPlansPanel({
               {highlight ? (
                 <span style={{ fontSize: 12, fontWeight: 700, color: colors.accent }}>Current</span>
               ) : selected ? (
-                <span style={{ fontSize: 12, fontWeight: 700, color: "#1d4ed8" }}>Selected</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: "#1d4ed8" }}>Selected from pricing</span>
+              ) : recommended ? (
+                <span style={{ fontSize: 12, fontWeight: 700, color: "#0f766e" }}>Recommended next step</span>
               ) : null}
             </div>
 
@@ -175,6 +207,9 @@ export function BillingPlansPanel({
               >
                 {ctaLabel(planId, highlight)}
               </Button>
+            </div>
+            <div style={{ color: text.muted, fontSize: 12, lineHeight: 1.5 }}>
+              {ctaSupportCopy(planId, highlight, selected, recommended)}
             </div>
           </div>
         );
