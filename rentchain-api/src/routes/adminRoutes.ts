@@ -8,6 +8,7 @@ import { getPlanConfig, resolvePlanFromPriceId, type BillingPlanKey } from "../c
 import { getTuReferralMetricsForMonth } from "../services/metrics/tuReferralReport";
 import { getPublicStatusPayload } from "../services/statusService";
 import { loadAdminSubscriptionConversionFunnel } from "../services/admin/adminSubscriptionConversionView";
+import { loadAdminSubscriptionConversionInsights } from "../services/admin/adminSubscriptionConversionInsights";
 import {
   createStatusIncident,
   resolveStatusIncident,
@@ -842,6 +843,22 @@ router.get("/analytics/conversion-funnel", requireAdmin, async (req, res) => {
   } catch (err: any) {
     console.error("[admin] conversion funnel failed", err?.message || err);
     return res.status(500).json({ ok: false, error: "CONVERSION_FUNNEL_FAILED" });
+  }
+});
+
+router.get("/analytics/conversion-insights", requireAdmin, async (req, res) => {
+  try {
+    const days = req.query?.days;
+    const payload = await loadAdminSubscriptionConversionInsights({
+      days: typeof days === "string" ? days : undefined,
+    });
+    return res.json({
+      ok: true,
+      ...payload,
+    });
+  } catch (err: any) {
+    console.error("[admin] conversion insights failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "CONVERSION_INSIGHTS_FAILED" });
   }
 });
 

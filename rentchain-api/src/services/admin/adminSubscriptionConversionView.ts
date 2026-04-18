@@ -12,13 +12,14 @@ export const SUBSCRIPTION_CONVERSION_FUNNEL_STEPS = [
 
 type FunnelStepName = (typeof SUBSCRIPTION_CONVERSION_FUNNEL_STEPS)[number];
 
-type EventProps = {
+export type EventProps = {
   targetPlan?: unknown;
   surface?: unknown;
   source?: unknown;
+  featureKey?: unknown;
 };
 
-type ConversionEventRow = {
+export type ConversionEventRow = {
   name: FunnelStepName;
   ts: number;
   props: EventProps;
@@ -86,9 +87,13 @@ function toConversionEventRow(data: any): ConversionEventRow | null {
   };
 }
 
-export async function loadAdminSubscriptionConversionFunnel(params?: {
+export type SubscriptionConversionDataset = SubscriptionConversionSummary & {
+  rows: ConversionEventRow[];
+};
+
+export async function loadAdminSubscriptionConversionDataset(params?: {
   days?: number | string;
-}): Promise<SubscriptionConversionSummary> {
+}): Promise<SubscriptionConversionDataset> {
   const days = clampDays(params?.days);
   const to = Date.now();
   const from = to - days * 24 * 60 * 60 * 1000;
@@ -141,7 +146,15 @@ export async function loadAdminSubscriptionConversionFunnel(params?: {
       from: new Date(from).toISOString(),
       to: new Date(to).toISOString(),
     },
+    rows,
     funnel,
     breakdowns,
   };
+}
+
+export async function loadAdminSubscriptionConversionFunnel(params?: {
+  days?: number | string;
+}): Promise<SubscriptionConversionSummary> {
+  const { rows: _rows, ...summary } = await loadAdminSubscriptionConversionDataset(params);
+  return summary;
 }
