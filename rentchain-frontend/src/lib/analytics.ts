@@ -1,4 +1,5 @@
 import { isTelemetryEnabled } from "./telemetry";
+import { resolveApiUrl } from "./apiClient";
 type AnalyticsProps = Record<string, unknown>;
 
 const hasDoNotTrack = () => {
@@ -51,7 +52,7 @@ export function track(eventName: string, props: AnalyticsProps = {}) {
     return;
   }
 
-  void fetch("/api/events/track", {
+  void fetch(resolveApiUrl("/api/events/track"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
