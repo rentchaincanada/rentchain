@@ -78,6 +78,11 @@ describe("PricingPage analytics", () => {
         route: "/",
       })
     );
+    expect(
+      screen.getByText(
+        /Starter gives you the workflow foundation, Pro adds operational control and reporting, and Elite adds portfolio intelligence and oversight/i
+      )
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Annual" }));
 

@@ -17,7 +17,7 @@ import { apiFetch } from "@/lib/apiClient";
 import { track } from "@/lib/analytics";
 import { billingTierLabel, useBillingStatus } from "@/hooks/useBillingStatus";
 import { refreshEntitlements } from "@/lib/entitlements";
-import { CANONICAL_TIER_MATRIX } from "@/constants/pricingPlans";
+import { CANONICAL_TIER_MATRIX, TIER_POSITIONING_COPY } from "@/constants/pricingPlans";
 
 const formatAmount = (amountCents: number, currency: string) => {
   const amount = (amountCents || 0) / 100;
@@ -253,11 +253,11 @@ const BillingPage: React.FC = () => {
     : null;
   const recommendedUpgradeReason =
     resolvedCurrentPlan === "free"
-      ? "Starter is the first paid plan and the clearest move into the full workflow foundation for active rental operations."
+      ? TIER_POSITIONING_COPY.starter.nextStepReason || null
       : resolvedCurrentPlan === "starter"
-        ? "Pro is the next logical step when you need stronger operational control, cleaner reporting, and better coordination as work gets busier."
+        ? TIER_POSITIONING_COPY.pro.nextStepReason || null
         : resolvedCurrentPlan === "pro"
-          ? "Elite is the next logical step when you need portfolio intelligence, analytics, and oversight that sit above the operational tools already in Pro."
+          ? TIER_POSITIONING_COPY.elite.nextStepReason || null
           : null;
 
   return (
@@ -286,6 +286,9 @@ const BillingPage: React.FC = () => {
                 {requestedUpgradePlan ? " from your pricing selection." : "."}
               </div>
             ) : null}
+            <div style={{ color: text.muted, fontSize: "0.9rem", marginTop: 6 }}>
+              Starter gives you the workflow foundation, Pro adds operational control and reporting, and Elite adds portfolio intelligence and oversight.
+            </div>
           </div>
           <div className="rc-wrap-row">
             <Button type="button" variant="secondary" onClick={load} disabled={loading}>
