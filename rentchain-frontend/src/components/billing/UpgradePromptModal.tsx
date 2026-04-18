@@ -37,6 +37,12 @@ export function UpgradePromptModal({
   const title = copy.title;
   const subtitle = copy.subtitle;
   const bullets = copy.bullets?.slice(0, 3) || [];
+  const sourceContext =
+    source === "locked_feature"
+      ? `This upgrade prompt opened because this feature is locked on your current plan.`
+      : source === "feature_teaser"
+        ? `This upgrade prompt opened from a feature preview so you can review the upgrade before leaving the page.`
+        : null;
 
   const primaryRef = useRef<HTMLButtonElement | null>(null);
   const modalRef = useRef<HTMLDivElement | null>(null);
@@ -203,6 +209,9 @@ export function UpgradePromptModal({
 
           {copy.trustNote ? (
             <div style={{ fontSize: 12, color: "rgba(71,85,105,0.9)" }}>{copy.trustNote}</div>
+          ) : null}
+          {sourceContext ? (
+            <div style={{ fontSize: 12, color: "rgba(71,85,105,0.9)" }}>{sourceContext}</div>
           ) : null}
 
           <div className="rc-wrap-row">

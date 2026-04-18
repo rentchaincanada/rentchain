@@ -69,10 +69,14 @@ describe("UpgradePromptModal", () => {
           onClose={vi.fn()}
           featureKey="tenant_invites"
           currentPlan="free"
-          source="unit_test"
+          source="locked_feature"
         />
       </MemoryRouter>
     );
+
+    expect(
+      screen.getByText("This upgrade prompt opened because this feature is locked on your current plan.")
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getAllByRole("button", { name: "Not now" })[0]);
 
@@ -80,7 +84,7 @@ describe("UpgradePromptModal", () => {
       featureKey: "tenant_invites",
       currentPlan: "free",
       requiredPlan: "starter",
-      source: "unit_test",
+      source: "locked_feature",
       route: "/",
       presentation: "modal",
     });
