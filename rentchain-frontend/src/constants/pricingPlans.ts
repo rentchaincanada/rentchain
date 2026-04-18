@@ -41,6 +41,13 @@ export type TierMatrixPlan = PricingPlan & {
   capabilities: Record<TierCapabilityArea, TierCapabilityEntry>;
 };
 
+export type TierPositioning = {
+  badge: string;
+  audience: string;
+  support: string;
+  nextStepReason?: string;
+};
+
 export const TIER_MATRIX_AREAS: Array<{ key: TierCapabilityArea; label: string }> = [
   { key: "properties_units", label: "Properties / units" },
   { key: "applications", label: "Applications" },
@@ -55,6 +62,35 @@ export const TIER_MATRIX_AREAS: Array<{ key: TierCapabilityArea; label: string }
   { key: "automation", label: "Automation" },
   { key: "team_admin_tools", label: "Team / admin tools" },
 ];
+
+export const TIER_POSITIONING_COPY: Record<Exclude<PricingPlanKey, "free">, TierPositioning> = {
+  starter: {
+    badge: "Workflow foundation",
+    audience: "For landlords who need one place to run the weekly rental workflow across active rentals.",
+    support:
+      "Starter is the first paid plan built to keep applicant, tenant, and property work together in one operating flow.",
+    nextStepReason:
+      "Starter is the clearest move into the workflow foundation for active rental operations.",
+  },
+  pro: {
+    badge: "Operations and reporting",
+    audience:
+      "For operators who need stronger operational control, cleaner reporting, and better handoff between people and tasks.",
+    support:
+      "Pro is the step up when operational complexity starts growing and you need exports, reporting, and stronger coordination.",
+    nextStepReason:
+      "Pro is the next logical step when you need stronger operational control, cleaner reporting, and better coordination as work gets busier.",
+  },
+  elite: {
+    badge: "Insights and oversight",
+    audience:
+      "For portfolios that need insight-led oversight, portfolio trends, and higher-confidence decisions.",
+    support:
+      "Elite is for teams that want portfolio-level visibility, intelligence, and higher-confidence oversight on top of Pro.",
+    nextStepReason:
+      "Elite is the next logical step when you need portfolio intelligence, analytics, and oversight that sit above the operational tools already in Pro.",
+  },
+};
 
 // Canonical pricing and capability matrix used by /pricing and /billing.
 // It mirrors the current commercial truth from backend billing prices plus
@@ -98,7 +134,7 @@ export const CANONICAL_TIER_MATRIX: Record<PricingPlanKey, TierMatrixPlan> = {
     label: "Starter",
     monthlyPrice: "$29",
     yearlyPrice: "$290",
-    tagline: "Best for active landlords running day-to-day rental operations.",
+    tagline: "Best for workflow foundation across day-to-day rental operations.",
     ctaLabel: "Upgrade to Starter",
     features: [
       "Tenant invites and linked applications",
@@ -127,7 +163,7 @@ export const CANONICAL_TIER_MATRIX: Record<PricingPlanKey, TierMatrixPlan> = {
     label: "Pro",
     monthlyPrice: "$49",
     yearlyPrice: "$490",
-    tagline: "Best for growing portfolios that need exports, reporting, and team workflows.",
+    tagline: "Best for operational control, exports, and reporting as complexity grows.",
     ctaLabel: "Upgrade to Pro",
     features: [
       "CSV, spreadsheet, and PDF export paths",
@@ -156,7 +192,7 @@ export const CANONICAL_TIER_MATRIX: Record<PricingPlanKey, TierMatrixPlan> = {
     label: "Elite",
     monthlyPrice: "$79",
     yearlyPrice: "$790",
-    tagline: "Best for premium visibility, audit depth, and advanced portfolio oversight.",
+    tagline: "Best for portfolio intelligence, analytics, and advanced oversight.",
     ctaLabel: "Upgrade to Elite",
     features: [
       "Advanced exports and audit visibility",

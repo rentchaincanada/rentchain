@@ -35,7 +35,7 @@ describe("BillingPlansPanel", () => {
 
     expect(screen.getByText("Current")).toBeInTheDocument();
     expect(screen.getByText("Selected from pricing")).toBeInTheDocument();
-    expect(screen.getByText("Operational control, exports, and reporting")).toBeInTheDocument();
+    expect(screen.getAllByText("Operations and reporting").length).toBeGreaterThan(0);
     expect(
       screen.getByText("Selected from pricing. Opens secure checkout for the Pro plan you already chose.")
     ).toBeInTheDocument();
@@ -65,10 +65,10 @@ describe("BillingPlansPanel", () => {
     );
 
     expect(screen.getByText("Recommended next step")).toBeInTheDocument();
-    expect(screen.getAllByText("Portfolio intelligence, insights, and oversight").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Operations and reporting").length).toBeGreaterThan(0);
     expect(
       screen.getByText(
-        "Recommended next step based on your current plan. Opens secure checkout for Operational control, exports, and reporting."
+        "Recommended next step based on your current plan. Opens secure checkout for operations and reporting."
       )
     ).toBeInTheDocument();
   });

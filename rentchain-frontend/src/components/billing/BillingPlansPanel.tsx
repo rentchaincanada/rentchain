@@ -6,21 +6,10 @@ import { getVisiblePlans, type PlanKey } from "@/billing/planVisibility";
 import { normalizePlan } from "@/lib/plan";
 import {
   CANONICAL_TIER_MATRIX,
+  TIER_POSITIONING_COPY,
   TIER_MATRIX_AREAS,
   type PricingPlanKey,
 } from "@/constants/pricingPlans";
-
-const PLAN_IDENTITY_COPY: Record<Exclude<PricingPlanKey, "free">, string> = {
-  starter: "Workflow foundation for weekly rental operations",
-  pro: "Operational control, exports, and reporting",
-  elite: "Portfolio intelligence, insights, and oversight",
-};
-
-const PLAN_SUPPORT_COPY: Record<Exclude<PricingPlanKey, "free">, string> = {
-  starter: "Best when you want one place to keep applicant, tenant, and property work connected.",
-  pro: "Best when you need cleaner reporting, stronger coordination, and easier operational follow-through.",
-  elite: "Best when you need portfolio-level visibility, analytics, and higher-confidence oversight.",
-};
 
 type Props = {
   pricing: any | null;
@@ -104,9 +93,9 @@ export function BillingPlansPanel({
       return `Selected from pricing. Opens secure checkout for the ${CANONICAL_TIER_MATRIX[planKey].label} plan you already chose.`;
     }
     if (isRecommended) {
-      return `Recommended next step based on your current plan. Opens secure checkout for ${PLAN_IDENTITY_COPY[planKey]}.`;
+      return `Recommended next step based on your current plan. Opens secure checkout for ${TIER_POSITIONING_COPY[planKey].badge.toLowerCase()}.`;
     }
-    return `Opens secure checkout so you can review and confirm ${PLAN_IDENTITY_COPY[planKey]}.`;
+    return `Opens secure checkout so you can review and confirm ${TIER_POSITIONING_COPY[planKey].badge.toLowerCase()}.`;
   };
 
   return (
@@ -161,7 +150,7 @@ export function BillingPlansPanel({
                   {plan.tagline}
                 </div>
                 <div style={{ marginTop: 4, fontSize: 12, fontWeight: 700, color: text.secondary }}>
-                  {PLAN_IDENTITY_COPY[planId]}
+                  {TIER_POSITIONING_COPY[planId].badge}
                 </div>
               </div>
               {highlight ? (
@@ -178,7 +167,7 @@ export function BillingPlansPanel({
             </div>
 
             <div style={{ color: text.muted, fontSize: 12, lineHeight: 1.55 }}>
-              {PLAN_SUPPORT_COPY[planId]}
+              {TIER_POSITIONING_COPY[planId].support}
             </div>
 
             <ul

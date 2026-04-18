@@ -9,6 +9,7 @@ import {
   CANONICAL_TIER_MATRIX,
   DEFAULT_PLANS,
   PLAN_ORDER,
+  TIER_POSITIONING_COPY,
   type PricingInterval,
   type PricingPlanKey,
 } from "../../constants/pricingPlans";
@@ -55,28 +56,6 @@ function buildBillingUpgradePath(target: Exclude<PlanKey, "free">, interval: Pri
   });
   return `/billing?${params.toString()}`;
 }
-
-const PLAN_AUDIENCE_COPY: Record<PlanKey, string> = {
-  free: "For landlords getting started and wanting to try the basics with one property.",
-  starter: "For landlords who need one place to run the weekly rental workflow across active units.",
-  pro: "For operators who need stronger operational control, cleaner reporting, and better handoff across tasks and people.",
-  elite: "For portfolios that need insight-led oversight, portfolio trends, and higher-confidence decisions.",
-};
-
-const PLAN_SUPPORT_COPY: Partial<Record<PlanKey, string>> = {
-  starter:
-    "Free helps you get started. Starter is the first plan built to keep applicant, tenant, and property work together in one operating flow.",
-  pro:
-    "Pro is the step up when operational complexity starts growing and you need exports, reporting, and stronger coordination.",
-  elite:
-    "Elite is for teams that want portfolio-level visibility, intelligence, and higher-confidence oversight on top of Pro.",
-};
-
-const PLAN_BADGE_COPY: Partial<Record<PlanKey, string>> = {
-  starter: "Workflow foundation",
-  pro: "Operations and reporting",
-  elite: "Insights and oversight",
-};
 
 const PLAN_CALLOUT_COPY: Partial<
   Record<
@@ -327,6 +306,9 @@ const PricingPage: React.FC = () => {
           <p style={{ margin: `${spacing.xs} 0 0`, color: text.muted, fontSize: "0.92rem" }}>
             Start on Free to try the basics, move to Starter for daily rental work, step up to Pro for stronger control, and use Elite for deeper portfolio oversight.
           </p>
+          <p style={{ margin: `${spacing.xs} 0 0`, color: text.secondary, fontSize: "0.92rem", fontWeight: 600 }}>
+            Starter gives you the workflow foundation, Pro adds operational control and reporting, and Elite adds portfolio intelligence and oversight.
+          </p>
         </div>
 
         <div
@@ -419,7 +401,7 @@ const PricingPage: React.FC = () => {
                 <div style={{ fontSize: 21, fontWeight: 800, lineHeight: 1.15, ...wrappingTextStyle }}>
                   {copy.pricing.tierLabels[plan]}
                 </div>
-                {PLAN_BADGE_COPY[plan] ? (
+                {plan !== "free" ? (
                   <span
                     style={{
                       border:
@@ -438,12 +420,14 @@ const PricingPage: React.FC = () => {
                       ...wrappingTextStyle,
                     }}
                   >
-                    {PLAN_BADGE_COPY[plan]}
+                    {TIER_POSITIONING_COPY[plan].badge}
                   </span>
                 ) : null}
               </div>
               <div style={{ color: text.muted, fontSize: "0.94rem", lineHeight: 1.65, minHeight: isMobile ? "auto" : 62, ...wrappingTextStyle }}>
-                {PLAN_AUDIENCE_COPY[plan]}
+                {plan === "free"
+                  ? "For landlords getting started and wanting to try the basics with one property."
+                  : TIER_POSITIONING_COPY[plan].audience}
               </div>
               <div style={{ fontSize: 28, fontWeight: 800, lineHeight: 1.05, ...wrappingTextStyle }}>{renderPrice(plan)}</div>
               <ul
@@ -507,7 +491,7 @@ const PricingPage: React.FC = () => {
                   ) : null}
                 </div>
               ) : null}
-              {plan === "starter" && PLAN_SUPPORT_COPY[plan] ? (
+              {plan !== "free" ? (
                 <div
                   style={{
                     color: text.muted,
@@ -520,7 +504,7 @@ const PricingPage: React.FC = () => {
                     ...wrappingTextStyle,
                   }}
                 >
-                  {PLAN_SUPPORT_COPY[plan]}
+                  {TIER_POSITIONING_COPY[plan].support}
                 </div>
               ) : null}
               <div style={{ marginTop: isMobile ? spacing.sm : "auto", paddingTop: spacing.sm, width: "100%" }}>

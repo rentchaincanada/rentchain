@@ -121,6 +121,11 @@ describe("BillingPage", () => {
     await waitFor(() =>
       expect(screen.getByText(/Pricing selection saved: Pro on the Yearly plan/i)).toBeInTheDocument()
     );
+    expect(
+      screen.getByText(
+        /Starter gives you the workflow foundation, Pro adds operational control and reporting, and Elite adds portfolio intelligence and oversight/i
+      )
+    ).toBeInTheDocument();
     expect(screen.getByText(/Recommended next plan: Pro from your pricing selection/i)).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Continue to Pro checkout" }).length).toBeGreaterThan(0);
     expect(mocks.billingPlansPanelMock).toHaveBeenCalledWith(
