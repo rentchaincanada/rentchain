@@ -1,3 +1,4 @@
+
 # Mission
 
 MISSION: Conversion Insight Feedback Engine v1
@@ -20,7 +21,7 @@ are merged and stable.
 # Objective
 
 OBJECTIVE:
-Build a lightweight, Firestore-backed feedback engine that converts conversion analytics into structured insights and feeds them back into the optimization loop, enabling repeatable improvement cycles.
+Build a lightweight, backend-only, Firestore-backed conversion insight layer that extends Mission 30 funnel analysis into structured optimization feedback for the next loop.
 
 This mission closes the loop:
 
@@ -28,33 +29,38 @@ Measure → Analyze → Improve → Learn → Repeat
 
 # Why This Matters
 
-Mission 30 produces funnel metrics.
-Mission 31–32 introduce changes.
+Mission 30 provides aggregate funnel counts and breakdowns.
+Mission 31 and Mission 32 changed upgrade UX and pricing-to-billing handoff behavior.
 
-Mission 33:
-- explains WHY changes worked or failed
-- identifies which features drive upgrades
-- produces structured insights for the next iteration
+Mission 33 should:
+- explain which surfaces are producing upgrade intent
+- identify which plans and paths are seeing the strongest interest
+- identify bottlenecks and weak segments
+- generate lightweight, deterministic recommendations for the next optimization cycle
 
-This turns RentChain into a **data-driven optimization system**.
+This turns RentChain into a data-driven optimization system without introducing a new analytics stack.
 
 # Strict Requirements
 
-- Reuse existing Firestore collections:
+- Reuse existing Firestore collections already used by Mission 29 and Mission 30:
   - `events`
-  - `telemetry_counters`
-- Reuse Mission 30 analysis layer
+  - `telemetry_counters` only if a small supporting use is genuinely helpful
+- Reuse and extend the Mission 30 analysis layer
 - Do NOT introduce:
-  - new analytics pipeline
-  - new storage system
+  - a new analytics pipeline
+  - a new storage system
   - dashboards
+  - frontend consumers
   - heavy ML/statistical modeling
+  - user-journey stitching
 - Keep everything:
   - aggregate
   - privacy-safe
+  - deterministic
   - query-based
+  - explainable
 - No PII
-- No user-level data exposure
+- No user-level or session-level output
 
 # Non-Goals
 
@@ -63,173 +69,199 @@ This turns RentChain into a **data-driven optimization system**.
 - No A/B testing framework
 - No billing system changes
 - No analytics ingestion changes
+- No event schema redesign
+- No causal inference engine
+- No experiment platform
 
 # Primary Files / File Families To Inspect First
 
-Backend analysis layer:
-- Mission 30 analysis service and route
+Mission 30 analysis layer:
+- `rentchain-api/src/services/admin/adminSubscriptionConversionView.ts`
+- `rentchain-api/src/routes/adminRoutes.ts`
+- Mission 30 route/tests
 
-Event ingestion:
+Event ingestion context (read-only):
 - `rentchain-api/src/routes/eventsRoutes.ts`
 - `rentchain-api/src/services/telemetryService.ts`
 
-Frontend usage context (read-only):
-- upgrade flows
+Frontend usage context (read-only only, no frontend changes expected):
 - pricing pages
 - billing page
+- upgrade CTA / prompt surfaces
 
 # Firestore Data Model Focus
 
-Continue using:
+Continue using the actual Mission 29 / Mission 30 event read model.
 
 ## `events` collection
-- `eventName`
+
+Mission 29-style analytics events are expected to use:
+- `name`
+- `ts`
+- `props`
 - `createdAt`
-- `source`
-- `surface`
-- `featureKey`
-- `requiredPlan`
-- `currentPlan`
-- `targetPlan`
-- `interval`
-- `presentation`
+- optional `userId`
+- optional `sessionId`
+
+Important:
+- this is a mixed-schema collection
+- the insight engine must only analyze Mission 29-style analytics events
+- other event documents in `events` must be ignored safely
 
 ## `telemetry_counters` collection
-- aggregated counts
-- event frequency
-- time-based summaries
 
-DO NOT modify schema unless strictly additive.
+Current usage is coarse and event-name based.
+It may help with sanity-check totals only if useful, but it is not the primary source for breakdowns or insights.
+
+Do NOT redesign either schema in this mission.
 
 # Insight Scope
 
-Produce structured insights such as:
+Produce lightweight aggregate insights such as:
 
-1. Feature → Upgrade correlation
-- Which `featureKey` events precede upgrade actions
+1. Surface effectiveness
+- which surfaces are producing the strongest upgrade intent
+- examples:
+  - `marketing_pricing`
+  - `billing_page`
+  - locked/teaser surfaces where present
 
-2. Surface effectiveness
-- Which surfaces convert best:
-  - pricing
-  - billing
-  - locked features
-  - upgrade prompts
+2. Plan-interest distribution
+- which `targetPlan` values are receiving the most upgrade interest
+- where plan selection appears concentrated or weak
 
-3. Plan targeting effectiveness
-- Which `targetPlan` converts best
-- where users hesitate
+3. Funnel bottlenecks
+- identify weakest steps from the Mission 30 funnel
+- examples:
+  - pricing page view → plan CTA
+  - billing page open → billing upgrade click
 
-4. Funnel anomaly detection (simple)
-- sudden drop-offs
-- unusually low/high conversion segments
+4. Feature or prompt relevance only where supported by data
+- use `props.featureKey` or related fields only if enough Mission 29-style events actually populate them
+- do NOT fabricate insights where data is sparse or absent
 
-5. Conversion bottleneck identification
-- identify weakest funnel step
+5. Recommendation generation
+- simple rule-based output derived from:
+  - weak step conversions
+  - weak surface performance
+  - concentrated or imbalanced plan-interest patterns
 
 # Required Output Shape
 
-Expose a lightweight feedback output, example:
+Expose one lightweight admin-only feedback output.
+
+Preferred example shape:
 
 ```json
 {
-  "window": { "days": 30 },
-  "topConversionDrivers": [
-    { "featureKey": "portfolio_score", "conversionImpact": 0.32 },
-    { "featureKey": "marketplace_assignment", "conversionImpact": 0.21 }
+  "ok": true,
+  "window": {
+    "days": 30,
+    "from": "2026-03-19T00:00:00.000Z",
+    "to": "2026-04-18T00:00:00.000Z"
+  },
+  "funnel": [
+    { "step": "pricing_page_viewed", "count": 12 },
+    { "step": "pricing_plan_cta_clicked", "count": 8, "conversionFromPrevious": 0.667 },
+    { "step": "billing_page_opened", "count": 24 },
+    { "step": "billing_upgrade_clicked", "count": 15, "conversionFromPrevious": 0.625 }
   ],
-  "surfacePerformance": {
-    "pricing_page": 0.18,
-    "billing_page": 0.27,
-    "locked_feature": 0.34
-  },
-  "planPerformance": {
-    "starter": 0.12,
-    "pro": 0.28,
-    "elite": 0.19
-  },
-  "bottlenecks": [
-    {
-      "step": "upgrade_prompt_checkout_clicked",
-      "dropOff": 0.68
+  "insights": {
+    "strongestSurface": {
+      "surface": "billing_page",
+      "count": 39
+    },
+    "strongestPlanInterest": {
+      "targetPlan": "starter",
+      "count": 9
+    },
+    "weakestFunnelStep": {
+      "step": "pricing_page_viewed -> pricing_plan_cta_clicked",
+      "conversion": 0.667
     }
-  ],
+  },
   "recommendations": [
-    "Improve checkout clarity",
-    "Increase CTA visibility on pricing page",
-    "Strengthen value messaging for Pro tier"
+    "Strengthen Pro and Elite differentiation on pricing surfaces",
+    "Preserve billing as the primary upgrade hub",
+    "Monitor whether prompt-driven upgrade flows become meaningful before optimizing them"
   ]
 }
 
 Keep it:
 	•	simple
 	•	deterministic
+	•	aggregate-only
 	•	explainable
 
 Pre-Implementation Audit
 
 Before coding, inspect and summarize:
-	1.	What Mission 30 outputs already provide
-	2.	What additional aggregation is needed
-	3.	Which event fields are reliable for correlation
-	4.	Whether indexing is needed for:
-	•	eventName
-	•	createdAt
+	1.	What Mission 30 already computes and returns
+	2.	What additional aggregation is actually needed for v1 insights
+	3.	Which props fields are reliably populated in Mission 29-style events:
 	•	targetPlan
-	•	featureKey
+	•	surface
+	•	source
+	•	featureKey if present
+	4.	Whether current event volume supports meaningful insight output without overfitting
+	5.	Whether any additional indexing is needed, or whether Mission 30’s bounded ts query strategy is still sufficient
 
 Required rule:
 	•	extend, do not rebuild
+	•	do not overclaim insights beyond what current data volume and event shape support
 
 Implementation Tasks
-	1.	Build insight aggregation layer
+	1.	Extend the Mission 30 analysis layer
 
-	•	extend Mission 30 service
-	•	compute correlations:
-	•	feature → upgrade
-	•	surface → conversion
-	•	plan → conversion
+	•	build a dedicated backend insight service on top of the existing bounded-window event read model
+	•	reuse Mission 30 funnel output where helpful
 
-	2.	Add simple scoring logic
+	2.	Compute aggregate insight summaries
 
-	•	rank features by conversion influence
-	•	rank surfaces by effectiveness
-	•	rank plans by conversion success
+	•	strongest upgrade-intent surfaces
+	•	target-plan interest distribution
+	•	weakest funnel step(s)
+	•	optional feature-level signals only where reliable data exists
 
-	3.	Generate recommendations (lightweight)
+	3.	Add simple deterministic recommendation logic
 
-	•	rule-based suggestions (NOT AI model)
-	•	based on:
-	•	bottlenecks
-	•	weak surfaces
-	•	low-performing plans
+	•	rule-based only
+	•	examples:
+	•	if billing outperforms pricing, preserve billing-centered routing
+	•	if Starter dominates interest heavily, improve Pro/Elite differentiation
+	•	if prompt usage is near zero, deprioritize prompt optimization
 
-	4.	Expose feedback route
+	4.	Expose one admin-only read route
+Preferred example:
 
-Example:
 	•	/api/admin/analytics/conversion-insights
 
 Characteristics:
 	•	read-only
 	•	JSON only
-	•	admin/internal use
+	•	admin/internal only
 
 	5.	Keep output privacy-safe
 
 	•	aggregate only
-	•	no raw events
-	•	no user data
+	•	no raw event dumps
+	•	no userId
+	•	no sessionId
+	•	no personal data
 
-	6.	Add targeted tests
+	6.	Add targeted backend tests
 
 	•	aggregation correctness
 	•	empty dataset handling
+	•	mixed-schema event filtering
 	•	recommendation generation logic
+	•	route auth/response tests
 
 API Surfaces
 
 Add one new backend route:
 
-Example:
+Preferred:
 	•	/api/admin/analytics/conversion-insights
 
 Do NOT expose publicly.
@@ -237,36 +269,38 @@ Do NOT expose publicly.
 Tests Required
 
 Backend:
-	•	aggregation tests
-	•	correlation tests
+	•	insight aggregation tests
 	•	recommendation logic tests
 	•	route tests
-	•	build must pass
+	•	empty dataset behavior
+	•	mixed-schema filtering tests
+	•	backend build must pass
 
 Frontend:
 	•	none required
 
 Manual QA
-	1.	Verify insight output is consistent
+	1.	Verify insight output is consistent with Mission 30 funnel data
 	2.	Verify no PII appears
-	3.	Verify recommendation logic is stable
-	4.	Verify insights align with known funnel behavior
-	5.	Verify route performance is acceptable
+	3.	Verify recommendation logic is stable and deterministic
+	4.	Verify low-volume data still returns safe, explainable output
+	5.	Verify route performance is acceptable for bounded windows
 
 Acceptance Criteria
-	•	insights generated from real event data
-	•	correlations between features, surfaces, and upgrades identified
-	•	bottlenecks detected
-	•	recommendations produced
-	•	no new analytics system introduced
+	•	insights are generated from real Mission 29 / Mission 30 event data
+	•	strongest surfaces and plan-interest patterns are identified
+	•	bottlenecks are identified
+	•	deterministic recommendations are produced
+	•	no new analytics system is introduced
+	•	no frontend or dashboard work is introduced
 	•	backend tests pass
 	•	backend build passes
 
 Deliverable Summary
-	•	conversion insight engine
-	•	feedback loop output tied to Mission 30 data
-	•	correlation + recommendation layer
-	•	lightweight admin endpoint
+	•	backend conversion insight engine
+	•	admin-only feedback route
+	•	aggregate insight and recommendation layer tied to Mission 30 data
+	•	targeted backend tests
 
 Commit
 
