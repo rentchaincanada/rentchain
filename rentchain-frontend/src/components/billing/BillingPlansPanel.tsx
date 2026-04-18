@@ -17,6 +17,7 @@ type Props = {
   interval: "month" | "year";
   onIntervalChange: (value: "month" | "year") => void;
   currentPlan?: string | null;
+  selectedPlan?: "starter" | "pro" | "elite" | null;
   role?: string | null;
   mode: "billing" | "pricing";
   planActionLoading?: string | null;
@@ -30,6 +31,7 @@ export function BillingPlansPanel({
   interval,
   onIntervalChange,
   currentPlan,
+  selectedPlan,
   role,
   mode,
   planActionLoading,
@@ -80,6 +82,7 @@ export function BillingPlansPanel({
 
         const plan = CANONICAL_TIER_MATRIX[planId];
         const highlight = currentPlanKey === planId;
+        const selected = selectedPlan === planId;
         const topAreas = TIER_MATRIX_AREAS.slice(0, 4);
 
         return (
@@ -89,8 +92,14 @@ export function BillingPlansPanel({
               borderRadius: radius.lg,
               border: highlight
                 ? "1px solid rgba(59,130,246,0.45)"
-                : "1px solid rgba(148,163,184,0.25)",
-              background: highlight ? "rgba(59,130,246,0.08)" : "rgba(148,163,184,0.06)",
+                : selected
+                  ? "1px solid rgba(37,99,235,0.45)"
+                  : "1px solid rgba(148,163,184,0.25)",
+              background: highlight
+                ? "rgba(59,130,246,0.08)"
+                : selected
+                  ? "rgba(37,99,235,0.08)"
+                  : "rgba(148,163,184,0.06)",
               padding: 12,
               display: "grid",
               gap: 12,
@@ -112,6 +121,8 @@ export function BillingPlansPanel({
               </div>
               {highlight ? (
                 <span style={{ fontSize: 12, fontWeight: 700, color: colors.accent }}>Current</span>
+              ) : selected ? (
+                <span style={{ fontSize: 12, fontWeight: 700, color: "#1d4ed8" }}>Selected</span>
               ) : null}
             </div>
 

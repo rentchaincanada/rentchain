@@ -8,7 +8,6 @@ const mocks = vi.hoisted(() => ({
   useCapabilities: vi.fn(),
   fetchBillingPricing: vi.fn(),
   createBillingPortalSession: vi.fn(),
-  startCheckout: vi.fn(),
   track: vi.fn(),
   navigate: vi.fn(),
 }));
@@ -32,10 +31,6 @@ vi.mock("../hooks/useCapabilities", () => ({
 vi.mock("../api/billingApi", () => ({
   fetchBillingPricing: mocks.fetchBillingPricing,
   createBillingPortalSession: mocks.createBillingPortalSession,
-}));
-
-vi.mock("../billing/startCheckout", () => ({
-  startCheckout: mocks.startCheckout,
 }));
 
 vi.mock("@/lib/analytics", () => ({
@@ -68,7 +63,7 @@ describe("PricingPage analytics", () => {
     vi.clearAllMocks();
   });
 
-  it("routes upgrade intent through billing from the workspace pricing page", async () => {
+  it("routes upgrade intent through billing with the selected plan and interval", async () => {
     render(
       <MemoryRouter>
         <PricingPage />
@@ -103,7 +98,6 @@ describe("PricingPage analytics", () => {
       action: "open_billing_hub",
       route: "/",
     });
-    expect(mocks.navigate).toHaveBeenCalledWith("/billing");
-    expect(mocks.startCheckout).not.toHaveBeenCalled();
+    expect(mocks.navigate).toHaveBeenCalledWith("/billing?upgradePlan=pro&upgradeInterval=year");
   });
 });

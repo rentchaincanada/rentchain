@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Card, Section, Button } from "../components/ui/Ui";
 import {
   createBillingPortalSession,
@@ -68,6 +69,25 @@ const renewalLabel = (renewalDate: string | null) => {
 const checkoutCtaLabel = (tier: "starter" | "pro" | "elite") =>
   `Continue to ${CANONICAL_TIER_MATRIX[tier].label} checkout`;
 
+function normalizeUpgradePlanParam(
+  value: string | null,
+  currentPlan: string
+): "starter" | "pro" | "elite" | null {
+  if (value !== "starter" && value !== "pro" && value !== "elite") return null;
+  const paidPlanOrder: Array<"starter" | "pro" | "elite"> = ["starter", "pro", "elite"];
+  if (currentPlan === "free") return value;
+  if (paidPlanOrder.indexOf(currentPlan as "starter" | "pro" | "elite") >= paidPlanOrder.indexOf(value)) {
+    return null;
+  }
+  return value;
+}
+
+function normalizeUpgradeIntervalParam(value: string | null): "month" | "year" | null {
+  if (value === "month") return "month";
+  if (value === "year") return "year";
+  return null;
+}
+
 const BillingPage: React.FC = () => {
   const [records, setRecords] = useState<BillingRecord[]>([]);
   const [loading, setLoading] = useState(false);
@@ -78,11 +98,17 @@ const BillingPage: React.FC = () => {
   const [pricingError, setPricingError] = useState(false);
   const [planActionLoading, setPlanActionLoading] = useState<string | null>(null);
   const [interval, setInterval] = useState<"month" | "year">("month");
+  const [searchParams] = useSearchParams();
   const { user, updateUser } = useAuth();
   const billingStatus = useBillingStatus();
   const currentPlan = billingStatus.isLoading ? null : billingStatus.tier;
   const resolvedCurrentPlan = currentPlan || "free";
   const isPaidPlan = resolvedCurrentPlan !== "free";
+  const requestedUpgradePlan = normalizeUpgradePlanParam(
+    searchParams.get("upgradePlan"),
+    resolvedCurrentPlan
+  );
+  const requestedUpgradeInterval = normalizeUpgradeIntervalParam(searchParams.get("upgradeInterval"));
 
   const getErrorMessage = (error: unknown, fallback: string) => {
     if (error instanceof Error && error.message) return error.message;
@@ -139,6 +165,11 @@ const BillingPage: React.FC = () => {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!requestedUpgradeInterval) return;
+    setInterval(requestedUpgradeInterval);
+  }, [requestedUpgradeInterval]);
 
   const pricingUnavailable = !pricingLoading && pricingError;
 
@@ -198,14 +229,15 @@ const BillingPage: React.FC = () => {
   };
 
   const nextUpgradeTier =
-    resolvedCurrentPlan === "free"
+    requestedUpgradePlan ||
+    (resolvedCurrentPlan === "free"
       ? "starter"
       : resolvedCurrentPlan === "starter"
         ? "pro"
         : resolvedCurrentPlan === "pro"
           ? "elite"
-          : null;
-  const starterUpgradeLabel = checkoutCtaLabel("starter");
+          : null);
+  const starterUpgradeLabel = checkoutCtaLabel(requestedUpgradePlan || "starter");
   const nextUpgradeLabel = nextUpgradeTier
     ? interval === "year"
       ? `${checkoutCtaLabel(nextUpgradeTier)} (Yearly)`
@@ -230,6 +262,11 @@ const BillingPage: React.FC = () => {
           <div>
             <h1 style={{ margin: 0, fontSize: "1.3rem", fontWeight: 700 }}>Billing & Receipts</h1>
             <div style={{ color: text.muted, fontSize: "0.95rem" }}>Current plan, upgrade options, subscription details, and screening receipts.</div>
+            {requestedUpgradePlan ? (
+              <div style={{ color: text.muted, fontSize: "0.9rem", marginTop: 6 }}>
+                Pricing selection saved: {CANONICAL_TIER_MATRIX[requestedUpgradePlan].label} on the {interval === "year" ? "Yearly" : "Monthly"} plan.
+              </div>
+            ) : null}
           </div>
           <div className="rc-wrap-row">
             <Button type="button" variant="secondary" onClick={load} disabled={loading}>
@@ -243,10 +280,14 @@ const BillingPage: React.FC = () => {
               <Button
                 type="button"
                 variant="primary"
-                onClick={() => void handlePlanAction("starter")}
-                disabled={billingStatus.isLoading || planActionLoading === "starter" || pricingUnavailable}
+                onClick={() => void handlePlanAction(requestedUpgradePlan || "starter")}
+                disabled={
+                  billingStatus.isLoading ||
+                  planActionLoading === (requestedUpgradePlan || "starter") ||
+                  pricingUnavailable
+                }
               >
-                {planActionLoading === "starter" ? "Opening..." : starterUpgradeLabel}
+                {planActionLoading === (requestedUpgradePlan || "starter") ? "Opening..." : starterUpgradeLabel}
               </Button>
             )}
           </div>
@@ -281,10 +322,14 @@ const BillingPage: React.FC = () => {
               <Button
                 type="button"
                 variant="secondary"
-                onClick={() => void handlePlanAction("starter")}
-                disabled={billingStatus.isLoading || planActionLoading === "starter" || pricingUnavailable}
+                onClick={() => void handlePlanAction(requestedUpgradePlan || "starter")}
+                disabled={
+                  billingStatus.isLoading ||
+                  planActionLoading === (requestedUpgradePlan || "starter") ||
+                  pricingUnavailable
+                }
               >
-                {planActionLoading === "starter" ? "Opening..." : starterUpgradeLabel}
+                {planActionLoading === (requestedUpgradePlan || "starter") ? "Opening..." : starterUpgradeLabel}
               </Button>
             )}
             {nextUpgradeTier ? (
@@ -334,6 +379,7 @@ const BillingPage: React.FC = () => {
             }
           }}
           currentPlan={currentPlan}
+          selectedPlan={requestedUpgradePlan}
           role={user?.actorRole || user?.role || null}
           mode="billing"
           planActionLoading={planActionLoading}

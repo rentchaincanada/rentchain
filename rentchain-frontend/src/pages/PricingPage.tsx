@@ -5,7 +5,6 @@ import { Card, Section, Button } from "../components/ui/Ui";
 import { spacing, text } from "../styles/tokens";
 import { useAuth } from "../context/useAuth";
 import { useCapabilities } from "../hooks/useCapabilities";
-import { startCheckout } from "../billing/startCheckout";
 import { createBillingPortalSession, fetchBillingPricing, type BillingPlanPricing } from "../api/billingApi";
 import {
   CANONICAL_TIER_MATRIX,
@@ -47,6 +46,14 @@ function pricingCardShadow(plan: PlanKey, hovered: boolean) {
     return hovered ? "0 22px 42px rgba(37,99,235,0.16)" : "0 16px 34px rgba(37,99,235,0.12)";
   }
   return hovered ? "0 16px 32px rgba(15,23,42,0.10)" : "0 10px 24px rgba(15,23,42,0.06)";
+}
+
+function buildBillingUpgradePath(target: Exclude<PlanKey, "free">, interval: PricingInterval) {
+  const params = new URLSearchParams({
+    upgradePlan: target,
+    upgradeInterval: interval === "yearly" ? "year" : "month",
+  });
+  return `/billing?${params.toString()}`;
 }
 
 const PricingPage: React.FC = () => {
@@ -183,7 +190,7 @@ const PricingPage: React.FC = () => {
       return;
     }
 
-    navigate("/billing");
+    navigate(buildBillingUpgradePath(target, interval));
   };
 
   const planCtaLabel = (target: Exclude<PlanKey, "free">) => {

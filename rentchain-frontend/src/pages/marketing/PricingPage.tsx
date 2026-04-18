@@ -5,7 +5,6 @@ import { spacing, text } from "../../styles/tokens";
 import { MarketingLayout } from "./MarketingLayout";
 import { useAuth } from "../../context/useAuth";
 import { useCapabilities } from "../../hooks/useCapabilities";
-import { startCheckout } from "../../billing/startCheckout";
 import {
   CANONICAL_TIER_MATRIX,
   DEFAULT_PLANS,
@@ -47,6 +46,14 @@ function pricingCardShadow(plan: PlanKey, hovered: boolean) {
     return hovered ? "0 22px 42px rgba(37,99,235,0.16)" : "0 16px 34px rgba(37,99,235,0.12)";
   }
   return hovered ? "0 16px 32px rgba(15,23,42,0.10)" : "0 10px 24px rgba(15,23,42,0.06)";
+}
+
+function buildBillingUpgradePath(target: Exclude<PlanKey, "free">, interval: PricingInterval) {
+  const params = new URLSearchParams({
+    upgradePlan: target,
+    upgradeInterval: interval === "yearly" ? "year" : "month",
+  });
+  return `/billing?${params.toString()}`;
 }
 
 const PLAN_AUDIENCE_COPY: Record<PlanKey, string> = {
@@ -259,7 +266,7 @@ const PricingPage: React.FC = () => {
       navigate("/billing");
       return;
     }
-    navigate("/billing");
+    navigate(buildBillingUpgradePath(plan, interval));
   };
 
   const planCtaLabel = (plan: Exclude<PlanKey, "free">) => {
