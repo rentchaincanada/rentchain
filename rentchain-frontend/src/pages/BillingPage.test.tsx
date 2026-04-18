@@ -104,6 +104,32 @@ describe("BillingPage", () => {
     ).toBe(true);
   });
 
+  it("uses the pricing-selected upgrade plan and interval when arriving from pricing", async () => {
+    mocks.useBillingStatusMock.mockReturnValue({
+      tier: "free",
+      interval: null,
+      renewalDate: null,
+      isLoading: false,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/billing?upgradePlan=pro&upgradeInterval=year"]}>
+        <BillingPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() =>
+      expect(screen.getByText(/Pricing selection saved: Pro on the Yearly plan/i)).toBeInTheDocument()
+    );
+    expect(screen.getAllByRole("button", { name: "Continue to Pro checkout" }).length).toBeGreaterThan(0);
+    expect(mocks.billingPlansPanelMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        interval: "year",
+        selectedPlan: "pro",
+      })
+    );
+  });
+
   it("uses the resolved billing tier consistently in the summary and plans panel", async () => {
     mocks.useBillingStatusMock.mockReturnValue({
       tier: "pro",
