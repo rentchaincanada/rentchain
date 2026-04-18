@@ -49,10 +49,6 @@ function pricingCardShadow(plan: PlanKey, hovered: boolean) {
   return hovered ? "0 16px 32px rgba(15,23,42,0.10)" : "0 10px 24px rgba(15,23,42,0.06)";
 }
 
-function ctaLabel(plan: Exclude<PlanKey, "free">) {
-  return CANONICAL_TIER_MATRIX[plan].ctaLabel;
-}
-
 const PricingPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -164,7 +160,7 @@ const PricingPage: React.FC = () => {
     const action =
       PLAN_ORDER.indexOf(currentPlan) >= PLAN_ORDER.indexOf(target)
         ? "manage_existing_plan"
-        : "start_checkout";
+        : "open_billing_hub";
     safeTrack("pricing_plan_cta_clicked", {
       surface: "workspace_pricing",
       currentPlan,
@@ -187,13 +183,12 @@ const PricingPage: React.FC = () => {
       return;
     }
 
-    void startCheckout({
-      tier: target,
-      interval: "monthly",
-      featureKey: "pricing",
-      source: "workspace_pricing",
-      redirectTo: "/billing",
-    });
+    navigate("/billing");
+  };
+
+  const planCtaLabel = (target: Exclude<PlanKey, "free">) => {
+    if (PLAN_ORDER.indexOf(currentPlan) >= PLAN_ORDER.indexOf(target)) return "Manage plan";
+    return `Review ${CANONICAL_TIER_MATRIX[target].label} plan`;
   };
 
   return (
@@ -423,7 +418,7 @@ const PricingPage: React.FC = () => {
                   </Button>
                 ) : (
                   <Button type="button" onClick={() => void handleUpgrade(plan)} style={{ width: "100%" }}>
-                    {ctaLabel(plan)}
+                    {planCtaLabel(plan)}
                   </Button>
                 )}
               </div>

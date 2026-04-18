@@ -39,7 +39,7 @@ describe("UpgradePromptModal", () => {
     expect(screen.getByText("Current: Starter")).toBeInTheDocument();
     expect(screen.getByText("Needed: Starter")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "See upgrade options" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue to Starter checkout" }));
 
     expect(mocks.startCheckout).toHaveBeenCalledWith({
       tier: "starter",

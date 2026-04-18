@@ -96,8 +96,12 @@ describe("BillingPage", () => {
 
     expect(screen.getAllByText("Loading...").length).toBeGreaterThan(0);
     expect(screen.getByTestId("billing-plans-panel")).toHaveTextContent("none");
-    expect(screen.getAllByRole("button", { name: "Upgrade plan" })).toHaveLength(2);
-    expect(screen.getAllByRole("button", { name: "Upgrade plan" }).every((button) => button.hasAttribute("disabled"))).toBe(true);
+    expect(screen.getAllByRole("button", { name: "Continue to Starter checkout" })).toHaveLength(2);
+    expect(
+      screen
+        .getAllByRole("button", { name: "Continue to Starter checkout" })
+        .every((button) => button.hasAttribute("disabled"))
+    ).toBe(true);
   });
 
   it("uses the resolved billing tier consistently in the summary and plans panel", async () => {

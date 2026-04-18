@@ -242,7 +242,7 @@ const PricingPage: React.FC = () => {
       ? "login_redirect"
       : isAtOrAbove(currentPlan, plan)
         ? "manage_existing_plan"
-        : "start_checkout";
+        : "open_billing_hub";
     safeTrack("pricing_plan_cta_clicked", {
       surface: "marketing_pricing",
       currentPlan,
@@ -259,13 +259,13 @@ const PricingPage: React.FC = () => {
       navigate("/billing");
       return;
     }
-    void startCheckout({
-      tier: plan,
-      interval: "monthly",
-      featureKey: "pricing",
-      source: "marketing_pricing",
-      redirectTo: "/billing",
-    });
+    navigate("/billing");
+  };
+
+  const planCtaLabel = (plan: Exclude<PlanKey, "free">) => {
+    if (!isAuthed) return `Sign in for ${copy.pricing.tierLabels[plan]}`;
+    if (isAuthed && isAtOrAbove(currentPlan, plan)) return "Manage plan";
+    return `Review ${copy.pricing.tierLabels[plan]} plan`;
   };
 
   return (
@@ -501,7 +501,7 @@ const PricingPage: React.FC = () => {
                   </Button>
                 ) : (
                   <Button type="button" onClick={() => handleUpgrade(plan)} style={{ width: "100%" }}>
-                    {copy.pricing.ctaByTier?.[plan] || copy.pricing.ctaUpgrade}
+                    {planCtaLabel(plan)}
                   </Button>
                 )}
               </div>

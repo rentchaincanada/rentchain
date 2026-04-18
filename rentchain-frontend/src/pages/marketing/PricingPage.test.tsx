@@ -10,7 +10,16 @@ const mocks = vi.hoisted(() => ({
   fetchBillingPricing: vi.fn(),
   startCheckout: vi.fn(),
   track: vi.fn(),
+  navigate: vi.fn(),
 }));
+
+vi.mock("react-router-dom", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-router-dom")>();
+  return {
+    ...actual,
+    useNavigate: () => mocks.navigate,
+  };
+});
 
 vi.mock("../../context/useAuth", () => ({
   useAuth: mocks.useAuth,
@@ -66,7 +75,7 @@ describe("Marketing PricingPage analytics", () => {
     vi.clearAllMocks();
   });
 
-  it("tracks marketing pricing views, interval changes, and plan CTA clicks", async () => {
+  it("routes authenticated marketing pricing upgrades through billing", async () => {
     render(
       <MemoryRouter>
         <PricingPage />
@@ -91,22 +100,17 @@ describe("Marketing PricingPage analytics", () => {
       route: "/",
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Upgrade to Pro" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review Pro plan" }));
 
     expect(mocks.track).toHaveBeenCalledWith("pricing_plan_cta_clicked", {
       surface: "marketing_pricing",
       currentPlan: "free",
       targetPlan: "pro",
       interval: "yearly",
-      action: "start_checkout",
+      action: "open_billing_hub",
       route: "/",
     });
-    expect(mocks.startCheckout).toHaveBeenCalledWith({
-      tier: "pro",
-      interval: "monthly",
-      featureKey: "pricing",
-      source: "marketing_pricing",
-      redirectTo: "/billing",
-    });
+    expect(mocks.navigate).toHaveBeenCalledWith("/billing");
+    expect(mocks.startCheckout).not.toHaveBeenCalled();
   });
 });
