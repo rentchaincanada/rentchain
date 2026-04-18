@@ -30,8 +30,9 @@ export function UpgradePromptModal({
   const requiredPlanKey = requiredPlan || resolveRequiredPlan(featureKey, currentPlan) || "pro";
   const requiredLabel = normalizePlanLabel(requiredPlanKey);
   const currentLabel = normalizePlanLabel(currentPlan || "free");
-  const primaryLabel =
-    copy.primaryCta || (requiredLabel ? `Upgrade to ${requiredLabel}` : "Upgrade now");
+  const primaryLabel = requiredLabel
+    ? `Continue to ${requiredLabel} checkout`
+    : "Continue to checkout";
   const secondaryLabel = copy.secondaryCta || "Not now";
   const title = copy.title;
   const subtitle = copy.subtitle;
@@ -154,6 +155,17 @@ export function UpgradePromptModal({
           >
             </div>
             <div>
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 900,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  color: "#1d4ed8",
+                }}
+              >
+                {requiredLabel ? `${requiredLabel} plan` : "Upgrade"}
+              </div>
               <div style={{ fontWeight: 900, fontSize: 20 }}>{title}</div>
               <div style={{ marginTop: 4, fontSize: 14, opacity: 0.82 }}>{subtitle}</div>
             </div>
@@ -296,7 +308,7 @@ export function UpgradePromptModal({
                   cursor: "pointer",
                 }}
               >
-                Learn more
+                Compare plans first
               </button>
             </div>
           </div>

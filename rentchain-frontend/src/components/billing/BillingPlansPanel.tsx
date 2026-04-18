@@ -62,8 +62,13 @@ export function BillingPlansPanel({
   const ctaLabel = (planKey: Exclude<PricingPlanKey, "free">, isCurrent: boolean) => {
     if (isCurrent) return "Current plan";
     if (planActionLoading === planKey) return "Starting...";
-    if (mode === "pricing" && planKey === "starter") return "Get started";
-    return CANONICAL_TIER_MATRIX[planKey].ctaLabel;
+    const paidPlanOrder: Exclude<PricingPlanKey, "free">[] = ["starter", "pro", "elite"];
+    if (currentPlanKey && currentPlanKey !== "free") {
+      if (paidPlanOrder.indexOf(currentPlanKey as Exclude<PricingPlanKey, "free">) >= paidPlanOrder.indexOf(planKey)) {
+        return "Manage plan";
+      }
+    }
+    return `Continue to ${CANONICAL_TIER_MATRIX[planKey].label} checkout`;
   };
 
   return (

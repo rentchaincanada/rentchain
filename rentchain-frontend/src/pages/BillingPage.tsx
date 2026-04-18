@@ -65,6 +65,9 @@ const renewalLabel = (renewalDate: string | null) => {
   return parsed.toLocaleDateString();
 };
 
+const checkoutCtaLabel = (tier: "starter" | "pro" | "elite") =>
+  `Continue to ${CANONICAL_TIER_MATRIX[tier].label} checkout`;
+
 const BillingPage: React.FC = () => {
   const [records, setRecords] = useState<BillingRecord[]>([]);
   const [loading, setLoading] = useState(false);
@@ -202,10 +205,11 @@ const BillingPage: React.FC = () => {
         : resolvedCurrentPlan === "pro"
           ? "elite"
           : null;
+  const starterUpgradeLabel = checkoutCtaLabel("starter");
   const nextUpgradeLabel = nextUpgradeTier
     ? interval === "year"
-      ? `${CANONICAL_TIER_MATRIX[nextUpgradeTier].ctaLabel} (Yearly)`
-      : `${CANONICAL_TIER_MATRIX[nextUpgradeTier].ctaLabel} (Monthly)`
+      ? `${checkoutCtaLabel(nextUpgradeTier)} (Yearly)`
+      : `${checkoutCtaLabel(nextUpgradeTier)} (Monthly)`
     : null;
   const nextUpgradeHelp = nextUpgradeTier
     ? `You'll be taken to checkout for the ${interval === "year" ? "Yearly" : "Monthly"} ${CANONICAL_TIER_MATRIX[nextUpgradeTier].label} plan.`
@@ -242,7 +246,7 @@ const BillingPage: React.FC = () => {
                 onClick={() => void handlePlanAction("starter")}
                 disabled={billingStatus.isLoading || planActionLoading === "starter" || pricingUnavailable}
               >
-                {planActionLoading === "starter" ? "Opening..." : "Upgrade plan"}
+                {planActionLoading === "starter" ? "Opening..." : starterUpgradeLabel}
               </Button>
             )}
           </div>
@@ -280,7 +284,7 @@ const BillingPage: React.FC = () => {
                 onClick={() => void handlePlanAction("starter")}
                 disabled={billingStatus.isLoading || planActionLoading === "starter" || pricingUnavailable}
               >
-                {planActionLoading === "starter" ? "Opening..." : "Upgrade plan"}
+                {planActionLoading === "starter" ? "Opening..." : starterUpgradeLabel}
               </Button>
             )}
             {nextUpgradeTier ? (
