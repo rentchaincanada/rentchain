@@ -23,6 +23,8 @@ export type ConversionEventRow = {
   name: FunnelStepName;
   ts: number;
   props: EventProps;
+  userId: string | null;
+  sessionId: string | null;
 };
 
 export type SubscriptionConversionSummary = {
@@ -71,7 +73,19 @@ function incrementBucket(bucket: Record<string, number>, key: string | null) {
   bucket[key] = (bucket[key] || 0) + 1;
 }
 
-function isMission29ConversionEvent(data: any): data is { name: FunnelStepName; ts: number; props: EventProps } {
+function toOptionalString(value: unknown) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function isMission29ConversionEvent(data: any): data is {
+  name: FunnelStepName;
+  ts: number;
+  props: EventProps;
+  userId?: unknown;
+  sessionId?: unknown;
+} {
   if (!FUNNEL_STEP_SET.has(String(data?.name || ""))) return false;
   if (toNumber(data?.ts) == null) return false;
   if (!isPlainObject(data?.props)) return false;
@@ -84,6 +98,8 @@ function toConversionEventRow(data: any): ConversionEventRow | null {
     name: data.name,
     ts: Number(data.ts),
     props: data.props,
+    userId: toOptionalString(data.userId),
+    sessionId: toOptionalString(data.sessionId),
   };
 }
 
@@ -91,24 +107,13 @@ export type SubscriptionConversionDataset = SubscriptionConversionSummary & {
   rows: ConversionEventRow[];
 };
 
-export async function loadAdminSubscriptionConversionDataset(params?: {
-  days?: number | string;
-}): Promise<SubscriptionConversionDataset> {
-  const days = clampDays(params?.days);
-  const to = Date.now();
-  const from = to - days * 24 * 60 * 60 * 1000;
-
-  const snapshot = await db
-    .collection("events")
-    .where("ts", ">=", from)
-    .where("ts", "<=", to)
-    .get();
-
-  const rows = (snapshot.docs || [])
-    .map((doc: any) => ({ id: doc.id, ...(doc.data() || {}) }))
-    .map(toConversionEventRow)
-    .filter((row): row is ConversionEventRow => row != null);
-
+export function buildSubscriptionConversionSummary(params: {
+  days: number;
+  from: number;
+  to: number;
+  rows: ConversionEventRow[];
+}): SubscriptionConversionSummary {
+  const { days, from, to, rows } = params;
   const counts = SUBSCRIPTION_CONVERSION_FUNNEL_STEPS.reduce<Record<FunnelStepName, number>>((acc, step) => {
     acc[step] = 0;
     return acc;
@@ -146,9 +151,33 @@ export async function loadAdminSubscriptionConversionDataset(params?: {
       from: new Date(from).toISOString(),
       to: new Date(to).toISOString(),
     },
-    rows,
     funnel,
     breakdowns,
+  };
+}
+
+export async function loadAdminSubscriptionConversionDataset(params?: {
+  days?: number | string;
+}): Promise<SubscriptionConversionDataset> {
+  const days = clampDays(params?.days);
+  const to = Date.now();
+  const from = to - days * 24 * 60 * 60 * 1000;
+
+  const snapshot = await db
+    .collection("events")
+    .where("ts", ">=", from)
+    .where("ts", "<=", to)
+    .get();
+
+  const rows = (snapshot.docs || [])
+    .map((doc: any) => ({ id: doc.id, ...(doc.data() || {}) }))
+    .map(toConversionEventRow)
+    .filter((row): row is ConversionEventRow => row != null);
+  const summary = buildSubscriptionConversionSummary({ days, from, to, rows });
+
+  return {
+    rows,
+    ...summary,
   };
 }
 
