@@ -58,9 +58,14 @@ describe("Marketing LandingPage", () => {
         /RentChain helps landlords across Canada stay on top of property details, tenant activity, maintenance, and the tasks that tend to fall through the cracks\./i
       )
     ).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Get started with a property" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "Start your first property" }).length).toBeGreaterThan(0);
     expect(
-      screen.getByText(/Free to try\. Upgrade when you need stronger workflows and deeper support\./i)
+      screen.getByText(
+        /Start with your first property, see how the workflow works, and decide on paid plans only after you understand the value inside the product\./i
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/No commitment to explore\. Start free and upgrade only when your workflow needs more support\./i)
     ).toBeInTheDocument();
     expect(screen.getByText("Is this available across Canada?")).toBeInTheDocument();
     expect(
@@ -82,7 +87,7 @@ describe("Marketing LandingPage", () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Get started with a property" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Start your first property" })[0]);
 
     expect(mocks.navigate).toHaveBeenCalledWith("/signup?next=/properties&intent=registry_readiness");
     expect(mocks.track).toHaveBeenCalledWith(
@@ -115,7 +120,7 @@ describe("Marketing LandingPage", () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Get started with a property" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Start your first property" })[0]);
 
     expect(mocks.navigate).toHaveBeenCalledWith("/properties?intent=registry_readiness");
   });
