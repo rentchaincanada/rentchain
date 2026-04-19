@@ -51,6 +51,8 @@ const PropertiesPage: React.FC = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [isUnitsModalOpen, setIsUnitsModalOpen] = useState(false);
   const [activePropertyId, setActivePropertyId] = useState<string | null>(null);
+  const [recentlyCreatedPropertyId, setRecentlyCreatedPropertyId] = useState<string | null>(null);
+  const [recentlyCreatedPropertyName, setRecentlyCreatedPropertyName] = useState<string | null>(null);
   const [draftUnits, setDraftUnits] = useState<UnitInput[]>([
     { unitNumber: "", beds: 1, baths: 1, sqft: 500, marketRent: 1500, status: "vacant" },
   ]);
@@ -274,6 +276,10 @@ const PropertiesPage: React.FC = () => {
     if (property?.id) {
       setProperties((prev) => [...prev, property]);
       setSelectedPropertyId(property.id);
+      setRecentlyCreatedPropertyId(property.id);
+      setRecentlyCreatedPropertyName(
+        String(property.name || property.addressLine1 || "your first property")
+      );
       const next = new URLSearchParams(location.search);
       const returnTo = resolveReturnToParam(next.get("returnTo"));
       if (returnTo) {
@@ -598,7 +604,7 @@ const PropertiesPage: React.FC = () => {
 
         <Card elevated ref={addPropertyRef}>
           <h1 style={{ margin: 0, fontSize: "1.4rem", fontWeight: 700 }}>
-            Add a new property
+            {properties.length === 0 ? "Start here: add your first property" : "Add a new property"}
           </h1>
           <p
             style={{
@@ -608,8 +614,9 @@ const PropertiesPage: React.FC = () => {
               fontSize: "0.95rem",
             }}
           >
-            Capture units, rents, and amenities. Newly added properties will show
-            up in your list and rent roll below.
+            {properties.length === 0
+              ? "Start your rental workflow by adding one property. You only need the address, city, and total units to get moving."
+              : "Capture units, rents, and amenities. Newly added properties will show up in your list and rent roll below."}
           </p>
           <AddPropertyForm
             onCreated={handlePropertyCreated}
@@ -657,26 +664,77 @@ const PropertiesPage: React.FC = () => {
             </div>
           ) : null}
           {!isLoadingProperties && properties.length === 0 ? (
-            <div style={{ display: "grid", gap: 8 }}>
-              <div style={{ color: text.primary, fontSize: 14, fontWeight: 700 }}>
-                {propertyView === "archived" ? "No archived properties yet" : "No properties yet"}
+            <div
+              style={{
+                display: "grid",
+                gap: 10,
+                padding: 16,
+                borderRadius: radius.lg,
+                border: "1px solid rgba(37,99,235,0.18)",
+                background: "linear-gradient(180deg, rgba(239,246,255,0.9) 0%, rgba(255,255,255,0.98) 100%)",
+              }}
+            >
+              <div style={{ color: text.primary, fontSize: 20, fontWeight: 800 }}>
+                {propertyView === "archived" ? "No archived properties yet" : "Start your rental workflow"}
               </div>
-              <div style={{ color: text.muted, fontSize: 13 }}>
+              <div style={{ color: text.muted, fontSize: 14, lineHeight: 1.6 }}>
                 {propertyView === "archived"
                   ? "Archive a property from the active view to keep historical records without cluttering your portfolio."
-                  : "Properties are the foundation for units, tenants, and applications."}
+                  : "Add your first property to begin managing tenants, leases, and maintenance in one place."}
               </div>
               {propertyView === "active" ? (
+                <>
+                  <div style={{ color: text.secondary, fontSize: 13, fontWeight: 600 }}>
+                    Start here. Once your first property is set up, you can add a unit or invite a tenant next.
+                  </div>
+                  <Button
+                    onClick={() => {
+                      track("empty_state_cta_clicked", { pageKey: "properties", ctaKey: "add_property" });
+                      addPropertyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    }}
+                    style={{ width: "fit-content" }}
+                  >
+                    Add your first property
+                  </Button>
+                </>
+              ) : null}
+            </div>
+          ) : null}
+
+          {recentlyCreatedPropertyId && selectedPropertyId === recentlyCreatedPropertyId ? (
+            <div
+              style={{
+                display: "grid",
+                gap: 10,
+                padding: 16,
+                borderRadius: radius.lg,
+                border: "1px solid rgba(16,185,129,0.28)",
+                background: "rgba(236,253,245,0.95)",
+              }}
+            >
+              <div style={{ color: text.primary, fontSize: 18, fontWeight: 800 }}>
+                Your first property is set up
+              </div>
+              <div style={{ color: text.muted, fontSize: 14, lineHeight: 1.6 }}>
+                {`${recentlyCreatedPropertyName || "Your property"} is ready. Keep the workflow moving by adding a unit or inviting a tenant next.`}
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <Button
                   onClick={() => {
-                    track("empty_state_cta_clicked", { pageKey: "properties", ctaKey: "add_property" });
-                    addPropertyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    if (!selectedPropertyId) return;
+                    setActivePropertyId(selectedPropertyId);
+                    setDraftUnits([
+                      { unitNumber: "", beds: 1, baths: 1, sqft: 500, marketRent: 1500, status: "vacant" },
+                    ]);
+                    setIsUnitsModalOpen(true);
                   }}
-                  style={{ width: "fit-content" }}
                 >
-                  Add first property
+                  Add a unit
                 </Button>
-              ) : null}
+                <Button variant="secondary" onClick={() => navigate("/tenants")}>
+                  Invite a tenant
+                </Button>
+              </div>
             </div>
           ) : null}
 

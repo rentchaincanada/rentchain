@@ -114,4 +114,21 @@ describe("PropertiesPage", () => {
 
     expect(screen.getByText("Archived properties are hidden from active portfolio views but preserved for records and history.")).toBeInTheDocument();
   });
+
+  it("shows a guided first-property empty state for new users", async () => {
+    mocks.fetchPropertiesMock.mockResolvedValue({ items: [] });
+
+    render(
+      <MemoryRouter>
+        <PropertiesPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Start your rental workflow")).toBeInTheDocument();
+    expect(
+      screen.getByText("Add your first property to begin managing tenants, leases, and maintenance in one place.")
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add your first property" })).toBeInTheDocument();
+    expect(screen.getByText("Start here: add your first property")).toBeInTheDocument();
+  });
 });

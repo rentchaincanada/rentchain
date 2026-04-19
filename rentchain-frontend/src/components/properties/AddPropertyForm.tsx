@@ -253,7 +253,7 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
         plan: user?.plan || "free",
         route: typeof window !== "undefined" ? window.location.pathname : undefined,
       });
-      setSuccessText("Property created and units captured successfully.");
+      setSuccessText("Your first property is set up. Add a unit or invite a tenant next when you are ready.");
       if (onCreated) {
         onCreated(property);
       }
