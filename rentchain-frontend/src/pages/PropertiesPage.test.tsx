@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   fetchPropertiesMock: vi.fn(),
   fetchCountsMock: vi.fn(),
   useToastMock: vi.fn(),
+  useAuthMock: vi.fn(),
 }));
 
 vi.mock("../api/propertiesApi", () => ({
@@ -71,6 +72,10 @@ vi.mock("../components/ui/ToastProvider", () => ({
   useToast: mocks.useToastMock,
 }));
 
+vi.mock("../context/useAuth", () => ({
+  useAuth: mocks.useAuthMock,
+}));
+
 vi.mock("../lib/analytics", () => ({
   track: vi.fn(),
 }));
@@ -85,6 +90,9 @@ describe("PropertiesPage", () => {
     }));
     mocks.fetchCountsMock.mockResolvedValue({ counts: {} });
     mocks.useToastMock.mockReturnValue({ showToast: vi.fn() });
+    mocks.useAuthMock.mockReturnValue({
+      user: { id: "user-1", plan: "free", role: "landlord" },
+    });
   });
 
   it("renders active and archived property filters", async () => {
