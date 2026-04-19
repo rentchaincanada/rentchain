@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   fetchCountsMock: vi.fn(),
   useToastMock: vi.fn(),
   useAuthMock: vi.fn(),
+  useCapabilitiesMock: vi.fn(),
 }));
 
 vi.mock("../api/propertiesApi", () => ({
@@ -19,7 +20,25 @@ vi.mock("../components/layout/MacShell", () => ({
 }));
 
 vi.mock("../components/properties/AddPropertyForm", () => ({
-  AddPropertyForm: () => <div>Add form</div>,
+  AddPropertyForm: ({ onCreated }: any) => (
+    <div>
+      <div>Add form</div>
+      {onCreated ? (
+        <button
+          type="button"
+          onClick={() =>
+            onCreated({
+              id: "prop-created",
+              name: "Created Property",
+              portfolioStatus: "active",
+            })
+          }
+        >
+          Complete property setup
+        </button>
+      ) : null}
+    </div>
+  ),
 }));
 
 vi.mock("../components/property/PropertyActivityPanel", () => ({
@@ -76,6 +95,10 @@ vi.mock("../context/useAuth", () => ({
   useAuth: mocks.useAuthMock,
 }));
 
+vi.mock("../hooks/useCapabilities", () => ({
+  useCapabilities: mocks.useCapabilitiesMock,
+}));
+
 vi.mock("../lib/analytics", () => ({
   track: vi.fn(),
 }));
@@ -92,6 +115,11 @@ describe("PropertiesPage", () => {
     mocks.useToastMock.mockReturnValue({ showToast: vi.fn() });
     mocks.useAuthMock.mockReturnValue({
       user: { id: "user-1", plan: "free", role: "landlord" },
+    });
+    mocks.useCapabilitiesMock.mockReturnValue({
+      caps: { plan: "free" },
+      features: { tenant_invites: false },
+      loading: false,
     });
   });
 
@@ -130,5 +158,25 @@ describe("PropertiesPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add your first property" })).toBeInTheDocument();
     expect(screen.getByText("Start here: add your first property")).toBeInTheDocument();
+  });
+
+  it("shows a free-safe next step after property creation", async () => {
+    mocks.fetchPropertiesMock.mockResolvedValue({ items: [] });
+
+    render(
+      <MemoryRouter>
+        <PropertiesPage />
+      </MemoryRouter>
+    );
+
+    const setupButtons = await screen.findAllByRole("button", {
+      name: "Complete property setup",
+    });
+    fireEvent.click(setupButtons[0]);
+
+    expect(await screen.findByText("Your first property is set up")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add a unit" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send application" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Invite a tenant" })).not.toBeInTheDocument();
   });
 });

@@ -32,6 +32,7 @@ import "../styles/propertiesMobile.css";
 import "./PropertiesPage.css";
 import { track } from "../lib/analytics";
 import { resolveReturnToParam } from "../lib/propertyGate";
+import { useCapabilities } from "../hooks/useCapabilities";
 
 const PropertiesPage: React.FC = () => {
   const [properties, setProperties] = useState<Property[]>([]);
@@ -66,7 +67,9 @@ const PropertiesPage: React.FC = () => {
   const [leasePackOpen, setLeasePackOpen] = useState(false);
   const [leasePackInitialPropertyId, setLeasePackInitialPropertyId] = useState<string | null>(null);
   const { showToast } = useToast();
+  const { features } = useCapabilities();
   const currentProperties = properties?.length ?? 0;
+  const canInviteTenant = features?.tenant_invites !== false;
   const archiveHelpCopy =
     propertyView === "archived"
       ? "Archived properties are hidden from active portfolio views but preserved for records and history."
@@ -313,9 +316,9 @@ const PropertiesPage: React.FC = () => {
     navigate("/dashboard?onboarding=ready", { replace: true });
   };
 
-  const handleSaveUnits = async () => {
+  const handleSaveUnits = async (unitsOverride?: UnitInput[]) => {
     if (!activePropertyId) return;
-    const clean = draftUnits
+    const clean = (unitsOverride || draftUnits)
       .map((u) => ({
         ...u,
         unitNumber: u.unitNumber.trim(),
@@ -731,8 +734,11 @@ const PropertiesPage: React.FC = () => {
                 >
                   Add a unit
                 </Button>
-                <Button variant="secondary" onClick={() => navigate("/tenants")}>
-                  Invite a tenant
+                <Button
+                  variant="secondary"
+                  onClick={() => navigate(canInviteTenant ? "/tenants" : "/applications?openSendApplication=1")}
+                >
+                  {canInviteTenant ? "Invite a tenant" : "Send application"}
                 </Button>
               </div>
             </div>
@@ -1181,6 +1187,16 @@ const UnitsModal = ({
     ]);
   const removeRow = (idx: number) =>
     setUnits(units.length <= 1 ? units : units.filter((_, i) => i !== idx));
+  const normalizedUnits = units
+    .map((u) => ({
+      unitNumber: String(u.unitNumber || "").trim(),
+      beds: Number(u.beds),
+      baths: Number(u.baths),
+      sqft: Number(u.sqft),
+      marketRent: Number(u.marketRent),
+      status: u.status === "occupied" ? "occupied" : "vacant",
+    }))
+    .filter((u) => u.unitNumber.length > 0);
 
   return (
     <div
@@ -1353,7 +1369,7 @@ const UnitsModal = ({
             </button>
             <button
               type="button"
-              onClick={onSave}
+              onClick={() => onSave(normalizedUnits)}
               disabled={saving}
               style={{
                 padding: "8px 12px",

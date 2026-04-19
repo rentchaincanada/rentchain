@@ -212,6 +212,25 @@ describe("eventsRoutes", () => {
     ]);
   });
 
+  it("accepts empty-state analytics events used by the activation flow", async () => {
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/track",
+      body: {
+        name: "empty_state_cta_clicked",
+        props: {
+          pageKey: "properties",
+          ctaKey: "add_property",
+        },
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ ok: true });
+    expect(telemetryMocks.incrementCounter).toHaveBeenCalledWith({ name: "empty_state_cta_clicked" });
+  });
+
   it("persists authenticated events with userId and no sessionId", async () => {
     const router = await createRouter();
     const res = await invokeRouter(router, {
