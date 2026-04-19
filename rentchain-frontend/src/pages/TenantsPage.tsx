@@ -19,7 +19,7 @@ import { TenantScorePill } from "../components/tenant/TenantScorePill";
 import { hydrateTenantSummariesBatch, getCachedTenantSummary } from "../lib/tenantSummaryCache";
 import { track } from "../lib/analytics";
 import { useCapabilities } from "@/hooks/useCapabilities";
-import { dispatchUpgradePrompt } from "@/lib/upgradePrompt";
+import { openUpgradeFlow } from "@/billing/openUpgradeFlow";
 import "./TenantsPage.css";
 
 type TenantWithTenancies = any & { tenancies?: TenancyApiModel[] };
@@ -201,18 +201,18 @@ export const TenantsPage: React.FC = () => {
   const selectedTenantIdFromUrl = searchParams.get("tenantId");
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(selectedTenantIdFromUrl);
   const { features } = useCapabilities();
-  const inviteEnabled = features?.tenant_invites !== false;
+  const inviteEnabled = Boolean(features?.tenant_invites || features?.tenantInvites);
 
   const role = String(user?.actorRole || user?.role || "").trim().toLowerCase();
   const canViewTenants = role === "landlord" || role === "admin";
 
   const handleInviteAction = useCallback(() => {
     if (!inviteEnabled) {
-      dispatchUpgradePrompt({ featureKey: "tenant_invites", source: "tenants_page" });
+      void openUpgradeFlow({ navigate, fallbackPath: "/pricing" });
       return;
     }
     setInviteOpen(true);
-  }, [inviteEnabled]);
+  }, [inviteEnabled, navigate]);
 
   const refreshTenantTenancies = useCallback(async (tenantId: string) => {
     const nextTenancies = await fetchTenantTenancies(tenantId);

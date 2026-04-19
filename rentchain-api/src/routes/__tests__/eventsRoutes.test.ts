@@ -231,6 +231,27 @@ describe("eventsRoutes", () => {
     expect(telemetryMocks.incrementCounter).toHaveBeenCalledWith({ name: "empty_state_cta_clicked" });
   });
 
+  it("accepts dashboard timeline nudge analytics events", async () => {
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/track",
+      body: {
+        name: "dashboard_timeline_nudge_clicked",
+        props: {
+          planNormalized: "free",
+          source: "dashboard_nudge",
+        },
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ ok: true });
+    expect(telemetryMocks.incrementCounter).toHaveBeenCalledWith({
+      name: "dashboard_timeline_nudge_clicked",
+    });
+  });
+
   it("persists authenticated events with userId and no sessionId", async () => {
     const router = await createRouter();
     const res = await invokeRouter(router, {
