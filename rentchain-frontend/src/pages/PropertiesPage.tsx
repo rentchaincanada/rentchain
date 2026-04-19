@@ -708,38 +708,87 @@ const PropertiesPage: React.FC = () => {
             <div
               style={{
                 display: "grid",
-                gap: 10,
+                gap: 12,
                 padding: 16,
                 borderRadius: radius.lg,
                 border: "1px solid rgba(16,185,129,0.28)",
                 background: "rgba(236,253,245,0.95)",
               }}
             >
-              <div style={{ color: text.primary, fontSize: 18, fontWeight: 800 }}>
-                Your first property is set up
+              <div style={{ display: "grid", gap: 6 }}>
+                <div style={{ color: "#047857", fontSize: 12, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                  Step 1 complete
+                </div>
+                <div style={{ color: text.primary, fontSize: 18, fontWeight: 800 }}>
+                  Your first property is set up
+                </div>
+                <div style={{ color: text.muted, fontSize: 14, lineHeight: 1.6 }}>
+                  {`${recentlyCreatedPropertyName || "Your property"} is ready. Add the first unit next so you can keep building the rent roll and tenant workflow in the right order.`}
+                </div>
               </div>
-              <div style={{ color: text.muted, fontSize: 14, lineHeight: 1.6 }}>
-                {`${recentlyCreatedPropertyName || "Your property"} is ready. Keep the workflow moving by adding a unit or inviting a tenant next.`}
+              <div
+                style={{
+                  display: "grid",
+                  gap: 8,
+                  padding: 12,
+                  borderRadius: radius.md,
+                  border: "1px solid rgba(16,185,129,0.22)",
+                  background: "rgba(255,255,255,0.72)",
+                }}
+              >
+                <div style={{ color: text.secondary, fontSize: 12, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                  Step 2 next
+                </div>
+                <div style={{ color: text.primary, fontSize: 15, fontWeight: 700 }}>
+                  Add your first unit
+                </div>
+                <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.5 }}>
+                  Units make the property usable for leases, applications, and rent tracking. This is the clearest next workflow step after creating the property.
+                </div>
+                <div>
+                  <Button
+                    onClick={() => {
+                      if (!selectedPropertyId) return;
+                      setActivePropertyId(selectedPropertyId);
+                      setDraftUnits([
+                        { unitNumber: "", beds: 1, baths: 1, sqft: 500, marketRent: 1500, status: "vacant" },
+                      ]);
+                      setIsUnitsModalOpen(true);
+                    }}
+                  >
+                    Add a unit
+                  </Button>
+                </div>
               </div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <Button
-                  onClick={() => {
-                    if (!selectedPropertyId) return;
-                    setActivePropertyId(selectedPropertyId);
-                    setDraftUnits([
-                      { unitNumber: "", beds: 1, baths: 1, sqft: 500, marketRent: 1500, status: "vacant" },
-                    ]);
-                    setIsUnitsModalOpen(true);
-                  }}
-                >
-                  Add a unit
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => navigate(canInviteTenant ? "/tenants" : "/applications?openSendApplication=1")}
-                >
-                  {canInviteTenant ? "Invite a tenant" : "Send application"}
-                </Button>
+              <div
+                style={{
+                  display: "grid",
+                  gap: 8,
+                  padding: 12,
+                  borderRadius: radius.md,
+                  border: `1px solid ${colors.border}`,
+                  background: "rgba(255,255,255,0.66)",
+                }}
+              >
+                <div style={{ color: text.secondary, fontSize: 12, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                  Step 3 later
+                </div>
+                <div style={{ color: text.primary, fontSize: 14, fontWeight: 700 }}>
+                  {canInviteTenant ? "Move into the tenant workflow" : "Move into the application workflow"}
+                </div>
+                <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.5 }}>
+                  {canInviteTenant
+                    ? "Invite a tenant after at least one unit is ready so the application and lease flow has a clear place to start."
+                    : "Send an application after your first unit is in place so the next workflow step stays clear and supported on Free."}
+                </div>
+                <div>
+                  <Button
+                    variant="secondary"
+                    onClick={() => navigate(canInviteTenant ? "/tenants" : "/applications?openSendApplication=1")}
+                  >
+                    {canInviteTenant ? "Invite a tenant" : "Send application"}
+                  </Button>
+                </div>
               </div>
             </div>
           ) : null}
