@@ -264,7 +264,7 @@ describe("tenant maintenance pages", () => {
     );
 
     expect((await screen.findAllByText(/Reopen \/ follow-up/i)).length).toBeGreaterThan(0);
-    fireEvent.change(screen.getByPlaceholderText(/Explain what still needs attention/i), {
+    fireEvent.change(await screen.findByPlaceholderText(/Explain what still needs attention/i), {
       target: { value: "The latch failed again after closing." },
     });
     fireEvent.click(screen.getByRole("button", { name: /Reopen request/i }));
