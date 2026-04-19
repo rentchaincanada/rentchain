@@ -32,10 +32,8 @@ import "../styles/propertiesMobile.css";
 import "./PropertiesPage.css";
 import { track } from "../lib/analytics";
 import { resolveReturnToParam } from "../lib/propertyGate";
-import { useAuth } from "../context/useAuth";
 
 const PropertiesPage: React.FC = () => {
-  const { user } = useAuth();
   const [properties, setProperties] = useState<Property[]>([]);
   const [propertyView, setPropertyView] = useState<"active" | "archived">("active");
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(
@@ -333,7 +331,6 @@ const PropertiesPage: React.FC = () => {
       track("activation_unit_created", {
         surface: "properties_page",
         source: "manual_units_modal",
-        plan: user?.plan || "free",
         route: typeof window !== "undefined" ? window.location.pathname : undefined,
       });
       // Update local state so the units panel renders immediately
