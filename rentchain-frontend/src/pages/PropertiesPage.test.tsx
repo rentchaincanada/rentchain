@@ -175,7 +175,12 @@ describe("PropertiesPage", () => {
     fireEvent.click(setupButtons[0]);
 
     expect(await screen.findByText("Your first property is set up")).toBeInTheDocument();
+    expect(screen.getByText("Step 1 complete")).toBeInTheDocument();
+    expect(screen.getByText("Step 2 next")).toBeInTheDocument();
+    expect(screen.getByText("Add your first unit")).toBeInTheDocument();
+    expect(screen.getByText("Step 3 later")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add a unit" })).toBeInTheDocument();
+    expect(screen.getByText("Move into the application workflow")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send application" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Invite a tenant" })).not.toBeInTheDocument();
   });
