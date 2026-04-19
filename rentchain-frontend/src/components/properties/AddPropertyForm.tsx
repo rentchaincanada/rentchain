@@ -9,6 +9,8 @@ import { colors, radius, text } from "../../styles/tokens";
 import { setOnboardingStep } from "../../api/onboardingApi";
 import { useToast } from "@/components/ui/ToastProvider";
 import { PROVINCE_OPTIONS } from "@/lib/provinces";
+import { track } from "../../lib/analytics";
+import { useAuth } from "../../context/useAuth";
 import "../../styles/propertiesMobile.css";
 
 interface AddPropertyFormProps {
@@ -39,6 +41,7 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
   onCreated,
   onExistingPropertyId,
 }) => {
+  const { user } = useAuth();
   const [name, setName] = useState("");
   const [pid, setPid] = useState("");
   const [addressLine1, setAddressLine1] = useState("");
@@ -244,6 +247,12 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
         });
       }
       const { property } = await createProperty(payload);
+      track("activation_property_created", {
+        surface: "properties_page",
+        source: "add_property_form",
+        plan: user?.plan || "free",
+        route: typeof window !== "undefined" ? window.location.pathname : undefined,
+      });
       setSuccessText("Property created and units captured successfully.");
       if (onCreated) {
         onCreated(property);

@@ -4,11 +4,14 @@ import { Button, Card, Input } from "../../components/ui/Ui";
 import { fetchProperties } from "../../api/propertiesApi";
 import { fetchUnitsForProperty } from "../../api/unitsApi";
 import { createWorkOrder, listContractorInvites, type ContractorInvite, type WorkOrderPriority } from "../../api/workOrdersApi";
+import { track } from "../../lib/analytics";
+import { useAuth } from "../../context/useAuth";
 
 const priorities: WorkOrderPriority[] = ["low", "medium", "high", "urgent"];
 
 export default function WorkOrderNewPage() {
   const nav = useNavigate();
+  const { user } = useAuth();
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [properties, setProperties] = React.useState<Array<{ id: string; name: string }>>([]);
@@ -209,6 +212,12 @@ export default function WorkOrderNewPage() {
                   assignedContractorId: assignedContractorId || null,
                   invitedContractorIds: selectedInvites,
                   notesInternal: notesInternal.trim(),
+                });
+                track("activation_work_order_created", {
+                  surface: "work_order_new_page",
+                  source: "work_order_new_page",
+                  plan: user?.plan || "free",
+                  route: typeof window !== "undefined" ? window.location.pathname : undefined,
                 });
                 nav("/work-orders");
               } catch (err: any) {
