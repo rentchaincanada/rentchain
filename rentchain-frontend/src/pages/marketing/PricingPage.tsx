@@ -263,15 +263,15 @@ const PricingPage: React.FC = () => {
   };
 
   const planCtaLabel = (plan: Exclude<PlanKey, "free">) => {
-    if (!isAuthed) return `Sign in for ${copy.pricing.tierLabels[plan]}`;
+    if (!isAuthed) return `Start with ${copy.pricing.tierLabels[plan]}`;
     if (isAuthed && isAtOrAbove(currentPlan, plan)) return "Manage plan";
-    return `Review ${copy.pricing.tierLabels[plan]} plan`;
+    return `See ${copy.pricing.tierLabels[plan]} in billing`;
   };
 
   const planCtaSupport = (plan: Exclude<PlanKey, "free">) => {
-    if (!isAuthed) return "Sign in first, then review this plan in billing before checkout opens.";
+    if (!isAuthed) return "Start inside the product first, then review this plan in billing only when you want more support.";
     if (isAtOrAbove(currentPlan, plan)) return "Open billing to manage your current subscription details.";
-    return `Billing will show the ${copy.pricing.tierLabels[plan]} plan details before secure checkout opens.`;
+    return `Billing will show the ${copy.pricing.tierLabels[plan]} plan details before secure checkout opens, so you can understand the fit before deciding.`;
   };
 
   return (
@@ -308,6 +308,9 @@ const PricingPage: React.FC = () => {
           </p>
           <p style={{ margin: `${spacing.xs} 0 0`, color: text.secondary, fontSize: "0.92rem", fontWeight: 600 }}>
             Starter gives you the workflow foundation, Pro adds operational control and reporting, and Elite adds portfolio intelligence and oversight.
+          </p>
+          <p style={{ margin: `${spacing.xs} 0 0`, color: text.secondary, fontSize: "0.92rem" }}>
+            You can start and explore before committing to a paid plan. Pricing is here to show what opens next once the workflow is working for you.
           </p>
         </div>
 

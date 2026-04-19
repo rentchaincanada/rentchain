@@ -83,6 +83,11 @@ describe("PricingPage analytics", () => {
         /Starter gives you the workflow foundation, Pro adds operational control and reporting, and Elite adds portfolio intelligence and oversight/i
       )
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /You do not need to pick a paid plan before you understand the workflow\. Use pricing to see what opens next after the basics are already working for you\./i
+      )
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Annual" }));
 
@@ -93,7 +98,7 @@ describe("PricingPage analytics", () => {
       route: "/",
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Review Pro plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "See Pro in billing" }));
 
     expect(mocks.track).toHaveBeenCalledWith("pricing_plan_cta_clicked", {
       surface: "workspace_pricing",

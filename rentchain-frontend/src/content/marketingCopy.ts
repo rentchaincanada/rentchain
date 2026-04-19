@@ -144,9 +144,9 @@ export const marketingCopy: Record<Locale, MarketingCopy> = {
       authedPrimaryCta: "Go to dashboard",
     },
     pricing: {
-      headline: "Pricing that matches how RentChain works today",
+      headline: "Start using RentChain before you worry about plans",
       subheadline:
-        "Start on Free with guided setup and pay-per-use screening, then upgrade for richer workflow tools, accountant-ready exports, and stronger reporting.",
+        "Start on Free with guided setup, your first property, and the core rental workflow. Upgrade later if you need deeper operational tools, exports, and reporting.",
       intervalLabels: {
         monthly: "Monthly",
         yearly: "Annual",
@@ -166,7 +166,7 @@ export const marketingCopy: Record<Locale, MarketingCopy> = {
       tierBadges: {
         pro: "Most Popular",
       },
-      ctaStartFree: "Start Free",
+      ctaStartFree: "Start your rental workflow",
       ctaUpgrade: "Upgrade",
       ctaByTier: {
         starter: "Upgrade to Starter",

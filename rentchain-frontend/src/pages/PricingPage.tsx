@@ -226,14 +226,14 @@ const PricingPage: React.FC = () => {
 
   const planCtaLabel = (target: Exclude<PlanKey, "free">) => {
     if (PLAN_ORDER.indexOf(currentPlan) >= PLAN_ORDER.indexOf(target)) return "Manage plan";
-    return `Review ${CANONICAL_TIER_MATRIX[target].label} plan`;
+    return `See ${CANONICAL_TIER_MATRIX[target].label} in billing`;
   };
 
   const planCtaSupport = (target: Exclude<PlanKey, "free">) => {
     if (PLAN_ORDER.indexOf(currentPlan) >= PLAN_ORDER.indexOf(target)) {
       return "Open billing to manage your current subscription details.";
     }
-    return `Billing will show the ${CANONICAL_TIER_MATRIX[target].label} plan details before secure checkout opens.`;
+    return `Billing will show the ${CANONICAL_TIER_MATRIX[target].label} plan details before secure checkout opens, so you can understand the fit before deciding.`;
   };
 
   return (
@@ -264,6 +264,9 @@ const PricingPage: React.FC = () => {
           </p>
           <p style={{ marginTop: spacing.xs, color: text.secondary, maxWidth: 760, lineHeight: 1.65, fontWeight: 600 }}>
             Starter gives you the workflow foundation, Pro adds operational control and reporting, and Elite adds portfolio intelligence and oversight.
+          </p>
+          <p style={{ marginTop: spacing.xs, color: text.secondary, maxWidth: 760, lineHeight: 1.65 }}>
+            You do not need to pick a paid plan before you understand the workflow. Use pricing to see what opens next after the basics are already working for you.
           </p>
         </Card>
 
@@ -479,7 +482,7 @@ const PricingPage: React.FC = () => {
               <div style={{ marginTop: isMobile ? spacing.sm : "auto", paddingTop: 8, width: "100%" }}>
                 {plan === "free" ? (
                   <Button type="button" variant="secondary" onClick={() => navigate("/dashboard")} style={{ width: "100%" }}>
-                    Start Free
+                    Start your rental workflow
                   </Button>
                 ) : (
                   <div style={{ display: "grid", gap: 8 }}>

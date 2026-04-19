@@ -15,15 +15,15 @@ type HowItWorksStep = {
 const HOW_IT_WORKS: HowItWorksStep[] = [
   {
     title: "Set up your property",
-    body: "Add a property, keep the important details together, and stop chasing information across different tools.",
+    body: "Add your first property, keep the important details together, and start the workflow without piecing it together across different tools.",
   },
   {
     title: "See what needs attention",
-    body: "Catch missing details early so everyday tasks, tenant work, and filing steps are easier to finish cleanly.",
+    body: "See what is missing early so tenant work, maintenance follow-up, and rental admin are easier to finish cleanly.",
   },
   {
     title: "Add deeper support when you need it",
-    body: "Paid plans give growing landlords stronger workflow support, clearer records, and guided filing help when things get more complex.",
+    body: "Paid plans add deeper workflow support only when your rental operations outgrow the basics you can already start using now.",
   },
 ];
 
@@ -174,13 +174,25 @@ const LandingPage: React.FC = () => {
                   maintenance, and the tasks that tend to fall through the cracks. When you need deeper
                   lease, filing, or compliance support, those tools can vary by province and continue to expand.
                 </p>
+                <p
+                  style={{
+                    margin: 0,
+                    color: text.secondary,
+                    fontSize: "0.98rem",
+                    lineHeight: 1.7,
+                    maxWidth: 720,
+                    fontWeight: 600,
+                  }}
+                >
+                  Start with your first property, see how the workflow works, and decide on paid plans only after you understand the value inside the product.
+                </p>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: spacing.sm, alignItems: "center" }}>
                 <Button type="button" onClick={handlePrimaryCta}>
-                  Get started with a property
+                  Start your first property
                 </Button>
                 <div style={{ color: text.secondary, fontSize: "0.93rem", fontWeight: 600 }}>
-                  Free to try. Upgrade when you need stronger workflows and deeper support.
+                  No commitment to explore. Start free and upgrade only when your workflow needs more support.
                 </div>
               </div>
               <div
@@ -192,9 +204,9 @@ const LandingPage: React.FC = () => {
                 }}
               >
                 {[
-                  "Organize a property and try the basics",
-                  "See what is missing before it becomes a problem",
-                  "Unlock guided filing support when you need it",
+                  "Set up your first property and tenant workflow in one place",
+                  "See what is missing before it becomes a larger admin problem",
+                  "Add deeper workflow support only when you actually need it",
                 ].map((item) => (
                   <div
                     key={item}
@@ -314,8 +326,8 @@ const LandingPage: React.FC = () => {
             <div style={{ display: "grid", gap: spacing.sm }}>
               <h2 style={sectionHeadingStyle}>What stays free</h2>
               <ul style={{ margin: 0, paddingLeft: "1.1rem", color: text.muted, lineHeight: 1.8 }}>
-                <li>Set up a property and keep the important details together</li>
-                <li>See missing information before a task turns messy</li>
+                <li>Set up your first property and keep the important details together</li>
+                <li>Track the basics before a task turns messy</li>
                 <li>Use the platform to get organized before paying</li>
                 <li>Try the workflow before deciding whether you need more support</li>
               </ul>
@@ -409,9 +421,9 @@ const LandingPage: React.FC = () => {
                 system to get value on day one.
               </p>
             </div>
-            <Button type="button" onClick={handlePrimaryCta}>
-              Get started with a property
-            </Button>
+              <Button type="button" onClick={handlePrimaryCta}>
+                Start your first property
+              </Button>
           </div>
         </Card>
       </div>
