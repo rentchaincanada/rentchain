@@ -9,6 +9,7 @@ import { getTuReferralMetricsForMonth } from "../services/metrics/tuReferralRepo
 import { getPublicStatusPayload } from "../services/statusService";
 import { loadAdminSubscriptionConversionFunnel } from "../services/admin/adminSubscriptionConversionView";
 import { loadAdminSubscriptionConversionInsights } from "../services/admin/adminSubscriptionConversionInsights";
+import { loadAdminActivationSummary } from "../services/admin/adminActivationSummary";
 import { loadAdminSubscriptionConversionValidation } from "../services/admin/adminSubscriptionConversionValidation";
 import {
   createStatusIncident,
@@ -860,6 +861,22 @@ router.get("/analytics/conversion-insights", requireAdmin, async (req, res) => {
   } catch (err: any) {
     console.error("[admin] conversion insights failed", err?.message || err);
     return res.status(500).json({ ok: false, error: "CONVERSION_INSIGHTS_FAILED" });
+  }
+});
+
+router.get("/analytics/activation-summary", requireAdmin, async (req, res) => {
+  try {
+    const days = req.query?.days;
+    const payload = await loadAdminActivationSummary({
+      days: typeof days === "string" ? days : undefined,
+    });
+    return res.json({
+      ok: true,
+      ...payload,
+    });
+  } catch (err: any) {
+    console.error("[admin] activation summary failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "ACTIVATION_SUMMARY_FAILED" });
   }
 });
 

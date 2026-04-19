@@ -328,6 +328,11 @@ const PropertiesPage: React.FC = () => {
     setSavingUnits(true);
     try {
       await addUnitsManual(activePropertyId, clean);
+      track("activation_unit_created", {
+        surface: "properties_page",
+        source: "manual_units_modal",
+        route: typeof window !== "undefined" ? window.location.pathname : undefined,
+      });
       // Update local state so the units panel renders immediately
       setProperties((prev) =>
         prev.map((p) =>

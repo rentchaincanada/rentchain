@@ -5,6 +5,7 @@ import { fetchProperties } from "../../api/propertiesApi";
 import { fetchUnitsForProperty } from "../../api/unitsApi";
 import { useCapabilities } from "../../hooks/useCapabilities";
 import { dispatchUpgradePrompt, resolveRequiredPlanLabel } from "../../lib/upgradePrompt";
+import { track } from "../../lib/analytics";
 import { useAuth } from "../../context/useAuth";
 import { useLanguage } from "../../context/LanguageContext";
 import { useToast } from "../ui/ToastProvider";
@@ -234,6 +235,12 @@ export const InviteTenantModal: React.FC<Props> = ({
         setInfoMsg(emailError || "Email was not sent. You can copy or open the link below.");
       }
       setInfoMsg((prev) => (prev ? `${prev} ${copy.postInviteHint}` : copy.postInviteHint));
+      track("activation_tenant_added", {
+        surface: "tenant_invite_modal",
+        source: "tenant_invite_modal",
+        plan: user?.plan || "free",
+        route: typeof window !== "undefined" ? window.location.pathname : undefined,
+      });
       await setOnboardingStep("tenantInvited", true).catch(() => {});
       onInviteCreated?.(data);
     } catch (e: any) {

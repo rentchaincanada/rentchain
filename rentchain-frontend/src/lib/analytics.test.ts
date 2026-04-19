@@ -61,6 +61,42 @@ describe("track", () => {
     );
   });
 
+  it("posts activation analytics events through the same tracker endpoint", async () => {
+    vi.stubEnv("MODE", "production");
+    const { track } = await import("./analytics");
+
+    track("activation_property_created", {
+      surface: "properties_page",
+      source: "add_property_form",
+      plan: "free",
+      route: "/properties",
+    });
+    await Promise.resolve();
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "https://api.rentchain.test/api/events/track",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        keepalive: true,
+      })
+    );
+    const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0];
+    const payload = JSON.parse(String(fetchCall?.[1]?.body || "{}"));
+    expect(payload).toEqual(
+      expect.objectContaining({
+        name: "activation_property_created",
+        props: {
+          surface: "properties_page",
+          source: "add_property_form",
+          plan: "free",
+          route: "/properties",
+        },
+        ts: expect.any(String),
+      })
+    );
+  });
+
   it("does not post when telemetry is disabled", async () => {
     vi.stubEnv("MODE", "production");
     mocks.isTelemetryEnabled.mockReturnValue(false);

@@ -24,6 +24,7 @@ import { SendApplicationModal } from "./SendApplicationModal";
 import { parseCsvPreview } from "../../utils/csvPreview";
 import { useToast } from "../ui/ToastProvider";
 import { setOnboardingStep } from "../../api/onboardingApi";
+import { track } from "../../lib/analytics";
 import "../../styles/propertiesMobile.css";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { useEntitlements } from "@/hooks/useEntitlements";
@@ -232,6 +233,12 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
       if (onRefresh) {
         await onRefresh();
       }
+      track("activation_unit_created", {
+        surface: "property_detail_panel",
+        source: "units_csv_import",
+        plan: currentPlan,
+        route: typeof window !== "undefined" ? window.location.pathname : undefined,
+      });
       try {
         await setOnboardingStep("unitAdded", true);
       } catch {

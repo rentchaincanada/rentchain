@@ -183,6 +183,35 @@ describe("eventsRoutes", () => {
     expect(telemetryMocks.incrementCounter).toHaveBeenCalledWith({ name: "upgrade_prompt_viewed" });
   });
 
+  it("accepts activation analytics events through the generic tracker", async () => {
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/track",
+      user: { id: "user-activation", role: "landlord" },
+      body: {
+        name: "activation_property_created",
+        props: {
+          surface: "properties_page",
+          source: "add_property_form",
+          plan: "free",
+          route: "/properties",
+        },
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ ok: true });
+    expect(telemetryMocks.incrementCounter).toHaveBeenCalledWith({ name: "activation_property_created" });
+    expect(getCollectionDocs("events")).toEqual([
+      expect.objectContaining({
+        name: "activation_property_created",
+        userId: "user-activation",
+        sessionId: null,
+      }),
+    ]);
+  });
+
   it("persists authenticated events with userId and no sessionId", async () => {
     const router = await createRouter();
     const res = await invokeRouter(router, {
