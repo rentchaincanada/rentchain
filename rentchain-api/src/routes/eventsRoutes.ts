@@ -16,6 +16,8 @@ const ALLOWED_EVENT_PATTERNS = [
   /^upgrade_modal_/,
   /^registry_/,
   /^activation_/,
+  /^empty_state_/,
+  /^onboarding_/,
 ];
 
 const SESSION_COOKIE = "rc_sid";
