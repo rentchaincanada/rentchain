@@ -69,7 +69,7 @@ const PropertiesPage: React.FC = () => {
   const { showToast } = useToast();
   const { features } = useCapabilities();
   const currentProperties = properties?.length ?? 0;
-  const canInviteTenant = features?.tenant_invites !== false;
+  const canInviteTenant = Boolean(features?.tenant_invites || features?.tenantInvites);
   const archiveHelpCopy =
     propertyView === "archived"
       ? "Archived properties are hidden from active portfolio views but preserved for records and history."
@@ -1211,7 +1211,7 @@ const UnitsModal = ({
   onClose: () => void;
   units: UnitInput[];
   setUnits: (u: UnitInput[]) => void;
-  onSave: () => void;
+  onSave: (unitsOverride?: UnitInput[]) => void;
   saving: boolean;
 }) => {
   if (!open) return null;

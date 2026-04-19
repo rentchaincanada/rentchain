@@ -184,4 +184,28 @@ describe("PropertiesPage", () => {
     expect(screen.getByRole("button", { name: "Send application" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Invite a tenant" })).not.toBeInTheDocument();
   });
+
+  it("keeps the later step free-safe when tenant invite capability is missing from features", async () => {
+    mocks.fetchPropertiesMock.mockResolvedValue({ items: [] });
+    mocks.useCapabilitiesMock.mockReturnValue({
+      caps: { plan: "free" },
+      features: {},
+      loading: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <PropertiesPage />
+      </MemoryRouter>
+    );
+
+    const setupButtons = await screen.findAllByRole("button", {
+      name: "Complete property setup",
+    });
+    fireEvent.click(setupButtons[0]);
+
+    expect(await screen.findByText("Move into the application workflow")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send application" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Invite a tenant" })).not.toBeInTheDocument();
+  });
 });

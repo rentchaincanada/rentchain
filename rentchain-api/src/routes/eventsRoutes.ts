@@ -16,6 +16,7 @@ const ALLOWED_EVENT_PATTERNS = [
   /^upgrade_modal_/,
   /^registry_/,
   /^activation_/,
+  /^dashboard_timeline_nudge_/,
   /^empty_state_/,
   /^onboarding_/,
 ];
