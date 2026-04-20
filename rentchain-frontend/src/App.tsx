@@ -153,6 +153,7 @@ const AutomationTimelinePage = lazy(
 );
 const AutomationTimelineV1Page = lazy(() => import("./pages/admin/AutomationTimelineV1Page"));
 const SupportDebugConsolePage = lazy(() => import("./pages/admin/SupportDebugConsolePage"));
+const SecurityReliabilityConsolePage = lazy(() => import("./pages/admin/SecurityReliabilityConsolePage"));
 const AdminTriageQueuePage = lazy(() => import("./pages/admin/AdminTriageQueuePage"));
 const AdminAlertingPage = lazy(() => import("./pages/admin/AdminAlertingPage"));
 const AdminNotificationsPage = lazy(() => import("./pages/admin/AdminNotificationsPage"));
@@ -921,6 +922,16 @@ function App() {
             <RequireAdmin>
               <Suspense fallback={null}>
                 <AutomationTimelineV1Page />
+              </Suspense>
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/admin/ops"
+          element={
+            <RequireAdmin>
+              <Suspense fallback={null}>
+                <SecurityReliabilityConsolePage />
               </Suspense>
             </RequireAdmin>
           }

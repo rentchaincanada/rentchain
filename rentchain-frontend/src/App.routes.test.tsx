@@ -58,6 +58,10 @@ vi.mock("./pages/admin/SupportDebugConsolePage", () => ({
   default: () => <h1>Support / Debug Console</h1>,
 }));
 
+vi.mock("./pages/admin/SecurityReliabilityConsolePage", () => ({
+  default: () => <h1>Security & Reliability Console</h1>,
+}));
+
 vi.mock("./pages/admin/AdminTriageQueuePage", () => ({
   default: () => <h1>Admin Triage Queue</h1>,
 }));
@@ -217,6 +221,20 @@ describe("Routes: /admin/support-console", () => {
     );
 
     expect(await screen.findByText(/Support \/ Debug Console/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /admin/ops", () => {
+  it("renders the admin security and reliability console route", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/admin/ops"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Security & Reliability Console/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });
