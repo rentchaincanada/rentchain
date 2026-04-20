@@ -212,6 +212,16 @@ export function deriveLandlordAnalyticsSnapshot(input: AdminAnalyticsDerivedInpu
       units: input.units,
       workOrders: input.workOrders,
     }),
+    comparisons: {
+      previousPeriod: {
+        vacancyRate: previous.summary.vacancyRate,
+        applicationConversionRate: previous.applications.conversionRate,
+        applicationsStarted: previous.applications.started,
+        applicationsSubmitted: previous.applications.submitted,
+        maintenanceCostCents: previous.maintenance.maintenanceCostCents,
+        openWorkOrders: previous.maintenance.openWorkOrders,
+      },
+    },
     properties: (input.properties || [])
       .map((property: any) => ({
         id: asString(property?.id, 240),

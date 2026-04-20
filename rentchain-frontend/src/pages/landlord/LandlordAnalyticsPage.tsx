@@ -1,10 +1,15 @@
 import React from "react";
 import { fetchLandlordAnalyticsSnapshot, type AnalyticsPeriod, type LandlordAnalyticsSnapshot } from "../../api/landlordAnalyticsApi";
+import {
+  fetchLandlordAnalyticsAlerts,
+  type LandlordAnalyticsAlertsResponse,
+} from "../../api/landlordAnalyticsAlertsApi";
 import { MacShell } from "../../components/layout/MacShell";
 import { Card, Section } from "../../components/ui/Ui";
 import { useToast } from "../../components/ui/ToastProvider";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import { FeatureTeaser } from "@/components/billing/FeatureTeaser";
+import AnalyticsAlertsPanel from "../../components/analytics/AnalyticsAlertsPanel";
 import AnalyticsFiltersBar from "../../components/analytics/AnalyticsFiltersBar";
 import AnalyticsKpiGrid from "../../components/analytics/AnalyticsKpiGrid";
 import AnalyticsSectionPanel from "../../components/analytics/AnalyticsSectionPanel";
@@ -25,6 +30,7 @@ function formatCurrency(cents: number | null | undefined) {
 function useAnalyticsState(enabled: boolean, period: AnalyticsPeriod, propertyId: string) {
   const { showToast } = useToast();
   const [snapshot, setSnapshot] = React.useState<LandlordAnalyticsSnapshot | null>(null);
+  const [alerts, setAlerts] = React.useState<LandlordAnalyticsAlertsResponse | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -39,12 +45,20 @@ function useAnalyticsState(enabled: boolean, period: AnalyticsPeriod, propertyId
       try {
         setLoading(true);
         setError(null);
-        const response = await fetchLandlordAnalyticsSnapshot({
-          period,
-          propertyId: propertyId || null,
-        });
+        const [analyticsResponse, alertsResponse] = await Promise.all([
+          fetchLandlordAnalyticsSnapshot({
+            period,
+            propertyId: propertyId || null,
+          }),
+          fetchLandlordAnalyticsAlerts({
+            period,
+            propertyId: propertyId || null,
+            status: "active",
+          }),
+        ]);
         if (!mounted) return;
-        setSnapshot(response);
+        setSnapshot(analyticsResponse);
+        setAlerts(alertsResponse);
       } catch (err: any) {
         if (!mounted) return;
         const message = err?.message || "Failed to load analytics";
@@ -64,7 +78,7 @@ function useAnalyticsState(enabled: boolean, period: AnalyticsPeriod, propertyId
     };
   }, [enabled, period, propertyId, showToast]);
 
-  return { snapshot, loading, error };
+  return { snapshot, alerts, loading, error };
 }
 
 export default function LandlordAnalyticsPage() {
@@ -78,7 +92,7 @@ export default function LandlordAnalyticsPage() {
   const [propertyId, setPropertyId] = React.useState("");
   const analyticsEnabled = !entitlementLoading && canViewPortfolioHealthSummary;
   const canViewAdvancedAnalytics = hasCapability("portfolio_analytics");
-  const { snapshot, loading, error } = useAnalyticsState(analyticsEnabled, period, propertyId);
+  const { snapshot, alerts, loading, error } = useAnalyticsState(analyticsEnabled, period, propertyId);
 
   const summaryItems = snapshot
     ? [
@@ -116,7 +130,7 @@ export default function LandlordAnalyticsPage() {
     : [];
 
   return (
-    <MacShell title="Analytics">
+    <MacShell title="Analytics" showTopNav={false}>
       <div style={{ display: "grid", gap: 16 }}>
         <Section>
           <div style={{ display: "grid", gap: 6 }}>
@@ -150,6 +164,7 @@ export default function LandlordAnalyticsPage() {
 
         {analyticsEnabled && !loading && !error && snapshot ? (
           <>
+            <AnalyticsAlertsPanel alerts={alerts?.alerts || []} summary={alerts?.summary || null} />
             <AnalyticsKpiGrid items={summaryItems} />
 
             {canViewPortfolioScore ? (
