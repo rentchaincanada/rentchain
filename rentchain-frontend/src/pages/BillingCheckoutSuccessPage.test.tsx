@@ -76,9 +76,11 @@ describe("BillingCheckoutSuccessPage", () => {
     expect(screen.getByText("Confirming upgrade")).toBeInTheDocument();
 
     await waitFor(() => expect(screen.getByText("Upgrade confirmed")).toBeInTheDocument());
+    expect(screen.getByText(/invite tenants and send secure application links/i)).toBeInTheDocument();
     expect(screen.getByText("Starter")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Go to dashboard" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Continue setup" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send your first application" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Invite a tenant" })).toBeInTheDocument();
     expect(mocks.refreshEntitlementsMock).toHaveBeenCalledTimes(1);
     expect(mocks.clearUpgradePromptMock).toHaveBeenCalledTimes(1);
   });

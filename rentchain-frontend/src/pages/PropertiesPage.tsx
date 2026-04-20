@@ -108,6 +108,7 @@ const PropertiesPage: React.FC = () => {
   const openLeasePack = params.get("openLeasePack") === "1";
   const deepLinkId = params.get("actionRequestId") || undefined;
   const panel = params.get("panel") || "";
+  const upgradeConfirmed = params.get("upgradeConfirmed") === "1";
 
   useEffect(() => {
     if (!(openAddLease || openAddUnit || openEditUnits || openEditProperty || openSendApplication || openLeasePack)) return;
@@ -766,25 +767,36 @@ const PropertiesPage: React.FC = () => {
                   gap: 8,
                   padding: 12,
                   borderRadius: radius.md,
-                  border: `1px solid ${colors.border}`,
-                  background: "rgba(255,255,255,0.66)",
+                  border: upgradeConfirmed ? "1px solid rgba(16,185,129,0.28)" : `1px solid ${colors.border}`,
+                  background: upgradeConfirmed ? "rgba(16,185,129,0.08)" : "rgba(255,255,255,0.66)",
                 }}
               >
                 <div style={{ color: text.secondary, fontSize: 12, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase" }}>
-                  Step 3 later
+                  {upgradeConfirmed ? "Upgrade unlocked" : "Step 3 later"}
                 </div>
                 <div style={{ color: text.primary, fontSize: 14, fontWeight: 700 }}>
                   {canInviteTenant ? "Move into the tenant workflow" : "Move into the application workflow"}
                 </div>
                 <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.5 }}>
                   {canInviteTenant
-                    ? "Invite a tenant after at least one unit is ready so the application and lease flow has a clear place to start."
-                    : "Send an application after your first unit is in place so the next workflow step stays clear and supported on Free."}
+                    ? upgradeConfirmed
+                      ? "Tenant invites are now unlocked. Move into the tenant workflow as soon as your first unit is ready."
+                      : "Invite a tenant after at least one unit is ready so the application and lease flow has a clear place to start."
+                    : upgradeConfirmed
+                      ? "Application sending is now unlocked. Move into the application workflow as soon as your first unit is ready."
+                      : "Send an application after your first unit is in place so the next workflow step stays clear and supported on Free."}
                 </div>
                 <div>
                   <Button
                     variant="secondary"
-                    onClick={() => navigate(canInviteTenant ? "/tenants" : "/applications?openSendApplication=1")}
+                    onClick={() =>
+                      navigate(
+                        canInviteTenant
+                          ? "/tenants?invite=1&upgradeConfirmed=1&highlight=tenants"
+                          : "/applications?openSendApplication=1&upgradeConfirmed=1&highlight=applications"
+                      )
+                    }
+                    style={upgradeConfirmed ? { boxShadow: "0 0 0 3px rgba(16,185,129,0.14)" } : undefined}
                   >
                     {canInviteTenant ? "Invite a tenant" : "Send application"}
                   </Button>

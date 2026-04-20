@@ -346,7 +346,18 @@ function copyChecklistToClipboard(checklist: { steps: string[]; notes: string[];
     checklist.notes.length ? "Notes:" : null,
     ...checklist.notes,
   ].filter(Boolean);
-  return navigator.clipboard.writeText(lines.join("\n"));
+  return writeToClipboard(lines.join("\n"));
+}
+
+function writeToClipboard(value: string) {
+  if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
+    return Promise.reject(new Error("clipboard_unavailable"));
+  }
+  return navigator.clipboard.writeText(value);
+}
+
+function scheduleCopyStateReset(setCopyState: React.Dispatch<React.SetStateAction<"idle" | "copied" | "failed">>) {
+  setTimeout(() => setCopyState("idle"), 1800);
 }
 
 type Props = {
@@ -427,9 +438,9 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
     const pid = data?.pidPrompt.registryPid;
     if (!pid) return;
     try {
-      await navigator.clipboard.writeText(pid);
+      await writeToClipboard(pid);
       setCopyState("copied");
-      window.setTimeout(() => setCopyState("idle"), 1800);
+      scheduleCopyStateReset(setCopyState);
     } catch {
       setCopyState("failed");
     }
@@ -441,7 +452,7 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
     try {
       await copyChecklistToClipboard(checklist);
       setCopyState("copied");
-      window.setTimeout(() => setCopyState("idle"), 1800);
+      scheduleCopyStateReset(setCopyState);
     } catch {
       setCopyState("failed");
     }
@@ -1518,7 +1529,9 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                       type="button"
                       variant="secondary"
                       onClick={() => {
-                        window.location.assign(`/admin/registry/properties/${encodeURIComponent(String(property?.id || ""))}`);
+                        if (typeof window !== "undefined") {
+                          window.location.assign(`/admin/registry/properties/${encodeURIComponent(String(property?.id || ""))}`);
+                        }
                       }}
                     >
                       Open registry review
