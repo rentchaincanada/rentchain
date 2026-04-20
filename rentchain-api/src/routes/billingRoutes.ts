@@ -9,13 +9,21 @@ import {
   getPlanMatrix,
   getStripeEnv,
   isCanonicalFreePlan,
-  resolvePlanFromPriceId,
   resolvePaidBillingPlan,
   resolvePlanPriceId,
   type BillingPlanKey,
 } from "../config/planMatrix";
 import { getScreeningPricing } from "../billing/screeningPricing";
 import { resolveLandlordAndTier } from "../lib/landlordResolver";
+import {
+  deriveBillingIntervalFromCheckoutSession,
+  deriveBillingTierFromCheckoutSession,
+  isVerifiedPaidSession,
+  normalizeBillingInterval,
+  updateLandlordSubscriptionState,
+  type BillingInterval as SyncedBillingInterval,
+  type BillingTier as SyncedBillingTier,
+} from "../services/billingSubscriptionSyncService";
 
 const router = express.Router();
 
@@ -105,28 +113,11 @@ function normalizeTier(input: any): BillingTier | "free" | null {
 }
 
 function normalizeInterval(input: any): BillingInterval {
-  const raw = String(input || "").trim().toLowerCase();
-  if (raw === "year" || raw === "yearly" || raw === "annual" || raw === "annually") return "yearly";
-  if (raw === "month" || raw === "monthly") return "monthly";
-  return "monthly";
+  return normalizeBillingInterval(input) || "monthly";
 }
 
 function resolvePriceId(tier: BillingTier, interval: BillingInterval) {
   return resolvePlanPriceId({ plan: tier, interval });
-}
-
-function normalizeStripeRecurringInterval(input: unknown): BillingInterval | null {
-  const raw = String(input || "").trim().toLowerCase();
-  if (raw === "month") return "monthly";
-  if (raw === "year") return "yearly";
-  return null;
-}
-
-function isVerifiedPaidSession(status: unknown, paymentStatus: unknown): boolean {
-  const normalizedStatus = String(status || "").trim().toLowerCase();
-  const normalizedPaymentStatus = String(paymentStatus || "").trim().toLowerCase();
-  if (normalizedStatus !== "complete") return false;
-  return normalizedPaymentStatus === "paid" || normalizedPaymentStatus === "no_payment_required";
 }
 
 function sanitizeRedirectTo(raw: any): string {
@@ -152,45 +143,6 @@ function appendBillingCanceled(path: string): string {
   if (!path) return "/dashboard?billing=canceled=1";
   if (path.includes("?")) return `${path}&billing=canceled=1`;
   return `${path}?billing=canceled=1`;
-}
-
-async function updateLandlordSubscription(params: {
-  landlordId: string;
-  tier: BillingTier | "free";
-  stripeCustomerId?: string | null;
-  stripeSubscriptionId?: string | null;
-  stripeCheckoutSessionId?: string | null;
-  subscriptionStatus?: string | null;
-  subscriptionInterval?: BillingInterval | null;
-  currentPeriodEnd?: number | null;
-}) {
-  const {
-    landlordId,
-    tier,
-    stripeCustomerId,
-    stripeSubscriptionId,
-    stripeCheckoutSessionId,
-    subscriptionStatus,
-    subscriptionInterval,
-    currentPeriodEnd,
-  } = params;
-
-  await db
-    .collection("landlords")
-    .doc(landlordId)
-    .set(
-      {
-        plan: tier,
-        stripeCustomerId: stripeCustomerId || null,
-        stripeSubscriptionId: stripeSubscriptionId || null,
-        stripeCheckoutSessionId: stripeCheckoutSessionId || null,
-        subscriptionStatus: subscriptionStatus || null,
-        subscriptionInterval: subscriptionInterval || null,
-        currentPeriodEnd: currentPeriodEnd ?? null,
-        subscriptionUpdatedAt: Date.now(),
-      },
-      { merge: true }
-    );
 }
 
 function isStripeConnectionError(err: any): boolean {
@@ -544,15 +496,8 @@ router.get("/session-status", requireAuth, async (req: any, res) => {
 
     const subscription =
       session.subscription && typeof session.subscription === "object" ? session.subscription : null;
-    const subscriptionPriceId = subscription?.items?.data?.[0]?.price?.id || null;
-    const resolvedPlan =
-      resolvePaidBillingPlan(session.metadata?.tier) ||
-      resolvePaidBillingPlan(subscription?.metadata?.tier) ||
-      resolvePlanFromPriceId(subscriptionPriceId);
-    const resolvedInterval =
-      normalizeInterval(session.metadata?.interval) ||
-      normalizeInterval(subscription?.metadata?.interval) ||
-      normalizeStripeRecurringInterval(subscription?.items?.data?.[0]?.price?.recurring?.interval);
+    const resolvedPlan = deriveBillingTierFromCheckoutSession(session);
+    const resolvedInterval = deriveBillingIntervalFromCheckoutSession(session);
     const paymentStatus = (asOptionalString(session.payment_status) as StripeSessionPaymentStatus) || null;
     const sessionStatus = asOptionalString(session.status) || "unknown";
     const subscriptionStatus = asOptionalString(subscription?.status) || null;
@@ -569,14 +514,14 @@ router.get("/session-status", requireAuth, async (req: any, res) => {
     const shouldActivatePlan = Boolean(resolvedPlan) && isVerifiedPaidSession(sessionStatus, paymentStatus);
 
     if (shouldActivatePlan) {
-      await updateLandlordSubscription({
+      await updateLandlordSubscriptionState({
         landlordId,
-        tier: resolvedPlan as BillingTier,
+        tier: resolvedPlan as SyncedBillingTier,
         stripeCustomerId,
         stripeSubscriptionId,
         stripeCheckoutSessionId: session.id,
-        subscriptionStatus,
-        subscriptionInterval: resolvedInterval,
+        subscriptionStatus: subscriptionStatus || null,
+        subscriptionInterval: (resolvedInterval as SyncedBillingInterval | null) || null,
         currentPeriodEnd,
       });
     }

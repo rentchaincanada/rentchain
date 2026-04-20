@@ -1,5 +1,3 @@
-import express from "express";
-import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const constructEventMock = vi.fn();
@@ -49,17 +47,32 @@ vi.mock("../../services/stripeScreeningProcessor", () => ({
   applyScreeningResultsFromOrder: vi.fn(async () => ({ ok: true })),
 }));
 
-async function createApp() {
+async function invokeWebhook(body: string) {
   const { stripeWebhookHandler } = await import("../stripeScreeningOrdersWebhookRoutes");
-  const app = express();
-
-  app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), stripeWebhookHandler);
-
-  app.use((_req, res) => {
-    return res.status(401).json({ ok: false, error: "unauthorized" });
+  return await new Promise<{ status: number; body: any; text?: string }>((resolve, reject) => {
+    const req: any = {
+      body: Buffer.from(body),
+      headers: {
+        "stripe-signature": "t=1,v1=test",
+      },
+    };
+    const res: any = {
+      statusCode: 200,
+      status(code: number) {
+        this.statusCode = code;
+        return this;
+      },
+      json(payload: any) {
+        resolve({ status: this.statusCode, body: payload });
+        return this;
+      },
+      send(payload: any) {
+        resolve({ status: this.statusCode, body: null, text: String(payload || "") });
+        return this;
+      },
+    };
+    stripeWebhookHandler(req, res).catch(reject);
   });
-
-  return app;
 }
 
 describe("stripe webhook public route", () => {
@@ -72,13 +85,7 @@ describe("stripe webhook public route", () => {
       type: "noop.event",
       data: { object: {} },
     });
-    const app = await createApp();
-
-    const res = await request(app)
-      .post("/api/stripe/webhook")
-      .set("stripe-signature", "t=1,v1=test")
-      .set("content-type", "application/json")
-      .send('{"id":"evt_1","type":"noop.event"}');
+    const res = await invokeWebhook('{"id":"evt_1","type":"noop.event"}');
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ received: true });
@@ -89,16 +96,33 @@ describe("stripe webhook public route", () => {
     constructEventMock.mockImplementationOnce(() => {
       throw new Error("bad signature");
     });
-    const app = await createApp();
-
-    const res = await request(app)
-      .post("/api/stripe/webhook")
-      .set("stripe-signature", "t=1,v1=bad")
-      .set("content-type", "application/json")
-      .send('{"id":"evt_1","type":"noop.event"}');
+    const { stripeWebhookHandler } = await import("../stripeScreeningOrdersWebhookRoutes");
+    const res = await new Promise<{ status: number; body: any; text?: string }>((resolve, reject) => {
+      const req: any = {
+        body: Buffer.from('{"id":"evt_1","type":"noop.event"}'),
+        headers: {
+          "stripe-signature": "t=1,v1=bad",
+        },
+      };
+      const res: any = {
+        statusCode: 200,
+        status(code: number) {
+          this.statusCode = code;
+          return this;
+        },
+        json(payload: any) {
+          resolve({ status: this.statusCode, body: payload });
+          return this;
+        },
+        send(payload: any) {
+          resolve({ status: this.statusCode, body: null, text: String(payload || "") });
+          return this;
+        },
+      };
+      stripeWebhookHandler(req, res).catch(reject);
+    });
 
     expect(res.status).toBe(400);
     expect(String(res.text || "")).toContain("Signature verification failed");
   });
 });
-

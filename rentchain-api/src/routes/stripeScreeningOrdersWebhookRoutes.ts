@@ -4,7 +4,6 @@ import { db } from "../config/firebase";
 import { getStripeClient } from "../services/stripeService";
 import { STRIPE_WEBHOOK_SECRET } from "../config/screeningConfig";
 import { stripeNotConfiguredResponse, isStripeNotConfiguredError } from "../lib/stripeNotConfigured";
-import { resolvePlanFromPriceId } from "../config/planMatrix";
 import { finalizeStripePayment } from "../services/stripeFinalize";
 import { applyScreeningResultsFromOrder } from "../services/stripeScreeningProcessor";
 import { beginScreening } from "../services/screening/screeningOrchestrator";
@@ -12,6 +11,11 @@ import { writeScreeningEvent } from "../services/screening/screeningEvents";
 import { recordScreeningPaymentFailed } from "../services/screeningPaymentTransactionService";
 import { writeCanonicalEvent } from "../lib/events/buildEvent";
 import { buildScreeningMonetizationPatch } from "../services/screening/screeningMonetizationService";
+import {
+  deriveBillingIntervalFromSubscription,
+  deriveBillingTierFromSubscription,
+  updateLandlordSubscriptionState,
+} from "../services/billingSubscriptionSyncService";
 
 interface StripeWebhookRequest extends Request {
   rawBody?: Buffer;
@@ -39,38 +43,6 @@ async function resolveLandlordIdFromCustomer(
     });
     return null;
   }
-}
-
-async function updateLandlordSubscription(params: {
-  landlordId: string;
-  tier: BillingTier | "free";
-  stripeCustomerId?: string | null;
-  stripeSubscriptionId?: string | null;
-  subscriptionStatus?: string | null;
-  currentPeriodEnd?: number | null;
-}) {
-  const {
-    landlordId,
-    tier,
-    stripeCustomerId,
-    stripeSubscriptionId,
-    subscriptionStatus,
-    currentPeriodEnd,
-  } = params;
-  await db
-    .collection("landlords")
-    .doc(landlordId)
-    .set(
-      {
-        plan: tier,
-        stripeCustomerId: stripeCustomerId || null,
-        stripeSubscriptionId: stripeSubscriptionId || null,
-        subscriptionStatus: subscriptionStatus || null,
-        currentPeriodEnd: currentPeriodEnd ?? null,
-        subscriptionUpdatedAt: Date.now(),
-      },
-      { merge: true }
-    );
 }
 
 async function markApplicationScreeningPaid(params: {
@@ -519,8 +491,8 @@ export const stripeWebhookHandler = async (req: StripeWebhookRequest, res: Respo
         typeof subscription.customer === "string"
           ? subscription.customer
           : subscription.customer?.id || null;
-      const priceId = subscription.items?.data?.[0]?.price?.id || null;
-      const tier = resolvePlanFromPriceId(priceId);
+      const tier = deriveBillingTierFromSubscription(subscription);
+      const interval = deriveBillingIntervalFromSubscription(subscription);
       const subscriptionStatus = subscription.status || "unknown";
       const currentPeriodEnd =
         typeof (subscription as any).current_period_end === "number"
@@ -530,7 +502,7 @@ export const stripeWebhookHandler = async (req: StripeWebhookRequest, res: Respo
       if (!tier && event.type !== "customer.subscription.deleted") {
         console.warn("[stripe-webhook-subscription] unknown price id", {
           eventId: event.id,
-          priceId,
+          subscriptionId: subscription.id,
         });
         return res.json({ received: true, ignored: true });
       }
@@ -547,12 +519,13 @@ export const stripeWebhookHandler = async (req: StripeWebhookRequest, res: Respo
       }
 
       const resolvedTier = event.type === "customer.subscription.deleted" ? "free" : tier || "free";
-      await updateLandlordSubscription({
+      await updateLandlordSubscriptionState({
         landlordId,
         tier: resolvedTier,
         stripeCustomerId: customerId,
         stripeSubscriptionId: subscription.id,
         subscriptionStatus,
+        subscriptionInterval: resolvedTier === "free" ? null : interval,
         currentPeriodEnd,
       });
       console.log("[stripe-webhook-subscription] updated landlord", {
