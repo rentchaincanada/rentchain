@@ -152,6 +152,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   const sendApplicationOpenedRef = useRef(false);
   const editPropertyOpenedRef = useRef(false);
   const [highlightedUnitKey, setHighlightedUnitKey] = useState<string | null>(null);
+  const [blockedApplicationUpgradeUnitKey, setBlockedApplicationUpgradeUnitKey] = useState<string | null>(null);
   const [occupancyPromptDismissed, setOccupancyPromptDismissed] = useState(false);
   const [editComplianceExpanded, setEditComplianceExpanded] = useState(false);
   const [submissionAssistantOpen, setSubmissionAssistantOpen] = useState(false);
@@ -168,6 +169,14 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
       });
     },
     [caps?.plan, currentPlan, propertyUpgradeRedirect]
+  );
+
+  const openBlockedApplicationUpgrade = useCallback(
+    (unitKey: string) => {
+      setBlockedApplicationUpgradeUnitKey(unitKey);
+      promptApplicationsUpgrade("property_detail_panel_units");
+    },
+    [promptApplicationsUpgrade]
   );
 
   const promptUnitsUpgrade = useCallback(
@@ -315,6 +324,48 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
         padding: "6px 10px",
         fontSize: "0.85rem",
       };
+
+  const renderBlockedApplicationUpgrade = (unitKey: string) => {
+    if (applicationsEnabled || blockedApplicationUpgradeUnitKey !== unitKey) return null;
+    return (
+      <div
+        style={{
+          marginTop: 8,
+          padding: "10px 12px",
+          borderRadius: 10,
+          border: "1px solid rgba(59,130,246,0.22)",
+          background: "rgba(59,130,246,0.08)",
+          display: "grid",
+          gap: 8,
+          maxWidth: 280,
+        }}
+      >
+        <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#1d4ed8" }}>
+          Send application is locked on Free
+        </div>
+        <div style={{ fontSize: "0.75rem", color: "#475569" }}>
+          Starter unlocks tenant invites and application links. Use the upgrade button here to continue to plan options.
+        </div>
+        <button
+          type="button"
+          onClick={() => promptApplicationsUpgrade("property_detail_panel_units_inline")}
+          style={{
+            padding: "7px 10px",
+            borderRadius: 8,
+            border: "1px solid rgba(59,130,246,0.35)",
+            background: "#fff",
+            color: "#2563eb",
+            cursor: "pointer",
+            fontSize: "0.8rem",
+            fontWeight: 700,
+            justifySelf: "start",
+          }}
+        >
+          See Starter upgrade options
+        </button>
+      </div>
+    );
+  };
 
   useEffect(() => {
     if (!openSendApplication) return;
@@ -1469,16 +1520,23 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                             <div style={{ display: "grid", gap: 4 }}>
                               <button
                                 type="button"
-                                onClick={() => handleSendApplication(u)}
+                                onClick={() =>
+                                  applicationsEnabled
+                                    ? handleSendApplication(u)
+                                    : openBlockedApplicationUpgrade(unitKey)
+                                }
                                 aria-label={`${sendApplicationActionLabel} for unit ${unitNum}`}
                                 style={sendApplicationActionStyle}
                               >
                                 {sendApplicationActionLabel}
                               </button>
                               {!applicationsEnabled ? (
-                                <div style={{ fontSize: "0.75rem", color: "#64748b" }}>
-                                  Starter unlocks tenant invites and application links.
-                                </div>
+                                <>
+                                  <div style={{ fontSize: "0.75rem", color: "#64748b" }}>
+                                    Starter unlocks tenant invites and application links.
+                                  </div>
+                                  {renderBlockedApplicationUpgrade(unitKey)}
+                                </>
                               ) : null}
                             </div>
                           ) : null}
@@ -1604,16 +1662,23 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                     <div style={{ display: "grid", gap: 4 }}>
                       <button
                         type="button"
-                        onClick={() => handleSendApplication(u)}
+                        onClick={() =>
+                          applicationsEnabled
+                            ? handleSendApplication(u)
+                            : openBlockedApplicationUpgrade(unitKey)
+                        }
                         aria-label={`${sendApplicationActionLabel} for unit ${unitNum}`}
                         style={sendApplicationActionStyle}
                       >
                         {sendApplicationActionLabel}
                       </button>
                       {!applicationsEnabled ? (
-                        <div style={{ fontSize: "0.75rem", color: "#64748b" }}>
-                          Starter unlocks tenant invites and application links.
-                        </div>
+                        <>
+                          <div style={{ fontSize: "0.75rem", color: "#64748b" }}>
+                            Starter unlocks tenant invites and application links.
+                          </div>
+                          {renderBlockedApplicationUpgrade(unitKey)}
+                        </>
                       ) : null}
                     </div>
                   ) : null}
