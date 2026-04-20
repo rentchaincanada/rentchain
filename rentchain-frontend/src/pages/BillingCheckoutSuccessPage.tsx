@@ -8,6 +8,7 @@ import { useUpgrade } from "@/context/UpgradeContext";
 import { useToast } from "@/components/ui/ToastProvider";
 import { fetchCheckoutSessionStatus, type CheckoutSessionStatus } from "@/api/billingApi";
 import { planLabel } from "@/lib/plan";
+import { getPostUpgradeContent, setPostUpgradeState } from "@/lib/postUpgrade";
 
 function sanitizeRedirectTo(raw: string | null): string | null {
   if (!raw) return null;
@@ -58,6 +59,9 @@ const BillingCheckoutSuccessPage: React.FC = () => {
 
         if (isSuccess) {
           await refreshEntitlements(updateUser);
+          if (next.plan) {
+            setPostUpgradeState(next.plan);
+          }
           clearUpgradePrompt();
           setViewState("success");
           showToast({
@@ -77,6 +81,7 @@ const BillingCheckoutSuccessPage: React.FC = () => {
   }, [sessionId, updateUser, clearUpgradePrompt, showToast]);
 
   const primaryPlanLabel = result?.plan ? planLabel(result.plan) : null;
+  const postUpgradeContent = result?.plan ? getPostUpgradeContent(result.plan) : null;
   const continuePath = redirectTo || "/properties";
 
   const message = (() => {
@@ -125,26 +130,61 @@ const BillingCheckoutSuccessPage: React.FC = () => {
               </div>
               <div style={{ fontSize: "1.1rem", fontWeight: 700 }}>{primaryPlanLabel}</div>
               <div style={{ color: text.muted, fontSize: "0.95rem" }}>
-                Your account capabilities have been refreshed for this workspace.
+                {postUpgradeContent?.benefitSummary || "Your account capabilities have been refreshed for this workspace."}
               </div>
+              {postUpgradeContent?.unlockedFeatures?.length ? (
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
+                  {postUpgradeContent.unlockedFeatures.map((feature) => (
+                    <div
+                      key={feature}
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 999,
+                        border: "1px solid #bfdbfe",
+                        background: "#ffffff",
+                        fontSize: "0.85rem",
+                        fontWeight: 600,
+                      }}
+                    >
+                      {feature}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
           ) : null}
           {viewState !== "loading" ? (
             <div style={{ color: text.muted, fontSize: "0.9rem" }}>
               {viewState === "success"
-                ? "Next steps: go back to the dashboard or continue the workflow you started before checkout."
+                ? "Next steps: go back to the dashboard or move directly into the workflows your upgrade unlocked."
                 : "If payment already went through, give it a moment and check billing again."}
             </div>
           ) : null}
           <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
             {viewState === "success" ? (
               <>
+                {postUpgradeContent ? (
+                  <Button type="button" onClick={() => navigate(postUpgradeContent.primaryAction.to)}>
+                    {postUpgradeContent.primaryAction.label}
+                  </Button>
+                ) : null}
                 <Button type="button" onClick={() => navigate("/dashboard")}>
                   Go to dashboard
                 </Button>
-                <Button type="button" variant="secondary" onClick={() => navigate(continuePath)}>
-                  Continue setup
-                </Button>
+                {postUpgradeContent ? (
+                  <Button type="button" variant="secondary" onClick={() => navigate(postUpgradeContent.secondaryAction.to)}>
+                    {postUpgradeContent.secondaryAction.label}
+                  </Button>
+                ) : (
+                  <Button type="button" variant="secondary" onClick={() => navigate(continuePath)}>
+                    Continue setup
+                  </Button>
+                )}
+                {redirectTo ? (
+                  <Button type="button" variant="ghost" onClick={() => navigate(continuePath)}>
+                    Continue where you left off
+                  </Button>
+                ) : null}
               </>
             ) : (
               <>

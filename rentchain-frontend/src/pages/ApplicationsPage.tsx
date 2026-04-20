@@ -254,6 +254,7 @@ const normalizeTransUnionConfigError = (error: unknown) => {
 const ApplicationsPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const upgradeParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const { showToast } = useToast();
   const [applications, setApplications] = useState<RentalApplicationSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -440,6 +441,8 @@ const ApplicationsPage: React.FC = () => {
     currentPlan === "starter" ||
     currentPlan === "pro" ||
     currentPlan === "elite";
+  const upgradeConfirmed = upgradeParams.get("upgradeConfirmed") === "1";
+  const upgradeHighlight = upgradeParams.get("highlight");
   const canViewScreeningHistory = entitlements.canViewScreeningHistory;
   const canExportPdf = entitlements.canExportPdf;
   const canViewReviewSummary = entitlements.canViewReviewSummary;
@@ -1693,10 +1696,33 @@ const ApplicationsPage: React.FC = () => {
               setScreeningInviteOpen(true);
             }}
             disabled={!propertiesReady || !SCREENING_ENABLED}
+            style={
+              upgradeConfirmed && upgradeHighlight === "screening"
+                ? { border: "1px solid rgba(16,185,129,0.4)", boxShadow: "0 0 0 3px rgba(16,185,129,0.14)" }
+                : undefined
+            }
           >
             {propertiesLoaded ? (SCREENING_ENABLED ? "Send screening invite" : screeningComingSoonText) : "Loading properties…"}
           </Button>
         </div>
+        {upgradeConfirmed ? (
+          <div
+            style={{
+              marginTop: 12,
+              padding: "10px 12px",
+              borderRadius: 12,
+              border: "1px solid rgba(16,185,129,0.28)",
+              background: "rgba(16,185,129,0.08)",
+              color: text.primary,
+              fontSize: 13,
+              fontWeight: 600,
+            }}
+          >
+            {upgradeHighlight === "screening"
+              ? "Upgrade confirmed. Screening workflows are now active on this page."
+              : "Upgrade confirmed. Secure application links are now active on this page."}
+          </div>
+        ) : null}
       </Card>
 
       <TransUnionConnectionCard

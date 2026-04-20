@@ -202,6 +202,8 @@ export const TenantsPage: React.FC = () => {
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(selectedTenantIdFromUrl);
   const { features } = useCapabilities();
   const inviteEnabled = Boolean(features?.tenant_invites || features?.tenantInvites);
+  const upgradeConfirmed = searchParams.get("upgradeConfirmed") === "1";
+  const upgradeHighlight = searchParams.get("highlight");
 
   const role = String(user?.actorRole || user?.role || "").trim().toLowerCase();
   const canViewTenants = role === "landlord" || role === "admin";
@@ -421,11 +423,31 @@ export const TenantsPage: React.FC = () => {
               background: inviteEnabled ? colors.panel : "#faf5ff",
               cursor: "pointer",
               minHeight: 44,
+              boxShadow:
+                upgradeConfirmed && upgradeHighlight === "tenants" && inviteEnabled
+                  ? "0 0 0 3px rgba(16,185,129,0.14)"
+                  : undefined,
             }}
           >
             {inviteEnabled ? "Invite tenant" : "Unlock Tenant Invites"}
           </button>
         </div>
+        {upgradeConfirmed && inviteEnabled ? (
+          <div
+            style={{
+              marginTop: 12,
+              padding: "10px 12px",
+              borderRadius: 12,
+              border: "1px solid rgba(16,185,129,0.28)",
+              background: "rgba(16,185,129,0.08)",
+              color: text.primary,
+              fontSize: 13,
+              fontWeight: 600,
+            }}
+          >
+            Upgrade confirmed. Tenant invites are now unlocked for this workspace.
+          </div>
+        ) : null}
       </Card>
 
       <Card elevated className="rc-tenants-grid">
