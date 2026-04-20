@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   useCapabilities: vi.fn(),
   useEntitlements: vi.fn(),
   showToast: vi.fn(),
+  dispatchUpgradePrompt: vi.fn(),
 }));
 
 vi.mock("../../api/propertiesApi", async () => {
@@ -57,6 +58,15 @@ vi.mock("@/hooks/useEntitlements", () => ({
   useEntitlements: () => mocks.useEntitlements(),
 }));
 
+vi.mock("@/lib/upgradePrompt", () => ({
+  dispatchUpgradePrompt: (...args: any[]) => mocks.dispatchUpgradePrompt(...args),
+  resolveRequiredPlanLabel: (featureKey: string, currentPlan: string) => {
+    if (featureKey === "applications" && currentPlan === "free") return "Starter";
+    if (featureKey === "units" && currentPlan === "free") return "Starter";
+    return "Starter";
+  },
+}));
+
 vi.mock("@/context/UpgradeContext", () => ({
   useUpgrade: () => ({ openUpgrade: vi.fn() }),
 }));
@@ -90,6 +100,7 @@ describe("PropertyDetailPanel", () => {
     mocks.getPropertyMonthlyPayments.mockResolvedValue({ payments: [], total: 0 });
     mocks.fetchUnitsForProperty.mockResolvedValue([]);
     mocks.showToast.mockReset();
+    mocks.dispatchUpgradePrompt.mockReset();
     mocks.useCapabilities.mockReturnValue({
       caps: { plan: "starter" },
       features: { applications: true, unitsTable: true },
@@ -155,5 +166,64 @@ render(
       );
     });
     expect(onRefresh).toHaveBeenCalled();
+  });
+
+  it("shows a local upgrade card when the blocked send-application action is clicked on free tier", async () => {
+    mocks.fetchUnitsForProperty.mockResolvedValue([
+      {
+        id: "unit-1",
+        unitNumber: "101",
+        status: "vacant",
+      },
+    ]);
+    mocks.useCapabilities.mockReturnValue({
+      caps: { plan: "free" },
+      features: { applications: false, unitsTable: true },
+      loading: false,
+    });
+    mocks.useEntitlements.mockReturnValue({
+      plan: "free",
+      hasCapability: () => false,
+    });
+
+    render(
+      <AuthProvider>
+        <MemoryRouter>
+          <PropertyDetailPanel
+            property={{
+              id: "prop-1",
+              name: "Harbour View",
+              addressLine1: "12 Wharf Street",
+              city: "Halifax",
+              province: "NS",
+              postalCode: "B3H 1A1",
+              country: "Canada",
+              totalUnits: 1,
+              amenities: [],
+              units: [],
+              createdAt: new Date().toISOString(),
+            }}
+            onRefresh={vi.fn()}
+          />
+        </MemoryRouter>
+      </AuthProvider>
+    );
+
+    const blockedButtons = await screen.findAllByRole("button", {
+      name: /upgrade to starter to send application for unit 101/i,
+    });
+    fireEvent.click(blockedButtons[0]);
+
+    const upgradeHeadings = await screen.findAllByText("Send application is locked on Free");
+    expect(upgradeHeadings.length).toBeGreaterThan(0);
+
+    const upgradeCtas = screen.getAllByRole("button", { name: "See Starter upgrade options" });
+    expect(upgradeCtas.length).toBeGreaterThan(0);
+    expect(mocks.dispatchUpgradePrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        featureKey: "applications",
+        source: "property_detail_panel_units",
+      })
+    );
   });
 });
