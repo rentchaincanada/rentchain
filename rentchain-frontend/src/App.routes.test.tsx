@@ -86,6 +86,10 @@ vi.mock("./pages/landlord/PortfolioHealthSummaryPage", () => ({
   default: () => <h1>Portfolio Health Summary</h1>,
 }));
 
+vi.mock("./pages/landlord/LandlordAnalyticsPage", () => ({
+  default: () => <h1>Landlord Analytics Dashboard</h1>,
+}));
+
 vi.mock("./pages/landlord/PortfolioScorePage", () => ({
   default: () => <h1>Landlord Portfolio Score</h1>,
 }));
@@ -193,6 +197,20 @@ describe("Routes: /automation/timeline", () => {
     );
 
     expect(await screen.findByText(/Automation Timeline/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /analytics", () => {
+  it("renders the landlord analytics dashboard route", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/analytics"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Landlord Analytics Dashboard/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });
