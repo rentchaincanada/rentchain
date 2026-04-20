@@ -10,6 +10,7 @@ import { getPublicStatusPayload } from "../services/statusService";
 import { loadAdminSubscriptionConversionFunnel } from "../services/admin/adminSubscriptionConversionView";
 import { loadAdminSubscriptionConversionInsights } from "../services/admin/adminSubscriptionConversionInsights";
 import { loadAdminActivationSummary } from "../services/admin/adminActivationSummary";
+import { loadAdminAnalyticsSnapshot } from "../services/admin/adminAnalyticsSnapshot";
 import { loadAdminSubscriptionConversionValidation } from "../services/admin/adminSubscriptionConversionValidation";
 import {
   createStatusIncident,
@@ -877,6 +878,22 @@ router.get("/analytics/activation-summary", requireAdmin, async (req, res) => {
   } catch (err: any) {
     console.error("[admin] activation summary failed", err?.message || err);
     return res.status(500).json({ ok: false, error: "ACTIVATION_SUMMARY_FAILED" });
+  }
+});
+
+router.get("/analytics/snapshot", requireAdmin, async (req, res) => {
+  try {
+    const payload = await loadAdminAnalyticsSnapshot({
+      period: typeof req.query?.period === "string" ? req.query.period : undefined,
+      granularity: typeof req.query?.granularity === "string" ? req.query.granularity : undefined,
+    });
+    return res.json({
+      ok: true,
+      ...payload,
+    });
+  } catch (err: any) {
+    console.error("[admin] analytics snapshot failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "ANALYTICS_SNAPSHOT_FAILED" });
   }
 });
 
