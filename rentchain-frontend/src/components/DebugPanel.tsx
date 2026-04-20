@@ -10,6 +10,9 @@ export const DebugPanel: React.FC = () => {
   const [limits, setLimits] = useState<AccountLimits | null>(null);
 
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
     fetchAccountLimits().then(setLimits).catch(() => setLimits(null));
   }, []);
 

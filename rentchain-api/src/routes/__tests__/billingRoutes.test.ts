@@ -177,11 +177,18 @@ describe("billingRoutes subscription status", () => {
       checkout: {
         sessions: {
           create: vi.fn(async () => {
+            const cause: any = new Error("getaddrinfo ENOTFOUND api.stripe.com");
+            cause.name = "Error";
+            cause.code = "ENOTFOUND";
+            cause.errno = "ENOTFOUND";
+            cause.syscall = "getaddrinfo";
+            cause.hostname = "api.stripe.com";
             const err: any = new Error("An error occurred with our connection to Stripe.");
             err.name = "StripeConnectionError";
             err.type = "StripeConnectionError";
             err.requestId = "req_checkout_123";
             err.numRetries = 2;
+            err.cause = cause;
             throw err;
           }),
         },
@@ -214,6 +221,19 @@ describe("billingRoutes subscription status", () => {
         numRetries: 2,
         stripeEnv: expect.any(String),
         stripeKeyMode: "live",
+        transportFailureClass: "dns_resolution_failure",
+        errno: "ENOTFOUND",
+        syscall: "getaddrinfo",
+        hostname: "api.stripe.com",
+        causeMessage: "getaddrinfo ENOTFOUND api.stripe.com",
+        causeChain: [
+          expect.objectContaining({
+            code: "ENOTFOUND",
+            errno: "ENOTFOUND",
+            syscall: "getaddrinfo",
+            message: "getaddrinfo ENOTFOUND api.stripe.com",
+          }),
+        ],
       })
     );
   });
@@ -315,6 +335,63 @@ describe("billingRoutes subscription status", () => {
         type: "StripeConnectionError",
         requestId: "req_portal_123",
         numRetries: 2,
+      })
+    );
+  });
+
+  it("captures low-level timeout diagnostics when present on the Stripe error object", async () => {
+    getStripeClientMock.mockReturnValue({
+      checkout: {
+        sessions: {
+          create: vi.fn(async () => {
+            const err: any = new Error("An error occurred with our connection to Stripe.");
+            err.name = "StripeConnectionError";
+            err.type = "StripeConnectionError";
+            err.code = "ETIMEDOUT";
+            err.errno = "ETIMEDOUT";
+            err.syscall = "connect";
+            err.host = "api.stripe.com";
+            err.port = 443;
+            err.detail = "socket timed out before TLS handshake";
+            err.headers = {
+              authorization: "Bearer secret",
+              "content-type": "application/json",
+            };
+            throw err;
+          }),
+        },
+      },
+    });
+
+    const router = (await import("../billingRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/upgrade",
+      headers: {
+        "x-test-user": JSON.stringify({ id: "u1", landlordId: "landlord-1", role: "landlord", plan: "free" }),
+      },
+      body: {
+        tier: "starter",
+        interval: "monthly",
+      },
+    });
+
+    expect(res.status).toBe(503);
+    expect(res.body).toEqual({ ok: false, error: "checkout_temporarily_unavailable" });
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "[billing/checkout] Stripe request failed",
+      expect.objectContaining({
+        route: "/upgrade",
+        operation: "checkout.sessions.create",
+        transportFailureClass: "timeout",
+        errno: "ETIMEDOUT",
+        syscall: "connect",
+        host: "api.stripe.com",
+        port: "443",
+        detail: "socket timed out before TLS handshake",
+        headers: {
+          "content-type": "application/json",
+        },
       })
     );
   });
