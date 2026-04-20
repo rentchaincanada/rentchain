@@ -73,6 +73,30 @@ export async function createBillingPortalSession(): Promise<{ url: string }> {
   return { url: data?.url ?? "" };
 }
 
+export type CheckoutSessionStatus = {
+  ok: boolean;
+  sessionId?: string;
+  status?: string | null;
+  payment_status?: "paid" | "unpaid" | "no_payment_required" | null;
+  customer?: string | null;
+  plan?: PaidPlan | null;
+  interval?: "monthly" | "yearly" | null;
+  subscription_status?: string | null;
+  current_period_end?: number | null;
+  plan_updated?: boolean;
+};
+
+export async function fetchCheckoutSessionStatus(sessionId: string): Promise<CheckoutSessionStatus> {
+  const data = await apiJson<any>(`/billing/session-status?session_id=${encodeURIComponent(sessionId)}`, {
+    method: "GET",
+  });
+  return {
+    ...data,
+    plan: data?.plan ? normalizePaidPlan(data.plan) : null,
+    interval: data?.interval === "yearly" ? "yearly" : data?.interval === "monthly" ? "monthly" : null,
+  };
+}
+
 export async function simulateCreditPull(
   tenantId: string
 ): Promise<{ reportId: string; message: string }> {

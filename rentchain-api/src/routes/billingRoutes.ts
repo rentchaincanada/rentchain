@@ -9,6 +9,7 @@ import {
   getPlanMatrix,
   getStripeEnv,
   isCanonicalFreePlan,
+  resolvePlanFromPriceId,
   resolvePaidBillingPlan,
   resolvePlanPriceId,
   type BillingPlanKey,
@@ -94,6 +95,7 @@ router.get("/pricing", (_req, res) => {
 
 type BillingTier = BillingPlanKey;
 type BillingInterval = "monthly" | "yearly";
+type StripeSessionPaymentStatus = "paid" | "unpaid" | "no_payment_required" | null;
 
 function normalizeTier(input: any): BillingTier | "free" | null {
   const raw = String(input || "").trim();
@@ -111,6 +113,20 @@ function normalizeInterval(input: any): BillingInterval {
 
 function resolvePriceId(tier: BillingTier, interval: BillingInterval) {
   return resolvePlanPriceId({ plan: tier, interval });
+}
+
+function normalizeStripeRecurringInterval(input: unknown): BillingInterval | null {
+  const raw = String(input || "").trim().toLowerCase();
+  if (raw === "month") return "monthly";
+  if (raw === "year") return "yearly";
+  return null;
+}
+
+function isVerifiedPaidSession(status: unknown, paymentStatus: unknown): boolean {
+  const normalizedStatus = String(status || "").trim().toLowerCase();
+  const normalizedPaymentStatus = String(paymentStatus || "").trim().toLowerCase();
+  if (normalizedStatus !== "complete") return false;
+  return normalizedPaymentStatus === "paid" || normalizedPaymentStatus === "no_payment_required";
 }
 
 function sanitizeRedirectTo(raw: any): string {
@@ -136,6 +152,45 @@ function appendBillingCanceled(path: string): string {
   if (!path) return "/dashboard?billing=canceled=1";
   if (path.includes("?")) return `${path}&billing=canceled=1`;
   return `${path}?billing=canceled=1`;
+}
+
+async function updateLandlordSubscription(params: {
+  landlordId: string;
+  tier: BillingTier | "free";
+  stripeCustomerId?: string | null;
+  stripeSubscriptionId?: string | null;
+  stripeCheckoutSessionId?: string | null;
+  subscriptionStatus?: string | null;
+  subscriptionInterval?: BillingInterval | null;
+  currentPeriodEnd?: number | null;
+}) {
+  const {
+    landlordId,
+    tier,
+    stripeCustomerId,
+    stripeSubscriptionId,
+    stripeCheckoutSessionId,
+    subscriptionStatus,
+    subscriptionInterval,
+    currentPeriodEnd,
+  } = params;
+
+  await db
+    .collection("landlords")
+    .doc(landlordId)
+    .set(
+      {
+        plan: tier,
+        stripeCustomerId: stripeCustomerId || null,
+        stripeSubscriptionId: stripeSubscriptionId || null,
+        stripeCheckoutSessionId: stripeCheckoutSessionId || null,
+        subscriptionStatus: subscriptionStatus || null,
+        subscriptionInterval: subscriptionInterval || null,
+        currentPeriodEnd: currentPeriodEnd ?? null,
+        subscriptionUpdatedAt: Date.now(),
+      },
+      { merge: true }
+    );
 }
 
 function isStripeConnectionError(err: any): boolean {
@@ -465,6 +520,97 @@ async function handleCheckout(req: any, res: any) {
 router.post("/checkout", requireAuth, handleCheckout);
 router.post("/subscribe", requireAuth, handleCheckout);
 router.post("/upgrade", requireAuth, handleCheckout);
+
+router.get("/session-status", requireAuth, async (req: any, res) => {
+  const sessionId = String(req.query?.session_id || "").trim();
+  if (!sessionId) {
+    return res.status(400).json({ ok: false, error: "missing_session_id" });
+  }
+
+  try {
+    const stripe = getStripeClient();
+    const session = await stripe.checkout.sessions.retrieve(sessionId, {
+      expand: ["subscription"],
+    });
+
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    const metadataLandlordId = String(session.metadata?.landlordId || "").trim();
+    if (!landlordId) {
+      return res.status(401).json({ ok: false, error: "Unauthorized" });
+    }
+    if (!metadataLandlordId || metadataLandlordId !== landlordId) {
+      return res.status(403).json({ ok: false, error: "forbidden" });
+    }
+
+    const subscription =
+      session.subscription && typeof session.subscription === "object" ? session.subscription : null;
+    const subscriptionPriceId = subscription?.items?.data?.[0]?.price?.id || null;
+    const resolvedPlan =
+      resolvePaidBillingPlan(session.metadata?.tier) ||
+      resolvePaidBillingPlan(subscription?.metadata?.tier) ||
+      resolvePlanFromPriceId(subscriptionPriceId);
+    const resolvedInterval =
+      normalizeInterval(session.metadata?.interval) ||
+      normalizeInterval(subscription?.metadata?.interval) ||
+      normalizeStripeRecurringInterval(subscription?.items?.data?.[0]?.price?.recurring?.interval);
+    const paymentStatus = (asOptionalString(session.payment_status) as StripeSessionPaymentStatus) || null;
+    const sessionStatus = asOptionalString(session.status) || "unknown";
+    const subscriptionStatus = asOptionalString(subscription?.status) || null;
+    const currentPeriodEnd =
+      typeof (subscription as any)?.current_period_end === "number"
+        ? (subscription as any).current_period_end * 1000
+        : null;
+    const stripeCustomerId =
+      typeof session.customer === "string" ? session.customer : asOptionalString((session.customer as any)?.id);
+    const stripeSubscriptionId =
+      typeof session.subscription === "string"
+        ? session.subscription
+        : asOptionalString((session.subscription as any)?.id);
+    const shouldActivatePlan = Boolean(resolvedPlan) && isVerifiedPaidSession(sessionStatus, paymentStatus);
+
+    if (shouldActivatePlan) {
+      await updateLandlordSubscription({
+        landlordId,
+        tier: resolvedPlan as BillingTier,
+        stripeCustomerId,
+        stripeSubscriptionId,
+        stripeCheckoutSessionId: session.id,
+        subscriptionStatus,
+        subscriptionInterval: resolvedInterval,
+        currentPeriodEnd,
+      });
+    }
+
+    return res.status(200).json({
+      ok: true,
+      sessionId: session.id,
+      status: sessionStatus,
+      payment_status: paymentStatus,
+      customer: stripeCustomerId,
+      plan: resolvedPlan,
+      interval: resolvedInterval,
+      subscription_status: subscriptionStatus,
+      current_period_end: currentPeriodEnd,
+      plan_updated: shouldActivatePlan,
+    });
+  } catch (err: any) {
+    if (isStripeNotConfiguredError(err)) {
+      return res.status(400).json(stripeNotConfiguredResponse());
+    }
+    if (Number(err?.statusCode) === 404) {
+      return res.status(404).json({ ok: false, error: "session_not_found" });
+    }
+    return sendStripeRouteError(
+      res,
+      {
+        scope: "checkout",
+        route: String(req.originalUrl || req.path || "/api/billing/session-status"),
+        operation: "checkout.sessions.retrieve",
+      },
+      err
+    );
+  }
+});
 
 router.post("/portal", requireAuth, async (req: any, res) => {
   try {

@@ -61,14 +61,15 @@ async function invokeRouter(
   options: { method: string; url: string; headers?: Record<string, string>; body?: any }
 ) {
   return await new Promise<{ status: number; body: any }>((resolve, reject) => {
+    const url = new URL(`http://example.test${options.url}`);
     const req: any = {
       method: options.method,
-      url: options.url,
-      originalUrl: options.url,
-      path: options.url,
+      url: `${url.pathname}${url.search}`,
+      originalUrl: `${url.pathname}${url.search}`,
+      path: url.pathname,
       headers: options.headers ?? {},
       body: options.body ?? {},
-      query: {},
+      query: Object.fromEntries(url.searchParams.entries()),
       get(name: string) {
         return this.headers[String(name).toLowerCase()];
       },
@@ -394,5 +395,109 @@ describe("billingRoutes subscription status", () => {
         },
       })
     );
+  });
+
+  it("returns verified checkout session status and syncs the landlord plan", async () => {
+    const retrieveMock = vi.fn(async () => ({
+      id: "cs_123",
+      status: "complete",
+      payment_status: "paid",
+      customer: "cus_123",
+      metadata: {
+        landlordId: "landlord-1",
+        tier: "pro",
+        interval: "monthly",
+      },
+      subscription: {
+        id: "sub_123",
+        status: "active",
+        metadata: {
+          landlordId: "landlord-1",
+          tier: "pro",
+          interval: "monthly",
+        },
+        current_period_end: 1_735_689_600,
+        items: {
+          data: [
+            {
+              price: {
+                id: "price_test_pro_monthly",
+                recurring: { interval: "month" },
+              },
+            },
+          ],
+        },
+      },
+    }));
+    getStripeClientMock.mockReturnValue({
+      checkout: {
+        sessions: {
+          retrieve: retrieveMock,
+        },
+      },
+    });
+
+    const router = (await import("../billingRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/session-status?session_id=cs_123",
+      headers: {
+        "x-test-user": JSON.stringify({ id: "u1", landlordId: "landlord-1", role: "landlord", plan: "free" }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(retrieveMock).toHaveBeenCalledWith("cs_123", { expand: ["subscription"] });
+    expect(res.body).toMatchObject({
+      ok: true,
+      sessionId: "cs_123",
+      status: "complete",
+      payment_status: "paid",
+      customer: "cus_123",
+      plan: "pro",
+      interval: "monthly",
+      subscription_status: "active",
+      current_period_end: 1_735_689_600_000,
+      plan_updated: true,
+    });
+    expect(landlordDocSetMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        plan: "pro",
+        stripeCustomerId: "cus_123",
+        stripeSubscriptionId: "sub_123",
+        stripeCheckoutSessionId: "cs_123",
+        subscriptionStatus: "active",
+        subscriptionInterval: "monthly",
+        currentPeriodEnd: 1_735_689_600_000,
+        subscriptionUpdatedAt: expect.any(Number),
+      }),
+      { merge: true }
+    );
+  });
+
+  it("returns 404 when the checkout session does not exist", async () => {
+    getStripeClientMock.mockReturnValue({
+      checkout: {
+        sessions: {
+          retrieve: vi.fn(async () => {
+            const err: any = new Error("No such checkout.session");
+            err.statusCode = 404;
+            throw err;
+          }),
+        },
+      },
+    });
+
+    const router = (await import("../billingRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/session-status?session_id=cs_missing",
+      headers: {
+        "x-test-user": JSON.stringify({ id: "u1", landlordId: "landlord-1", role: "landlord", plan: "free" }),
+      },
+    });
+
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ ok: false, error: "session_not_found" });
   });
 });
