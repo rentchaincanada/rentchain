@@ -66,7 +66,7 @@ export function UpgradeNudgeHost() {
   };
   const upgrade = async () => {
     void logTelemetryEvent("nudge_click_upgrade", { type: active.type });
-    await openUpgradeFlow({ navigate });
+    await openUpgradeFlow({ navigate, currentPlan: plan });
     setActive(null);
   };
 

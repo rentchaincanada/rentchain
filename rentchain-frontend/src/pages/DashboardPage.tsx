@@ -636,7 +636,11 @@ const DashboardPage: React.FC = () => {
               } catch {
                 // telemetry must never interrupt UX
               }
-              void openUpgradeFlow({ navigate, fallbackPath: "/pricing" });
+              void openUpgradeFlow({
+                navigate,
+                fallbackPath: "/pricing",
+                currentPlan: planNormalized,
+              });
             }}
             onDismiss={() => {
               try {
