@@ -158,7 +158,149 @@ function resolveStripeKeyMode(): "live" | "test" | "unknown" {
   return "unknown";
 }
 
+function asOptionalString(value: unknown): string | null {
+  if (value == null) return null;
+  const normalized = String(value).trim();
+  return normalized ? normalized : null;
+}
+
+function sanitizeHeaders(headers: unknown): Record<string, string> | null {
+  if (!headers || typeof headers !== "object" || Array.isArray(headers)) return null;
+  const redacted = new Set(["authorization", "proxy-authorization", "cookie", "set-cookie", "x-api-key"]);
+  const result: Record<string, string> = {};
+  for (const [rawKey, rawValue] of Object.entries(headers as Record<string, unknown>)) {
+    const key = String(rawKey || "").trim().toLowerCase();
+    if (!key || redacted.has(key)) continue;
+    const value = asOptionalString(rawValue);
+    if (value) result[key] = value;
+  }
+  return Object.keys(result).length ? result : null;
+}
+
+function getErrorChain(err: any): any[] {
+  const chain: any[] = [];
+  const seen = new Set<any>();
+  let current = err;
+
+  while (current && typeof current === "object" && !seen.has(current) && chain.length < 4) {
+    chain.push(current);
+    seen.add(current);
+    current = current.cause;
+  }
+
+  return chain;
+}
+
+function classifyTransportFailure(parts: Array<string | null | undefined>): string {
+  const haystack = parts
+    .filter(Boolean)
+    .map((part) => String(part).toLowerCase())
+    .join(" ");
+
+  if (
+    /etimedout|timeout|timed out|esockettimedout/.test(haystack)
+  ) {
+    return "timeout";
+  }
+  if (
+    /enotfound|eai_again|getaddrinfo|dns/.test(haystack)
+  ) {
+    return "dns_resolution_failure";
+  }
+  if (
+    /tls|ssl|certificate|cert_|self signed|unable to verify/.test(haystack)
+  ) {
+    return "tls_failure";
+  }
+  if (
+    /econnreset|socket hang up|econnrefused|ehostunreach|enetunreach|epipe|socket/.test(haystack)
+  ) {
+    return "socket_failure";
+  }
+
+  return "unknown_transport_failure";
+}
+
+function extractStripeTransportDiagnostics(err: any) {
+  const chain = getErrorChain(err);
+  const raw = err?.raw && typeof err.raw === "object" ? err.raw : null;
+  const transportSource = chain.find(
+    (entry) =>
+      entry &&
+      typeof entry === "object" &&
+      (entry.errno != null ||
+        entry.syscall != null ||
+        entry.hostname != null ||
+        entry.host != null ||
+        entry.address != null ||
+        entry.port != null ||
+        entry.code != null)
+  );
+
+  const primaryMessage = asOptionalString(err?.message);
+  const causeMessage = asOptionalString(err?.cause?.message);
+  const detail = asOptionalString(err?.detail) || asOptionalString(raw?.detail);
+  const errno = asOptionalString(transportSource?.errno) || asOptionalString(err?.errno) || asOptionalString(raw?.errno);
+  const syscall =
+    asOptionalString(transportSource?.syscall) || asOptionalString(err?.syscall) || asOptionalString(raw?.syscall);
+  const hostname =
+    asOptionalString(transportSource?.hostname) || asOptionalString(err?.hostname) || asOptionalString(raw?.hostname);
+  const host = asOptionalString(transportSource?.host) || asOptionalString(err?.host) || asOptionalString(raw?.host);
+  const address =
+    asOptionalString(transportSource?.address) || asOptionalString(err?.address) || asOptionalString(raw?.address);
+  const port =
+    asOptionalString(transportSource?.port) || asOptionalString(err?.port) || asOptionalString(raw?.port);
+  const nestedCode =
+    asOptionalString(transportSource?.code) ||
+    asOptionalString(err?.cause?.code) ||
+    asOptionalString(raw?.code);
+  const nestedType =
+    asOptionalString(transportSource?.name) ||
+    asOptionalString(err?.cause?.name) ||
+    asOptionalString(raw?.type);
+  const stackPreview = asOptionalString(err?.stack)?.split("\n").slice(0, 3).join("\n") || null;
+  const transportFailureClass = classifyTransportFailure([
+    err?.code,
+    err?.type,
+    err?.name,
+    primaryMessage,
+    causeMessage,
+    detail,
+    errno,
+    syscall,
+    hostname,
+    host,
+    nestedCode,
+    nestedType,
+  ]);
+
+  return {
+    transportFailureClass,
+    detail,
+    errno,
+    syscall,
+    hostname,
+    host,
+    address,
+    port,
+    causeMessage,
+    nestedCode,
+    nestedType,
+    rawType: asOptionalString(raw?.type),
+    rawCode: asOptionalString(raw?.code),
+    stackPreview,
+    causeChain: chain.slice(1).map((entry) => ({
+      name: asOptionalString(entry?.name),
+      code: asOptionalString(entry?.code),
+      errno: asOptionalString(entry?.errno),
+      syscall: asOptionalString(entry?.syscall),
+      message: asOptionalString(entry?.message),
+    })),
+  };
+}
+
 function logStripeFailure(scope: string, err: any, extra: Record<string, unknown> = {}) {
+  const diagnostics = extractStripeTransportDiagnostics(err);
   console.error(`[billing/${scope}] Stripe request failed`, {
     route: extra.route || null,
     operation: extra.operation || null,
@@ -170,9 +312,10 @@ function logStripeFailure(scope: string, err: any, extra: Record<string, unknown
     requestId: err?.requestId || err?.raw?.requestId || null,
     requestLogUrl: err?.request_log_url || err?.raw?.request_log_url || null,
     numRetries: err?.numRetries ?? err?.raw?.numRetries ?? null,
-    headers: err?.headers || err?.raw?.headers || null,
+    headers: sanitizeHeaders(err?.headers || err?.raw?.headers || null),
     stripeEnv: getStripeEnv(),
     stripeKeyMode: resolveStripeKeyMode(),
+    ...diagnostics,
     ...extra,
   });
 }
