@@ -111,6 +111,7 @@ import adminNotificationRoutes from "./routes/adminNotificationRoutes";
 import portfolioScoreRoutes from "./routes/portfolioScoreRoutes";
 import portfolioScoreHistoryRoutes from "./routes/portfolioScoreHistoryRoutes";
 import landlordPortfolioHealthRoutes from "./routes/landlordPortfolioHealthRoutes";
+import landlordAnalyticsRoutes from "./routes/landlordAnalyticsRoutes";
 import landlordPortfolioScoreRoutes from "./routes/landlordPortfolioScoreRoutes";
 import landlordPortfolioScoreSharingRoutes from "./routes/landlordPortfolioScoreSharingRoutes";
 import publicPortfolioScoreRoutes from "./routes/publicPortfolioScoreRoutes";
@@ -258,6 +259,8 @@ app.use("/api/admin", routeSource("portfolioScoreHistoryRoutes.ts"), portfolioSc
 console.log("[route-mount] portfolioScoreHistoryRoutes mounted at /api/admin");
 app.use("/api", routeSource("landlordPortfolioHealthRoutes.ts"), landlordPortfolioHealthRoutes);
 console.log("[route-mount] landlordPortfolioHealthRoutes mounted at /api");
+app.use("/api", routeSource("landlordAnalyticsRoutes.ts"), landlordAnalyticsRoutes);
+console.log("[route-mount] landlordAnalyticsRoutes mounted at /api");
 app.use("/api", routeSource("landlordPortfolioScoreRoutes.ts"), landlordPortfolioScoreRoutes);
 console.log("[route-mount] landlordPortfolioScoreRoutes mounted at /api");
 app.use("/api", routeSource("landlordPortfolioScoreSharingRoutes.ts"), landlordPortfolioScoreSharingRoutes);

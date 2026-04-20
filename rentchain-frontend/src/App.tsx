@@ -160,6 +160,7 @@ const AdminNotificationsPage = lazy(() => import("./pages/admin/AdminNotificatio
 const PortfolioScorePage = lazy(() => import("./pages/admin/PortfolioScorePage"));
 const PortfolioScoreHistoryPage = lazy(() => import("./pages/admin/PortfolioScoreHistoryPage"));
 const PortfolioHealthSummaryPage = lazy(() => import("./pages/landlord/PortfolioHealthSummaryPage"));
+const LandlordAnalyticsPage = lazy(() => import("./pages/landlord/LandlordAnalyticsPage"));
 const LandlordPortfolioScorePage = lazy(() => import("./pages/landlord/PortfolioScorePage"));
 const SharedPortfolioScorePage = lazy(() => import("./pages/public/SharedPortfolioScorePage"));
 const ActionRecommendationsPage = lazy(() => import("./pages/landlord/ActionRecommendationsPage"));
@@ -457,6 +458,18 @@ function App() {
             <RequireAuth>
               <LandlordNav>
                 <ApplicationReviewSummaryPage />
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/analytics"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <Suspense fallback={null}>
+                  <LandlordAnalyticsPage />
+                </Suspense>
               </LandlordNav>
             </RequireAuth>
           }

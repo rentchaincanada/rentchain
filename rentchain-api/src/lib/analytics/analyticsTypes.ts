@@ -110,3 +110,50 @@ export type AdminAnalyticsDerivedInput = {
   events: any[];
   canonicalEvents: any[];
 };
+
+export type LandlordAnalyticsInsight = {
+  type:
+    | "lease_expiry"
+    | "vacancy_concentration"
+    | "maintenance_cost_increase"
+    | "applications_drop"
+    | "work_order_concentration";
+  severity: "low" | "medium" | "high";
+  message: string;
+  propertyId?: string | null;
+};
+
+export type LandlordRevenueAnalytics = {
+  estimatedScheduledRentCents: number;
+  averageRentPerOccupiedUnitCents: number | null;
+};
+
+export type LandlordAnalyticsSummary = {
+  occupiedUnits: number;
+  vacancyRate: number | null;
+  activeApplications: number;
+  applicationConversionRate: number | null;
+  openWorkOrders: number;
+  maintenanceCostCents: number;
+  estimatedScheduledRentCents: number;
+  leasesEndingSoon: number;
+};
+
+export type LandlordAnalyticsSnapshot = {
+  summary: LandlordAnalyticsSummary;
+  applications: AdminApplicationsAnalytics;
+  leasing: AdminPortfolioAnalytics;
+  maintenance: AdminMaintenanceAnalytics;
+  revenue: LandlordRevenueAnalytics;
+  insights: LandlordAnalyticsInsight[];
+  properties: Array<{
+    id: string;
+    name: string;
+  }>;
+  filters: {
+    period: AdminAnalyticsPeriod;
+    propertyId: string | null;
+    from: string;
+    to: string;
+  };
+};
