@@ -5,9 +5,14 @@ import { MemoryRouter } from "react-router-dom";
 import LandlordAnalyticsPage from "./LandlordAnalyticsPage";
 
 const showToast = vi.fn();
+const macShellSpy = vi.fn();
 
 vi.mock("../../api/landlordAnalyticsApi", () => ({
   fetchLandlordAnalyticsSnapshot: vi.fn(),
+}));
+
+vi.mock("../../api/landlordAnalyticsAlertsApi", () => ({
+  fetchLandlordAnalyticsAlerts: vi.fn(),
 }));
 
 vi.mock("@/hooks/useEntitlements", () => ({
@@ -19,7 +24,10 @@ vi.mock("../../components/ui/ToastProvider", () => ({
 }));
 
 vi.mock("../../components/layout/MacShell", () => ({
-  MacShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  MacShell: ({ children, ...props }: { children: React.ReactNode }) => {
+    macShellSpy(props);
+    return <div>{children}</div>;
+  },
 }));
 
 vi.mock("../../components/ui/Ui", () => ({
@@ -38,6 +46,7 @@ vi.mock("@/components/billing/FeatureTeaser", () => ({
 
 beforeEach(() => {
   showToast.mockReset();
+  macShellSpy.mockReset();
   vi.clearAllMocks();
 });
 
@@ -61,6 +70,7 @@ describe("LandlordAnalyticsPage", () => {
 
   async function mockApiResolved() {
     const { fetchLandlordAnalyticsSnapshot } = await import("../../api/landlordAnalyticsApi");
+    const { fetchLandlordAnalyticsAlerts } = await import("../../api/landlordAnalyticsAlertsApi");
     vi.mocked(fetchLandlordAnalyticsSnapshot).mockResolvedValue({
       summary: {
         occupiedUnits: 4,
@@ -105,6 +115,16 @@ describe("LandlordAnalyticsPage", () => {
         averageRentPerOccupiedUnitCents: 165000,
       },
       insights: [{ type: "lease_expiry", severity: "medium", message: "1 lease ends within 30 days." }],
+      comparisons: {
+        previousPeriod: {
+          vacancyRate: 0.1,
+          applicationConversionRate: 0.4,
+          applicationsStarted: 3,
+          applicationsSubmitted: 3,
+          maintenanceCostCents: 5000,
+          openWorkOrders: 1,
+        },
+      },
       properties: [
         { id: "prop-1", name: "Alpha" },
         { id: "prop-2", name: "Beta" },
@@ -114,6 +134,33 @@ describe("LandlordAnalyticsPage", () => {
         propertyId: null,
         from: "2026-01-20T00:00:00.000Z",
         to: "2026-04-20T00:00:00.000Z",
+      },
+    } as any);
+    vi.mocked(fetchLandlordAnalyticsAlerts).mockResolvedValue({
+      summary: {
+        activeCount: 2,
+        highSeverityCount: 1,
+        mediumSeverityCount: 1,
+        lowSeverityCount: 0,
+      },
+      alerts: [
+        {
+          id: "alert-1",
+          type: "lease_expiry",
+          severity: "medium",
+          status: "active",
+          title: "Leases ending soon",
+          message: "1 lease ends within 30 days.",
+          detectedAt: "2026-04-20T00:00:00.000Z",
+          lastEvaluatedAt: "2026-04-20T00:00:00.000Z",
+          notification: { inAppEligible: true, emailEligible: true, automationEligible: false },
+          actions: [{ type: "review_leases", label: "Review leases", href: "/portfolio-health" }],
+        },
+      ],
+      filters: {
+        period: "90d",
+        propertyId: null,
+        status: "active",
       },
     } as any);
 
@@ -130,16 +177,19 @@ describe("LandlordAnalyticsPage", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/Attention-worthy insights/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Analytics alerts/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Applications/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Revenue signal/i })).toBeInTheDocument();
-    expect(screen.getByText(/1 lease ends within 30 days/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Review leases/i })).toHaveAttribute("href", "/portfolio-health");
+    expect(macShellSpy).toHaveBeenCalledWith(expect.objectContaining({ title: "Analytics", showTopNav: false }));
   });
 
   it("shows a loading state while analytics are being fetched", async () => {
     await mockEntitlements();
     const { fetchLandlordAnalyticsSnapshot } = await import("../../api/landlordAnalyticsApi");
+    const { fetchLandlordAnalyticsAlerts } = await import("../../api/landlordAnalyticsAlertsApi");
     vi.mocked(fetchLandlordAnalyticsSnapshot).mockReturnValue(new Promise(() => {}) as any);
+    vi.mocked(fetchLandlordAnalyticsAlerts).mockReturnValue(new Promise(() => {}) as any);
 
     render(
       <MemoryRouter>
@@ -153,6 +203,7 @@ describe("LandlordAnalyticsPage", () => {
   it("renders a useful empty-state message for sparse portfolios", async () => {
     await mockEntitlements();
     const { fetchLandlordAnalyticsSnapshot } = await import("../../api/landlordAnalyticsApi");
+    const { fetchLandlordAnalyticsAlerts } = await import("../../api/landlordAnalyticsAlertsApi");
     vi.mocked(fetchLandlordAnalyticsSnapshot).mockResolvedValue({
       summary: {
         occupiedUnits: 0,
@@ -197,12 +248,36 @@ describe("LandlordAnalyticsPage", () => {
         averageRentPerOccupiedUnitCents: null,
       },
       insights: [],
+      comparisons: {
+        previousPeriod: {
+          vacancyRate: null,
+          applicationConversionRate: null,
+          applicationsStarted: 0,
+          applicationsSubmitted: 0,
+          maintenanceCostCents: 0,
+          openWorkOrders: 0,
+        },
+      },
       properties: [],
       filters: {
         period: "90d",
         propertyId: null,
         from: "2026-01-20T00:00:00.000Z",
         to: "2026-04-20T00:00:00.000Z",
+      },
+    } as any);
+    vi.mocked(fetchLandlordAnalyticsAlerts).mockResolvedValue({
+      summary: {
+        activeCount: 0,
+        highSeverityCount: 0,
+        mediumSeverityCount: 0,
+        lowSeverityCount: 0,
+      },
+      alerts: [],
+      filters: {
+        period: "90d",
+        propertyId: null,
+        status: "active",
       },
     } as any);
 
@@ -220,7 +295,22 @@ describe("LandlordAnalyticsPage", () => {
   it("renders an error state cleanly", async () => {
     await mockEntitlements();
     const { fetchLandlordAnalyticsSnapshot } = await import("../../api/landlordAnalyticsApi");
+    const { fetchLandlordAnalyticsAlerts } = await import("../../api/landlordAnalyticsAlertsApi");
     vi.mocked(fetchLandlordAnalyticsSnapshot).mockRejectedValue(new Error("Boom"));
+    vi.mocked(fetchLandlordAnalyticsAlerts).mockResolvedValue({
+      summary: {
+        activeCount: 0,
+        highSeverityCount: 0,
+        mediumSeverityCount: 0,
+        lowSeverityCount: 0,
+      },
+      alerts: [],
+      filters: {
+        period: "90d",
+        propertyId: null,
+        status: "active",
+      },
+    } as any);
 
     render(
       <MemoryRouter>
@@ -234,6 +324,7 @@ describe("LandlordAnalyticsPage", () => {
   it("re-fetches when filters change", async () => {
     await mockEntitlements();
     const fetchLandlordAnalyticsSnapshot = await mockApiResolved();
+    const { fetchLandlordAnalyticsAlerts } = await import("../../api/landlordAnalyticsAlertsApi");
 
     render(
       <MemoryRouter>
@@ -241,13 +332,19 @@ describe("LandlordAnalyticsPage", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/Attention-worthy insights/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Analytics alerts/i)).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText(/Analytics period/i), { target: { value: "30d" } });
     fireEvent.change(screen.getByLabelText(/Analytics property/i), { target: { value: "prop-2" } });
 
     expect(fetchLandlordAnalyticsSnapshot).toHaveBeenCalledWith({ period: "30d", propertyId: null });
     expect(fetchLandlordAnalyticsSnapshot).toHaveBeenLastCalledWith({ period: "30d", propertyId: "prop-2" });
+    expect(vi.mocked(fetchLandlordAnalyticsAlerts)).toHaveBeenCalledWith({ period: "30d", propertyId: null, status: "active" });
+    expect(vi.mocked(fetchLandlordAnalyticsAlerts)).toHaveBeenLastCalledWith({
+      period: "30d",
+      propertyId: "prop-2",
+      status: "active",
+    });
   });
 
   it("shows upgrade guidance when deeper analytics are unavailable", async () => {

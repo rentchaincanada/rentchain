@@ -82,6 +82,14 @@ describe("deriveLandlordAnalyticsSnapshot", () => {
       estimatedScheduledRentCents: 180000,
       averageRentPerOccupiedUnitCents: 180000,
     });
+    expect(result.comparisons.previousPeriod).toEqual({
+      vacancyRate: 2 / 3,
+      applicationConversionRate: null,
+      applicationsStarted: 0,
+      applicationsSubmitted: 0,
+      maintenanceCostCents: 0,
+      openWorkOrders: 1,
+    });
     expect(result.properties).toEqual([
       { id: "prop-1", name: "Untitled property" },
       { id: "prop-2", name: "Untitled property" },
@@ -132,5 +140,13 @@ describe("deriveLandlordAnalyticsSnapshot", () => {
     });
     expect(result.insights).toEqual([]);
     expect(result.properties).toEqual([]);
+    expect(result.comparisons.previousPeriod).toEqual({
+      vacancyRate: null,
+      applicationConversionRate: null,
+      applicationsStarted: 0,
+      applicationsSubmitted: 0,
+      maintenanceCostCents: 0,
+      openWorkOrders: 0,
+    });
   });
 });

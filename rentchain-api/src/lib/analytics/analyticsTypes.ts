@@ -146,6 +146,16 @@ export type LandlordAnalyticsSnapshot = {
   maintenance: AdminMaintenanceAnalytics;
   revenue: LandlordRevenueAnalytics;
   insights: LandlordAnalyticsInsight[];
+  comparisons: {
+    previousPeriod: {
+      vacancyRate: number | null;
+      applicationConversionRate: number | null;
+      applicationsStarted: number;
+      applicationsSubmitted: number;
+      maintenanceCostCents: number;
+      openWorkOrders: number;
+    };
+  };
   properties: Array<{
     id: string;
     name: string;
