@@ -137,6 +137,52 @@ function appendBillingCanceled(path: string): string {
   if (path.includes("?")) return `${path}&billing=canceled=1`;
   return `${path}?billing=canceled=1`;
 }
+
+function isStripeConnectionError(err: any): boolean {
+  const name = String(err?.name || "").trim();
+  const type = String(err?.type || "").trim();
+  const code = String(err?.code || "").trim();
+  const message = String(err?.message || "").trim();
+  return (
+    name === "StripeConnectionError" ||
+    type === "StripeConnectionError" ||
+    code === "StripeConnectionError" ||
+    /connection to stripe/i.test(message)
+  );
+}
+
+function logStripeFailure(scope: string, err: any, extra: Record<string, unknown> = {}) {
+  console.error(`[billing/${scope}] Stripe request failed`, {
+    message: err?.message,
+    name: err?.name,
+    type: err?.type,
+    code: err?.code,
+    statusCode: err?.statusCode,
+    requestId: err?.requestId || err?.raw?.requestId || null,
+    ...extra,
+  });
+}
+
+function sendStripeRouteError(res: any, scope: "checkout" | "portal", err: any) {
+  if (isStripeNotConfiguredError(err)) {
+    return res.status(400).json(stripeNotConfiguredResponse());
+  }
+
+  if (isStripeConnectionError(err)) {
+    logStripeFailure(scope, err);
+    return res.status(503).json({
+      ok: false,
+      error: scope === "checkout" ? "checkout_temporarily_unavailable" : "billing_portal_temporarily_unavailable",
+    });
+  }
+
+  logStripeFailure(scope, err);
+  return res.status(500).json({
+    ok: false,
+    error: scope === "checkout" ? "checkout_failed" : "billing_portal_failed",
+  });
+}
+
 router.use((req, res, next) => {
   res.setHeader("x-billing-routes", "present");
   next();
@@ -170,48 +216,39 @@ router.get(
 );
 
 async function handleCheckout(req: any, res: any) {
-  const landlordId = req.user?.landlordId || req.user?.id;
-  const userId = req.user?.id || null;
-  if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
-
-  const { tier, interval, plan, requiredPlan, planKey, featureKey, source, redirectTo } =
-    req.body || {};
-  const resolvedTier = normalizeTier(tier || plan || requiredPlan || planKey);
-  if (!resolvedTier) {
-    return res.status(400).json({ ok: false, error: "missing_tier" });
-  }
-  if (resolvedTier === "free") {
-    return res.status(400).json({ ok: false, error: "invalid_tier" });
-  }
-  const resolvedInterval = normalizeInterval(interval);
-
-  const resolved = resolvePriceId(resolvedTier, resolvedInterval);
-  if (!resolved.priceId) {
-    console.error("[billing/checkout] price not configured or invalid", { envKey: resolved.envKey });
-    const statusCode = process.env.NODE_ENV === "production" ? 503 : 400;
-    return res.status(statusCode).json({
-      ok: false,
-      error: "price_not_configured",
-      detail: `${resolved.envKey} must be Stripe price id price_...`,
-    });
-  }
-
-  let stripe: any;
   try {
-    stripe = getStripeClient();
-  } catch (err) {
-    if (isStripeNotConfiguredError(err)) {
-      return res.status(400).json(stripeNotConfiguredResponse());
+    const landlordId = req.user?.landlordId || req.user?.id;
+    const userId = req.user?.id || null;
+    if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+
+    const { tier, interval, plan, requiredPlan, planKey, featureKey, source, redirectTo } =
+      req.body || {};
+    const resolvedTier = normalizeTier(tier || plan || requiredPlan || planKey);
+    if (!resolvedTier) {
+      return res.status(400).json({ ok: false, error: "missing_tier" });
     }
-    throw err;
-  }
+    if (resolvedTier === "free") {
+      return res.status(400).json({ ok: false, error: "invalid_tier" });
+    }
+    const resolvedInterval = normalizeInterval(interval);
 
-  const featureKeyValue = String(featureKey || "unknown").trim().slice(0, 80);
-  const sourceValue = String(source || "unknown").trim().slice(0, 80);
-  const redirectToValue = sanitizeRedirectTo(redirectTo);
-  const frontendUrl = resolveFrontendBase();
+    const resolved = resolvePriceId(resolvedTier, resolvedInterval);
+    if (!resolved.priceId) {
+      console.error("[billing/checkout] price not configured or invalid", { envKey: resolved.envKey });
+      const statusCode = process.env.NODE_ENV === "production" ? 503 : 400;
+      return res.status(statusCode).json({
+        ok: false,
+        error: "price_not_configured",
+        detail: `${resolved.envKey} must be Stripe price id price_...`,
+      });
+    }
 
-  try {
+    const stripe = getStripeClient();
+    const featureKeyValue = String(featureKey || "unknown").trim().slice(0, 80);
+    const sourceValue = String(source || "unknown").trim().slice(0, 80);
+    const redirectToValue = sanitizeRedirectTo(redirectTo);
+    const frontendUrl = resolveFrontendBase();
+
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       payment_method_types: ["card"],
@@ -242,10 +279,7 @@ async function handleCheckout(req: any, res: any) {
 
     return res.status(200).json({ ok: true, url: session.url });
   } catch (err: any) {
-    console.error("[billing/checkout] Failed to create Checkout Session", {
-      message: err?.message,
-    });
-    return res.status(500).json({ ok: false, error: "checkout_failed" });
+    return sendStripeRouteError(res, "checkout", err);
   }
 }
 
@@ -254,46 +288,41 @@ router.post("/subscribe", requireAuth, handleCheckout);
 router.post("/upgrade", requireAuth, handleCheckout);
 
 router.post("/portal", requireAuth, async (req: any, res) => {
-  const landlordId = req.user?.landlordId || req.user?.id;
-  if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
-
-  let stripe: any;
   try {
-    stripe = getStripeClient();
-  } catch (err) {
-    if (isStripeNotConfiguredError(err)) {
-      return res.status(400).json(stripeNotConfiguredResponse());
+    const landlordId = req.user?.landlordId || req.user?.id;
+    if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+
+    const stripe = getStripeClient();
+    const landlordRef = db.collection("landlords").doc(String(landlordId));
+    const landlordSnap = await landlordRef.get();
+    if (!landlordSnap.exists) {
+      return res.status(404).json({ ok: false, error: "landlord_not_found" });
     }
-    throw err;
-  }
+    const landlord = landlordSnap.data() as any;
 
-  const landlordRef = db.collection("landlords").doc(String(landlordId));
-  const landlordSnap = await landlordRef.get();
-  if (!landlordSnap.exists) {
-    return res.status(404).json({ ok: false, error: "landlord_not_found" });
-  }
-  const landlord = landlordSnap.data() as any;
+    let stripeCustomerId = String(landlord?.stripeCustomerId || "").trim();
+    if (!stripeCustomerId) {
+      const email = String(landlord?.email || req.user?.email || "").trim() || undefined;
+      const name = String(landlord?.name || landlord?.companyName || "").trim() || undefined;
+      const customer = await stripe.customers.create({
+        email,
+        name,
+        metadata: { landlordId: String(landlordId) },
+      });
+      stripeCustomerId = customer.id;
+      await landlordRef.set({ stripeCustomerId }, { merge: true });
+    }
 
-  let stripeCustomerId = String(landlord?.stripeCustomerId || "").trim();
-  if (!stripeCustomerId) {
-    const email = String(landlord?.email || req.user?.email || "").trim() || undefined;
-    const name = String(landlord?.name || landlord?.companyName || "").trim() || undefined;
-    const customer = await stripe.customers.create({
-      email,
-      name,
-      metadata: { landlordId: String(landlordId) },
+    const frontendUrl = resolveFrontendBase();
+    const session = await stripe.billingPortal.sessions.create({
+      customer: stripeCustomerId,
+      return_url: `${frontendUrl}/billing`,
     });
-    stripeCustomerId = customer.id;
-    await landlordRef.set({ stripeCustomerId }, { merge: true });
+
+    return res.status(200).json({ ok: true, url: session.url });
+  } catch (err: any) {
+    return sendStripeRouteError(res, "portal", err);
   }
-
-  const frontendUrl = resolveFrontendBase();
-  const session = await stripe.billingPortal.sessions.create({
-    customer: stripeCustomerId,
-    return_url: `${frontendUrl}/billing`,
-  });
-
-  return res.status(200).json({ ok: true, url: session.url });
 });
 
 export default router;
