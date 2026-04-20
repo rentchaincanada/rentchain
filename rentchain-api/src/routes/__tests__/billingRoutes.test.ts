@@ -6,6 +6,7 @@ const stripeNotConfiguredResponseMock = vi.fn(() => ({ ok: false, error: "stripe
 const isStripeNotConfiguredErrorMock = vi.fn((err: any) => String(err?.code || err?.message || "").trim() === "stripe_not_configured");
 const landlordDocGetMock = vi.fn(async () => ({ exists: false, data: () => null }));
 const landlordDocSetMock = vi.fn(async () => undefined);
+const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
 vi.mock("../../middleware/requireAuth", () => ({
   requireAuth: (req: any, _res: any, next: any) => {
@@ -108,6 +109,9 @@ describe("billingRoutes subscription status", () => {
     landlordDocGetMock.mockResolvedValue({ exists: false, data: () => null });
     landlordDocSetMock.mockResolvedValue(undefined);
     process.env.STRIPE_PRICE_STARTER_MONTHLY_TEST = "price_test_starter_monthly";
+    process.env.STRIPE_PRICE_STARTER_MONTHLY = "price_live_starter_monthly";
+    process.env.STRIPE_SECRET_KEY = "sk_live_test_diagnostic";
+    consoleErrorSpy.mockClear();
   });
 
   it("returns the effective canonical tier from landlord resolution", async () => {
@@ -176,6 +180,8 @@ describe("billingRoutes subscription status", () => {
             const err: any = new Error("An error occurred with our connection to Stripe.");
             err.name = "StripeConnectionError";
             err.type = "StripeConnectionError";
+            err.requestId = "req_checkout_123";
+            err.numRetries = 2;
             throw err;
           }),
         },
@@ -197,6 +203,63 @@ describe("billingRoutes subscription status", () => {
 
     expect(res.status).toBe(503);
     expect(res.body).toEqual({ ok: false, error: "checkout_temporarily_unavailable" });
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "[billing/checkout] Stripe request failed",
+      expect.objectContaining({
+        route: "/checkout",
+        operation: "checkout.sessions.create",
+        name: "StripeConnectionError",
+        type: "StripeConnectionError",
+        requestId: "req_checkout_123",
+        numRetries: 2,
+        stripeEnv: expect.any(String),
+        stripeKeyMode: "live",
+      })
+    );
+  });
+
+  it("returns the same controlled 503 when /subscribe hits the shared Stripe checkout failure path", async () => {
+    getStripeClientMock.mockReturnValue({
+      checkout: {
+        sessions: {
+          create: vi.fn(async () => {
+            const err: any = new Error("An error occurred with our connection to Stripe.");
+            err.name = "StripeConnectionError";
+            err.type = "StripeConnectionError";
+            err.requestId = "req_subscribe_123";
+            err.numRetries = 2;
+            throw err;
+          }),
+        },
+      },
+    });
+
+    const router = (await import("../billingRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/subscribe",
+      headers: {
+        "x-test-user": JSON.stringify({ id: "u1", landlordId: "landlord-1", role: "landlord", plan: "free" }),
+      },
+      body: {
+        planKey: "starter",
+        interval: "monthly",
+      },
+    });
+
+    expect(res.status).toBe(503);
+    expect(res.body).toEqual({ ok: false, error: "checkout_temporarily_unavailable" });
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "[billing/checkout] Stripe request failed",
+      expect.objectContaining({
+        route: "/subscribe",
+        operation: "checkout.sessions.create",
+        name: "StripeConnectionError",
+        type: "StripeConnectionError",
+        requestId: "req_subscribe_123",
+        numRetries: 2,
+      })
+    );
   });
 
   it("returns a controlled 503 when Stripe billing portal hits a connection failure", async () => {
@@ -215,6 +278,8 @@ describe("billingRoutes subscription status", () => {
             const err: any = new Error("An error occurred with our connection to Stripe.");
             err.name = "StripeConnectionError";
             err.type = "StripeConnectionError";
+            err.requestId = "req_portal_123";
+            err.numRetries = 2;
             throw err;
           }),
         },
@@ -241,5 +306,16 @@ describe("billingRoutes subscription status", () => {
 
     expect(res.status).toBe(503);
     expect(res.body).toEqual({ ok: false, error: "billing_portal_temporarily_unavailable" });
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "[billing/portal] Stripe request failed",
+      expect.objectContaining({
+        route: "/portal",
+        operation: "billingPortal.sessions.create",
+        name: "StripeConnectionError",
+        type: "StripeConnectionError",
+        requestId: "req_portal_123",
+        numRetries: 2,
+      })
+    );
   });
 });

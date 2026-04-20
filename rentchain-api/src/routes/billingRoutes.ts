@@ -151,35 +151,63 @@ function isStripeConnectionError(err: any): boolean {
   );
 }
 
+function resolveStripeKeyMode(): "live" | "test" | "unknown" {
+  const key = String(process.env.STRIPE_SECRET_KEY || "").trim();
+  if (key.startsWith("sk_live_")) return "live";
+  if (key.startsWith("sk_test_")) return "test";
+  return "unknown";
+}
+
 function logStripeFailure(scope: string, err: any, extra: Record<string, unknown> = {}) {
   console.error(`[billing/${scope}] Stripe request failed`, {
+    route: extra.route || null,
+    operation: extra.operation || null,
     message: err?.message,
     name: err?.name,
     type: err?.type,
     code: err?.code,
     statusCode: err?.statusCode,
     requestId: err?.requestId || err?.raw?.requestId || null,
+    requestLogUrl: err?.request_log_url || err?.raw?.request_log_url || null,
+    numRetries: err?.numRetries ?? err?.raw?.numRetries ?? null,
+    headers: err?.headers || err?.raw?.headers || null,
+    stripeEnv: getStripeEnv(),
+    stripeKeyMode: resolveStripeKeyMode(),
     ...extra,
   });
 }
 
-function sendStripeRouteError(res: any, scope: "checkout" | "portal", err: any) {
+function sendStripeRouteError(
+  res: any,
+  context: {
+    scope: "checkout" | "portal";
+    route: string;
+    operation: string;
+  },
+  err: any
+) {
   if (isStripeNotConfiguredError(err)) {
     return res.status(400).json(stripeNotConfiguredResponse());
   }
 
   if (isStripeConnectionError(err)) {
-    logStripeFailure(scope, err);
+    logStripeFailure(context.scope, err, {
+      route: context.route,
+      operation: context.operation,
+    });
     return res.status(503).json({
       ok: false,
-      error: scope === "checkout" ? "checkout_temporarily_unavailable" : "billing_portal_temporarily_unavailable",
+      error: context.scope === "checkout" ? "checkout_temporarily_unavailable" : "billing_portal_temporarily_unavailable",
     });
   }
 
-  logStripeFailure(scope, err);
+  logStripeFailure(context.scope, err, {
+    route: context.route,
+    operation: context.operation,
+  });
   return res.status(500).json({
     ok: false,
-    error: scope === "checkout" ? "checkout_failed" : "billing_portal_failed",
+    error: context.scope === "checkout" ? "checkout_failed" : "billing_portal_failed",
   });
 }
 
@@ -279,7 +307,15 @@ async function handleCheckout(req: any, res: any) {
 
     return res.status(200).json({ ok: true, url: session.url });
   } catch (err: any) {
-    return sendStripeRouteError(res, "checkout", err);
+    return sendStripeRouteError(
+      res,
+      {
+        scope: "checkout",
+        route: String(req.originalUrl || req.path || "/api/billing/checkout"),
+        operation: "checkout.sessions.create",
+      },
+      err
+    );
   }
 }
 
@@ -321,7 +357,15 @@ router.post("/portal", requireAuth, async (req: any, res) => {
 
     return res.status(200).json({ ok: true, url: session.url });
   } catch (err: any) {
-    return sendStripeRouteError(res, "portal", err);
+    return sendStripeRouteError(
+      res,
+      {
+        scope: "portal",
+        route: String(req.originalUrl || req.path || "/api/billing/portal"),
+        operation: "billingPortal.sessions.create",
+      },
+      err
+    );
   }
 });
 
