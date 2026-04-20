@@ -66,6 +66,9 @@ export default function TenantInviteRedeemPage() {
   }, [prefilledToken]);
 
   React.useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
     let cancelled = false;
     void getTenantWorkspace()
       .then((next) => {
