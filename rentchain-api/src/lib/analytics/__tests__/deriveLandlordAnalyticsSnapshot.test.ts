@@ -82,6 +82,18 @@ describe("deriveLandlordAnalyticsSnapshot", () => {
       estimatedScheduledRentCents: 180000,
       averageRentPerOccupiedUnitCents: 180000,
     });
+    expect(result.predictive.metrics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: "projected_vacancy_risk",
+          status: "supported",
+        }),
+        expect.objectContaining({
+          key: "projected_lease_expiry_concentration",
+          riskLevel: "medium",
+        }),
+      ])
+    );
     expect(result.comparisons.previousPeriod).toEqual({
       summary: {
         occupiedUnits: 1,
@@ -189,6 +201,7 @@ describe("deriveLandlordAnalyticsSnapshot", () => {
       leasesEndingSoon: 0,
     });
     expect(result.insights).toEqual([]);
+    expect(result.predictive.metrics.every((metric) => metric.status === "insufficient_data")).toBe(true);
     expect(result.properties).toEqual([]);
     expect(result.propertyMetrics).toEqual([]);
     expect(result.comparisons.previousPeriod.summary).toEqual({

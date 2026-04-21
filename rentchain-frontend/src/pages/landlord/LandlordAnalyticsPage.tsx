@@ -19,6 +19,7 @@ import AnalyticsKpiGrid from "../../components/analytics/AnalyticsKpiGrid";
 import AnalyticsSectionPanel from "../../components/analytics/AnalyticsSectionPanel";
 import InsightCardsPanel from "../../components/analytics/InsightCardsPanel";
 import PortfolioBenchmarkingPanel from "../../components/analytics/PortfolioBenchmarkingPanel";
+import PredictiveMetricsPanel from "../../components/analytics/PredictiveMetricsPanel";
 
 function formatPercent(value: number | null) {
   if (value == null || !Number.isFinite(value)) return "—";
@@ -222,6 +223,9 @@ export default function LandlordAnalyticsPage() {
             <AnalyticsAlertsPanel alerts={alerts?.alerts || []} summary={alerts?.summary || null} />
             <AnalyticsKpiGrid items={summaryItems} periodLabel={periodLabel(period)} />
             {canViewBenchmarking ? <PortfolioBenchmarkingPanel benchmarking={benchmarking} /> : null}
+            {canViewPortfolioScore && canViewAdvancedAnalytics ? (
+              <PredictiveMetricsPanel metrics={snapshot.predictive?.metrics || []} />
+            ) : null}
 
             {canViewPortfolioScore ? (
               <div

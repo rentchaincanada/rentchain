@@ -108,6 +108,14 @@ describe("loadLandlordAnalyticsSnapshot", () => {
     expect(scoped.summary.activeApplications).toBe(1);
     expect(scoped.comparisons.deltas.summary.estimatedScheduledRentCents.direction).toBe("flat");
     expect(scoped.comparisons.deltas.summary.activeApplications.direction).toBe("flat");
+    expect(scoped.predictive.metrics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: "projected_vacancy_risk",
+          status: "supported",
+        }),
+      ])
+    );
     expect(scoped.propertyMetrics).toEqual([
       expect.objectContaining({
         propertyId: "prop-1",
@@ -136,6 +144,7 @@ describe("loadLandlordAnalyticsSnapshot", () => {
     expect(result.summary.occupiedUnits).toBe(0);
     expect(result.summary.maintenanceCostCents).toBe(0);
     expect(result.insights).toEqual([]);
+    expect(result.predictive.metrics.every((metric) => metric.status === "insufficient_data")).toBe(true);
     expect(result.propertyMetrics).toEqual([]);
     expect(result.comparisons.deltas.summary.maintenanceCostCents.direction).toBe("flat");
   });

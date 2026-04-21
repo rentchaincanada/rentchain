@@ -220,6 +220,26 @@ export type LandlordRevenueAnalytics = {
   averageRentPerOccupiedUnitCents: number | null;
 };
 
+export type LandlordPredictiveMetricKey =
+  | "projected_vacancy_risk"
+  | "projected_lease_expiry_concentration"
+  | "projected_maintenance_burden_risk"
+  | "projected_application_slowdown_risk"
+  | "projected_revenue_pressure_signal";
+
+export type LandlordPredictiveMetric = {
+  key: LandlordPredictiveMetricKey;
+  label: string;
+  riskLevel: "low" | "medium" | "high" | null;
+  status: "supported" | "insufficient_data";
+  explanation: string;
+  supportingValues?: Record<string, number | string | null>;
+};
+
+export type LandlordPredictiveMetrics = {
+  metrics: LandlordPredictiveMetric[];
+};
+
 export type LandlordAnalyticsSummary = {
   occupiedUnits: number;
   vacancyRate: number | null;
@@ -237,6 +257,7 @@ export type LandlordAnalyticsSnapshot = {
   leasing: AdminPortfolioAnalytics;
   maintenance: AdminMaintenanceAnalytics;
   revenue: LandlordRevenueAnalytics;
+  predictive: LandlordPredictiveMetrics;
   insights: LandlordAnalyticsInsight[];
   comparisons: {
     previousPeriod: {
