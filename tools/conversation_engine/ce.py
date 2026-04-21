@@ -49,6 +49,16 @@ def normalize_paste_kind(value: str) -> str:
     return aliases.get(normalized, normalized)
 
 
+# Helper: /tmp file path for a run and kind
+def tmp_capture_path(run_id: str, kind: str) -> pathlib.Path:
+    return pathlib.Path(f"/tmp/{run_id}_{normalize_paste_kind(kind)}.txt")
+
+
+# Helper: label for final Codex commit artifact
+def final_codex_response_label() -> str:
+    return "final Codex commit response"
+
+
 def render_status(repo: v2.Repo, store: v2.RunStore, state: v2.RunState) -> str:
     artifacts = v2.run_artifact_paths(store, state)
     artifact_lines = [
@@ -205,10 +215,11 @@ def cmd_ce_apply_codex_audit(args: argparse.Namespace) -> int:
     v2.cmd_make_chatgpt_review_prompt(argparse.Namespace(run_id=run_id))
     state = store.load_state(run_id)
     prompt_path = store.run_dir(run_id) / "prompts" / "chatgpt_review_prompt.txt"
+    review_capture = tmp_capture_path(run_id, "chatgpt-review")
 
     print(f"ChatGPT review prompt: {prompt_path}")
     print(f"Next step: {v2.next_step_hint(state)}")
-    print("Fast mode: ce-paste chatgpt-review && ce-apply-chatgpt-review --review-file <paste-output>")
+    print(f"Fast mode: ce-paste chatgpt-review && ce-apply-chatgpt-review --review-file {review_capture}")
     return 0
 
 
@@ -223,13 +234,14 @@ def cmd_ce_apply_chatgpt_review(args: argparse.Namespace) -> int:
         v2.cmd_make_codex_implementation_prompt(argparse.Namespace(run_id=run_id))
         state = store.load_state(run_id)
         prompt_path = store.run_dir(run_id) / "prompts" / "codex_implementation_prompt.txt"
+        implementation_capture = tmp_capture_path(run_id, "implementation")
         print(f"Codex implementation prompt: {prompt_path}")
     else:
         print(f"Decision: {state.decision}")
 
     print(f"Next step: {v2.next_step_hint(state)}")
     if state.decision == "approve_to_implement":
-        print("Fast mode: ce-paste implementation && ce-apply-codex-implementation --response-file <paste-output>")
+        print(f"Fast mode: ce-paste implementation && ce-apply-codex-implementation --response-file {implementation_capture}")
     return 0
 
 
@@ -241,10 +253,11 @@ def cmd_ce_apply_codex_implementation(args: argparse.Namespace) -> int:
     v2.cmd_make_chatgpt_implementation_review_prompt(argparse.Namespace(run_id=run_id))
     state = store.load_state(run_id)
     prompt_path = store.run_dir(run_id) / "prompts" / "chatgpt_implementation_review_prompt.txt"
+    patch_capture = tmp_capture_path(run_id, "chatgpt-patch")
 
     print(f"ChatGPT implementation review prompt: {prompt_path}")
     print(f"Next step: {v2.next_step_hint(state)}")
-    print("Fast mode: ce-paste chatgpt-patch && ce-apply-chatgpt-patch --review-file <paste-output>")
+    print(f"Fast mode: ce-paste chatgpt-patch && ce-apply-chatgpt-patch --review-file {patch_capture}")
     return 0
 
 
@@ -255,11 +268,12 @@ def cmd_ce_apply_chatgpt_patch(args: argparse.Namespace) -> int:
     run_id = resolve_run_id(store, args.run_id)
     v2.cmd_apply_chatgpt_patch(argparse.Namespace(run_id=run_id, review_file=args.review_file))
     state = store.load_state(run_id)
+    commit_capture = tmp_capture_path(run_id, "commit")
 
     print(f"Decision: {state.decision}")
     print(f"Next step: {v2.next_step_hint(state)}")
     if state.current_stage == "approved_for_commit":
-        print("Fast mode: ce-paste commit && ce-make-codex-commit-prompt")
+        print(f"Fast mode: ce-paste commit && ce-make-codex-commit-prompt && save clipboard to {commit_capture}")
     return 0
 
 
@@ -271,10 +285,11 @@ def cmd_ce_make_codex_commit_prompt(args: argparse.Namespace) -> int:
     v2.cmd_make_codex_commit_prompt(argparse.Namespace(run_id=run_id))
     state = store.load_state(run_id)
     prompt_path = store.run_dir(run_id) / "prompts" / "codex_commit_prompt.txt"
+    commit_capture = tmp_capture_path(run_id, "commit")
 
     print(f"Codex commit prompt: {prompt_path}")
     print(f"Next step: {v2.next_step_hint(state)}")
-    print("Fast mode: ce-paste commit && ce-apply-codex-commit --response-file <paste-output> && ce-finalize")
+    print(f"Fast mode: ce-paste commit && ce-apply-codex-commit --response-file {commit_capture} && ce-finalize")
     return 0
 
 
@@ -286,10 +301,11 @@ def cmd_ce_apply_codex_commit(args: argparse.Namespace) -> int:
     v2.cmd_apply_codex_implementation(argparse.Namespace(run_id=run_id, response_file=args.response_file))
     state = store.load_state(run_id)
     artifacts = v2.run_artifact_paths(store, state)
+    persisted_path = artifacts["codex_implementation_response"]
 
-    print(f"Saved final Codex response to: {artifacts['codex_implementation_response']}")
+    print(f"Saved {final_codex_response_label()} to: {persisted_path}")
     print(f"Decision: {state.decision}")
-    print("Next step: ce-finalize --run-id \"<current-run>\"")
+    print("Next step: ce-finalize")
     print("Fast mode: ce-finalize")
     return 0
 
@@ -301,10 +317,11 @@ def cmd_ce_finalize(args: argparse.Namespace) -> int:
     v2.cmd_finalize_summary(argparse.Namespace(run_id=run_id))
     state = store.load_state(run_id)
     artifacts = v2.run_artifact_paths(store, state)
+    persisted_path = artifacts["codex_implementation_response"]
 
     print(f"Final summary: {artifacts['final_summary']}")
     print(f"Latest audit: {artifacts['latest_audit']}")
-    print(f"Persisted final Codex response: {artifacts['codex_implementation_response']}")
+    print(f"Persisted {final_codex_response_label()}: {persisted_path}")
     print(f"Next step: {v2.next_step_hint(state)}")
     return 0
 
