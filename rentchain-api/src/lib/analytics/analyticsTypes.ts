@@ -93,6 +93,7 @@ export type AdminAnalyticsDerivedInput = {
   granularity: AdminAnalyticsGranularity;
   applications: any[];
   screeningReconciliations: Array<{
+    applicationId?: string;
     status: ScreeningReconciliationStatus;
     summary: {
       hasQuote: boolean;
@@ -121,6 +122,82 @@ export type LandlordAnalyticsInsight = {
   severity: "low" | "medium" | "high";
   message: string;
   propertyId?: string | null;
+};
+
+export type LandlordBenchmarkDimension =
+  | "vacancyRate"
+  | "applicationVolume"
+  | "applicationConversionRate"
+  | "openWorkOrders"
+  | "maintenanceCostCents"
+  | "maintenanceCostPerUnitCents"
+  | "leasesEndingSoon"
+  | "estimatedScheduledRentCents"
+  | "estimatedRentPerOccupiedUnitCents";
+
+export type LandlordPropertyAnalyticsMetrics = {
+  vacancyRate: number | null;
+  occupancyRate: number | null;
+  applicationVolume: number;
+  applicationConversionRate: number | null;
+  openWorkOrders: number;
+  maintenanceCostCents: number;
+  maintenanceCostPerUnitCents: number | null;
+  leasesEndingSoon: number;
+  estimatedScheduledRentCents: number;
+  estimatedRentPerOccupiedUnitCents: number | null;
+  totalUnits: number;
+  occupiedUnits: number;
+  vacantUnits: number;
+};
+
+export type LandlordPropertyAnalytics = {
+  propertyId: string;
+  propertyName: string;
+  metrics: LandlordPropertyAnalyticsMetrics;
+};
+
+export type LandlordBenchmarkMetricComparison = {
+  portfolioAverage: number | null;
+  rank: number | null;
+  direction: "better" | "worse" | "neutral" | "insufficient_data";
+  deltaFromAverage: number | null;
+};
+
+export type LandlordBenchmarkInsight = {
+  type:
+    | "vacancy_leader"
+    | "vacancy_risk"
+    | "application_conversion_leader"
+    | "maintenance_concentration"
+    | "lease_expiry_concentration"
+    | "rent_leader";
+  severity: "low" | "medium" | "high";
+  message: string;
+  propertyId?: string | null;
+};
+
+export type LandlordBenchmarkingComparison = {
+  propertyId: string;
+  propertyName: string;
+  metrics: LandlordPropertyAnalyticsMetrics;
+  benchmarks: Partial<Record<LandlordBenchmarkDimension, LandlordBenchmarkMetricComparison>>;
+};
+
+export type LandlordPortfolioBenchmarking = {
+  summary: {
+    propertyCount: number;
+    comparedPropertyCount: number;
+    benchmarkDimensions: LandlordBenchmarkDimension[];
+  };
+  comparisons: LandlordBenchmarkingComparison[];
+  insights: LandlordBenchmarkInsight[];
+  filters: {
+    period: AdminAnalyticsPeriod;
+    propertyId: string | null;
+    from: string;
+    to: string;
+  };
 };
 
 export type LandlordRevenueAnalytics = {
@@ -160,6 +237,7 @@ export type LandlordAnalyticsSnapshot = {
     id: string;
     name: string;
   }>;
+  propertyMetrics: LandlordPropertyAnalytics[];
   filters: {
     period: AdminAnalyticsPeriod;
     propertyId: string | null;

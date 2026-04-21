@@ -4,6 +4,10 @@ import {
   fetchLandlordAnalyticsAlerts,
   type LandlordAnalyticsAlertsResponse,
 } from "../../api/landlordAnalyticsAlertsApi";
+import {
+  fetchLandlordAnalyticsBenchmarking,
+  type LandlordAnalyticsBenchmarkingResponse,
+} from "../../api/landlordAnalyticsBenchmarkingApi";
 import { MacShell } from "../../components/layout/MacShell";
 import { Card, Section } from "../../components/ui/Ui";
 import { useToast } from "../../components/ui/ToastProvider";
@@ -14,6 +18,7 @@ import AnalyticsFiltersBar from "../../components/analytics/AnalyticsFiltersBar"
 import AnalyticsKpiGrid from "../../components/analytics/AnalyticsKpiGrid";
 import AnalyticsSectionPanel from "../../components/analytics/AnalyticsSectionPanel";
 import InsightCardsPanel from "../../components/analytics/InsightCardsPanel";
+import PortfolioBenchmarkingPanel from "../../components/analytics/PortfolioBenchmarkingPanel";
 
 function formatPercent(value: number | null) {
   if (value == null || !Number.isFinite(value)) return "—";
@@ -27,15 +32,17 @@ function formatCurrency(cents: number | null | undefined) {
   );
 }
 
-function useAnalyticsState(enabled: boolean, period: AnalyticsPeriod, propertyId: string) {
+function useAnalyticsState(enabled: boolean, includeBenchmarking: boolean, period: AnalyticsPeriod, propertyId: string) {
   const { showToast } = useToast();
   const [snapshot, setSnapshot] = React.useState<LandlordAnalyticsSnapshot | null>(null);
   const [alerts, setAlerts] = React.useState<LandlordAnalyticsAlertsResponse | null>(null);
+  const [benchmarking, setBenchmarking] = React.useState<LandlordAnalyticsBenchmarkingResponse | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (!enabled) {
+      setBenchmarking(null);
       setLoading(false);
       return;
     }
@@ -45,7 +52,7 @@ function useAnalyticsState(enabled: boolean, period: AnalyticsPeriod, propertyId
       try {
         setLoading(true);
         setError(null);
-        const [analyticsResponse, alertsResponse] = await Promise.all([
+        const requests: Array<Promise<any>> = [
           fetchLandlordAnalyticsSnapshot({
             period,
             propertyId: propertyId || null,
@@ -55,10 +62,20 @@ function useAnalyticsState(enabled: boolean, period: AnalyticsPeriod, propertyId
             propertyId: propertyId || null,
             status: "active",
           }),
-        ]);
+        ];
+        if (includeBenchmarking) {
+          requests.push(
+            fetchLandlordAnalyticsBenchmarking({
+              period,
+              propertyId: propertyId || null,
+            })
+          );
+        }
+        const [analyticsResponse, alertsResponse, benchmarkingResponse] = await Promise.all(requests);
         if (!mounted) return;
         setSnapshot(analyticsResponse);
         setAlerts(alertsResponse);
+        setBenchmarking(includeBenchmarking ? benchmarkingResponse || null : null);
       } catch (err: any) {
         if (!mounted) return;
         const message = err?.message || "Failed to load analytics";
@@ -76,9 +93,9 @@ function useAnalyticsState(enabled: boolean, period: AnalyticsPeriod, propertyId
     return () => {
       mounted = false;
     };
-  }, [enabled, period, propertyId, showToast]);
+  }, [enabled, includeBenchmarking, period, propertyId, showToast]);
 
-  return { snapshot, alerts, loading, error };
+  return { snapshot, alerts, benchmarking, loading, error };
 }
 
 export default function LandlordAnalyticsPage() {
@@ -92,7 +109,13 @@ export default function LandlordAnalyticsPage() {
   const [propertyId, setPropertyId] = React.useState("");
   const analyticsEnabled = !entitlementLoading && canViewPortfolioHealthSummary;
   const canViewAdvancedAnalytics = hasCapability("portfolio_analytics");
-  const { snapshot, alerts, loading, error } = useAnalyticsState(analyticsEnabled, period, propertyId);
+  const canViewBenchmarking = canViewPortfolioScore;
+  const { snapshot, alerts, benchmarking, loading, error } = useAnalyticsState(
+    analyticsEnabled,
+    canViewBenchmarking,
+    period,
+    propertyId
+  );
 
   const summaryItems = snapshot
     ? [
@@ -166,6 +189,7 @@ export default function LandlordAnalyticsPage() {
           <>
             <AnalyticsAlertsPanel alerts={alerts?.alerts || []} summary={alerts?.summary || null} />
             <AnalyticsKpiGrid items={summaryItems} />
+            {canViewBenchmarking ? <PortfolioBenchmarkingPanel benchmarking={benchmarking} /> : null}
 
             {canViewPortfolioScore ? (
               <div

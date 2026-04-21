@@ -3,6 +3,7 @@ import type {
   AdminAnalyticsDerivedInput,
   AdminAnalyticsSnapshot,
   LandlordAnalyticsInsight,
+  LandlordPropertyAnalytics,
   LandlordAnalyticsSnapshot,
 } from "./analyticsTypes";
 
@@ -53,6 +54,123 @@ function monthlyRentCentsFromLease(lease: any): number | null {
 
   const rentDollars = numberOrNull(lease?.monthlyRent, lease?.currentRent, lease?.rent, lease?.scheduledRent);
   return rentDollars != null ? Math.round(rentDollars * 100) : null;
+}
+
+function docPropertyId(doc: any) {
+  return asString(doc?.propertyId || doc?.property?.id, 240);
+}
+
+function deriveEstimatedRent(leases: any[], now: number) {
+  let estimatedScheduledRentCents = 0;
+  let occupiedUnitsWithRent = 0;
+
+  for (const lease of leases || []) {
+    if (!isActiveLease(lease, now)) continue;
+    const rentCents = monthlyRentCentsFromLease(lease);
+    if (rentCents == null || rentCents <= 0) continue;
+    estimatedScheduledRentCents += rentCents;
+    occupiedUnitsWithRent += 1;
+  }
+
+  return {
+    estimatedScheduledRentCents,
+    averageRentPerOccupiedUnitCents:
+      occupiedUnitsWithRent > 0 ? Math.round(estimatedScheduledRentCents / occupiedUnitsWithRent) : null,
+  };
+}
+
+function derivePropertyMetrics(input: AdminAnalyticsDerivedInput): LandlordPropertyAnalytics[] {
+  return (input.properties || [])
+    .map((property: any) => {
+      const propertyId = asString(property?.id, 240);
+      if (!propertyId) return null;
+
+      const propertyApplications = (input.applications || []).filter((doc) => docPropertyId(doc) === propertyId);
+      const applicationIds = new Set(propertyApplications.map((doc: any) => asString(doc?.id, 240)).filter(Boolean));
+      const propertyWorkOrders = (input.workOrders || []).filter((doc) => docPropertyId(doc) === propertyId);
+      const propertyUnits = (input.units || []).filter((doc) => docPropertyId(doc) === propertyId);
+      const propertyLeases = (input.leases || []).filter((doc) => docPropertyId(doc) === propertyId);
+      const leaseIds = new Set(propertyLeases.map((doc: any) => asString(doc?.id, 240)).filter(Boolean));
+      const workOrderIds = new Set(propertyWorkOrders.map((doc: any) => asString(doc?.id, 240)).filter(Boolean));
+
+      const propertyEvents = (input.events || []).filter((doc) => {
+        if (docPropertyId(doc) === propertyId) return true;
+        if (applicationIds.has(asString(doc?.applicationId, 240))) return true;
+        if (leaseIds.has(asString(doc?.leaseId, 240))) return true;
+        return false;
+      });
+
+      const propertyCanonicalEvents = (input.canonicalEvents || []).filter((event: any) => {
+        if (asString((event as any)?.propertyId, 240) === propertyId) return true;
+        if (asString(event?.metadata?.propertyId, 240) === propertyId) return true;
+        if (asString(event?.resource?.type, 80) === "property" && asString(event?.resource?.id, 240) === propertyId) {
+          return true;
+        }
+        if (applicationIds.has(asString(event?.metadata?.applicationId, 240))) return true;
+        if (asString(event?.resource?.type, 80) === "rental_application" && applicationIds.has(asString(event?.resource?.id, 240))) {
+          return true;
+        }
+        if (leaseIds.has(asString(event?.metadata?.leaseId, 240))) return true;
+        if (asString(event?.resource?.type, 80) === "lease" && leaseIds.has(asString(event?.resource?.id, 240))) return true;
+        if (workOrderIds.has(asString(event?.metadata?.workOrderId, 240))) return true;
+        if (
+          ["maintenance_request", "work_order"].includes(asString(event?.resource?.type, 80)) &&
+          workOrderIds.has(asString(event?.resource?.id, 240))
+        ) {
+          return true;
+        }
+        return false;
+      });
+
+      const propertyFinancialTransactions = (input.financialTransactions || []).filter((doc) =>
+        applicationIds.has(asString(doc?.applicationId, 240))
+      );
+
+      const propertyScreeningReconciliations = (input.screeningReconciliations || []).filter((reconciliation: any) =>
+        applicationIds.has(asString(reconciliation?.applicationId, 240))
+      );
+
+      const snapshot = deriveAdminAnalyticsSnapshot({
+        ...input,
+        applications: propertyApplications,
+        screeningReconciliations: propertyScreeningReconciliations,
+        financialTransactions: propertyFinancialTransactions,
+        workOrders: propertyWorkOrders,
+        properties: [{ id: propertyId, ...property }],
+        units: propertyUnits,
+        leases: propertyLeases,
+        events: propertyEvents,
+        canonicalEvents: propertyCanonicalEvents,
+      });
+
+      const revenue = deriveEstimatedRent(propertyLeases, input.now);
+
+      return {
+        propertyId,
+        propertyName:
+          asString(property?.name || property?.address || property?.title, 240) || "Untitled property",
+        metrics: {
+          vacancyRate: snapshot.summary.vacancyRate,
+          occupancyRate: snapshot.portfolio.occupancyRate,
+          applicationVolume: snapshot.applications.submitted,
+          applicationConversionRate: snapshot.applications.conversionRate,
+          openWorkOrders: snapshot.maintenance.openWorkOrders,
+          maintenanceCostCents: snapshot.maintenance.maintenanceCostCents,
+          maintenanceCostPerUnitCents:
+            snapshot.portfolio.totalUnits > 0
+              ? Math.round(snapshot.maintenance.maintenanceCostCents / snapshot.portfolio.totalUnits)
+              : null,
+          leasesEndingSoon: snapshot.portfolio.leasesEndingIn30Days,
+          estimatedScheduledRentCents: revenue.estimatedScheduledRentCents,
+          estimatedRentPerOccupiedUnitCents: revenue.averageRentPerOccupiedUnitCents,
+          totalUnits: snapshot.portfolio.totalUnits,
+          occupiedUnits: snapshot.portfolio.occupiedUnits,
+          vacantUnits: snapshot.portfolio.vacantUnits,
+        },
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a!.propertyName.localeCompare(b!.propertyName)) as LandlordPropertyAnalytics[];
 }
 
 function buildPreviousInput(input: AdminAnalyticsDerivedInput): AdminAnalyticsDerivedInput {
@@ -173,16 +291,8 @@ function deriveInsights(params: {
 export function deriveLandlordAnalyticsSnapshot(input: AdminAnalyticsDerivedInput & { propertyId?: string | null }): LandlordAnalyticsSnapshot {
   const current = deriveAdminAnalyticsSnapshot(input);
   const previous = deriveAdminAnalyticsSnapshot(buildPreviousInput(input));
-
-  let estimatedScheduledRentCents = 0;
-  let occupiedUnitsWithRent = 0;
-  for (const lease of input.leases || []) {
-    if (!isActiveLease(lease, input.now)) continue;
-    const rentCents = monthlyRentCentsFromLease(lease);
-    if (rentCents == null || rentCents <= 0) continue;
-    estimatedScheduledRentCents += rentCents;
-    occupiedUnitsWithRent += 1;
-  }
+  const revenue = deriveEstimatedRent(input.leases || [], input.now);
+  const propertyMetrics = derivePropertyMetrics(input);
 
   const activeApplications = current.applications.pendingReviewCount;
   const leasesEndingSoon = current.portfolio.leasesEndingIn30Days;
@@ -195,16 +305,15 @@ export function deriveLandlordAnalyticsSnapshot(input: AdminAnalyticsDerivedInpu
       applicationConversionRate: current.applications.conversionRate,
       openWorkOrders: current.maintenance.openWorkOrders,
       maintenanceCostCents: current.maintenance.maintenanceCostCents,
-      estimatedScheduledRentCents,
+      estimatedScheduledRentCents: revenue.estimatedScheduledRentCents,
       leasesEndingSoon,
     },
     applications: current.applications,
     leasing: current.portfolio,
     maintenance: current.maintenance,
     revenue: {
-      estimatedScheduledRentCents,
-      averageRentPerOccupiedUnitCents:
-        occupiedUnitsWithRent > 0 ? Math.round(estimatedScheduledRentCents / occupiedUnitsWithRent) : null,
+      estimatedScheduledRentCents: revenue.estimatedScheduledRentCents,
+      averageRentPerOccupiedUnitCents: revenue.averageRentPerOccupiedUnitCents,
     },
     insights: deriveInsights({
       current,
@@ -229,6 +338,7 @@ export function deriveLandlordAnalyticsSnapshot(input: AdminAnalyticsDerivedInpu
       }))
       .filter((property) => property.id)
       .sort((a, b) => a.name.localeCompare(b.name)),
+    propertyMetrics,
     filters: {
       period: input.period,
       propertyId: input.propertyId ? asString(input.propertyId, 240) : null,

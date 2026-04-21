@@ -15,6 +15,10 @@ vi.mock("../../api/landlordAnalyticsAlertsApi", () => ({
   fetchLandlordAnalyticsAlerts: vi.fn(),
 }));
 
+vi.mock("../../api/landlordAnalyticsBenchmarkingApi", () => ({
+  fetchLandlordAnalyticsBenchmarking: vi.fn(),
+}));
+
 vi.mock("@/hooks/useEntitlements", () => ({
   useEntitlements: vi.fn(),
 }));
@@ -71,6 +75,7 @@ describe("LandlordAnalyticsPage", () => {
   async function mockApiResolved() {
     const { fetchLandlordAnalyticsSnapshot } = await import("../../api/landlordAnalyticsApi");
     const { fetchLandlordAnalyticsAlerts } = await import("../../api/landlordAnalyticsAlertsApi");
+    const { fetchLandlordAnalyticsBenchmarking } = await import("../../api/landlordAnalyticsBenchmarkingApi");
     vi.mocked(fetchLandlordAnalyticsSnapshot).mockResolvedValue({
       summary: {
         occupiedUnits: 4,
@@ -129,6 +134,122 @@ describe("LandlordAnalyticsPage", () => {
         { id: "prop-1", name: "Alpha" },
         { id: "prop-2", name: "Beta" },
       ],
+      propertyMetrics: [
+        {
+          propertyId: "prop-1",
+          propertyName: "Alpha",
+          metrics: {
+            vacancyRate: 0,
+            occupancyRate: 1,
+            applicationVolume: 2,
+            applicationConversionRate: 0.5,
+            openWorkOrders: 0,
+            maintenanceCostCents: 5000,
+            maintenanceCostPerUnitCents: 2500,
+            leasesEndingSoon: 0,
+            estimatedScheduledRentCents: 320000,
+            estimatedRentPerOccupiedUnitCents: 160000,
+            totalUnits: 2,
+            occupiedUnits: 2,
+            vacantUnits: 0,
+          },
+        },
+        {
+          propertyId: "prop-2",
+          propertyName: "Beta",
+          metrics: {
+            vacancyRate: 0.33,
+            occupancyRate: 0.67,
+            applicationVolume: 1,
+            applicationConversionRate: null,
+            openWorkOrders: 1,
+            maintenanceCostCents: 7500,
+            maintenanceCostPerUnitCents: 2500,
+            leasesEndingSoon: 1,
+            estimatedScheduledRentCents: 340000,
+            estimatedRentPerOccupiedUnitCents: 170000,
+            totalUnits: 3,
+            occupiedUnits: 2,
+            vacantUnits: 1,
+          },
+        },
+      ],
+      filters: {
+        period: "90d",
+        propertyId: null,
+        from: "2026-01-20T00:00:00.000Z",
+        to: "2026-04-20T00:00:00.000Z",
+      },
+    } as any);
+    vi.mocked(fetchLandlordAnalyticsAlerts).mockResolvedValue({
+      summary: {
+        activeCount: 2,
+        highSeverityCount: 1,
+        mediumSeverityCount: 1,
+        lowSeverityCount: 0,
+      },
+      alerts: [
+        {
+          id: "alert-1",
+          type: "lease_expiry",
+          severity: "medium",
+          status: "active",
+          title: "Leases ending soon",
+          message: "1 lease ends within 30 days.",
+          detectedAt: "2026-04-20T00:00:00.000Z",
+          lastEvaluatedAt: "2026-04-20T00:00:00.000Z",
+          notification: { inAppEligible: true, emailEligible: true, automationEligible: false },
+          actions: [{ type: "review_leases", label: "Review leases", href: "/portfolio-health" }],
+        },
+      ],
+      filters: {
+        period: "90d",
+        propertyId: null,
+        status: "active",
+      },
+    } as any);
+    vi.mocked(fetchLandlordAnalyticsBenchmarking).mockResolvedValue({
+      summary: {
+        propertyCount: 2,
+        comparedPropertyCount: 2,
+        benchmarkDimensions: ["vacancyRate", "applicationConversionRate"],
+      },
+      comparisons: [
+        {
+          propertyId: "prop-1",
+          propertyName: "Alpha",
+          metrics: {
+            vacancyRate: 0,
+            occupancyRate: 1,
+            applicationVolume: 2,
+            applicationConversionRate: 0.5,
+            openWorkOrders: 0,
+            maintenanceCostCents: 5000,
+            maintenanceCostPerUnitCents: 2500,
+            leasesEndingSoon: 0,
+            estimatedScheduledRentCents: 320000,
+            estimatedRentPerOccupiedUnitCents: 160000,
+            totalUnits: 2,
+            occupiedUnits: 2,
+            vacantUnits: 0,
+          },
+          benchmarks: {
+            vacancyRate: {
+              portfolioAverage: 0.17,
+              rank: 1,
+              direction: "better",
+              deltaFromAverage: -0.17,
+            },
+          },
+        },
+      ],
+      insights: [
+        {
+          type: "vacancy_leader",
+          severity: "low",
+          message: "Alpha currently has the lowest vacancy rate in your portfolio.",
+        },
+      ],
       filters: {
         period: "90d",
         propertyId: null,
@@ -178,6 +299,7 @@ describe("LandlordAnalyticsPage", () => {
     );
 
     expect(await screen.findByText(/Analytics alerts/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Portfolio benchmarking/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Applications/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Revenue signal/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Review leases/i })).toHaveAttribute("href", "/portfolio-health");
@@ -188,8 +310,10 @@ describe("LandlordAnalyticsPage", () => {
     await mockEntitlements();
     const { fetchLandlordAnalyticsSnapshot } = await import("../../api/landlordAnalyticsApi");
     const { fetchLandlordAnalyticsAlerts } = await import("../../api/landlordAnalyticsAlertsApi");
+    const { fetchLandlordAnalyticsBenchmarking } = await import("../../api/landlordAnalyticsBenchmarkingApi");
     vi.mocked(fetchLandlordAnalyticsSnapshot).mockReturnValue(new Promise(() => {}) as any);
     vi.mocked(fetchLandlordAnalyticsAlerts).mockReturnValue(new Promise(() => {}) as any);
+    vi.mocked(fetchLandlordAnalyticsBenchmarking).mockReturnValue(new Promise(() => {}) as any);
 
     render(
       <MemoryRouter>
@@ -204,6 +328,7 @@ describe("LandlordAnalyticsPage", () => {
     await mockEntitlements();
     const { fetchLandlordAnalyticsSnapshot } = await import("../../api/landlordAnalyticsApi");
     const { fetchLandlordAnalyticsAlerts } = await import("../../api/landlordAnalyticsAlertsApi");
+    const { fetchLandlordAnalyticsBenchmarking } = await import("../../api/landlordAnalyticsBenchmarkingApi");
     vi.mocked(fetchLandlordAnalyticsSnapshot).mockResolvedValue({
       summary: {
         occupiedUnits: 0,
@@ -248,6 +373,7 @@ describe("LandlordAnalyticsPage", () => {
         averageRentPerOccupiedUnitCents: null,
       },
       insights: [],
+      propertyMetrics: [],
       comparisons: {
         previousPeriod: {
           vacancyRate: null,
@@ -280,6 +406,21 @@ describe("LandlordAnalyticsPage", () => {
         status: "active",
       },
     } as any);
+    vi.mocked(fetchLandlordAnalyticsBenchmarking).mockResolvedValue({
+      summary: {
+        propertyCount: 0,
+        comparedPropertyCount: 0,
+        benchmarkDimensions: ["vacancyRate"],
+      },
+      comparisons: [],
+      insights: [],
+      filters: {
+        period: "90d",
+        propertyId: null,
+        from: "2026-01-20T00:00:00.000Z",
+        to: "2026-04-20T00:00:00.000Z",
+      },
+    } as any);
 
     render(
       <MemoryRouter>
@@ -296,6 +437,7 @@ describe("LandlordAnalyticsPage", () => {
     await mockEntitlements();
     const { fetchLandlordAnalyticsSnapshot } = await import("../../api/landlordAnalyticsApi");
     const { fetchLandlordAnalyticsAlerts } = await import("../../api/landlordAnalyticsAlertsApi");
+    const { fetchLandlordAnalyticsBenchmarking } = await import("../../api/landlordAnalyticsBenchmarkingApi");
     vi.mocked(fetchLandlordAnalyticsSnapshot).mockRejectedValue(new Error("Boom"));
     vi.mocked(fetchLandlordAnalyticsAlerts).mockResolvedValue({
       summary: {
@@ -309,6 +451,21 @@ describe("LandlordAnalyticsPage", () => {
         period: "90d",
         propertyId: null,
         status: "active",
+      },
+    } as any);
+    vi.mocked(fetchLandlordAnalyticsBenchmarking).mockResolvedValue({
+      summary: {
+        propertyCount: 0,
+        comparedPropertyCount: 0,
+        benchmarkDimensions: [],
+      },
+      comparisons: [],
+      insights: [],
+      filters: {
+        period: "90d",
+        propertyId: null,
+        from: "2026-01-20T00:00:00.000Z",
+        to: "2026-04-20T00:00:00.000Z",
       },
     } as any);
 
@@ -325,6 +482,7 @@ describe("LandlordAnalyticsPage", () => {
     await mockEntitlements();
     const fetchLandlordAnalyticsSnapshot = await mockApiResolved();
     const { fetchLandlordAnalyticsAlerts } = await import("../../api/landlordAnalyticsAlertsApi");
+    const { fetchLandlordAnalyticsBenchmarking } = await import("../../api/landlordAnalyticsBenchmarkingApi");
 
     render(
       <MemoryRouter>
@@ -344,6 +502,11 @@ describe("LandlordAnalyticsPage", () => {
       period: "30d",
       propertyId: "prop-2",
       status: "active",
+    });
+    expect(vi.mocked(fetchLandlordAnalyticsBenchmarking)).toHaveBeenCalledWith({ period: "30d", propertyId: null });
+    expect(vi.mocked(fetchLandlordAnalyticsBenchmarking)).toHaveBeenLastCalledWith({
+      period: "30d",
+      propertyId: "prop-2",
     });
   });
 
