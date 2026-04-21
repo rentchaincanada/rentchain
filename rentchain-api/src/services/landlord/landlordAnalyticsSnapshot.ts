@@ -169,6 +169,7 @@ function buildDerivedInput(params: {
       })
     )
     .map((reconciliation: any) => ({
+      applicationId: asAnalyticsString(reconciliation?.applicationId, 240),
       status: reconciliation.status,
       summary: {
         hasQuote: Boolean(reconciliation?.summary?.hasQuote),

@@ -94,6 +94,24 @@ describe("deriveLandlordAnalyticsSnapshot", () => {
       { id: "prop-1", name: "Untitled property" },
       { id: "prop-2", name: "Untitled property" },
     ]);
+    expect(result.propertyMetrics).toEqual([
+      expect.objectContaining({
+        propertyId: "prop-1",
+        metrics: expect.objectContaining({
+          vacancyRate: 1,
+          openWorkOrders: 1,
+          maintenanceCostCents: 18000,
+        }),
+      }),
+      expect.objectContaining({
+        propertyId: "prop-2",
+        metrics: expect.objectContaining({
+          vacancyRate: 0,
+          estimatedScheduledRentCents: 180000,
+          leasesEndingSoon: 1,
+        }),
+      }),
+    ]);
     expect(result.insights).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -140,6 +158,7 @@ describe("deriveLandlordAnalyticsSnapshot", () => {
     });
     expect(result.insights).toEqual([]);
     expect(result.properties).toEqual([]);
+    expect(result.propertyMetrics).toEqual([]);
     expect(result.comparisons.previousPeriod).toEqual({
       vacancyRate: null,
       applicationConversionRate: null,

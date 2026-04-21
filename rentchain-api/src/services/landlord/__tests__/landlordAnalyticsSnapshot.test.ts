@@ -106,6 +106,16 @@ describe("loadLandlordAnalyticsSnapshot", () => {
     expect(scoped.summary.maintenanceCostCents).toBe(0);
     expect(scoped.summary.estimatedScheduledRentCents).toBe(165000);
     expect(scoped.summary.activeApplications).toBe(1);
+    expect(scoped.propertyMetrics).toEqual([
+      expect.objectContaining({
+        propertyId: "prop-1",
+        metrics: expect.objectContaining({
+          totalUnits: 1,
+          occupiedUnits: 1,
+          estimatedScheduledRentCents: 165000,
+        }),
+      }),
+    ]);
   });
 
   it("returns a stable empty payload when a landlord has no analytics data", async () => {
@@ -119,5 +129,6 @@ describe("loadLandlordAnalyticsSnapshot", () => {
     expect(result.summary.occupiedUnits).toBe(0);
     expect(result.summary.maintenanceCostCents).toBe(0);
     expect(result.insights).toEqual([]);
+    expect(result.propertyMetrics).toEqual([]);
   });
 });

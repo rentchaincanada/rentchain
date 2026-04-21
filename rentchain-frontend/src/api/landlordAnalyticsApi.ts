@@ -71,6 +71,25 @@ export type LandlordAnalyticsSnapshot = {
     id: string;
     name: string;
   }>;
+  propertyMetrics: Array<{
+    propertyId: string;
+    propertyName: string;
+    metrics: {
+      vacancyRate: number | null;
+      occupancyRate: number | null;
+      applicationVolume: number;
+      applicationConversionRate: number | null;
+      openWorkOrders: number;
+      maintenanceCostCents: number;
+      maintenanceCostPerUnitCents: number | null;
+      leasesEndingSoon: number;
+      estimatedScheduledRentCents: number;
+      estimatedRentPerOccupiedUnitCents: number | null;
+      totalUnits: number;
+      occupiedUnits: number;
+      vacantUnits: number;
+    };
+  }>;
   filters: {
     period: AnalyticsPeriod;
     propertyId: string | null;
