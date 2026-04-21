@@ -1,4 +1,5 @@
 import { deriveAdminAnalyticsSnapshot } from "./deriveAdminAnalyticsSnapshot";
+import { deriveAnalyticsDelta, derivePropertyMetricDeltas } from "./deriveAnalyticsDeltas";
 import type {
   AdminAnalyticsDerivedInput,
   AdminAnalyticsSnapshot,
@@ -179,6 +180,7 @@ function buildPreviousInput(input: AdminAnalyticsDerivedInput): AdminAnalyticsDe
   const previousFrom = previousTo - duration;
   return {
     ...input,
+    now: previousTo,
     from: previousFrom,
     to: previousTo,
   };
@@ -290,12 +292,21 @@ function deriveInsights(params: {
 
 export function deriveLandlordAnalyticsSnapshot(input: AdminAnalyticsDerivedInput & { propertyId?: string | null }): LandlordAnalyticsSnapshot {
   const current = deriveAdminAnalyticsSnapshot(input);
-  const previous = deriveAdminAnalyticsSnapshot(buildPreviousInput(input));
+  const previousInput = buildPreviousInput(input);
+  const previous = deriveAdminAnalyticsSnapshot(previousInput);
   const revenue = deriveEstimatedRent(input.leases || [], input.now);
+  const previousRevenue = deriveEstimatedRent(input.leases || [], previousInput.to);
   const propertyMetrics = derivePropertyMetrics(input);
+  const previousPropertyMetrics = derivePropertyMetrics(previousInput);
+  const propertyMetricsWithDeltas = derivePropertyMetricDeltas({
+    current: propertyMetrics,
+    previous: previousPropertyMetrics,
+  });
 
   const activeApplications = current.applications.pendingReviewCount;
   const leasesEndingSoon = current.portfolio.leasesEndingIn30Days;
+  const previousActiveApplications = previous.applications.pendingReviewCount;
+  const previousLeasesEndingSoon = previous.portfolio.leasesEndingIn30Days;
 
   return {
     summary: {
@@ -323,12 +334,172 @@ export function deriveLandlordAnalyticsSnapshot(input: AdminAnalyticsDerivedInpu
     }),
     comparisons: {
       previousPeriod: {
-        vacancyRate: previous.summary.vacancyRate,
-        applicationConversionRate: previous.applications.conversionRate,
-        applicationsStarted: previous.applications.started,
-        applicationsSubmitted: previous.applications.submitted,
-        maintenanceCostCents: previous.maintenance.maintenanceCostCents,
-        openWorkOrders: previous.maintenance.openWorkOrders,
+        summary: {
+          occupiedUnits: previous.portfolio.occupiedUnits,
+          vacancyRate: previous.summary.vacancyRate,
+          activeApplications: previousActiveApplications,
+          applicationConversionRate: previous.applications.conversionRate,
+          openWorkOrders: previous.maintenance.openWorkOrders,
+          maintenanceCostCents: previous.maintenance.maintenanceCostCents,
+          estimatedScheduledRentCents: previousRevenue.estimatedScheduledRentCents,
+          leasesEndingSoon: previousLeasesEndingSoon,
+        },
+        applications: previous.applications,
+        leasing: previous.portfolio,
+        maintenance: previous.maintenance,
+        revenue: previousRevenue,
+      },
+      deltas: {
+        summary: {
+          occupiedUnits: deriveAnalyticsDelta({
+            current: current.portfolio.occupiedUnits,
+            prior: previous.portfolio.occupiedUnits,
+            preference: "higher_better",
+          }),
+          vacancyRate: deriveAnalyticsDelta({
+            current: current.summary.vacancyRate,
+            prior: previous.summary.vacancyRate,
+            preference: "lower_better",
+          }),
+          activeApplications: deriveAnalyticsDelta({
+            current: activeApplications,
+            prior: previousActiveApplications,
+            preference: "higher_better",
+          }),
+          applicationConversionRate: deriveAnalyticsDelta({
+            current: current.applications.conversionRate,
+            prior: previous.applications.conversionRate,
+            preference: "higher_better",
+          }),
+          openWorkOrders: deriveAnalyticsDelta({
+            current: current.maintenance.openWorkOrders,
+            prior: previous.maintenance.openWorkOrders,
+            preference: "lower_better",
+          }),
+          maintenanceCostCents: deriveAnalyticsDelta({
+            current: current.maintenance.maintenanceCostCents,
+            prior: previous.maintenance.maintenanceCostCents,
+            preference: "lower_better",
+          }),
+          estimatedScheduledRentCents: deriveAnalyticsDelta({
+            current: revenue.estimatedScheduledRentCents,
+            prior: previousRevenue.estimatedScheduledRentCents,
+            preference: "higher_better",
+          }),
+          leasesEndingSoon: deriveAnalyticsDelta({
+            current: leasesEndingSoon,
+            prior: previousLeasesEndingSoon,
+            preference: "lower_better",
+          }),
+        },
+        applications: {
+          started: deriveAnalyticsDelta({
+            current: current.applications.started,
+            prior: previous.applications.started,
+            preference: "higher_better",
+          }),
+          submitted: deriveAnalyticsDelta({
+            current: current.applications.submitted,
+            prior: previous.applications.submitted,
+            preference: "higher_better",
+          }),
+          approved: deriveAnalyticsDelta({
+            current: current.applications.approved,
+            prior: previous.applications.approved,
+            preference: "higher_better",
+          }),
+          rejected: deriveAnalyticsDelta({
+            current: current.applications.rejected,
+            prior: previous.applications.rejected,
+            preference: "lower_better",
+          }),
+          declined: deriveAnalyticsDelta({
+            current: current.applications.declined,
+            prior: previous.applications.declined,
+            preference: "lower_better",
+          }),
+          pendingReviewCount: deriveAnalyticsDelta({
+            current: current.applications.pendingReviewCount,
+            prior: previous.applications.pendingReviewCount,
+            preference: "lower_better",
+          }),
+          conversionRate: deriveAnalyticsDelta({
+            current: current.applications.conversionRate,
+            prior: previous.applications.conversionRate,
+            preference: "higher_better",
+          }),
+        },
+        leasing: {
+          occupiedUnits: deriveAnalyticsDelta({
+            current: current.portfolio.occupiedUnits,
+            prior: previous.portfolio.occupiedUnits,
+            preference: "higher_better",
+          }),
+          vacantUnits: deriveAnalyticsDelta({
+            current: current.portfolio.vacantUnits,
+            prior: previous.portfolio.vacantUnits,
+            preference: "lower_better",
+          }),
+          occupancyRate: deriveAnalyticsDelta({
+            current: current.portfolio.occupancyRate,
+            prior: previous.portfolio.occupancyRate,
+            preference: "higher_better",
+          }),
+          leasesEndingIn30Days: deriveAnalyticsDelta({
+            current: current.portfolio.leasesEndingIn30Days,
+            prior: previous.portfolio.leasesEndingIn30Days,
+            preference: "lower_better",
+          }),
+          leasesEndingIn60Days: deriveAnalyticsDelta({
+            current: current.portfolio.leasesEndingIn60Days,
+            prior: previous.portfolio.leasesEndingIn60Days,
+            preference: "lower_better",
+          }),
+          leasesEndingIn90Days: deriveAnalyticsDelta({
+            current: current.portfolio.leasesEndingIn90Days,
+            prior: previous.portfolio.leasesEndingIn90Days,
+            preference: "lower_better",
+          }),
+        },
+        maintenance: {
+          openWorkOrders: deriveAnalyticsDelta({
+            current: current.maintenance.openWorkOrders,
+            prior: previous.maintenance.openWorkOrders,
+            preference: "lower_better",
+          }),
+          completedWorkOrders: deriveAnalyticsDelta({
+            current: current.maintenance.completedWorkOrders,
+            prior: previous.maintenance.completedWorkOrders,
+            preference: "higher_better",
+          }),
+          reopenedWorkOrders: deriveAnalyticsDelta({
+            current: current.maintenance.reopenedWorkOrders,
+            prior: previous.maintenance.reopenedWorkOrders,
+            preference: "lower_better",
+          }),
+          maintenanceCostCents: deriveAnalyticsDelta({
+            current: current.maintenance.maintenanceCostCents,
+            prior: previous.maintenance.maintenanceCostCents,
+            preference: "lower_better",
+          }),
+          averageCostPerCompletedWorkOrderCents: deriveAnalyticsDelta({
+            current: current.maintenance.averageCostPerCompletedWorkOrderCents,
+            prior: previous.maintenance.averageCostPerCompletedWorkOrderCents,
+            preference: "lower_better",
+          }),
+        },
+        revenue: {
+          estimatedScheduledRentCents: deriveAnalyticsDelta({
+            current: revenue.estimatedScheduledRentCents,
+            prior: previousRevenue.estimatedScheduledRentCents,
+            preference: "higher_better",
+          }),
+          averageRentPerOccupiedUnitCents: deriveAnalyticsDelta({
+            current: revenue.averageRentPerOccupiedUnitCents,
+            prior: previousRevenue.averageRentPerOccupiedUnitCents,
+            preference: "higher_better",
+          }),
+        },
       },
     },
     properties: (input.properties || [])
@@ -338,7 +509,7 @@ export function deriveLandlordAnalyticsSnapshot(input: AdminAnalyticsDerivedInpu
       }))
       .filter((property) => property.id)
       .sort((a, b) => a.name.localeCompare(b.name)),
-    propertyMetrics,
+    propertyMetrics: propertyMetricsWithDeltas,
     filters: {
       period: input.period,
       propertyId: input.propertyId ? asString(input.propertyId, 240) : null,

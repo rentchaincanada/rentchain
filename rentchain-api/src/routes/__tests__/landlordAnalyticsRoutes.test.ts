@@ -123,7 +123,63 @@ describe("landlordAnalyticsRoutes", () => {
         averageRentPerOccupiedUnitCents: 165000,
       },
       insights: [],
+      comparisons: {
+        previousPeriod: {
+          summary: {
+            occupiedUnits: 3,
+            vacancyRate: 0.3,
+            activeApplications: 1,
+            applicationConversionRate: 0.2,
+            openWorkOrders: 2,
+            maintenanceCostCents: 4000,
+            estimatedScheduledRentCents: 620000,
+            leasesEndingSoon: 2,
+          },
+          applications: {
+            started: 2,
+            submitted: 2,
+            approved: 1,
+            rejected: 0,
+            declined: 0,
+            pendingReviewCount: 1,
+            conversionRate: 0.2,
+          },
+          leasing: {
+            totalProperties: 2,
+            totalUnits: 5,
+            occupiedUnits: 3,
+            vacantUnits: 2,
+            occupancyRate: 0.6,
+            leasesEndingIn30Days: 2,
+            leasesEndingIn60Days: 2,
+            leasesEndingIn90Days: 2,
+            turnoverCount: 0,
+          },
+          maintenance: {
+            openWorkOrders: 2,
+            completedWorkOrders: 1,
+            reopenedWorkOrders: 0,
+            maintenanceCostCents: 4000,
+            averageCostPerCompletedWorkOrderCents: 4000,
+            costConcentrationByProperty: [],
+          },
+          revenue: {
+            estimatedScheduledRentCents: 620000,
+            averageRentPerOccupiedUnitCents: 155000,
+          },
+        },
+        deltas: {
+          summary: {
+            occupiedUnits: { current: 4, prior: 3, absoluteDelta: 1, relativeDelta: 0.3333, direction: "better" },
+          },
+          applications: {},
+          leasing: {},
+          maintenance: {},
+          revenue: {},
+        },
+      },
       properties: [{ id: "prop-123", name: "Alpha" }],
+      propertyMetrics: [],
       filters: {
         period: "90d",
         propertyId: null,
@@ -149,6 +205,7 @@ describe("landlordAnalyticsRoutes", () => {
     });
     expect(response.body.ok).toBe(true);
     expect(response.body.summary.occupiedUnits).toBe(4);
+    expect(response.body.comparisons.deltas.summary.occupiedUnits.direction).toBe("better");
   });
 
   it("enforces landlord authentication", async () => {

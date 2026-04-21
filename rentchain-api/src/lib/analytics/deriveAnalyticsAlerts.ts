@@ -63,6 +63,7 @@ export function deriveAnalyticsAlerts(params: {
   const currentIso =
     typeof params.now === "number" ? new Date(params.now).toISOString() : new Date(snapshot.filters.to).toISOString();
   const previous = snapshot.comparisons.previousPeriod;
+  const deltas = snapshot.comparisons.deltas;
   const alerts: AnalyticsAlert[] = [];
 
   const leaseExpiryCount = snapshot.leasing.leasesEndingIn30Days;
@@ -90,7 +91,7 @@ export function deriveAnalyticsAlerts(params: {
   );
 
   const vacancyRate = snapshot.summary.vacancyRate || 0;
-  const previousVacancyRate = previous.vacancyRate || 0;
+  const previousVacancyRate = previous.summary.vacancyRate || 0;
   alerts.push(
     buildAlert({
       type: "high_vacancy",
@@ -112,15 +113,15 @@ export function deriveAnalyticsAlerts(params: {
     })
   );
 
-  const vacancyDelta = vacancyRate - previousVacancyRate;
+  const vacancyDelta = deltas.summary.vacancyRate.absoluteDelta || 0;
   alerts.push(
     buildAlert({
       type: "vacancy_increase",
       severity: vacancyDelta >= 0.2 ? "high" : "medium",
-      status: previous.vacancyRate != null && vacancyDelta >= 0.1 ? "active" : "resolved",
+      status: deltas.summary.vacancyRate.direction === "worse" && vacancyDelta >= 0.1 ? "active" : "resolved",
       title: "Vacancy worsened",
       message:
-        previous.vacancyRate != null && vacancyDelta >= 0.1
+        deltas.summary.vacancyRate.direction === "worse" && vacancyDelta >= 0.1
           ? `Vacancy increased from ${Math.round(previousVacancyRate * 100)}% to ${Math.round(vacancyRate * 100)}%.`
           : "Vacancy has not worsened meaningfully versus the prior period.",
       propertyId,
@@ -152,7 +153,7 @@ export function deriveAnalyticsAlerts(params: {
       propertyId,
       propertyName: propertyNameById(snapshot, propertyId),
       metricValue: snapshot.applications.started,
-      previousMetricValue: previous.applicationsStarted,
+      previousMetricValue: previous.applications.started,
       period,
       detectedAt: snapshot.filters.to,
       lastEvaluatedAt: currentIso,
@@ -161,9 +162,12 @@ export function deriveAnalyticsAlerts(params: {
   );
 
   const conversionRate = snapshot.applications.conversionRate || 0;
-  const previousConversionRate = previous.applicationConversionRate || 0;
+  const previousConversionRate = previous.summary.applicationConversionRate || 0;
   const conversionDropActive =
-    previous.applicationConversionRate != null && previousConversionRate >= 0.2 && previousConversionRate - conversionRate >= 0.2;
+    deltas.summary.applicationConversionRate.direction === "worse" &&
+    previous.summary.applicationConversionRate != null &&
+    previousConversionRate >= 0.2 &&
+    previousConversionRate - conversionRate >= 0.2;
   alerts.push(
     buildAlert({
       type: "application_conversion_drop",
@@ -195,7 +199,7 @@ export function deriveAnalyticsAlerts(params: {
       propertyId: applicationsDropInsight?.propertyId || propertyId,
       propertyName: propertyNameById(snapshot, applicationsDropInsight?.propertyId || propertyId),
       metricValue: snapshot.applications.submitted,
-      previousMetricValue: previous.applicationsSubmitted,
+      previousMetricValue: previous.applications.submitted,
       period,
       detectedAt: snapshot.filters.to,
       lastEvaluatedAt: currentIso,
@@ -205,7 +209,7 @@ export function deriveAnalyticsAlerts(params: {
 
   const maintenanceInsight = snapshot.insights.find((insight) => insight.type === "maintenance_cost_increase");
   const maintenanceCost = snapshot.maintenance.maintenanceCostCents;
-  const previousMaintenanceCost = previous.maintenanceCostCents;
+  const previousMaintenanceCost = previous.summary.maintenanceCostCents;
   const maintenanceActive =
     Boolean(maintenanceInsight) ||
     (previousMaintenanceCost > 0 && maintenanceCost >= Math.max(50_000, previousMaintenanceCost * 1.5));
@@ -240,7 +244,7 @@ export function deriveAnalyticsAlerts(params: {
       propertyId: workOrderInsight?.propertyId || propertyId,
       propertyName: propertyNameById(snapshot, workOrderInsight?.propertyId || propertyId),
       metricValue: snapshot.maintenance.openWorkOrders,
-      previousMetricValue: previous.openWorkOrders,
+      previousMetricValue: previous.summary.openWorkOrders,
       period,
       detectedAt: snapshot.filters.to,
       lastEvaluatedAt: currentIso,

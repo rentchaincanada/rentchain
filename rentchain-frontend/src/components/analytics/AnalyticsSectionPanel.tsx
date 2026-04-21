@@ -1,10 +1,14 @@
 import React from "react";
 import { Card } from "../ui/Ui";
+import type { AnalyticsDeltaValue } from "@/api/landlordAnalyticsApi";
+import TrendDeltaBadge from "./TrendDeltaBadge";
 
 type Metric = {
   label: string;
   value: string;
   hint?: string;
+  delta?: AnalyticsDeltaValue | null;
+  formatAbsoluteDelta?: (value: number) => string | null;
 };
 
 type Props = {
@@ -12,9 +16,10 @@ type Props = {
   description: string;
   metrics: Metric[];
   emptyMessage?: string;
+  periodLabel?: string;
 };
 
-export function AnalyticsSectionPanel({ title, description, metrics, emptyMessage }: Props) {
+export function AnalyticsSectionPanel({ title, description, metrics, emptyMessage, periodLabel = "period" }: Props) {
   return (
     <Card>
       <div style={{ display: "grid", gap: 12 }}>
@@ -41,6 +46,11 @@ export function AnalyticsSectionPanel({ title, description, metrics, emptyMessag
                 <div style={{ display: "grid", gap: 2 }}>
                   <div style={{ fontWeight: 600, color: "#0f172a" }}>{metric.label}</div>
                   {metric.hint ? <div style={{ color: "#64748b", fontSize: "0.88rem" }}>{metric.hint}</div> : null}
+                  <TrendDeltaBadge
+                    delta={metric.delta}
+                    periodLabel={periodLabel}
+                    formatAbsoluteDelta={metric.formatAbsoluteDelta}
+                  />
                 </div>
                 <div style={{ fontWeight: 700, color: "#0f172a", textAlign: "right" }}>{metric.value}</div>
               </div>
