@@ -253,6 +253,78 @@ def extract_section(text: str, heading_patterns: list[str]) -> str | None:
     return None
 
 
+# Helper functions for writing latest audit
+def build_latest_audit_text(
+    repo: Repo,
+    state: RunState,
+    *,
+    source_label: str,
+    source_file: str,
+    include_tests: bool = False,
+) -> str:
+    tests_block = ""
+    if include_tests:
+        tests_block = (
+            "\n\n"
+            "Test/build results:\n\n"
+            f"{state.tests_summary or 'No tests summary captured.'}"
+        )
+
+    return textwrap.dedent(
+        f"""
+        Generated at: {now_utc()}
+        Run ID: {state.run_id}
+
+        1. Current system structure relevant to this mission
+
+        Branch:
+        - Current branch is `{repo.current_branch()}`.
+
+        Current repo state:
+        - The worktree is {'clean' if repo.is_clean() else 'not clean'}.
+        - Current stage is `{state.current_stage}`.
+        - Current decision is `{state.decision}`.
+        - Expected branch is `{state.expected_branch}`.
+        - Mission title is `{state.mission_title}`.
+
+        2. Duplicated logic or drift locations
+
+        Current drift / risk points:
+        - {state.risks_summary or 'No risks summary captured.'}
+
+        3. Canonical path to standardize around
+
+        Canonical files currently touched:
+        {chr(10).join(f'- `{f}`' for f in state.changed_files) if state.changed_files else '- None recorded'}
+
+        4. Exact files to modify
+
+        Mission-scoped files:
+        {chr(10).join(f'- `{f}`' for f in state.changed_files) if state.changed_files else '- None recorded'}
+
+        5. Risks
+
+        {state.risks_summary or 'No risks summary captured.'}
+
+        6. Implementation plan
+
+        - Latest {source_label} captured in `{source_file}`
+        - Review changed files, risks, and current branch before next mission step{tests_block}
+        """
+    ).strip() + "\n"
+
+
+def write_latest_audit(repo: Repo, content: str) -> None:
+    latest_audit_path = pathlib.Path(repo.repo_root()) / ".conversation_engine" / "latest_audit.txt"
+    tmp_latest_audit_path = latest_audit_path.with_suffix(".tmp")
+    try:
+        latest_audit_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_latest_audit_path.write_text(content, encoding="utf-8")
+        tmp_latest_audit_path.replace(latest_audit_path)
+    except OSError as exc:
+        raise EngineError(f"Failed to update {latest_audit_path}: {exc}") from exc
+
+
 class PromptBuilder:
     @staticmethod
     def codex_audit_prompt(state: RunState, mission_text: str) -> str:
@@ -497,6 +569,13 @@ def cmd_apply_codex_audit(args: argparse.Namespace) -> int:
     state.changed_files = extract_changed_files(text)
     state.risks_summary = extract_section(text, ["5. risks", "known risks", "risks"]) or state.risks_summary
     store.save_state(state)
+    latest_audit = build_latest_audit_text(
+        repo,
+        state,
+        source_label="Codex audit",
+        source_file="responses/codex_audit.txt",
+    )
+    write_latest_audit(repo, latest_audit)
     print(f"Saved Codex audit: {path}")
     return 0
 
@@ -563,6 +642,14 @@ def cmd_apply_codex_implementation(args: argparse.Namespace) -> int:
     state.tests_summary = extract_section(text, ["test/build results", "updated test/build results"]) or state.tests_summary
     state.risks_summary = extract_section(text, ["known risks", "remaining risks", "risks"]) or state.risks_summary
     store.save_state(state)
+    latest_audit = build_latest_audit_text(
+        repo,
+        state,
+        source_label="Codex implementation",
+        source_file="responses/codex_implementation.txt",
+        include_tests=True,
+    )
+    write_latest_audit(repo, latest_audit)
     print(f"Saved Codex implementation: {path}")
     return 0
 
@@ -644,6 +731,14 @@ def cmd_finalize_summary(args: argparse.Namespace) -> int:
     path = store.write_text(state.run_id, "final_summary.md", summary)
     state.current_stage = "finalized"
     store.save_state(state)
+    latest_audit = build_latest_audit_text(
+        repo,
+        state,
+        source_label="final summary",
+        source_file="final_summary.md",
+        include_tests=True,
+    )
+    write_latest_audit(repo, latest_audit)
     print(path)
     return 0
 
