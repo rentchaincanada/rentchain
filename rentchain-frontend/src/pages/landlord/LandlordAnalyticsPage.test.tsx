@@ -60,6 +60,132 @@ afterEach(() => {
 });
 
 describe("LandlordAnalyticsPage", () => {
+  function buildComparisons(overrides?: Record<string, any>) {
+    return {
+      previousPeriod: {
+        summary: {
+          occupiedUnits: 3,
+          vacancyRate: 0.1,
+          activeApplications: 1,
+          applicationConversionRate: 0.4,
+          openWorkOrders: 2,
+          maintenanceCostCents: 5000,
+          estimatedScheduledRentCents: 620000,
+          leasesEndingSoon: 2,
+        },
+        applications: {
+          started: 3,
+          submitted: 3,
+          approved: 1,
+          rejected: 0,
+          declined: 0,
+          pendingReviewCount: 1,
+          conversionRate: 0.4,
+        },
+        leasing: {
+          totalProperties: 2,
+          totalUnits: 5,
+          occupiedUnits: 3,
+          vacantUnits: 2,
+          occupancyRate: 0.6,
+          leasesEndingIn30Days: 2,
+          leasesEndingIn60Days: 2,
+          leasesEndingIn90Days: 2,
+          turnoverCount: 0,
+        },
+        maintenance: {
+          openWorkOrders: 2,
+          completedWorkOrders: 1,
+          reopenedWorkOrders: 0,
+          maintenanceCostCents: 5000,
+          averageCostPerCompletedWorkOrderCents: 5000,
+          costConcentrationByProperty: [],
+        },
+        revenue: {
+          estimatedScheduledRentCents: 620000,
+          averageRentPerOccupiedUnitCents: 155000,
+        },
+      },
+      deltas: {
+        summary: {
+          occupiedUnits: { current: 4, prior: 3, absoluteDelta: 1, relativeDelta: 0.3333, direction: "better" },
+          vacancyRate: { current: 0.2, prior: 0.1, absoluteDelta: 0.1, relativeDelta: 1, direction: "worse" },
+          activeApplications: { current: 2, prior: 1, absoluteDelta: 1, relativeDelta: 1, direction: "better" },
+          applicationConversionRate: {
+            current: 0.5,
+            prior: 0.4,
+            absoluteDelta: 0.1,
+            relativeDelta: 0.25,
+            direction: "better",
+          },
+          openWorkOrders: { current: 1, prior: 2, absoluteDelta: -1, relativeDelta: -0.5, direction: "better" },
+          maintenanceCostCents: {
+            current: 12500,
+            prior: 5000,
+            absoluteDelta: 7500,
+            relativeDelta: 1.5,
+            direction: "worse",
+          },
+          estimatedScheduledRentCents: {
+            current: 660000,
+            prior: 620000,
+            absoluteDelta: 40000,
+            relativeDelta: 0.0645,
+            direction: "better",
+          },
+          leasesEndingSoon: { current: 1, prior: 2, absoluteDelta: -1, relativeDelta: -0.5, direction: "better" },
+        },
+        applications: {
+          started: { current: 4, prior: 3, absoluteDelta: 1, relativeDelta: 0.3333, direction: "better" },
+          submitted: { current: 3, prior: 3, absoluteDelta: 0, relativeDelta: 0, direction: "flat" },
+          approved: { current: 2, prior: 1, absoluteDelta: 1, relativeDelta: 1, direction: "better" },
+          rejected: { current: 0, prior: 0, absoluteDelta: 0, relativeDelta: null, direction: "flat" },
+          declined: { current: 0, prior: 0, absoluteDelta: 0, relativeDelta: null, direction: "flat" },
+          pendingReviewCount: { current: 2, prior: 1, absoluteDelta: 1, relativeDelta: 1, direction: "worse" },
+          conversionRate: { current: 0.5, prior: 0.4, absoluteDelta: 0.1, relativeDelta: 0.25, direction: "better" },
+        },
+        leasing: {
+          occupiedUnits: { current: 4, prior: 3, absoluteDelta: 1, relativeDelta: 0.3333, direction: "better" },
+          vacantUnits: { current: 1, prior: 2, absoluteDelta: -1, relativeDelta: -0.5, direction: "better" },
+          occupancyRate: { current: 0.8, prior: 0.6, absoluteDelta: 0.2, relativeDelta: 0.3333, direction: "better" },
+          leasesEndingIn30Days: { current: 1, prior: 2, absoluteDelta: -1, relativeDelta: -0.5, direction: "better" },
+          leasesEndingIn60Days: { current: 1, prior: 2, absoluteDelta: -1, relativeDelta: -0.5, direction: "better" },
+          leasesEndingIn90Days: { current: 2, prior: 2, absoluteDelta: 0, relativeDelta: 0, direction: "flat" },
+        },
+        maintenance: {
+          openWorkOrders: { current: 1, prior: 2, absoluteDelta: -1, relativeDelta: -0.5, direction: "better" },
+          completedWorkOrders: { current: 2, prior: 1, absoluteDelta: 1, relativeDelta: 1, direction: "better" },
+          reopenedWorkOrders: { current: 0, prior: 0, absoluteDelta: 0, relativeDelta: null, direction: "flat" },
+          maintenanceCostCents: { current: 12500, prior: 5000, absoluteDelta: 7500, relativeDelta: 1.5, direction: "worse" },
+          averageCostPerCompletedWorkOrderCents: {
+            current: 6250,
+            prior: 5000,
+            absoluteDelta: 1250,
+            relativeDelta: 0.25,
+            direction: "worse",
+          },
+        },
+        revenue: {
+          estimatedScheduledRentCents: {
+            current: 660000,
+            prior: 620000,
+            absoluteDelta: 40000,
+            relativeDelta: 0.0645,
+            direction: "better",
+          },
+          averageRentPerOccupiedUnitCents: {
+            current: 165000,
+            prior: 155000,
+            absoluteDelta: 10000,
+            relativeDelta: 0.0645,
+            direction: "better",
+          },
+        },
+      },
+      ...overrides,
+    };
+  }
+
   function mockEntitlements(overrides?: Record<string, any>) {
     return import("@/hooks/useEntitlements").then(({ useEntitlements }) => {
       vi.mocked(useEntitlements).mockReturnValue({
@@ -120,16 +246,7 @@ describe("LandlordAnalyticsPage", () => {
         averageRentPerOccupiedUnitCents: 165000,
       },
       insights: [{ type: "lease_expiry", severity: "medium", message: "1 lease ends within 30 days." }],
-      comparisons: {
-        previousPeriod: {
-          vacancyRate: 0.1,
-          applicationConversionRate: 0.4,
-          applicationsStarted: 3,
-          applicationsSubmitted: 3,
-          maintenanceCostCents: 5000,
-          openWorkOrders: 1,
-        },
-      },
+      comparisons: buildComparisons(),
       properties: [
         { id: "prop-1", name: "Alpha" },
         { id: "prop-2", name: "Beta" },
@@ -302,6 +419,7 @@ describe("LandlordAnalyticsPage", () => {
     expect(screen.getByRole("heading", { name: /Portfolio benchmarking/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Applications/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Revenue signal/i })).toBeInTheDocument();
+    expect(screen.getAllByText(/vs prior 90 days/i).length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: /Review leases/i })).toHaveAttribute("href", "/portfolio-health");
     expect(macShellSpy).toHaveBeenCalledWith(expect.objectContaining({ title: "Analytics", showTopNav: false }));
   });
@@ -374,16 +492,92 @@ describe("LandlordAnalyticsPage", () => {
       },
       insights: [],
       propertyMetrics: [],
-      comparisons: {
+      comparisons: buildComparisons({
         previousPeriod: {
-          vacancyRate: null,
-          applicationConversionRate: null,
-          applicationsStarted: 0,
-          applicationsSubmitted: 0,
-          maintenanceCostCents: 0,
-          openWorkOrders: 0,
+          summary: {
+            occupiedUnits: 0,
+            vacancyRate: null,
+            activeApplications: 0,
+            applicationConversionRate: null,
+            openWorkOrders: 0,
+            maintenanceCostCents: 0,
+            estimatedScheduledRentCents: 0,
+            leasesEndingSoon: 0,
+          },
+          applications: {
+            started: 0,
+            submitted: 0,
+            approved: 0,
+            rejected: 0,
+            declined: 0,
+            pendingReviewCount: 0,
+            conversionRate: null,
+          },
+          leasing: {
+            totalProperties: 0,
+            totalUnits: 0,
+            occupiedUnits: 0,
+            vacantUnits: 0,
+            occupancyRate: null,
+            leasesEndingIn30Days: 0,
+            leasesEndingIn60Days: 0,
+            leasesEndingIn90Days: 0,
+            turnoverCount: 0,
+          },
+          maintenance: {
+            openWorkOrders: 0,
+            completedWorkOrders: 0,
+            reopenedWorkOrders: 0,
+            maintenanceCostCents: 0,
+            averageCostPerCompletedWorkOrderCents: null,
+            costConcentrationByProperty: [],
+          },
+          revenue: {
+            estimatedScheduledRentCents: 0,
+            averageRentPerOccupiedUnitCents: null,
+          },
         },
-      },
+        deltas: {
+          summary: {
+            occupiedUnits: { current: 0, prior: 0, absoluteDelta: 0, relativeDelta: null, direction: "flat" },
+            vacancyRate: { current: null, prior: null, absoluteDelta: null, relativeDelta: null, direction: "insufficient_data" },
+            activeApplications: { current: 0, prior: 0, absoluteDelta: 0, relativeDelta: null, direction: "flat" },
+            applicationConversionRate: { current: null, prior: null, absoluteDelta: null, relativeDelta: null, direction: "insufficient_data" },
+            openWorkOrders: { current: 0, prior: 0, absoluteDelta: 0, relativeDelta: null, direction: "flat" },
+            maintenanceCostCents: { current: 0, prior: 0, absoluteDelta: 0, relativeDelta: null, direction: "flat" },
+            estimatedScheduledRentCents: { current: 0, prior: 0, absoluteDelta: 0, relativeDelta: null, direction: "flat" },
+            leasesEndingSoon: { current: 0, prior: 0, absoluteDelta: 0, relativeDelta: null, direction: "flat" },
+          },
+          applications: {
+            started: { current: 0, prior: 0, absoluteDelta: 0, relativeDelta: null, direction: "flat" },
+            submitted: { current: 0, prior: 0, absoluteDelta: 0, relativeDelta: null, direction: "flat" },
+            approved: { current: 0, prior: 0, absoluteDelta: 0, relativeDelta: null, direction: "flat" },
+            rejected: { current: 0, prior: 0, absoluteDelta: 0, relativeDelta: null, direction: "flat" },
+            declined: { current: 0, prior: 0, absoluteDelta: 0, relativeDelta: null, direction: "flat" },
+            pendingReviewCount: { current: 0, prior: 0, absoluteDelta: 0, relativeDelta: null, direction: "flat" },
+            conversionRate: { current: null, prior: null, absoluteDelta: null, relativeDelta: null, direction: "insufficient_data" },
+          },
+          leasing: {
+            occupiedUnits: { current: 0, prior: 0, absoluteDelta: 0, relativeDelta: null, direction: "flat" },
+            vacantUnits: { current: 0, prior: 0, absoluteDelta: 0, relativeDelta: null, direction: "flat" },
+            occupancyRate: { current: null, prior: null, absoluteDelta: null, relativeDelta: null, direction: "insufficient_data" },
+            leasesEndingIn30Days: { current: 0, prior: 0, absoluteDelta: 0, relativeDelta: null, direction: "flat" },
+            leasesEndingIn60Days: { current: 0, prior: 0, absoluteDelta: 0, relativeDelta: null, direction: "flat" },
+            leasesEndingIn90Days: { current: 0, prior: 0, absoluteDelta: 0, relativeDelta: null, direction: "flat" },
+          },
+          maintenance: {
+            openWorkOrders: { current: 0, prior: 0, absoluteDelta: 0, relativeDelta: null, direction: "flat" },
+            completedWorkOrders: { current: 0, prior: 0, absoluteDelta: 0, relativeDelta: null, direction: "flat" },
+            reopenedWorkOrders: { current: 0, prior: 0, absoluteDelta: 0, relativeDelta: null, direction: "flat" },
+            maintenanceCostCents: { current: 0, prior: 0, absoluteDelta: 0, relativeDelta: null, direction: "flat" },
+            averageCostPerCompletedWorkOrderCents: { current: null, prior: null, absoluteDelta: null, relativeDelta: null, direction: "insufficient_data" },
+          },
+          revenue: {
+            estimatedScheduledRentCents: { current: 0, prior: 0, absoluteDelta: 0, relativeDelta: null, direction: "flat" },
+            averageRentPerOccupiedUnitCents: { current: null, prior: null, absoluteDelta: null, relativeDelta: null, direction: "insufficient_data" },
+          },
+        },
+      }),
       properties: [],
       filters: {
         period: "90d",
@@ -476,6 +670,93 @@ describe("LandlordAnalyticsPage", () => {
     );
 
     expect(await screen.findByText(/Failed to load analytics: Boom/i)).toBeInTheDocument();
+  });
+
+  it("renders safely when delta fields are missing", async () => {
+    await mockEntitlements();
+    const { fetchLandlordAnalyticsSnapshot } = await import("../../api/landlordAnalyticsApi");
+    const { fetchLandlordAnalyticsAlerts } = await import("../../api/landlordAnalyticsAlertsApi");
+    const { fetchLandlordAnalyticsBenchmarking } = await import("../../api/landlordAnalyticsBenchmarkingApi");
+    vi.mocked(fetchLandlordAnalyticsSnapshot).mockResolvedValue({
+      summary: {
+        occupiedUnits: 2,
+        vacancyRate: 0.1,
+        activeApplications: 1,
+        applicationConversionRate: 0.5,
+        openWorkOrders: 1,
+        maintenanceCostCents: 4000,
+        estimatedScheduledRentCents: 320000,
+        leasesEndingSoon: 1,
+      },
+      applications: {
+        started: 1,
+        submitted: 1,
+        approved: 1,
+        rejected: 0,
+        declined: 0,
+        pendingReviewCount: 1,
+        conversionRate: 0.5,
+      },
+      leasing: {
+        totalProperties: 1,
+        totalUnits: 2,
+        occupiedUnits: 2,
+        vacantUnits: 0,
+        occupancyRate: 1,
+        leasesEndingIn30Days: 1,
+        leasesEndingIn60Days: 1,
+        leasesEndingIn90Days: 1,
+        turnoverCount: 0,
+      },
+      maintenance: {
+        openWorkOrders: 1,
+        completedWorkOrders: 1,
+        reopenedWorkOrders: 0,
+        maintenanceCostCents: 4000,
+        averageCostPerCompletedWorkOrderCents: 4000,
+        costConcentrationByProperty: [],
+      },
+      revenue: {
+        estimatedScheduledRentCents: 320000,
+        averageRentPerOccupiedUnitCents: 160000,
+      },
+      insights: [],
+      comparisons: {
+        previousPeriod: buildComparisons().previousPeriod,
+      },
+      properties: [{ id: "prop-1", name: "Alpha" }],
+      propertyMetrics: [],
+      filters: {
+        period: "90d",
+        propertyId: null,
+        from: "2026-01-20T00:00:00.000Z",
+        to: "2026-04-20T00:00:00.000Z",
+      },
+    } as any);
+    vi.mocked(fetchLandlordAnalyticsAlerts).mockResolvedValue({
+      summary: { activeCount: 0, highSeverityCount: 0, mediumSeverityCount: 0, lowSeverityCount: 0 },
+      alerts: [],
+      filters: { period: "90d", propertyId: null, status: "active" },
+    } as any);
+    vi.mocked(fetchLandlordAnalyticsBenchmarking).mockResolvedValue({
+      summary: { propertyCount: 1, comparedPropertyCount: 0, benchmarkDimensions: ["vacancyRate"] },
+      comparisons: [],
+      insights: [],
+      filters: {
+        period: "90d",
+        propertyId: null,
+        from: "2026-01-20T00:00:00.000Z",
+        to: "2026-04-20T00:00:00.000Z",
+      },
+    } as any);
+
+    render(
+      <MemoryRouter>
+        <LandlordAnalyticsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole("heading", { name: /Applications/i })).toBeInTheDocument();
   });
 
   it("re-fetches when filters change", async () => {

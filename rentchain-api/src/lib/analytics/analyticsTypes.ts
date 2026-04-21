@@ -124,6 +124,20 @@ export type LandlordAnalyticsInsight = {
   propertyId?: string | null;
 };
 
+export type AnalyticsDeltaDirection =
+  | "better"
+  | "worse"
+  | "flat"
+  | "insufficient_data";
+
+export type AnalyticsDeltaValue = {
+  current: number | null;
+  prior: number | null;
+  absoluteDelta: number | null;
+  relativeDelta: number | null;
+  direction: AnalyticsDeltaDirection;
+};
+
 export type LandlordBenchmarkDimension =
   | "vacancyRate"
   | "applicationVolume"
@@ -155,6 +169,7 @@ export type LandlordPropertyAnalytics = {
   propertyId: string;
   propertyName: string;
   metrics: LandlordPropertyAnalyticsMetrics;
+  deltas?: Partial<Record<keyof LandlordPropertyAnalyticsMetrics, AnalyticsDeltaValue>>;
 };
 
 export type LandlordBenchmarkMetricComparison = {
@@ -225,12 +240,60 @@ export type LandlordAnalyticsSnapshot = {
   insights: LandlordAnalyticsInsight[];
   comparisons: {
     previousPeriod: {
-      vacancyRate: number | null;
-      applicationConversionRate: number | null;
-      applicationsStarted: number;
-      applicationsSubmitted: number;
-      maintenanceCostCents: number;
-      openWorkOrders: number;
+      summary: {
+        occupiedUnits: number;
+        vacancyRate: number | null;
+        activeApplications: number;
+        applicationConversionRate: number | null;
+        openWorkOrders: number;
+        maintenanceCostCents: number;
+        estimatedScheduledRentCents: number;
+        leasesEndingSoon: number;
+      };
+      applications: AdminApplicationsAnalytics;
+      leasing: AdminPortfolioAnalytics;
+      maintenance: AdminMaintenanceAnalytics;
+      revenue: LandlordRevenueAnalytics;
+    };
+    deltas: {
+      summary: {
+        occupiedUnits: AnalyticsDeltaValue;
+        vacancyRate: AnalyticsDeltaValue;
+        activeApplications: AnalyticsDeltaValue;
+        applicationConversionRate: AnalyticsDeltaValue;
+        openWorkOrders: AnalyticsDeltaValue;
+        maintenanceCostCents: AnalyticsDeltaValue;
+        estimatedScheduledRentCents: AnalyticsDeltaValue;
+        leasesEndingSoon: AnalyticsDeltaValue;
+      };
+      applications: {
+        started: AnalyticsDeltaValue;
+        submitted: AnalyticsDeltaValue;
+        approved: AnalyticsDeltaValue;
+        rejected: AnalyticsDeltaValue;
+        declined: AnalyticsDeltaValue;
+        pendingReviewCount: AnalyticsDeltaValue;
+        conversionRate: AnalyticsDeltaValue;
+      };
+      leasing: {
+        occupiedUnits: AnalyticsDeltaValue;
+        vacantUnits: AnalyticsDeltaValue;
+        occupancyRate: AnalyticsDeltaValue;
+        leasesEndingIn30Days: AnalyticsDeltaValue;
+        leasesEndingIn60Days: AnalyticsDeltaValue;
+        leasesEndingIn90Days: AnalyticsDeltaValue;
+      };
+      maintenance: {
+        openWorkOrders: AnalyticsDeltaValue;
+        completedWorkOrders: AnalyticsDeltaValue;
+        reopenedWorkOrders: AnalyticsDeltaValue;
+        maintenanceCostCents: AnalyticsDeltaValue;
+        averageCostPerCompletedWorkOrderCents: AnalyticsDeltaValue;
+      };
+      revenue: {
+        estimatedScheduledRentCents: AnalyticsDeltaValue;
+        averageRentPerOccupiedUnitCents: AnalyticsDeltaValue;
+      };
     };
   };
   properties: Array<{

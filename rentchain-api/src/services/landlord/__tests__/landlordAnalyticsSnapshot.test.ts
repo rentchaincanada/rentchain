@@ -106,6 +106,8 @@ describe("loadLandlordAnalyticsSnapshot", () => {
     expect(scoped.summary.maintenanceCostCents).toBe(0);
     expect(scoped.summary.estimatedScheduledRentCents).toBe(165000);
     expect(scoped.summary.activeApplications).toBe(1);
+    expect(scoped.comparisons.deltas.summary.estimatedScheduledRentCents.direction).toBe("flat");
+    expect(scoped.comparisons.deltas.summary.activeApplications.direction).toBe("flat");
     expect(scoped.propertyMetrics).toEqual([
       expect.objectContaining({
         propertyId: "prop-1",
@@ -113,6 +115,11 @@ describe("loadLandlordAnalyticsSnapshot", () => {
           totalUnits: 1,
           occupiedUnits: 1,
           estimatedScheduledRentCents: 165000,
+        }),
+        deltas: expect.objectContaining({
+          occupiedUnits: expect.objectContaining({
+            direction: "flat",
+          }),
         }),
       }),
     ]);
@@ -130,5 +137,6 @@ describe("loadLandlordAnalyticsSnapshot", () => {
     expect(result.summary.maintenanceCostCents).toBe(0);
     expect(result.insights).toEqual([]);
     expect(result.propertyMetrics).toEqual([]);
+    expect(result.comparisons.deltas.summary.maintenanceCostCents.direction).toBe("flat");
   });
 });

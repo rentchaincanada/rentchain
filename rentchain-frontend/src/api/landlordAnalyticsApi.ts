@@ -9,6 +9,14 @@ export type LandlordAnalyticsInsight = {
   propertyId?: string | null;
 };
 
+export type AnalyticsDeltaValue = {
+  current: number | null;
+  prior: number | null;
+  absoluteDelta: number | null;
+  relativeDelta: number | null;
+  direction: "better" | "worse" | "flat" | "insufficient_data";
+};
+
 export type LandlordAnalyticsSnapshot = {
   summary: {
     occupiedUnits: number;
@@ -59,12 +67,59 @@ export type LandlordAnalyticsSnapshot = {
   insights: LandlordAnalyticsInsight[];
   comparisons: {
     previousPeriod: {
-      vacancyRate: number | null;
-      applicationConversionRate: number | null;
-      applicationsStarted: number;
-      applicationsSubmitted: number;
-      maintenanceCostCents: number;
-      openWorkOrders: number;
+      summary: {
+        occupiedUnits: number;
+        vacancyRate: number | null;
+        activeApplications: number;
+        applicationConversionRate: number | null;
+        openWorkOrders: number;
+        maintenanceCostCents: number;
+        estimatedScheduledRentCents: number;
+        leasesEndingSoon: number;
+      };
+      applications: {
+        started: number;
+        submitted: number;
+        approved: number;
+        rejected: number;
+        declined: number;
+        pendingReviewCount: number;
+        conversionRate: number | null;
+      };
+      leasing: {
+        totalProperties: number;
+        totalUnits: number;
+        occupiedUnits: number;
+        vacantUnits: number;
+        occupancyRate: number | null;
+        leasesEndingIn30Days: number;
+        leasesEndingIn60Days: number;
+        leasesEndingIn90Days: number;
+        turnoverCount: number;
+      };
+      maintenance: {
+        openWorkOrders: number;
+        completedWorkOrders: number;
+        reopenedWorkOrders: number;
+        maintenanceCostCents: number;
+        averageCostPerCompletedWorkOrderCents: number | null;
+        costConcentrationByProperty: Array<{
+          propertyId: string;
+          workOrderCount: number;
+          totalCostCents: number;
+        }>;
+      };
+      revenue: {
+        estimatedScheduledRentCents: number;
+        averageRentPerOccupiedUnitCents: number | null;
+      };
+    };
+    deltas: {
+      summary: Record<string, AnalyticsDeltaValue>;
+      applications: Record<string, AnalyticsDeltaValue>;
+      leasing: Record<string, AnalyticsDeltaValue>;
+      maintenance: Record<string, AnalyticsDeltaValue>;
+      revenue: Record<string, AnalyticsDeltaValue>;
     };
   };
   properties: Array<{
@@ -89,6 +144,7 @@ export type LandlordAnalyticsSnapshot = {
       occupiedUnits: number;
       vacantUnits: number;
     };
+    deltas?: Record<string, AnalyticsDeltaValue>;
   }>;
   filters: {
     period: AnalyticsPeriod;

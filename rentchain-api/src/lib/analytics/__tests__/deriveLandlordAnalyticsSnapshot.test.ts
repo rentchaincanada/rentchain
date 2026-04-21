@@ -83,12 +83,39 @@ describe("deriveLandlordAnalyticsSnapshot", () => {
       averageRentPerOccupiedUnitCents: 180000,
     });
     expect(result.comparisons.previousPeriod).toEqual({
-      vacancyRate: 2 / 3,
-      applicationConversionRate: null,
-      applicationsStarted: 0,
-      applicationsSubmitted: 0,
-      maintenanceCostCents: 0,
-      openWorkOrders: 1,
+      summary: {
+        occupiedUnits: 1,
+        vacancyRate: 2 / 3,
+        activeApplications: 1,
+        applicationConversionRate: null,
+        openWorkOrders: 1,
+        maintenanceCostCents: 0,
+        estimatedScheduledRentCents: 180000,
+        leasesEndingSoon: 0,
+      },
+      applications: expect.objectContaining({
+        started: 0,
+        submitted: 0,
+      }),
+      leasing: expect.objectContaining({
+        occupiedUnits: 1,
+        vacantUnits: 2,
+      }),
+      maintenance: expect.objectContaining({
+        openWorkOrders: 1,
+        maintenanceCostCents: 0,
+      }),
+      revenue: {
+        estimatedScheduledRentCents: 180000,
+        averageRentPerOccupiedUnitCents: 180000,
+      },
+    });
+    expect(result.comparisons.deltas.summary.vacancyRate).toEqual({
+      current: 2 / 3,
+      prior: 2 / 3,
+      absoluteDelta: 0,
+      relativeDelta: 0,
+      direction: "flat",
     });
     expect(result.properties).toEqual([
       { id: "prop-1", name: "Untitled property" },
@@ -101,6 +128,11 @@ describe("deriveLandlordAnalyticsSnapshot", () => {
           vacancyRate: 1,
           openWorkOrders: 1,
           maintenanceCostCents: 18000,
+        }),
+        deltas: expect.objectContaining({
+          maintenanceCostCents: expect.objectContaining({
+            direction: "worse",
+          }),
         }),
       }),
       expect.objectContaining({
@@ -159,13 +191,17 @@ describe("deriveLandlordAnalyticsSnapshot", () => {
     expect(result.insights).toEqual([]);
     expect(result.properties).toEqual([]);
     expect(result.propertyMetrics).toEqual([]);
-    expect(result.comparisons.previousPeriod).toEqual({
+    expect(result.comparisons.previousPeriod.summary).toEqual({
+      occupiedUnits: 0,
       vacancyRate: null,
+      activeApplications: 0,
       applicationConversionRate: null,
-      applicationsStarted: 0,
-      applicationsSubmitted: 0,
-      maintenanceCostCents: 0,
       openWorkOrders: 0,
+      maintenanceCostCents: 0,
+      estimatedScheduledRentCents: 0,
+      leasesEndingSoon: 0,
     });
+    expect(result.comparisons.deltas.summary.occupiedUnits.direction).toBe("flat");
+    expect(result.comparisons.deltas.summary.vacancyRate.direction).toBe("insufficient_data");
   });
 });
