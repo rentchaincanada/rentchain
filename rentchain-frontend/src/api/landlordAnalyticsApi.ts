@@ -9,6 +9,15 @@ export type LandlordAnalyticsInsight = {
   propertyId?: string | null;
 };
 
+export type LandlordPredictiveMetric = {
+  key: string;
+  label: string;
+  riskLevel: "low" | "medium" | "high" | null;
+  status: "supported" | "insufficient_data";
+  explanation: string;
+  supportingValues?: Record<string, number | string | null>;
+};
+
 export type AnalyticsDeltaValue = {
   current: number | null;
   prior: number | null;
@@ -63,6 +72,9 @@ export type LandlordAnalyticsSnapshot = {
   revenue: {
     estimatedScheduledRentCents: number;
     averageRentPerOccupiedUnitCents: number | null;
+  };
+  predictive: {
+    metrics: LandlordPredictiveMetric[];
   };
   insights: LandlordAnalyticsInsight[];
   comparisons: {

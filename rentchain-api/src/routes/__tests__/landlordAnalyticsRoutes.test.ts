@@ -122,6 +122,20 @@ describe("landlordAnalyticsRoutes", () => {
         estimatedScheduledRentCents: 660000,
         averageRentPerOccupiedUnitCents: 165000,
       },
+      predictive: {
+        metrics: [
+          {
+            key: "projected_vacancy_risk",
+            label: "Projected vacancy risk",
+            riskLevel: "medium",
+            status: "supported",
+            explanation: "Vacancy pressure is present in the current view, but it is not yet at the highest-risk threshold.",
+            supportingValues: {
+              vacancyRate: 0.2,
+            },
+          },
+        ],
+      },
       insights: [],
       comparisons: {
         previousPeriod: {
@@ -205,6 +219,7 @@ describe("landlordAnalyticsRoutes", () => {
     });
     expect(response.body.ok).toBe(true);
     expect(response.body.summary.occupiedUnits).toBe(4);
+    expect(response.body.predictive.metrics[0].key).toBe("projected_vacancy_risk");
     expect(response.body.comparisons.deltas.summary.occupiedUnits.direction).toBe("better");
   });
 

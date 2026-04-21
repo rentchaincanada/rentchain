@@ -245,6 +245,26 @@ describe("LandlordAnalyticsPage", () => {
         estimatedScheduledRentCents: 660000,
         averageRentPerOccupiedUnitCents: 165000,
       },
+      predictive: {
+        metrics: [
+          {
+            key: "projected_vacancy_risk",
+            label: "Projected vacancy risk",
+            riskLevel: "medium",
+            status: "supported",
+            explanation: "Vacancy pressure is present in the current view, but it is not yet at the highest-risk threshold.",
+            supportingValues: { vacancyRate: 0.2, vacantUnits: 1 },
+          },
+          {
+            key: "projected_revenue_pressure_signal",
+            label: "Projected revenue pressure signal",
+            riskLevel: "medium",
+            status: "supported",
+            explanation: "Revenue pressure is present, but the current portfolio signals do not yet indicate the highest-risk case.",
+            supportingValues: { estimatedScheduledRentCents: 660000, leasesEndingSoon: 1 },
+          },
+        ],
+      },
       insights: [{ type: "lease_expiry", severity: "medium", message: "1 lease ends within 30 days." }],
       comparisons: buildComparisons(),
       properties: [
@@ -416,6 +436,8 @@ describe("LandlordAnalyticsPage", () => {
     );
 
     expect(await screen.findByText(/Analytics alerts/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Predictive metrics/i })).toBeInTheDocument();
+    expect(screen.getByText(/Vacancy pressure is present in the current view/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Portfolio benchmarking/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Applications/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Revenue signal/i })).toBeInTheDocument();
@@ -489,6 +511,17 @@ describe("LandlordAnalyticsPage", () => {
       revenue: {
         estimatedScheduledRentCents: 0,
         averageRentPerOccupiedUnitCents: null,
+      },
+      predictive: {
+        metrics: [
+          {
+            key: "projected_vacancy_risk",
+            label: "Projected vacancy risk",
+            riskLevel: null,
+            status: "insufficient_data",
+            explanation: "Not enough occupied or rentable unit data is available to project vacancy risk yet.",
+          },
+        ],
       },
       insights: [],
       propertyMetrics: [],
@@ -719,6 +752,17 @@ describe("LandlordAnalyticsPage", () => {
       revenue: {
         estimatedScheduledRentCents: 320000,
         averageRentPerOccupiedUnitCents: 160000,
+      },
+      predictive: {
+        metrics: [
+          {
+            key: "projected_vacancy_risk",
+            label: "Projected vacancy risk",
+            riskLevel: "low",
+            status: "supported",
+            explanation: "Current occupancy is stable and vacancy is not worsening materially versus the prior period.",
+          },
+        ],
       },
       insights: [],
       comparisons: {
