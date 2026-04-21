@@ -122,6 +122,18 @@ describe("landlordAnalyticsRoutes", () => {
         estimatedScheduledRentCents: 660000,
         averageRentPerOccupiedUnitCents: 165000,
       },
+      decisions: {
+        items: [
+          {
+            decisionType: "reduce_vacancy_risk",
+            priority: "medium",
+            explanation: "Vacancy pressure is present in the current view, so leasing attention should stay active.",
+            supportingSignals: [{ source: "predictive_metric", key: "projected_vacancy_risk", label: "Projected vacancy risk" }],
+            recommendedAction: "Reduce vacancy risk",
+            href: "/analytics",
+          },
+        ],
+      },
       predictive: {
         metrics: [
           {
@@ -219,6 +231,7 @@ describe("landlordAnalyticsRoutes", () => {
     });
     expect(response.body.ok).toBe(true);
     expect(response.body.summary.occupiedUnits).toBe(4);
+    expect(response.body.decisions.items[0].decisionType).toBe("reduce_vacancy_risk");
     expect(response.body.predictive.metrics[0].key).toBe("projected_vacancy_risk");
     expect(response.body.comparisons.deltas.summary.occupiedUnits.direction).toBe("better");
   });

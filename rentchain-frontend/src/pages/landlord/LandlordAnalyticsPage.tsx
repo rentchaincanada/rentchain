@@ -14,6 +14,7 @@ import { useToast } from "../../components/ui/ToastProvider";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import { FeatureTeaser } from "@/components/billing/FeatureTeaser";
 import AnalyticsAlertsPanel from "../../components/analytics/AnalyticsAlertsPanel";
+import AgentDecisionPanel from "../../components/analytics/AgentDecisionPanel";
 import AnalyticsFiltersBar from "../../components/analytics/AnalyticsFiltersBar";
 import AnalyticsKpiGrid from "../../components/analytics/AnalyticsKpiGrid";
 import AnalyticsSectionPanel from "../../components/analytics/AnalyticsSectionPanel";
@@ -224,7 +225,10 @@ export default function LandlordAnalyticsPage() {
             <AnalyticsKpiGrid items={summaryItems} periodLabel={periodLabel(period)} />
             {canViewBenchmarking ? <PortfolioBenchmarkingPanel benchmarking={benchmarking} /> : null}
             {canViewPortfolioScore && canViewAdvancedAnalytics ? (
-              <PredictiveMetricsPanel metrics={snapshot.predictive?.metrics || []} />
+              <>
+                <AgentDecisionPanel decisions={snapshot.decisions?.items || []} />
+                <PredictiveMetricsPanel metrics={snapshot.predictive?.metrics || []} />
+              </>
             ) : null}
 
             {canViewPortfolioScore ? (

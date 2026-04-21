@@ -46,6 +46,9 @@ function buildSnapshot(overrides?: Partial<LandlordAnalyticsSnapshot>): Landlord
       estimatedScheduledRentCents: 660000,
       averageRentPerOccupiedUnitCents: 165000,
     },
+    decisions: {
+      items: [],
+    },
     insights: [
       { type: "maintenance_cost_increase", severity: "medium", message: "Maintenance costs increased compared with the previous period." },
       { type: "work_order_concentration", severity: "high", message: "Most open work orders are tied to one property (3).", propertyId: "prop-1" },

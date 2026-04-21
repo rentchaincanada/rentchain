@@ -240,6 +240,38 @@ export type LandlordPredictiveMetrics = {
   metrics: LandlordPredictiveMetric[];
 };
 
+export type LandlordAgentDecisionType =
+  | "review_lease_renewals"
+  | "reduce_vacancy_risk"
+  | "improve_application_conversion"
+  | "address_maintenance_backlog"
+  | "review_revenue_pressure"
+  | "focus_highest_risk_property";
+
+export type LandlordAgentDecisionPriority = "low" | "medium" | "high";
+
+export type LandlordAgentDecisionSupportingSignal = {
+  source: "alert" | "predictive_metric" | "benchmarking_insight" | "delta";
+  key: string;
+  label: string;
+  propertyId?: string | null;
+  value?: number | string | null;
+  direction?: AnalyticsDeltaDirection | null;
+};
+
+export type LandlordAgentDecision = {
+  decisionType: LandlordAgentDecisionType;
+  priority: LandlordAgentDecisionPriority;
+  explanation: string;
+  supportingSignals: LandlordAgentDecisionSupportingSignal[];
+  recommendedAction: string;
+  href?: string;
+};
+
+export type LandlordAgentDecisions = {
+  items: LandlordAgentDecision[];
+};
+
 export type LandlordAnalyticsSummary = {
   occupiedUnits: number;
   vacancyRate: number | null;
@@ -251,7 +283,7 @@ export type LandlordAnalyticsSummary = {
   leasesEndingSoon: number;
 };
 
-export type LandlordAnalyticsSnapshot = {
+export type LandlordAnalyticsSnapshotBase = {
   summary: LandlordAnalyticsSummary;
   applications: AdminApplicationsAnalytics;
   leasing: AdminPortfolioAnalytics;
@@ -328,4 +360,8 @@ export type LandlordAnalyticsSnapshot = {
     from: string;
     to: string;
   };
+};
+
+export type LandlordAnalyticsSnapshot = LandlordAnalyticsSnapshotBase & {
+  decisions: LandlordAgentDecisions;
 };

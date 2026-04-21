@@ -55,6 +55,7 @@ describe("loadLandlordAnalyticsBenchmarking", () => {
         estimatedScheduledRentCents: 450000,
         averageRentPerOccupiedUnitCents: 150000,
       },
+      decisions: { items: [] },
       insights: [],
       comparisons: {
         previousPeriod: {

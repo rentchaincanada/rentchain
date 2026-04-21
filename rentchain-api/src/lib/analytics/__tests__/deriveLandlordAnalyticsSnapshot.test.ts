@@ -94,6 +94,18 @@ describe("deriveLandlordAnalyticsSnapshot", () => {
         }),
       ])
     );
+    expect(result.decisions.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          decisionType: "reduce_vacancy_risk",
+          priority: "high",
+        }),
+        expect.objectContaining({
+          decisionType: "review_lease_renewals",
+          recommendedAction: "Review renewals",
+        }),
+      ])
+    );
     expect(result.comparisons.previousPeriod).toEqual({
       summary: {
         occupiedUnits: 1,
@@ -202,6 +214,7 @@ describe("deriveLandlordAnalyticsSnapshot", () => {
     });
     expect(result.insights).toEqual([]);
     expect(result.predictive.metrics.every((metric) => metric.status === "insufficient_data")).toBe(true);
+    expect(result.decisions.items).toEqual([]);
     expect(result.properties).toEqual([]);
     expect(result.propertyMetrics).toEqual([]);
     expect(result.comparisons.previousPeriod.summary).toEqual({
