@@ -18,6 +18,24 @@ export type LandlordPredictiveMetric = {
   supportingValues?: Record<string, number | string | null>;
 };
 
+export type LandlordAgentDecisionSupportingSignal = {
+  source: "alert" | "predictive_metric" | "benchmarking_insight" | "delta";
+  key: string;
+  label: string;
+  propertyId?: string | null;
+  value?: number | string | null;
+  direction?: "better" | "worse" | "flat" | "insufficient_data" | null;
+};
+
+export type LandlordAgentDecision = {
+  decisionType: string;
+  priority: "low" | "medium" | "high";
+  explanation: string;
+  supportingSignals: LandlordAgentDecisionSupportingSignal[];
+  recommendedAction: string;
+  href?: string;
+};
+
 export type AnalyticsDeltaValue = {
   current: number | null;
   prior: number | null;
@@ -72,6 +90,9 @@ export type LandlordAnalyticsSnapshot = {
   revenue: {
     estimatedScheduledRentCents: number;
     averageRentPerOccupiedUnitCents: number | null;
+  };
+  decisions: {
+    items: LandlordAgentDecision[];
   };
   predictive: {
     metrics: LandlordPredictiveMetric[];

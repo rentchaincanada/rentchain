@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import type { AnalyticsAlert, AnalyticsAlertsStatusFilter, LandlordAnalyticsAlertsResponse } from "./alertTypes";
-import type { LandlordAnalyticsSnapshot } from "./analyticsTypes";
+import type { LandlordAnalyticsSnapshotBase } from "./analyticsTypes";
 
 function asString(value: unknown, max = 240) {
   return String(value || "").trim().slice(0, max);
@@ -32,7 +32,7 @@ function buildAlert(input: Omit<AnalyticsAlert, "id" | "notification"> & { perio
   } satisfies AnalyticsAlert;
 }
 
-function propertyNameById(snapshot: LandlordAnalyticsSnapshot, propertyId?: string | null) {
+function propertyNameById(snapshot: LandlordAnalyticsSnapshotBase, propertyId?: string | null) {
   if (!propertyId) return null;
   return snapshot.properties.find((property) => property.id === propertyId)?.name || null;
 }
@@ -53,7 +53,7 @@ function actionLink(type: AnalyticsAlert["type"], propertyId?: string | null) {
 }
 
 export function deriveAnalyticsAlerts(params: {
-  snapshot: LandlordAnalyticsSnapshot;
+  snapshot: LandlordAnalyticsSnapshotBase;
   status?: AnalyticsAlertsStatusFilter;
   now?: number;
 }): LandlordAnalyticsAlertsResponse {

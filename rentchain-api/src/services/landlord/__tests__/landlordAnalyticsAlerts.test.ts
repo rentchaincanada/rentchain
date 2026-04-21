@@ -52,6 +52,7 @@ describe("loadLandlordAnalyticsAlerts", () => {
         estimatedScheduledRentCents: 540000,
         averageRentPerOccupiedUnitCents: 180000,
       },
+      decisions: { items: [] },
       insights: [{ type: "maintenance_cost_increase", severity: "medium", message: "Maintenance costs increased compared with the previous period." }],
       comparisons: {
         previousPeriod: {

@@ -116,6 +116,14 @@ describe("loadLandlordAnalyticsSnapshot", () => {
         }),
       ])
     );
+    expect(scoped.decisions.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          decisionType: "review_lease_renewals",
+          recommendedAction: "Review renewals",
+        }),
+      ])
+    );
     expect(scoped.propertyMetrics).toEqual([
       expect.objectContaining({
         propertyId: "prop-1",
@@ -145,6 +153,7 @@ describe("loadLandlordAnalyticsSnapshot", () => {
     expect(result.summary.maintenanceCostCents).toBe(0);
     expect(result.insights).toEqual([]);
     expect(result.predictive.metrics.every((metric) => metric.status === "insufficient_data")).toBe(true);
+    expect(result.decisions.items).toEqual([]);
     expect(result.propertyMetrics).toEqual([]);
     expect(result.comparisons.deltas.summary.maintenanceCostCents.direction).toBe("flat");
   });

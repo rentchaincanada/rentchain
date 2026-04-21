@@ -6,7 +6,7 @@ import type {
   LandlordPortfolioBenchmarking,
   LandlordPropertyAnalytics,
   LandlordPropertyAnalyticsMetrics,
-  LandlordAnalyticsSnapshot,
+  LandlordAnalyticsSnapshotBase,
 } from "./analyticsTypes";
 
 const DIMENSIONS: Array<{
@@ -207,7 +207,7 @@ function deriveInsights(properties: LandlordPropertyAnalytics[]): LandlordBenchm
 }
 
 export function derivePortfolioBenchmarking(params: {
-  snapshot: LandlordAnalyticsSnapshot;
+  snapshot: LandlordAnalyticsSnapshotBase;
   propertyId?: string | null;
 }): LandlordPortfolioBenchmarking {
   const snapshot = params.snapshot;

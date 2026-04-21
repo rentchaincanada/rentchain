@@ -245,6 +245,26 @@ describe("LandlordAnalyticsPage", () => {
         estimatedScheduledRentCents: 660000,
         averageRentPerOccupiedUnitCents: 165000,
       },
+      decisions: {
+        items: [
+          {
+            decisionType: "reduce_vacancy_risk",
+            priority: "high",
+            explanation: "Beta carries the strongest vacancy pressure in the current view, so leasing attention should move there first.",
+            recommendedAction: "View property analytics",
+            href: "/analytics?propertyId=prop-2",
+            supportingSignals: [
+              { source: "alert", key: "high_vacancy", label: "Vacancy is elevated", propertyId: "prop-2" },
+              {
+                source: "predictive_metric",
+                key: "projected_vacancy_risk",
+                label: "Projected vacancy risk",
+                propertyId: "prop-2",
+              },
+            ],
+          },
+        ],
+      },
       predictive: {
         metrics: [
           {
@@ -436,6 +456,8 @@ describe("LandlordAnalyticsPage", () => {
     );
 
     expect(await screen.findByText(/Analytics alerts/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Recommended next actions/i })).toBeInTheDocument();
+    expect(screen.getByText(/Beta carries the strongest vacancy pressure/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Predictive metrics/i })).toBeInTheDocument();
     expect(screen.getByText(/Vacancy pressure is present in the current view/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Portfolio benchmarking/i })).toBeInTheDocument();
@@ -511,6 +533,9 @@ describe("LandlordAnalyticsPage", () => {
       revenue: {
         estimatedScheduledRentCents: 0,
         averageRentPerOccupiedUnitCents: null,
+      },
+      decisions: {
+        items: [],
       },
       predictive: {
         metrics: [
@@ -752,6 +777,9 @@ describe("LandlordAnalyticsPage", () => {
       revenue: {
         estimatedScheduledRentCents: 320000,
         averageRentPerOccupiedUnitCents: 160000,
+      },
+      decisions: {
+        items: [],
       },
       predictive: {
         metrics: [

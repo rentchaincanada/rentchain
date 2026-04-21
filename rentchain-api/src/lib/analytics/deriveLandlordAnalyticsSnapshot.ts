@@ -1,10 +1,14 @@
 import { deriveAdminAnalyticsSnapshot } from "./deriveAdminAnalyticsSnapshot";
+import { deriveAgentDecisions } from "./deriveAgentDecisions";
+import { deriveAnalyticsAlerts } from "./deriveAnalyticsAlerts";
 import { deriveAnalyticsDelta, derivePropertyMetricDeltas } from "./deriveAnalyticsDeltas";
+import { derivePortfolioBenchmarking } from "./derivePortfolioBenchmarking";
 import { derivePredictiveMetrics } from "./derivePredictiveMetrics";
 import type {
   AdminAnalyticsDerivedInput,
   AdminAnalyticsSnapshot,
   LandlordAnalyticsInsight,
+  LandlordAnalyticsSnapshotBase,
   LandlordPropertyAnalytics,
   LandlordAnalyticsSnapshot,
 } from "./analyticsTypes";
@@ -499,7 +503,7 @@ export function deriveLandlordAnalyticsSnapshot(input: AdminAnalyticsDerivedInpu
     propertyMetrics: propertyMetricsWithDeltas,
   });
 
-  return {
+  const snapshotBase: LandlordAnalyticsSnapshotBase = {
     summary: {
       occupiedUnits: current.portfolio.occupiedUnits,
       vacancyRate: current.summary.vacancyRate,
@@ -708,5 +712,35 @@ export function deriveLandlordAnalyticsSnapshot(input: AdminAnalyticsDerivedInpu
       from: new Date(input.from).toISOString(),
       to: new Date(input.to).toISOString(),
     },
+  };
+
+  const alerts = deriveAnalyticsAlerts({
+    snapshot: snapshotBase,
+    status: "active",
+    now: input.now,
+  });
+  const benchmarking = derivePortfolioBenchmarking({
+    snapshot: snapshotBase,
+    propertyId: snapshotBase.filters.propertyId,
+  });
+  const decisions = deriveAgentDecisions({
+    filters: {
+      propertyId: snapshotBase.filters.propertyId,
+    },
+    deltas: {
+      summary: snapshotBase.comparisons.deltas.summary,
+      applications: {
+        submitted: snapshotBase.comparisons.deltas.applications.submitted,
+        conversionRate: snapshotBase.comparisons.deltas.applications.conversionRate,
+      },
+    },
+    alerts: alerts.alerts,
+    predictiveMetrics: snapshotBase.predictive.metrics,
+    benchmarking,
+  });
+
+  return {
+    ...snapshotBase,
+    decisions,
   };
 }
