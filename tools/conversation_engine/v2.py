@@ -166,6 +166,15 @@ class RunStore:
             raise EngineError(f"Run not found: {run_id}")
         return RunState.from_json(json.loads(path.read_text(encoding="utf-8")))
 
+    def list_run_ids(self) -> list[str]:
+        if not self.base.exists():
+            return []
+        return sorted(path.name for path in self.base.iterdir() if path.is_dir())
+
+    def latest_run_id(self) -> str | None:
+        run_ids = self.list_run_ids()
+        return run_ids[-1] if run_ids else None
+
     def write_text(self, run_id: str, relative_path: str, content: str) -> pathlib.Path:
         path = self.run_dir(run_id) / relative_path
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -348,6 +357,93 @@ def extract_section(text: str, heading_patterns: list[str]) -> str | None:
 
     content = "\n".join(collected).strip()
     return content or None
+
+
+def run_artifact_paths(store: RunStore, state: RunState) -> dict[str, pathlib.Path]:
+    run_dir = store.run_dir(state.run_id)
+    return {
+        "mission": run_dir / "mission.md",
+        "codex_audit_prompt": run_dir / "prompts" / "codex_audit_prompt.txt",
+        "chatgpt_review_prompt": run_dir / "prompts" / "chatgpt_review_prompt.txt",
+        "codex_implementation_prompt": run_dir / "prompts" / "codex_implementation_prompt.txt",
+        "chatgpt_implementation_review_prompt": run_dir / "prompts" / "chatgpt_implementation_review_prompt.txt",
+        "codex_commit_prompt": run_dir / "prompts" / "codex_commit_prompt.txt",
+        "final_summary": run_dir / "final_summary.md",
+        "latest_audit": pathlib.Path(state.repo_root) / ".conversation_engine" / "latest_audit.txt",
+    }
+
+
+def next_step_hint(state: RunState, *, wrapper_prefix: str = "python tools/conversation_engine/ce.py") -> str:
+    run_id = state.run_id
+
+    if state.current_stage == "started":
+        return (
+            "Generate the first Codex audit prompt with "
+            f"`python tools/conversation_engine/v2.py make-codex-audit-prompt --run-id {run_id}` "
+            "or use `python tools/conversation_engine/ce.py ce-start --mission-file <path>` for the wrapper flow."
+        )
+
+    if state.current_stage == "codex_audit_prompt_ready":
+        return (
+            "Paste the Codex audit prompt into Codex, save the response, then run "
+            f"`{wrapper_prefix} ce-apply-codex-audit --run-id {run_id} --response-file <path>`."
+        )
+
+    if state.current_stage in {"codex_audit_applied", "chatgpt_review_prompt_ready"}:
+        return (
+            "Paste the ChatGPT review prompt into ChatGPT, save the response, then run "
+            f"`{wrapper_prefix} ce-apply-chatgpt-review --run-id {run_id} --review-file <path>`."
+        )
+
+    if state.current_stage == "chatgpt_review_applied":
+        if state.decision == "approve_to_implement":
+            return (
+                "Generate the Codex implementation prompt with "
+                f"`python tools/conversation_engine/v2.py make-codex-implementation-prompt --run-id {run_id}`, "
+                "then paste it into Codex."
+            )
+        if state.decision in {"needs_patch_before_implementation", "reject_scope"}:
+            return "Follow the ChatGPT review instructions manually. The run is not yet approved for implementation."
+        return "Review the ChatGPT response and confirm whether the mission is approved for implementation."
+
+    if state.current_stage == "codex_implementation_prompt_ready":
+        return (
+            "Paste the Codex implementation prompt into Codex, save the summary, then run "
+            f"`{wrapper_prefix} ce-apply-codex-implementation --run-id {run_id} --response-file <path>`."
+        )
+
+    if state.current_stage in {"codex_implementation_applied", "chatgpt_implementation_review_prompt_ready"}:
+        return (
+            "Paste the ChatGPT implementation review prompt into ChatGPT, save the response, then run "
+            f"`python tools/conversation_engine/v2.py apply-chatgpt-patch --run-id {run_id} --review-file <path>`."
+        )
+
+    if state.current_stage in {"chatgpt_patch_applied"}:
+        if state.decision == "approve_to_commit":
+            return (
+                "Generate the Codex commit prompt with "
+                f"`python tools/conversation_engine/v2.py make-codex-commit-prompt --run-id {run_id}`."
+            )
+        if state.decision in {"needs_patch_after_implementation", "reject_scope"}:
+            return "Follow the ChatGPT implementation review instructions manually before proceeding."
+        return "Review the ChatGPT implementation review outcome before proceeding."
+
+    if state.current_stage == "approved_for_commit":
+        return (
+            "Generate the Codex commit prompt with "
+            f"`python tools/conversation_engine/v2.py make-codex-commit-prompt --run-id {run_id}`."
+        )
+
+    if state.current_stage == "codex_commit_prompt_ready":
+        return (
+            "Paste the Codex commit prompt into Codex. After commit/push are complete, run "
+            f"`{wrapper_prefix} ce-finalize --run-id {run_id}`."
+        )
+
+    if state.current_stage == "finalized":
+        return "Review `final_summary.md` and `.conversation_engine/latest_audit.txt` for the final recorded state."
+
+    return "No next-step guidance is available for the current stage."
 
 
 # Helper functions for writing latest audit
