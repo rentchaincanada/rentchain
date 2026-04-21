@@ -230,27 +230,124 @@ def classify_review_decision(text: str) -> ReviewDecision:
 
 def extract_changed_files(text: str) -> list[str]:
     files: list[str] = []
-    for line in text.splitlines():
-        line = line.strip()
-        if line.startswith("- `") and line.endswith("`"):
-            candidate = line[3:-1]
-            if "/" in candidate:
-                files.append(candidate)
+    seen: set[str] = set()
+
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line.startswith("- "):
+            continue
+
+        candidate: str | None = None
+
+        # Pattern: - [path/to/file.ts](/absolute/path/or/url)
+        markdown_link_match = re.match(r"- \[([^\]]+)\]\([^)]+\)", line)
+        if markdown_link_match:
+            candidate = markdown_link_match.group(1).strip()
+
+        # Pattern: - `path/to/file.ts`
+        if candidate is None:
+            backtick_match = re.match(r"- `([^`]+)`", line)
+            if backtick_match:
+                candidate = backtick_match.group(1).strip()
+
+        # Pattern: - path/to/file.ts
+        if candidate is None:
+            plain_match = re.match(r"- ([A-Za-z0-9_./-]+\.[A-Za-z0-9_]+)$", line)
+            if plain_match:
+                candidate = plain_match.group(1).strip()
+
+        if candidate is None:
+            continue
+
+        # Ignore obvious command lines that are not files
+        if candidate.startswith("npm "):
+            continue
+        if candidate.startswith("pnpm "):
+            continue
+        if candidate.startswith("yarn "):
+            continue
+        if candidate.startswith("node "):
+            continue
+        if " --run " in candidate:
+            continue
+
+        if candidate not in seen:
+            seen.add(candidate)
+            files.append(candidate)
+
     return files
 
 
 def extract_section(text: str, heading_patterns: list[str]) -> str | None:
     lines = text.splitlines()
+
+    normalized_patterns = [pattern.strip().lower() for pattern in heading_patterns]
+
+    def is_heading(line: str) -> bool:
+        stripped = line.strip()
+        if not stripped:
+            return False
+
+        # Exact markdown heading forms like:
+        # ## Risks
+        # ### Test/build results
+        if stripped.startswith("#"):
+            heading_text = stripped.lstrip("#").strip().lower()
+            return bool(heading_text)
+
+        # Numbered heading forms like:
+        # 1. Current system structure...
+        # 5. Risks
+        if re.match(r"^\d+\.\s+", stripped):
+            return True
+
+        # Colon headings like:
+        # Risks:
+        # Test/build results:
+        if stripped.endswith(":"):
+            return True
+
+        return False
+
+    def heading_matches(line: str) -> bool:
+        stripped = line.strip()
+        lower = stripped.lower()
+
+        candidates = {lower}
+
+        if stripped.startswith("#"):
+            candidates.add(stripped.lstrip("#").strip().lower())
+
+        numbered_match = re.match(r"^(\d+\.\s+)(.+)$", stripped)
+        if numbered_match:
+            candidates.add(numbered_match.group(2).strip().lower())
+
+        if stripped.endswith(":"):
+            candidates.add(stripped[:-1].strip().lower())
+
+        return any(
+            candidate == pattern or candidate.startswith(pattern)
+            for candidate in candidates
+            for pattern in normalized_patterns
+        )
+
+    start_idx: int | None = None
     for idx, line in enumerate(lines):
-        stripped = line.strip().lower()
-        if any(stripped.startswith(pattern.lower()) for pattern in heading_patterns):
-            collected: list[str] = []
-            for next_line in lines[idx + 1 :]:
-                if next_line.strip().endswith(":") and collected:
-                    break
-                collected.append(next_line)
-            return "\n".join(collected).strip() or None
-    return None
+        if heading_matches(line):
+            start_idx = idx
+            break
+
+    if start_idx is None:
+        return None
+
+    collected: list[str] = []
+    for next_line in lines[start_idx + 1 :]:
+        if is_heading(next_line):
+            break
+        collected.append(next_line)
+
+    content = "\n".join(collected).strip()
+    return content or None
 
 
 # Helper functions for writing latest audit
