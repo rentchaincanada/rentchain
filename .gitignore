@@ -80,3 +80,7 @@ test-results/
 /tmp/chatgpt_review_*.txt
 /tmp/codex_impl_*.txt
 /tmp/chatgpt_patch_*.txt
+
+__pycache__/
+*.pyc
+*.pyo
