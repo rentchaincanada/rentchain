@@ -257,6 +257,33 @@ describe("LandlordAnalyticsPage", () => {
         to: "2026-04-20T00:00:00.000Z",
       },
     } as any);
+    vi.mocked(fetchLandlordAnalyticsAlerts).mockResolvedValue({
+      summary: {
+        activeCount: 2,
+        highSeverityCount: 1,
+        mediumSeverityCount: 1,
+        lowSeverityCount: 0,
+      },
+      alerts: [
+        {
+          id: "alert-1",
+          type: "lease_expiry",
+          severity: "medium",
+          status: "active",
+          title: "Leases ending soon",
+          message: "1 lease ends within 30 days.",
+          detectedAt: "2026-04-20T00:00:00.000Z",
+          lastEvaluatedAt: "2026-04-20T00:00:00.000Z",
+          notification: { inAppEligible: true, emailEligible: true, automationEligible: false },
+          actions: [{ type: "review_leases", label: "Review leases", href: "/portfolio-health" }],
+        },
+      ],
+      filters: {
+        period: "90d",
+        propertyId: null,
+        status: "active",
+      },
+    } as any);
 
     return fetchLandlordAnalyticsSnapshot;
   }
