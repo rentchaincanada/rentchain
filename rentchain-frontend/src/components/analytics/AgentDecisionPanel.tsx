@@ -1,7 +1,13 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { Card } from "../ui/Ui";
-import { markLandlordDecisionReviewed, type AnalyticsPeriod, type LandlordAgentDecision } from "@/api/landlordAnalyticsApi";
+import {
+  dismissLandlordDecision,
+  markLandlordDecisionReviewed,
+  snoozeLandlordDecision,
+  type AnalyticsPeriod,
+  type LandlordAgentDecision,
+} from "@/api/landlordAnalyticsApi";
 
 const priorityTone: Record<"low" | "medium" | "high", { bg: string; text: string }> = {
   low: { bg: "rgba(14, 165, 233, 0.12)", text: "#075985" },
@@ -27,6 +33,12 @@ type Props = {
   propertyId?: string | null;
 };
 
+const SNOOZE_PRESETS = [
+  { label: "Snooze 1d", days: 1 },
+  { label: "Snooze 3d", days: 3 },
+  { label: "Snooze 7d", days: 7 },
+] as const;
+
 function errorMessage(error: unknown) {
   if (error instanceof Error && error.message) return error.message;
   return "Failed to mark this decision as reviewed.";
@@ -50,7 +62,8 @@ export function AgentDecisionPanel({
   propertyId = null,
 }: Props) {
   const [items, setItems] = React.useState(decisions);
-  const [reviewingDecisionId, setReviewingDecisionId] = React.useState<string | null>(null);
+  const [workingDecisionId, setWorkingDecisionId] = React.useState<string | null>(null);
+  const [workingAction, setWorkingAction] = React.useState<"review" | "snooze" | "dismiss" | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -59,7 +72,8 @@ export function AgentDecisionPanel({
 
   const handleReview = async (decisionId: string) => {
     try {
-      setReviewingDecisionId(decisionId);
+      setWorkingDecisionId(decisionId);
+      setWorkingAction("review");
       setError(null);
       const response = await markLandlordDecisionReviewed({
         decisionId,
@@ -80,7 +94,48 @@ export function AgentDecisionPanel({
     } catch (err: unknown) {
       setError(errorMessage(err));
     } finally {
-      setReviewingDecisionId(null);
+      setWorkingDecisionId(null);
+      setWorkingAction(null);
+    }
+  };
+
+  const handleSnooze = async (decisionId: string, days: number) => {
+    try {
+      setWorkingDecisionId(decisionId);
+      setWorkingAction("snooze");
+      setError(null);
+      const snoozedUntil = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+      await snoozeLandlordDecision({
+        decisionId,
+        snoozedUntil,
+        period,
+        propertyId,
+      });
+      setItems((current) => current.filter((decision) => decision.id !== decisionId));
+    } catch (err: unknown) {
+      setError(errorMessage(err));
+    } finally {
+      setWorkingDecisionId(null);
+      setWorkingAction(null);
+    }
+  };
+
+  const handleDismiss = async (decisionId: string) => {
+    try {
+      setWorkingDecisionId(decisionId);
+      setWorkingAction("dismiss");
+      setError(null);
+      await dismissLandlordDecision({
+        decisionId,
+        period,
+        propertyId,
+      });
+      setItems((current) => current.filter((decision) => decision.id !== decisionId));
+    } catch (err: unknown) {
+      setError(errorMessage(err));
+    } finally {
+      setWorkingDecisionId(null);
+      setWorkingAction(null);
     }
   };
 
@@ -165,7 +220,7 @@ export function AgentDecisionPanel({
                       <button
                         type="button"
                         onClick={() => void handleReview(decision.id)}
-                        disabled={reviewingDecisionId === decision.id}
+                        disabled={workingDecisionId === decision.id}
                         style={{
                           border: "1px solid #cbd5e1",
                           borderRadius: 999,
@@ -173,12 +228,47 @@ export function AgentDecisionPanel({
                           color: "#0f172a",
                           fontWeight: 700,
                           padding: "6px 12px",
-                          cursor: reviewingDecisionId === decision.id ? "not-allowed" : "pointer",
+                          cursor: workingDecisionId === decision.id ? "not-allowed" : "pointer",
                         }}
                       >
-                        {reviewingDecisionId === decision.id ? "Saving..." : "Mark Reviewed"}
+                        {workingDecisionId === decision.id && workingAction === "review" ? "Saving..." : "Mark Reviewed"}
                       </button>
                     )}
+                    {SNOOZE_PRESETS.map((preset) => (
+                      <button
+                        key={`${decision.id}-${preset.days}`}
+                        type="button"
+                        onClick={() => void handleSnooze(decision.id, preset.days)}
+                        disabled={workingDecisionId === decision.id}
+                        style={{
+                          border: "1px solid #cbd5e1",
+                          borderRadius: 999,
+                          background: "#fff",
+                          color: "#334155",
+                          fontWeight: 600,
+                          padding: "6px 10px",
+                          cursor: workingDecisionId === decision.id ? "not-allowed" : "pointer",
+                        }}
+                      >
+                        {workingDecisionId === decision.id && workingAction === "snooze" ? "Saving..." : preset.label}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => void handleDismiss(decision.id)}
+                      disabled={workingDecisionId === decision.id}
+                      style={{
+                        border: "1px solid rgba(185, 28, 28, 0.25)",
+                        borderRadius: 999,
+                        background: "#fff",
+                        color: "#991b1b",
+                        fontWeight: 700,
+                        padding: "6px 12px",
+                        cursor: workingDecisionId === decision.id ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      {workingDecisionId === decision.id && workingAction === "dismiss" ? "Saving..." : "Dismiss"}
+                    </button>
                   </div>
                 </div>
               );
