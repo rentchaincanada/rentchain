@@ -1,4 +1,7 @@
 import React from "react";
+import type { LandlordAnalyticsSnapshot } from "../../api/landlordAnalyticsApi";
+import type { LandlordAnalyticsAlertsResponse } from "../../api/landlordAnalyticsAlertsApi";
+import type { LandlordAnalyticsBenchmarkingResponse } from "../../api/landlordAnalyticsBenchmarkingApi";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
@@ -6,9 +9,12 @@ import LandlordAnalyticsPage from "./LandlordAnalyticsPage";
 
 const showToast = vi.fn();
 const macShellSpy = vi.fn();
+type EntitlementOverrides = Record<string, unknown>;
+type PendingRequest = Promise<never>;
 
 vi.mock("../../api/landlordAnalyticsApi", () => ({
   fetchLandlordAnalyticsSnapshot: vi.fn(),
+  markLandlordDecisionReviewed: vi.fn(),
 }));
 
 vi.mock("../../api/landlordAnalyticsAlertsApi", () => ({
@@ -35,8 +41,8 @@ vi.mock("../../components/layout/MacShell", () => ({
 }));
 
 vi.mock("../../components/ui/Ui", () => ({
-  Card: ({ children, ...props }: any) => <div {...props}>{children}</div>,
-  Section: ({ children }: any) => <section>{children}</section>,
+  Card: ({ children, ...props }: React.PropsWithChildren<Record<string, unknown>>) => <div {...props}>{children}</div>,
+  Section: ({ children }: React.PropsWithChildren) => <section>{children}</section>,
 }));
 
 vi.mock("@/components/billing/FeatureTeaser", () => ({
@@ -60,7 +66,7 @@ afterEach(() => {
 });
 
 describe("LandlordAnalyticsPage", () => {
-  function buildComparisons(overrides?: Record<string, any>) {
+  function buildComparisons(overrides?: Record<string, unknown>) {
     return {
       previousPeriod: {
         summary: {
@@ -186,7 +192,7 @@ describe("LandlordAnalyticsPage", () => {
     };
   }
 
-  function mockEntitlements(overrides?: Record<string, any>) {
+  function mockEntitlements(overrides?: EntitlementOverrides) {
     return import("@/hooks/useEntitlements").then(({ useEntitlements }) => {
       vi.mocked(useEntitlements).mockReturnValue({
         loading: false,
@@ -194,7 +200,7 @@ describe("LandlordAnalyticsPage", () => {
         canViewPortfolioScore: true,
         hasCapability: (key: string) => key === "portfolio_analytics",
         ...overrides,
-      } as any);
+      } as ReturnType<typeof useEntitlements>);
     });
   }
 
@@ -248,6 +254,7 @@ describe("LandlordAnalyticsPage", () => {
       decisions: {
         items: [
           {
+            id: "reduce_vacancy_risk:prop-2",
             decisionType: "reduce_vacancy_risk",
             priority: "high",
             explanation: "Beta carries the strongest vacancy pressure in the current view, so leasing attention should move there first.",
@@ -258,6 +265,8 @@ describe("LandlordAnalyticsPage", () => {
             workflowCategory: "vacancy_readiness",
             automationEligible: false,
             href: "/analytics?propertyId=prop-2",
+            state: "pending",
+            reviewedAt: null,
             supportingSignals: [
               { source: "alert", key: "high_vacancy", label: "Vacancy is elevated", propertyId: "prop-2" },
               {
@@ -342,7 +351,7 @@ describe("LandlordAnalyticsPage", () => {
         from: "2026-01-20T00:00:00.000Z",
         to: "2026-04-20T00:00:00.000Z",
       },
-    } as any);
+    } as LandlordAnalyticsSnapshot);
     vi.mocked(fetchLandlordAnalyticsAlerts).mockResolvedValue({
       summary: {
         activeCount: 2,
@@ -369,7 +378,7 @@ describe("LandlordAnalyticsPage", () => {
         propertyId: null,
         status: "active",
       },
-    } as any);
+    } as LandlordAnalyticsAlertsResponse);
     vi.mocked(fetchLandlordAnalyticsBenchmarking).mockResolvedValue({
       summary: {
         propertyCount: 2,
@@ -418,7 +427,7 @@ describe("LandlordAnalyticsPage", () => {
         from: "2026-01-20T00:00:00.000Z",
         to: "2026-04-20T00:00:00.000Z",
       },
-    } as any);
+    } as LandlordAnalyticsBenchmarkingResponse);
     vi.mocked(fetchLandlordAnalyticsAlerts).mockResolvedValue({
       summary: {
         activeCount: 2,
@@ -445,7 +454,7 @@ describe("LandlordAnalyticsPage", () => {
         propertyId: null,
         status: "active",
       },
-    } as any);
+    } as LandlordAnalyticsAlertsResponse);
 
     return fetchLandlordAnalyticsSnapshot;
   }
@@ -478,9 +487,9 @@ describe("LandlordAnalyticsPage", () => {
     const { fetchLandlordAnalyticsSnapshot } = await import("../../api/landlordAnalyticsApi");
     const { fetchLandlordAnalyticsAlerts } = await import("../../api/landlordAnalyticsAlertsApi");
     const { fetchLandlordAnalyticsBenchmarking } = await import("../../api/landlordAnalyticsBenchmarkingApi");
-    vi.mocked(fetchLandlordAnalyticsSnapshot).mockReturnValue(new Promise(() => {}) as any);
-    vi.mocked(fetchLandlordAnalyticsAlerts).mockReturnValue(new Promise(() => {}) as any);
-    vi.mocked(fetchLandlordAnalyticsBenchmarking).mockReturnValue(new Promise(() => {}) as any);
+    vi.mocked(fetchLandlordAnalyticsSnapshot).mockReturnValue(new Promise(() => {}) as PendingRequest);
+    vi.mocked(fetchLandlordAnalyticsAlerts).mockReturnValue(new Promise(() => {}) as PendingRequest);
+    vi.mocked(fetchLandlordAnalyticsBenchmarking).mockReturnValue(new Promise(() => {}) as PendingRequest);
 
     render(
       <MemoryRouter>
@@ -648,7 +657,7 @@ describe("LandlordAnalyticsPage", () => {
         from: "2026-01-20T00:00:00.000Z",
         to: "2026-04-20T00:00:00.000Z",
       },
-    } as any);
+    } as LandlordAnalyticsSnapshot);
     vi.mocked(fetchLandlordAnalyticsAlerts).mockResolvedValue({
       summary: {
         activeCount: 0,
@@ -662,7 +671,7 @@ describe("LandlordAnalyticsPage", () => {
         propertyId: null,
         status: "active",
       },
-    } as any);
+    } as LandlordAnalyticsAlertsResponse);
     vi.mocked(fetchLandlordAnalyticsBenchmarking).mockResolvedValue({
       summary: {
         propertyCount: 0,
@@ -677,7 +686,7 @@ describe("LandlordAnalyticsPage", () => {
         from: "2026-01-20T00:00:00.000Z",
         to: "2026-04-20T00:00:00.000Z",
       },
-    } as any);
+    } as LandlordAnalyticsBenchmarkingResponse);
 
     render(
       <MemoryRouter>
@@ -709,7 +718,7 @@ describe("LandlordAnalyticsPage", () => {
         propertyId: null,
         status: "active",
       },
-    } as any);
+    } as LandlordAnalyticsAlertsResponse);
     vi.mocked(fetchLandlordAnalyticsBenchmarking).mockResolvedValue({
       summary: {
         propertyCount: 0,
@@ -724,7 +733,7 @@ describe("LandlordAnalyticsPage", () => {
         from: "2026-01-20T00:00:00.000Z",
         to: "2026-04-20T00:00:00.000Z",
       },
-    } as any);
+    } as LandlordAnalyticsBenchmarkingResponse);
 
     render(
       <MemoryRouter>
@@ -809,12 +818,12 @@ describe("LandlordAnalyticsPage", () => {
         from: "2026-01-20T00:00:00.000Z",
         to: "2026-04-20T00:00:00.000Z",
       },
-    } as any);
+    } as LandlordAnalyticsSnapshot);
     vi.mocked(fetchLandlordAnalyticsAlerts).mockResolvedValue({
       summary: { activeCount: 0, highSeverityCount: 0, mediumSeverityCount: 0, lowSeverityCount: 0 },
       alerts: [],
       filters: { period: "90d", propertyId: null, status: "active" },
-    } as any);
+    } as LandlordAnalyticsAlertsResponse);
     vi.mocked(fetchLandlordAnalyticsBenchmarking).mockResolvedValue({
       summary: { propertyCount: 1, comparedPropertyCount: 0, benchmarkDimensions: ["vacancyRate"] },
       comparisons: [],
@@ -825,7 +834,7 @@ describe("LandlordAnalyticsPage", () => {
         from: "2026-01-20T00:00:00.000Z",
         to: "2026-04-20T00:00:00.000Z",
       },
-    } as any);
+    } as LandlordAnalyticsBenchmarkingResponse);
 
     render(
       <MemoryRouter>

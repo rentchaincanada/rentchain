@@ -1,4 +1,5 @@
 import React from "react";
+import type { LandlordAnalyticsSnapshot } from "../../api/landlordAnalyticsApi";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
@@ -6,8 +7,11 @@ import ActionRecommendationsPage from "./ActionRecommendationsPage";
 
 const showToast = vi.fn();
 
+type EntitlementOverrides = Record<string, unknown>;
+
 vi.mock("../../api/landlordAnalyticsApi", () => ({
   fetchLandlordAnalyticsSnapshot: vi.fn(),
+  markLandlordDecisionReviewed: vi.fn(),
 }));
 
 vi.mock("@/hooks/useEntitlements", () => ({
@@ -23,8 +27,8 @@ vi.mock("../../components/layout/MacShell", () => ({
 }));
 
 vi.mock("../../components/ui/Ui", () => ({
-  Card: ({ children, elevated: _elevated, ...props }: any) => <div {...props}>{children}</div>,
-  Section: ({ children }: any) => <section>{children}</section>,
+  Card: ({ children, ...props }: React.PropsWithChildren<Record<string, unknown>>) => <div {...props}>{children}</div>,
+  Section: ({ children }: React.PropsWithChildren) => <section>{children}</section>,
 }));
 
 vi.mock("@/components/billing/LockedFeature", () => ({
@@ -57,7 +61,7 @@ afterEach(() => {
 });
 
 describe("ActionRecommendationsPage", () => {
-  function mockEntitlements(overrides?: Record<string, any>) {
+  function mockEntitlements(overrides?: EntitlementOverrides) {
     return import("@/hooks/useEntitlements").then(({ useEntitlements }) => {
       vi.mocked(useEntitlements).mockReturnValue({
         loading: false,
@@ -65,7 +69,7 @@ describe("ActionRecommendationsPage", () => {
         canViewActionRecommendations: true,
         hasCapability: (key: string) => key === "portfolio_analytics",
         ...overrides,
-      } as any);
+      } as ReturnType<typeof useEntitlements>);
     });
   }
 
@@ -76,6 +80,7 @@ describe("ActionRecommendationsPage", () => {
       decisions: {
         items: [
           {
+            id: "review_lease_renewals",
             decisionType: "review_lease_renewals",
             priority: "medium",
             explanation: "Several leases are approaching renewal windows and need attention.",
@@ -86,9 +91,12 @@ describe("ActionRecommendationsPage", () => {
             workflowCategory: "lease_renewals",
             automationEligible: false,
             href: "/leases?status=expiring",
+            state: "pending",
+            reviewedAt: null,
             supportingSignals: [],
           },
           {
+            id: "reduce_vacancy_risk:prop-2",
             decisionType: "reduce_vacancy_risk",
             priority: "high",
             explanation: "Vacancy pressure is concentrated in Beta and needs follow-through now.",
@@ -99,11 +107,13 @@ describe("ActionRecommendationsPage", () => {
             workflowCategory: "vacancy_readiness",
             automationEligible: false,
             href: "/analytics?propertyId=prop-2",
+            state: "pending",
+            reviewedAt: null,
             supportingSignals: [],
           },
         ],
       },
-    } as any);
+    } as LandlordAnalyticsSnapshot);
 
     render(
       <MemoryRouter>
@@ -127,7 +137,7 @@ describe("ActionRecommendationsPage", () => {
       decisions: {
         items: [],
       },
-    } as any);
+    } as LandlordAnalyticsSnapshot);
 
     render(
       <MemoryRouter>

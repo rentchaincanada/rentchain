@@ -148,6 +148,7 @@ describe("deriveAgentDecisions", () => {
     ]);
     expect(result.items[0]).toEqual(
       expect.objectContaining({
+        id: "reduce_vacancy_risk:prop-2",
         priority: "high",
         recommendedAction: "View property analytics",
         actionKey: "open_vacancy_readiness_flow",
@@ -156,6 +157,8 @@ describe("deriveAgentDecisions", () => {
         workflowCategory: "vacancy_readiness",
         automationEligible: false,
         href: "/analytics?propertyId=prop-2",
+        state: "pending",
+        reviewedAt: null,
       })
     );
     expect(result.items[0].supportingSignals.map((signal) => signal.key)).toEqual(

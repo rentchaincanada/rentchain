@@ -249,6 +249,7 @@ export type LandlordAgentDecisionType =
   | "focus_highest_risk_property";
 
 export type LandlordAgentDecisionPriority = "low" | "medium" | "high";
+export type AgentDecisionState = "pending" | "reviewed";
 
 export type LandlordAgentDecisionSupportingSignal = {
   source: "alert" | "predictive_metric" | "benchmarking_insight" | "delta";
@@ -276,12 +277,15 @@ export type LandlordDecisionActionKey =
   | "open_property_focus_flow";
 
 export type LandlordAgentDecision = {
+  id: string;
   decisionType: LandlordAgentDecisionType;
   priority: LandlordAgentDecisionPriority;
   explanation: string;
   supportingSignals: LandlordAgentDecisionSupportingSignal[];
   recommendedAction: string;
   href?: string;
+  state: AgentDecisionState;
+  reviewedAt?: string | null;
   actionKey: LandlordDecisionActionKey;
   actionLabel: string;
   destination: string;
@@ -291,6 +295,16 @@ export type LandlordAgentDecision = {
 
 export type LandlordAgentDecisions = {
   items: LandlordAgentDecision[];
+};
+
+export type PersistedAgentDecisionState = {
+  id: string;
+  landlordId: string;
+  decisionId: string;
+  state: AgentDecisionState;
+  reviewedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type LandlordAnalyticsSummary = {

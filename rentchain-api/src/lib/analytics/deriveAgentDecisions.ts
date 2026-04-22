@@ -127,29 +127,22 @@ function supportFromDelta(key: string, label: string, delta: AnalyticsDeltaValue
   };
 }
 
-function deriveActionHook(type: LandlordAgentDecisionType, propertyId?: string | null): {
+function deriveActionHook(
+  type: LandlordAgentDecisionType,
+  propertyId?: string | null
+): {
   actionKey: LandlordDecisionActionKey;
   actionLabel: string;
   destination: string;
-  workflowCategory: LandlordDecisionWorkflowCategory;
-  automationEligible: false;
+  workflowCategory?: LandlordDecisionWorkflowCategory;
+  automationEligible: boolean;
 } {
   if (type === "review_lease_renewals") {
     return {
       actionKey: "open_lease_renewals_flow",
-      actionLabel: "Open lease renewals",
+      actionLabel: "Review renewals",
       destination: "/portfolio-health",
       workflowCategory: "lease_renewals",
-      automationEligible: false,
-    };
-  }
-
-  if (type === "reduce_vacancy_risk") {
-    return {
-      actionKey: "open_vacancy_readiness_flow",
-      actionLabel: propertyId ? "Open vacancy readiness" : "Review vacancy readiness",
-      destination: propertyId ? `/analytics?propertyId=${encodeURIComponent(propertyId)}` : "/analytics",
-      workflowCategory: "vacancy_readiness",
       automationEligible: false,
     };
   }
@@ -157,7 +150,7 @@ function deriveActionHook(type: LandlordAgentDecisionType, propertyId?: string |
   if (type === "improve_application_conversion") {
     return {
       actionKey: "open_application_funnel_review_flow",
-      actionLabel: "Open application funnel",
+      actionLabel: "Review applications",
       destination: "/applications",
       workflowCategory: "application_funnel",
       automationEligible: false,
@@ -167,7 +160,7 @@ function deriveActionHook(type: LandlordAgentDecisionType, propertyId?: string |
   if (type === "address_maintenance_backlog") {
     return {
       actionKey: "open_maintenance_backlog_flow",
-      actionLabel: "Open work orders",
+      actionLabel: "Review work orders",
       destination: "/work-orders",
       workflowCategory: "maintenance_backlog",
       automationEligible: false,
@@ -177,20 +170,34 @@ function deriveActionHook(type: LandlordAgentDecisionType, propertyId?: string |
   if (type === "review_revenue_pressure") {
     return {
       actionKey: "open_revenue_pressure_follow_up_flow",
-      actionLabel: "Review revenue follow-up",
+      actionLabel: "Review revenue pressure",
       destination: propertyId ? `/analytics?propertyId=${encodeURIComponent(propertyId)}` : "/analytics",
       workflowCategory: "revenue_follow_up",
       automationEligible: false,
     };
   }
 
+  if (type === "focus_highest_risk_property") {
+    return {
+      actionKey: "open_property_focus_flow",
+      actionLabel: "View property analytics",
+      destination: propertyId ? `/analytics?propertyId=${encodeURIComponent(propertyId)}` : "/analytics",
+      workflowCategory: "property_focus",
+      automationEligible: false,
+    };
+  }
+
   return {
-    actionKey: "open_property_focus_flow",
-    actionLabel: "Open property focus",
+    actionKey: "open_vacancy_readiness_flow",
+    actionLabel: propertyId ? "View property analytics" : "View analytics",
     destination: propertyId ? `/analytics?propertyId=${encodeURIComponent(propertyId)}` : "/analytics",
-    workflowCategory: "property_focus",
+    workflowCategory: "vacancy_readiness",
     automationEligible: false,
   };
+}
+
+function decisionId(decisionType: LandlordAgentDecisionType, propertyId?: string | null) {
+  return propertyId ? `${decisionType}:${propertyId}` : decisionType;
 }
 
 function dedupeSignals(signals: Array<LandlordAgentDecisionSupportingSignal | null | undefined>) {
@@ -225,12 +232,15 @@ function buildDecision(params: {
   if (params.priority === "low" && supportingSignals.length < 2) return null;
   const hook = deriveActionHook(params.decisionType, params.propertyId || null);
   return {
+    id: decisionId(params.decisionType, params.propertyId || null),
     decisionType: params.decisionType,
     priority: params.priority,
     explanation: params.explanation,
     supportingSignals,
     recommendedAction: params.recommendedAction,
     href: hook.destination,
+    state: "pending",
+    reviewedAt: null,
     actionKey: hook.actionKey,
     actionLabel: hook.actionLabel,
     destination: hook.destination,

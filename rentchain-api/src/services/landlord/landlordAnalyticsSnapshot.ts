@@ -12,6 +12,7 @@ import {
 import type { AdminAnalyticsDerivedInput, LandlordAnalyticsSnapshot } from "../../lib/analytics/analyticsTypes";
 import { deriveLandlordAnalyticsSnapshot } from "../../lib/analytics/deriveLandlordAnalyticsSnapshot";
 import { deriveScreeningReconciliation } from "../../lib/reconciliation/deriveScreeningReconciliation";
+import { loadLandlordDecisionStates, mergeLandlordDecisionStates } from "./landlordDecisionStates";
 
 type LandlordAnalyticsParams = {
   landlordId: string;
@@ -253,5 +254,14 @@ export async function loadLandlordAnalyticsSnapshot(params: LandlordAnalyticsPar
     screeningOrdersRaw: (screeningOrdersSnap.docs || []).map((doc: any) => ({ id: doc.id, ...(doc.data() || {}) })),
   });
 
-  return deriveLandlordAnalyticsSnapshot(derivedInput);
+  const snapshot = deriveLandlordAnalyticsSnapshot(derivedInput);
+  const decisionStates = await loadLandlordDecisionStates(landlordId);
+
+  return {
+    ...snapshot,
+    decisions: {
+      ...snapshot.decisions,
+      items: mergeLandlordDecisionStates(snapshot.decisions.items, decisionStates),
+    },
+  };
 }
