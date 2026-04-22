@@ -10,6 +10,7 @@ import {
   shouldDeriveScreeningReconciliation,
 } from "../../lib/analytics/analyticsCore";
 import type { AdminAnalyticsDerivedInput, LandlordAnalyticsSnapshot } from "../../lib/analytics/analyticsTypes";
+import { applyDecisionAutomationRules } from "../../lib/analytics/deriveDecisionAutomationRules";
 import { deriveLandlordAnalyticsSnapshot } from "../../lib/analytics/deriveLandlordAnalyticsSnapshot";
 import { deriveScreeningReconciliation } from "../../lib/reconciliation/deriveScreeningReconciliation";
 import { loadLandlordDecisionStates, mergeLandlordDecisionStates } from "./landlordDecisionStates";
@@ -256,12 +257,13 @@ export async function loadLandlordAnalyticsSnapshot(params: LandlordAnalyticsPar
 
   const snapshot = deriveLandlordAnalyticsSnapshot(derivedInput);
   const decisionStates = await loadLandlordDecisionStates(landlordId);
+  const decisions = applyDecisionAutomationRules(mergeLandlordDecisionStates(snapshot.decisions.items, decisionStates));
 
   return {
       ...snapshot,
       decisions: {
         ...snapshot.decisions,
-        items: mergeLandlordDecisionStates(snapshot.decisions.items, decisionStates),
+        items: decisions,
       },
   };
 }

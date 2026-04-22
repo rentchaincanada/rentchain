@@ -276,6 +276,8 @@ export type LandlordDecisionActionKey =
   | "open_revenue_pressure_follow_up_flow"
   | "open_property_focus_flow";
 
+export type LandlordDecisionAutomationState = "manual_only" | "ready" | "blocked";
+
 export type LandlordAgentDecision = {
   id: string;
   decisionType: LandlordAgentDecisionType;
@@ -291,6 +293,8 @@ export type LandlordAgentDecision = {
   destination: string;
   workflowCategory?: LandlordDecisionWorkflowCategory;
   automationEligible: boolean;
+  automationState: LandlordDecisionAutomationState;
+  automationReason: string | null;
 };
 
 export type LandlordAgentDecisions = {

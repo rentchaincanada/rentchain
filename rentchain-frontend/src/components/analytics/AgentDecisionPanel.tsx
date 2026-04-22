@@ -24,6 +24,19 @@ const workflowCategoryLabel: Record<NonNullable<LandlordAgentDecision["workflowC
   property_focus: "Property focus",
 };
 
+const automationTone: Record<Exclude<LandlordAgentDecision["automationState"], "manual_only">, { bg: string; text: string; label: string }> = {
+  ready: {
+    bg: "rgba(21, 128, 61, 0.1)",
+    text: "#166534",
+    label: "Automation ready",
+  },
+  blocked: {
+    bg: "rgba(217, 119, 6, 0.12)",
+    text: "#92400e",
+    label: "Automation blocked",
+  },
+};
+
 type Props = {
   decisions: LandlordAgentDecision[];
   title?: string;
@@ -196,7 +209,25 @@ export function AgentDecisionPanel({
                       Workflow: {categoryLabel}
                     </div>
                   ) : null}
+                  {decision.automationState !== "manual_only" ? (
+                    <div
+                      style={{
+                        justifySelf: "start",
+                        padding: "4px 9px",
+                        borderRadius: 999,
+                        background: automationTone[decision.automationState].bg,
+                        color: automationTone[decision.automationState].text,
+                        fontWeight: 700,
+                        fontSize: "0.78rem",
+                      }}
+                    >
+                      {automationTone[decision.automationState].label}
+                    </div>
+                  ) : null}
                   {support ? <div style={{ color: "#64748b", fontSize: "0.88rem" }}>{support}</div> : null}
+                  {decision.automationState !== "manual_only" && decision.automationReason ? (
+                    <div style={{ color: "#64748b", fontSize: "0.84rem" }}>{decision.automationReason}</div>
+                  ) : null}
                   <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
                     {ctaDestination && ctaLabel ? (
                       <Link to={ctaDestination} style={{ color: "#0f766e", fontWeight: 700, textDecoration: "none" }}>

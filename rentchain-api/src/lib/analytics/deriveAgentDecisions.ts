@@ -275,6 +275,8 @@ function buildDecision(params: {
     destination: hook.destination,
     workflowCategory: hook.workflowCategory,
     automationEligible: hook.automationEligible,
+    automationState: "manual_only",
+    automationReason: null,
   } satisfies LandlordAgentDecision;
 }
 

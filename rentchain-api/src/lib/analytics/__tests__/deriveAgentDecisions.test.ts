@@ -156,6 +156,8 @@ describe("deriveAgentDecisions", () => {
         destination: "/analytics?entry=vacancy-readiness&propertyId=prop-2",
         workflowCategory: "vacancy_readiness",
         automationEligible: false,
+        automationState: "manual_only",
+        automationReason: null,
         href: "/analytics?entry=vacancy-readiness&propertyId=prop-2",
         state: "pending",
         reviewedAt: null,
@@ -412,6 +414,8 @@ describe("deriveAgentDecisions", () => {
           destination: "/portfolio-health?entry=lease-renewals&propertyId=prop-1",
           workflowCategory: "lease_renewals",
           automationEligible: false,
+          automationState: "manual_only",
+          automationReason: null,
         }),
         expect.objectContaining({
           decisionType: "reduce_vacancy_risk",
@@ -424,6 +428,7 @@ describe("deriveAgentDecisions", () => {
           actionLabel: "Review submitted applications",
           destination: "/applications?entry=application-funnel&status=SUBMITTED",
           workflowCategory: "application_funnel",
+          automationState: "manual_only",
         }),
         expect.objectContaining({
           decisionType: "address_maintenance_backlog",
@@ -431,6 +436,7 @@ describe("deriveAgentDecisions", () => {
           actionLabel: "Open maintenance backlog",
           destination: "/work-orders?entry=maintenance-backlog&propertyId=prop-4",
           workflowCategory: "maintenance_backlog",
+          automationState: "manual_only",
         }),
         expect.objectContaining({
           decisionType: "review_revenue_pressure",
@@ -438,6 +444,7 @@ describe("deriveAgentDecisions", () => {
           actionLabel: "Open revenue focus",
           destination: "/analytics?entry=revenue-pressure&propertyId=prop-5",
           workflowCategory: "revenue_follow_up",
+          automationState: "manual_only",
         }),
       ])
     );

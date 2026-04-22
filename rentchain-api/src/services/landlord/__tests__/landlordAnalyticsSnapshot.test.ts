@@ -146,6 +146,8 @@ describe("loadLandlordAnalyticsSnapshot", () => {
           destination: "/portfolio-health?entry=lease-renewals&propertyId=prop-1",
           workflowCategory: "lease_renewals",
           automationEligible: false,
+          automationState: "blocked",
+          automationReason: expect.stringContaining("Reviewed decisions stay manual"),
         }),
       ])
     );
