@@ -127,14 +127,73 @@ function supportFromDelta(key: string, label: string, delta: AnalyticsDeltaValue
   };
 }
 
-function actionHref(type: LandlordAgentDecisionType, propertyId?: string | null) {
-  if (type === "review_lease_renewals") return "/portfolio-health";
-  if (type === "improve_application_conversion") return "/applications";
-  if (type === "address_maintenance_backlog") return "/work-orders";
-  if (type === "reduce_vacancy_risk" || type === "review_revenue_pressure" || type === "focus_highest_risk_property") {
-    return propertyId ? `/analytics?propertyId=${encodeURIComponent(propertyId)}` : "/analytics";
+function deriveActionHook(
+  type: LandlordAgentDecisionType,
+  propertyId?: string | null
+): {
+  actionKey: LandlordDecisionActionKey;
+  actionLabel: string;
+  destination: string;
+  workflowCategory?: LandlordDecisionWorkflowCategory;
+  automationEligible: boolean;
+} {
+  if (type === "review_lease_renewals") {
+    return {
+      actionKey: "open_lease_renewals_flow",
+      actionLabel: "Review renewals",
+      destination: "/portfolio-health",
+      workflowCategory: "lease_renewals",
+      automationEligible: false,
+    };
   }
-  return undefined;
+
+  if (type === "improve_application_conversion") {
+    return {
+      actionKey: "open_application_funnel_review_flow",
+      actionLabel: "Review applications",
+      destination: "/applications",
+      workflowCategory: "application_funnel",
+      automationEligible: false,
+    };
+  }
+
+  if (type === "address_maintenance_backlog") {
+    return {
+      actionKey: "open_maintenance_backlog_flow",
+      actionLabel: "Review work orders",
+      destination: "/work-orders",
+      workflowCategory: "maintenance_backlog",
+      automationEligible: false,
+    };
+  }
+
+  if (type === "review_revenue_pressure") {
+    return {
+      actionKey: "open_revenue_pressure_follow_up_flow",
+      actionLabel: "Review revenue pressure",
+      destination: propertyId ? `/analytics?propertyId=${encodeURIComponent(propertyId)}` : "/analytics",
+      workflowCategory: "revenue_follow_up",
+      automationEligible: false,
+    };
+  }
+
+  if (type === "focus_highest_risk_property") {
+    return {
+      actionKey: "open_property_focus_flow",
+      actionLabel: "View property analytics",
+      destination: propertyId ? `/analytics?propertyId=${encodeURIComponent(propertyId)}` : "/analytics",
+      workflowCategory: "property_focus",
+      automationEligible: false,
+    };
+  }
+
+  return {
+    actionKey: "open_vacancy_readiness_flow",
+    actionLabel: propertyId ? "View property analytics" : "View analytics",
+    destination: propertyId ? `/analytics?propertyId=${encodeURIComponent(propertyId)}` : "/analytics",
+    workflowCategory: "vacancy_readiness",
+    automationEligible: false,
+  };
 }
 
 function decisionId(decisionType: LandlordAgentDecisionType, propertyId?: string | null) {
@@ -182,6 +241,11 @@ function buildDecision(params: {
     href: hook.destination,
     state: "pending",
     reviewedAt: null,
+    actionKey: hook.actionKey,
+    actionLabel: hook.actionLabel,
+    destination: hook.destination,
+    workflowCategory: hook.workflowCategory,
+    automationEligible: hook.automationEligible,
   } satisfies LandlordAgentDecision;
 }
 
