@@ -1,4 +1,5 @@
 import React from "react";
+import { useLocation } from "react-router-dom";
 import { fetchLandlordAnalyticsSnapshot, type AnalyticsPeriod, type LandlordAnalyticsSnapshot } from "../../api/landlordAnalyticsApi";
 import {
   fetchLandlordAnalyticsAlerts,
@@ -52,6 +53,13 @@ function periodLabel(period: AnalyticsPeriod) {
   if (period === "90d") return "90 days";
   if (period === "365d") return "365 days";
   return "month to date";
+}
+
+function entryLabel(entry: string | null) {
+  if (entry === "vacancy-readiness") return "Vacancy readiness";
+  if (entry === "revenue-pressure") return "Revenue pressure";
+  if (entry === "property-focus") return "Property focus";
+  return null;
 }
 
 function useAnalyticsState(enabled: boolean, includeBenchmarking: boolean, period: AnalyticsPeriod, propertyId: string) {
@@ -125,6 +133,7 @@ function useAnalyticsState(enabled: boolean, includeBenchmarking: boolean, perio
 }
 
 export default function LandlordAnalyticsPage() {
+  const location = useLocation();
   const {
     loading: entitlementLoading,
     canViewPortfolioHealthSummary,
@@ -133,6 +142,15 @@ export default function LandlordAnalyticsPage() {
   } = useEntitlements();
   const [period, setPeriod] = React.useState<AnalyticsPeriod>("90d");
   const [propertyId, setPropertyId] = React.useState("");
+  const urlParams = React.useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const routedPropertyId = urlParams.get("propertyId");
+  const routedEntryLabel = entryLabel(urlParams.get("entry"));
+
+  React.useEffect(() => {
+    if (!routedPropertyId || routedPropertyId === propertyId) return;
+    setPropertyId(routedPropertyId);
+  }, [propertyId, routedPropertyId]);
+
   const analyticsEnabled = !entitlementLoading && canViewPortfolioHealthSummary;
   const canViewAdvancedAnalytics = hasCapability("portfolio_analytics");
   const canViewBenchmarking = canViewPortfolioScore;
@@ -204,6 +222,11 @@ export default function LandlordAnalyticsPage() {
             <div style={{ color: "#475569", maxWidth: 840 }}>
               A calm view of portfolio health, application activity, leasing pressure, maintenance burden, and rent signals.
             </div>
+            {routedEntryLabel ? (
+              <div style={{ color: "#0f766e", fontWeight: 600, fontSize: "0.92rem" }}>
+                Focused from decisions: {routedEntryLabel}
+              </div>
+            ) : null}
           </div>
         </Section>
 

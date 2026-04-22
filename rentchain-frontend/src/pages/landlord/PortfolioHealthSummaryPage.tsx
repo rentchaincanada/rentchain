@@ -1,4 +1,5 @@
 import React from "react";
+import { useLocation } from "react-router-dom";
 import { fetchLandlordPortfolioHealth, type LandlordPortfolioHealthSummaryV1 } from "../../api/landlordPortfolioHealthApi";
 import { MacShell } from "../../components/layout/MacShell";
 import { Card, Section } from "../../components/ui/Ui";
@@ -12,6 +13,7 @@ import PortfolioHealthNextFocusList from "../../components/portfolioHealth/Portf
 import PortfolioFeedbackSummary from "../../components/portfolioHealth/PortfolioFeedbackSummary";
 
 export default function PortfolioHealthSummaryPage() {
+  const location = useLocation();
   const { showToast } = useToast();
   const {
     loading: entitlementLoading,
@@ -22,6 +24,15 @@ export default function PortfolioHealthSummaryPage() {
   const [summary, setSummary] = React.useState<LandlordPortfolioHealthSummaryV1 | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const entryParams = React.useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const entry = entryParams.get("entry");
+  const entryPropertyId = entryParams.get("propertyId");
+  const entryMessage =
+    entry === "lease-renewals"
+      ? entryPropertyId
+        ? "Opened from decisions to review lease-renewal pressure for a specific property."
+        : "Opened from decisions to review lease-renewal pressure."
+      : null;
 
   React.useEffect(() => {
     if (entitlementLoading || !canViewPortfolioHealthSummary) return;
@@ -34,9 +45,9 @@ export default function PortfolioHealthSummaryPage() {
         const response = await fetchLandlordPortfolioHealth();
         if (!mounted) return;
         setSummary(response.portfolioHealth);
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (!mounted) return;
-        const message = err?.message || "Failed to load portfolio health summary";
+        const message = err instanceof Error && err.message ? err.message : "Failed to load portfolio health summary";
         setError(message);
         showToast({
           message: "Failed to load portfolio health summary",
@@ -67,6 +78,10 @@ export default function PortfolioHealthSummaryPage() {
             </div>
           </div>
         </Section>
+
+        {entryMessage ? (
+          <Card style={{ borderColor: "#99f6e4", background: "#f0fdfa", color: "#115e59" }}>{entryMessage}</Card>
+        ) : null}
 
         {entitlementLoading ? <Card>Loading portfolio health…</Card> : null}
         {!entitlementLoading && !canViewPortfolioHealthSummary ? (

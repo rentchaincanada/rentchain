@@ -127,6 +127,16 @@ function supportFromDelta(key: string, label: string, delta: AnalyticsDeltaValue
   };
 }
 
+function buildDestination(pathname: string, params: Record<string, string | null | undefined>) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (typeof value !== "string" || !value.trim()) continue;
+    search.set(key, value);
+  }
+  const query = search.toString();
+  return query ? `${pathname}?${query}` : pathname;
+}
+
 function deriveActionHook(
   type: LandlordAgentDecisionType,
   propertyId?: string | null
@@ -140,8 +150,11 @@ function deriveActionHook(
   if (type === "review_lease_renewals") {
     return {
       actionKey: "open_lease_renewals_flow",
-      actionLabel: "Review renewals",
-      destination: "/portfolio-health",
+      actionLabel: "Open renewals focus",
+      destination: buildDestination("/portfolio-health", {
+        entry: "lease-renewals",
+        propertyId: propertyId || null,
+      }),
       workflowCategory: "lease_renewals",
       automationEligible: false,
     };
@@ -150,8 +163,12 @@ function deriveActionHook(
   if (type === "improve_application_conversion") {
     return {
       actionKey: "open_application_funnel_review_flow",
-      actionLabel: "Review applications",
-      destination: "/applications",
+      actionLabel: "Review submitted applications",
+      destination: buildDestination("/applications", {
+        entry: "application-funnel",
+        propertyId: propertyId || null,
+        status: "SUBMITTED",
+      }),
       workflowCategory: "application_funnel",
       automationEligible: false,
     };
@@ -160,8 +177,11 @@ function deriveActionHook(
   if (type === "address_maintenance_backlog") {
     return {
       actionKey: "open_maintenance_backlog_flow",
-      actionLabel: "Review work orders",
-      destination: "/work-orders",
+      actionLabel: "Open maintenance backlog",
+      destination: buildDestination("/work-orders", {
+        entry: "maintenance-backlog",
+        propertyId: propertyId || null,
+      }),
       workflowCategory: "maintenance_backlog",
       automationEligible: false,
     };
@@ -170,8 +190,11 @@ function deriveActionHook(
   if (type === "review_revenue_pressure") {
     return {
       actionKey: "open_revenue_pressure_follow_up_flow",
-      actionLabel: "Review revenue pressure",
-      destination: propertyId ? `/analytics?propertyId=${encodeURIComponent(propertyId)}` : "/analytics",
+      actionLabel: propertyId ? "Open revenue focus" : "Review revenue pressure",
+      destination: buildDestination("/analytics", {
+        entry: "revenue-pressure",
+        propertyId: propertyId || null,
+      }),
       workflowCategory: "revenue_follow_up",
       automationEligible: false,
     };
@@ -180,8 +203,11 @@ function deriveActionHook(
   if (type === "focus_highest_risk_property") {
     return {
       actionKey: "open_property_focus_flow",
-      actionLabel: "View property analytics",
-      destination: propertyId ? `/analytics?propertyId=${encodeURIComponent(propertyId)}` : "/analytics",
+      actionLabel: propertyId ? "Open property focus" : "View property analytics",
+      destination: buildDestination("/analytics", {
+        entry: "property-focus",
+        propertyId: propertyId || null,
+      }),
       workflowCategory: "property_focus",
       automationEligible: false,
     };
@@ -189,8 +215,11 @@ function deriveActionHook(
 
   return {
     actionKey: "open_vacancy_readiness_flow",
-    actionLabel: propertyId ? "View property analytics" : "View analytics",
-    destination: propertyId ? `/analytics?propertyId=${encodeURIComponent(propertyId)}` : "/analytics",
+    actionLabel: propertyId ? "Open vacancy readiness" : "View vacancy readiness",
+    destination: buildDestination("/analytics", {
+      entry: "vacancy-readiness",
+      propertyId: propertyId || null,
+    }),
     workflowCategory: "vacancy_readiness",
     automationEligible: false,
   };

@@ -484,6 +484,25 @@ describe("LandlordAnalyticsPage", () => {
     expect(macShellSpy).toHaveBeenCalledWith(expect.objectContaining({ title: "Analytics", showTopNav: false }));
   });
 
+  it("hydrates analytics focus from destination query params", async () => {
+    await mockEntitlements();
+    const fetchLandlordAnalyticsSnapshot = await mockApiResolved();
+
+    render(
+      <MemoryRouter initialEntries={["/analytics?entry=revenue-pressure&propertyId=prop-2"]}>
+        <LandlordAnalyticsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Focused from decisions: Revenue pressure/i)).toBeInTheDocument();
+    expect(fetchLandlordAnalyticsSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        period: "90d",
+        propertyId: "prop-2",
+      })
+    );
+  });
+
   it("shows a loading state while analytics are being fetched", async () => {
     await mockEntitlements();
     const { fetchLandlordAnalyticsSnapshot } = await import("../../api/landlordAnalyticsApi");
