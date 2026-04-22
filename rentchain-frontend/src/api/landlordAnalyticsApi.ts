@@ -75,7 +75,7 @@ export type LandlordAgentDecision = {
   supportingSignals: LandlordAgentDecisionSupportingSignal[];
   recommendedAction: string;
   href?: string;
-  state: "pending" | "reviewed" | "snoozed" | "dismissed";
+  state: "pending" | "reviewed" | "snoozed" | "dismissed" | "executed";
   reviewedAt?: string | null;
   actionKey: LandlordDecisionActionKey;
   actionLabel: string;
@@ -97,6 +97,10 @@ export type LandlordAgentDecision = {
     | "responseDeadlineAt"
   )[];
   executionInput: LandlordDecisionLeaseNoticeExecutionInput | null;
+  executedAt?: string | null;
+  executionOutcomeStatus: "none" | "succeeded" | "failed";
+  executionOutcomeAt: string | null;
+  executionOutcomeReason: string | null;
 };
 
 export type AnalyticsDeltaValue = {
@@ -348,7 +352,43 @@ export async function executeLandlordDecision(params: {
     reason?: string;
     timestamp: string;
   };
+  state: {
+    decisionId: string;
+    state: LandlordAgentDecision["state"];
+    reviewedAt?: string | null;
+    dismissedAt?: string | null;
+    snoozedAt?: string | null;
+    snoozedUntil?: string | null;
+    executedAt?: string | null;
+    executionOutcomeStatus: LandlordAgentDecision["executionOutcomeStatus"];
+    executionOutcomeAt: string | null;
+    executionOutcomeReason: string | null;
+    updatedAt: string;
+  };
   noticeId?: string;
+} | {
+  ok: false;
+  error: string;
+  automationResult?: {
+    action: LandlordDecisionExecutionMapping["action"];
+    executed: boolean;
+    skipped: boolean;
+    reason?: string;
+    timestamp: string;
+  };
+  state?: {
+    decisionId: string;
+    state: LandlordAgentDecision["state"];
+    reviewedAt?: string | null;
+    dismissedAt?: string | null;
+    snoozedAt?: string | null;
+    snoozedUntil?: string | null;
+    executedAt?: string | null;
+    executionOutcomeStatus: LandlordAgentDecision["executionOutcomeStatus"];
+    executionOutcomeAt: string | null;
+    executionOutcomeReason: string | null;
+    updatedAt: string;
+  };
 }> {
   const search = new URLSearchParams();
   if (params.period) search.set("period", params.period);
@@ -356,5 +396,6 @@ export async function executeLandlordDecision(params: {
   const suffix = search.toString() ? `?${search.toString()}` : "";
   return await apiFetch(`/landlord/analytics/decisions/${encodeURIComponent(params.decisionId)}/execute${suffix}`, {
     method: "POST",
+    allowStatuses: [409],
   });
 }

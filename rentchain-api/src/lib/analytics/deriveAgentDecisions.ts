@@ -283,6 +283,10 @@ function buildDecision(params: {
     executionInputReason: null,
     executionInputMissingFields: [],
     executionInput: null,
+    executedAt: null,
+    executionOutcomeStatus: "none",
+    executionOutcomeAt: null,
+    executionOutcomeReason: null,
   } satisfies LandlordAgentDecision;
 }
 

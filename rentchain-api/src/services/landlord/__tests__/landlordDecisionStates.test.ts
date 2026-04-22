@@ -100,6 +100,10 @@ describe("landlordDecisionStates", () => {
           executionInputReason: null,
           executionInputMissingFields: [],
           executionInput: null,
+          executedAt: null,
+          executionOutcomeStatus: "none",
+          executionOutcomeAt: null,
+          executionOutcomeReason: null,
           href: "/analytics?propertyId=prop-1",
           state: "pending",
           reviewedAt: null,
@@ -181,6 +185,10 @@ describe("landlordDecisionStates", () => {
       executionInputReason: null,
       executionInputMissingFields: [],
       executionInput: null,
+      executedAt: null,
+      executionOutcomeStatus: "none" as const,
+      executionOutcomeAt: null,
+      executionOutcomeReason: null,
       href: "/analytics?propertyId=prop-1",
       state: "pending" as const,
       reviewedAt: null,
@@ -238,5 +246,26 @@ describe("landlordDecisionStates", () => {
     expect(snoozed.snoozedUntil).toBe("2026-04-29T12:00:00.000Z");
     expect(dismissed.state).toBe("dismissed");
     expect(dismissed.dismissedAt).toBeTruthy();
+  });
+
+  it("persists explicit executed state and failed execution feedback canonically", async () => {
+    const { saveExecutedLandlordDecisionState, saveFailedLandlordDecisionExecutionOutcome } = await import("../landlordDecisionStates");
+
+    const executed = await saveExecutedLandlordDecisionState({
+      landlordId: "landlord-1",
+      decisionId: "review_lease_renewals:prop-1",
+    });
+    const failed = await saveFailedLandlordDecisionExecutionOutcome({
+      landlordId: "landlord-1",
+      decisionId: "reduce_vacancy_risk:prop-1",
+      reason: "AUTOMATION_EXECUTION_FAILED",
+    });
+
+    expect(executed.state).toBe("executed");
+    expect(executed.executionOutcomeStatus).toBe("succeeded");
+    expect(executed.executedAt).toBeTruthy();
+    expect(failed.state).toBe("pending");
+    expect(failed.executionOutcomeStatus).toBe("failed");
+    expect(failed.executionOutcomeReason).toBe("AUTOMATION_EXECUTION_FAILED");
   });
 });

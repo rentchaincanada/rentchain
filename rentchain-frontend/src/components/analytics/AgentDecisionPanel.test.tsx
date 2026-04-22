@@ -65,6 +65,15 @@ beforeEach(() => {
       skipped: false,
       timestamp: "2026-04-22T12:00:00.000Z",
     },
+    state: {
+      decisionId: "review_lease_renewals:prop-1",
+      state: "executed",
+      executedAt: "2026-04-22T12:00:00.000Z",
+      executionOutcomeStatus: "succeeded",
+      executionOutcomeAt: "2026-04-22T12:00:00.000Z",
+      executionOutcomeReason: null,
+      updatedAt: "2026-04-22T12:00:00.000Z",
+    },
     noticeId: "notice-1",
   });
 });
@@ -98,6 +107,10 @@ describe("AgentDecisionPanel", () => {
               executionInputReason: null,
               executionInputMissingFields: [],
               executionInput: null,
+              executedAt: null,
+              executionOutcomeStatus: "none",
+              executionOutcomeAt: null,
+              executionOutcomeReason: null,
               href: "/analytics?propertyId=prop-2",
               state: "pending",
               reviewedAt: null,
@@ -166,6 +179,10 @@ describe("AgentDecisionPanel", () => {
               executionInputReason: null,
               executionInputMissingFields: [],
               executionInput: null,
+              executedAt: null,
+              executionOutcomeStatus: "none",
+              executionOutcomeAt: null,
+              executionOutcomeReason: null,
               href: "/portfolio-health",
               state: "pending",
               reviewedAt: null,
@@ -215,6 +232,10 @@ describe("AgentDecisionPanel", () => {
               executionInputReason: null,
               executionInputMissingFields: [],
               executionInput: null,
+              executedAt: null,
+              executionOutcomeStatus: "none",
+              executionOutcomeAt: null,
+              executionOutcomeReason: null,
               href: "/analytics?propertyId=prop-2",
               state: "pending",
               reviewedAt: null,
@@ -264,6 +285,10 @@ describe("AgentDecisionPanel", () => {
               executionInputReason: null,
               executionInputMissingFields: [],
               executionInput: null,
+              executedAt: null,
+              executionOutcomeStatus: "none",
+              executionOutcomeAt: null,
+              executionOutcomeReason: null,
               href: "/analytics?propertyId=prop-2",
               state: "reviewed",
               reviewedAt: "2026-04-22T12:00:00.000Z",
@@ -331,6 +356,10 @@ describe("AgentDecisionPanel", () => {
                 newLeaseEndDate: "2027-05-10",
                 responseDeadlineAt: Date.UTC(2026, 4, 1, 12, 0, 0, 0),
               },
+              executedAt: null,
+              executionOutcomeStatus: "none",
+              executionOutcomeAt: null,
+              executionOutcomeReason: null,
               href: "/portfolio-health?entry=lease-renewals&propertyId=prop-1",
               state: "pending",
               reviewedAt: null,
@@ -350,6 +379,8 @@ describe("AgentDecisionPanel", () => {
         propertyId: null,
       });
     });
-    expect(screen.queryByText(/Review upcoming renewals/i)).not.toBeInTheDocument();
+    expect(await screen.findByText("Executed")).toBeInTheDocument();
+    expect(screen.getByText(/Notice sent/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Execute now/i })).not.toBeInTheDocument();
   });
 });

@@ -13,6 +13,8 @@ import {
 } from "../services/leaseNoticeWorkflowService";
 import { loadLandlordAnalyticsSnapshot } from "../services/landlord/landlordAnalyticsSnapshot";
 import {
+  saveExecutedLandlordDecisionState,
+  saveFailedLandlordDecisionExecutionOutcome,
   saveDismissedLandlordDecisionState,
   saveReviewedLandlordDecisionState,
   saveSnoozedLandlordDecisionState,
@@ -22,6 +24,22 @@ const router = Router();
 
 function asString(value: unknown, max = 240) {
   return String(value || "").trim().slice(0, max);
+}
+
+function decisionStatePayload(state: any) {
+  return {
+    decisionId: state.decisionId,
+    state: state.state,
+    reviewedAt: state.reviewedAt || null,
+    dismissedAt: state.dismissedAt || null,
+    snoozedAt: state.snoozedAt || null,
+    snoozedUntil: state.snoozedUntil || null,
+    executedAt: state.executedAt || null,
+    executionOutcomeStatus: state.executionOutcomeStatus || "none",
+    executionOutcomeAt: state.executionOutcomeAt || null,
+    executionOutcomeReason: state.executionOutcomeReason || null,
+    updatedAt: state.updatedAt,
+  };
 }
 
 async function resolveVisibleDecision(req: any, res: any) {
@@ -222,6 +240,20 @@ router.post("/landlord/analytics/decisions/:decisionId/execute", requireAuth, re
     if (decision.automationState !== "ready") {
       return res.status(409).json({ ok: false, error: "DECISION_NOT_READY", reason: decision.automationReason || null });
     }
+    if (decision.state === "executed") {
+      return res.status(409).json({
+        ok: false,
+        error: "DECISION_ALREADY_EXECUTED",
+        state: {
+          decisionId,
+          state: decision.state,
+          executedAt: decision.executedAt || null,
+          executionOutcomeStatus: decision.executionOutcomeStatus,
+          executionOutcomeAt: decision.executionOutcomeAt || null,
+          executionOutcomeReason: decision.executionOutcomeReason || null,
+        },
+      });
+    }
     if (decision.executionMappingState !== "mapped" || !decision.executionMapping) {
       return res.status(409).json({ ok: false, error: "DECISION_NOT_MAPPED" });
     }
@@ -305,53 +337,99 @@ router.post("/landlord/analytics/decisions/:decisionId/execute", requireAuth, re
       },
     });
 
-    const automation = await executeAutomation({
-      action: "lease.auto_send_notice",
-      policyResult,
-      actor: {
-        type: "landlord",
-        id: actorId,
-        role: "landlord",
-      },
-      resource: {
-        type: "lease",
-        id: lease.id,
-      },
-      visibility: "internal",
-      metadata: {
-        domain: "lease_notice",
-        initiatedFrom: "decision_execute",
-        landlordId,
-        tenantId: lease.tenantId,
-        propertyId: lease.propertyId,
-        unitId: lease.unitId,
-        decisionId,
-        policyAction: "send_notice",
-      },
-      context: {
-        noticeReady: true,
-        alreadySent: Boolean(lease.latestNoticeId),
-        hasRequiredLegalInputs: Boolean(policyRequest.context.hasRequiredLegalInputs),
-        execute: async () => {
-          const execution = await performLeaseNoticeSendFromPreviewInput({
-            leaseId: lease.id,
-            landlordId,
-            actorId,
-            lease,
-            previewInput,
-            autopilotPolicy,
-          });
-          if (execution.status >= 400 || !execution.payload.ok) {
-            const error = new Error(String(execution.payload?.error || "AUTOMATION_EXECUTION_FAILED"));
-            (error as any).code = execution.payload?.error || "AUTOMATION_EXECUTION_FAILED";
-            throw error;
-          }
-          return execution.payload;
+    let automation;
+    try {
+      automation = await executeAutomation({
+        action: "lease.auto_send_notice",
+        policyResult,
+        actor: {
+          type: "landlord",
+          id: actorId,
+          role: "landlord",
         },
-      },
-    });
+        resource: {
+          type: "lease",
+          id: lease.id,
+        },
+        visibility: "internal",
+        metadata: {
+          domain: "lease_notice",
+          initiatedFrom: "decision_execute",
+          landlordId,
+          tenantId: lease.tenantId,
+          propertyId: lease.propertyId,
+          unitId: lease.unitId,
+          decisionId,
+          policyAction: "send_notice",
+        },
+        context: {
+          noticeReady: true,
+          alreadySent: Boolean(lease.latestNoticeId),
+          hasRequiredLegalInputs: Boolean(policyRequest.context.hasRequiredLegalInputs),
+          execute: async () => {
+            const execution = await performLeaseNoticeSendFromPreviewInput({
+              leaseId: lease.id,
+              landlordId,
+              actorId,
+              lease,
+              previewInput,
+              autopilotPolicy,
+            });
+            if (execution.status >= 400 || !execution.payload.ok) {
+              const error = new Error(String(execution.payload?.error || "AUTOMATION_EXECUTION_FAILED"));
+              (error as any).code = execution.payload?.error || "AUTOMATION_EXECUTION_FAILED";
+              throw error;
+            }
+            return execution.payload;
+          },
+        },
+      });
+    } catch (executionErr: any) {
+      const persistedFailureState = await saveFailedLandlordDecisionExecutionOutcome({
+        landlordId,
+        decisionId,
+        reason: executionErr?.code || executionErr?.message || "LANDLORD_DECISION_EXECUTE_FAILED",
+      });
+      await writeCanonicalEvent({
+        type: "decision.execution_failed",
+        domain: "system",
+        action: "execution_failed",
+        status: "failed",
+        actor: { type: "landlord", id: landlordId, role: "landlord" },
+        resource: { type: "analytics_decision", id: decisionId },
+        occurredAt: persistedFailureState.executionOutcomeAt || persistedFailureState.updatedAt,
+        visibility: "landlord",
+        summary: `Analytics decision ${decisionId} execution failed.`,
+        metadata: {
+          landlordId,
+          decisionId,
+          decisionType: decision.decisionType,
+          action: decision.executionMapping.action,
+          resourceType: decision.executionMapping.resourceType,
+          resourceId: decision.executionMapping.resourceId,
+          reason: persistedFailureState.executionOutcomeReason || null,
+          source: "landlord_analytics_decisions",
+        },
+      });
+      return res.status(500).json({
+        ok: false,
+        error: "LANDLORD_DECISION_EXECUTE_FAILED",
+        state: decisionStatePayload(persistedFailureState),
+      });
+    }
 
     const success = Boolean(automation.automationResult.executed);
+    const persistedState = success
+      ? await saveExecutedLandlordDecisionState({
+          landlordId,
+          decisionId,
+        })
+      : await saveFailedLandlordDecisionExecutionOutcome({
+          landlordId,
+          decisionId,
+          reason: automation.automationResult.reason || "DECISION_EXECUTION_FAILED",
+        });
+
     await writeCanonicalEvent({
       type: success ? "decision.executed" : "decision.execution_failed",
       domain: "system",
@@ -381,6 +459,7 @@ router.post("/landlord/analytics/decisions/:decisionId/execute", requireAuth, re
         ok: false,
         error: "DECISION_EXECUTION_FAILED",
         automationResult: automation.automationResult,
+        state: decisionStatePayload(persistedState),
       });
     }
 
@@ -393,6 +472,7 @@ router.post("/landlord/analytics/decisions/:decisionId/execute", requireAuth, re
         resourceId: decision.executionMapping.resourceId,
       },
       automationResult: automation.automationResult,
+      state: decisionStatePayload(persistedState),
       ...(automation.data && typeof automation.data === "object" ? automation.data : {}),
     });
   } catch (err: any) {
