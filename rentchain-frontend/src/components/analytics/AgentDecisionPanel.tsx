@@ -9,6 +9,15 @@ const priorityTone: Record<"low" | "medium" | "high", { bg: string; text: string
   high: { bg: "rgba(239, 68, 68, 0.12)", text: "#991b1b" },
 };
 
+const workflowCategoryLabel: Record<NonNullable<LandlordAgentDecision["workflowCategory"]>, string> = {
+  lease_renewals: "Lease renewals",
+  vacancy_readiness: "Vacancy readiness",
+  application_funnel: "Application funnel",
+  maintenance_backlog: "Maintenance backlog",
+  revenue_follow_up: "Revenue follow-up",
+  property_focus: "Property focus",
+};
+
 type Props = {
   decisions: LandlordAgentDecision[];
   title?: string;
@@ -45,6 +54,7 @@ export function AgentDecisionPanel({
           <div style={{ display: "grid", gap: 10 }}>
             {decisions.map((decision) => {
               const support = supportingLine(decision);
+              const categoryLabel = decision.workflowCategory ? workflowCategoryLabel[decision.workflowCategory] : null;
               return (
                 <div
                   key={decision.decisionType}
@@ -74,11 +84,16 @@ export function AgentDecisionPanel({
                     </div>
                   </div>
                   <div style={{ color: "#334155" }}>{decision.explanation}</div>
+                  {categoryLabel ? (
+                    <div style={{ color: "#64748b", fontSize: "0.82rem", fontWeight: 600 }}>
+                      Workflow: {categoryLabel}
+                    </div>
+                  ) : null}
                   {support ? <div style={{ color: "#64748b", fontSize: "0.88rem" }}>{support}</div> : null}
-                  {decision.href ? (
+                  {decision.destination ? (
                     <div>
-                      <Link to={decision.href} style={{ color: "#0f766e", fontWeight: 700, textDecoration: "none" }}>
-                        {decision.recommendedAction}
+                      <Link to={decision.destination} style={{ color: "#0f766e", fontWeight: 700, textDecoration: "none" }}>
+                        {decision.actionLabel}
                       </Link>
                     </div>
                   ) : null}

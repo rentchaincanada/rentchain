@@ -103,6 +103,11 @@ describe("deriveLandlordAnalyticsSnapshot", () => {
         expect.objectContaining({
           decisionType: "review_lease_renewals",
           recommendedAction: "Review renewals",
+          actionKey: "open_lease_renewals_flow",
+          actionLabel: "Open lease renewals",
+          destination: "/portfolio-health",
+          workflowCategory: "lease_renewals",
+          automationEligible: false,
         }),
       ])
     );
