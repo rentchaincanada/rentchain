@@ -1,3 +1,4 @@
+import type { AutomationAction } from "../automation/automationTypes";
 import type { ScreeningReconciliationStatus } from "../reconciliation/reconciliationTypes";
 
 export type AdminAnalyticsPeriod = "30d" | "90d" | "365d" | "month_to_date";
@@ -277,6 +278,16 @@ export type LandlordDecisionActionKey =
   | "open_property_focus_flow";
 
 export type LandlordDecisionAutomationState = "manual_only" | "ready" | "blocked";
+export type LandlordDecisionExecutionMappingState = "none" | "mapped";
+export type LandlordDecisionExecutionResourceType = "lease" | "rental_application" | "work_order";
+
+export type LandlordDecisionExecutionMapping = {
+  action: AutomationAction;
+  resourceType: LandlordDecisionExecutionResourceType;
+  resourceId: string;
+  prerequisitesMet: boolean;
+  prerequisiteReason: string | null;
+};
 
 export type LandlordAgentDecision = {
   id: string;
@@ -295,6 +306,8 @@ export type LandlordAgentDecision = {
   automationEligible: boolean;
   automationState: LandlordDecisionAutomationState;
   automationReason: string | null;
+  executionMappingState: LandlordDecisionExecutionMappingState;
+  executionMapping: LandlordDecisionExecutionMapping | null;
 };
 
 export type LandlordAgentDecisions = {

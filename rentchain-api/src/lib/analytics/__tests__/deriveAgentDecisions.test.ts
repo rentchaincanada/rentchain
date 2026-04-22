@@ -158,6 +158,8 @@ describe("deriveAgentDecisions", () => {
         automationEligible: false,
         automationState: "manual_only",
         automationReason: null,
+        executionMappingState: "none",
+        executionMapping: null,
         href: "/analytics?entry=vacancy-readiness&propertyId=prop-2",
         state: "pending",
         reviewedAt: null,
@@ -416,6 +418,8 @@ describe("deriveAgentDecisions", () => {
           automationEligible: false,
           automationState: "manual_only",
           automationReason: null,
+          executionMappingState: "none",
+          executionMapping: null,
         }),
         expect.objectContaining({
           decisionType: "reduce_vacancy_risk",

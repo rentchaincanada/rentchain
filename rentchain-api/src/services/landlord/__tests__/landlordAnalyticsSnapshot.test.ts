@@ -148,6 +148,13 @@ describe("loadLandlordAnalyticsSnapshot", () => {
           automationEligible: false,
           automationState: "blocked",
           automationReason: expect.stringContaining("Reviewed decisions stay manual"),
+          executionMappingState: "mapped",
+          executionMapping: expect.objectContaining({
+            action: "lease.auto_send_notice",
+            resourceType: "lease",
+            resourceId: "lease-1",
+            prerequisitesMet: false,
+          }),
         }),
       ])
     );

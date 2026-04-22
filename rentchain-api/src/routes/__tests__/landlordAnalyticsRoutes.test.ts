@@ -187,6 +187,8 @@ describe("landlordAnalyticsRoutes", () => {
             automationEligible: false,
             automationState: "manual_only",
             automationReason: "This decision is guidance-only in v1 and does not map to an execution rule.",
+            executionMappingState: "none",
+            executionMapping: null,
             href: "/analytics",
             state: "pending",
             reviewedAt: null,

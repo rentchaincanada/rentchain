@@ -20,6 +20,8 @@ function baseDecision(overrides?: Partial<LandlordAgentDecision>): LandlordAgent
     automationEligible: false,
     automationState: "manual_only",
     automationReason: null,
+    executionMappingState: "none",
+    executionMapping: null,
     ...overrides,
   };
 }

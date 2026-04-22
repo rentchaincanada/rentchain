@@ -11,6 +11,7 @@ import {
 } from "../../lib/analytics/analyticsCore";
 import type { AdminAnalyticsDerivedInput, LandlordAnalyticsSnapshot } from "../../lib/analytics/analyticsTypes";
 import { applyDecisionAutomationRules } from "../../lib/analytics/deriveDecisionAutomationRules";
+import { applyDecisionExecutionMappings } from "../../lib/analytics/deriveDecisionExecutionMappings";
 import { deriveLandlordAnalyticsSnapshot } from "../../lib/analytics/deriveLandlordAnalyticsSnapshot";
 import { deriveScreeningReconciliation } from "../../lib/reconciliation/deriveScreeningReconciliation";
 import { loadLandlordDecisionStates, mergeLandlordDecisionStates } from "./landlordDecisionStates";
@@ -257,7 +258,11 @@ export async function loadLandlordAnalyticsSnapshot(params: LandlordAnalyticsPar
 
   const snapshot = deriveLandlordAnalyticsSnapshot(derivedInput);
   const decisionStates = await loadLandlordDecisionStates(landlordId);
-  const decisions = applyDecisionAutomationRules(mergeLandlordDecisionStates(snapshot.decisions.items, decisionStates));
+  const decisions = applyDecisionExecutionMappings({
+    decisions: applyDecisionAutomationRules(mergeLandlordDecisionStates(snapshot.decisions.items, decisionStates)),
+    leases: derivedInput.leases,
+    now,
+  });
 
   return {
       ...snapshot,
