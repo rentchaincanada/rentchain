@@ -197,6 +197,18 @@ describe("loadLandlordAnalyticsSnapshot", () => {
       ])
     );
     expect(scoped.decisions.items.find((decision) => decision.id === "reduce_vacancy_risk:prop-1")).toBeUndefined();
+    expect(scoped.decisionOutcomeAnalytics).toEqual({
+      scope: "landlord_all_time",
+      appearedCount: 3,
+      reviewedCount: 0,
+      dismissedCount: 0,
+      executedCount: 0,
+      failedExecutionCount: 0,
+      resolvedCount: 0,
+      resolutionRate: 0,
+      medianTimeToResolutionHours: null,
+      averageTimeToExecutionHours: null,
+    });
     expect(scoped.propertyMetrics).toEqual([
       expect.objectContaining({
         propertyId: "prop-1",
@@ -227,6 +239,7 @@ describe("loadLandlordAnalyticsSnapshot", () => {
     expect(result.insights).toEqual([]);
     expect(result.predictive.metrics.every((metric) => metric.status === "insufficient_data")).toBe(true);
     expect(result.decisions.items).toEqual([]);
+    expect(result.decisionOutcomeAnalytics.appearedCount).toBe(0);
     expect(result.propertyMetrics).toEqual([]);
     expect(result.comparisons.deltas.summary.maintenanceCostCents.direction).toBe("flat");
   });
@@ -366,5 +379,69 @@ describe("loadLandlordAnalyticsSnapshot", () => {
 
     expect(appearanceEvents).toHaveLength(1);
     expect(appearanceEvents[0].id).toBe("decision_appeared__landlord-1__review_lease_renewals:prop-1");
+  });
+
+  it("derives all-time decision outcome analytics from canonical decision events", async () => {
+    const nowIso = "2026-04-20T12:00:00.000Z";
+    seedDoc("properties", "prop-1", {
+      landlordId: "landlord-1",
+      name: "Alpha",
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    });
+    seedDoc("canonicalEvents", "event-appeared", {
+      type: "decision.appeared",
+      visibility: "landlord",
+      resource: { type: "analytics_decision", id: "decision-1" },
+      metadata: { landlordId: "landlord-1", decisionId: "decision-1" },
+      occurredAt: "2026-04-01T12:00:00.000Z",
+    });
+    seedDoc("canonicalEvents", "event-reviewed", {
+      type: "decision.reviewed",
+      visibility: "landlord",
+      resource: { type: "analytics_decision", id: "decision-1" },
+      metadata: { landlordId: "landlord-1", decisionId: "decision-1" },
+      occurredAt: "2026-04-03T12:00:00.000Z",
+    });
+    seedDoc("canonicalEvents", "event-appeared-2", {
+      type: "decision.appeared",
+      visibility: "landlord",
+      resource: { type: "analytics_decision", id: "decision-2" },
+      metadata: { landlordId: "landlord-1", decisionId: "decision-2" },
+      occurredAt: "2026-04-05T12:00:00.000Z",
+    });
+    seedDoc("canonicalEvents", "event-executed", {
+      type: "decision.executed",
+      visibility: "landlord",
+      resource: { type: "analytics_decision", id: "decision-2" },
+      metadata: { landlordId: "landlord-1", decisionId: "decision-2" },
+      occurredAt: "2026-04-07T12:00:00.000Z",
+    });
+    seedDoc("canonicalEvents", "event-failed", {
+      type: "decision.execution_failed",
+      visibility: "landlord",
+      resource: { type: "analytics_decision", id: "decision-3" },
+      metadata: { landlordId: "landlord-1", decisionId: "decision-3" },
+      occurredAt: "2026-04-06T12:00:00.000Z",
+    });
+
+    const { loadLandlordAnalyticsSnapshot } = await import("../landlordAnalyticsSnapshot");
+    const result = await loadLandlordAnalyticsSnapshot({
+      landlordId: "landlord-1",
+      now: Date.parse(nowIso),
+    });
+
+    expect(result.decisionOutcomeAnalytics).toEqual({
+      scope: "landlord_all_time",
+      appearedCount: 2,
+      reviewedCount: 1,
+      dismissedCount: 0,
+      executedCount: 1,
+      failedExecutionCount: 1,
+      resolvedCount: 2,
+      resolutionRate: 1,
+      medianTimeToResolutionHours: 48,
+      averageTimeToExecutionHours: 48,
+    });
   });
 });

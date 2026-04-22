@@ -8,6 +8,7 @@ import { LockedFeature } from "@/components/billing/LockedFeature";
 import { FeatureTeaser } from "@/components/billing/FeatureTeaser";
 import { resolveRequiredPlanLabel } from "@/lib/upgradePrompt";
 import AgentDecisionPanel from "../../components/analytics/AgentDecisionPanel";
+import DecisionOutcomeAnalyticsPanel from "../../components/analytics/DecisionOutcomeAnalyticsPanel";
 
 function errorMessage(error: unknown) {
   if (error instanceof Error && error.message) return error.message;
@@ -110,13 +111,16 @@ export default function ActionRecommendationsPage() {
           <Card style={{ color: "#b91c1c" }}>Failed to load recommended actions: {error}</Card>
         ) : null}
         {!entitlementLoading && canViewDecisionInbox && !loading && !error ? (
-          <AgentDecisionPanel
-            decisions={snapshot?.decisions?.items || []}
-            title="Decision inbox"
-            description="Review the next landlord actions surfaced directly from your current analytics snapshot."
-            emptyMessage="No prioritized landlord actions are surfaced for this view right now."
-            period="90d"
-          />
+          <>
+            <DecisionOutcomeAnalyticsPanel analytics={snapshot?.decisionOutcomeAnalytics} />
+            <AgentDecisionPanel
+              decisions={snapshot?.decisions?.items || []}
+              title="Decision inbox"
+              description="Review the next landlord actions surfaced directly from your current analytics snapshot."
+              emptyMessage="No prioritized landlord actions are surfaced for this view right now."
+              period="90d"
+            />
+          </>
         ) : null}
       </div>
     </MacShell>

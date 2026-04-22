@@ -112,6 +112,19 @@ export type AnalyticsDeltaValue = {
   direction: "better" | "worse" | "flat" | "insufficient_data";
 };
 
+export type LandlordDecisionOutcomeAnalytics = {
+  scope: "landlord_all_time";
+  appearedCount: number;
+  reviewedCount: number;
+  dismissedCount: number;
+  executedCount: number;
+  failedExecutionCount: number;
+  resolvedCount: number;
+  resolutionRate: number | null;
+  medianTimeToResolutionHours: number | null;
+  averageTimeToExecutionHours: number | null;
+};
+
 export type LandlordAnalyticsSnapshot = {
   summary: {
     occupiedUnits: number;
@@ -162,6 +175,7 @@ export type LandlordAnalyticsSnapshot = {
   decisions: {
     items: LandlordAgentDecision[];
   };
+  decisionOutcomeAnalytics: LandlordDecisionOutcomeAnalytics;
   predictive: {
     metrics: LandlordPredictiveMetric[];
   };

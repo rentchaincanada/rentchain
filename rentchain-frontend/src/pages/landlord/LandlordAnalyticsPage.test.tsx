@@ -255,6 +255,18 @@ describe("LandlordAnalyticsPage", () => {
         estimatedScheduledRentCents: 660000,
         averageRentPerOccupiedUnitCents: 165000,
       },
+      decisionOutcomeAnalytics: {
+        scope: "landlord_all_time",
+        appearedCount: 12,
+        reviewedCount: 5,
+        dismissedCount: 2,
+        executedCount: 3,
+        failedExecutionCount: 1,
+        resolvedCount: 10,
+        resolutionRate: 0.8333,
+        medianTimeToResolutionHours: 54,
+        averageTimeToExecutionHours: 61,
+      },
       decisions: {
         items: [
           {
@@ -486,6 +498,8 @@ describe("LandlordAnalyticsPage", () => {
     );
 
     expect(await screen.findByText(/Analytics alerts/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Decision outcomes/i })).toBeInTheDocument();
+    expect(screen.getByText(/all-time landlord decision outcomes from canonical decision events/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Recommended next actions/i })).toBeInTheDocument();
     expect(screen.getByText(/Beta carries the strongest vacancy pressure/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Predictive metrics/i })).toBeInTheDocument();

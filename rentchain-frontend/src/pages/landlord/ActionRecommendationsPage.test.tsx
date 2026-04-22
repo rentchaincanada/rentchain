@@ -81,6 +81,18 @@ describe("ActionRecommendationsPage", () => {
     await mockEntitlements();
     const { fetchLandlordAnalyticsSnapshot } = await import("../../api/landlordAnalyticsApi");
     vi.mocked(fetchLandlordAnalyticsSnapshot).mockResolvedValue({
+      decisionOutcomeAnalytics: {
+        scope: "landlord_all_time",
+        appearedCount: 8,
+        reviewedCount: 3,
+        dismissedCount: 1,
+        executedCount: 2,
+        failedExecutionCount: 1,
+        resolvedCount: 6,
+        resolutionRate: 0.75,
+        medianTimeToResolutionHours: 36,
+        averageTimeToExecutionHours: 42,
+      },
       decisions: {
         items: [
           {
@@ -151,6 +163,9 @@ describe("ActionRecommendationsPage", () => {
 
     expect(await screen.findByRole("heading", { name: /Decision inbox/i })).toBeInTheDocument();
     expect(screen.getByText(/centralized decision inbox/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Decision outcomes/i })).toBeInTheDocument();
+    expect(screen.getByText(/all-time landlord decision outcomes from canonical decision events/i)).toBeInTheDocument();
+    expect(screen.getByText(/resolution rate 75%/i)).toBeInTheDocument();
     expect(fetchLandlordAnalyticsSnapshot).toHaveBeenCalledTimes(1);
 
     const actionLinks = screen.getAllByRole("link");

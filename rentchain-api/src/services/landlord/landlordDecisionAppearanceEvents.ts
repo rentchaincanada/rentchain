@@ -23,11 +23,12 @@ export async function emitLandlordDecisionAppearanceEvents(params: {
   decisions: LandlordAgentDecision[];
   canonicalEvents: CanonicalEventV1[];
   occurredAt: string;
-}): Promise<void> {
+}): Promise<CanonicalEventV1[]> {
   const landlordId = asString(params.landlordId, 240);
-  if (!landlordId) return;
+  if (!landlordId) return [];
 
   const seenDecisionIds = new Set<string>();
+  const emittedEvents: CanonicalEventV1[] = [];
   for (const event of params.canonicalEvents || []) {
     const decisionId = asString(event.metadata?.decisionId, 240);
     if (!decisionId) continue;
@@ -40,14 +41,16 @@ export async function emitLandlordDecisionAppearanceEvents(params: {
     if (!decisionId || seenDecisionIds.has(decisionId)) continue;
     seenDecisionIds.add(decisionId);
 
-    await writeCanonicalEvent({
+    const emittedEvent: CanonicalEventV1 = {
       id: decisionAppearanceEventId(landlordId, decisionId),
+      version: "v1",
       type: "decision.appeared",
       domain: "system",
       action: "appeared",
       actor: { type: "system", id: "system", role: "system" },
       resource: { type: "analytics_decision", id: decisionId },
       occurredAt: params.occurredAt,
+      recordedAt: params.occurredAt,
       visibility: "landlord",
       summary: `Analytics decision ${decisionId} appeared.`,
       metadata: {
@@ -56,6 +59,10 @@ export async function emitLandlordDecisionAppearanceEvents(params: {
         decisionType: decision.decisionType,
         source: "landlord_analytics_decisions",
       },
-    });
+    };
+    await writeCanonicalEvent(emittedEvent);
+    emittedEvents.push(emittedEvent);
   }
+
+  return emittedEvents;
 }
