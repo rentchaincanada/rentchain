@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Card } from "../ui/Ui";
 import {
   dismissLandlordDecision,
+  executeLandlordDecision,
   markLandlordDecisionReviewed,
   snoozeLandlordDecision,
   type AnalyticsPeriod,
@@ -76,7 +77,7 @@ export function AgentDecisionPanel({
 }: Props) {
   const [items, setItems] = React.useState(decisions);
   const [workingDecisionId, setWorkingDecisionId] = React.useState<string | null>(null);
-  const [workingAction, setWorkingAction] = React.useState<"review" | "snooze" | "dismiss" | null>(null);
+  const [workingAction, setWorkingAction] = React.useState<"review" | "snooze" | "dismiss" | "execute" | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -152,6 +153,25 @@ export function AgentDecisionPanel({
     }
   };
 
+  const handleExecute = async (decisionId: string) => {
+    try {
+      setWorkingDecisionId(decisionId);
+      setWorkingAction("execute");
+      setError(null);
+      await executeLandlordDecision({
+        decisionId,
+        period,
+        propertyId,
+      });
+      setItems((current) => current.filter((decision) => decision.id !== decisionId));
+    } catch (err: unknown) {
+      setError(errorMessage(err));
+    } finally {
+      setWorkingDecisionId(null);
+      setWorkingAction(null);
+    }
+  };
+
   return (
     <Card>
       <div style={{ display: "grid", gap: 14 }}>
@@ -175,6 +195,10 @@ export function AgentDecisionPanel({
                 : decision.href
                   ? decision.recommendedAction
                   : null;
+              const canExecuteNow =
+                decision.automationState === "ready" &&
+                decision.executionMappingState === "mapped" &&
+                decision.executionInputState === "complete";
               return (
                 <div
                   key={decision.id}
@@ -233,6 +257,23 @@ export function AgentDecisionPanel({
                       <Link to={ctaDestination} style={{ color: "#0f766e", fontWeight: 700, textDecoration: "none" }}>
                         {ctaLabel}
                       </Link>
+                    ) : null}
+                    {canExecuteNow ? (
+                      <button
+                        type="button"
+                        onClick={() => void handleExecute(decision.id)}
+                        disabled={workingDecisionId === decision.id}
+                        style={{
+                          border: "1px solid #166534",
+                          borderRadius: 999,
+                          background: "#166534",
+                          color: "#fff",
+                          fontWeight: 700,
+                          padding: "6px 12px",
+                        }}
+                      >
+                        {workingDecisionId === decision.id && workingAction === "execute" ? "Executing…" : "Execute now"}
+                      </button>
                     ) : null}
                     {decision.state === "reviewed" ? (
                       <div

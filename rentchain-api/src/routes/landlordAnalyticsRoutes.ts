@@ -1,7 +1,16 @@
 import { Router } from "express";
 import { writeCanonicalEvent } from "../lib/events/buildEvent";
+import { executeAutomation } from "../lib/automation/automationExecutor";
+import { buildLeaseNoticePolicyRequest } from "../lib/policy/policyAdapters";
+import { evaluatePolicy, toAutopilotPolicySummary, writePolicyEvaluatedEvent } from "../lib/policy/policyEvaluator";
 import { requireAuth } from "../middleware/requireAuth";
 import { requireLandlord } from "../middleware/requireLandlord";
+import {
+  buildLeaseNoticePreviewInputFromLease,
+  getLeaseForLandlordWorkflow,
+  normalizeLeaseRecord,
+  performLeaseNoticeSendFromPreviewInput,
+} from "../services/leaseNoticeWorkflowService";
 import { loadLandlordAnalyticsSnapshot } from "../services/landlord/landlordAnalyticsSnapshot";
 import {
   saveDismissedLandlordDecisionState,
@@ -200,6 +209,195 @@ router.post("/landlord/analytics/decisions/:decisionId/dismiss", requireAuth, re
   } catch (err: any) {
     console.error("[landlord-analytics] decision dismiss failed", err?.message || err);
     return res.status(500).json({ ok: false, error: "LANDLORD_DECISION_DISMISS_FAILED" });
+  }
+});
+
+router.post("/landlord/analytics/decisions/:decisionId/execute", requireAuth, requireLandlord, async (req: any, res) => {
+  try {
+    const resolved = await resolveVisibleDecision(req, res);
+    if (!resolved) return;
+    const { landlordId, decisionId, decision } = resolved;
+    const actorId = asString(req.user?.id || landlordId, 240) || null;
+
+    if (decision.automationState !== "ready") {
+      return res.status(409).json({ ok: false, error: "DECISION_NOT_READY", reason: decision.automationReason || null });
+    }
+    if (decision.executionMappingState !== "mapped" || !decision.executionMapping) {
+      return res.status(409).json({ ok: false, error: "DECISION_NOT_MAPPED" });
+    }
+    if (decision.executionInputState !== "complete" || !decision.executionInput) {
+      return res.status(409).json({
+        ok: false,
+        error: "DECISION_INPUTS_INCOMPLETE",
+        missingFields: decision.executionInputMissingFields || [],
+        reason: decision.executionInputReason || null,
+      });
+    }
+    if (decision.executionMapping.action !== "lease.auto_send_notice" || decision.executionMapping.resourceType !== "lease") {
+      return res.status(409).json({ ok: false, error: "DECISION_EXECUTION_UNSUPPORTED" });
+    }
+
+    const leaseResult = await getLeaseForLandlordWorkflow(decision.executionMapping.resourceId, landlordId);
+    if (!leaseResult.ok) {
+      return res.status(leaseResult.status).json({ ok: false, error: leaseResult.error });
+    }
+    const lease = normalizeLeaseRecord(leaseResult.lease.id || decision.executionMapping.resourceId, leaseResult.lease);
+    const previewInput = buildLeaseNoticePreviewInputFromLease(lease);
+    if (!previewInput) {
+      return res.status(409).json({
+        ok: false,
+        error: "DECISION_INPUTS_INCOMPLETE",
+        missingFields: decision.executionInputMissingFields || [],
+        reason: decision.executionInputReason || null,
+      });
+    }
+
+    await writeCanonicalEvent({
+      type: "decision.execution_requested",
+      domain: "system",
+      action: "execution_requested",
+      actor: { type: "landlord", id: landlordId, role: "landlord" },
+      resource: { type: "analytics_decision", id: decisionId },
+      occurredAt: new Date().toISOString(),
+      visibility: "landlord",
+      summary: `Analytics decision ${decisionId} execution requested.`,
+      metadata: {
+        landlordId,
+        decisionId,
+        decisionType: decision.decisionType,
+        action: decision.executionMapping.action,
+        resourceType: decision.executionMapping.resourceType,
+        resourceId: decision.executionMapping.resourceId,
+        source: "landlord_analytics_decisions",
+      },
+    });
+
+    const requestBody = {
+      rentChangeMode: previewInput.rentChangeMode,
+      proposedRent: previewInput.proposedRent,
+      newTermType: previewInput.newTermType,
+      newLeaseStartDate: previewInput.newLeaseStartDate,
+      newLeaseEndDate: previewInput.newLeaseEndDate,
+      responseDeadlineAt: previewInput.responseDeadlineAt,
+      noticeType: previewInput.noticeType,
+    };
+    const policyRequest = buildLeaseNoticePolicyRequest({
+      action: "send_notice",
+      actorRole: asString(req.user?.role, 80).toLowerCase() || "landlord",
+      actorUserId: actorId,
+      lease,
+      leaseId: lease.id,
+      requestBody,
+    });
+    const policyResult = evaluatePolicy(policyRequest);
+    const autopilotPolicy = toAutopilotPolicySummary(policyResult);
+    await writePolicyEvaluatedEvent({
+      request: policyRequest,
+      result: policyResult,
+      actorType: "landlord",
+      metadata: {
+        landlordId,
+        tenantId: lease.tenantId,
+        propertyId: lease.propertyId,
+        unitId: lease.unitId,
+        initiatedFrom: "decision_execute",
+        decisionId,
+      },
+    });
+
+    const automation = await executeAutomation({
+      action: "lease.auto_send_notice",
+      policyResult,
+      actor: {
+        type: "landlord",
+        id: actorId,
+        role: "landlord",
+      },
+      resource: {
+        type: "lease",
+        id: lease.id,
+      },
+      visibility: "internal",
+      metadata: {
+        domain: "lease_notice",
+        initiatedFrom: "decision_execute",
+        landlordId,
+        tenantId: lease.tenantId,
+        propertyId: lease.propertyId,
+        unitId: lease.unitId,
+        decisionId,
+        policyAction: "send_notice",
+      },
+      context: {
+        noticeReady: true,
+        alreadySent: Boolean(lease.latestNoticeId),
+        hasRequiredLegalInputs: Boolean(policyRequest.context.hasRequiredLegalInputs),
+        execute: async () => {
+          const execution = await performLeaseNoticeSendFromPreviewInput({
+            leaseId: lease.id,
+            landlordId,
+            actorId,
+            lease,
+            previewInput,
+            autopilotPolicy,
+          });
+          if (execution.status >= 400 || !execution.payload.ok) {
+            const error = new Error(String(execution.payload?.error || "AUTOMATION_EXECUTION_FAILED"));
+            (error as any).code = execution.payload?.error || "AUTOMATION_EXECUTION_FAILED";
+            throw error;
+          }
+          return execution.payload;
+        },
+      },
+    });
+
+    const success = Boolean(automation.automationResult.executed);
+    await writeCanonicalEvent({
+      type: success ? "decision.executed" : "decision.execution_failed",
+      domain: "system",
+      action: success ? "executed" : "execution_failed",
+      status: success ? "executed" : "failed",
+      actor: { type: "landlord", id: landlordId, role: "landlord" },
+      resource: { type: "analytics_decision", id: decisionId },
+      occurredAt: automation.automationResult.timestamp,
+      visibility: "landlord",
+      summary: success
+        ? `Analytics decision ${decisionId} executed.`
+        : `Analytics decision ${decisionId} execution failed.`,
+      metadata: {
+        landlordId,
+        decisionId,
+        decisionType: decision.decisionType,
+        action: decision.executionMapping.action,
+        resourceType: decision.executionMapping.resourceType,
+        resourceId: decision.executionMapping.resourceId,
+        reason: automation.automationResult.reason || null,
+        source: "landlord_analytics_decisions",
+      },
+    });
+
+    if (!success) {
+      return res.status(409).json({
+        ok: false,
+        error: "DECISION_EXECUTION_FAILED",
+        automationResult: automation.automationResult,
+      });
+    }
+
+    return res.json({
+      ok: true,
+      execution: {
+        decisionId,
+        action: decision.executionMapping.action,
+        resourceType: decision.executionMapping.resourceType,
+        resourceId: decision.executionMapping.resourceId,
+      },
+      automationResult: automation.automationResult,
+      ...(automation.data && typeof automation.data === "object" ? automation.data : {}),
+    });
+  } catch (err: any) {
+    console.error("[landlord-analytics] decision execute failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "LANDLORD_DECISION_EXECUTE_FAILED" });
   }
 });
 
