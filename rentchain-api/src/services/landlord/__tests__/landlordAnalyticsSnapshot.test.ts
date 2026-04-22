@@ -132,6 +132,11 @@ describe("loadLandlordAnalyticsSnapshot", () => {
           recommendedAction: "Review renewals",
           state: "reviewed",
           reviewedAt: "2026-04-20T12:00:00.000Z",
+          actionKey: "open_lease_renewals_flow",
+          actionLabel: "Open lease renewals",
+          destination: "/portfolio-health",
+          workflowCategory: "lease_renewals",
+          automationEligible: false,
         }),
       ])
     );

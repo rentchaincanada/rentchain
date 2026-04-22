@@ -151,6 +151,11 @@ describe("deriveAgentDecisions", () => {
         id: "reduce_vacancy_risk:prop-2",
         priority: "high",
         recommendedAction: "View property analytics",
+        actionKey: "open_vacancy_readiness_flow",
+        actionLabel: "Open vacancy readiness",
+        destination: "/analytics?propertyId=prop-2",
+        workflowCategory: "vacancy_readiness",
+        automationEligible: false,
         href: "/analytics?propertyId=prop-2",
         state: "pending",
         reviewedAt: null,
@@ -209,5 +214,232 @@ describe("deriveAgentDecisions", () => {
     });
 
     expect(result.items).toEqual([]);
+  });
+
+  it("assigns stable workflow hooks for each supported decision type", () => {
+    const result = deriveAgentDecisions({
+      filters: {
+        propertyId: null,
+      },
+      deltas: {
+        summary: {
+          vacancyRate: { current: 0.2, prior: 0.05, absoluteDelta: 0.15, relativeDelta: 3, direction: "worse" },
+          applicationConversionRate: {
+            current: 0.1,
+            prior: 0.4,
+            absoluteDelta: -0.3,
+            relativeDelta: -0.75,
+            direction: "worse",
+          },
+          activeApplications: { current: 1, prior: 4, absoluteDelta: -3, relativeDelta: -0.75, direction: "worse" },
+          openWorkOrders: { current: 5, prior: 1, absoluteDelta: 4, relativeDelta: 4, direction: "worse" },
+          maintenanceCostCents: {
+            current: 90000,
+            prior: 30000,
+            absoluteDelta: 60000,
+            relativeDelta: 2,
+            direction: "worse",
+          },
+          estimatedScheduledRentCents: {
+            current: 500000,
+            prior: 650000,
+            absoluteDelta: -150000,
+            relativeDelta: -0.23,
+            direction: "worse",
+          },
+          leasesEndingSoon: { current: 4, prior: 1, absoluteDelta: 3, relativeDelta: 3, direction: "worse" },
+        },
+        applications: {
+          submitted: { current: 1, prior: 5, absoluteDelta: -4, relativeDelta: -0.8, direction: "worse" },
+          conversionRate: {
+            current: 0.1,
+            prior: 0.4,
+            absoluteDelta: -0.3,
+            relativeDelta: -0.75,
+            direction: "worse",
+          },
+        },
+      },
+      alerts: [
+        {
+          id: "lease",
+          type: "lease_expiry",
+          severity: "high",
+          status: "active",
+          title: "Lease expiries are elevated",
+          message: "Lease expiries are elevated in the current view.",
+          propertyId: "prop-1",
+          detectedAt: "2026-04-20T00:00:00.000Z",
+          lastEvaluatedAt: "2026-04-20T00:00:00.000Z",
+          notification: { inAppEligible: true, emailEligible: true, automationEligible: false },
+        },
+        {
+          id: "vacancy",
+          type: "high_vacancy",
+          severity: "high",
+          status: "active",
+          title: "Vacancy is elevated",
+          message: "Vacancy is elevated in the current view.",
+          propertyId: "prop-2",
+          detectedAt: "2026-04-20T00:00:00.000Z",
+          lastEvaluatedAt: "2026-04-20T00:00:00.000Z",
+          notification: { inAppEligible: true, emailEligible: true, automationEligible: false },
+        },
+        {
+          id: "applications",
+          type: "application_conversion_drop",
+          severity: "high",
+          status: "active",
+          title: "Application conversion dropped",
+          message: "Application conversion dropped in the current view.",
+          propertyId: "prop-3",
+          detectedAt: "2026-04-20T00:00:00.000Z",
+          lastEvaluatedAt: "2026-04-20T00:00:00.000Z",
+          notification: { inAppEligible: true, emailEligible: true, automationEligible: false },
+        },
+        {
+          id: "maintenance",
+          type: "work_order_concentration",
+          severity: "high",
+          status: "active",
+          title: "Work orders are concentrated",
+          message: "Work orders are concentrated in one property.",
+          propertyId: "prop-4",
+          detectedAt: "2026-04-20T00:00:00.000Z",
+          lastEvaluatedAt: "2026-04-20T00:00:00.000Z",
+          notification: { inAppEligible: true, emailEligible: true, automationEligible: false },
+        },
+      ],
+      predictiveMetrics: [
+        {
+          key: "projected_vacancy_risk",
+          label: "Projected vacancy risk",
+          riskLevel: "high",
+          status: "supported",
+          explanation: "Vacancy risk remains elevated.",
+          supportingValues: { topPropertyId: "prop-2" },
+        },
+        {
+          key: "projected_lease_expiry_concentration",
+          label: "Projected lease expiry concentration",
+          riskLevel: "high",
+          status: "supported",
+          explanation: "Lease expiry concentration remains elevated.",
+          supportingValues: { topPropertyId: "prop-1" },
+        },
+        {
+          key: "projected_application_slowdown_risk",
+          label: "Projected application slowdown risk",
+          riskLevel: "high",
+          status: "supported",
+          explanation: "Application slowdown risk remains elevated.",
+          supportingValues: { topPropertyId: "prop-3" },
+        },
+        {
+          key: "projected_maintenance_burden_risk",
+          label: "Projected maintenance burden risk",
+          riskLevel: "high",
+          status: "supported",
+          explanation: "Maintenance burden remains elevated.",
+          supportingValues: { topPropertyId: "prop-4" },
+        },
+        {
+          key: "projected_revenue_pressure_signal",
+          label: "Projected revenue pressure signal",
+          riskLevel: "high",
+          status: "supported",
+          explanation: "Revenue pressure remains elevated.",
+          supportingValues: { topPropertyId: "prop-5" },
+        },
+      ],
+      benchmarking: {
+        summary: {
+          propertyCount: 5,
+          comparedPropertyCount: 5,
+          benchmarkDimensions: ["vacancyRate"],
+        },
+        comparisons: [
+          {
+            propertyId: "prop-2",
+            propertyName: "Beta",
+            metrics: {
+              vacancyRate: 0.5,
+              occupancyRate: 0.5,
+              applicationVolume: 1,
+              applicationConversionRate: 0.1,
+              openWorkOrders: 1,
+              maintenanceCostCents: 5000,
+              maintenanceCostPerUnitCents: 2500,
+              leasesEndingSoon: 1,
+              estimatedScheduledRentCents: 300000,
+              estimatedRentPerOccupiedUnitCents: 150000,
+              totalUnits: 2,
+              occupiedUnits: 1,
+              vacantUnits: 1,
+            },
+            benchmarks: {},
+          },
+        ],
+        insights: [
+          {
+            type: "vacancy_risk",
+            severity: "high",
+            propertyId: "prop-2",
+            message: "Beta has the highest vacancy pressure.",
+          },
+          {
+            type: "maintenance_concentration",
+            severity: "high",
+            propertyId: "prop-4",
+            message: "Maintenance is concentrated in Delta.",
+          },
+        ],
+        filters: {
+          period: "90d",
+          propertyId: null,
+          from: "2026-01-20T00:00:00.000Z",
+          to: "2026-04-20T00:00:00.000Z",
+        },
+      },
+    });
+
+    expect(result.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          decisionType: "review_lease_renewals",
+          actionKey: "open_lease_renewals_flow",
+          actionLabel: "Open lease renewals",
+          destination: "/portfolio-health",
+          workflowCategory: "lease_renewals",
+          automationEligible: false,
+        }),
+        expect.objectContaining({
+          decisionType: "reduce_vacancy_risk",
+          actionKey: "open_vacancy_readiness_flow",
+          workflowCategory: "vacancy_readiness",
+        }),
+        expect.objectContaining({
+          decisionType: "improve_application_conversion",
+          actionKey: "open_application_funnel_review_flow",
+          actionLabel: "Open application funnel",
+          destination: "/applications",
+          workflowCategory: "application_funnel",
+        }),
+        expect.objectContaining({
+          decisionType: "address_maintenance_backlog",
+          actionKey: "open_maintenance_backlog_flow",
+          actionLabel: "Open work orders",
+          destination: "/work-orders",
+          workflowCategory: "maintenance_backlog",
+        }),
+        expect.objectContaining({
+          decisionType: "review_revenue_pressure",
+          actionKey: "open_revenue_pressure_follow_up_flow",
+          actionLabel: "Review revenue follow-up",
+          destination: "/analytics?propertyId=prop-5",
+          workflowCategory: "revenue_follow_up",
+        }),
+      ])
+    );
   });
 });

@@ -27,6 +27,14 @@ export type LandlordAgentDecisionSupportingSignal = {
   direction?: "better" | "worse" | "flat" | "insufficient_data" | null;
 };
 
+export type LandlordDecisionWorkflowCategory =
+  | "lease_renewals"
+  | "vacancy_readiness"
+  | "application_funnel"
+  | "maintenance_backlog"
+  | "revenue_follow_up"
+  | "property_focus";
+
 export type LandlordAgentDecision = {
   id: string;
   decisionType: string;
@@ -37,6 +45,11 @@ export type LandlordAgentDecision = {
   href?: string;
   state: "pending" | "reviewed";
   reviewedAt?: string | null;
+  actionKey: string;
+  actionLabel: string;
+  destination: string;
+  workflowCategory?: LandlordDecisionWorkflowCategory;
+  automationEligible: boolean;
 };
 
 export type AnalyticsDeltaValue = {

@@ -85,6 +85,11 @@ describe("ActionRecommendationsPage", () => {
             priority: "medium",
             explanation: "Several leases are approaching renewal windows and need attention.",
             recommendedAction: "Review renewals",
+            actionKey: "open_lease_renewals_flow",
+            actionLabel: "Open lease renewals",
+            destination: "/portfolio-health",
+            workflowCategory: "lease_renewals",
+            automationEligible: false,
             href: "/leases?status=expiring",
             state: "pending",
             reviewedAt: null,
@@ -96,6 +101,11 @@ describe("ActionRecommendationsPage", () => {
             priority: "high",
             explanation: "Vacancy pressure is concentrated in Beta and needs follow-through now.",
             recommendedAction: "Review vacancy plan",
+            actionKey: "open_vacancy_readiness_flow",
+            actionLabel: "Open vacancy readiness",
+            destination: "/analytics?propertyId=prop-2",
+            workflowCategory: "vacancy_readiness",
+            automationEligible: false,
             href: "/analytics?propertyId=prop-2",
             state: "pending",
             reviewedAt: null,
@@ -116,7 +126,8 @@ describe("ActionRecommendationsPage", () => {
     expect(fetchLandlordAnalyticsSnapshot).toHaveBeenCalledTimes(1);
 
     const actionLinks = screen.getAllByRole("link");
-    expect(actionLinks.map((node) => node.textContent)).toEqual(["Review renewals", "Review vacancy plan"]);
+    expect(actionLinks.map((node) => node.textContent)).toEqual(["Open lease renewals", "Open vacancy readiness"]);
+    expect(screen.getByText(/Workflow: Lease renewals/i)).toBeInTheDocument();
   });
 
   it("renders a clean empty state when the snapshot has no decisions", async () => {

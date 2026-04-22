@@ -260,6 +260,22 @@ export type LandlordAgentDecisionSupportingSignal = {
   direction?: AnalyticsDeltaDirection | null;
 };
 
+export type LandlordDecisionWorkflowCategory =
+  | "lease_renewals"
+  | "vacancy_readiness"
+  | "application_funnel"
+  | "maintenance_backlog"
+  | "revenue_follow_up"
+  | "property_focus";
+
+export type LandlordDecisionActionKey =
+  | "open_lease_renewals_flow"
+  | "open_vacancy_readiness_flow"
+  | "open_application_funnel_review_flow"
+  | "open_maintenance_backlog_flow"
+  | "open_revenue_pressure_follow_up_flow"
+  | "open_property_focus_flow";
+
 export type LandlordAgentDecision = {
   id: string;
   decisionType: LandlordAgentDecisionType;
@@ -270,6 +286,11 @@ export type LandlordAgentDecision = {
   href?: string;
   state: AgentDecisionState;
   reviewedAt?: string | null;
+  actionKey: LandlordDecisionActionKey;
+  actionLabel: string;
+  destination: string;
+  workflowCategory?: LandlordDecisionWorkflowCategory;
+  automationEligible: boolean;
 };
 
 export type LandlordAgentDecisions = {
