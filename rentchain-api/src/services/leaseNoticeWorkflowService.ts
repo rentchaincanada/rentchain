@@ -64,6 +64,24 @@ export type LeaseNoticePreviewInput = {
   noticeType?: LeaseNoticeType;
 };
 
+export type LeaseNoticeExecutionInputState = "none" | "partial" | "complete";
+
+export type LeaseNoticeExecutionInputSnapshot = {
+  noticeType: LeaseNoticeType | null;
+  legalTemplateKey: string | null;
+  noticeRuleVersion: string | null;
+  province: string | null;
+  leaseType: LeaseType | null;
+  currentRent: number | null;
+  noticeDueAt: number | null;
+  rentChangeMode: RentChangeMode | null;
+  proposedRent: number | null;
+  newTermType: LeaseType | null;
+  newLeaseStartDate: string | null;
+  newLeaseEndDate: string | null;
+  responseDeadlineAt: number | null;
+};
+
 function nowMs() {
   return Date.now();
 }
@@ -110,6 +128,22 @@ function asLeaseType(value: unknown): LeaseType {
 function determineNoticeType(lease: LeaseWorkflowLease): LeaseNoticeType {
   if (lease.leaseType === "month_to_month") return "month_to_month_notice";
   return "renewal_offer";
+}
+
+function addMissingField(target: Set<string>, field: string, condition: boolean) {
+  if (!condition) target.add(field);
+}
+
+function deriveRentChangeModeFromLease(lease: LeaseWorkflowLease): RentChangeMode | null {
+  if (typeof lease.renewalOfferedRent !== "number" || !Number.isFinite(lease.renewalOfferedRent) || lease.renewalOfferedRent <= 0) {
+    return null;
+  }
+  if (typeof lease.currentRent !== "number" || !Number.isFinite(lease.currentRent) || lease.currentRent <= 0) {
+    return null;
+  }
+  if (lease.renewalOfferedRent === lease.currentRent) return "no_change";
+  if (lease.renewalOfferedRent > lease.currentRent) return "increase";
+  return "decrease";
 }
 
 export function normalizeLeaseRecord(id: string, raw: any): LeaseWorkflowLease {
@@ -163,6 +197,72 @@ export function normalizeLeaseRecord(id: string, raw: any): LeaseWorkflowLease {
     tenantName: String(raw?.tenantName || raw?.residentName || "").trim() || null,
     unitLabel: String(raw?.unitLabel || raw?.unitNumber || raw?.unit || "").trim() || null,
     propertyLabel: String(raw?.propertyLabel || raw?.propertyName || "").trim() || null,
+  };
+}
+
+export function deriveLeaseNoticeExecutionInputSnapshot(lease: LeaseWorkflowLease): {
+  state: LeaseNoticeExecutionInputState;
+  reason: string | null;
+  input: LeaseNoticeExecutionInputSnapshot | null;
+} {
+  const rule = resolveLeaseNoticeRule({ province: lease.province, leaseType: lease.leaseType });
+  if (!rule) {
+    return {
+      state: "none",
+      reason: "This lease does not currently resolve to a supported lease notice rule.",
+      input: null,
+    };
+  }
+
+  const noticeType = determineNoticeType(lease);
+  const noticeDueAt = lease.nextNoticeDueAt || (lease.leaseEndDate ? minusDays(lease.leaseEndDate, rule.noticeLeadDays) : null);
+  const rentChangeMode = deriveRentChangeModeFromLease(lease);
+  const proposedRent =
+    typeof lease.renewalOfferedRent === "number" && Number.isFinite(lease.renewalOfferedRent) && lease.renewalOfferedRent > 0
+      ? lease.renewalOfferedRent
+      : null;
+  const responseDeadlineAt = typeof lease.renewalDecisionDeadlineAt === "number" ? lease.renewalDecisionDeadlineAt : null;
+
+  const input: LeaseNoticeExecutionInputSnapshot = {
+    noticeType,
+    legalTemplateKey: rule.templateKey,
+    noticeRuleVersion: rule.ruleVersion,
+    province: lease.province || null,
+    leaseType: lease.leaseType || null,
+    currentRent: lease.currentRent,
+    noticeDueAt,
+    rentChangeMode,
+    proposedRent,
+    newTermType: null,
+    newLeaseStartDate: null,
+    newLeaseEndDate: null,
+    responseDeadlineAt,
+  };
+
+  const missing = new Set<string>();
+  addMissingField(missing, "rentChangeMode", Boolean(input.rentChangeMode));
+  if (input.rentChangeMode === "increase" || input.rentChangeMode === "decrease") {
+    addMissingField(missing, "proposedRent", typeof input.proposedRent === "number" && Number.isFinite(input.proposedRent) && input.proposedRent > 0);
+  }
+  addMissingField(missing, "newTermType", Boolean(input.newTermType));
+  addMissingField(missing, "newLeaseStartDate", Boolean(input.newLeaseStartDate));
+  if (rule.requireTermDates) {
+    addMissingField(missing, "newLeaseEndDate", Boolean(input.newLeaseEndDate));
+  }
+  addMissingField(missing, "responseDeadlineAt", typeof input.responseDeadlineAt === "number" && Number.isFinite(input.responseDeadlineAt) && input.responseDeadlineAt > 0);
+
+  if (!missing.size) {
+    return {
+      state: "complete",
+      reason: null,
+      input,
+    };
+  }
+
+  return {
+    state: "partial",
+    reason: `Lease notice execution still requires explicit landlord input for: ${Array.from(missing).join(", ")}.`,
+    input,
   };
 }
 

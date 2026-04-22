@@ -23,6 +23,9 @@ function baseDecision(overrides?: Partial<LandlordAgentDecision>): LandlordAgent
       "A lease automation path exists, but this decision still needs a specific lease target and notice inputs before execution.",
     executionMappingState: "none",
     executionMapping: null,
+    executionInputState: "none",
+    executionInputReason: null,
+    executionInput: null,
     ...overrides,
   };
 }
@@ -50,8 +53,24 @@ describe("applyDecisionExecutionMappings", () => {
           resourceType: "lease",
           resourceId: "lease-1",
           prerequisitesMet: false,
-          prerequisiteReason: expect.stringContaining("legal notice inputs"),
+          prerequisiteReason: expect.stringContaining("explicit landlord input"),
         },
+        executionInputState: "partial",
+        executionInputReason: expect.stringContaining("rentChangeMode"),
+        executionInput: expect.objectContaining({
+          noticeType: "renewal_offer",
+          legalTemplateKey: "ns.fixed_term.renewal_offer.v1",
+          noticeRuleVersion: "ns-v1",
+          province: "NS",
+          leaseType: "fixed_term",
+          currentRent: null,
+          rentChangeMode: null,
+          proposedRent: null,
+          newTermType: null,
+          newLeaseStartDate: null,
+          newLeaseEndDate: null,
+          responseDeadlineAt: null,
+        }),
       })
     );
   });
@@ -115,6 +134,45 @@ describe("applyDecisionExecutionMappings", () => {
       expect.objectContaining({
         executionMappingState: "none",
         executionMapping: null,
+      })
+    );
+  });
+
+  it("maps stored renewal offer fields deterministically but keeps operator-choice term fields partial", () => {
+    const result = applyDecisionExecutionMappings({
+      decisions: [baseDecision()],
+      leases: [
+        {
+          id: "lease-1",
+          landlordId: "landlord-1",
+          tenantId: "tenant-1",
+          propertyId: "prop-1",
+          unitId: "unit-1",
+          province: "NS",
+          leaseType: "fixed_term",
+          currentRent: 1650,
+          renewalOfferedRent: 1750,
+          renewalDecisionDeadlineAt: Date.UTC(2026, 4, 1, 12, 0, 0, 0),
+          leaseEndDate: "2026-05-10",
+          status: "active",
+        },
+      ],
+      now: Date.UTC(2026, 3, 20, 12, 0, 0, 0),
+    });
+
+    expect(result[0]).toEqual(
+      expect.objectContaining({
+        executionMappingState: "mapped",
+        executionInputState: "partial",
+        executionInputReason: expect.stringContaining("newTermType"),
+        executionInput: expect.objectContaining({
+          rentChangeMode: "increase",
+          proposedRent: 1750,
+          responseDeadlineAt: Date.UTC(2026, 4, 1, 12, 0, 0, 0),
+          newTermType: null,
+          newLeaseStartDate: null,
+          newLeaseEndDate: null,
+        }),
       })
     );
   });

@@ -1,4 +1,5 @@
 import type { LandlordAgentDecision, LandlordDecisionExecutionMapping } from "./analyticsTypes";
+import { deriveLeaseNoticeExecutionInputSnapshot, normalizeLeaseRecord } from "../../services/leaseNoticeWorkflowService";
 
 type MappingInput = {
   decisions: LandlordAgentDecision[];
@@ -50,6 +51,9 @@ function baseDecision(decision: LandlordAgentDecision, mapping: LandlordDecision
     ...decision,
     executionMappingState: mapping ? "mapped" : "none",
     executionMapping: mapping,
+    executionInputState: "none",
+    executionInputReason: null,
+    executionInput: null,
   };
 }
 
@@ -66,21 +70,30 @@ function mapLeaseRenewalDecision(decision: LandlordAgentDecision, input: Mapping
     return baseDecision(decision, null);
   }
 
-  const lease = candidateLeases[0];
+  const rawLease = candidateLeases[0];
+  const lease = normalizeLeaseRecord(asString(rawLease?.id, 240), rawLease);
   if (asString(lease?.latestNoticeId, 240)) {
     return baseDecision(decision, null);
   }
 
+  const executionInput = deriveLeaseNoticeExecutionInputSnapshot(lease);
+
   const mapping: LandlordDecisionExecutionMapping = {
     action: "lease.auto_send_notice",
     resourceType: "lease",
-    resourceId: asString(lease?.id, 240),
-    prerequisitesMet: false,
-    prerequisiteReason:
-      "The target lease is known, but notice execution still requires operator-supplied legal notice inputs before it can run safely.",
+    resourceId: asString(lease.id, 240),
+    prerequisitesMet: executionInput.state === "complete",
+    prerequisiteReason: executionInput.reason,
   };
 
-  return baseDecision(decision, mapping);
+  return {
+    ...decision,
+    executionMappingState: "mapped",
+    executionMapping: mapping,
+    executionInputState: executionInput.state,
+    executionInputReason: executionInput.reason,
+    executionInput: executionInput.input,
+  };
 }
 
 export function applyDecisionExecutionMappings(input: MappingInput): LandlordAgentDecision[] {

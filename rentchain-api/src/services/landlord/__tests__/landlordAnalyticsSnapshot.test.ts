@@ -155,6 +155,22 @@ describe("loadLandlordAnalyticsSnapshot", () => {
             resourceId: "lease-1",
             prerequisitesMet: false,
           }),
+          executionInputState: "partial",
+          executionInputReason: expect.stringContaining("rentChangeMode"),
+          executionInput: expect.objectContaining({
+            noticeType: "renewal_offer",
+            legalTemplateKey: "ns.fixed_term.renewal_offer.v1",
+            noticeRuleVersion: "ns-v1",
+            province: "NS",
+            leaseType: "fixed_term",
+            currentRent: 1650,
+            rentChangeMode: null,
+            proposedRent: null,
+            newTermType: null,
+            newLeaseStartDate: null,
+            newLeaseEndDate: null,
+            responseDeadlineAt: null,
+          }),
         }),
       ])
     );
