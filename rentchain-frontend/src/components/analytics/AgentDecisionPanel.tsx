@@ -101,6 +101,12 @@ export function AgentDecisionPanel({
             {items.map((decision) => {
               const support = supportingLine(decision);
               const categoryLabel = decision.workflowCategory ? workflowCategoryLabel[decision.workflowCategory] : null;
+              const ctaDestination = decision.destination || decision.href;
+              const ctaLabel = decision.destination
+                ? decision.actionLabel || decision.recommendedAction
+                : decision.href
+                  ? decision.recommendedAction
+                  : null;
               return (
                 <div
                   key={decision.id}
@@ -137,13 +143,9 @@ export function AgentDecisionPanel({
                   ) : null}
                   {support ? <div style={{ color: "#64748b", fontSize: "0.88rem" }}>{support}</div> : null}
                   <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-                    {decision.href ? (
-                      <Link to={decision.href} style={{ color: "#0f766e", fontWeight: 700, textDecoration: "none" }}>
-                        {decision.recommendedAction}
-                  {decision.destination ? (
-                    <div>
-                      <Link to={decision.destination} style={{ color: "#0f766e", fontWeight: 700, textDecoration: "none" }}>
-                        {decision.actionLabel}
+                    {ctaDestination && ctaLabel ? (
+                      <Link to={ctaDestination} style={{ color: "#0f766e", fontWeight: 700, textDecoration: "none" }}>
+                        {ctaLabel}
                       </Link>
                     ) : null}
                     {decision.state === "reviewed" ? (

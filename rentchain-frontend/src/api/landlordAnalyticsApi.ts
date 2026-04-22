@@ -42,6 +42,11 @@ export type LandlordAgentDecision = {
   explanation: string;
   supportingSignals: LandlordAgentDecisionSupportingSignal[];
   recommendedAction: string;
+  actionKey?: string;
+  actionLabel?: string;
+  destination?: string;
+  workflowCategory?: "leasing" | "applications" | "maintenance" | "revenue" | "portfolio";
+  automationEligible?: boolean;
   href?: string;
   state: "pending" | "reviewed";
   reviewedAt?: string | null;

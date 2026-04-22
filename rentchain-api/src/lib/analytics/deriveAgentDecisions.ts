@@ -127,70 +127,14 @@ function supportFromDelta(key: string, label: string, delta: AnalyticsDeltaValue
   };
 }
 
-function deriveActionHook(type: LandlordAgentDecisionType, propertyId?: string | null): {
-  actionKey: LandlordDecisionActionKey;
-  actionLabel: string;
-  destination: string;
-  workflowCategory: LandlordDecisionWorkflowCategory;
-  automationEligible: false;
-} {
-  if (type === "review_lease_renewals") {
-    return {
-      actionKey: "open_lease_renewals_flow",
-      actionLabel: "Open lease renewals",
-      destination: "/portfolio-health",
-      workflowCategory: "lease_renewals",
-      automationEligible: false,
-    };
+function actionHref(type: LandlordAgentDecisionType, propertyId?: string | null) {
+  if (type === "review_lease_renewals") return "/portfolio-health";
+  if (type === "improve_application_conversion") return "/applications";
+  if (type === "address_maintenance_backlog") return "/work-orders";
+  if (type === "reduce_vacancy_risk" || type === "review_revenue_pressure" || type === "focus_highest_risk_property") {
+    return propertyId ? `/analytics?propertyId=${encodeURIComponent(propertyId)}` : "/analytics";
   }
-
-  if (type === "reduce_vacancy_risk") {
-    return {
-      actionKey: "open_vacancy_readiness_flow",
-      actionLabel: propertyId ? "Open vacancy readiness" : "Review vacancy readiness",
-      destination: propertyId ? `/analytics?propertyId=${encodeURIComponent(propertyId)}` : "/analytics",
-      workflowCategory: "vacancy_readiness",
-      automationEligible: false,
-    };
-  }
-
-  if (type === "improve_application_conversion") {
-    return {
-      actionKey: "open_application_funnel_review_flow",
-      actionLabel: "Open application funnel",
-      destination: "/applications",
-      workflowCategory: "application_funnel",
-      automationEligible: false,
-    };
-  }
-
-  if (type === "address_maintenance_backlog") {
-    return {
-      actionKey: "open_maintenance_backlog_flow",
-      actionLabel: "Open work orders",
-      destination: "/work-orders",
-      workflowCategory: "maintenance_backlog",
-      automationEligible: false,
-    };
-  }
-
-  if (type === "review_revenue_pressure") {
-    return {
-      actionKey: "open_revenue_pressure_follow_up_flow",
-      actionLabel: "Review revenue follow-up",
-      destination: propertyId ? `/analytics?propertyId=${encodeURIComponent(propertyId)}` : "/analytics",
-      workflowCategory: "revenue_follow_up",
-      automationEligible: false,
-    };
-  }
-
-  return {
-    actionKey: "open_property_focus_flow",
-    actionLabel: "Open property focus",
-    destination: propertyId ? `/analytics?propertyId=${encodeURIComponent(propertyId)}` : "/analytics",
-    workflowCategory: "property_focus",
-    automationEligible: false,
-  };
+  return undefined;
 }
 
 function decisionId(decisionType: LandlordAgentDecisionType, propertyId?: string | null) {
@@ -235,15 +179,9 @@ function buildDecision(params: {
     explanation: params.explanation,
     supportingSignals,
     recommendedAction: params.recommendedAction,
-    href: actionHref(params.decisionType, params.propertyId || null),
+    href: hook.destination,
     state: "pending",
     reviewedAt: null,
-    href: hook.destination,
-    actionKey: hook.actionKey,
-    actionLabel: hook.actionLabel,
-    destination: hook.destination,
-    workflowCategory: hook.workflowCategory,
-    automationEligible: hook.automationEligible,
   } satisfies LandlordAgentDecision;
 }
 
