@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type StoredDoc = { id: string; data: any };
 
-const { dbMock, resetDb, seedDoc } = vi.hoisted(() => {
+const { dbMock, resetDb, seedDoc, readDoc } = vi.hoisted(() => {
   const collections = new Map<string, Map<string, StoredDoc>>();
 
   function ensureCollection(name: string) {
@@ -20,6 +20,20 @@ const { dbMock, resetDb, seedDoc } = vi.hoisted(() => {
           }));
           return { docs, empty: docs.length === 0, size: docs.length };
         },
+        doc: (id: string) => ({
+          id,
+          get: async () => {
+            const entry = ensureCollection(name).get(id);
+            return {
+              id,
+              exists: Boolean(entry),
+              data: () => entry?.data,
+            };
+          },
+          set: async (data: any) => {
+            ensureCollection(name).set(id, { id, data });
+          },
+        }),
       }),
     },
     resetDb: () => {
@@ -28,6 +42,7 @@ const { dbMock, resetDb, seedDoc } = vi.hoisted(() => {
     seedDoc: (collection: string, id: string, data: any) => {
       ensureCollection(collection).set(id, { id, data });
     },
+    readDoc: (collection: string, id: string) => ensureCollection(collection).get(id)?.data || null,
   };
 });
 
@@ -282,5 +297,74 @@ describe("loadLandlordAnalyticsSnapshot", () => {
         }),
       ])
     );
+  });
+
+  it("emits a first-seen decision.appeared event once across repeated snapshot loads", async () => {
+    const now = Date.UTC(2026, 3, 20, 12, 0, 0, 0);
+
+    seedDoc("properties", "prop-1", { landlordId: "landlord-1", name: "Alpha" });
+    seedDoc("units", "unit-1", { landlordId: "landlord-1", propertyId: "prop-1", status: "occupied" });
+    seedDoc("leases", "lease-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      status: "active",
+      leaseType: "fixed_term",
+      province: "NS",
+      monthlyRent: 1650,
+      endDate: new Date(now + 25 * 24 * 60 * 60 * 1000).toISOString(),
+    });
+    seedDoc("events", "event-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      type: "lease_expiry",
+      severity: "high",
+      status: "active",
+      message: "Lease is expiring soon.",
+      createdAt: now,
+      occurredAt: now,
+    });
+
+    const { loadLandlordAnalyticsSnapshot } = await import("../landlordAnalyticsSnapshot");
+
+    await loadLandlordAnalyticsSnapshot({
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      now,
+    });
+
+    expect(readDoc("canonicalEvents", "decision_appeared__landlord-1__review_lease_renewals:prop-1")).toEqual(
+      expect.objectContaining({
+        type: "decision.appeared",
+        action: "appeared",
+        visibility: "landlord",
+        resource: expect.objectContaining({
+          type: "analytics_decision",
+          id: "review_lease_renewals:prop-1",
+        }),
+        metadata: expect.objectContaining({
+          landlordId: "landlord-1",
+          decisionId: "review_lease_renewals:prop-1",
+          decisionType: "review_lease_renewals",
+          source: "landlord_analytics_decisions",
+        }),
+      })
+    );
+
+    await loadLandlordAnalyticsSnapshot({
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      now: now + 60_000,
+    });
+
+    const canonicalEventDocs = await dbMock.collection("canonicalEvents").get();
+    const appearanceEvents = (canonicalEventDocs.docs || [])
+      .map((doc: any) => ({ id: doc.id, ...(doc.data() || {}) }))
+      .filter(
+        (event: any) =>
+          event.type === "decision.appeared" && event.metadata?.decisionId === "review_lease_renewals:prop-1"
+      );
+
+    expect(appearanceEvents).toHaveLength(1);
+    expect(appearanceEvents[0].id).toBe("decision_appeared__landlord-1__review_lease_renewals:prop-1");
   });
 });
