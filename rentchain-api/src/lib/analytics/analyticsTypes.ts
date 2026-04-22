@@ -249,7 +249,7 @@ export type LandlordAgentDecisionType =
   | "focus_highest_risk_property";
 
 export type LandlordAgentDecisionPriority = "low" | "medium" | "high";
-export type AgentDecisionState = "pending" | "reviewed";
+export type AgentDecisionState = "pending" | "reviewed" | "snoozed" | "dismissed";
 
 export type LandlordAgentDecisionSupportingSignal = {
   source: "alert" | "predictive_metric" | "benchmarking_insight" | "delta";
@@ -303,6 +303,9 @@ export type PersistedAgentDecisionState = {
   decisionId: string;
   state: AgentDecisionState;
   reviewedAt?: string | null;
+  snoozedUntil?: string | null;
+  snoozedAt?: string | null;
+  dismissedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 };

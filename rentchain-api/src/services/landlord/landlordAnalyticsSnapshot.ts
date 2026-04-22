@@ -258,10 +258,10 @@ export async function loadLandlordAnalyticsSnapshot(params: LandlordAnalyticsPar
   const decisionStates = await loadLandlordDecisionStates(landlordId);
 
   return {
-    ...snapshot,
-    decisions: {
-      ...snapshot.decisions,
-      items: mergeLandlordDecisionStates(snapshot.decisions.items, decisionStates),
-    },
+      ...snapshot,
+      decisions: {
+        ...snapshot.decisions,
+        items: mergeLandlordDecisionStates(snapshot.decisions.items, decisionStates),
+      },
   };
 }

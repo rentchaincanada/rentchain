@@ -12,6 +12,8 @@ type EntitlementOverrides = Record<string, unknown>;
 vi.mock("../../api/landlordAnalyticsApi", () => ({
   fetchLandlordAnalyticsSnapshot: vi.fn(),
   markLandlordDecisionReviewed: vi.fn(),
+  snoozeLandlordDecision: vi.fn(),
+  dismissLandlordDecision: vi.fn(),
 }));
 
 vi.mock("@/hooks/useEntitlements", () => ({

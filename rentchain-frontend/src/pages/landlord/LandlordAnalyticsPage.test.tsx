@@ -15,6 +15,8 @@ type PendingRequest = Promise<never>;
 vi.mock("../../api/landlordAnalyticsApi", () => ({
   fetchLandlordAnalyticsSnapshot: vi.fn(),
   markLandlordDecisionReviewed: vi.fn(),
+  snoozeLandlordDecision: vi.fn(),
+  dismissLandlordDecision: vi.fn(),
 }));
 
 vi.mock("../../api/landlordAnalyticsAlertsApi", () => ({

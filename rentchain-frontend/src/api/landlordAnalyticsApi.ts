@@ -35,6 +35,14 @@ export type LandlordDecisionWorkflowCategory =
   | "revenue_follow_up"
   | "property_focus";
 
+export type LandlordDecisionActionKey =
+  | "open_lease_renewals_flow"
+  | "open_vacancy_readiness_flow"
+  | "open_application_funnel_review_flow"
+  | "open_maintenance_backlog_flow"
+  | "open_revenue_pressure_follow_up_flow"
+  | "open_property_focus_flow";
+
 export type LandlordAgentDecision = {
   id: string;
   decisionType: string;
@@ -42,15 +50,10 @@ export type LandlordAgentDecision = {
   explanation: string;
   supportingSignals: LandlordAgentDecisionSupportingSignal[];
   recommendedAction: string;
-  actionKey?: string;
-  actionLabel?: string;
-  destination?: string;
-  workflowCategory?: "leasing" | "applications" | "maintenance" | "revenue" | "portfolio";
-  automationEligible?: boolean;
   href?: string;
-  state: "pending" | "reviewed";
+  state: "pending" | "reviewed" | "snoozed" | "dismissed";
   reviewedAt?: string | null;
-  actionKey: string;
+  actionKey: LandlordDecisionActionKey;
   actionLabel: string;
   destination: string;
   workflowCategory?: LandlordDecisionWorkflowCategory;
@@ -236,6 +239,53 @@ export async function markLandlordDecisionReviewed(params: {
   if (params.propertyId) search.set("propertyId", params.propertyId);
   const suffix = search.toString() ? `?${search.toString()}` : "";
   return await apiFetch(`/landlord/analytics/decisions/${encodeURIComponent(params.decisionId)}/review${suffix}`, {
+    method: "POST",
+  });
+}
+
+export async function snoozeLandlordDecision(params: {
+  decisionId: string;
+  snoozedUntil: string;
+  period?: AnalyticsPeriod;
+  propertyId?: string | null;
+}): Promise<{
+  state: {
+    decisionId: string;
+    state: "snoozed";
+    snoozedAt: string | null;
+    snoozedUntil: string | null;
+    updatedAt: string;
+  };
+}> {
+  const search = new URLSearchParams();
+  if (params.period) search.set("period", params.period);
+  if (params.propertyId) search.set("propertyId", params.propertyId);
+  const suffix = search.toString() ? `?${search.toString()}` : "";
+  return await apiFetch(`/landlord/analytics/decisions/${encodeURIComponent(params.decisionId)}/snooze${suffix}`, {
+    method: "POST",
+    body: JSON.stringify({
+      snoozedUntil: params.snoozedUntil,
+    }),
+  });
+}
+
+export async function dismissLandlordDecision(params: {
+  decisionId: string;
+  period?: AnalyticsPeriod;
+  propertyId?: string | null;
+}): Promise<{
+  state: {
+    decisionId: string;
+    state: "dismissed";
+    dismissedAt: string | null;
+    updatedAt: string;
+  };
+}> {
+  const search = new URLSearchParams();
+  if (params.period) search.set("period", params.period);
+  if (params.propertyId) search.set("propertyId", params.propertyId);
+  const suffix = search.toString() ? `?${search.toString()}` : "";
+  return await apiFetch(`/landlord/analytics/decisions/${encodeURIComponent(params.decisionId)}/dismiss${suffix}`, {
     method: "POST",
   });
 }

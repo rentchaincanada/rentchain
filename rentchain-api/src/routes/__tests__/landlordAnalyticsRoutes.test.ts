@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const loadLandlordAnalyticsSnapshot = vi.fn();
 const saveReviewedLandlordDecisionState = vi.fn();
+const saveSnoozedLandlordDecisionState = vi.fn();
+const saveDismissedLandlordDecisionState = vi.fn();
 const writeCanonicalEvent = vi.fn();
 
 vi.mock("../../middleware/requireAuth", () => ({
@@ -32,6 +34,8 @@ vi.mock("../../services/landlord/landlordAnalyticsSnapshot", () => ({
 
 vi.mock("../../services/landlord/landlordDecisionStates", () => ({
   saveReviewedLandlordDecisionState,
+  saveSnoozedLandlordDecisionState,
+  saveDismissedLandlordDecisionState,
 }));
 
 vi.mock("../../lib/events/buildEvent", () => ({
@@ -62,7 +66,7 @@ async function invokeRouter(
         return this.get(name);
       },
     };
-    const decisionMatch = path.match(/\/landlord\/analytics\/decisions\/([^/]+)\/review$/);
+    const decisionMatch = path.match(/\/landlord\/analytics\/decisions\/([^/]+)\/(review|snooze|dismiss)$/);
     if (decisionMatch) {
       req.params.decisionId = decodeURIComponent(decisionMatch[1]);
     }
@@ -101,6 +105,25 @@ describe("landlordAnalyticsRoutes", () => {
       decisionId: "reduce_vacancy_risk:prop-123",
       state: "reviewed",
       reviewedAt: "2026-04-20T12:00:00.000Z",
+      createdAt: "2026-04-20T12:00:00.000Z",
+      updatedAt: "2026-04-20T12:00:00.000Z",
+    });
+    saveSnoozedLandlordDecisionState.mockResolvedValue({
+      id: "landlord-1__reduce_vacancy_risk:prop-123",
+      landlordId: "landlord-1",
+      decisionId: "reduce_vacancy_risk:prop-123",
+      state: "snoozed",
+      snoozedAt: "2026-04-20T12:00:00.000Z",
+      snoozedUntil: "2026-04-23T12:00:00.000Z",
+      createdAt: "2026-04-20T12:00:00.000Z",
+      updatedAt: "2026-04-20T12:00:00.000Z",
+    });
+    saveDismissedLandlordDecisionState.mockResolvedValue({
+      id: "landlord-1__reduce_vacancy_risk:prop-123",
+      landlordId: "landlord-1",
+      decisionId: "reduce_vacancy_risk:prop-123",
+      state: "dismissed",
+      dismissedAt: "2026-04-20T12:00:00.000Z",
       createdAt: "2026-04-20T12:00:00.000Z",
       updatedAt: "2026-04-20T12:00:00.000Z",
     });
@@ -318,6 +341,67 @@ describe("landlordAnalyticsRoutes", () => {
     expect(response.body).toEqual({ ok: false, error: "DECISION_NOT_VISIBLE" });
     expect(saveReviewedLandlordDecisionState).not.toHaveBeenCalled();
     expect(writeCanonicalEvent).not.toHaveBeenCalled();
+  });
+
+  it("snoozes a visible landlord decision and emits a canonical event", async () => {
+    const router = (await import("../landlordAnalyticsRoutes")).default;
+    const response = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/analytics/decisions/reduce_vacancy_risk%3Aprop-123/snooze?period=90d&propertyId=prop-123",
+      user: { id: "landlord-1", role: "landlord" },
+      body: { snoozedUntil: "2026-04-23T12:00:00.000Z" },
+    });
+
+    expect(response.status).toBe(200);
+    expect(saveSnoozedLandlordDecisionState).toHaveBeenCalledWith({
+      landlordId: "landlord-1",
+      decisionId: "reduce_vacancy_risk:prop-123",
+      snoozedUntil: "2026-04-23T12:00:00.000Z",
+    });
+    expect(writeCanonicalEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "decision.snoozed",
+        metadata: expect.objectContaining({
+          decisionType: "reduce_vacancy_risk",
+          snoozedUntil: "2026-04-23T12:00:00.000Z",
+        }),
+      })
+    );
+    expect(response.body.state).toEqual(
+      expect.objectContaining({
+        decisionId: "reduce_vacancy_risk:prop-123",
+        state: "snoozed",
+      })
+    );
+  });
+
+  it("dismisses a visible landlord decision and emits a canonical event", async () => {
+    const router = (await import("../landlordAnalyticsRoutes")).default;
+    const response = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/analytics/decisions/reduce_vacancy_risk%3Aprop-123/dismiss?period=90d&propertyId=prop-123",
+      user: { id: "landlord-1", role: "landlord" },
+    });
+
+    expect(response.status).toBe(200);
+    expect(saveDismissedLandlordDecisionState).toHaveBeenCalledWith({
+      landlordId: "landlord-1",
+      decisionId: "reduce_vacancy_risk:prop-123",
+    });
+    expect(writeCanonicalEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "decision.dismissed",
+        metadata: expect.objectContaining({
+          decisionType: "reduce_vacancy_risk",
+        }),
+      })
+    );
+    expect(response.body.state).toEqual(
+      expect.objectContaining({
+        decisionId: "reduce_vacancy_risk:prop-123",
+        state: "dismissed",
+      })
+    );
   });
 
   it("enforces landlord authentication", async () => {

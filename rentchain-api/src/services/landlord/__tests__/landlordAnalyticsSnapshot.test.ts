@@ -97,6 +97,15 @@ describe("loadLandlordAnalyticsSnapshot", () => {
       createdAt: "2026-04-20T12:00:00.000Z",
       updatedAt: "2026-04-20T12:00:00.000Z",
     });
+    seedDoc("landlordDecisionStates", "landlord-1__reduce_vacancy_risk:prop-1", {
+      landlordId: "landlord-1",
+      decisionId: "reduce_vacancy_risk:prop-1",
+      state: "snoozed",
+      snoozedAt: "2026-04-20T12:00:00.000Z",
+      snoozedUntil: "2026-04-28T12:00:00.000Z",
+      createdAt: "2026-04-20T12:00:00.000Z",
+      updatedAt: "2026-04-20T12:00:00.000Z",
+    });
 
     const { loadLandlordAnalyticsSnapshot } = await import("../landlordAnalyticsSnapshot");
 
@@ -133,13 +142,14 @@ describe("loadLandlordAnalyticsSnapshot", () => {
           state: "reviewed",
           reviewedAt: "2026-04-20T12:00:00.000Z",
           actionKey: "open_lease_renewals_flow",
-          actionLabel: "Open lease renewals",
+          actionLabel: "Review renewals",
           destination: "/portfolio-health",
           workflowCategory: "lease_renewals",
           automationEligible: false,
         }),
       ])
     );
+    expect(scoped.decisions.items.find((decision) => decision.id === "reduce_vacancy_risk:prop-1")).toBeUndefined();
     expect(scoped.propertyMetrics).toEqual([
       expect.objectContaining({
         propertyId: "prop-1",
