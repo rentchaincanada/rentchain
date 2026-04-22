@@ -742,5 +742,17 @@ export function deriveLandlordAnalyticsSnapshot(input: AdminAnalyticsDerivedInpu
   return {
     ...snapshotBase,
     decisions,
+    decisionOutcomeAnalytics: {
+      scope: "landlord_all_time",
+      appearedCount: 0,
+      reviewedCount: 0,
+      dismissedCount: 0,
+      executedCount: 0,
+      failedExecutionCount: 0,
+      resolvedCount: 0,
+      resolutionRate: null,
+      medianTimeToResolutionHours: null,
+      averageTimeToExecutionHours: null,
+    },
   };
 }

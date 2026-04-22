@@ -343,6 +343,19 @@ export type LandlordAgentDecisions = {
   items: LandlordAgentDecision[];
 };
 
+export type LandlordDecisionOutcomeAnalytics = {
+  scope: "landlord_all_time";
+  appearedCount: number;
+  reviewedCount: number;
+  dismissedCount: number;
+  executedCount: number;
+  failedExecutionCount: number;
+  resolvedCount: number;
+  resolutionRate: number | null;
+  medianTimeToResolutionHours: number | null;
+  averageTimeToExecutionHours: number | null;
+};
+
 export type PersistedAgentDecisionState = {
   id: string;
   landlordId: string;
@@ -452,4 +465,5 @@ export type LandlordAnalyticsSnapshotBase = {
 
 export type LandlordAnalyticsSnapshot = LandlordAnalyticsSnapshotBase & {
   decisions: LandlordAgentDecisions;
+  decisionOutcomeAnalytics: LandlordDecisionOutcomeAnalytics;
 };

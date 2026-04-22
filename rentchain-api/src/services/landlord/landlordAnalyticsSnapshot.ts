@@ -16,6 +16,7 @@ import { deriveLandlordAnalyticsSnapshot } from "../../lib/analytics/deriveLandl
 import { deriveScreeningReconciliation } from "../../lib/reconciliation/deriveScreeningReconciliation";
 import { emitLandlordDecisionAppearanceEvents } from "./landlordDecisionAppearanceEvents";
 import { loadLandlordDecisionStates, mergeLandlordDecisionStates } from "./landlordDecisionStates";
+import { deriveLandlordDecisionOutcomeAnalytics } from "./landlordDecisionOutcomeAnalytics";
 
 type LandlordAnalyticsParams = {
   landlordId: string;
@@ -268,7 +269,7 @@ export async function loadLandlordAnalyticsSnapshot(params: LandlordAnalyticsPar
     })
   );
 
-  await emitLandlordDecisionAppearanceEvents({
+  const emittedAppearanceEvents = await emitLandlordDecisionAppearanceEvents({
     landlordId,
     decisions,
     canonicalEvents: canonicalEventsRaw,
@@ -281,5 +282,9 @@ export async function loadLandlordAnalyticsSnapshot(params: LandlordAnalyticsPar
         ...snapshot.decisions,
         items: decisions,
       },
+      decisionOutcomeAnalytics: deriveLandlordDecisionOutcomeAnalytics({
+        landlordId,
+        canonicalEvents: [...canonicalEventsRaw, ...emittedAppearanceEvents],
+      }),
   };
 }

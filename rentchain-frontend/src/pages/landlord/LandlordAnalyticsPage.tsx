@@ -19,6 +19,7 @@ import AgentDecisionPanel from "../../components/analytics/AgentDecisionPanel";
 import AnalyticsFiltersBar from "../../components/analytics/AnalyticsFiltersBar";
 import AnalyticsKpiGrid from "../../components/analytics/AnalyticsKpiGrid";
 import AnalyticsSectionPanel from "../../components/analytics/AnalyticsSectionPanel";
+import DecisionOutcomeAnalyticsPanel from "../../components/analytics/DecisionOutcomeAnalyticsPanel";
 import InsightCardsPanel from "../../components/analytics/InsightCardsPanel";
 import PortfolioBenchmarkingPanel from "../../components/analytics/PortfolioBenchmarkingPanel";
 import PredictiveMetricsPanel from "../../components/analytics/PredictiveMetricsPanel";
@@ -258,6 +259,7 @@ export default function LandlordAnalyticsPage() {
             {canViewBenchmarking ? <PortfolioBenchmarkingPanel benchmarking={benchmarking} /> : null}
             {canViewPortfolioScore && canViewAdvancedAnalytics ? (
               <>
+                <DecisionOutcomeAnalyticsPanel analytics={snapshot.decisionOutcomeAnalytics} />
                 <AgentDecisionPanel
                   decisions={snapshot.decisions?.items || []}
                   period={period}
