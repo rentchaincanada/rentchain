@@ -1,14 +1,17 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { Card } from "../ui/Ui";
+import { Timeline } from "../timeline/Timeline";
 import {
   dismissLandlordDecision,
   executeLandlordDecision,
+  fetchLandlordDecisionHistory,
   markLandlordDecisionReviewed,
   snoozeLandlordDecision,
   type AnalyticsPeriod,
   type LandlordAgentDecision,
 } from "@/api/landlordAnalyticsApi";
+import type { TimelineItem } from "@/api/timelineApi";
 
 const priorityTone: Record<"low" | "medium" | "high", { bg: string; text: string }> = {
   low: { bg: "rgba(14, 165, 233, 0.12)", text: "#075985" },
@@ -98,6 +101,47 @@ function sectionHeadingStyle() {
   } as const;
 }
 
+function HistoryToggle(props: {
+  decisionId: string;
+  showHistory: boolean;
+  historyItems: TimelineItem[];
+  historyLoading: boolean;
+  historyError: string | null;
+  onToggleHistory: (decisionId: string) => Promise<void>;
+}) {
+  const { decisionId, showHistory, historyItems, historyLoading, historyError, onToggleHistory } = props;
+
+  return (
+    <div style={{ display: "grid", gap: 10, width: "100%" }}>
+      <button
+        type="button"
+        onClick={() => void onToggleHistory(decisionId)}
+        style={{
+          justifySelf: "start",
+          border: "1px solid #cbd5e1",
+          borderRadius: 999,
+          background: "#fff",
+          color: "#334155",
+          fontWeight: 700,
+          padding: "6px 12px",
+          cursor: "pointer",
+        }}
+      >
+        {showHistory ? "Hide history" : "View history"}
+      </button>
+      {showHistory ? (
+        <div style={{ display: "grid", gap: 10 }}>
+          {historyLoading ? <div style={{ color: "#64748b" }}>Loading history…</div> : null}
+          {!historyLoading && historyError ? <div style={{ color: "#b91c1c" }}>{historyError}</div> : null}
+          {!historyLoading && !historyError ? (
+            <Timeline items={historyItems} emptyMessage="No canonical decision history is available yet." />
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function ActionDecisionCard(props: {
   decision: LandlordAgentDecision;
   workingDecisionId: string | null;
@@ -106,8 +150,26 @@ function ActionDecisionCard(props: {
   onSnooze: (decisionId: string, days: number) => Promise<void>;
   onDismiss: (decisionId: string) => Promise<void>;
   onExecute: (decisionId: string) => Promise<void>;
+  showHistory: boolean;
+  historyItems: TimelineItem[];
+  historyLoading: boolean;
+  historyError: string | null;
+  onToggleHistory: (decisionId: string) => Promise<void>;
 }) {
-  const { decision, workingDecisionId, workingAction, onReview, onSnooze, onDismiss, onExecute } = props;
+  const {
+    decision,
+    workingDecisionId,
+    workingAction,
+    onReview,
+    onSnooze,
+    onDismiss,
+    onExecute,
+    showHistory,
+    historyItems,
+    historyLoading,
+    historyError,
+    onToggleHistory,
+  } = props;
   const support = supportingLine(decision);
   const categoryLabel = decision.workflowCategory ? workflowCategoryLabel[decision.workflowCategory] : null;
   const ctaDestination = decision.destination || decision.href;
@@ -282,6 +344,14 @@ function ActionDecisionCard(props: {
         >
           {workingDecisionId === decision.id && workingAction === "dismiss" ? "Saving..." : "Dismiss"}
         </button>
+        <HistoryToggle
+          decisionId={decision.id}
+          showHistory={showHistory}
+          historyItems={historyItems}
+          historyLoading={historyLoading}
+          historyError={historyError}
+          onToggleHistory={onToggleHistory}
+        />
       </div>
     </div>
   );
@@ -289,8 +359,13 @@ function ActionDecisionCard(props: {
 
 function ExecutedDecisionCard(props: {
   decision: LandlordAgentDecision;
+  showHistory: boolean;
+  historyItems: TimelineItem[];
+  historyLoading: boolean;
+  historyError: string | null;
+  onToggleHistory: (decisionId: string) => Promise<void>;
 }) {
-  const { decision } = props;
+  const { decision, showHistory, historyItems, historyLoading, historyError, onToggleHistory } = props;
   const categoryLabel = decision.workflowCategory ? workflowCategoryLabel[decision.workflowCategory] : null;
   const ctaDestination = decision.destination || decision.href;
   const ctaLabel = decision.destination
@@ -339,6 +414,14 @@ function ExecutedDecisionCard(props: {
           </Link>
         ) : null}
       </div>
+      <HistoryToggle
+        decisionId={decision.id}
+        showHistory={showHistory}
+        historyItems={historyItems}
+        historyLoading={historyLoading}
+        historyError={historyError}
+        onToggleHistory={onToggleHistory}
+      />
     </div>
   );
 }
@@ -356,6 +439,10 @@ export function AgentDecisionPanel({
   const [workingAction, setWorkingAction] = React.useState<"review" | "snooze" | "dismiss" | "execute" | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [showExecuted, setShowExecuted] = React.useState(false);
+  const [expandedHistoryDecisionIds, setExpandedHistoryDecisionIds] = React.useState<Record<string, boolean>>({});
+  const [historyItemsByDecisionId, setHistoryItemsByDecisionId] = React.useState<Record<string, TimelineItem[]>>({});
+  const [historyLoadingByDecisionId, setHistoryLoadingByDecisionId] = React.useState<Record<string, boolean>>({});
+  const [historyErrorByDecisionId, setHistoryErrorByDecisionId] = React.useState<Record<string, string | null>>({});
 
   React.useEffect(() => {
     setItems(decisions);
@@ -363,6 +450,32 @@ export function AgentDecisionPanel({
 
   const activeItems = React.useMemo(() => items.filter((decision) => decision.state !== "executed"), [items]);
   const executedItems = React.useMemo(() => items.filter((decision) => decision.state === "executed"), [items]);
+
+  const handleToggleHistory = async (decisionId: string) => {
+    const currentlyExpanded = Boolean(expandedHistoryDecisionIds[decisionId]);
+    if (currentlyExpanded) {
+      setExpandedHistoryDecisionIds((current) => ({ ...current, [decisionId]: false }));
+      return;
+    }
+
+    setExpandedHistoryDecisionIds((current) => ({ ...current, [decisionId]: true }));
+    if (historyItemsByDecisionId[decisionId] || historyLoadingByDecisionId[decisionId]) return;
+
+    try {
+      setHistoryLoadingByDecisionId((current) => ({ ...current, [decisionId]: true }));
+      setHistoryErrorByDecisionId((current) => ({ ...current, [decisionId]: null }));
+      const response = await fetchLandlordDecisionHistory({
+        decisionId,
+        period,
+        propertyId,
+      });
+      setHistoryItemsByDecisionId((current) => ({ ...current, [decisionId]: response.events || [] }));
+    } catch (err: unknown) {
+      setHistoryErrorByDecisionId((current) => ({ ...current, [decisionId]: errorMessage(err) }));
+    } finally {
+      setHistoryLoadingByDecisionId((current) => ({ ...current, [decisionId]: false }));
+    }
+  };
 
   const handleReview = async (decisionId: string) => {
     try {
@@ -513,6 +626,11 @@ export function AgentDecisionPanel({
                     onSnooze={handleSnooze}
                     onDismiss={handleDismiss}
                     onExecute={handleExecute}
+                    showHistory={Boolean(expandedHistoryDecisionIds[decision.id])}
+                    historyItems={historyItemsByDecisionId[decision.id] || []}
+                    historyLoading={Boolean(historyLoadingByDecisionId[decision.id])}
+                    historyError={historyErrorByDecisionId[decision.id] || null}
+                    onToggleHistory={handleToggleHistory}
                   />
                 ))}
               </div>
@@ -542,7 +660,15 @@ export function AgentDecisionPanel({
               {showExecuted ? (
                 <div style={{ display: "grid", gap: 10 }}>
                   {executedItems.map((decision) => (
-                    <ExecutedDecisionCard key={decision.id} decision={decision} />
+                    <ExecutedDecisionCard
+                      key={decision.id}
+                      decision={decision}
+                      showHistory={Boolean(expandedHistoryDecisionIds[decision.id])}
+                      historyItems={historyItemsByDecisionId[decision.id] || []}
+                      historyLoading={Boolean(historyLoadingByDecisionId[decision.id])}
+                      historyError={historyErrorByDecisionId[decision.id] || null}
+                      onToggleHistory={handleToggleHistory}
+                    />
                   ))}
                 </div>
               ) : (

@@ -11,6 +11,13 @@ export type TimelineItem = {
 };
 
 const TITLE_BY_TYPE: Record<string, string> = {
+  "decision.appeared": "Appeared",
+  "decision.reviewed": "Reviewed",
+  "decision.snoozed": "Snoozed",
+  "decision.dismissed": "Dismissed",
+  "decision.execution_requested": "Execution requested",
+  "decision.executed": "Executed",
+  "decision.execution_failed": "Execution failed",
   "application.created": "Application created",
   "application.submitted": "Application submitted",
   "screening.quote_generated": "Screening quote generated",

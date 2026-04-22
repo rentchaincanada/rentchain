@@ -19,6 +19,7 @@ import {
   saveReviewedLandlordDecisionState,
   saveSnoozedLandlordDecisionState,
 } from "../services/landlord/landlordDecisionStates";
+import { loadLandlordDecisionTimeline } from "../services/landlord/landlordDecisionHistory";
 
 const router = Router();
 
@@ -86,6 +87,28 @@ router.get("/landlord/analytics", requireAuth, requireLandlord, async (req: any,
   } catch (err: any) {
     console.error("[landlord-analytics] fetch failed", err?.message || err);
     return res.status(500).json({ ok: false, error: "LANDLORD_ANALYTICS_FETCH_FAILED" });
+  }
+});
+
+router.get("/landlord/analytics/decisions/:decisionId/history", requireAuth, requireLandlord, async (req: any, res) => {
+  try {
+    const resolved = await resolveVisibleDecision(req, res);
+    if (!resolved) return;
+    const { landlordId, decisionId } = resolved;
+
+    const events = await loadLandlordDecisionTimeline({
+      landlordId,
+      decisionId,
+    });
+
+    return res.json({
+      ok: true,
+      decisionId,
+      events,
+    });
+  } catch (err: any) {
+    console.error("[landlord-analytics] decision history failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "LANDLORD_DECISION_HISTORY_FAILED" });
   }
 });
 
