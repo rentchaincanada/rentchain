@@ -1,4 +1,5 @@
 import { apiFetch } from "./apiFetch";
+import type { TimelineItem } from "./timelineApi";
 
 export type AnalyticsPeriod = "30d" | "90d" | "365d" | "month_to_date";
 
@@ -254,6 +255,12 @@ export type LandlordAnalyticsSnapshot = {
   };
 };
 
+export type LandlordDecisionHistoryResponse = {
+  ok: true;
+  decisionId: string;
+  events: TimelineItem[];
+};
+
 export async function fetchLandlordAnalyticsSnapshot(params?: {
   period?: AnalyticsPeriod;
   propertyId?: string | null;
@@ -331,6 +338,20 @@ export async function dismissLandlordDecision(params: {
   return await apiFetch(`/landlord/analytics/decisions/${encodeURIComponent(params.decisionId)}/dismiss${suffix}`, {
     method: "POST",
   });
+}
+
+export async function fetchLandlordDecisionHistory(params: {
+  decisionId: string;
+  period?: AnalyticsPeriod;
+  propertyId?: string | null;
+}): Promise<LandlordDecisionHistoryResponse> {
+  const search = new URLSearchParams();
+  if (params.period) search.set("period", params.period);
+  if (params.propertyId) search.set("propertyId", params.propertyId);
+  const suffix = search.toString() ? `?${search.toString()}` : "";
+  return await apiFetch<LandlordDecisionHistoryResponse>(
+    `/landlord/analytics/decisions/${encodeURIComponent(params.decisionId)}/history${suffix}`
+  );
 }
 
 export async function executeLandlordDecision(params: {
