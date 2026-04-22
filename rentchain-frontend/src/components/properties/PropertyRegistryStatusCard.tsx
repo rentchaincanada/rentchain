@@ -356,6 +356,10 @@ function writeToClipboard(value: string) {
   return navigator.clipboard.writeText(value);
 }
 
+function canSafelyUpdateBrowserState() {
+  return typeof window !== "undefined" && typeof document !== "undefined";
+}
+
 function scheduleCopyStateReset(setCopyState: React.Dispatch<React.SetStateAction<"idle" | "copied" | "failed">>) {
   setTimeout(() => setCopyState("idle"), 1800);
 }
@@ -422,12 +426,17 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
         active = false;
       };
     }
+    if (!canSafelyUpdateBrowserState()) {
+      return () => {
+        active = false;
+      };
+    }
     void fetchBillingPricing()
       .then((next) => {
-        if (active) setPricing(next);
+        if (active && canSafelyUpdateBrowserState()) setPricing(next);
       })
       .catch(() => {
-        if (active) setPricing(null);
+        if (active && canSafelyUpdateBrowserState()) setPricing(null);
       });
     return () => {
       active = false;
