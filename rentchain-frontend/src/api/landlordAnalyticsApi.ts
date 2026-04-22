@@ -51,6 +51,22 @@ export type LandlordDecisionExecutionMapping = {
   prerequisiteReason: string | null;
 };
 
+export type LandlordDecisionLeaseNoticeExecutionInput = {
+  noticeType: "renewal_offer" | "end_of_term_notice" | "non_renewal" | "month_to_month_notice" | null;
+  legalTemplateKey: string | null;
+  noticeRuleVersion: string | null;
+  province: string | null;
+  leaseType: "fixed_term" | "year_to_year" | "month_to_month" | null;
+  currentRent: number | null;
+  noticeDueAt: number | null;
+  rentChangeMode: "no_change" | "increase" | "decrease" | "undecided" | null;
+  proposedRent: number | null;
+  newTermType: "fixed_term" | "year_to_year" | "month_to_month" | null;
+  newLeaseStartDate: string | null;
+  newLeaseEndDate: string | null;
+  responseDeadlineAt: number | null;
+};
+
 export type LandlordAgentDecision = {
   id: string;
   decisionType: string;
@@ -70,6 +86,9 @@ export type LandlordAgentDecision = {
   automationReason: string | null;
   executionMappingState: "none" | "mapped";
   executionMapping: LandlordDecisionExecutionMapping | null;
+  executionInputState: "none" | "partial" | "complete";
+  executionInputReason: string | null;
+  executionInput: LandlordDecisionLeaseNoticeExecutionInput | null;
 };
 
 export type AnalyticsDeltaValue = {

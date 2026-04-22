@@ -22,6 +22,9 @@ function baseDecision(overrides?: Partial<LandlordAgentDecision>): LandlordAgent
     automationReason: null,
     executionMappingState: "none",
     executionMapping: null,
+    executionInputState: "none",
+    executionInputReason: null,
+    executionInput: null,
     ...overrides,
   };
 }

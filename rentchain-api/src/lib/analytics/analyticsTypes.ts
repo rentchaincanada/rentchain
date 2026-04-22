@@ -1,4 +1,5 @@
 import type { AutomationAction } from "../automation/automationTypes";
+import type { LeaseNoticeType, LeaseType, RentChangeMode } from "../../config/leaseNoticeRules";
 import type { ScreeningReconciliationStatus } from "../reconciliation/reconciliationTypes";
 
 export type AdminAnalyticsPeriod = "30d" | "90d" | "365d" | "month_to_date";
@@ -289,6 +290,24 @@ export type LandlordDecisionExecutionMapping = {
   prerequisiteReason: string | null;
 };
 
+export type LandlordDecisionExecutionInputState = "none" | "partial" | "complete";
+
+export type LandlordDecisionLeaseNoticeExecutionInput = {
+  noticeType: LeaseNoticeType | null;
+  legalTemplateKey: string | null;
+  noticeRuleVersion: string | null;
+  province: string | null;
+  leaseType: LeaseType | null;
+  currentRent: number | null;
+  noticeDueAt: number | null;
+  rentChangeMode: RentChangeMode | null;
+  proposedRent: number | null;
+  newTermType: LeaseType | null;
+  newLeaseStartDate: string | null;
+  newLeaseEndDate: string | null;
+  responseDeadlineAt: number | null;
+};
+
 export type LandlordAgentDecision = {
   id: string;
   decisionType: LandlordAgentDecisionType;
@@ -308,6 +327,9 @@ export type LandlordAgentDecision = {
   automationReason: string | null;
   executionMappingState: LandlordDecisionExecutionMappingState;
   executionMapping: LandlordDecisionExecutionMapping | null;
+  executionInputState: LandlordDecisionExecutionInputState;
+  executionInputReason: string | null;
+  executionInput: LandlordDecisionLeaseNoticeExecutionInput | null;
 };
 
 export type LandlordAgentDecisions = {
