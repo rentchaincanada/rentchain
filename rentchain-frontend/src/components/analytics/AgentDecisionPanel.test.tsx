@@ -125,6 +125,7 @@ describe("AgentDecisionPanel", () => {
     );
 
     expect(screen.getByRole("heading", { name: /Recommended next actions/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Actions to review/i })).toBeInTheDocument();
     expect(screen.getByText(/Vacancy pressure is concentrated in Beta/i)).toBeInTheDocument();
     expect(screen.getByText(/high priority/i)).toBeInTheDocument();
     expect(screen.getByText(/Workflow: Vacancy readiness/i)).toBeInTheDocument();
@@ -379,8 +380,168 @@ describe("AgentDecisionPanel", () => {
         propertyId: null,
       });
     });
-    expect(await screen.findByText("Executed")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /Recently executed/i })).toBeInTheDocument();
     expect(screen.getByText(/Notice sent/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Execute now/i })).not.toBeInTheDocument();
+  });
+
+  it("keeps failed execution feedback in the active section", async () => {
+    executeLandlordDecision.mockResolvedValueOnce({
+      ok: false,
+      error: "DECISION_EXECUTION_FAILED",
+      state: {
+        decisionId: "review_lease_renewals:prop-1",
+        state: "pending",
+        executedAt: null,
+        executionOutcomeStatus: "failed",
+        executionOutcomeAt: "2026-04-22T12:00:00.000Z",
+        executionOutcomeReason: "AUTOMATION_EXECUTION_FAILED",
+        updatedAt: "2026-04-22T12:00:00.000Z",
+      },
+      automationResult: {
+        action: "lease.auto_send_notice",
+        executed: false,
+        skipped: true,
+        reason: "AUTOMATION_EXECUTION_FAILED",
+        timestamp: "2026-04-22T12:00:00.000Z",
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <AgentDecisionPanel
+          period="90d"
+          decisions={[
+            {
+              id: "review_lease_renewals:prop-1",
+              decisionType: "review_lease_renewals",
+              priority: "high",
+              explanation: "Review upcoming renewals.",
+              recommendedAction: "Review renewals",
+              actionKey: "open_lease_renewals_flow",
+              actionLabel: "Open renewals focus",
+              destination: "/portfolio-health?entry=lease-renewals&propertyId=prop-1",
+              workflowCategory: "lease_renewals",
+              automationEligible: true,
+              automationState: "ready",
+              automationReason: "This decision is active and already mapped to a deterministic automation path.",
+              executionMappingState: "mapped",
+              executionMapping: {
+                action: "lease.auto_send_notice",
+                resourceType: "lease",
+                resourceId: "lease-1",
+                prerequisitesMet: true,
+                prerequisiteReason: null,
+              },
+              executionInputState: "complete",
+              executionInputReason: null,
+              executionInputMissingFields: [],
+              executionInput: {
+                noticeType: "renewal_offer",
+                legalTemplateKey: "ns.fixed_term.renewal_offer.v1",
+                noticeRuleVersion: "ns-v1",
+                province: "NS",
+                leaseType: "fixed_term",
+                currentRent: 1650,
+                noticeDueAt: Date.UTC(2026, 1, 10, 0, 0, 0, 0),
+                rentChangeMode: "no_change",
+                proposedRent: null,
+                newTermType: "fixed_term",
+                newLeaseStartDate: "2026-05-11",
+                newLeaseEndDate: "2027-05-10",
+                responseDeadlineAt: Date.UTC(2026, 4, 1, 12, 0, 0, 0),
+              },
+              executedAt: null,
+              executionOutcomeStatus: "none",
+              executionOutcomeAt: null,
+              executionOutcomeReason: null,
+              href: "/portfolio-health?entry=lease-renewals&propertyId=prop-1",
+              state: "pending",
+              reviewedAt: null,
+              supportingSignals: [],
+            },
+          ]}
+        />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Execute now/i }));
+
+    await waitFor(() => {
+      expect(executeLandlordDecision).toHaveBeenCalledWith({
+        decisionId: "review_lease_renewals:prop-1",
+        period: "90d",
+        propertyId: null,
+      });
+    });
+    expect(screen.queryByRole("heading", { name: /Recently executed/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/Execution failed/i)).toBeInTheDocument();
+    expect(screen.getByText(/AUTOMATION_EXECUTION_FAILED/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Execute now/i })).toBeInTheDocument();
+  });
+
+  it("renders executed decisions in a secondary section", () => {
+    render(
+      <MemoryRouter>
+        <AgentDecisionPanel
+          decisions={[
+            {
+              id: "review_lease_renewals:prop-1",
+              decisionType: "review_lease_renewals",
+              priority: "high",
+              explanation: "Review upcoming renewals.",
+              recommendedAction: "Review renewals",
+              actionKey: "open_lease_renewals_flow",
+              actionLabel: "Open renewals focus",
+              destination: "/portfolio-health?entry=lease-renewals&propertyId=prop-1",
+              workflowCategory: "lease_renewals",
+              automationEligible: true,
+              automationState: "ready",
+              automationReason: "This decision is active and already mapped to a deterministic automation path.",
+              executionMappingState: "mapped",
+              executionMapping: {
+                action: "lease.auto_send_notice",
+                resourceType: "lease",
+                resourceId: "lease-1",
+                prerequisitesMet: true,
+                prerequisiteReason: null,
+              },
+              executionInputState: "complete",
+              executionInputReason: null,
+              executionInputMissingFields: [],
+              executionInput: {
+                noticeType: "renewal_offer",
+                legalTemplateKey: "ns.fixed_term.renewal_offer.v1",
+                noticeRuleVersion: "ns-v1",
+                province: "NS",
+                leaseType: "fixed_term",
+                currentRent: 1650,
+                noticeDueAt: Date.UTC(2026, 1, 10, 0, 0, 0, 0),
+                rentChangeMode: "no_change",
+                proposedRent: null,
+                newTermType: "fixed_term",
+                newLeaseStartDate: "2026-05-11",
+                newLeaseEndDate: "2027-05-10",
+                responseDeadlineAt: Date.UTC(2026, 4, 1, 12, 0, 0, 0),
+              },
+              executedAt: "2026-04-22T12:00:00.000Z",
+              executionOutcomeStatus: "succeeded",
+              executionOutcomeAt: "2026-04-22T12:00:00.000Z",
+              executionOutcomeReason: null,
+              href: "/portfolio-health?entry=lease-renewals&propertyId=prop-1",
+              state: "executed",
+              reviewedAt: null,
+              supportingSignals: [],
+            },
+          ]}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole("heading", { name: /Actions to review/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Recently executed/i })).toBeInTheDocument();
+    expect(screen.getByText(/No attention-worthy actions are surfaced/i)).toBeInTheDocument();
+    expect(screen.getByText(/Notice sent/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Dismiss/i })).not.toBeInTheDocument();
   });
 });
