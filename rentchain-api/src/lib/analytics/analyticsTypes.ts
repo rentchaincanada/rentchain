@@ -252,7 +252,8 @@ export type LandlordAgentDecisionType =
   | "focus_highest_risk_property";
 
 export type LandlordAgentDecisionPriority = "low" | "medium" | "high";
-export type AgentDecisionState = "pending" | "reviewed" | "snoozed" | "dismissed";
+export type AgentDecisionState = "pending" | "reviewed" | "snoozed" | "dismissed" | "executed";
+export type LandlordDecisionExecutionOutcomeStatus = "none" | "succeeded" | "failed";
 
 export type LandlordAgentDecisionSupportingSignal = {
   source: "alert" | "predictive_metric" | "benchmarking_insight" | "delta";
@@ -332,6 +333,10 @@ export type LandlordAgentDecision = {
   executionInputReason: string | null;
   executionInputMissingFields: LeaseNoticeExecutionInputMissingField[];
   executionInput: LandlordDecisionLeaseNoticeExecutionInput | null;
+  executedAt?: string | null;
+  executionOutcomeStatus: LandlordDecisionExecutionOutcomeStatus;
+  executionOutcomeAt: string | null;
+  executionOutcomeReason: string | null;
 };
 
 export type LandlordAgentDecisions = {
@@ -347,6 +352,10 @@ export type PersistedAgentDecisionState = {
   snoozedUntil?: string | null;
   snoozedAt?: string | null;
   dismissedAt?: string | null;
+  executedAt?: string | null;
+  executionOutcomeStatus?: Exclude<LandlordDecisionExecutionOutcomeStatus, "none"> | null;
+  executionOutcomeAt?: string | null;
+  executionOutcomeReason?: string | null;
   createdAt: string;
   updatedAt: string;
 };

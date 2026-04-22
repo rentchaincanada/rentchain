@@ -38,6 +38,19 @@ const automationTone: Record<Exclude<LandlordAgentDecision["automationState"], "
   },
 };
 
+const executionOutcomeTone: Record<Exclude<LandlordAgentDecision["executionOutcomeStatus"], "none">, { bg: string; text: string; label: string }> = {
+  succeeded: {
+    bg: "rgba(21, 128, 61, 0.1)",
+    text: "#166534",
+    label: "Executed",
+  },
+  failed: {
+    bg: "rgba(185, 28, 28, 0.1)",
+    text: "#991b1b",
+    label: "Execution failed",
+  },
+};
+
 type Props = {
   decisions: LandlordAgentDecision[];
   title?: string;
@@ -158,12 +171,46 @@ export function AgentDecisionPanel({
       setWorkingDecisionId(decisionId);
       setWorkingAction("execute");
       setError(null);
-      await executeLandlordDecision({
+      const response = await executeLandlordDecision({
         decisionId,
         period,
         propertyId,
       });
-      setItems((current) => current.filter((decision) => decision.id !== decisionId));
+      if (!response.ok) {
+        if (response.state) {
+          setItems((current) =>
+            current.map((decision) =>
+              decision.id === decisionId
+                ? {
+                    ...decision,
+                    state: response.state!.state,
+                    reviewedAt: response.state!.reviewedAt ?? decision.reviewedAt ?? null,
+                    executedAt: response.state!.executedAt ?? decision.executedAt ?? null,
+                    executionOutcomeStatus: response.state!.executionOutcomeStatus,
+                    executionOutcomeAt: response.state!.executionOutcomeAt,
+                    executionOutcomeReason: response.state!.executionOutcomeReason,
+                  }
+                : decision
+            )
+          );
+        }
+        throw new Error(response.error || "Execution failed");
+      }
+      setItems((current) =>
+        current.map((decision) =>
+          decision.id === decisionId
+            ? {
+                ...decision,
+                state: response.state.state,
+                reviewedAt: response.state.reviewedAt ?? decision.reviewedAt ?? null,
+                executedAt: response.state.executedAt ?? null,
+                executionOutcomeStatus: response.state.executionOutcomeStatus,
+                executionOutcomeAt: response.state.executionOutcomeAt,
+                executionOutcomeReason: response.state.executionOutcomeReason,
+              }
+            : decision
+        )
+      );
     } catch (err: unknown) {
       setError(errorMessage(err));
     } finally {
@@ -196,9 +243,11 @@ export function AgentDecisionPanel({
                   ? decision.recommendedAction
                   : null;
               const canExecuteNow =
+                decision.state !== "executed" &&
                 decision.automationState === "ready" &&
                 decision.executionMappingState === "mapped" &&
                 decision.executionInputState === "complete";
+              const isResolved = decision.state === "executed";
               return (
                 <div
                   key={decision.id}
@@ -251,6 +300,31 @@ export function AgentDecisionPanel({
                   {support ? <div style={{ color: "#64748b", fontSize: "0.88rem" }}>{support}</div> : null}
                   {decision.automationState !== "manual_only" && decision.automationReason ? (
                     <div style={{ color: "#64748b", fontSize: "0.84rem" }}>{decision.automationReason}</div>
+                  ) : null}
+                  {decision.executionOutcomeStatus !== "none" ? (
+                    <div
+                      style={{
+                        justifySelf: "start",
+                        padding: "4px 9px",
+                        borderRadius: 999,
+                        background: executionOutcomeTone[decision.executionOutcomeStatus].bg,
+                        color: executionOutcomeTone[decision.executionOutcomeStatus].text,
+                        fontWeight: 700,
+                        fontSize: "0.78rem",
+                      }}
+                    >
+                      {executionOutcomeTone[decision.executionOutcomeStatus].label}
+                    </div>
+                  ) : null}
+                  {decision.executionOutcomeStatus === "succeeded" ? (
+                    <div style={{ color: "#166534", fontSize: "0.84rem" }}>
+                      Notice sent{decision.executedAt ? ` on ${new Date(decision.executedAt).toLocaleDateString()}` : ""}.
+                    </div>
+                  ) : null}
+                  {decision.executionOutcomeStatus === "failed" ? (
+                    <div style={{ color: "#991b1b", fontSize: "0.84rem" }}>
+                      {decision.executionOutcomeReason || "The last execution attempt failed."}
+                    </div>
                   ) : null}
                   <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
                     {ctaDestination && ctaLabel ? (
@@ -306,7 +380,7 @@ export function AgentDecisionPanel({
                         {workingDecisionId === decision.id && workingAction === "review" ? "Saving..." : "Mark Reviewed"}
                       </button>
                     )}
-                    {SNOOZE_PRESETS.map((preset) => (
+                    {!isResolved ? SNOOZE_PRESETS.map((preset) => (
                       <button
                         key={`${decision.id}-${preset.days}`}
                         type="button"
@@ -324,8 +398,8 @@ export function AgentDecisionPanel({
                       >
                         {workingDecisionId === decision.id && workingAction === "snooze" ? "Saving..." : preset.label}
                       </button>
-                    ))}
-                    <button
+                    )) : null}
+                    {!isResolved ? <button
                       type="button"
                       onClick={() => void handleDismiss(decision.id)}
                       disabled={workingDecisionId === decision.id}
@@ -340,7 +414,7 @@ export function AgentDecisionPanel({
                       }}
                     >
                       {workingDecisionId === decision.id && workingAction === "dismiss" ? "Saving..." : "Dismiss"}
-                    </button>
+                    </button> : null}
                   </div>
                 </div>
               );

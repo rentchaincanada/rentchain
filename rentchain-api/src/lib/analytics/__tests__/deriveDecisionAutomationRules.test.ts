@@ -26,6 +26,10 @@ function baseDecision(overrides?: Partial<LandlordAgentDecision>): LandlordAgent
     executionInputReason: null,
     executionInputMissingFields: [],
     executionInput: null,
+    executedAt: null,
+    executionOutcomeStatus: "none",
+    executionOutcomeAt: null,
+    executionOutcomeReason: null,
     ...overrides,
   };
 }

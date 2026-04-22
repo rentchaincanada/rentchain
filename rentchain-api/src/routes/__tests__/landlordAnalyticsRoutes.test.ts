@@ -4,6 +4,8 @@ const loadLandlordAnalyticsSnapshot = vi.fn();
 const saveReviewedLandlordDecisionState = vi.fn();
 const saveSnoozedLandlordDecisionState = vi.fn();
 const saveDismissedLandlordDecisionState = vi.fn();
+const saveExecutedLandlordDecisionState = vi.fn();
+const saveFailedLandlordDecisionExecutionOutcome = vi.fn();
 const writeCanonicalEvent = vi.fn();
 const executeAutomation = vi.fn();
 const buildLeaseNoticePolicyRequest = vi.fn();
@@ -45,6 +47,8 @@ vi.mock("../../services/landlord/landlordDecisionStates", () => ({
   saveReviewedLandlordDecisionState,
   saveSnoozedLandlordDecisionState,
   saveDismissedLandlordDecisionState,
+  saveExecutedLandlordDecisionState,
+  saveFailedLandlordDecisionExecutionOutcome,
 }));
 
 vi.mock("../../lib/automation/automationExecutor", () => ({
@@ -154,6 +158,32 @@ describe("landlordAnalyticsRoutes", () => {
       decisionId: "reduce_vacancy_risk:prop-123",
       state: "dismissed",
       dismissedAt: "2026-04-20T12:00:00.000Z",
+      createdAt: "2026-04-20T12:00:00.000Z",
+      updatedAt: "2026-04-20T12:00:00.000Z",
+    });
+    saveExecutedLandlordDecisionState.mockResolvedValue({
+      id: "landlord-1__review_lease_renewals:prop-1",
+      landlordId: "landlord-1",
+      decisionId: "review_lease_renewals:prop-1",
+      state: "executed",
+      reviewedAt: null,
+      executedAt: "2026-04-20T12:00:00.000Z",
+      executionOutcomeStatus: "succeeded",
+      executionOutcomeAt: "2026-04-20T12:00:00.000Z",
+      executionOutcomeReason: null,
+      createdAt: "2026-04-20T12:00:00.000Z",
+      updatedAt: "2026-04-20T12:00:00.000Z",
+    });
+    saveFailedLandlordDecisionExecutionOutcome.mockResolvedValue({
+      id: "landlord-1__review_lease_renewals:prop-1",
+      landlordId: "landlord-1",
+      decisionId: "review_lease_renewals:prop-1",
+      state: "pending",
+      reviewedAt: null,
+      executedAt: null,
+      executionOutcomeStatus: "failed",
+      executionOutcomeAt: "2026-04-20T12:00:00.000Z",
+      executionOutcomeReason: "AUTOMATION_EXECUTION_FAILED",
       createdAt: "2026-04-20T12:00:00.000Z",
       updatedAt: "2026-04-20T12:00:00.000Z",
     });
@@ -274,6 +304,10 @@ describe("landlordAnalyticsRoutes", () => {
             executionInputReason: null,
             executionInputMissingFields: [],
             executionInput: null,
+            executedAt: null,
+            executionOutcomeStatus: "none",
+            executionOutcomeAt: null,
+            executionOutcomeReason: null,
             href: "/analytics",
             state: "pending",
             reviewedAt: null,
@@ -537,6 +571,10 @@ describe("landlordAnalyticsRoutes", () => {
               newLeaseEndDate: "2027-05-10",
               responseDeadlineAt: Date.UTC(2026, 4, 1, 12, 0, 0, 0),
             },
+            executedAt: null,
+            executionOutcomeStatus: "none",
+            executionOutcomeAt: null,
+            executionOutcomeReason: null,
             href: "/portfolio-health?entry=lease-renewals&propertyId=prop-1",
             state: "pending",
             reviewedAt: null,
@@ -554,6 +592,10 @@ describe("landlordAnalyticsRoutes", () => {
 
     expect(response.status).toBe(200);
     expect(executeAutomation).toHaveBeenCalled();
+    expect(saveExecutedLandlordDecisionState).toHaveBeenCalledWith({
+      landlordId: "landlord-1",
+      decisionId: "review_lease_renewals:prop-1",
+    });
     expect(performLeaseNoticeSendFromPreviewInput).toHaveBeenCalled();
     expect(writeCanonicalEvent).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -578,6 +620,10 @@ describe("landlordAnalyticsRoutes", () => {
           action: "lease.auto_send_notice",
           resourceId: "lease-1",
         }),
+        state: expect.objectContaining({
+          state: "executed",
+          executionOutcomeStatus: "succeeded",
+        }),
       })
     );
   });
@@ -598,6 +644,98 @@ describe("landlordAnalyticsRoutes", () => {
       })
     );
     expect(executeAutomation).not.toHaveBeenCalled();
+  });
+
+  it("persists failed execution feedback without resolving the decision", async () => {
+    loadLandlordAnalyticsSnapshot.mockResolvedValueOnce({
+      decisions: {
+        items: [
+          {
+            id: "review_lease_renewals:prop-1",
+            decisionType: "review_lease_renewals",
+            priority: "high",
+            explanation: "Review renewals.",
+            supportingSignals: [],
+            recommendedAction: "Review renewals",
+            actionKey: "open_lease_renewals_flow",
+            actionLabel: "Open renewals focus",
+            destination: "/portfolio-health?entry=lease-renewals&propertyId=prop-1",
+            workflowCategory: "lease_renewals",
+            automationEligible: true,
+            automationState: "ready",
+            automationReason: "This decision is active and already mapped to a deterministic automation path.",
+            executionMappingState: "mapped",
+            executionMapping: {
+              action: "lease.auto_send_notice",
+              resourceType: "lease",
+              resourceId: "lease-1",
+              prerequisitesMet: true,
+              prerequisiteReason: null,
+            },
+            executionInputState: "complete",
+            executionInputReason: null,
+            executionInputMissingFields: [],
+            executionInput: {
+              noticeType: "renewal_offer",
+              legalTemplateKey: "ns.fixed_term.renewal_offer.v1",
+              noticeRuleVersion: "ns-v1",
+              province: "NS",
+              leaseType: "fixed_term",
+              currentRent: 1650,
+              noticeDueAt: Date.UTC(2026, 1, 10, 0, 0, 0, 0),
+              rentChangeMode: "no_change",
+              proposedRent: null,
+              newTermType: "fixed_term",
+              newLeaseStartDate: "2026-05-11",
+              newLeaseEndDate: "2027-05-10",
+              responseDeadlineAt: Date.UTC(2026, 4, 1, 12, 0, 0, 0),
+            },
+            executedAt: null,
+            executionOutcomeStatus: "none",
+            executionOutcomeAt: null,
+            executionOutcomeReason: null,
+            href: "/portfolio-health?entry=lease-renewals&propertyId=prop-1",
+            state: "pending",
+            reviewedAt: null,
+          },
+        ],
+      },
+    });
+    executeAutomation.mockResolvedValueOnce({
+      automationResult: {
+        action: "lease.auto_send_notice",
+        executed: false,
+        skipped: true,
+        reason: "AUTOMATION_EXECUTION_FAILED",
+        timestamp: "2026-04-20T12:00:00.000Z",
+      },
+    });
+
+    const router = (await import("../landlordAnalyticsRoutes")).default;
+    const response = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/analytics/decisions/review_lease_renewals%3Aprop-1/execute",
+      user: { id: "landlord-1", role: "landlord" },
+    });
+
+    expect(response.status).toBe(409);
+    expect(saveFailedLandlordDecisionExecutionOutcome).toHaveBeenCalledWith({
+      landlordId: "landlord-1",
+      decisionId: "review_lease_renewals:prop-1",
+      reason: "AUTOMATION_EXECUTION_FAILED",
+    });
+    expect(saveExecutedLandlordDecisionState).not.toHaveBeenCalled();
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        ok: false,
+        error: "DECISION_EXECUTION_FAILED",
+        state: expect.objectContaining({
+          state: "pending",
+          executionOutcomeStatus: "failed",
+          executionOutcomeReason: "AUTOMATION_EXECUTION_FAILED",
+        }),
+      })
+    );
   });
 
   it("enforces landlord authentication", async () => {
