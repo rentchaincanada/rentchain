@@ -185,4 +185,50 @@ describe("applyDecisionExecutionMappings", () => {
       })
     );
   });
+
+  it("promotes a lease-renewal decision to complete when canonical renewal inputs are fully stored", () => {
+    const result = applyDecisionExecutionMappings({
+      decisions: [baseDecision()],
+      leases: [
+        {
+          id: "lease-1",
+          landlordId: "landlord-1",
+          tenantId: "tenant-1",
+          propertyId: "prop-1",
+          unitId: "unit-1",
+          province: "NS",
+          leaseType: "fixed_term",
+          currentRent: 1650,
+          renewalRentChangeMode: "no_change",
+          renewalDecisionDeadlineAt: Date.UTC(2026, 4, 1, 12, 0, 0, 0),
+          renewalNewTermType: "fixed_term",
+          renewalNewLeaseStartDate: "2026-05-11",
+          renewalNewLeaseEndDate: "2027-05-10",
+          leaseEndDate: "2026-05-10",
+          status: "active",
+        },
+      ],
+      now: Date.UTC(2026, 3, 20, 12, 0, 0, 0),
+    });
+
+    expect(result[0]).toEqual(
+      expect.objectContaining({
+        executionMappingState: "mapped",
+        executionMapping: expect.objectContaining({
+          prerequisitesMet: true,
+          prerequisiteReason: null,
+        }),
+        executionInputState: "complete",
+        executionInputReason: null,
+        executionInputMissingFields: [],
+        executionInput: expect.objectContaining({
+          rentChangeMode: "no_change",
+          newTermType: "fixed_term",
+          newLeaseStartDate: "2026-05-11",
+          newLeaseEndDate: "2027-05-10",
+          responseDeadlineAt: Date.UTC(2026, 4, 1, 12, 0, 0, 0),
+        }),
+      })
+    );
+  });
 });

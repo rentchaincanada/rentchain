@@ -44,8 +44,12 @@ export type LeaseWorkflowLease = {
   latestNoticeId: string | null;
   latestRenewalIntent: string | null;
   latestRenewalIntentAt: number | null;
+  renewalRentChangeMode: RentChangeMode | null;
   renewalOfferedRent: number | null;
   renewalDecisionDeadlineAt: number | null;
+  renewalNewTermType: LeaseType | null;
+  renewalNewLeaseStartDate: string | null;
+  renewalNewLeaseEndDate: string | null;
   moveOutDate: string | null;
   createdAt: number;
   updatedAt: number;
@@ -81,6 +85,15 @@ export type LeaseNoticeExecutionInputSnapshot = {
   leaseType: LeaseType | null;
   currentRent: number | null;
   noticeDueAt: number | null;
+  rentChangeMode: RentChangeMode | null;
+  proposedRent: number | null;
+  newTermType: LeaseType | null;
+  newLeaseStartDate: string | null;
+  newLeaseEndDate: string | null;
+  responseDeadlineAt: number | null;
+};
+
+export type LeaseRenewalOperatorInputRecord = {
   rentChangeMode: RentChangeMode | null;
   proposedRent: number | null;
   newTermType: LeaseType | null;
@@ -132,6 +145,12 @@ function asLeaseType(value: unknown): LeaseType {
   return "fixed_term";
 }
 
+function asOptionalLeaseType(value: unknown): LeaseType | null {
+  const raw = String(value || "").trim().toLowerCase();
+  if (raw === "fixed_term" || raw === "year_to_year" || raw === "month_to_month") return raw;
+  return null;
+}
+
 function determineNoticeType(lease: LeaseWorkflowLease): LeaseNoticeType {
   if (lease.leaseType === "month_to_month") return "month_to_month_notice";
   return "renewal_offer";
@@ -141,7 +160,16 @@ function addMissingField(target: Set<string>, field: string, condition: boolean)
   if (!condition) target.add(field);
 }
 
+function asRentChangeMode(value: unknown): RentChangeMode | null {
+  const raw = String(value || "").trim().toLowerCase();
+  if (raw === "no_change" || raw === "increase" || raw === "decrease" || raw === "undecided") {
+    return raw;
+  }
+  return null;
+}
+
 function deriveRentChangeModeFromLease(lease: LeaseWorkflowLease): RentChangeMode | null {
+  if (lease.renewalRentChangeMode) return lease.renewalRentChangeMode;
   if (typeof lease.renewalOfferedRent !== "number" || !Number.isFinite(lease.renewalOfferedRent) || lease.renewalOfferedRent <= 0) {
     return null;
   }
@@ -195,15 +223,120 @@ export function normalizeLeaseRecord(id: string, raw: any): LeaseWorkflowLease {
     latestNoticeId: String(raw?.latestNoticeId || "").trim() || null,
     latestRenewalIntent: String(raw?.latestRenewalIntent || "").trim() || null,
     latestRenewalIntentAt: toMillis(raw?.latestRenewalIntentAt),
+    renewalRentChangeMode: asRentChangeMode(raw?.renewalRentChangeMode),
     renewalOfferedRent:
       typeof raw?.renewalOfferedRent === "number" ? raw.renewalOfferedRent : null,
     renewalDecisionDeadlineAt: toMillis(raw?.renewalDecisionDeadlineAt),
+    renewalNewTermType: asOptionalLeaseType(raw?.renewalNewTermType || raw?.newTermType || null),
+    renewalNewLeaseStartDate: toDateOnly(raw?.renewalNewLeaseStartDate || raw?.newLeaseStartDate || null),
+    renewalNewLeaseEndDate: toDateOnly(raw?.renewalNewLeaseEndDate || raw?.newLeaseEndDate || null),
     moveOutDate: toDateOnly(raw?.moveOutDate || null),
     createdAt,
     updatedAt,
     tenantName: String(raw?.tenantName || raw?.residentName || "").trim() || null,
     unitLabel: String(raw?.unitLabel || raw?.unitNumber || raw?.unit || "").trim() || null,
     propertyLabel: String(raw?.propertyLabel || raw?.propertyName || "").trim() || null,
+  };
+}
+
+export function deriveLeaseRenewalOperatorInputRecord(lease: LeaseWorkflowLease): LeaseRenewalOperatorInputRecord {
+  return {
+    rentChangeMode: deriveRentChangeModeFromLease(lease),
+    proposedRent:
+      typeof lease.renewalOfferedRent === "number" && Number.isFinite(lease.renewalOfferedRent) && lease.renewalOfferedRent > 0
+        ? lease.renewalOfferedRent
+        : null,
+    newTermType: lease.renewalNewTermType || null,
+    newLeaseStartDate: lease.renewalNewLeaseStartDate || null,
+    newLeaseEndDate: lease.renewalNewLeaseEndDate || null,
+    responseDeadlineAt: typeof lease.renewalDecisionDeadlineAt === "number" ? lease.renewalDecisionDeadlineAt : null,
+  };
+}
+
+export function sanitizeLeaseRenewalOperatorInput(input: any): {
+  ok: true;
+  data: LeaseRenewalOperatorInputRecord;
+} | {
+  ok: false;
+  error: string;
+} {
+  const rentChangeMode = asRentChangeMode(input?.rentChangeMode);
+  const proposedRentRaw = input?.proposedRent;
+  const proposedRent =
+    proposedRentRaw == null || proposedRentRaw === ""
+      ? null
+      : typeof proposedRentRaw === "number" && Number.isFinite(proposedRentRaw) && proposedRentRaw > 0
+      ? proposedRentRaw
+      : Number.isFinite(Number(proposedRentRaw)) && Number(proposedRentRaw) > 0
+      ? Number(proposedRentRaw)
+      : NaN;
+  if (Number.isNaN(proposedRent)) {
+    return { ok: false, error: "INVALID_PROPOSED_RENT" };
+  }
+
+  const newTermTypeRaw = input?.newTermType;
+  const newTermType =
+    newTermTypeRaw == null || newTermTypeRaw === ""
+      ? null
+      : (() => {
+          const value = String(newTermTypeRaw || "").trim().toLowerCase();
+          if (value === "fixed_term" || value === "year_to_year" || value === "month_to_month") return value;
+          return "__invalid__";
+        })();
+  if (newTermType === "__invalid__") {
+    return { ok: false, error: "INVALID_NEW_TERM_TYPE" };
+  }
+
+  const newLeaseStartDate =
+    input?.newLeaseStartDate == null || input?.newLeaseStartDate === "" ? null : toDateOnly(input?.newLeaseStartDate);
+  if (input?.newLeaseStartDate != null && input?.newLeaseStartDate !== "" && !newLeaseStartDate) {
+    return { ok: false, error: "INVALID_NEW_LEASE_START_DATE" };
+  }
+
+  const newLeaseEndDate =
+    input?.newLeaseEndDate == null || input?.newLeaseEndDate === "" ? null : toDateOnly(input?.newLeaseEndDate);
+  if (input?.newLeaseEndDate != null && input?.newLeaseEndDate !== "" && !newLeaseEndDate) {
+    return { ok: false, error: "INVALID_NEW_LEASE_END_DATE" };
+  }
+
+  const responseDeadlineAt =
+    input?.responseDeadlineAt == null || input?.responseDeadlineAt === "" ? null : toMillis(input?.responseDeadlineAt);
+  if (input?.responseDeadlineAt != null && input?.responseDeadlineAt !== "" && !responseDeadlineAt) {
+    return { ok: false, error: "INVALID_RESPONSE_DEADLINE" };
+  }
+
+  if ((rentChangeMode === "increase" || rentChangeMode === "decrease") && proposedRent == null) {
+    return {
+      ok: true,
+      data: {
+        rentChangeMode,
+        proposedRent: null,
+        newTermType: newTermType as LeaseType | null,
+        newLeaseStartDate,
+        newLeaseEndDate,
+        responseDeadlineAt,
+      },
+    };
+  }
+
+  if ((rentChangeMode === "no_change" || rentChangeMode === "undecided") && proposedRent != null) {
+    return { ok: false, error: "PROPOSED_RENT_NOT_ALLOWED_FOR_RENT_CHANGE_MODE" };
+  }
+
+  if (!rentChangeMode && proposedRent != null) {
+    return { ok: false, error: "RENT_CHANGE_MODE_REQUIRED_FOR_PROPOSED_RENT" };
+  }
+
+  return {
+    ok: true,
+    data: {
+      rentChangeMode,
+      proposedRent,
+      newTermType: newTermType as LeaseType | null,
+      newLeaseStartDate,
+      newLeaseEndDate,
+      responseDeadlineAt,
+    },
   };
 }
 
@@ -225,12 +358,10 @@ export function deriveLeaseNoticeExecutionInputSnapshot(lease: LeaseWorkflowLeas
 
   const noticeType = determineNoticeType(lease);
   const noticeDueAt = lease.nextNoticeDueAt || (lease.leaseEndDate ? minusDays(lease.leaseEndDate, rule.noticeLeadDays) : null);
-  const rentChangeMode = deriveRentChangeModeFromLease(lease);
-  const proposedRent =
-    typeof lease.renewalOfferedRent === "number" && Number.isFinite(lease.renewalOfferedRent) && lease.renewalOfferedRent > 0
-      ? lease.renewalOfferedRent
-      : null;
-  const responseDeadlineAt = typeof lease.renewalDecisionDeadlineAt === "number" ? lease.renewalDecisionDeadlineAt : null;
+  const persistedInput = deriveLeaseRenewalOperatorInputRecord(lease);
+  const rentChangeMode = persistedInput.rentChangeMode;
+  const proposedRent = persistedInput.proposedRent;
+  const responseDeadlineAt = persistedInput.responseDeadlineAt;
 
   const input: LeaseNoticeExecutionInputSnapshot = {
     noticeType,
@@ -242,9 +373,9 @@ export function deriveLeaseNoticeExecutionInputSnapshot(lease: LeaseWorkflowLeas
     noticeDueAt,
     rentChangeMode,
     proposedRent,
-    newTermType: null,
-    newLeaseStartDate: null,
-    newLeaseEndDate: null,
+    newTermType: persistedInput.newTermType,
+    newLeaseStartDate: persistedInput.newLeaseStartDate,
+    newLeaseEndDate: persistedInput.newLeaseEndDate,
     responseDeadlineAt,
   };
 
