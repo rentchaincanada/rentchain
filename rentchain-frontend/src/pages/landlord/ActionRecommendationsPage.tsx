@@ -1,5 +1,5 @@
 import React from "react";
-import { fetchLandlordActionRecommendations, type LandlordActionRecommendationV1 } from "../../api/landlordActionRecommendationsApi";
+import { fetchLandlordAnalyticsSnapshot, type LandlordAnalyticsSnapshot } from "../../api/landlordAnalyticsApi";
 import { MacShell } from "../../components/layout/MacShell";
 import { Card, Section } from "../../components/ui/Ui";
 import { useToast } from "../../components/ui/ToastProvider";
@@ -7,7 +7,7 @@ import { useEntitlements } from "@/hooks/useEntitlements";
 import { LockedFeature } from "@/components/billing/LockedFeature";
 import { FeatureTeaser } from "@/components/billing/FeatureTeaser";
 import { resolveRequiredPlanLabel } from "@/lib/upgradePrompt";
-import RecommendationList from "../../components/actionRecommendations/RecommendationList";
+import AgentDecisionPanel from "../../components/analytics/AgentDecisionPanel";
 
 export default function ActionRecommendationsPage() {
   const { showToast } = useToast();
@@ -15,25 +15,31 @@ export default function ActionRecommendationsPage() {
     loading: entitlementLoading,
     canViewPortfolioScore,
     canViewActionRecommendations,
+    hasCapability,
   } = useEntitlements();
-  const [recommendations, setRecommendations] = React.useState<LandlordActionRecommendationV1[]>([]);
+  const [snapshot, setSnapshot] = React.useState<LandlordAnalyticsSnapshot | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const canViewAnalyticsDecisions = canViewPortfolioScore && hasCapability("portfolio_analytics");
+  const canViewDecisionInbox = canViewActionRecommendations && canViewAnalyticsDecisions;
 
   React.useEffect(() => {
-    if (entitlementLoading || !canViewActionRecommendations) return;
+    if (entitlementLoading || !canViewDecisionInbox) {
+      setLoading(false);
+      return;
+    }
 
     let mounted = true;
     (async () => {
       try {
         setLoading(true);
         setError(null);
-        const response = await fetchLandlordActionRecommendations();
+        const response = await fetchLandlordAnalyticsSnapshot();
         if (!mounted) return;
-        setRecommendations(response.recommendations || []);
+        setSnapshot(response);
       } catch (err: any) {
         if (!mounted) return;
-        const message = err?.message || "Failed to load recommended actions";
+        const message = err?.message || "Failed to load decision inbox";
         setError(message);
         showToast({
           message: "Failed to load recommended actions",
@@ -48,10 +54,11 @@ export default function ActionRecommendationsPage() {
     return () => {
       mounted = false;
     };
-  }, [canViewActionRecommendations, entitlementLoading, showToast]);
+  }, [canViewDecisionInbox, entitlementLoading, showToast]);
 
   const recommendationsPlanLabel =
     resolveRequiredPlanLabel("portfolio_action_recommendations") || "Elite";
+  const analyticsPlanLabel = resolveRequiredPlanLabel("portfolio_analytics") || "Elite";
 
   return (
     <MacShell title="Recommended actions">
@@ -60,36 +67,50 @@ export default function ActionRecommendationsPage() {
           <div style={{ display: "grid", gap: 6 }}>
             <h1 style={{ margin: 0, fontSize: "1.5rem" }}>Recommended actions</h1>
             <div style={{ color: "#475569", maxWidth: 820 }}>
-              A simple set of landlord-safe next steps based on your portfolio health, score, and recent direction.
+              A centralized decision inbox that turns current portfolio signals into the next actions worth reviewing now.
             </div>
           </div>
         </Section>
 
         {entitlementLoading ? <Card>Loading recommended actions…</Card> : null}
-        {!entitlementLoading && !canViewActionRecommendations && canViewPortfolioScore ? (
-          <FeatureTeaser
-            featureKey="portfolio_action_recommendations"
-            eyebrow={`${recommendationsPlanLabel} intelligence`}
-            title={`Unlock recommended actions on ${recommendationsPlanLabel}`}
-            description="Recommended actions turn your portfolio health, score, and recent direction into prioritized next steps for daily follow-through."
-            ctaLabel={`Upgrade to ${recommendationsPlanLabel}`}
-          />
-        ) : null}
-        {!entitlementLoading && !canViewActionRecommendations && !canViewPortfolioScore ? (
+        {!entitlementLoading && !canViewPortfolioScore ? (
           <LockedFeature
             featureKey="portfolio_action_recommendations"
             title={`Unlock recommended actions on ${recommendationsPlanLabel}`}
-            description="Recommended actions sit on top of RentChain's higher-tier intelligence layer and add prioritized next steps based on your portfolio signals."
-            hint="Portfolio health remains available now, while score and recommendations unlock as you move up the intelligence ladder."
+            description="Recommended actions build on RentChain's portfolio intelligence and surface a centralized inbox of prioritized next steps."
+            hint="Portfolio health remains available now, while portfolio score, analytics, and decision inbox access unlock as you move up the intelligence ladder."
             ctaLabel={`Upgrade to ${recommendationsPlanLabel}`}
           />
         ) : null}
-        {!entitlementLoading && canViewActionRecommendations && loading ? <Card>Loading recommended actions…</Card> : null}
-        {!entitlementLoading && canViewActionRecommendations && !loading && error ? (
+        {!entitlementLoading && canViewPortfolioScore && !hasCapability("portfolio_analytics") ? (
+          <FeatureTeaser
+            featureKey="portfolio_analytics"
+            eyebrow={`${analyticsPlanLabel} analytics`}
+            title={`Unlock decision inbox on ${analyticsPlanLabel}`}
+            description="Decision inbox is powered by the same analytics snapshot that drives portfolio decisions, so analytics access is required to view these actions."
+            ctaLabel={`Upgrade to ${analyticsPlanLabel}`}
+          />
+        ) : null}
+        {!entitlementLoading && canViewAnalyticsDecisions && !canViewActionRecommendations ? (
+          <FeatureTeaser
+            featureKey="portfolio_action_recommendations"
+            title={`Unlock recommended actions on ${recommendationsPlanLabel}`}
+            eyebrow={`${recommendationsPlanLabel} intelligence`}
+            description="Recommended actions turn current analytics decisions into a centralized inbox for day-to-day follow-through."
+            ctaLabel={`Upgrade to ${recommendationsPlanLabel}`}
+          />
+        ) : null}
+        {!entitlementLoading && canViewDecisionInbox && loading ? <Card>Loading recommended actions…</Card> : null}
+        {!entitlementLoading && canViewDecisionInbox && !loading && error ? (
           <Card style={{ color: "#b91c1c" }}>Failed to load recommended actions: {error}</Card>
         ) : null}
-        {!entitlementLoading && canViewActionRecommendations && !loading && !error ? (
-          <RecommendationList recommendations={recommendations} />
+        {!entitlementLoading && canViewDecisionInbox && !loading && !error ? (
+          <AgentDecisionPanel
+            decisions={snapshot?.decisions?.items || []}
+            title="Decision inbox"
+            description="Review the next landlord actions surfaced directly from your current analytics snapshot."
+            emptyMessage="No prioritized landlord actions are surfaced for this view right now."
+          />
         ) : null}
       </div>
     </MacShell>

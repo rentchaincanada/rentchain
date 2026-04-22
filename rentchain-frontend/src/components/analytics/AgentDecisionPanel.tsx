@@ -11,6 +11,9 @@ const priorityTone: Record<"low" | "medium" | "high", { bg: string; text: string
 
 type Props = {
   decisions: LandlordAgentDecision[];
+  title?: string;
+  description?: string;
+  emptyMessage?: string;
 };
 
 function supportingLine(decision: LandlordAgentDecision) {
@@ -22,19 +25,22 @@ function supportingLine(decision: LandlordAgentDecision) {
   return parts.length ? parts.join(" • ") : null;
 }
 
-export function AgentDecisionPanel({ decisions }: Props) {
+export function AgentDecisionPanel({
+  decisions,
+  title = "Recommended next actions",
+  description = "Deterministic recommendations built from current analytics, alerts, benchmarking, deltas, and predictive signals.",
+  emptyMessage = "No attention-worthy actions are surfaced for this view right now.",
+}: Props) {
   return (
     <Card>
       <div style={{ display: "grid", gap: 14 }}>
         <div style={{ display: "grid", gap: 4 }}>
-          <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Recommended next actions</h2>
-          <div style={{ color: "#475569" }}>
-            Deterministic recommendations built from current analytics, alerts, benchmarking, deltas, and predictive signals.
-          </div>
+          <h2 style={{ margin: 0, fontSize: "1.05rem" }}>{title}</h2>
+          <div style={{ color: "#475569" }}>{description}</div>
         </div>
 
         {!decisions.length ? (
-          <div style={{ color: "#64748b" }}>No attention-worthy actions are surfaced for this view right now.</div>
+          <div style={{ color: "#64748b" }}>{emptyMessage}</div>
         ) : (
           <div style={{ display: "grid", gap: 10 }}>
             {decisions.map((decision) => {
