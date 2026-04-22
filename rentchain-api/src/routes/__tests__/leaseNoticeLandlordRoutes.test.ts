@@ -64,7 +64,27 @@ vi.mock("../../config/leaseNoticeRules", () => ({
 
 const appendLeaseWorkflowEvent = vi.fn(async () => undefined);
 const buildPreview = vi.fn(async () => undefined);
+const deriveLeaseRenewalOperatorInputRecord = vi.fn((lease: any) => ({
+  rentChangeMode: lease?.renewalRentChangeMode ?? null,
+  proposedRent: lease?.renewalOfferedRent ?? null,
+  newTermType: lease?.renewalNewTermType ?? null,
+  newLeaseStartDate: lease?.renewalNewLeaseStartDate ?? null,
+  newLeaseEndDate: lease?.renewalNewLeaseEndDate ?? null,
+  responseDeadlineAt: lease?.renewalDecisionDeadlineAt ?? null,
+}));
 const lookupUserEmail = vi.fn(async () => "tenant@example.com");
+const normalizeLeaseRecord = vi.fn((id: string, raw: any) => ({ id, ...(raw || {}) }));
+const sanitizeLeaseRenewalOperatorInput = vi.fn((body: any) => ({
+  ok: true,
+  data: {
+    rentChangeMode: body?.rentChangeMode ?? null,
+    proposedRent: body?.proposedRent ?? null,
+    newTermType: body?.newTermType ?? null,
+    newLeaseStartDate: body?.newLeaseStartDate ?? null,
+    newLeaseEndDate: body?.newLeaseEndDate ?? null,
+    responseDeadlineAt: body?.responseDeadlineAt ?? null,
+  },
+}));
 const sendLeaseWorkflowEmail = vi.fn(async () => ({ ok: true }));
 const getLeaseForLandlordWorkflow = vi.fn(async () => ({
   ok: true,
@@ -85,10 +105,12 @@ vi.mock("../../services/leaseNoticeWorkflowService", () => ({
   appendLeaseWorkflowEvent,
   buildPreview,
   computeNoResponseState: vi.fn(),
+  deriveLeaseRenewalOperatorInputRecord,
   getLeaseForLandlordWorkflow,
   getLeaseNoticeByLeaseId: vi.fn(),
   lookupUserEmail,
-  normalizeLeaseRecord: vi.fn(),
+  normalizeLeaseRecord,
+  sanitizeLeaseRenewalOperatorInput,
   sendLeaseWorkflowEmail,
 }));
 
@@ -123,10 +145,26 @@ async function invokeRouter(router: any, options: { method: string; url: string;
   });
 }
 
+function readCollectionDoc(name: string, id: string) {
+  return collections.get(name)?.get(id) ?? null;
+}
+
 describe("leaseNoticeLandlordRoutes policy integration", () => {
   beforeEach(() => {
     collections.clear();
     vi.clearAllMocks();
+    normalizeLeaseRecord.mockImplementation((id: string, raw: any) => ({ id, ...(raw || {}) }));
+    sanitizeLeaseRenewalOperatorInput.mockImplementation((body: any) => ({
+      ok: true,
+      data: {
+        rentChangeMode: body?.rentChangeMode ?? null,
+        proposedRent: body?.proposedRent ?? null,
+        newTermType: body?.newTermType ?? null,
+        newLeaseStartDate: body?.newLeaseStartDate ?? null,
+        newLeaseEndDate: body?.newLeaseEndDate ?? null,
+        responseDeadlineAt: body?.responseDeadlineAt ?? null,
+      },
+    }));
     buildPreview.mockReturnValue({
       ok: true,
       rule: { noticeLeadDays: 90 },
@@ -235,6 +273,41 @@ describe("leaseNoticeLandlordRoutes policy integration", () => {
         metadata: expect.objectContaining({
           action: "lease.auto_send_notice",
         }),
+      })
+    );
+  });
+
+  it("persists renewal operator inputs canonically on the lease record", async () => {
+    const router = (await import("../leaseNoticeLandlordRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "PUT",
+      url: "/lease-1/renewal-inputs",
+      body: {
+        rentChangeMode: "no_change",
+        newTermType: "fixed_term",
+        newLeaseStartDate: "2026-07-01",
+        newLeaseEndDate: "2027-06-30",
+        responseDeadlineAt: 1700000000000,
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(readCollectionDoc("leases", "lease-1")).toEqual(
+      expect.objectContaining({
+        renewalRentChangeMode: "no_change",
+        renewalNewTermType: "fixed_term",
+        renewalNewLeaseStartDate: "2026-07-01",
+        renewalNewLeaseEndDate: "2027-06-30",
+        renewalDecisionDeadlineAt: 1700000000000,
+      })
+    );
+    expect(res.body?.renewalInputs).toEqual(
+      expect.objectContaining({
+        rentChangeMode: "no_change",
+        newTermType: "fixed_term",
+        newLeaseStartDate: "2026-07-01",
+        newLeaseEndDate: "2027-06-30",
+        responseDeadlineAt: 1700000000000,
       })
     );
   });

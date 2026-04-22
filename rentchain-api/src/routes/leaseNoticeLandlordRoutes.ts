@@ -10,10 +10,12 @@ import {
   appendLeaseWorkflowEvent,
   buildPreview,
   computeNoResponseState,
+  deriveLeaseRenewalOperatorInputRecord,
   getLeaseForLandlordWorkflow,
   getLeaseNoticeByLeaseId,
   lookupUserEmail,
   normalizeLeaseRecord,
+  sanitizeLeaseRenewalOperatorInput,
   sendLeaseWorkflowEmail,
 } from "../services/leaseNoticeWorkflowService";
 import { executeAutomation } from "../lib/automation/automationExecutor";
@@ -115,8 +117,12 @@ async function performLeaseNoticeSend(params: {
       noticeRuleVersion: previewResult.preview.noticeRuleVersion,
       noticeLeadDays: previewResult.rule.noticeLeadDays,
       nextNoticeDueAt: previewResult.preview.noticeDueAt,
+      renewalRentChangeMode: previewResult.preview.rentChangeMode,
       renewalOfferedRent: previewResult.preview.proposedRent,
       renewalDecisionDeadlineAt: previewResult.preview.responseDeadlineAt,
+      renewalNewTermType: previewResult.preview.newTermType,
+      renewalNewLeaseStartDate: previewResult.preview.newTermStartDate,
+      renewalNewLeaseEndDate: previewResult.preview.newTermEndDate,
       updatedAt: now,
     },
     { merge: true }
@@ -275,11 +281,13 @@ router.get("/expiring", async (req: any, res) => {
   try {
     const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
     const withinDays = Math.max(1, Number(req.query?.withinDays || 120));
+    const propertyId = String(req.query?.propertyId || "").trim();
     const now = Date.now();
     const horizon = now + withinDays * 24 * 60 * 60 * 1000;
     const snap = await db.collection("leases").where("landlordId", "==", landlordId).limit(400).get();
     const items = snap.docs
       .map((doc) => normalizeLeaseRecord(doc.id, doc.data() as any))
+      .filter((lease) => !propertyId || lease.propertyId === propertyId)
       .filter((lease) => lease.status === "active" || lease.status === "notice_pending" || lease.status === "renewal_pending")
       .filter((lease) => !!lease.nextNoticeDueAt && Number(lease.nextNoticeDueAt) <= horizon)
       .sort((a, b) => Number(a.nextNoticeDueAt || 0) - Number(b.nextNoticeDueAt || 0));
@@ -294,6 +302,97 @@ router.get("/expiring", async (req: any, res) => {
   } catch (err: any) {
     console.error("[lease-notice] expiring-list failed", { message: err?.message || "failed" });
     return res.status(500).json({ ok: false, error: "LEASE_EXPIRING_LIST_FAILED" });
+  }
+});
+
+router.get("/:id/renewal-inputs", async (req: any, res) => {
+  try {
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    const leaseId = String(req.params?.id || "").trim();
+    const leaseResult = await getLeaseForLandlordWorkflow(leaseId, landlordId);
+    if (!leaseResult.ok) {
+      return res.status(leaseResult.status).json({ ok: false, error: leaseResult.error });
+    }
+    const lease = normalizeLeaseRecord(leaseId, leaseResult.lease);
+    return res.json({
+      ok: true,
+      lease,
+      renewalInputs: deriveLeaseRenewalOperatorInputRecord(lease),
+    });
+  } catch (err: any) {
+    console.error("[lease-notice] renewal-inputs load failed", { message: err?.message || "failed" });
+    return res.status(500).json({ ok: false, error: "LEASE_RENEWAL_INPUT_LOAD_FAILED" });
+  }
+});
+
+router.put("/:id/renewal-inputs", async (req: any, res) => {
+  try {
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    const actorId = String(req.user?.id || landlordId || "").trim() || null;
+    const leaseId = String(req.params?.id || "").trim();
+    const leaseResult = await getLeaseForLandlordWorkflow(leaseId, landlordId);
+    if (!leaseResult.ok) {
+      return res.status(leaseResult.status).json({ ok: false, error: leaseResult.error });
+    }
+
+    const sanitized = sanitizeLeaseRenewalOperatorInput(req.body || {});
+    if (!sanitized.ok) {
+      return res.status(400).json({ ok: false, error: sanitized.error });
+    }
+
+    const now = Date.now();
+    await db.collection("leases").doc(leaseId).set(
+      {
+        renewalRentChangeMode: sanitized.data.rentChangeMode,
+        renewalOfferedRent: sanitized.data.proposedRent,
+        renewalDecisionDeadlineAt: sanitized.data.responseDeadlineAt,
+        renewalNewTermType: sanitized.data.newTermType,
+        renewalNewLeaseStartDate: sanitized.data.newLeaseStartDate,
+        renewalNewLeaseEndDate: sanitized.data.newLeaseEndDate,
+        updatedAt: now,
+      },
+      { merge: true }
+    );
+
+    const lease = normalizeLeaseRecord(leaseId, {
+      ...(leaseResult.lease || {}),
+      renewalRentChangeMode: sanitized.data.rentChangeMode,
+      renewalOfferedRent: sanitized.data.proposedRent,
+      renewalDecisionDeadlineAt: sanitized.data.responseDeadlineAt,
+      renewalNewTermType: sanitized.data.newTermType,
+      renewalNewLeaseStartDate: sanitized.data.newLeaseStartDate,
+      renewalNewLeaseEndDate: sanitized.data.newLeaseEndDate,
+      updatedAt: now,
+    });
+
+    await appendLeaseWorkflowEvent({
+      entityType: "lease",
+      entityId: leaseId,
+      leaseId,
+      landlordId,
+      tenantId: lease.tenantId,
+      propertyId: lease.propertyId,
+      unitId: lease.unitId,
+      actorType: "landlord",
+      actorId,
+      eventType: "lease_notice_preview_generated",
+      eventData: {
+        kind: "renewal_inputs_saved",
+        rentChangeMode: sanitized.data.rentChangeMode,
+        proposedRent: sanitized.data.proposedRent,
+        newTermType: sanitized.data.newTermType,
+        responseDeadlineAt: sanitized.data.responseDeadlineAt,
+      },
+    });
+
+    return res.json({
+      ok: true,
+      lease,
+      renewalInputs: deriveLeaseRenewalOperatorInputRecord(lease),
+    });
+  } catch (err: any) {
+    console.error("[lease-notice] renewal-inputs save failed", { message: err?.message || "failed" });
+    return res.status(500).json({ ok: false, error: "LEASE_RENEWAL_INPUT_SAVE_FAILED" });
   }
 });
 
