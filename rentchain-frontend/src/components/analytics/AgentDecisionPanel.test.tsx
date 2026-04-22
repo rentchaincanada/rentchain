@@ -70,6 +70,8 @@ describe("AgentDecisionPanel", () => {
               destination: "/analytics?propertyId=prop-2",
               workflowCategory: "vacancy_readiness",
               automationEligible: false,
+              automationState: "manual_only",
+              automationReason: "This decision is guidance-only in v1 and does not map to an execution rule.",
               href: "/analytics?propertyId=prop-2",
               state: "pending",
               reviewedAt: null,
@@ -89,6 +91,7 @@ describe("AgentDecisionPanel", () => {
     expect(screen.getByText(/Workflow: Vacancy readiness/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open vacancy readiness/i })).toHaveAttribute("href", "/analytics?propertyId=prop-2");
     expect(screen.getByText(/Vacancy is elevated/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Automation blocked/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Snooze 1d/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Dismiss/i })).toBeInTheDocument();
   });
@@ -129,6 +132,8 @@ describe("AgentDecisionPanel", () => {
               destination: "/portfolio-health",
               workflowCategory: "lease_renewals",
               automationEligible: false,
+              automationState: "blocked",
+              automationReason: "A lease automation path exists, but this decision still needs a specific lease target and notice inputs before execution.",
               href: "/portfolio-health",
               state: "pending",
               reviewedAt: null,
@@ -148,6 +153,7 @@ describe("AgentDecisionPanel", () => {
         propertyId: null,
       });
     });
+    expect(screen.getByText(/Automation blocked/i)).toBeInTheDocument();
     expect(await screen.findByText("Reviewed")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Mark Reviewed/i })).not.toBeInTheDocument();
   });
@@ -169,6 +175,8 @@ describe("AgentDecisionPanel", () => {
               destination: "/analytics?propertyId=prop-2",
               workflowCategory: "vacancy_readiness",
               automationEligible: false,
+              automationState: "manual_only",
+              automationReason: "This decision is guidance-only in v1 and does not map to an execution rule.",
               href: "/analytics?propertyId=prop-2",
               state: "pending",
               reviewedAt: null,
@@ -210,6 +218,8 @@ describe("AgentDecisionPanel", () => {
               destination: "/analytics?propertyId=prop-2",
               workflowCategory: "vacancy_readiness",
               automationEligible: false,
+              automationState: "manual_only",
+              automationReason: "This decision is guidance-only in v1 and does not map to an execution rule.",
               href: "/analytics?propertyId=prop-2",
               state: "reviewed",
               reviewedAt: "2026-04-22T12:00:00.000Z",

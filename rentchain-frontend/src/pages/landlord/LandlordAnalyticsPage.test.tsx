@@ -266,6 +266,8 @@ describe("LandlordAnalyticsPage", () => {
             destination: "/analytics?propertyId=prop-2",
             workflowCategory: "vacancy_readiness",
             automationEligible: false,
+            automationState: "manual_only",
+            automationReason: "This decision is guidance-only in v1 and does not map to an execution rule.",
             href: "/analytics?propertyId=prop-2",
             state: "pending",
             reviewedAt: null,

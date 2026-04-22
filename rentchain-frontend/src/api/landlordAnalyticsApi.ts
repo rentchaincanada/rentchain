@@ -58,6 +58,8 @@ export type LandlordAgentDecision = {
   destination: string;
   workflowCategory?: LandlordDecisionWorkflowCategory;
   automationEligible: boolean;
+  automationState: "manual_only" | "ready" | "blocked";
+  automationReason: string | null;
 };
 
 export type AnalyticsDeltaValue = {
