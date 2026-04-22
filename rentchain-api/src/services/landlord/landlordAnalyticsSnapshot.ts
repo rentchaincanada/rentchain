@@ -14,6 +14,7 @@ import { applyDecisionAutomationRules } from "../../lib/analytics/deriveDecision
 import { applyDecisionExecutionMappings } from "../../lib/analytics/deriveDecisionExecutionMappings";
 import { deriveLandlordAnalyticsSnapshot } from "../../lib/analytics/deriveLandlordAnalyticsSnapshot";
 import { deriveScreeningReconciliation } from "../../lib/reconciliation/deriveScreeningReconciliation";
+import { emitLandlordDecisionAppearanceEvents } from "./landlordDecisionAppearanceEvents";
 import { loadLandlordDecisionStates, mergeLandlordDecisionStates } from "./landlordDecisionStates";
 
 type LandlordAnalyticsParams = {
@@ -208,6 +209,7 @@ function buildDerivedInput(params: {
 export async function loadLandlordAnalyticsSnapshot(params: LandlordAnalyticsParams): Promise<LandlordAnalyticsSnapshot> {
   const landlordId = asAnalyticsString(params.landlordId, 240);
   const now = typeof params.now === "number" ? params.now : Date.now();
+  const occurredAt = new Date(now).toISOString();
   const period = clampAnalyticsPeriod(params.period);
   const { from, to } = resolveAnalyticsWindow(period, now);
 
@@ -233,6 +235,8 @@ export async function loadLandlordAnalyticsSnapshot(params: LandlordAnalyticsPar
     loadCollection("screeningOrders"),
   ]);
 
+  const canonicalEventsRaw = (canonicalEventsSnap.docs || []).map((doc: any) => ({ id: doc.id, ...(doc.data() || {}) }) as CanonicalEventV1);
+
   const derivedInput = buildDerivedInput({
     landlordId,
     propertyId: params.propertyId,
@@ -246,9 +250,7 @@ export async function loadLandlordAnalyticsSnapshot(params: LandlordAnalyticsPar
     unitsRaw: (unitsSnap.docs || []).map((doc: any) => ({ id: doc.id, ...(doc.data() || {}) })),
     leasesRaw: (leasesSnap.docs || []).map((doc: any) => ({ id: doc.id, ...(doc.data() || {}) })),
     eventsRaw: (eventsSnap.docs || []).map((doc: any) => ({ id: doc.id, ...(doc.data() || {}) })),
-    canonicalEventsRaw: (canonicalEventsSnap.docs || [])
-      .map((doc: any) => ({ id: doc.id, ...(doc.data() || {}) }) as CanonicalEventV1)
-      .filter(isAnalyticsVisibleCanonicalEvent),
+    canonicalEventsRaw: canonicalEventsRaw.filter(isAnalyticsVisibleCanonicalEvent),
     financialTransactionsRaw: (financialTransactionsSnap.docs || []).map((doc: any) => ({
       id: doc.id,
       ...(doc.data() || {}),
@@ -265,6 +267,13 @@ export async function loadLandlordAnalyticsSnapshot(params: LandlordAnalyticsPar
       now,
     })
   );
+
+  await emitLandlordDecisionAppearanceEvents({
+    landlordId,
+    decisions,
+    canonicalEvents: canonicalEventsRaw,
+    occurredAt,
+  });
 
   return {
       ...snapshot,
