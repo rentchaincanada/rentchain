@@ -27,6 +27,14 @@ export type LandlordAgentDecisionSupportingSignal = {
   direction?: "better" | "worse" | "flat" | "insufficient_data" | null;
 };
 
+export type LandlordDecisionWorkflowCategory =
+  | "lease_renewals"
+  | "vacancy_readiness"
+  | "application_funnel"
+  | "maintenance_backlog"
+  | "revenue_follow_up"
+  | "property_focus";
+
 export type LandlordAgentDecision = {
   decisionType: string;
   priority: "low" | "medium" | "high";
@@ -34,6 +42,11 @@ export type LandlordAgentDecision = {
   supportingSignals: LandlordAgentDecisionSupportingSignal[];
   recommendedAction: string;
   href?: string;
+  actionKey: string;
+  actionLabel: string;
+  destination: string;
+  workflowCategory?: LandlordDecisionWorkflowCategory;
+  automationEligible: boolean;
 };
 
 export type AnalyticsDeltaValue = {

@@ -19,6 +19,11 @@ describe("AgentDecisionPanel", () => {
               priority: "high",
               explanation: "Vacancy pressure is concentrated in Beta, so leasing attention should move there first.",
               recommendedAction: "View property analytics",
+              actionKey: "open_vacancy_readiness_flow",
+              actionLabel: "Open vacancy readiness",
+              destination: "/analytics?propertyId=prop-2",
+              workflowCategory: "vacancy_readiness",
+              automationEligible: false,
               href: "/analytics?propertyId=prop-2",
               supportingSignals: [
                 { source: "alert", key: "high_vacancy", label: "Vacancy is elevated", propertyId: "prop-2" },
@@ -33,10 +38,8 @@ describe("AgentDecisionPanel", () => {
     expect(screen.getByRole("heading", { name: /Recommended next actions/i })).toBeInTheDocument();
     expect(screen.getByText(/Vacancy pressure is concentrated in Beta/i)).toBeInTheDocument();
     expect(screen.getByText(/high priority/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /View property analytics/i })).toHaveAttribute(
-      "href",
-      "/analytics?propertyId=prop-2"
-    );
+    expect(screen.getByText(/Workflow: Vacancy readiness/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Open vacancy readiness/i })).toHaveAttribute("href", "/analytics?propertyId=prop-2");
     expect(screen.getByText(/Vacancy is elevated/i)).toBeInTheDocument();
   });
 

@@ -252,6 +252,11 @@ describe("LandlordAnalyticsPage", () => {
             priority: "high",
             explanation: "Beta carries the strongest vacancy pressure in the current view, so leasing attention should move there first.",
             recommendedAction: "View property analytics",
+            actionKey: "open_vacancy_readiness_flow",
+            actionLabel: "Open vacancy readiness",
+            destination: "/analytics?propertyId=prop-2",
+            workflowCategory: "vacancy_readiness",
+            automationEligible: false,
             href: "/analytics?propertyId=prop-2",
             supportingSignals: [
               { source: "alert", key: "high_vacancy", label: "Vacancy is elevated", propertyId: "prop-2" },
