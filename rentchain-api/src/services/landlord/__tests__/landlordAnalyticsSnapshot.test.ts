@@ -215,4 +215,72 @@ describe("loadLandlordAnalyticsSnapshot", () => {
     expect(result.propertyMetrics).toEqual([]);
     expect(result.comparisons.deltas.summary.maintenanceCostCents.direction).toBe("flat");
   });
+
+  it("promotes a complete mapped lease-renewal decision to ready automation state", async () => {
+    const nowIso = "2026-04-20T12:00:00.000Z";
+    seedDoc("properties", "prop-1", {
+      landlordId: "landlord-1",
+      name: "Alpha",
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    });
+    seedDoc("units", "unit-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitNumber: "1",
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    });
+    seedDoc("leases", "lease-1", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      unitNumber: "1",
+      status: "active",
+      leaseType: "fixed_term",
+      province: "NS",
+      currentRent: 1650,
+      monthlyRent: 1650,
+      startDate: "2025-05-11",
+      endDate: "2026-05-10",
+      renewalRentChangeMode: "no_change",
+      renewalDecisionDeadlineAt: Date.UTC(2026, 4, 1, 12, 0, 0, 0),
+      renewalNewTermType: "fixed_term",
+      renewalNewLeaseStartDate: "2026-05-11",
+      renewalNewLeaseEndDate: "2027-05-10",
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    });
+    seedDoc("events", "event-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      type: "lease_expiry",
+      severity: "high",
+      status: "active",
+      message: "Lease is expiring soon.",
+      createdAt: nowIso,
+      occurredAt: nowIso,
+    });
+
+    const { loadLandlordAnalyticsSnapshot } = await import("../landlordAnalyticsSnapshot");
+    const result = await loadLandlordAnalyticsSnapshot({
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      now: Date.UTC(2026, 3, 20, 12, 0, 0, 0),
+    });
+
+    expect(result.decisions.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "review_lease_renewals:prop-1",
+          automationEligible: true,
+          automationState: "ready",
+          executionMappingState: "mapped",
+          executionInputState: "complete",
+          executionInputMissingFields: [],
+        }),
+      ])
+    );
+  });
 });

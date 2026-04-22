@@ -328,3 +328,33 @@ export async function dismissLandlordDecision(params: {
     method: "POST",
   });
 }
+
+export async function executeLandlordDecision(params: {
+  decisionId: string;
+  period?: AnalyticsPeriod;
+  propertyId?: string | null;
+}): Promise<{
+  ok: true;
+  execution: {
+    decisionId: string;
+    action: LandlordDecisionExecutionMapping["action"];
+    resourceType: LandlordDecisionExecutionMapping["resourceType"];
+    resourceId: string;
+  };
+  automationResult: {
+    action: LandlordDecisionExecutionMapping["action"];
+    executed: boolean;
+    skipped: boolean;
+    reason?: string;
+    timestamp: string;
+  };
+  noticeId?: string;
+}> {
+  const search = new URLSearchParams();
+  if (params.period) search.set("period", params.period);
+  if (params.propertyId) search.set("propertyId", params.propertyId);
+  const suffix = search.toString() ? `?${search.toString()}` : "";
+  return await apiFetch(`/landlord/analytics/decisions/${encodeURIComponent(params.decisionId)}/execute${suffix}`, {
+    method: "POST",
+  });
+}

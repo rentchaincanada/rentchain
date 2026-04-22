@@ -258,11 +258,13 @@ export async function loadLandlordAnalyticsSnapshot(params: LandlordAnalyticsPar
 
   const snapshot = deriveLandlordAnalyticsSnapshot(derivedInput);
   const decisionStates = await loadLandlordDecisionStates(landlordId);
-  const decisions = applyDecisionExecutionMappings({
-    decisions: applyDecisionAutomationRules(mergeLandlordDecisionStates(snapshot.decisions.items, decisionStates)),
-    leases: derivedInput.leases,
-    now,
-  });
+  const decisions = applyDecisionAutomationRules(
+    applyDecisionExecutionMappings({
+      decisions: mergeLandlordDecisionStates(snapshot.decisions.items, decisionStates),
+      leases: derivedInput.leases,
+      now,
+    })
+  );
 
   return {
       ...snapshot,

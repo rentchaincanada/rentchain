@@ -74,6 +74,10 @@ const deriveLeaseRenewalOperatorInputRecord = vi.fn((lease: any) => ({
 }));
 const lookupUserEmail = vi.fn(async () => "tenant@example.com");
 const normalizeLeaseRecord = vi.fn((id: string, raw: any) => ({ id, ...(raw || {}) }));
+const performLeaseNoticeSendFromPreviewInput = vi.fn(async () => ({
+  status: 201,
+  payload: { ok: true, noticeId: "notice-1", autopilotPolicy: { outcome: "allow", canAutopilot: true } },
+}));
 const sanitizeLeaseRenewalOperatorInput = vi.fn((body: any) => ({
   ok: true,
   data: {
@@ -110,6 +114,7 @@ vi.mock("../../services/leaseNoticeWorkflowService", () => ({
   getLeaseNoticeByLeaseId: vi.fn(),
   lookupUserEmail,
   normalizeLeaseRecord,
+  performLeaseNoticeSendFromPreviewInput,
   sanitizeLeaseRenewalOperatorInput,
   sendLeaseWorkflowEmail,
 }));

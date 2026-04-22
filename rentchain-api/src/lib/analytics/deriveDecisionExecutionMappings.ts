@@ -49,6 +49,7 @@ function decisionPropertyId(decision: LandlordAgentDecision) {
 function baseDecision(decision: LandlordAgentDecision, mapping: LandlordDecisionExecutionMapping | null): LandlordAgentDecision {
   return {
     ...decision,
+    automationEligible: false,
     executionMappingState: mapping ? "mapped" : "none",
     executionMapping: mapping,
     executionInputState: "none",
@@ -89,6 +90,7 @@ function mapLeaseRenewalDecision(decision: LandlordAgentDecision, input: Mapping
 
   return {
     ...decision,
+    automationEligible: executionInput.state === "complete",
     executionMappingState: "mapped",
     executionMapping: mapping,
     executionInputState: executionInput.state,

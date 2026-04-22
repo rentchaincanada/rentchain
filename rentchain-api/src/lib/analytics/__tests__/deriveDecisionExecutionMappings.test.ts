@@ -48,6 +48,7 @@ describe("applyDecisionExecutionMappings", () => {
 
     expect(result[0]).toEqual(
       expect.objectContaining({
+        automationEligible: false,
         executionMappingState: "mapped",
         executionMapping: {
           action: "lease.auto_send_notice",
@@ -170,6 +171,7 @@ describe("applyDecisionExecutionMappings", () => {
 
     expect(result[0]).toEqual(
       expect.objectContaining({
+        automationEligible: false,
         executionMappingState: "mapped",
         executionInputState: "partial",
         executionInputReason: expect.stringContaining("newTermType"),
@@ -213,6 +215,7 @@ describe("applyDecisionExecutionMappings", () => {
 
     expect(result[0]).toEqual(
       expect.objectContaining({
+        automationEligible: true,
         executionMappingState: "mapped",
         executionMapping: expect.objectContaining({
           prerequisitesMet: true,

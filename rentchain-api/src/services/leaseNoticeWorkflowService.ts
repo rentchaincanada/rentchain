@@ -8,6 +8,7 @@ import {
   type RentChangeMode,
   resolveLeaseNoticeRule,
 } from "../config/leaseNoticeRules";
+import { toAutopilotPolicySummary } from "../lib/policy/policyEvaluator";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -66,6 +67,22 @@ export type LeaseNoticePreviewInput = {
   newLeaseEndDate?: string | null;
   responseDeadlineAt: number;
   noticeType?: LeaseNoticeType;
+};
+
+export type LeaseNoticeSendResult = {
+  status: number;
+  payload: {
+    ok: boolean;
+    error?: string;
+    noticeId?: string;
+    delivery?: {
+      ok?: boolean;
+      attempted?: boolean;
+      provider?: string | null;
+      reason?: string | null;
+    } | null;
+    autopilotPolicy: ReturnType<typeof toAutopilotPolicySummary>;
+  };
 };
 
 export type LeaseNoticeExecutionInputState = "none" | "partial" | "complete";
@@ -408,6 +425,29 @@ export function deriveLeaseNoticeExecutionInputSnapshot(lease: LeaseWorkflowLeas
   };
 }
 
+export function buildLeaseNoticePreviewInputFromLease(lease: LeaseWorkflowLease): LeaseNoticePreviewInput | null {
+  const snapshot = deriveLeaseNoticeExecutionInputSnapshot(lease);
+  if (snapshot.state !== "complete" || !snapshot.input) return null;
+  if (
+    !snapshot.input.rentChangeMode ||
+    !snapshot.input.newTermType ||
+    !snapshot.input.newLeaseStartDate ||
+    !snapshot.input.responseDeadlineAt
+  ) {
+    return null;
+  }
+
+  return {
+    rentChangeMode: snapshot.input.rentChangeMode,
+    proposedRent: snapshot.input.proposedRent,
+    newTermType: snapshot.input.newTermType,
+    newLeaseStartDate: snapshot.input.newLeaseStartDate,
+    newLeaseEndDate: snapshot.input.newLeaseEndDate,
+    responseDeadlineAt: snapshot.input.responseDeadlineAt,
+    noticeType: snapshot.input.noticeType || undefined,
+  };
+}
+
 export async function getLeaseForLandlordWorkflow(leaseId: string, landlordId: string) {
   const snap = await db.collection("leases").doc(leaseId).get();
   if (!snap.exists) return { ok: false as const, status: 404, error: "LEASE_NOT_FOUND" };
@@ -529,6 +569,227 @@ export function buildPreview(lease: LeaseWorkflowLease, input: LeaseNoticePrevie
     },
   };
   return { ok: true as const, rule, preview };
+}
+
+export async function performLeaseNoticeSendFromPreviewInput(params: {
+  leaseId: string;
+  landlordId: string;
+  actorId: string | null;
+  lease: LeaseWorkflowLease;
+  previewInput: LeaseNoticePreviewInput;
+  autopilotPolicy: ReturnType<typeof toAutopilotPolicySummary>;
+}): Promise<LeaseNoticeSendResult> {
+  const { leaseId, landlordId, actorId, lease, previewInput, autopilotPolicy } = params;
+  const previewResult = buildPreview(lease, previewInput);
+  if (!previewResult.ok) {
+    return { status: 400, payload: { ok: false, error: previewResult.error, autopilotPolicy } };
+  }
+
+  const noticeRef = db.collection("leaseNotices").doc();
+  const now = Date.now();
+  const baseNotice = {
+    id: noticeRef.id,
+    leaseId,
+    landlordId,
+    tenantId: lease.tenantId,
+    propertyId: lease.propertyId,
+    unitId: lease.unitId,
+    noticeType: previewResult.preview.noticeType,
+    legalTemplateKey: previewResult.preview.legalTemplateKey,
+    province: lease.province,
+    leaseType: lease.leaseType,
+    noticeDueAt: previewResult.preview.noticeDueAt,
+    sentAt: null,
+    deliveryStatus: "pending",
+    deliveryChannel: "email",
+    rentChangeMode: previewResult.preview.rentChangeMode,
+    currentRent: previewResult.preview.currentRent,
+    proposedRent: previewResult.preview.proposedRent,
+    newTermType: previewResult.preview.newTermType,
+    newTermStartDate: previewResult.preview.newTermStartDate,
+    newTermEndDate: previewResult.preview.newTermEndDate,
+    responseRequired: true,
+    responseDeadlineAt: previewResult.preview.responseDeadlineAt,
+    tenantResponse: "pending",
+    tenantRespondedAt: null,
+    tenantViewedAt: null,
+    landlordNotifiedOfResponseAt: null,
+    metadata: {
+      noticeRuleVersion: previewResult.preview.noticeRuleVersion,
+      summary: previewResult.preview.summary,
+    },
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  const batch = db.batch();
+  batch.set(noticeRef, baseNotice);
+  batch.set(
+    db.collection("leases").doc(leaseId),
+    {
+      status: "renewal_pending",
+      latestNoticeId: noticeRef.id,
+      noticeRuleVersion: previewResult.preview.noticeRuleVersion,
+      noticeLeadDays: previewResult.rule.noticeLeadDays,
+      nextNoticeDueAt: previewResult.preview.noticeDueAt,
+      renewalRentChangeMode: previewResult.preview.rentChangeMode,
+      renewalOfferedRent: previewResult.preview.proposedRent,
+      renewalDecisionDeadlineAt: previewResult.preview.responseDeadlineAt,
+      renewalNewTermType: previewResult.preview.newTermType,
+      renewalNewLeaseStartDate: previewResult.preview.newTermStartDate,
+      renewalNewLeaseEndDate: previewResult.preview.newTermEndDate,
+      updatedAt: now,
+    },
+    { merge: true }
+  );
+  await appendLeaseWorkflowEvent({
+    batch,
+    entityType: "leaseNotice",
+    entityId: noticeRef.id,
+    leaseId,
+    landlordId,
+    tenantId: lease.tenantId,
+    propertyId: lease.propertyId,
+    unitId: lease.unitId,
+    actorType: "landlord",
+    actorId,
+    eventType: "lease_notice_due",
+    eventData: {
+      noticeType: baseNotice.noticeType,
+      responseDeadlineAt: baseNotice.responseDeadlineAt,
+    },
+  });
+  await batch.commit();
+
+  const tenantEmail = await lookupUserEmail(lease.tenantId, ["tenants", "users"]);
+  const tenantUrl = `${String(process.env.PUBLIC_APP_URL || process.env.VITE_PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "")}/tenant/login?next=${encodeURIComponent(`/tenant/lease-notices/${noticeRef.id}`)}`;
+  const emailResult = await sendLeaseWorkflowEmail({
+    eventKey: "lease_notice_sent_tenant",
+    to: tenantEmail,
+    subject: "Lease notice from your landlord",
+    intro:
+      previewResult.preview.rentChangeMode === "undecided"
+        ? "Your landlord sent a lease notice and will decide rent later. Review the next-term options in RentChain."
+        : "Your landlord sent a lease notice. Review the next-term options and choose whether to begin a new term or quit at the end of the current term.",
+    ctaText: "Review lease notice",
+    ctaUrl: tenantUrl,
+    leaseId,
+    noticeId: noticeRef.id,
+    landlordId,
+    tenantId: lease.tenantId,
+    propertyId: lease.propertyId,
+    unitId: lease.unitId,
+  });
+
+  if (!emailResult.ok) {
+    await Promise.all([
+      noticeRef.set(
+        {
+          deliveryStatus: "failed",
+          metadata: {
+            ...baseNotice.metadata,
+            lastDeliveryError: emailResult.reason,
+          },
+          updatedAt: Date.now(),
+        },
+        { merge: true }
+      ),
+      appendLeaseWorkflowEvent({
+        entityType: "leaseNotice",
+        entityId: noticeRef.id,
+        leaseId,
+        landlordId,
+        tenantId: lease.tenantId,
+        propertyId: lease.propertyId,
+        unitId: lease.unitId,
+        actorType: "system",
+        actorId: null,
+        eventType: "landlord_notified",
+        eventData: {
+          kind: "send_failed",
+          noticeId: noticeRef.id,
+          reason: emailResult.reason,
+        },
+      }),
+    ]);
+    return {
+      status: 502,
+      payload: {
+        ok: false,
+        error: "LEASE_NOTICE_DELIVERY_FAILED",
+        noticeId: noticeRef.id,
+        delivery: emailResult,
+        autopilotPolicy,
+      },
+    };
+  }
+
+  const sentAt = Date.now();
+  const sentBatch = db.batch();
+  sentBatch.set(
+    noticeRef,
+    {
+      sentAt,
+      deliveryStatus: "sent",
+      updatedAt: sentAt,
+    },
+    { merge: true }
+  );
+  await appendLeaseWorkflowEvent({
+    batch: sentBatch,
+    entityType: "leaseNotice",
+    entityId: noticeRef.id,
+    leaseId,
+    landlordId,
+    tenantId: lease.tenantId,
+    propertyId: lease.propertyId,
+    unitId: lease.unitId,
+    actorType: "landlord",
+    actorId,
+    eventType: "lease_notice_sent",
+    eventData: {
+      deliveryStatus: "sent",
+      noticeType: baseNotice.noticeType,
+    },
+  });
+  await appendLeaseWorkflowEvent({
+    batch: sentBatch,
+    entityType: "lease",
+    entityId: leaseId,
+    leaseId,
+    landlordId,
+    tenantId: lease.tenantId,
+    propertyId: lease.propertyId,
+    unitId: lease.unitId,
+    actorType: "system",
+    actorId: null,
+    eventType: "landlord_notified",
+    eventData: {
+      kind: "notice_send_success",
+      noticeId: noticeRef.id,
+    },
+  });
+  await sentBatch.commit();
+
+  console.info("[lease-notice] sent", {
+    leaseId,
+    noticeId: noticeRef.id,
+    landlordId,
+    tenantId: lease.tenantId,
+    propertyId: lease.propertyId,
+    unitId: lease.unitId,
+    deliveryStatus: "sent",
+  });
+
+  return {
+    status: 201,
+    payload: {
+      ok: true,
+      noticeId: noticeRef.id,
+      delivery: emailResult,
+      autopilotPolicy,
+    },
+  };
 }
 
 export async function appendLeaseWorkflowEvent(input: {
