@@ -43,6 +43,14 @@ export type LandlordDecisionActionKey =
   | "open_revenue_pressure_follow_up_flow"
   | "open_property_focus_flow";
 
+export type LandlordDecisionExecutionMapping = {
+  action: "screening.auto_start_checkout" | "maintenance.auto_approve_cost" | "lease.auto_send_notice";
+  resourceType: "lease" | "rental_application" | "work_order";
+  resourceId: string;
+  prerequisitesMet: boolean;
+  prerequisiteReason: string | null;
+};
+
 export type LandlordAgentDecision = {
   id: string;
   decisionType: string;
@@ -60,6 +68,8 @@ export type LandlordAgentDecision = {
   automationEligible: boolean;
   automationState: "manual_only" | "ready" | "blocked";
   automationReason: string | null;
+  executionMappingState: "none" | "mapped";
+  executionMapping: LandlordDecisionExecutionMapping | null;
 };
 
 export type AnalyticsDeltaValue = {

@@ -277,6 +277,8 @@ function buildDecision(params: {
     automationEligible: hook.automationEligible,
     automationState: "manual_only",
     automationReason: null,
+    executionMappingState: "none",
+    executionMapping: null,
   } satisfies LandlordAgentDecision;
 }
 

@@ -104,10 +104,12 @@ describe("deriveLandlordAnalyticsSnapshot", () => {
           decisionType: "review_lease_renewals",
           recommendedAction: "Review renewals",
           actionKey: "open_lease_renewals_flow",
-          actionLabel: "Open lease renewals",
-          destination: "/portfolio-health",
+          actionLabel: "Open renewals focus",
+          destination: "/portfolio-health?entry=lease-renewals",
           workflowCategory: "lease_renewals",
           automationEligible: false,
+          executionMappingState: "none",
+          executionMapping: null,
         }),
       ])
     );

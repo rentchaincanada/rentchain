@@ -268,6 +268,8 @@ describe("LandlordAnalyticsPage", () => {
             automationEligible: false,
             automationState: "manual_only",
             automationReason: "This decision is guidance-only in v1 and does not map to an execution rule.",
+            executionMappingState: "none",
+            executionMapping: null,
             href: "/analytics?propertyId=prop-2",
             state: "pending",
             reviewedAt: null,
