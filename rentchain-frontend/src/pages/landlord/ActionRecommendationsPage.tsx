@@ -110,6 +110,7 @@ export default function ActionRecommendationsPage() {
             title="Decision inbox"
             description="Review the next landlord actions surfaced directly from your current analytics snapshot."
             emptyMessage="No prioritized landlord actions are surfaced for this view right now."
+            period="90d"
           />
         ) : null}
       </div>

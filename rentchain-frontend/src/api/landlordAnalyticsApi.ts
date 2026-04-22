@@ -28,12 +28,15 @@ export type LandlordAgentDecisionSupportingSignal = {
 };
 
 export type LandlordAgentDecision = {
+  id: string;
   decisionType: string;
   priority: "low" | "medium" | "high";
   explanation: string;
   supportingSignals: LandlordAgentDecisionSupportingSignal[];
   recommendedAction: string;
   href?: string;
+  state: "pending" | "reviewed";
+  reviewedAt?: string | null;
 };
 
 export type AnalyticsDeltaValue = {
@@ -196,4 +199,25 @@ export async function fetchLandlordAnalyticsSnapshot(params?: {
   if (params?.propertyId) search.set("propertyId", params.propertyId);
   const suffix = search.toString() ? `?${search.toString()}` : "";
   return await apiFetch<LandlordAnalyticsSnapshot>(`/landlord/analytics${suffix}`);
+}
+
+export async function markLandlordDecisionReviewed(params: {
+  decisionId: string;
+  period?: AnalyticsPeriod;
+  propertyId?: string | null;
+}): Promise<{
+  state: {
+    decisionId: string;
+    state: "reviewed";
+    reviewedAt: string | null;
+    updatedAt: string;
+  };
+}> {
+  const search = new URLSearchParams();
+  if (params.period) search.set("period", params.period);
+  if (params.propertyId) search.set("propertyId", params.propertyId);
+  const suffix = search.toString() ? `?${search.toString()}` : "";
+  return await apiFetch(`/landlord/analytics/decisions/${encodeURIComponent(params.decisionId)}/review${suffix}`, {
+    method: "POST",
+  });
 }

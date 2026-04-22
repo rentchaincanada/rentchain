@@ -8,6 +8,7 @@ const showToast = vi.fn();
 
 vi.mock("../../api/landlordAnalyticsApi", () => ({
   fetchLandlordAnalyticsSnapshot: vi.fn(),
+  markLandlordDecisionReviewed: vi.fn(),
 }));
 
 vi.mock("@/hooks/useEntitlements", () => ({
@@ -76,19 +77,25 @@ describe("ActionRecommendationsPage", () => {
       decisions: {
         items: [
           {
+            id: "review_lease_renewals",
             decisionType: "review_lease_renewals",
             priority: "medium",
             explanation: "Several leases are approaching renewal windows and need attention.",
             recommendedAction: "Review renewals",
             href: "/leases?status=expiring",
+            state: "pending",
+            reviewedAt: null,
             supportingSignals: [],
           },
           {
+            id: "reduce_vacancy_risk:prop-2",
             decisionType: "reduce_vacancy_risk",
             priority: "high",
             explanation: "Vacancy pressure is concentrated in Beta and needs follow-through now.",
             recommendedAction: "Review vacancy plan",
             href: "/analytics?propertyId=prop-2",
+            state: "pending",
+            reviewedAt: null,
             supportingSignals: [],
           },
         ],

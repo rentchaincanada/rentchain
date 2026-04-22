@@ -9,6 +9,7 @@ const macShellSpy = vi.fn();
 
 vi.mock("../../api/landlordAnalyticsApi", () => ({
   fetchLandlordAnalyticsSnapshot: vi.fn(),
+  markLandlordDecisionReviewed: vi.fn(),
 }));
 
 vi.mock("../../api/landlordAnalyticsAlertsApi", () => ({
@@ -248,11 +249,14 @@ describe("LandlordAnalyticsPage", () => {
       decisions: {
         items: [
           {
+            id: "reduce_vacancy_risk:prop-2",
             decisionType: "reduce_vacancy_risk",
             priority: "high",
             explanation: "Beta carries the strongest vacancy pressure in the current view, so leasing attention should move there first.",
             recommendedAction: "View property analytics",
             href: "/analytics?propertyId=prop-2",
+            state: "pending",
+            reviewedAt: null,
             supportingSignals: [
               { source: "alert", key: "high_vacancy", label: "Vacancy is elevated", propertyId: "prop-2" },
               {

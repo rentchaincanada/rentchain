@@ -89,6 +89,14 @@ describe("loadLandlordAnalyticsSnapshot", () => {
       status: "open",
       createdAt: now - 1 * 24 * 60 * 60 * 1000,
     });
+    seedDoc("landlordDecisionStates", "landlord-1__review_lease_renewals:prop-1", {
+      landlordId: "landlord-1",
+      decisionId: "review_lease_renewals:prop-1",
+      state: "reviewed",
+      reviewedAt: "2026-04-20T12:00:00.000Z",
+      createdAt: "2026-04-20T12:00:00.000Z",
+      updatedAt: "2026-04-20T12:00:00.000Z",
+    });
 
     const { loadLandlordAnalyticsSnapshot } = await import("../landlordAnalyticsSnapshot");
 
@@ -119,8 +127,11 @@ describe("loadLandlordAnalyticsSnapshot", () => {
     expect(scoped.decisions.items).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
+          id: "review_lease_renewals:prop-1",
           decisionType: "review_lease_renewals",
           recommendedAction: "Review renewals",
+          state: "reviewed",
+          reviewedAt: "2026-04-20T12:00:00.000Z",
         }),
       ])
     );

@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const loadLandlordAnalyticsSnapshot = vi.fn();
+const saveReviewedLandlordDecisionState = vi.fn();
+const writeCanonicalEvent = vi.fn();
 
 vi.mock("../../middleware/requireAuth", () => ({
   requireAuth: (req: any, res: any, next: any) => {
@@ -28,9 +30,17 @@ vi.mock("../../services/landlord/landlordAnalyticsSnapshot", () => ({
   loadLandlordAnalyticsSnapshot,
 }));
 
+vi.mock("../../services/landlord/landlordDecisionStates", () => ({
+  saveReviewedLandlordDecisionState,
+}));
+
+vi.mock("../../lib/events/buildEvent", () => ({
+  writeCanonicalEvent,
+}));
+
 async function invokeRouter(
   router: any,
-  options: { method: string; url: string; user?: Record<string, unknown> | null }
+  options: { method: string; url: string; user?: Record<string, unknown> | null; body?: any }
 ) {
   return await new Promise<{ status: number; body: any }>((resolve, reject) => {
     const [path, queryString] = options.url.split("?");
@@ -41,6 +51,7 @@ async function invokeRouter(
       originalUrl: options.url,
       path,
       user: options.user ?? null,
+      body: options.body ?? {},
       query: Object.fromEntries(query.entries()),
       params: {},
       headers: {},
@@ -51,6 +62,11 @@ async function invokeRouter(
         return this.get(name);
       },
     };
+    const decisionMatch = path.match(/\/landlord\/analytics\/decisions\/([^/]+)\/review$/);
+    if (decisionMatch) {
+      req.params.decisionId = decodeURIComponent(decisionMatch[1]);
+    }
+
     const res: any = {
       statusCode: 200,
       headers: {} as Record<string, string>,
@@ -79,6 +95,16 @@ async function invokeRouter(
 describe("landlordAnalyticsRoutes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    saveReviewedLandlordDecisionState.mockResolvedValue({
+      id: "landlord-1__reduce_vacancy_risk:prop-123",
+      landlordId: "landlord-1",
+      decisionId: "reduce_vacancy_risk:prop-123",
+      state: "reviewed",
+      reviewedAt: "2026-04-20T12:00:00.000Z",
+      createdAt: "2026-04-20T12:00:00.000Z",
+      updatedAt: "2026-04-20T12:00:00.000Z",
+    });
+    writeCanonicalEvent.mockResolvedValue(undefined);
     loadLandlordAnalyticsSnapshot.mockResolvedValue({
       summary: {
         occupiedUnits: 4,
@@ -125,12 +151,15 @@ describe("landlordAnalyticsRoutes", () => {
       decisions: {
         items: [
           {
+            id: "reduce_vacancy_risk:prop-123",
             decisionType: "reduce_vacancy_risk",
             priority: "medium",
             explanation: "Vacancy pressure is present in the current view, so leasing attention should stay active.",
             supportingSignals: [{ source: "predictive_metric", key: "projected_vacancy_risk", label: "Projected vacancy risk" }],
             recommendedAction: "Reduce vacancy risk",
             href: "/analytics",
+            state: "pending",
+            reviewedAt: null,
           },
         ],
       },
@@ -234,6 +263,56 @@ describe("landlordAnalyticsRoutes", () => {
     expect(response.body.decisions.items[0].decisionType).toBe("reduce_vacancy_risk");
     expect(response.body.predictive.metrics[0].key).toBe("projected_vacancy_risk");
     expect(response.body.comparisons.deltas.summary.occupiedUnits.direction).toBe("better");
+  });
+
+  it("marks a visible landlord decision as reviewed and emits a canonical event", async () => {
+    const router = (await import("../landlordAnalyticsRoutes")).default;
+    const response = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/analytics/decisions/reduce_vacancy_risk%3Aprop-123/review?period=90d&propertyId=prop-123",
+      user: { id: "landlord-1", role: "landlord" },
+    });
+
+    expect(response.status).toBe(200);
+    expect(loadLandlordAnalyticsSnapshot).toHaveBeenCalledWith({
+      landlordId: "landlord-1",
+      period: "90d",
+      propertyId: "prop-123",
+    });
+    expect(saveReviewedLandlordDecisionState).toHaveBeenCalledWith({
+      landlordId: "landlord-1",
+      decisionId: "reduce_vacancy_risk:prop-123",
+    });
+    expect(writeCanonicalEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "decision.reviewed",
+        resource: { type: "analytics_decision", id: "reduce_vacancy_risk:prop-123" },
+        metadata: expect.objectContaining({
+          landlordId: "landlord-1",
+          decisionType: "reduce_vacancy_risk",
+        }),
+      })
+    );
+    expect(response.body.state).toEqual(
+      expect.objectContaining({
+        decisionId: "reduce_vacancy_risk:prop-123",
+        state: "reviewed",
+      })
+    );
+  });
+
+  it("rejects review requests for decisions that are not currently visible", async () => {
+    const router = (await import("../landlordAnalyticsRoutes")).default;
+    const response = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/analytics/decisions/review_revenue_pressure/review",
+      user: { id: "landlord-1", role: "landlord" },
+    });
+
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual({ ok: false, error: "DECISION_NOT_VISIBLE" });
+    expect(saveReviewedLandlordDecisionState).not.toHaveBeenCalled();
+    expect(writeCanonicalEvent).not.toHaveBeenCalled();
   });
 
   it("enforces landlord authentication", async () => {

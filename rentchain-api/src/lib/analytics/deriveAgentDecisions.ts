@@ -135,6 +135,10 @@ function actionHref(type: LandlordAgentDecisionType, propertyId?: string | null)
   return undefined;
 }
 
+function decisionId(decisionType: LandlordAgentDecisionType, propertyId?: string | null) {
+  return propertyId ? `${decisionType}:${propertyId}` : decisionType;
+}
+
 function dedupeSignals(signals: Array<LandlordAgentDecisionSupportingSignal | null | undefined>) {
   const seen = new Set<string>();
   const result: LandlordAgentDecisionSupportingSignal[] = [];
@@ -166,12 +170,15 @@ function buildDecision(params: {
   const supportingSignals = dedupeSignals(params.signals);
   if (params.priority === "low" && supportingSignals.length < 2) return null;
   return {
+    id: decisionId(params.decisionType, params.propertyId || null),
     decisionType: params.decisionType,
     priority: params.priority,
     explanation: params.explanation,
     supportingSignals,
     recommendedAction: params.recommendedAction,
     href: actionHref(params.decisionType, params.propertyId || null),
+    state: "pending",
+    reviewedAt: null,
   } satisfies LandlordAgentDecision;
 }
 

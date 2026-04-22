@@ -226,7 +226,11 @@ export default function LandlordAnalyticsPage() {
             {canViewBenchmarking ? <PortfolioBenchmarkingPanel benchmarking={benchmarking} /> : null}
             {canViewPortfolioScore && canViewAdvancedAnalytics ? (
               <>
-                <AgentDecisionPanel decisions={snapshot.decisions?.items || []} />
+                <AgentDecisionPanel
+                  decisions={snapshot.decisions?.items || []}
+                  period={period}
+                  propertyId={propertyId}
+                />
                 <PredictiveMetricsPanel metrics={snapshot.predictive?.metrics || []} />
               </>
             ) : null}
