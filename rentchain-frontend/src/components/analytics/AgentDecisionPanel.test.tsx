@@ -17,7 +17,7 @@ vi.mock("@/api/landlordAnalyticsApi", async () => {
 });
 
 vi.mock("../ui/Ui", () => ({
-  Card: ({ children, ...props }: any) => <div {...props}>{children}</div>,
+  Card: ({ children, ...props }: React.PropsWithChildren<Record<string, unknown>>) => <div {...props}>{children}</div>,
 }));
 
 beforeEach(() => {

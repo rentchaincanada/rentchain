@@ -18,6 +18,11 @@ type Props = {
   propertyId?: string | null;
 };
 
+function errorMessage(error: unknown) {
+  if (error instanceof Error && error.message) return error.message;
+  return "Failed to mark this decision as reviewed.";
+}
+
 function supportingLine(decision: LandlordAgentDecision) {
   const parts = decision.supportingSignals
     .slice(0, 3)
@@ -63,8 +68,8 @@ export function AgentDecisionPanel({
             : decision
         )
       );
-    } catch (err: any) {
-      setError(err?.message || "Failed to mark this decision as reviewed.");
+    } catch (err: unknown) {
+      setError(errorMessage(err));
     } finally {
       setReviewingDecisionId(null);
     }

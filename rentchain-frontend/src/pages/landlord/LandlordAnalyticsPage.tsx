@@ -22,6 +22,11 @@ import InsightCardsPanel from "../../components/analytics/InsightCardsPanel";
 import PortfolioBenchmarkingPanel from "../../components/analytics/PortfolioBenchmarkingPanel";
 import PredictiveMetricsPanel from "../../components/analytics/PredictiveMetricsPanel";
 
+function errorMessage(error: unknown) {
+  if (error instanceof Error && error.message) return error.message;
+  return "Failed to load analytics";
+}
+
 function formatPercent(value: number | null) {
   if (value == null || !Number.isFinite(value)) return "—";
   return `${Math.round(value * 100)}%`;
@@ -69,7 +74,11 @@ function useAnalyticsState(enabled: boolean, includeBenchmarking: boolean, perio
       try {
         setLoading(true);
         setError(null);
-        const requests: Array<Promise<any>> = [
+        const requests: Array<
+          Promise<
+            LandlordAnalyticsSnapshot | LandlordAnalyticsAlertsResponse | LandlordAnalyticsBenchmarkingResponse
+          >
+        > = [
           fetchLandlordAnalyticsSnapshot({
             period,
             propertyId: propertyId || null,
@@ -93,9 +102,9 @@ function useAnalyticsState(enabled: boolean, includeBenchmarking: boolean, perio
         setSnapshot(analyticsResponse);
         setAlerts(alertsResponse);
         setBenchmarking(includeBenchmarking ? benchmarkingResponse || null : null);
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (!mounted) return;
-        const message = err?.message || "Failed to load analytics";
+        const message = errorMessage(err);
         setError(message);
         showToast({
           message: "Failed to load analytics",

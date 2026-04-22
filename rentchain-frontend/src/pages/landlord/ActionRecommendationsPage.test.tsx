@@ -1,10 +1,13 @@
 import React from "react";
+import type { LandlordAnalyticsSnapshot } from "../../api/landlordAnalyticsApi";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import ActionRecommendationsPage from "./ActionRecommendationsPage";
 
 const showToast = vi.fn();
+
+type EntitlementOverrides = Record<string, unknown>;
 
 vi.mock("../../api/landlordAnalyticsApi", () => ({
   fetchLandlordAnalyticsSnapshot: vi.fn(),
@@ -24,8 +27,8 @@ vi.mock("../../components/layout/MacShell", () => ({
 }));
 
 vi.mock("../../components/ui/Ui", () => ({
-  Card: ({ children, elevated: _elevated, ...props }: any) => <div {...props}>{children}</div>,
-  Section: ({ children }: any) => <section>{children}</section>,
+  Card: ({ children, ...props }: React.PropsWithChildren<Record<string, unknown>>) => <div {...props}>{children}</div>,
+  Section: ({ children }: React.PropsWithChildren) => <section>{children}</section>,
 }));
 
 vi.mock("@/components/billing/LockedFeature", () => ({
@@ -58,7 +61,7 @@ afterEach(() => {
 });
 
 describe("ActionRecommendationsPage", () => {
-  function mockEntitlements(overrides?: Record<string, any>) {
+  function mockEntitlements(overrides?: EntitlementOverrides) {
     return import("@/hooks/useEntitlements").then(({ useEntitlements }) => {
       vi.mocked(useEntitlements).mockReturnValue({
         loading: false,
@@ -66,7 +69,7 @@ describe("ActionRecommendationsPage", () => {
         canViewActionRecommendations: true,
         hasCapability: (key: string) => key === "portfolio_analytics",
         ...overrides,
-      } as any);
+      } as ReturnType<typeof useEntitlements>);
     });
   }
 
@@ -100,7 +103,7 @@ describe("ActionRecommendationsPage", () => {
           },
         ],
       },
-    } as any);
+    } as LandlordAnalyticsSnapshot);
 
     render(
       <MemoryRouter>
@@ -123,7 +126,7 @@ describe("ActionRecommendationsPage", () => {
       decisions: {
         items: [],
       },
-    } as any);
+    } as LandlordAnalyticsSnapshot);
 
     render(
       <MemoryRouter>

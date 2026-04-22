@@ -9,6 +9,11 @@ import { FeatureTeaser } from "@/components/billing/FeatureTeaser";
 import { resolveRequiredPlanLabel } from "@/lib/upgradePrompt";
 import AgentDecisionPanel from "../../components/analytics/AgentDecisionPanel";
 
+function errorMessage(error: unknown) {
+  if (error instanceof Error && error.message) return error.message;
+  return "Failed to load decision inbox";
+}
+
 export default function ActionRecommendationsPage() {
   const { showToast } = useToast();
   const {
@@ -37,9 +42,9 @@ export default function ActionRecommendationsPage() {
         const response = await fetchLandlordAnalyticsSnapshot();
         if (!mounted) return;
         setSnapshot(response);
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (!mounted) return;
-        const message = err?.message || "Failed to load decision inbox";
+        const message = errorMessage(err);
         setError(message);
         showToast({
           message: "Failed to load recommended actions",
