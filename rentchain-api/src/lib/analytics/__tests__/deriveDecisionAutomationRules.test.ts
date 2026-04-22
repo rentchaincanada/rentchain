@@ -24,6 +24,7 @@ function baseDecision(overrides?: Partial<LandlordAgentDecision>): LandlordAgent
     executionMapping: null,
     executionInputState: "none",
     executionInputReason: null,
+    executionInputMissingFields: [],
     executionInput: null,
     ...overrides,
   };

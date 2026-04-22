@@ -157,6 +157,13 @@ describe("loadLandlordAnalyticsSnapshot", () => {
           }),
           executionInputState: "partial",
           executionInputReason: expect.stringContaining("rentChangeMode"),
+          executionInputMissingFields: [
+            "rentChangeMode",
+            "newTermType",
+            "newLeaseStartDate",
+            "newLeaseEndDate",
+            "responseDeadlineAt",
+          ],
           executionInput: expect.objectContaining({
             noticeType: "renewal_offer",
             legalTemplateKey: "ns.fixed_term.renewal_offer.v1",

@@ -272,6 +272,7 @@ describe("LandlordAnalyticsPage", () => {
             executionMapping: null,
             executionInputState: "none",
             executionInputReason: null,
+            executionInputMissingFields: [],
             executionInput: null,
             href: "/analytics?propertyId=prop-2",
             state: "pending",

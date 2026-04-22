@@ -88,6 +88,14 @@ export type LandlordAgentDecision = {
   executionMapping: LandlordDecisionExecutionMapping | null;
   executionInputState: "none" | "partial" | "complete";
   executionInputReason: string | null;
+  executionInputMissingFields: (
+    | "rentChangeMode"
+    | "proposedRent"
+    | "newTermType"
+    | "newLeaseStartDate"
+    | "newLeaseEndDate"
+    | "responseDeadlineAt"
+  )[];
   executionInput: LandlordDecisionLeaseNoticeExecutionInput | null;
 };
 

@@ -191,6 +191,7 @@ describe("landlordAnalyticsRoutes", () => {
             executionMapping: null,
             executionInputState: "none",
             executionInputReason: null,
+            executionInputMissingFields: [],
             executionInput: null,
             href: "/analytics",
             state: "pending",

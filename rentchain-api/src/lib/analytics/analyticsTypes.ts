@@ -1,5 +1,6 @@
 import type { AutomationAction } from "../automation/automationTypes";
 import type { LeaseNoticeType, LeaseType, RentChangeMode } from "../../config/leaseNoticeRules";
+import type { LeaseNoticeExecutionInputMissingField } from "../../services/leaseNoticeWorkflowService";
 import type { ScreeningReconciliationStatus } from "../reconciliation/reconciliationTypes";
 
 export type AdminAnalyticsPeriod = "30d" | "90d" | "365d" | "month_to_date";
@@ -329,6 +330,7 @@ export type LandlordAgentDecision = {
   executionMapping: LandlordDecisionExecutionMapping | null;
   executionInputState: LandlordDecisionExecutionInputState;
   executionInputReason: string | null;
+  executionInputMissingFields: LeaseNoticeExecutionInputMissingField[];
   executionInput: LandlordDecisionLeaseNoticeExecutionInput | null;
 };
 

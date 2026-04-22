@@ -162,6 +162,7 @@ describe("deriveAgentDecisions", () => {
         executionMapping: null,
         executionInputState: "none",
         executionInputReason: null,
+        executionInputMissingFields: [],
         executionInput: null,
         href: "/analytics?entry=vacancy-readiness&propertyId=prop-2",
         state: "pending",
@@ -425,6 +426,7 @@ describe("deriveAgentDecisions", () => {
           executionMapping: null,
           executionInputState: "none",
           executionInputReason: null,
+          executionInputMissingFields: [],
           executionInput: null,
         }),
         expect.objectContaining({
