@@ -25,6 +25,7 @@ function baseDecision(overrides?: Partial<LandlordAgentDecision>): LandlordAgent
     executionMapping: null,
     executionInputState: "none",
     executionInputReason: null,
+    executionInputMissingFields: [],
     executionInput: null,
     ...overrides,
   };
@@ -57,6 +58,13 @@ describe("applyDecisionExecutionMappings", () => {
         },
         executionInputState: "partial",
         executionInputReason: expect.stringContaining("rentChangeMode"),
+        executionInputMissingFields: [
+          "rentChangeMode",
+          "newTermType",
+          "newLeaseStartDate",
+          "newLeaseEndDate",
+          "responseDeadlineAt",
+        ],
         executionInput: expect.objectContaining({
           noticeType: "renewal_offer",
           legalTemplateKey: "ns.fixed_term.renewal_offer.v1",
@@ -165,6 +173,7 @@ describe("applyDecisionExecutionMappings", () => {
         executionMappingState: "mapped",
         executionInputState: "partial",
         executionInputReason: expect.stringContaining("newTermType"),
+        executionInputMissingFields: ["newTermType", "newLeaseStartDate", "newLeaseEndDate"],
         executionInput: expect.objectContaining({
           rentChangeMode: "increase",
           proposedRent: 1750,

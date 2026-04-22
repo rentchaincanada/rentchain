@@ -65,6 +65,13 @@ export type LeaseNoticePreviewInput = {
 };
 
 export type LeaseNoticeExecutionInputState = "none" | "partial" | "complete";
+export type LeaseNoticeExecutionInputMissingField =
+  | "rentChangeMode"
+  | "proposedRent"
+  | "newTermType"
+  | "newLeaseStartDate"
+  | "newLeaseEndDate"
+  | "responseDeadlineAt";
 
 export type LeaseNoticeExecutionInputSnapshot = {
   noticeType: LeaseNoticeType | null;
@@ -203,6 +210,7 @@ export function normalizeLeaseRecord(id: string, raw: any): LeaseWorkflowLease {
 export function deriveLeaseNoticeExecutionInputSnapshot(lease: LeaseWorkflowLease): {
   state: LeaseNoticeExecutionInputState;
   reason: string | null;
+  missingFields: LeaseNoticeExecutionInputMissingField[];
   input: LeaseNoticeExecutionInputSnapshot | null;
 } {
   const rule = resolveLeaseNoticeRule({ province: lease.province, leaseType: lease.leaseType });
@@ -210,6 +218,7 @@ export function deriveLeaseNoticeExecutionInputSnapshot(lease: LeaseWorkflowLeas
     return {
       state: "none",
       reason: "This lease does not currently resolve to a supported lease notice rule.",
+      missingFields: [],
       input: null,
     };
   }
@@ -255,6 +264,7 @@ export function deriveLeaseNoticeExecutionInputSnapshot(lease: LeaseWorkflowLeas
     return {
       state: "complete",
       reason: null,
+      missingFields: [],
       input,
     };
   }
@@ -262,6 +272,7 @@ export function deriveLeaseNoticeExecutionInputSnapshot(lease: LeaseWorkflowLeas
   return {
     state: "partial",
     reason: `Lease notice execution still requires explicit landlord input for: ${Array.from(missing).join(", ")}.`,
+    missingFields: Array.from(missing) as LeaseNoticeExecutionInputMissingField[],
     input,
   };
 }

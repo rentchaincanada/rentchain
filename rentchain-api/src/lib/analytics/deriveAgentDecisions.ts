@@ -281,6 +281,7 @@ function buildDecision(params: {
     executionMapping: null,
     executionInputState: "none",
     executionInputReason: null,
+    executionInputMissingFields: [],
     executionInput: null,
   } satisfies LandlordAgentDecision;
 }

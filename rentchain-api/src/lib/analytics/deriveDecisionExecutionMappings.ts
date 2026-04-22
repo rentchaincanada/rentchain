@@ -53,6 +53,7 @@ function baseDecision(decision: LandlordAgentDecision, mapping: LandlordDecision
     executionMapping: mapping,
     executionInputState: "none",
     executionInputReason: null,
+    executionInputMissingFields: [],
     executionInput: null,
   };
 }
@@ -92,6 +93,7 @@ function mapLeaseRenewalDecision(decision: LandlordAgentDecision, input: Mapping
     executionMapping: mapping,
     executionInputState: executionInput.state,
     executionInputReason: executionInput.reason,
+    executionInputMissingFields: executionInput.missingFields,
     executionInput: executionInput.input,
   };
 }
