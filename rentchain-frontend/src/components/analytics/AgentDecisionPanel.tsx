@@ -355,6 +355,7 @@ export function AgentDecisionPanel({
   const [workingDecisionId, setWorkingDecisionId] = React.useState<string | null>(null);
   const [workingAction, setWorkingAction] = React.useState<"review" | "snooze" | "dismiss" | "execute" | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [showExecuted, setShowExecuted] = React.useState(false);
 
   React.useEffect(() => {
     setItems(decisions);
@@ -520,12 +521,35 @@ export function AgentDecisionPanel({
 
           {executedItems.length ? (
             <div style={{ display: "grid", gap: 10 }}>
-              <h3 style={sectionHeadingStyle()}>Recently executed</h3>
-              <div style={{ display: "grid", gap: 10 }}>
-                {executedItems.map((decision) => (
-                  <ExecutedDecisionCard key={decision.id} decision={decision} />
-                ))}
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                <h3 style={sectionHeadingStyle()}>{`Recently executed (${executedItems.length})`}</h3>
+                <button
+                  type="button"
+                  onClick={() => setShowExecuted((current) => !current)}
+                  style={{
+                    border: "1px solid #cbd5e1",
+                    borderRadius: 999,
+                    background: "#fff",
+                    color: "#334155",
+                    fontWeight: 700,
+                    padding: "6px 12px",
+                    cursor: "pointer",
+                  }}
+                >
+                  {showExecuted ? "Hide executed" : "Show executed"}
+                </button>
               </div>
+              {showExecuted ? (
+                <div style={{ display: "grid", gap: 10 }}>
+                  {executedItems.map((decision) => (
+                    <ExecutedDecisionCard key={decision.id} decision={decision} />
+                  ))}
+                </div>
+              ) : (
+                <div style={{ color: "#64748b", fontSize: "0.92rem" }}>
+                  Executed decisions are hidden to keep the active action area focused.
+                </div>
+              )}
             </div>
           ) : null}
         </div>

@@ -380,8 +380,9 @@ describe("AgentDecisionPanel", () => {
         propertyId: null,
       });
     });
-    expect(await screen.findByRole("heading", { name: /Recently executed/i })).toBeInTheDocument();
-    expect(screen.getByText(/Notice sent/i)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /Recently executed \(1\)/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Show executed/i })).toBeInTheDocument();
+    expect(screen.queryByText(/Notice sent/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Execute now/i })).not.toBeInTheDocument();
   });
 
@@ -480,7 +481,7 @@ describe("AgentDecisionPanel", () => {
     expect(screen.getByRole("button", { name: /Execute now/i })).toBeInTheDocument();
   });
 
-  it("renders executed decisions in a secondary section", () => {
+  it("renders executed decisions in a collapsible secondary section", () => {
     render(
       <MemoryRouter>
         <AgentDecisionPanel
@@ -539,9 +540,13 @@ describe("AgentDecisionPanel", () => {
     );
 
     expect(screen.getByRole("heading", { name: /Actions to review/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /Recently executed/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Recently executed \(1\)/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Show executed/i })).toBeInTheDocument();
     expect(screen.getByText(/No attention-worthy actions are surfaced/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Notice sent/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Show executed/i }));
     expect(screen.getByText(/Notice sent/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Hide executed/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Dismiss/i })).not.toBeInTheDocument();
   });
 });
