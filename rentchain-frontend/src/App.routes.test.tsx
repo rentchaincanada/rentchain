@@ -99,7 +99,7 @@ vi.mock("./pages/public/SharedPortfolioScorePage", () => ({
 }));
 
 vi.mock("./pages/landlord/ActionRecommendationsPage", () => ({
-  default: () => <h1>Landlord Action Recommendations</h1>,
+  default: () => <h1>Decision Inbox</h1>,
 }));
 
 vi.mock("./pages/tenant/TenantWorkspacePage", () => ({
@@ -378,7 +378,7 @@ describe("Routes: /recommended-actions", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/Landlord Action Recommendations/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Decision Inbox/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });
