@@ -244,6 +244,105 @@ describe("leaseRoutes integrity repairs", () => {
     expect(res.body?.tenant?.phone).toBe("90255511119");
   });
 
+  it("lists only active occupied reconciliation candidates from non-archived properties", async () => {
+    seedDoc("properties", "prop-active", {
+      landlordId: "landlord-1",
+      name: "Harbour View",
+      portfolioStatus: "active",
+      archivedAt: null,
+    });
+    seedDoc("properties", "prop-archived", {
+      landlordId: "landlord-1",
+      name: "Property_test",
+      portfolioStatus: "archived",
+      archivedAt: "2026-04-01T00:00:00.000Z",
+    });
+    seedDoc("units", "unit-active", {
+      landlordId: "landlord-1",
+      propertyId: "prop-active",
+      unitNumber: "101",
+      status: "occupied",
+      occupantName: "Recovered Tenant",
+      rent: 1850,
+    });
+    seedDoc("units", "unit-archived", {
+      landlordId: "landlord-1",
+      propertyId: "prop-archived",
+      unitNumber: "1",
+      status: "occupied",
+      occupantName: "Synthetic Occupant",
+      rent: 1800,
+    });
+
+    const app = await makeApp();
+    const res = await request(app).get("/reconciliation-candidates");
+
+    expect(res.status).toBe(200);
+    expect(res.body?.candidates).toHaveLength(1);
+    expect(res.body?.candidates?.[0]).toEqual(
+      expect.objectContaining({
+        propertyId: "prop-active",
+        propertyName: "Harbour View",
+        unitId: "unit-active",
+      })
+    );
+  });
+
+  it("excludes units whose explicit unit status is vacant even if occupancyStatus is stale occupied", async () => {
+    seedDoc("properties", "prop-1", {
+      landlordId: "landlord-1",
+      name: "Coburg Rd",
+      portfolioStatus: "active",
+      archivedAt: null,
+    });
+    seedDoc("units", "unit-stale", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitNumber: "1",
+      status: "vacant",
+      occupancyStatus: "occupied",
+      occupantName: "Stale Occupant",
+      rent: 1700,
+    });
+
+    const app = await makeApp();
+    const res = await request(app).get("/reconciliation-candidates");
+
+    expect(res.status).toBe(200);
+    expect(res.body?.candidates).toEqual([]);
+  });
+
+  it("excludes occupied units whose linked tenant reference is hidden cleanup data", async () => {
+    seedDoc("properties", "prop-1", {
+      landlordId: "landlord-1",
+      name: "Coburg Rd",
+      portfolioStatus: "active",
+      archivedAt: null,
+    });
+    seedDoc("units", "unit-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitNumber: "1",
+      status: "occupied",
+      occupantName: "Synthetic Occupant",
+      rent: 1750,
+    });
+    seedDoc("tenants", "bcea70bf3f353746c8895bc9", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      unit: "1",
+      hiddenFromActiveLists: true,
+      fullName: "Unnamed Tenant",
+    });
+
+    const app = await makeApp();
+    const res = await request(app).get("/reconciliation-candidates");
+
+    expect(res.status).toBe(200);
+    expect(res.body?.candidates).toEqual([]);
+  });
+
   it("lists notes and archive visibility metadata for landlord leases", async () => {
     seedDoc("properties", "prop-1", { landlordId: "landlord-1", name: "Harbour View" });
     seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", fullName: "Jane Tenant", email: "jane@example.com" });

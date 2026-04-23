@@ -30,6 +30,7 @@ import { writeCanonicalEvent } from "../lib/events/buildEvent";
 import { getSignedDownloadUrl } from "../lib/gcsSignedUrl";
 import {
   isTargetedHiddenLeaseId,
+  isTargetedHiddenTenantId,
 } from "../lib/testDataVisibilityTargets";
 
 const router = Router();
@@ -39,6 +40,11 @@ const PAYMENT_METHODS = new Set(["cash", "etransfer", "cheque", "bank", "card", 
 const CHARGE_CATEGORIES = new Set(["rent", "fee", "adjustment"]);
 
 type LedgerEntryType = "charge" | "payment";
+type ReconciliationPropertyState = {
+  propertyName: string;
+  isArchived: boolean;
+  hiddenFromActiveLists: boolean;
+};
 
 function toIsoDate(input: unknown): string | null {
   const value = String(input || "").trim();
@@ -57,6 +63,10 @@ function cents(value: unknown): number | null {
 
 function normalizeStatus(value: unknown): string {
   return String(value || "").trim().toLowerCase();
+}
+
+function normalizePortfolioStatus(value: unknown): "active" | "archived" {
+  return normalizeStatus(value) === "archived" ? "archived" : "active";
 }
 
 function normalizePhoneDigits(value: unknown): string | null {
@@ -179,6 +189,28 @@ function isCurrentLeaseStatus(status: unknown): boolean {
 
 function isHiddenFromLandlordLeaseLists(row: any): boolean {
   return row?.hiddenFromActiveLists === true || isTargetedHiddenLeaseId(row?.id);
+}
+
+function resolveUnitOccupancyStatus(unit: any): "occupied" | "vacant" | null {
+  const explicitStatus = normalizeStatus(unit?.status);
+  if (explicitStatus === "occupied" || explicitStatus === "vacant") {
+    return explicitStatus;
+  }
+
+  const occupancyStatus = normalizeStatus(unit?.occupancyStatus);
+  if (occupancyStatus === "occupied" || occupancyStatus === "vacant") {
+    return occupancyStatus;
+  }
+
+  return null;
+}
+
+function propertyUnitKeyById(propertyId: string, unitId: string) {
+  return `${propertyId}::id::${unitId}`;
+}
+
+function propertyUnitKeyByNumber(propertyId: string, unitNumber: string) {
+  return `${propertyId}::num::${unitNumber}`;
 }
 
 async function loadLeaseDocumentUrlForLease(raw: any): Promise<string | null> {
@@ -424,29 +456,51 @@ router.get("/reconciliation-candidates", requireLandlord, async (req: any, res: 
     const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
     if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
 
-    const [unitsSnap, leasesSnap, propertiesSnap] = await Promise.all([
+    const [unitsSnap, leasesSnap, propertiesSnap, tenantsSnap] = await Promise.all([
       db.collection("units").where("landlordId", "==", landlordId).get(),
       db.collection("leases").where("landlordId", "==", landlordId).get().catch(() => ({ docs: [] } as any)),
       db.collection("properties").where("landlordId", "==", landlordId).get().catch(() => ({ docs: [] } as any)),
+      db.collection("tenants").where("landlordId", "==", landlordId).get().catch(() => ({ docs: [] } as any)),
     ]);
 
     const currentLeaseKeys = new Set<string>();
     for (const doc of leasesSnap.docs || []) {
       const raw = doc.data() as any;
+      if (isHiddenFromLandlordLeaseLists({ id: doc.id, ...raw })) continue;
       if (!isCurrentLeaseStatus(raw?.status)) continue;
       const propertyId = String(raw?.propertyId || "").trim();
       const unitId = String(raw?.unitId || "").trim();
       const unitNumber = String(raw?.unitNumber || raw?.unit || "").trim();
-      if (propertyId && unitId) currentLeaseKeys.add(`${propertyId}::id::${unitId}`);
-      if (propertyId && unitNumber) currentLeaseKeys.add(`${propertyId}::num::${unitNumber}`);
+      if (propertyId && unitId) currentLeaseKeys.add(propertyUnitKeyById(propertyId, unitId));
+      if (propertyId && unitNumber) currentLeaseKeys.add(propertyUnitKeyByNumber(propertyId, unitNumber));
     }
 
-    const propertyNames = new Map(
+    const propertyVisibility = new Map<string, ReconciliationPropertyState>(
       (propertiesSnap.docs || []).map((doc: any) => [
         doc.id,
-        String(doc.data()?.name || doc.data()?.addressLine1 || "Property").trim() || "Property",
+        {
+          propertyName:
+            String(doc.data()?.name || doc.data()?.addressLine1 || "Property").trim() || "Property",
+          isArchived:
+            Boolean(doc.data()?.archivedAt) ||
+            normalizePortfolioStatus(doc.data()?.portfolioStatus) === "archived",
+          hiddenFromActiveLists: doc.data()?.hiddenFromActiveLists === true,
+        },
       ])
     );
+
+    const hiddenTenantUnitKeys = new Set<string>();
+    for (const doc of tenantsSnap.docs || []) {
+      const raw = doc.data() as any;
+      const tenantId = String(doc.id || "").trim();
+      const propertyId = String(raw?.propertyId || "").trim();
+      const unitId = String(raw?.unitId || "").trim();
+      const unitNumber = String(raw?.unit || raw?.unitLabel || "").trim();
+      const hiddenTenant = raw?.hiddenFromActiveLists === true || isTargetedHiddenTenantId(tenantId);
+      if (!hiddenTenant || !propertyId) continue;
+      if (unitId) hiddenTenantUnitKeys.add(propertyUnitKeyById(propertyId, unitId));
+      if (unitNumber) hiddenTenantUnitKeys.add(propertyUnitKeyByNumber(propertyId, unitNumber));
+    }
 
     const candidates = await Promise.all(
       (unitsSnap.docs || []).map(async (doc: any) => {
@@ -454,12 +508,22 @@ router.get("/reconciliation-candidates", requireLandlord, async (req: any, res: 
         const propertyId = String(raw?.propertyId || "").trim();
         const unitId = String(doc.id || raw?.id || raw?.unitId || "").trim();
         const unitNumber = String(raw?.unitNumber || raw?.label || "").trim();
-        const status = normalizeStatus(raw?.occupancyStatus || raw?.status);
-        if (status !== "occupied") return null;
+        const propertyState = propertyVisibility.get(propertyId);
+        const occupancyStatus = resolveUnitOccupancyStatus(raw);
+        if (occupancyStatus !== "occupied") return null;
         if (!propertyId || !unitId) return null;
+        if (!propertyState) return null;
+        if (propertyState.isArchived || propertyState.hiddenFromActiveLists) return null;
+        if (raw?.hiddenFromActiveLists === true) return null;
         if (
-          currentLeaseKeys.has(`${propertyId}::id::${unitId}`) ||
-          (unitNumber && currentLeaseKeys.has(`${propertyId}::num::${unitNumber}`))
+          hiddenTenantUnitKeys.has(propertyUnitKeyById(propertyId, unitId)) ||
+          (unitNumber && hiddenTenantUnitKeys.has(propertyUnitKeyByNumber(propertyId, unitNumber)))
+        ) {
+          return null;
+        }
+        if (
+          currentLeaseKeys.has(propertyUnitKeyById(propertyId, unitId)) ||
+          (unitNumber && currentLeaseKeys.has(propertyUnitKeyByNumber(propertyId, unitNumber)))
         ) {
           return null;
         }
@@ -475,7 +539,7 @@ router.get("/reconciliation-candidates", requireLandlord, async (req: any, res: 
           id: unitId,
           unitId,
           propertyId,
-          propertyName: propertyNames.get(propertyId) || "Property",
+          propertyName: propertyState.propertyName,
           unitNumber: unitNumber || "Unit",
           occupantName,
           leaseEndDate: String(raw?.leaseEndDate || "").trim() || null,
