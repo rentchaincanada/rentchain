@@ -12,6 +12,7 @@ import {
   type LandlordAgentDecision,
 } from "@/api/landlordAnalyticsApi";
 import type { TimelineItem } from "@/api/timelineApi";
+import { deriveDecisionExecutionState } from "./decisionExecutionAggregation";
 import { blockedReasonDisplay, executionStateDisplay, formatExecutionSummary } from "./decisionExecutionDisplay";
 
 const priorityTone: Record<"low" | "medium" | "high", { bg: string; text: string }> = {
@@ -94,19 +95,6 @@ function supportingLine(decision: LandlordAgentDecision) {
 
 function formatExecutedCopy(executedAt?: string | null) {
   return `Notice sent${executedAt ? ` on ${new Date(executedAt).toLocaleDateString()}` : ""}.`;
-}
-
-function effectiveExecutionState(decision: LandlordAgentDecision): NonNullable<LandlordAgentDecision["executionState"]> {
-  if (decision.executionState) return decision.executionState;
-  if (decision.state === "executed") return "already_executed";
-  if (
-    decision.automationState === "ready" &&
-    decision.executionMappingState === "mapped" &&
-    decision.executionInputState === "complete"
-  ) {
-    return "executable";
-  }
-  return "blocked";
 }
 
 function effectiveBlockedReason(decision: LandlordAgentDecision): NonNullable<LandlordAgentDecision["blockedReason"]> | null {
@@ -232,7 +220,7 @@ function ActionDecisionCard(props: {
     : decision.href
       ? decision.recommendedAction
       : null;
-  const decisionExecutionState = effectiveExecutionState(decision);
+  const decisionExecutionState = deriveDecisionExecutionState(decision);
   const decisionBlockedReason = effectiveBlockedReason(decision);
   const canExecuteNow = decisionExecutionState === "executable";
   const governanceSummary = formatExecutionSummary(effectiveExecutionSummary(decision));

@@ -19,10 +19,17 @@ import AgentDecisionPanel from "../../components/analytics/AgentDecisionPanel";
 import AnalyticsFiltersBar from "../../components/analytics/AnalyticsFiltersBar";
 import AnalyticsKpiGrid from "../../components/analytics/AnalyticsKpiGrid";
 import AnalyticsSectionPanel from "../../components/analytics/AnalyticsSectionPanel";
+import DecisionQueueSummary from "../../components/analytics/DecisionQueueSummary";
 import DecisionOutcomeAnalyticsPanel from "../../components/analytics/DecisionOutcomeAnalyticsPanel";
 import InsightCardsPanel from "../../components/analytics/InsightCardsPanel";
 import PortfolioBenchmarkingPanel from "../../components/analytics/PortfolioBenchmarkingPanel";
 import PredictiveMetricsPanel from "../../components/analytics/PredictiveMetricsPanel";
+import {
+  filterDecisionsByExecutionState,
+  type DecisionExecutionFilter,
+} from "../../components/analytics/decisionExecutionAggregation";
+
+const EMPTY_DECISIONS: LandlordAnalyticsSnapshot["decisions"]["items"] = [];
 
 function errorMessage(error: unknown) {
   if (error instanceof Error && error.message) return error.message;
@@ -143,6 +150,7 @@ export default function LandlordAnalyticsPage() {
   } = useEntitlements();
   const [period, setPeriod] = React.useState<AnalyticsPeriod>("90d");
   const [propertyId, setPropertyId] = React.useState("");
+  const [executionFilter, setExecutionFilter] = React.useState<DecisionExecutionFilter>("all");
   const urlParams = React.useMemo(() => new URLSearchParams(location.search), [location.search]);
   const routedPropertyId = urlParams.get("propertyId");
   const routedEntryLabel = entryLabel(urlParams.get("entry"));
@@ -166,6 +174,11 @@ export default function LandlordAnalyticsPage() {
   const leasingDeltas = snapshot?.comparisons?.deltas?.leasing;
   const maintenanceDeltas = snapshot?.comparisons?.deltas?.maintenance;
   const revenueDeltas = snapshot?.comparisons?.deltas?.revenue;
+  const decisions = snapshot?.decisions?.items ?? EMPTY_DECISIONS;
+  const filteredDecisions = React.useMemo(
+    () => filterDecisionsByExecutionState(decisions, executionFilter),
+    [decisions, executionFilter]
+  );
 
   const summaryItems = snapshot
     ? [
@@ -260,8 +273,13 @@ export default function LandlordAnalyticsPage() {
             {canViewPortfolioScore && canViewAdvancedAnalytics ? (
               <>
                 <DecisionOutcomeAnalyticsPanel analytics={snapshot.decisionOutcomeAnalytics} />
+                <DecisionQueueSummary
+                  decisions={decisions}
+                  filter={executionFilter}
+                  onFilterChange={setExecutionFilter}
+                />
                 <AgentDecisionPanel
-                  decisions={snapshot.decisions?.items || []}
+                  decisions={filteredDecisions}
                   period={period}
                   propertyId={propertyId}
                 />
