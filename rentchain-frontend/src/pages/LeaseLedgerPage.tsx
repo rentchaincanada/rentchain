@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import {
   addLeaseCharge,
   addLeasePayment,
@@ -9,9 +9,23 @@ import {
 } from "../api/leaseLedgerApi";
 import { getAuthToken } from "../lib/authToken";
 import { getFirebaseIdToken } from "../lib/firebaseAuthToken";
+import {
+  archiveLeaseRecord,
+  createLeaseNote,
+  getLeaseById,
+  getLeaseNotes,
+  restoreLeaseRecord,
+  type LandlordActiveLease,
+  type LeaseNote,
+} from "@/api/leasesApi";
 
 type ChargeType = "rent" | "fee" | "adjustment";
 type PaymentMethod = "cash" | "etransfer" | "cheque" | "bank" | "card" | "other";
+
+function errorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+}
 
 function centsFromInput(input: string): number | null {
   const parsed = Number(input);
@@ -21,6 +35,13 @@ function centsFromInput(input: string): number | null {
 
 function dollars(cents: number): string {
   return (cents / 100).toLocaleString(undefined, { style: "currency", currency: "CAD" });
+}
+
+function formatDate(value: string | null | undefined) {
+  if (!value) return "—";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString();
 }
 
 function todayIso() {
@@ -58,7 +79,11 @@ export default function LeaseLedgerPage() {
   const [monthlyTotals, setMonthlyTotals] = useState<Record<string, { chargesCents: number; paymentsCents: number; netCents: number }>>({});
   const [showChargeModal, setShowChargeModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showNoteModal, setShowNoteModal] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [lease, setLease] = useState<LandlordActiveLease | null>(null);
+  const [notes, setNotes] = useState<LeaseNote[]>([]);
+  const [noteText, setNoteText] = useState("");
 
   const [chargeDate, setChargeDate] = useState(todayIso());
   const [chargeType, setChargeType] = useState<ChargeType>("rent");
@@ -84,17 +109,87 @@ export default function LeaseLedgerPage() {
       setEntries(Array.isArray(res.entries) ? res.entries : []);
       setTotals(res.totals || { chargesCents: 0, paymentsCents: 0, balanceCents: 0 });
       setMonthlyTotals(res.monthlyTotals || {});
-    } catch (err: any) {
-      setError(err?.message || "Failed to load lease ledger");
+    } catch (err: unknown) {
+      setError(errorMessage(err, "Failed to load lease ledger"));
     } finally {
       setLoading(false);
     }
   };
 
+  const loadLeaseMeta = async () => {
+    if (!leaseId) return;
+    try {
+      const [leaseResponse, notesResponse] = await Promise.all([
+        getLeaseById(leaseId),
+        getLeaseNotes(leaseId),
+      ]);
+      setLease(leaseResponse.lease || null);
+      setNotes(Array.isArray(notesResponse.notes) ? notesResponse.notes : []);
+    } catch (err: unknown) {
+      setError(errorMessage(err, "Failed to load lease details"));
+    }
+  };
+
   useEffect(() => {
     loadLedger();
+    void loadLeaseMeta();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leaseId]);
+
+  function prettyStatus(value: string | null | undefined) {
+    const normalized = String(value || "").trim().toLowerCase();
+    if (!normalized) return "Unknown";
+    if (normalized === "notice_pending") return "Renew letter needed";
+    if (normalized === "renewal_pending") return "Renewal pending";
+    if (normalized === "renewal_accepted") return "Renewing";
+    if (normalized === "move_out_pending") return "Quitting";
+    return normalized.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+  }
+
+  async function submitNote() {
+    const note = noteText.trim();
+    if (!note) {
+      setError("Note text is required.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await createLeaseNote(leaseId, note);
+      setNoteText("");
+      setShowNoteModal(false);
+      await loadLeaseMeta();
+    } catch (err: unknown) {
+      setError(errorMessage(err, "Failed to save lease note"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function toggleArchive() {
+    if (!lease) return;
+    const isArchived = Boolean(lease.archivedAt);
+    const confirmed = window.confirm(
+      isArchived
+        ? "Restore this lease to the active lease workspace?"
+        : "Archive this lease from the landlord lease workspace? You can restore it later from View archive."
+    );
+    if (!confirmed) return;
+    setSaving(true);
+    setError(null);
+    try {
+      if (isArchived) {
+        await restoreLeaseRecord(lease.id);
+      } else {
+        await archiveLeaseRecord(lease.id);
+      }
+      await loadLeaseMeta();
+    } catch (err: unknown) {
+      setError(errorMessage(err, "Failed to update archive state"));
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function submitCharge() {
     const amountCents = centsFromInput(chargeAmount);
@@ -119,8 +214,8 @@ export default function LeaseLedgerPage() {
       setChargeAmount("");
       setChargeNotes("");
       await loadLedger();
-    } catch (err: any) {
-      setError(err?.message || "Failed to add charge");
+    } catch (err: unknown) {
+      setError(errorMessage(err, "Failed to add charge"));
     } finally {
       setSaving(false);
     }
@@ -151,8 +246,8 @@ export default function LeaseLedgerPage() {
       setPaymentReference("");
       setPaymentNotes("");
       await loadLedger();
-    } catch (err: any) {
-      setError(err?.message || "Failed to record payment");
+    } catch (err: unknown) {
+      setError(errorMessage(err, "Failed to record payment"));
     } finally {
       setSaving(false);
     }
@@ -182,8 +277,8 @@ export default function LeaseLedgerPage() {
       a.click();
       a.remove();
       URL.revokeObjectURL(objectUrl);
-    } catch (err: any) {
-      setError(err?.message || "Failed to export CSV");
+    } catch (err: unknown) {
+      setError(errorMessage(err, "Failed to export CSV"));
     }
   }
 
@@ -193,11 +288,27 @@ export default function LeaseLedgerPage() {
         <div>
           <h1 style={{ margin: 0, fontSize: "1.2rem" }}>Lease Ledger</h1>
           <div style={{ color: "#475569", marginTop: 4 }}>Lease ID: {leaseId}</div>
+          {lease ? (
+            <div style={{ color: "#334155", marginTop: 6, display: "grid", gap: 2 }}>
+              <div>
+                {lease.propertyName || "Property"} · Unit {lease.unitNumber || "—"}
+              </div>
+              <div>
+                {lease.tenantName || "Tenant not linked"} · {prettyStatus(lease.status)}
+                {lease.archivedAt ? ` · Archived ${formatDate(lease.archivedAt)}` : ""}
+              </div>
+            </div>
+          ) : null}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <Link to="/leases?view=archived">View archive</Link>
+          <button aria-label="Add lease note" onClick={() => setShowNoteModal(true)}>Add note</button>
           <button onClick={() => setShowChargeModal(true)}>Add charge</button>
           <button onClick={() => setShowPaymentModal(true)}>Record payment</button>
           <button onClick={exportCsv}>Export CSV</button>
+          <button onClick={() => void toggleArchive()} disabled={saving || !lease}>
+            {lease?.archivedAt ? "Restore lease" : "Archive lease"}
+          </button>
         </div>
       </div>
 
@@ -293,6 +404,43 @@ export default function LeaseLedgerPage() {
               <span>Net: {dollars(row.netCents)}</span>
             </div>
           ))}
+        </div>
+      ) : null}
+
+      <div style={{ display: "grid", gap: 8 }}>
+        <h2 style={{ margin: 0, fontSize: "1rem" }}>Lease notes</h2>
+        <div style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: 12, display: "grid", gap: 8 }}>
+          {notes.length === 0 ? <div style={{ color: "#64748b" }}>No lease notes yet.</div> : null}
+          {notes.map((note) => (
+            <div key={note.id} style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: 10 }}>
+              <div style={{ color: "#0f172a" }}>{note.note}</div>
+              <div style={{ color: "#64748b", fontSize: 12, marginTop: 4 }}>
+                {typeof note.createdAt === "number" ? new Date(note.createdAt).toLocaleString() : String(note.createdAt || "—")}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {showNoteModal ? (
+        <div style={modalBackdrop} onClick={() => !saving && setShowNoteModal(false)}>
+          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ marginTop: 0 }}>Add lease note</h3>
+            <div style={{ display: "grid", gap: 8 }}>
+              <label>
+                Note
+                <textarea rows={5} value={noteText} onChange={(e) => setNoteText(e.target.value)} />
+              </label>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                <button type="button" onClick={() => setShowNoteModal(false)} disabled={saving}>
+                  Cancel
+                </button>
+                <button type="button" onClick={() => void submitNote()} disabled={saving}>
+                  {saving ? "Saving…" : "Save note"}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       ) : null}
 
