@@ -100,6 +100,14 @@ function matchesLeaseSearch(lease: LandlordActiveLease, normalizedQuery: string)
   return haystack.includes(normalizedQuery);
 }
 
+function isTargetedHiddenLeaseId(leaseId: unknown) {
+  const targetedHiddenLeaseIds = new Set([
+    "test_lease_quit_01",
+    "some_other_synthetic_lease_id"
+  ]);
+  return targetedHiddenLeaseIds.has(String(leaseId || "").trim());
+}
+
 function isVisibleLease(lease: LandlordActiveLease) {
   return lease.hiddenFromActiveLists !== true && !isTargetedHiddenLeaseId(lease.id);
 }

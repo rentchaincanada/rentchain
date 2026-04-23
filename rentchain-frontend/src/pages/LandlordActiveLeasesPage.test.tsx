@@ -286,4 +286,3 @@ describe("LandlordActiveLeasesPage", () => {
     expect(screen.queryByText("Property_test")).not.toBeInTheDocument();
     expect(screen.queryByText("test2")).not.toBeInTheDocument();
   });
-});
