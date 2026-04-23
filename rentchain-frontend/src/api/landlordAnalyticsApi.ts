@@ -56,6 +56,21 @@ export type LandlordDecisionExecutionMapping = {
   prerequisiteReason: string | null;
 };
 
+export type LandlordDecisionExecutionState = "executable" | "blocked" | "already_executed" | "unsafe_duplicate";
+export type LandlordDecisionBlockedReason =
+  | "missing_required_inputs"
+  | "policy_blocked"
+  | "automation_disabled"
+  | "duplicate_prevented"
+  | "unknown_state_fail_closed";
+
+export type LandlordDecisionExecutionSummary = {
+  lastExecutedAt: string | null;
+  executionCount: number;
+  lastExecutionOutcome: "none" | "succeeded" | "failed";
+  lastExecutionOutcomeAt: string | null;
+};
+
 export type LandlordDecisionLeaseNoticeExecutionInput = {
   noticeType: "renewal_offer" | "end_of_term_notice" | "non_renewal" | "month_to_month_notice" | null;
   legalTemplateKey: string | null;
@@ -146,6 +161,11 @@ export type LandlordAgentDecision = {
     | LandlordDecisionMaintenanceApprovalExecutionInput
     | LandlordDecisionScreeningCheckoutExecutionInput
     | null;
+  executionState?: LandlordDecisionExecutionState;
+  blockedReason?: LandlordDecisionBlockedReason | null;
+  executionGuardKey?: string | null;
+  duplicateGuardActive?: boolean;
+  executionSummary?: LandlordDecisionExecutionSummary;
   executedAt?: string | null;
   executionOutcomeStatus: "none" | "succeeded" | "failed";
   executionOutcomeAt: string | null;

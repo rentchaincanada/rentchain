@@ -193,6 +193,16 @@ describe("loadLandlordAnalyticsSnapshot", () => {
             newLeaseEndDate: null,
             responseDeadlineAt: null,
           }),
+          executionState: "blocked",
+          blockedReason: "automation_disabled",
+          executionGuardKey: "lease.auto_send_notice:lease:lease-1",
+          duplicateGuardActive: false,
+          executionSummary: {
+            lastExecutedAt: null,
+            executionCount: 0,
+            lastExecutionOutcome: "none",
+            lastExecutionOutcomeAt: null,
+          },
         }),
       ])
     );
