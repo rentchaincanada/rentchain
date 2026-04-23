@@ -22,6 +22,18 @@ function mapInviteError(input: string | null) {
   return "We couldn't redeem that invite right now.";
 }
 
+function getInviteErrorMessage(error: unknown) {
+  if (typeof error === "object" && error !== null) {
+    const payload = "payload" in error ? (error as { payload?: { error?: unknown } }).payload : undefined;
+    const message = "message" in error ? (error as { message?: unknown }).message : null;
+    return mapInviteError(
+      typeof payload?.error === "string" ? payload.error : typeof message === "string" ? message : null
+    );
+  }
+
+  return mapInviteError(typeof error === "string" ? error : null);
+}
+
 export default function TenantInviteRedeemPage() {
   const location = useLocation();
   const [workspace, setWorkspace] = React.useState<Awaited<ReturnType<typeof getTenantWorkspace>> | null>(null);
@@ -54,8 +66,8 @@ export default function TenantInviteRedeemPage() {
       const result = await redeemTenantWorkspaceInvite(token.trim());
       setSuccess(result);
       setToken("");
-    } catch (err: any) {
-      setError(mapInviteError(err?.payload?.error || err?.message || null));
+    } catch (err: unknown) {
+      setError(getInviteErrorMessage(err));
     } finally {
       setSubmitting(false);
     }
