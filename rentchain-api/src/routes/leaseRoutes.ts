@@ -27,9 +27,11 @@ import { buildLeaseRiskPersistenceFields, computeLeaseRiskSnapshot } from "../se
 import { loadPropertyCredibilitySummary } from "../services/risk/propertyCredibilitySummary";
 import { dedupePropertyScopedLeasesByUnit, filterPropertyScopedLeases } from "../services/risk/propertyLeaseIsolation";
 import { writeCanonicalEvent } from "../lib/events/buildEvent";
+import { getSignedDownloadUrl } from "../lib/gcsSignedUrl";
 
 const router = Router();
 const LEDGER_COLLECTION = "ledgerEntries";
+const LEASE_NOTES_COLLECTION = "leaseNotes";
 const PAYMENT_METHODS = new Set(["cash", "etransfer", "cheque", "bank", "card", "other"]);
 const CHARGE_CATEGORIES = new Set(["rent", "fee", "adjustment"]);
 
@@ -50,6 +52,10 @@ function cents(value: unknown): number | null {
   return n;
 }
 
+function normalizeStatus(value: unknown): string {
+  return String(value || "").trim().toLowerCase();
+}
+
 function escapeCsvCell(value: unknown): string {
   const raw = String(value ?? "");
   if (/[",\n]/.test(raw)) {
@@ -66,6 +72,23 @@ async function getLeaseForLandlord(leaseId: string, landlordId: string) {
     return { ok: false as const, status: 403, error: "Forbidden" };
   }
   return { ok: true as const, lease };
+}
+
+async function getLeaseEntityForLandlord(leaseId: string, landlordId: string) {
+  const firestoreResult = await getLeaseForLandlord(leaseId, landlordId);
+  if (firestoreResult.ok) {
+    return { ok: true as const, source: "firestore" as const, lease: firestoreResult.lease };
+  }
+
+  if (firestoreResult.status === 403) {
+    return firestoreResult;
+  }
+
+  const memoryLease = leaseService.getById(leaseId);
+  if (!memoryLease) {
+    return firestoreResult;
+  }
+  return { ok: true as const, source: "memory" as const, lease: memoryLease as any };
 }
 
 function toMillis(value: any): number {
@@ -148,6 +171,16 @@ async function loadLeaseDocumentUrlForLease(raw: any): Promise<string | null> {
     String(raw?.documentUrl || raw?.approvedDocumentUrl || raw?.documentRef || "").trim() || null;
   if (directUrl) return directUrl;
 
+  const referenceBucket = String(raw?.referenceDocument?.bucket || raw?.leaseDocument?.bucket || "").trim();
+  const referencePath = String(raw?.referenceDocument?.path || raw?.leaseDocument?.path || "").trim();
+  if (referenceBucket && referencePath) {
+    try {
+      return await getSignedDownloadUrl({ bucket: referenceBucket, path: referencePath, expiresMinutes: 30 });
+    } catch {
+      return null;
+    }
+  }
+
   const draftId = String(raw?.sourceDraftId || "").trim();
   if (!draftId) return null;
 
@@ -166,6 +199,93 @@ async function loadLeaseDocumentUrlForLease(raw: any): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+async function loadUnitLeaseDocumentForResponse(raw: any) {
+  const leaseDocument = raw?.leaseDocument;
+  if (!leaseDocument || typeof leaseDocument !== "object") return raw;
+  const bucket = String(leaseDocument.bucket || "").trim();
+  const path = String(leaseDocument.path || "").trim();
+  if (!bucket || !path) return raw;
+  try {
+    const url = await getSignedDownloadUrl({ bucket, path, expiresMinutes: 30 });
+    return {
+      ...raw,
+      leaseDocument: {
+        ...leaseDocument,
+        url,
+      },
+    };
+  } catch {
+    return raw;
+  }
+}
+
+async function enrichLeaseRow(raw: any) {
+  const lease = normalizeLeaseRow(raw.id, raw);
+  const propertyId = String(lease.propertyId || "").trim();
+  const tenantId =
+    String(lease.primaryTenantId || lease.tenantId || lease.tenantIds?.[0] || "").trim() || null;
+
+  const [propertySnap, tenantSnap, documentUrl] = await Promise.all([
+    propertyId ? db.collection("properties").doc(propertyId).get().catch(() => null) : Promise.resolve(null),
+    tenantId ? db.collection("tenants").doc(tenantId).get().catch(() => null) : Promise.resolve(null),
+    loadLeaseDocumentUrlForLease(raw),
+  ]);
+
+  const propertyName =
+    propertySnap?.exists
+      ? String(propertySnap.data()?.name || propertySnap.data()?.addressLine1 || "Property").trim() || "Property"
+      : "Property";
+  const tenantName =
+    tenantSnap?.exists
+      ? String(tenantSnap.data()?.fullName || tenantSnap.data()?.name || "").trim() || null
+      : null;
+  const tenantEmail =
+    tenantSnap?.exists ? String(tenantSnap.data()?.email || "").trim() || null : null;
+
+  return {
+    ...lease,
+    propertyName,
+    tenantName,
+    tenantEmail,
+    documentUrl,
+    archivedAt: raw?.archivedAt || null,
+    archivedByUserId: raw?.archivedByUserId || null,
+    isArchived: Boolean(raw?.archivedAt),
+  };
+}
+
+async function listLandlordLeaseRows(landlordId: string, opts?: { archived?: boolean | null }) {
+  const collectionRef: any = (db as any).collection("leases");
+  if (!collectionRef || typeof collectionRef.where !== "function") {
+    return [];
+  }
+
+  const snap = await collectionRef.where("landlordId", "==", landlordId).get();
+  const rows = (snap.docs || []).map((doc: any) => ({ id: doc.id, ...(doc.data() as any) }));
+  const archivedFlag = opts?.archived;
+  const filtered = rows.filter((row: any) => {
+    const isArchived = Boolean(row?.archivedAt);
+    if (archivedFlag === true) return isArchived;
+    if (archivedFlag === false) return !isArchived && isCurrentLeaseStatus(row?.status);
+    return true;
+  });
+
+  const leases = await Promise.all(filtered.map((row: any) => enrichLeaseRow(row)));
+  return mergeLeaseRows(leases);
+}
+
+async function listLeaseNotes(leaseId: string, landlordId: string) {
+  const notesRef: any = (db as any).collection(LEASE_NOTES_COLLECTION);
+  if (!notesRef || typeof notesRef.where !== "function") return [];
+  const snap = await notesRef
+    .where("landlordId", "==", landlordId)
+    .where("leaseId", "==", leaseId)
+    .get();
+  return (snap.docs || [])
+    .map((doc: any) => ({ id: doc.id, ...(doc.data() as any) }))
+    .sort((a: any, b: any) => toMillis(b?.createdAt) - toMillis(a?.createdAt));
 }
 
 
@@ -217,16 +337,24 @@ async function assertNoConflictingActiveAgreement(input: {
 }
 
 async function loadLedgerEntries(leaseId: string, landlordId: string, from?: string | null, to?: string | null) {
-  let query: FirebaseFirestore.Query = db
+  const snap = await db
     .collection(LEDGER_COLLECTION)
     .where("landlordId", "==", landlordId)
-    .where("leaseId", "==", leaseId);
-
-  if (from) query = query.where("effectiveDate", ">=", from);
-  if (to) query = query.where("effectiveDate", "<=", to);
-  query = query.orderBy("effectiveDate", "asc").orderBy("createdAt", "asc");
-  const snap = await query.get();
-  return snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as any) }));
+    .where("leaseId", "==", leaseId)
+    .get();
+  return snap.docs
+    .map((doc) => ({ id: doc.id, ...(doc.data() as any) }))
+    .filter((entry: any) => {
+      const effectiveDate = String(entry?.effectiveDate || "").trim();
+      if (from && effectiveDate && effectiveDate < from) return false;
+      if (to && effectiveDate && effectiveDate > to) return false;
+      return true;
+    })
+    .sort((a: any, b: any) => {
+      const dateDiff = String(a?.effectiveDate || "").localeCompare(String(b?.effectiveDate || ""));
+      if (dateDiff !== 0) return dateDiff;
+      return toMillis(a?.createdAt) - toMillis(b?.createdAt);
+    });
 }
 
 async function enforceLeaseCapability(req: any, res: Response): Promise<boolean> {
@@ -253,75 +381,250 @@ router.get("/active", requireLandlord, async (req: any, res: Response) => {
     if (!(await enforceLeaseCapability(req, res))) return;
     const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
     if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+    const leases = await listLandlordLeaseRows(landlordId, { archived: false });
+    return res.status(200).json({ ok: true, leases });
+  } catch (err) {
+    console.error("[GET /api/leases/active] error", err);
+    return res.status(500).json({ ok: false, error: "Failed to load active leases" });
+  }
+});
 
-    const collectionRef: any = (db as any).collection("leases");
-    if (!collectionRef || typeof collectionRef.where !== "function") {
-      return res.status(200).json({ ok: true, leases: [] });
-    }
+router.get("/archived", requireLandlord, async (req: any, res: Response) => {
+  try {
+    if (!(await enforceLeaseCapability(req, res))) return;
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+    const leases = await listLandlordLeaseRows(landlordId, { archived: true });
+    return res.status(200).json({ ok: true, leases });
+  } catch (err) {
+    console.error("[GET /api/leases/archived] error", err);
+    return res.status(500).json({ ok: false, error: "Failed to load archived leases" });
+  }
+});
 
-    const snap = await collectionRef.where("landlordId", "==", landlordId).get();
-    const rawLeases = (snap.docs || [])
-      .map((doc: any) => ({ id: doc.id, ...(doc.data() as any) }))
-      .filter((lease: any) => isCurrentLeaseStatus(lease?.status));
+router.get("/reconciliation-candidates", requireLandlord, async (req: any, res: Response) => {
+  try {
+    if (!(await enforceLeaseCapability(req, res))) return;
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
 
-    const propertyIds: string[] = Array.from(
-      new Set(rawLeases.map((lease: any) => String(lease?.propertyId || "").trim()).filter(Boolean))
-    );
-    const tenantIds: string[] = Array.from(
-      new Set(
-        rawLeases.flatMap((lease: any) =>
-          Array.isArray(lease?.tenantIds)
-            ? lease.tenantIds.map((value: any) => String(value || "").trim()).filter(Boolean)
-            : [String(lease?.tenantId || lease?.primaryTenantId || "").trim()].filter(Boolean)
-        )
-      )
-    );
-
-    const [propertyDocs, tenantDocs] = await Promise.all([
-      Promise.all(propertyIds.map((propertyId) => db.collection("properties").doc(propertyId).get().catch(() => null))),
-      Promise.all(tenantIds.map((tenantId) => db.collection("tenants").doc(tenantId).get().catch(() => null))),
+    const [unitsSnap, leasesSnap, propertiesSnap] = await Promise.all([
+      db.collection("units").where("landlordId", "==", landlordId).get(),
+      db.collection("leases").where("landlordId", "==", landlordId).get().catch(() => ({ docs: [] } as any)),
+      db.collection("properties").where("landlordId", "==", landlordId).get().catch(() => ({ docs: [] } as any)),
     ]);
 
-    const propertyNameById = new Map(
-      propertyDocs
-        .filter((doc: any) => doc?.exists)
-        .map((doc: any) => [
-          doc.id,
-          String(doc.data()?.name || doc.data()?.addressLine1 || "Property").trim() || "Property",
-        ])
-    );
-    const tenantById = new Map(
-      tenantDocs
-        .filter((doc: any) => doc?.exists)
-        .map((doc: any) => [
-          doc.id,
-          {
-            name: String(doc.data()?.fullName || doc.data()?.name || "").trim() || null,
-            email: String(doc.data()?.email || "").trim() || null,
-          },
-        ])
+    const currentLeaseKeys = new Set<string>();
+    for (const doc of leasesSnap.docs || []) {
+      const raw = doc.data() as any;
+      if (!isCurrentLeaseStatus(raw?.status)) continue;
+      const propertyId = String(raw?.propertyId || "").trim();
+      const unitId = String(raw?.unitId || "").trim();
+      const unitNumber = String(raw?.unitNumber || raw?.unit || "").trim();
+      if (propertyId && unitId) currentLeaseKeys.add(`${propertyId}::id::${unitId}`);
+      if (propertyId && unitNumber) currentLeaseKeys.add(`${propertyId}::num::${unitNumber}`);
+    }
+
+    const propertyNames = new Map(
+      (propertiesSnap.docs || []).map((doc: any) => [
+        doc.id,
+        String(doc.data()?.name || doc.data()?.addressLine1 || "Property").trim() || "Property",
+      ])
     );
 
-    const leases = await Promise.all(
-      rawLeases.map(async (raw: any) => {
-        const lease = normalizeLeaseRow(raw.id, raw);
-        const tenantId =
-          String(lease.primaryTenantId || lease.tenantId || lease.tenantIds?.[0] || "").trim() || null;
-        const tenant = tenantId ? tenantById.get(tenantId) || null : null;
+    const candidates = await Promise.all(
+      (unitsSnap.docs || []).map(async (doc: any) => {
+        const raw = doc.data() as any;
+        const propertyId = String(raw?.propertyId || "").trim();
+        const unitId = String(doc.id || raw?.id || raw?.unitId || "").trim();
+        const unitNumber = String(raw?.unitNumber || raw?.label || "").trim();
+        const status = normalizeStatus(raw?.occupancyStatus || raw?.status);
+        if (status !== "occupied") return null;
+        if (!propertyId || !unitId) return null;
+        if (
+          currentLeaseKeys.has(`${propertyId}::id::${unitId}`) ||
+          (unitNumber && currentLeaseKeys.has(`${propertyId}::num::${unitNumber}`))
+        ) {
+          return null;
+        }
+
+        const leaseDocument = await loadUnitLeaseDocumentForResponse(raw);
+        const occupantName = String(raw?.occupantName || "").trim() || null;
+        const rent = Number(raw?.rent || 0);
+        const blockingReasons: string[] = [];
+        if (!occupantName) blockingReasons.push("occupant_name_required");
+        if (!Number.isFinite(rent) || rent <= 0) blockingReasons.push("rent_required");
+
         return {
-          ...lease,
-          propertyName: propertyNameById.get(lease.propertyId) || "Property",
-          tenantName: tenant?.name || null,
-          tenantEmail: tenant?.email || null,
-          documentUrl: await loadLeaseDocumentUrlForLease(raw),
+          id: unitId,
+          unitId,
+          propertyId,
+          propertyName: propertyNames.get(propertyId) || "Property",
+          unitNumber: unitNumber || "Unit",
+          occupantName,
+          leaseEndDate: String(raw?.leaseEndDate || "").trim() || null,
+          monthlyRent: Number.isFinite(rent) ? rent : 0,
+          leaseDocument: (leaseDocument as any)?.leaseDocument || raw?.leaseDocument || null,
+          canConvert: blockingReasons.length === 0,
+          blockingReasons,
         };
       })
     );
 
-    return res.status(200).json({ ok: true, leases: mergeLeaseRows(leases) });
+    return res.status(200).json({
+      ok: true,
+      candidates: candidates.filter(Boolean).sort((a: any, b: any) => {
+        const propertyDiff = String(a?.propertyName || "").localeCompare(String(b?.propertyName || ""));
+        if (propertyDiff !== 0) return propertyDiff;
+        return String(a?.unitNumber || "").localeCompare(String(b?.unitNumber || ""));
+      }),
+    });
   } catch (err) {
-    console.error("[GET /api/leases/active] error", err);
-    return res.status(500).json({ ok: false, error: "Failed to load active leases" });
+    console.error("[GET /api/leases/reconciliation-candidates] error", err);
+    return res.status(500).json({ ok: false, error: "Failed to load lease reconciliation candidates" });
+  }
+});
+
+router.post("/reconciliation-candidates/:unitId/convert", requireLandlord, async (req: any, res: Response) => {
+  try {
+    if (!(await enforceLeaseCapability(req, res))) return;
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+
+    const unitId = String(req.params?.unitId || "").trim();
+    if (!unitId) return res.status(400).json({ ok: false, error: "unit_id_required" });
+    const unitSnap = await db.collection("units").doc(unitId).get();
+    if (!unitSnap.exists) return res.status(404).json({ ok: false, error: "unit_not_found" });
+    const unit = unitSnap.data() as any;
+    if (String(unit?.landlordId || "").trim() !== landlordId) {
+      return res.status(403).json({ ok: false, error: "forbidden" });
+    }
+
+    const propertyId = String(unit?.propertyId || "").trim();
+    const unitNumber = String(unit?.unitNumber || unit?.label || "").trim();
+    if (!propertyId || !unitNumber) {
+      return res.status(400).json({ ok: false, error: "unit_context_incomplete" });
+    }
+    const occupancyStatus = normalizeStatus(unit?.occupancyStatus || unit?.status);
+    if (occupancyStatus !== "occupied") {
+      return res.status(400).json({ ok: false, error: "unit_not_occupied" });
+    }
+
+    const conflictingLeases = await db.collection("leases").where("landlordId", "==", landlordId).where("propertyId", "==", propertyId).get();
+    const hasCurrentLease = (conflictingLeases.docs || []).some((doc: any) => {
+      const raw = doc.data() as any;
+      if (!isCurrentLeaseStatus(raw?.status)) return false;
+      return (
+        String(raw?.unitId || "").trim() === unitId ||
+        String(raw?.unitNumber || raw?.unit || "").trim() === unitNumber
+      );
+    });
+    if (hasCurrentLease) {
+      return res.status(409).json({ ok: false, error: "current_lease_already_exists" });
+    }
+
+    const occupantName = String(req.body?.occupantName || unit?.occupantName || "").trim();
+    const tenantEmail = String(req.body?.tenantEmail || "").trim() || null;
+    const tenantPhone = String(req.body?.tenantPhone || "").trim() || null;
+    const startDate = toIsoDate(req.body?.startDate);
+    const endDate = toIsoDate(req.body?.endDate);
+    const monthlyRent = Number(req.body?.monthlyRent ?? unit?.rent);
+
+    if (!occupantName) return res.status(400).json({ ok: false, error: "occupant_name_required" });
+    if (!startDate) return res.status(400).json({ ok: false, error: "start_date_required" });
+    if (!Number.isFinite(monthlyRent) || monthlyRent <= 0) {
+      return res.status(400).json({ ok: false, error: "monthly_rent_required" });
+    }
+
+    const propertySnap = await db.collection("properties").doc(propertyId).get();
+    const property = propertySnap.data() as any;
+    const propertyName = String(property?.name || property?.addressLine1 || "Property").trim() || "Property";
+    const tenantRef = db.collection("tenants").doc();
+    const nowIso = new Date().toISOString();
+    await tenantRef.set(
+      {
+        landlordId,
+        fullName: occupantName,
+        email: tenantEmail,
+        phone: tenantPhone,
+        propertyId,
+        propertyName,
+        unitId,
+        unit: unitNumber,
+        currentLeaseId: null,
+        leaseStart: startDate,
+        leaseEnd: endDate || null,
+        monthlyRent,
+        status: "Current",
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        source: "occupied_unit_reconciliation",
+      },
+      { merge: false }
+    );
+
+    const riskSnapshot = await computeLeaseRiskSnapshot({
+      landlordId,
+      propertyId,
+      unitId,
+      tenantIds: [tenantRef.id],
+      monthlyRent,
+    });
+    const riskFields = buildLeaseRiskPersistenceFields({}, riskSnapshot, {
+      trigger: "lease_create",
+      source: "occupied_unit_reconciliation",
+    });
+
+    const lease = leaseService.create({
+      tenantId: tenantRef.id,
+      tenantIds: [tenantRef.id],
+      primaryTenantId: tenantRef.id,
+      propertyId,
+      unitNumber,
+      monthlyRent,
+      startDate,
+      endDate,
+      risk: riskFields.risk,
+      riskTimeline: riskFields.riskTimeline,
+    });
+
+    const firestoreLeaseRecord = {
+      landlordId,
+      tenantId: tenantRef.id,
+      tenantIds: [tenantRef.id],
+      primaryTenantId: tenantRef.id,
+      propertyId,
+      unitId,
+      unitNumber,
+      monthlyRent,
+      startDate,
+      endDate: endDate || null,
+      automationEnabled: lease.automationEnabled ?? true,
+      renewalStatus: lease.renewalStatus ?? "unknown",
+      status: lease.status,
+      risk: lease.risk ?? null,
+      riskScore: lease.riskScore ?? lease.risk?.score ?? null,
+      riskGrade: lease.riskGrade ?? lease.risk?.grade ?? null,
+      riskConfidence: lease.riskConfidence ?? lease.risk?.confidence ?? null,
+      riskTimeline: Array.isArray((lease as any).riskTimeline) ? (lease as any).riskTimeline : [],
+      createdAt: lease.createdAt,
+      updatedAt: lease.updatedAt,
+      source: "occupied_unit_reconciliation",
+      sourceUnitId: unitId,
+      referenceDocument: unit?.leaseDocument || null,
+    };
+    await db.collection("leases").doc(lease.id).set(firestoreLeaseRecord, { merge: false });
+    await tenantRef.set({ currentLeaseId: lease.id, updatedAt: new Date().toISOString() }, { merge: true });
+
+    const enrichedLease = await enrichLeaseRow({ id: lease.id, ...firestoreLeaseRecord });
+    return res.status(201).json({
+      ok: true,
+      lease: enrichedLease,
+      tenant: { id: tenantRef.id, fullName: occupantName, email: tenantEmail, phone: tenantPhone },
+    });
+  } catch (err) {
+    console.error("[POST /api/leases/reconciliation-candidates/:unitId/convert] error", err);
+    return res.status(500).json({ ok: false, error: "Failed to convert occupied unit to lease" });
   }
 });
 
@@ -737,12 +1040,128 @@ router.get("/:id/automation/tasks", requireLandlord, (req: any, res: Response) =
   return res.status(200).json({ ok: true, tasks });
 });
 
-router.get("/:id", (req: Request, res: Response) => {
-  const lease = leaseService.getById(req.params.id);
-  if (!lease) {
-    return res.status(404).json({ error: "Lease not found" });
+router.get("/:leaseId/notes", requireLandlord, async (req: any, res: Response) => {
+  try {
+    if (!(await enforceLeaseCapability(req, res))) return;
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    const leaseId = String(req.params?.leaseId || "").trim();
+    if (!leaseId) return res.status(400).json({ ok: false, error: "leaseId is required" });
+    const leaseCheck = await getLeaseEntityForLandlord(leaseId, landlordId);
+    if (!leaseCheck.ok) return res.status(leaseCheck.status).json({ ok: false, error: leaseCheck.error });
+    const notes = await listLeaseNotes(leaseId, landlordId);
+    return res.status(200).json({ ok: true, notes });
+  } catch (err) {
+    console.error("[GET /api/leases/:leaseId/notes] error", err);
+    return res.status(500).json({ ok: false, error: "Failed to load lease notes" });
   }
-  res.json({ lease });
+});
+
+router.post("/:leaseId/notes", requireLandlord, async (req: any, res: Response) => {
+  try {
+    if (!(await enforceLeaseCapability(req, res))) return;
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    const actorUserId = String(req.user?.id || req.user?.email || landlordId).trim();
+    const leaseId = String(req.params?.leaseId || "").trim();
+    if (!leaseId) return res.status(400).json({ ok: false, error: "leaseId is required" });
+    const leaseCheck = await getLeaseEntityForLandlord(leaseId, landlordId);
+    if (!leaseCheck.ok) return res.status(leaseCheck.status).json({ ok: false, error: leaseCheck.error });
+    const note = String(req.body?.note || "").trim();
+    if (!note) return res.status(400).json({ ok: false, error: "note_required" });
+    const noteRef = db.collection(LEASE_NOTES_COLLECTION).doc();
+    const record = {
+      id: noteRef.id,
+      leaseId,
+      landlordId,
+      note: note.slice(0, 5000),
+      createdAt: Date.now(),
+      createdBy: actorUserId || null,
+    };
+    await noteRef.set(record, { merge: false });
+    return res.status(201).json({ ok: true, note: record });
+  } catch (err) {
+    console.error("[POST /api/leases/:leaseId/notes] error", err);
+    return res.status(500).json({ ok: false, error: "Failed to save lease note" });
+  }
+});
+
+router.post("/:leaseId/archive", requireLandlord, async (req: any, res: Response) => {
+  try {
+    if (!(await enforceLeaseCapability(req, res))) return;
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    const actorUserId = String(req.user?.id || req.user?.email || landlordId).trim() || null;
+    const leaseId = String(req.params?.leaseId || "").trim();
+    if (!leaseId) return res.status(400).json({ ok: false, error: "leaseId is required" });
+    const leaseCheck = await getLeaseEntityForLandlord(leaseId, landlordId);
+    if (!leaseCheck.ok) return res.status(leaseCheck.status).json({ ok: false, error: leaseCheck.error });
+    if (leaseCheck.source === "firestore") {
+      await db.collection("leases").doc(leaseId).set(
+        {
+          archivedAt: new Date().toISOString(),
+          archivedByUserId: actorUserId,
+          restoredAt: null,
+          restoredByUserId: null,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+      const refreshed = await getLeaseEntityForLandlord(leaseId, landlordId);
+      if (!refreshed.ok) return res.status(refreshed.status).json({ ok: false, error: refreshed.error });
+      return res.status(200).json({ ok: true, lease: await enrichLeaseRow({ id: leaseId, ...(refreshed.lease as any) }) });
+    }
+    return res.status(400).json({ ok: false, error: "archive_requires_firestore_lease" });
+  } catch (err) {
+    console.error("[POST /api/leases/:leaseId/archive] error", err);
+    return res.status(500).json({ ok: false, error: "Failed to archive lease" });
+  }
+});
+
+router.post("/:leaseId/restore", requireLandlord, async (req: any, res: Response) => {
+  try {
+    if (!(await enforceLeaseCapability(req, res))) return;
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    const actorUserId = String(req.user?.id || req.user?.email || landlordId).trim() || null;
+    const leaseId = String(req.params?.leaseId || "").trim();
+    if (!leaseId) return res.status(400).json({ ok: false, error: "leaseId is required" });
+    const leaseCheck = await getLeaseEntityForLandlord(leaseId, landlordId);
+    if (!leaseCheck.ok) return res.status(leaseCheck.status).json({ ok: false, error: leaseCheck.error });
+    if (leaseCheck.source === "firestore") {
+      await db.collection("leases").doc(leaseId).set(
+        {
+          archivedAt: null,
+          archivedByUserId: null,
+          restoredAt: new Date().toISOString(),
+          restoredByUserId: actorUserId,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+      const refreshed = await getLeaseEntityForLandlord(leaseId, landlordId);
+      if (!refreshed.ok) return res.status(refreshed.status).json({ ok: false, error: refreshed.error });
+      return res.status(200).json({ ok: true, lease: await enrichLeaseRow({ id: leaseId, ...(refreshed.lease as any) }) });
+    }
+    return res.status(400).json({ ok: false, error: "restore_requires_firestore_lease" });
+  } catch (err) {
+    console.error("[POST /api/leases/:leaseId/restore] error", err);
+    return res.status(500).json({ ok: false, error: "Failed to restore lease" });
+  }
+});
+
+router.get("/:id", requireLandlord, async (req: any, res: Response) => {
+  try {
+    if (!(await enforceLeaseCapability(req, res))) return;
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    const result = await getLeaseEntityForLandlord(String(req.params?.id || "").trim(), landlordId);
+    if (!result.ok) {
+      return res.status(result.status).json({ error: result.error });
+    }
+    if (result.source === "firestore") {
+      return res.json({ lease: await enrichLeaseRow({ id: String(req.params?.id || "").trim(), ...(result.lease as any) }) });
+    }
+    return res.json({ lease: result.lease });
+  } catch (err) {
+    console.error("[GET /api/leases/:id] error", err);
+    return res.status(500).json({ error: "Failed to load lease" });
+  }
 });
 
 router.get("/tenant/:tenantId", requireLandlord, async (req: any, res: Response) => {
@@ -951,10 +1370,32 @@ router.post("/", async (req: Request, res: Response) => {
   }
 });
 
-router.put("/:id", async (req: Request, res: Response) => {
+router.put("/:id", async (req: any, res: Response) => {
   try {
     if (!(await enforceLeaseCapability(req, res))) return;
     const payload = req.body as UpdateLeasePayload;
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    const leaseResult = await getLeaseEntityForLandlord(String(req.params?.id || "").trim(), landlordId);
+    if (!leaseResult.ok) {
+      return res.status(leaseResult.status).json({ error: leaseResult.error });
+    }
+
+    if (leaseResult.source === "firestore") {
+      const next = {
+        ...(payload.monthlyRent !== undefined ? { monthlyRent: payload.monthlyRent } : {}),
+        ...(payload.startDate !== undefined ? { startDate: payload.startDate } : {}),
+        ...(payload.endDate !== undefined ? { endDate: payload.endDate ?? null } : {}),
+        ...(payload.automationEnabled !== undefined ? { automationEnabled: payload.automationEnabled } : {}),
+        ...(payload.renewalStatus !== undefined ? { renewalStatus: payload.renewalStatus } : {}),
+        ...(payload.status !== undefined ? { status: payload.status } : {}),
+        updatedAt: new Date().toISOString(),
+      };
+      await db.collection("leases").doc(String(req.params?.id || "").trim()).set(next, { merge: true });
+      const refreshed = await getLeaseEntityForLandlord(String(req.params?.id || "").trim(), landlordId);
+      if (!refreshed.ok) return res.status(refreshed.status).json({ error: refreshed.error });
+      return res.json({ lease: await enrichLeaseRow({ id: String(req.params?.id || "").trim(), ...(refreshed.lease as any) }) });
+    }
+
     const lease = leaseService.update(req.params.id, payload);
     if (!lease) {
       return res.status(404).json({ error: "Lease not found" });
@@ -966,10 +1407,28 @@ router.put("/:id", async (req: Request, res: Response) => {
   }
 });
 
-router.post("/:id/end", async (req: Request, res: Response) => {
+router.post("/:id/end", async (req: any, res: Response) => {
   try {
     if (!(await enforceLeaseCapability(req, res))) return;
     const endDate: string = req.body?.endDate || new Date().toISOString();
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    const leaseResult = await getLeaseEntityForLandlord(String(req.params?.id || "").trim(), landlordId);
+    if (!leaseResult.ok) {
+      return res.status(leaseResult.status).json({ error: leaseResult.error });
+    }
+    if (leaseResult.source === "firestore") {
+      await db.collection("leases").doc(String(req.params?.id || "").trim()).set(
+        {
+          status: "ended",
+          endDate,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+      const refreshed = await getLeaseEntityForLandlord(String(req.params?.id || "").trim(), landlordId);
+      if (!refreshed.ok) return res.status(refreshed.status).json({ error: refreshed.error });
+      return res.json({ lease: await enrichLeaseRow({ id: String(req.params?.id || "").trim(), ...(refreshed.lease as any) }) });
+    }
     const lease = leaseService.endLease(req.params.id, endDate);
     if (!lease) {
       return res.status(404).json({ error: "Lease not found" });
@@ -989,7 +1448,7 @@ router.get("/:leaseId/ledger", async (req: any, res: Response) => {
     const leaseId = String(req.params?.leaseId || "").trim();
     if (!leaseId) return res.status(400).json({ ok: false, error: "leaseId is required" });
 
-    const leaseCheck = await getLeaseForLandlord(leaseId, landlordId);
+    const leaseCheck = await getLeaseEntityForLandlord(leaseId, landlordId);
     if (!leaseCheck.ok) return res.status(leaseCheck.status).json({ ok: false, error: leaseCheck.error });
 
     const from = toIsoDate(req.query?.from) || null;
@@ -1049,7 +1508,7 @@ router.post("/:leaseId/ledger/charge", async (req: any, res: Response) => {
 
     const leaseId = String(req.params?.leaseId || "").trim();
     if (!leaseId) return res.status(400).json({ ok: false, error: "leaseId is required" });
-    const leaseCheck = await getLeaseForLandlord(leaseId, landlordId);
+    const leaseCheck = await getLeaseEntityForLandlord(leaseId, landlordId);
     if (!leaseCheck.ok) return res.status(leaseCheck.status).json({ ok: false, error: leaseCheck.error });
 
     const amountCents = cents(req.body?.amountCents);
@@ -1095,7 +1554,7 @@ router.post("/:leaseId/ledger/payment", async (req: any, res: Response) => {
 
     const leaseId = String(req.params?.leaseId || "").trim();
     if (!leaseId) return res.status(400).json({ ok: false, error: "leaseId is required" });
-    const leaseCheck = await getLeaseForLandlord(leaseId, landlordId);
+    const leaseCheck = await getLeaseEntityForLandlord(leaseId, landlordId);
     if (!leaseCheck.ok) return res.status(leaseCheck.status).json({ ok: false, error: leaseCheck.error });
 
     const amountCents = cents(req.body?.amountCents);
@@ -1142,7 +1601,7 @@ router.get("/:leaseId/ledger/export.csv", async (req: any, res: Response) => {
 
     const leaseId = String(req.params?.leaseId || "").trim();
     if (!leaseId) return res.status(400).json({ ok: false, error: "leaseId is required" });
-    const leaseCheck = await getLeaseForLandlord(leaseId, landlordId);
+    const leaseCheck = await getLeaseEntityForLandlord(leaseId, landlordId);
     if (!leaseCheck.ok) return res.status(leaseCheck.status).json({ ok: false, error: leaseCheck.error });
 
     const from = toIsoDate(req.query?.from) || null;
