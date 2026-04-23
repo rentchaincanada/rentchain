@@ -31,6 +31,7 @@ export type LandlordAgentDecisionSupportingSignal = {
 export type LandlordDecisionWorkflowCategory =
   | "lease_renewals"
   | "maintenance_cost_approval"
+  | "screening_checkout"
   | "vacancy_readiness"
   | "application_funnel"
   | "maintenance_backlog"
@@ -40,6 +41,7 @@ export type LandlordDecisionWorkflowCategory =
 export type LandlordDecisionActionKey =
   | "open_lease_renewals_flow"
   | "open_maintenance_cost_approval_flow"
+  | "open_screening_checkout_flow"
   | "open_vacancy_readiness_flow"
   | "open_application_funnel_review_flow"
   | "open_maintenance_backlog_flow"
@@ -80,6 +82,27 @@ export type LandlordDecisionMaintenanceApprovalExecutionInput = {
   withinAutoApprovalThreshold: boolean;
 };
 
+export type LandlordDecisionScreeningCheckoutExecutionInput = {
+  applicationId: string | null;
+  propertyId: string | null;
+  unitId: string | null;
+  applicantEmail: string | null;
+  applicationStatus: string | null;
+  eligibility: "eligible" | "ineligible" | "requires_upgrade" | "provider_unavailable";
+  eligibilityReasonCode: string | null;
+  consentVersion: string | null;
+  consentTimestamp: string | null;
+  quoteId: string | null;
+  quoteGeneratedAt: string | null;
+  quoteExpiresAt: string | null;
+  quoteStatus: "none" | "generated" | "expired" | "invalid";
+  paymentStatus: "none" | "pending_checkout" | "checkout_created" | "paid" | "failed" | "abandoned" | "waived";
+  fulfillmentStatus: "not_started" | "ready" | "ordered" | "completed" | "blocked";
+  blockingReason: string | null;
+  policyOutcome: "allow" | "block" | "review" | "defer" | null;
+  canStartCheckout: boolean;
+};
+
 export type LandlordAgentDecision = {
   id: string;
   decisionType: string;
@@ -112,8 +135,17 @@ export type LandlordAgentDecision = {
     | "reviewStatus"
     | "supportingEvidence"
     | "autoApprovalThreshold"
+    | "applicationStatus"
+    | "consentTimestamp"
+    | "consentVersion"
+    | "applicationData"
+    | "screeningQuote"
   )[];
-  executionInput: (LandlordDecisionLeaseNoticeExecutionInput | LandlordDecisionMaintenanceApprovalExecutionInput) | null;
+  executionInput:
+    | LandlordDecisionLeaseNoticeExecutionInput
+    | LandlordDecisionMaintenanceApprovalExecutionInput
+    | LandlordDecisionScreeningCheckoutExecutionInput
+    | null;
   executedAt?: string | null;
   executionOutcomeStatus: "none" | "succeeded" | "failed";
   executionOutcomeAt: string | null;

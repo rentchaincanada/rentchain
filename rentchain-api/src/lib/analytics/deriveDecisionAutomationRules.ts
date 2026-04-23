@@ -17,6 +17,8 @@ const WORKFLOW_BLOCK_REASONS: Partial<Record<LandlordDecisionWorkflowCategory, s
     "A screening automation path exists, but this decision does not yet identify a specific application to execute against.",
   maintenance_cost_approval:
     "This maintenance approval decision still needs a deterministic approval-ready work order and complete approval inputs before execution.",
+  screening_checkout:
+    "This screening checkout decision now has a deterministic application target, but explicit screening execution is not enabled in this mission.",
   maintenance_backlog:
     "A maintenance automation path exists, but this decision does not yet identify a specific work order with execution-ready evidence.",
 };

@@ -602,4 +602,95 @@ describe("deriveAgentDecisions", () => {
 
     expect(result.items.find((decision) => decision.decisionType === "approve_maintenance_cost")).toBeUndefined();
   });
+
+  it("emits a deterministic screening checkout decision only when one exact application is canonically ready", () => {
+    const result = deriveAgentDecisions({
+      filters: {
+        propertyId: null,
+      },
+      now: Date.UTC(2026, 3, 20, 11, 5, 0, 0),
+      workOrders: [],
+      applications: [
+        {
+          id: "app-1",
+          propertyId: "prop-6",
+          unitId: "unit-9",
+          status: "SUBMITTED",
+          applicant: {
+            firstName: "Jane",
+            lastName: "Doe",
+            email: "jane@example.com",
+            dob: "1990-01-01",
+          },
+          consent: {
+            creditConsent: true,
+            referenceConsent: true,
+            acceptedAt: "2026-04-20T10:00:00.000Z",
+            version: "v1.0",
+          },
+          residentialHistory: [{ address: "123 Main St" }],
+          screeningMonetization: {
+            eligibility: "eligible",
+            quoteStatus: "generated",
+            paymentStatus: "pending_checkout",
+            fulfillmentStatus: "ready",
+            quoteId: "quote_app-1",
+            quoteGeneratedAt: "2026-04-20T11:00:00.000Z",
+            quoteExpiresAt: "2026-04-20T11:30:00.000Z",
+          },
+        },
+      ],
+      screeningOrders: [],
+      deltas: {
+        summary: {
+          vacancyRate: { current: 0, prior: 0, absoluteDelta: 0, relativeDelta: 0, direction: "flat" },
+          applicationConversionRate: { current: 0.3, prior: 0.3, absoluteDelta: 0, relativeDelta: 0, direction: "flat" },
+          activeApplications: { current: 1, prior: 1, absoluteDelta: 0, relativeDelta: 0, direction: "flat" },
+          openWorkOrders: { current: 0, prior: 0, absoluteDelta: 0, relativeDelta: 0, direction: "flat" },
+          maintenanceCostCents: { current: 0, prior: 0, absoluteDelta: 0, relativeDelta: 0, direction: "flat" },
+          estimatedScheduledRentCents: { current: 300000, prior: 300000, absoluteDelta: 0, relativeDelta: 0, direction: "flat" },
+          leasesEndingSoon: { current: 0, prior: 0, absoluteDelta: 0, relativeDelta: 0, direction: "flat" },
+        },
+        applications: {
+          submitted: { current: 1, prior: 1, absoluteDelta: 0, relativeDelta: 0, direction: "flat" },
+          conversionRate: { current: 0.3, prior: 0.3, absoluteDelta: 0, relativeDelta: 0, direction: "flat" },
+        },
+      },
+      alerts: [],
+      predictiveMetrics: [],
+      benchmarking: {
+        summary: {
+          propertyCount: 1,
+          comparedPropertyCount: 1,
+          benchmarkDimensions: ["applicationConversionRate"],
+        },
+        comparisons: [],
+        insights: [],
+        filters: {
+          period: "90d",
+          propertyId: null,
+          from: "2026-01-20T00:00:00.000Z",
+          to: "2026-04-20T00:00:00.000Z",
+        },
+      },
+    });
+
+    expect(result.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "start_screening_checkout:app-1",
+          decisionType: "start_screening_checkout",
+          priority: "medium",
+          recommendedAction: "Start screening checkout",
+          actionKey: "open_screening_checkout_flow",
+          actionLabel: "Open screening checkout",
+          destination: "/applications?entry=screening-checkout&propertyId=prop-6&applicationId=app-1",
+          workflowCategory: "screening_checkout",
+          automationEligible: false,
+          automationState: "manual_only",
+          executionMappingState: "none",
+        }),
+      ])
+    );
+  });
 });

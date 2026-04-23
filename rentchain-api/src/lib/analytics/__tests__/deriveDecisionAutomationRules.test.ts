@@ -82,6 +82,58 @@ describe("deriveDecisionAutomationRule", () => {
     );
   });
 
+  it("keeps screening checkout decisions blocked until explicit screening execution is enabled", () => {
+    expect(
+      deriveDecisionAutomationRule(
+        baseDecision({
+          id: "start_screening_checkout:app-1",
+          decisionType: "start_screening_checkout",
+          actionKey: "open_screening_checkout_flow",
+          actionLabel: "Open screening checkout",
+          workflowCategory: "screening_checkout",
+          recommendedAction: "Start screening checkout",
+          destination: "/applications?entry=screening-checkout&applicationId=app-1",
+          href: "/applications?entry=screening-checkout&applicationId=app-1",
+          executionMappingState: "mapped",
+          executionMapping: {
+            action: "screening.auto_start_checkout",
+            resourceType: "rental_application",
+            resourceId: "app-1",
+            prerequisitesMet: true,
+            prerequisiteReason: null,
+          },
+          executionInputState: "complete",
+          executionInput: {
+            applicationId: "app-1",
+            propertyId: "prop-1",
+            unitId: "unit-1",
+            applicantEmail: "jane@example.com",
+            applicationStatus: "SUBMITTED",
+            eligibility: "eligible",
+            eligibilityReasonCode: "ELIGIBLE",
+            consentVersion: "v1.0",
+            consentTimestamp: "2026-04-20T10:00:00.000Z",
+            quoteId: "quote_app-1",
+            quoteGeneratedAt: "2026-04-20T11:00:00.000Z",
+            quoteExpiresAt: "2026-04-20T11:30:00.000Z",
+            quoteStatus: "generated",
+            paymentStatus: "pending_checkout",
+            fulfillmentStatus: "ready",
+            blockingReason: null,
+            policyOutcome: "allow",
+            canStartCheckout: true,
+          } as any,
+        })
+      )
+    ).toEqual(
+      expect.objectContaining({
+        automationEligible: false,
+        automationState: "blocked",
+        automationReason: expect.stringContaining("explicit screening execution is not enabled"),
+      })
+    );
+  });
+
   it("supports a ready state when a future decision explicitly opts into a deterministic executor path", () => {
     expect(
       deriveDecisionAutomationRule(

@@ -13,6 +13,8 @@ import type {
 } from "./analyticsTypes";
 import type { AnalyticsAlert } from "./alertTypes";
 import { deriveMaintenanceApprovalExecutionInputSnapshot } from "../maintenanceApprovalReadiness";
+import { deriveScreeningCheckoutExecutionInputSnapshot } from "../screeningCheckoutReadiness";
+import { latestOrderByApplication } from "./analyticsCore";
 
 type AgentDecisionInput = {
   filters: {
@@ -37,6 +39,9 @@ type AgentDecisionInput = {
   predictiveMetrics: LandlordPredictiveMetric[];
   benchmarking: LandlordPortfolioBenchmarking;
   workOrders: any[];
+  applications?: any[];
+  screeningOrders?: any[];
+  now?: number;
 };
 
 const PRIORITY_WEIGHT: Record<LandlordAgentDecisionPriority, number> = {
@@ -49,10 +54,11 @@ const DECISION_ORDER: Record<LandlordAgentDecisionType, number> = {
   reduce_vacancy_risk: 0,
   review_lease_renewals: 1,
   approve_maintenance_cost: 2,
-  address_maintenance_backlog: 3,
-  improve_application_conversion: 4,
-  review_revenue_pressure: 5,
-  focus_highest_risk_property: 6,
+  start_screening_checkout: 3,
+  address_maintenance_backlog: 4,
+  improve_application_conversion: 5,
+  review_revenue_pressure: 6,
+  focus_highest_risk_property: 7,
 };
 
 function getPredictiveMetric(metrics: LandlordPredictiveMetric[], key: LandlordPredictiveMetric["key"]) {
@@ -174,6 +180,20 @@ function deriveActionHook(
         workOrderId: resourceId || null,
       }),
       workflowCategory: "maintenance_cost_approval",
+      automationEligible: false,
+    };
+  }
+
+  if (type === "start_screening_checkout") {
+    return {
+      actionKey: "open_screening_checkout_flow",
+      actionLabel: "Open screening checkout",
+      destination: buildDestination("/applications", {
+        entry: "screening-checkout",
+        propertyId: propertyId || null,
+        applicationId: resourceId || null,
+      }),
+      workflowCategory: "screening_checkout",
       automationEligible: false,
     };
   }
@@ -532,6 +552,66 @@ function deriveMaintenanceApprovalDecision(input: AgentDecisionInput) {
   });
 }
 
+function normalizeScreeningDecisionApplication(application: any) {
+  const applicant = application?.applicant || {};
+  const applicantName = [asString(applicant?.firstName, 120), asString(applicant?.lastName, 120)]
+    .filter(Boolean)
+    .join(" ");
+
+  return {
+    id: asString(application?.id, 240),
+    propertyId: asString(application?.propertyId, 240) || null,
+    unitId: asString(application?.unitId, 240) || null,
+    propertyLabel: asString(application?.propertyLabel || application?.propertyName, 240) || null,
+    applicantName: applicantName || asString(applicant?.email, 240) || null,
+  };
+}
+
+function deriveScreeningCheckoutDecision(input: AgentDecisionInput) {
+  const latestOrders = latestOrderByApplication(input.screeningOrders || []);
+  const candidates = (input.applications || [])
+    .map((application) => ({
+      application,
+      readiness: deriveScreeningCheckoutExecutionInputSnapshot({
+        application,
+        latestOrder: latestOrders.get(asString(application?.id, 240)) || null,
+        now: input.now,
+      }),
+    }))
+    .filter(({ application, readiness }) => asString(application?.id, 240) && readiness.state === "complete");
+
+  if (candidates.length !== 1) return null;
+
+  const { application } = candidates[0];
+  const normalized = normalizeScreeningDecisionApplication(application);
+  if (!normalized.id) return null;
+
+  const alerts = input.alerts.filter(
+    (alert) =>
+      alert.status === "active" &&
+      (alert.type === "low_application_activity" ||
+        alert.type === "application_conversion_drop" ||
+        alert.type === "application_drop") &&
+      (normalized.propertyId == null || !alert.propertyId || alert.propertyId === normalized.propertyId)
+  );
+  const predictive = getPredictiveMetric(input.predictiveMetrics, "projected_application_slowdown_risk");
+  const priority = derivePriority([priorityFromAlert(alerts), priorityFromPredictive(predictive)]) || "medium";
+  const subject =
+    normalized.applicantName ||
+    normalized.propertyLabel ||
+    (normalized.unitId ? `application for unit ${normalized.unitId}` : `application ${normalized.id}`);
+
+  return buildDecision({
+    decisionType: "start_screening_checkout",
+    priority,
+    explanation: `${subject} has complete screening consent, applicant data, and a current quote. Checkout is ready to start for this exact application.`,
+    recommendedAction: "Start screening checkout",
+    propertyId: normalized.propertyId,
+    scopeId: normalized.id,
+    signals: [...alerts.map(supportFromAlert), predictive ? supportFromPredictive(predictive) : null],
+  });
+}
+
 function deriveRevenueDecision(input: AgentDecisionInput) {
   const predictive = getPredictiveMetric(input.predictiveMetrics, "projected_revenue_pressure_signal");
   const priority = priorityFromPredictive(predictive);
@@ -611,6 +691,7 @@ export function deriveAgentDecisions(input: AgentDecisionInput): LandlordAgentDe
     deriveVacancyDecision(input),
     deriveLeaseRenewalDecision(input),
     deriveMaintenanceApprovalDecision(input),
+    deriveScreeningCheckoutDecision(input),
     deriveMaintenanceDecision(input),
     deriveApplicationDecision(input),
     deriveRevenueDecision(input),

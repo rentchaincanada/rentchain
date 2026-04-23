@@ -93,6 +93,7 @@ export async function loadAdminAnalyticsSnapshot(params?: {
     period,
     granularity,
     applications,
+    screeningOrders,
     screeningReconciliations,
     financialTransactions,
     workOrders,

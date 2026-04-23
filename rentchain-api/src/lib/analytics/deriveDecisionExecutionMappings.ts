@@ -1,11 +1,15 @@
 import type { LandlordAgentDecision, LandlordDecisionExecutionMapping } from "./analyticsTypes";
 import { deriveLeaseNoticeExecutionInputSnapshot, normalizeLeaseRecord } from "../../services/leaseNoticeWorkflowService";
 import { deriveMaintenanceApprovalExecutionInputSnapshot } from "../maintenanceApprovalReadiness";
+import { latestOrderByApplication } from "./analyticsCore";
+import { deriveScreeningCheckoutExecutionInputSnapshot } from "../screeningCheckoutReadiness";
 
 type MappingInput = {
   decisions: LandlordAgentDecision[];
   leases: any[];
   workOrders: any[];
+  applications?: any[];
+  screeningOrders?: any[];
   now: number;
 };
 
@@ -139,6 +143,43 @@ function mapMaintenanceApprovalDecision(decision: LandlordAgentDecision, input: 
   };
 }
 
+function mapScreeningCheckoutDecision(decision: LandlordAgentDecision, input: MappingInput): LandlordAgentDecision {
+  const applicationId = decisionScopedResourceId(decision);
+  if (!applicationId) {
+    return baseDecision(decision, null);
+  }
+
+  const application = (input.applications || []).find((entry) => asString(entry?.id, 240) === applicationId);
+  if (!application) {
+    return baseDecision(decision, null);
+  }
+
+  const latestOrders = latestOrderByApplication(input.screeningOrders || []);
+  const executionInput = deriveScreeningCheckoutExecutionInputSnapshot({
+    application,
+    latestOrder: latestOrders.get(applicationId) || null,
+    now: input.now,
+  });
+  const mapping: LandlordDecisionExecutionMapping = {
+    action: "screening.auto_start_checkout",
+    resourceType: "rental_application",
+    resourceId: applicationId,
+    prerequisitesMet: executionInput.state === "complete",
+    prerequisiteReason: executionInput.reason,
+  };
+
+  return {
+    ...decision,
+    automationEligible: false,
+    executionMappingState: "mapped",
+    executionMapping: mapping,
+    executionInputState: executionInput.state,
+    executionInputReason: executionInput.reason,
+    executionInputMissingFields: executionInput.missingFields,
+    executionInput: executionInput.input,
+  };
+}
+
 export function applyDecisionExecutionMappings(input: MappingInput): LandlordAgentDecision[] {
   return input.decisions.map((decision) => {
     if (decision.decisionType === "review_lease_renewals") {
@@ -146,6 +187,9 @@ export function applyDecisionExecutionMappings(input: MappingInput): LandlordAge
     }
     if (decision.decisionType === "approve_maintenance_cost") {
       return mapMaintenanceApprovalDecision(decision, input);
+    }
+    if (decision.decisionType === "start_screening_checkout") {
+      return mapScreeningCheckoutDecision(decision, input);
     }
 
     return baseDecision(decision, null);

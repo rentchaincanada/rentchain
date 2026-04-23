@@ -5,6 +5,10 @@ import type {
   MaintenanceApprovalExecutionInput,
   MaintenanceApprovalExecutionInputMissingField,
 } from "../maintenanceApprovalReadiness";
+import type {
+  ScreeningCheckoutExecutionInput,
+  ScreeningCheckoutExecutionInputMissingField,
+} from "../screeningCheckoutReadiness";
 import type { ScreeningReconciliationStatus } from "../reconciliation/reconciliationTypes";
 
 export type AdminAnalyticsPeriod = "30d" | "90d" | "365d" | "month_to_date";
@@ -99,6 +103,7 @@ export type AdminAnalyticsDerivedInput = {
   period: AdminAnalyticsPeriod;
   granularity: AdminAnalyticsGranularity;
   applications: any[];
+  screeningOrders: any[];
   screeningReconciliations: Array<{
     applicationId?: string;
     status: ScreeningReconciliationStatus;
@@ -250,6 +255,7 @@ export type LandlordPredictiveMetrics = {
 export type LandlordAgentDecisionType =
   | "review_lease_renewals"
   | "approve_maintenance_cost"
+  | "start_screening_checkout"
   | "reduce_vacancy_risk"
   | "improve_application_conversion"
   | "address_maintenance_backlog"
@@ -272,6 +278,7 @@ export type LandlordAgentDecisionSupportingSignal = {
 export type LandlordDecisionWorkflowCategory =
   | "lease_renewals"
   | "maintenance_cost_approval"
+  | "screening_checkout"
   | "vacancy_readiness"
   | "application_funnel"
   | "maintenance_backlog"
@@ -281,6 +288,7 @@ export type LandlordDecisionWorkflowCategory =
 export type LandlordDecisionActionKey =
   | "open_lease_renewals_flow"
   | "open_maintenance_cost_approval_flow"
+  | "open_screening_checkout_flow"
   | "open_vacancy_readiness_flow"
   | "open_application_funnel_review_flow"
   | "open_maintenance_backlog_flow"
@@ -319,11 +327,13 @@ export type LandlordDecisionLeaseNoticeExecutionInput = {
 
 export type LandlordDecisionExecutionInput =
   | LandlordDecisionLeaseNoticeExecutionInput
-  | MaintenanceApprovalExecutionInput;
+  | MaintenanceApprovalExecutionInput
+  | ScreeningCheckoutExecutionInput;
 
 export type LandlordDecisionExecutionInputMissingField =
   | LeaseNoticeExecutionInputMissingField
-  | MaintenanceApprovalExecutionInputMissingField;
+  | MaintenanceApprovalExecutionInputMissingField
+  | ScreeningCheckoutExecutionInputMissingField;
 
 export type LandlordAgentDecision = {
   id: string;
