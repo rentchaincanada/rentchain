@@ -57,6 +57,12 @@ import {
   buildScreeningMonetizationSummary,
   normalizeScreeningMonetizationState,
 } from "../services/screening/screeningMonetizationService";
+import {
+  SCREENING_CONSENT_VERSION,
+  evaluateScreeningApplicationEligibility,
+  resolveScreeningConsentPayload,
+  validateScreeningConsentPayload,
+} from "../lib/screeningCheckoutReadiness";
 
 const router = Router();
 
@@ -70,10 +76,9 @@ const ALLOWED_STATUS = [
   "CONDITIONAL_DEPOSIT",
 ];
 
-const ELIGIBLE_STATUS = ["SUBMITTED", "IN_REVIEW"];
 const APPLICATION_DECISION_ACTIONS = ["request_info", "approve", "reject"] as const;
 const SERVICE_LEVELS = ["SELF_SERVE", "VERIFIED", "VERIFIED_AI"] as const;
-const CONSENT_VERSION = "v1.0";
+const CONSENT_VERSION = SCREENING_CONSENT_VERSION;
 const INFO_REQUEST_ITEM_LABELS: Record<string, string> = {
   upload_id: "Upload ID",
   phone_number: "Phone number",
@@ -1065,39 +1070,7 @@ function buildAiVerification(applicationId: string, seed: number) {
 }
 
 function evaluateEligibility(application: any) {
-  const status = String(application?.status || "").toUpperCase();
-  if (!ELIGIBLE_STATUS.includes(status)) {
-    return {
-      eligible: false,
-      detail: "Application must be submitted before screening.",
-      reasonCode: "APPLICATION_STATUS_NOT_READY",
-    };
-  }
-  const consent = application?.consent || {};
-  if (!consent?.creditConsent || !consent?.referenceConsent) {
-    return {
-      eligible: false,
-      detail: "Consent for credit and references is required.",
-      reasonCode: "MISSING_CONSENT",
-    };
-  }
-  const dob = String(application?.applicant?.dob || "").trim();
-  const sin = String(
-    application?.applicant?.sinLast4 ||
-      application?.applicant?.sin ||
-      application?.applicantProfile?.sinLast4 ||
-      application?.applicantProfile?.sin ||
-      ""
-  ).trim();
-  const currentAddress = String(application?.residentialHistory?.[0]?.address || "").trim();
-  if ((!dob && !sin) || !currentAddress) {
-    return {
-      eligible: false,
-      detail: "DOB (or SIN) and current address are required.",
-      reasonCode: "MISSING_TENANT_PROFILE",
-    };
-  }
-  return { eligible: true, detail: null, reasonCode: "ELIGIBLE" };
+  return evaluateScreeningApplicationEligibility(application);
 }
 
 function isScreeningAlreadyPaid(application: any) {
@@ -1129,32 +1102,11 @@ async function loadAuthorizedApplication(req: any, applicationId: string) {
 }
 
 function resolveConsentPayload(body: any, application?: any) {
-  const payload = body && typeof body === "object" ? body : {};
-  const nestedConsent = payload?.consent && typeof payload.consent === "object" ? payload.consent : {};
-  const consent = Object.keys(nestedConsent).length ? nestedConsent : payload;
-  const appConsent = application?.consent || {};
-  const timestamp = String(consent?.timestamp || appConsent?.acceptedAt || "").trim();
-  const version = String(consent?.version || appConsent?.version || CONSENT_VERSION).trim();
-  const textHash = consent?.textHash
-    ? String(consent.textHash).trim()
-    : appConsent?.textHash
-    ? String(appConsent.textHash).trim()
-    : null;
-  return {
-    given: Boolean(
-      consent?.given || (appConsent?.creditConsent === true && appConsent?.referenceConsent === true)
-    ),
-    timestamp,
-    version,
-    textHash,
-  };
+  return resolveScreeningConsentPayload(body, application);
 }
 
 function validateConsent(consent: ReturnType<typeof resolveConsentPayload>) {
-  if (!consent.given) return { ok: false, error: "consent_required" };
-  if (!consent.timestamp) return { ok: false, error: "consent_missing_timestamp" };
-  if (consent.version !== CONSENT_VERSION) return { ok: false, error: "consent_version_mismatch" };
-  return { ok: true };
+  return validateScreeningConsentPayload(consent);
 }
 
 function resolveServiceLevel(raw?: string | null) {

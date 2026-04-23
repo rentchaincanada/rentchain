@@ -302,4 +302,86 @@ describe("applyDecisionExecutionMappings", () => {
       })
     );
   });
+
+  it("maps a deterministic screening checkout decision to one exact application but keeps execution disabled for now", () => {
+    const result = applyDecisionExecutionMappings({
+      decisions: [
+        baseDecision({
+          id: "start_screening_checkout:app-1",
+          decisionType: "start_screening_checkout",
+          actionKey: "open_screening_checkout_flow",
+          actionLabel: "Open screening checkout",
+          destination: "/applications?entry=screening-checkout&propertyId=prop-3&applicationId=app-1",
+          href: "/applications?entry=screening-checkout&propertyId=prop-3&applicationId=app-1",
+          workflowCategory: "screening_checkout",
+          recommendedAction: "Start screening checkout",
+          automationState: "blocked",
+          automationReason: "This screening checkout decision now has a deterministic application target, but explicit screening execution is not enabled in this mission.",
+        }),
+      ],
+      leases: [],
+      workOrders: [],
+      applications: [
+        {
+          id: "app-1",
+          propertyId: "prop-3",
+          unitId: "unit-7",
+          status: "SUBMITTED",
+          applicant: {
+            firstName: "Jane",
+            lastName: "Doe",
+            email: "jane@example.com",
+            dob: "1990-01-01",
+          },
+          consent: {
+            creditConsent: true,
+            referenceConsent: true,
+            acceptedAt: "2026-04-20T10:00:00.000Z",
+            version: "v1.0",
+          },
+          residentialHistory: [{ address: "123 Main St" }],
+          screeningMonetization: {
+            eligibility: "eligible",
+            quoteStatus: "generated",
+            paymentStatus: "pending_checkout",
+            fulfillmentStatus: "ready",
+            quoteId: "quote_app-1",
+            quoteGeneratedAt: "2026-04-20T11:00:00.000Z",
+            quoteExpiresAt: "2026-04-20T11:30:00.000Z",
+          },
+        },
+      ],
+      screeningOrders: [],
+      now: Date.UTC(2026, 3, 20, 11, 5, 0, 0),
+    });
+
+    expect(result[0]).toEqual(
+      expect.objectContaining({
+        automationEligible: false,
+        executionMappingState: "mapped",
+        executionMapping: {
+          action: "screening.auto_start_checkout",
+          resourceType: "rental_application",
+          resourceId: "app-1",
+          prerequisitesMet: true,
+          prerequisiteReason: null,
+        },
+        executionInputState: "complete",
+        executionInputReason: null,
+        executionInputMissingFields: [],
+        executionInput: expect.objectContaining({
+          applicationId: "app-1",
+          propertyId: "prop-3",
+          unitId: "unit-7",
+          applicantEmail: "jane@example.com",
+          quoteId: "quote_app-1",
+          quoteStatus: "generated",
+          paymentStatus: "pending_checkout",
+          fulfillmentStatus: "ready",
+          canStartCheckout: true,
+          policyOutcome: "allow",
+        }),
+      })
+    );
+  });
 });

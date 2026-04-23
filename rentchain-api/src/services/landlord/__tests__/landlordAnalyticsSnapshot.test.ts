@@ -523,4 +523,80 @@ describe("loadLandlordAnalyticsSnapshot", () => {
       averageTimeToExecutionHours: 48,
     });
   });
+
+  it("surfaces one exact screening checkout decision when one application is canonically ready", async () => {
+    const now = Date.UTC(2026, 3, 20, 11, 5, 0, 0);
+
+    seedDoc("properties", "prop-6", {
+      landlordId: "landlord-1",
+      name: "Delta",
+      createdAt: now,
+      updatedAt: now,
+    });
+    seedDoc("rentalApplications", "app-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-6",
+      unitId: "unit-9",
+      status: "SUBMITTED",
+      createdAt: now - 86_400_000,
+      submittedAt: now - 86_400_000,
+      applicant: {
+        firstName: "Jane",
+        lastName: "Doe",
+        email: "jane@example.com",
+        dob: "1990-01-01",
+      },
+      consent: {
+        creditConsent: true,
+        referenceConsent: true,
+        acceptedAt: "2026-04-20T10:00:00.000Z",
+        version: "v1.0",
+      },
+      residentialHistory: [{ address: "123 Main St" }],
+      screeningMonetization: {
+        eligibility: "eligible",
+        quoteStatus: "generated",
+        paymentStatus: "pending_checkout",
+        fulfillmentStatus: "ready",
+        quoteId: "quote_app-1",
+        quoteGeneratedAt: "2026-04-20T11:00:00.000Z",
+        quoteExpiresAt: "2026-04-20T11:30:00.000Z",
+      },
+    });
+
+    const { loadLandlordAnalyticsSnapshot } = await import("../landlordAnalyticsSnapshot");
+    const result = await loadLandlordAnalyticsSnapshot({
+      landlordId: "landlord-1",
+      now,
+    });
+
+    expect(result.decisions.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "start_screening_checkout:app-1",
+          decisionType: "start_screening_checkout",
+          actionKey: "open_screening_checkout_flow",
+          workflowCategory: "screening_checkout",
+          automationEligible: false,
+          automationState: "blocked",
+          automationReason: expect.stringContaining("explicit screening execution is not enabled"),
+          executionMappingState: "mapped",
+          executionMapping: expect.objectContaining({
+            action: "screening.auto_start_checkout",
+            resourceType: "rental_application",
+            resourceId: "app-1",
+            prerequisitesMet: true,
+          }),
+          executionInputState: "complete",
+          executionInput: expect.objectContaining({
+            applicationId: "app-1",
+            quoteId: "quote_app-1",
+            quoteStatus: "generated",
+            paymentStatus: "pending_checkout",
+            canStartCheckout: true,
+          }),
+        }),
+      ])
+    );
+  });
 });

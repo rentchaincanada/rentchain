@@ -196,6 +196,7 @@ function buildDerivedInput(params: {
     granularity: "daily",
     propertyId: propertyIdFilter || null,
     applications,
+    screeningOrders,
     screeningReconciliations,
     financialTransactions,
     workOrders,
@@ -266,6 +267,8 @@ export async function loadLandlordAnalyticsSnapshot(params: LandlordAnalyticsPar
       decisions: mergeLandlordDecisionStates(snapshot.decisions.items, decisionStates),
       leases: derivedInput.leases,
       workOrders: derivedInput.workOrders,
+      applications: derivedInput.applications,
+      screeningOrders: derivedInput.screeningOrders,
       now,
     })
   );
