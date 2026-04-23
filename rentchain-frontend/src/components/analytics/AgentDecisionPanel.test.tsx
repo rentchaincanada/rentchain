@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AgentDecisionPanel from "./AgentDecisionPanel";
+import type { LandlordDecisionMaintenanceApprovalExecutionInput } from "@/api/landlordAnalyticsApi";
 
 const { markLandlordDecisionReviewed } = vi.hoisted(() => ({
   markLandlordDecisionReviewed: vi.fn(),
@@ -157,6 +158,8 @@ describe("AgentDecisionPanel", () => {
     expect(screen.getByText(/Vacancy pressure is concentrated in Beta/i)).toBeInTheDocument();
     expect(screen.getByText(/high priority/i)).toBeInTheDocument();
     expect(screen.getByText(/Workflow: Vacancy readiness/i)).toBeInTheDocument();
+    expect(screen.getByText(/Blocked/i)).toBeInTheDocument();
+    expect(screen.getByText(/Governance: Execution disabled for this decision state/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open vacancy readiness/i })).toHaveAttribute("href", "/analytics?propertyId=prop-2");
     expect(screen.getByText(/Vacancy is elevated/i)).toBeInTheDocument();
     expect(screen.queryByText(/Automation blocked/i)).not.toBeInTheDocument();
@@ -508,6 +511,74 @@ describe("AgentDecisionPanel", () => {
     expect(screen.getByText(/Execution failed/i)).toBeInTheDocument();
     expect(screen.getByText(/AUTOMATION_EXECUTION_FAILED/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Execute now/i })).toBeInTheDocument();
+  });
+
+  it("shows execution governance summary for duplicate-prevented decisions", () => {
+    render(
+      <MemoryRouter>
+        <AgentDecisionPanel
+          decisions={[
+            {
+              id: "approve_maintenance_cost:wo-1",
+              decisionType: "approve_maintenance_cost",
+              priority: "medium",
+              explanation: "Approve this work order cost.",
+              recommendedAction: "Review work order approval",
+              actionKey: "open_maintenance_cost_approval_flow",
+              actionLabel: "Open cost approval",
+              destination: "/work-orders?entry=maintenance-cost-approval&workOrderId=wo-1",
+              workflowCategory: "maintenance_cost_approval",
+              automationEligible: true,
+              automationState: "ready",
+              automationReason: "This decision is active and already mapped to a deterministic automation path.",
+              executionMappingState: "mapped",
+              executionMapping: {
+                action: "maintenance.auto_approve_cost",
+                resourceType: "work_order",
+                resourceId: "wo-1",
+                prerequisitesMet: true,
+                prerequisiteReason: null,
+              },
+              executionInputState: "complete",
+              executionInputReason: null,
+              executionInputMissingFields: [],
+              executionInput: {
+                actualCostCents: 32000,
+                currency: "CAD",
+                reviewStatus: "pending_review",
+                linkedExpenseStatus: "not_linked",
+                hasSupportingEvidence: true,
+                thresholdCents: 100000,
+                withinAutoApprovalThreshold: true,
+              } satisfies LandlordDecisionMaintenanceApprovalExecutionInput,
+              executionState: "unsafe_duplicate",
+              blockedReason: "duplicate_prevented",
+              executionGuardKey: "maintenance.auto_approve_cost:work_order:wo-1",
+              duplicateGuardActive: true,
+              executionSummary: {
+                lastExecutedAt: "2026-04-22T12:00:00.000Z",
+                executionCount: 1,
+                lastExecutionOutcome: "succeeded",
+                lastExecutionOutcomeAt: "2026-04-22T12:00:00.000Z",
+              },
+              executedAt: null,
+              executionOutcomeStatus: "none",
+              executionOutcomeAt: null,
+              executionOutcomeReason: null,
+              href: "/work-orders?entry=maintenance-cost-approval&workOrderId=wo-1",
+              state: "pending",
+              reviewedAt: null,
+              supportingSignals: [],
+            },
+          ]}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/Duplicate prevented/i)).toBeInTheDocument();
+    expect(screen.getByText(/Governance: Duplicate execution prevented/i)).toBeInTheDocument();
+    expect(screen.getByText(/Attempts: 1/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Execute now/i })).not.toBeInTheDocument();
   });
 
   it("renders executed decisions in a collapsible secondary section", () => {

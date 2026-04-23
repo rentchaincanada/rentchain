@@ -62,6 +62,40 @@ const executionOutcomeTone: Record<
   },
 };
 
+const executionStateTone: Record<
+  LandlordAgentDecision["executionState"],
+  { bg: string; text: string; label: string }
+> = {
+  executable: {
+    bg: "rgba(21, 128, 61, 0.1)",
+    text: "#166534",
+    label: "Executable now",
+  },
+  blocked: {
+    bg: "rgba(217, 119, 6, 0.12)",
+    text: "#92400e",
+    label: "Blocked",
+  },
+  already_executed: {
+    bg: "rgba(21, 128, 61, 0.1)",
+    text: "#166534",
+    label: "Already executed",
+  },
+  unsafe_duplicate: {
+    bg: "rgba(185, 28, 28, 0.1)",
+    text: "#991b1b",
+    label: "Duplicate prevented",
+  },
+};
+
+const blockedReasonLabel: Record<NonNullable<LandlordAgentDecision["blockedReason"]>, string> = {
+  missing_required_inputs: "Missing required inputs",
+  policy_blocked: "Blocked by policy or safety threshold",
+  automation_disabled: "Execution disabled for this decision state",
+  duplicate_prevented: "Duplicate execution prevented",
+  unknown_state_fail_closed: "Blocked because execution state is ambiguous",
+};
+
 type Props = {
   decisions: LandlordAgentDecision[];
   title?: string;
@@ -93,6 +127,59 @@ function supportingLine(decision: LandlordAgentDecision) {
 
 function formatExecutedCopy(executedAt?: string | null) {
   return `Notice sent${executedAt ? ` on ${new Date(executedAt).toLocaleDateString()}` : ""}.`;
+}
+
+function effectiveExecutionState(decision: LandlordAgentDecision): NonNullable<LandlordAgentDecision["executionState"]> {
+  if (decision.executionState) return decision.executionState;
+  if (decision.state === "executed") return "already_executed";
+  if (
+    decision.automationState === "ready" &&
+    decision.executionMappingState === "mapped" &&
+    decision.executionInputState === "complete"
+  ) {
+    return "executable";
+  }
+  return "blocked";
+}
+
+function effectiveBlockedReason(decision: LandlordAgentDecision): NonNullable<LandlordAgentDecision["blockedReason"]> | null {
+  if (decision.blockedReason) return decision.blockedReason;
+  if (decision.state === "reviewed") return "automation_disabled";
+  if (decision.automationState === "manual_only") return "automation_disabled";
+  if (decision.executionInputState !== "complete" || decision.executionMappingState !== "mapped") {
+    return "missing_required_inputs";
+  }
+  if (decision.automationState === "blocked") return "unknown_state_fail_closed";
+  return null;
+}
+
+function effectiveExecutionSummary(decision: LandlordAgentDecision): NonNullable<LandlordAgentDecision["executionSummary"]> {
+  return (
+    decision.executionSummary || {
+      lastExecutedAt: decision.executedAt || null,
+      executionCount: decision.executionOutcomeStatus === "none" ? 0 : 1,
+      lastExecutionOutcome: decision.executionOutcomeStatus,
+      lastExecutionOutcomeAt: decision.executionOutcomeAt || null,
+    }
+  );
+}
+
+function formatExecutionSummary(decision: LandlordAgentDecision) {
+  const summary = effectiveExecutionSummary(decision);
+  const count = summary.executionCount;
+  if (!count) return null;
+
+  const outcomeLabel =
+    summary.lastExecutionOutcome === "succeeded"
+      ? "Last outcome: succeeded"
+      : summary.lastExecutionOutcome === "failed"
+        ? "Last outcome: failed"
+        : null;
+  const lastExecutedLabel = summary.lastExecutedAt
+    ? `Last executed: ${new Date(summary.lastExecutedAt).toLocaleString()}`
+    : null;
+
+  return [`Attempts: ${count}`, outcomeLabel, lastExecutedLabel].filter(Boolean).join(" • ");
 }
 
 function sectionHeadingStyle() {
@@ -196,10 +283,10 @@ function ActionDecisionCard(props: {
     : decision.href
       ? decision.recommendedAction
       : null;
-  const canExecuteNow =
-    decision.automationState === "ready" &&
-    decision.executionMappingState === "mapped" &&
-    decision.executionInputState === "complete";
+  const decisionExecutionState = effectiveExecutionState(decision);
+  const decisionBlockedReason = effectiveBlockedReason(decision);
+  const canExecuteNow = decisionExecutionState === "executable";
+  const governanceSummary = formatExecutionSummary(decision);
 
   return (
     <div
@@ -234,24 +321,47 @@ function ActionDecisionCard(props: {
           Workflow: {categoryLabel}
         </div>
       ) : null}
-      {decision.automationState !== "manual_only" ? (
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {decision.automationState !== "manual_only" ? (
+          <div
+            style={{
+              justifySelf: "start",
+              padding: "4px 9px",
+              borderRadius: 999,
+              background: automationTone[decision.automationState].bg,
+              color: automationTone[decision.automationState].text,
+              fontWeight: 700,
+              fontSize: "0.78rem",
+            }}
+          >
+            {automationTone[decision.automationState].label}
+          </div>
+        ) : null}
         <div
           style={{
             justifySelf: "start",
             padding: "4px 9px",
             borderRadius: 999,
-            background: automationTone[decision.automationState].bg,
-            color: automationTone[decision.automationState].text,
+            background: executionStateTone[decisionExecutionState].bg,
+            color: executionStateTone[decisionExecutionState].text,
             fontWeight: 700,
             fontSize: "0.78rem",
           }}
         >
-          {automationTone[decision.automationState].label}
+          {executionStateTone[decisionExecutionState].label}
         </div>
-      ) : null}
+      </div>
       {support ? <div style={{ color: "#64748b", fontSize: "0.88rem" }}>{support}</div> : null}
       {decision.automationState !== "manual_only" && decision.automationReason ? (
         <div style={{ color: "#64748b", fontSize: "0.84rem" }}>{decision.automationReason}</div>
+      ) : null}
+      {decisionExecutionState !== "executable" && decisionBlockedReason ? (
+        <div style={{ color: "#475569", fontSize: "0.84rem", fontWeight: 600 }}>
+          Governance: {blockedReasonLabel[decisionBlockedReason]}
+        </div>
+      ) : null}
+      {governanceSummary ? (
+        <div style={{ color: "#64748b", fontSize: "0.82rem" }}>{governanceSummary}</div>
       ) : null}
       {decision.executionOutcomeStatus !== "none" ? (
         <div
@@ -424,7 +534,23 @@ function ExecutedDecisionCard(props: {
           Workflow: {categoryLabel}
         </div>
       ) : null}
+      <div
+        style={{
+          justifySelf: "start",
+          padding: "4px 9px",
+          borderRadius: 999,
+          background: executionStateTone.already_executed.bg,
+          color: executionStateTone.already_executed.text,
+          fontWeight: 700,
+          fontSize: "0.78rem",
+        }}
+      >
+        {executionStateTone.already_executed.label}
+      </div>
       <div style={{ color: "#166534", fontSize: "0.84rem" }}>{formatExecutedCopy(decision.executedAt)}</div>
+      {formatExecutionSummary(decision) ? (
+        <div style={{ color: "#64748b", fontSize: "0.82rem" }}>{formatExecutionSummary(decision)}</div>
+      ) : null}
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
         {ctaDestination && ctaLabel ? (
           <Link to={ctaDestination} style={{ color: "#0f766e", fontWeight: 700, textDecoration: "none" }}>

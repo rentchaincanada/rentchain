@@ -298,6 +298,13 @@ export type LandlordDecisionActionKey =
 export type LandlordDecisionAutomationState = "manual_only" | "ready" | "blocked";
 export type LandlordDecisionExecutionMappingState = "none" | "mapped";
 export type LandlordDecisionExecutionResourceType = "lease" | "rental_application" | "work_order";
+export type LandlordDecisionExecutionState = "executable" | "blocked" | "already_executed" | "unsafe_duplicate";
+export type LandlordDecisionBlockedReason =
+  | "missing_required_inputs"
+  | "policy_blocked"
+  | "automation_disabled"
+  | "duplicate_prevented"
+  | "unknown_state_fail_closed";
 
 export type LandlordDecisionExecutionMapping = {
   action: AutomationAction;
@@ -335,6 +342,13 @@ export type LandlordDecisionExecutionInputMissingField =
   | MaintenanceApprovalExecutionInputMissingField
   | ScreeningCheckoutExecutionInputMissingField;
 
+export type LandlordDecisionExecutionSummary = {
+  lastExecutedAt: string | null;
+  executionCount: number;
+  lastExecutionOutcome: LandlordDecisionExecutionOutcomeStatus;
+  lastExecutionOutcomeAt: string | null;
+};
+
 export type LandlordAgentDecision = {
   id: string;
   decisionType: LandlordAgentDecisionType;
@@ -358,6 +372,11 @@ export type LandlordAgentDecision = {
   executionInputReason: string | null;
   executionInputMissingFields: LandlordDecisionExecutionInputMissingField[];
   executionInput: LandlordDecisionExecutionInput | null;
+  executionState: LandlordDecisionExecutionState;
+  blockedReason: LandlordDecisionBlockedReason | null;
+  executionGuardKey: string | null;
+  duplicateGuardActive: boolean;
+  executionSummary: LandlordDecisionExecutionSummary;
   executedAt?: string | null;
   executionOutcomeStatus: LandlordDecisionExecutionOutcomeStatus;
   executionOutcomeAt: string | null;
