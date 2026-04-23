@@ -77,7 +77,7 @@ describe("ActionRecommendationsPage", () => {
     });
   }
 
-  it("renders centralized inbox decisions from the analytics snapshot in server order", async () => {
+  it("renders the decision inbox in deterministic operator priority order", async () => {
     await mockEntitlements();
     const { fetchLandlordAnalyticsSnapshot } = await import("../../api/landlordAnalyticsApi");
     vi.mocked(fetchLandlordAnalyticsSnapshot).mockResolvedValue({
@@ -169,8 +169,170 @@ describe("ActionRecommendationsPage", () => {
     expect(fetchLandlordAnalyticsSnapshot).toHaveBeenCalledTimes(1);
 
     const actionLinks = screen.getAllByRole("link");
-    expect(actionLinks.map((node) => node.textContent)).toEqual(["Open lease renewals", "Open vacancy readiness"]);
+    expect(actionLinks.map((node) => node.textContent)).toEqual(["Open vacancy readiness", "Open lease renewals"]);
     expect(screen.getByText(/Workflow: Lease renewals/i)).toBeInTheDocument();
+  });
+
+  it("keeps safer operator states below ready and blocked decisions", async () => {
+    await mockEntitlements();
+    const { fetchLandlordAnalyticsSnapshot } = await import("../../api/landlordAnalyticsApi");
+    vi.mocked(fetchLandlordAnalyticsSnapshot).mockResolvedValue({
+      decisionOutcomeAnalytics: {
+        scope: "landlord_all_time",
+        appearedCount: 4,
+        reviewedCount: 0,
+        dismissedCount: 0,
+        executedCount: 2,
+        failedExecutionCount: 0,
+        resolvedCount: 2,
+        resolutionRate: 0.5,
+        medianTimeToResolutionHours: 12,
+        averageTimeToExecutionHours: 8,
+      },
+      decisions: {
+        items: [
+          {
+            id: "executed",
+            decisionType: "review_lease_renewals",
+            priority: "high",
+            explanation: "Already completed.",
+            recommendedAction: "Completed decision",
+            actionKey: "open_lease_renewals_flow",
+            actionLabel: "Open completed decision",
+            destination: "/leases/completed",
+            workflowCategory: "lease_renewals",
+            automationEligible: true,
+            automationState: "ready",
+            automationReason: null,
+            executionMappingState: "mapped",
+            executionMapping: null,
+            executionInputState: "complete",
+            executionInputReason: null,
+            executionInputMissingFields: [],
+            executionInput: null,
+            executedAt: "2026-04-22T12:00:00.000Z",
+            executionOutcomeStatus: "succeeded",
+            executionOutcomeAt: "2026-04-22T12:00:00.000Z",
+            executionOutcomeReason: null,
+            href: "/leases/completed",
+            state: "executed",
+            reviewedAt: null,
+            supportingSignals: [],
+          },
+          {
+            id: "duplicate",
+            decisionType: "approve_maintenance_cost",
+            priority: "high",
+            explanation: "Already processed once.",
+            recommendedAction: "Duplicate guarded decision",
+            actionKey: "open_maintenance_cost_approval_flow",
+            actionLabel: "Open duplicate guard",
+            destination: "/maintenance/duplicate",
+            workflowCategory: "maintenance_cost_approval",
+            automationEligible: true,
+            automationState: "ready",
+            automationReason: null,
+            executionMappingState: "mapped",
+            executionMapping: null,
+            executionInputState: "complete",
+            executionInputReason: null,
+            executionInputMissingFields: [],
+            executionInput: null,
+            executionState: "unsafe_duplicate",
+            executedAt: null,
+            executionOutcomeStatus: "none",
+            executionOutcomeAt: null,
+            executionOutcomeReason: null,
+            href: "/maintenance/duplicate",
+            state: "pending",
+            reviewedAt: null,
+            supportingSignals: [],
+          },
+          {
+            id: "blocked",
+            decisionType: "review_lease_renewals",
+            priority: "medium",
+            explanation: "Still blocked.",
+            recommendedAction: "Blocked decision",
+            actionKey: "open_lease_renewals_flow",
+            actionLabel: "Open blocked decision",
+            destination: "/leases/blocked",
+            workflowCategory: "lease_renewals",
+            automationEligible: false,
+            automationState: "blocked",
+            automationReason: "Inputs missing",
+            executionMappingState: "none",
+            executionMapping: null,
+            executionInputState: "none",
+            executionInputReason: null,
+            executionInputMissingFields: [],
+            executionInput: null,
+            executedAt: null,
+            executionOutcomeStatus: "none",
+            executionOutcomeAt: null,
+            executionOutcomeReason: null,
+            href: "/leases/blocked",
+            state: "pending",
+            reviewedAt: null,
+            supportingSignals: [],
+          },
+          {
+            id: "ready",
+            decisionType: "start_screening_checkout",
+            priority: "low",
+            explanation: "Ready to run now.",
+            recommendedAction: "Ready decision",
+            actionKey: "open_screening_checkout_flow",
+            actionLabel: "Open ready decision",
+            destination: "/applications/ready",
+            workflowCategory: "screening_checkout",
+            automationEligible: true,
+            automationState: "ready",
+            automationReason: null,
+            executionMappingState: "mapped",
+            executionMapping: null,
+            executionInputState: "complete",
+            executionInputReason: null,
+            executionInputMissingFields: [],
+            executionInput: null,
+            executedAt: null,
+            executionOutcomeStatus: "none",
+            executionOutcomeAt: null,
+            executionOutcomeReason: null,
+            href: "/applications/ready",
+            state: "pending",
+            reviewedAt: null,
+            supportingSignals: [],
+          },
+        ],
+      },
+    } as LandlordAnalyticsSnapshot);
+
+    render(
+      <MemoryRouter>
+        <ActionRecommendationsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole("heading", { name: /Decision inbox/i })).toBeInTheDocument();
+
+    const actionLinks = screen
+      .getAllByRole("link")
+      .map((node) => node.textContent)
+      .filter((value) =>
+        [
+          "Open ready decision",
+          "Open blocked decision",
+          "Open duplicate guard",
+          "Open completed decision",
+        ].includes(value || "")
+      );
+
+    expect(actionLinks).toEqual([
+      "Open ready decision",
+      "Open blocked decision",
+      "Open duplicate guard",
+    ]);
   });
 
   it("shows an operator queue summary and filters the current inbox in memory", async () => {
