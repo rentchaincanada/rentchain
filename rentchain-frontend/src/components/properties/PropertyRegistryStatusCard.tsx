@@ -361,7 +361,8 @@ function canSafelyUpdateBrowserState() {
 }
 
 function scheduleCopyStateReset(setCopyState: React.Dispatch<React.SetStateAction<"idle" | "copied" | "failed">>) {
-  setTimeout(() => setCopyState("idle"), 1800);
+  if (typeof window === "undefined") return null;
+  return window.setTimeout(() => setCopyState("idle"), 1800);
 }
 
 type Props = {
@@ -390,28 +391,50 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
   const viewedPromptKeysRef = React.useRef<Set<string>>(new Set());
   const lastPlanRef = React.useRef<string | null>(null);
   const conversionTrackedRef = React.useRef(false);
+  const isMountedRef = React.useRef(true);
+  const copyResetTimeoutRef = React.useRef<number | null>(null);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (typeof window !== "undefined" && copyResetTimeoutRef.current != null) {
+        window.clearTimeout(copyResetTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const propertyId = property?.id || null;
 
   const loadData = useCallback(async () => {
     if (!propertyId) {
-      setData(null);
-      setSubmissionData(null);
+      if (isMountedRef.current) {
+        setData(null);
+        setSubmissionData(null);
+      }
       return;
     }
     try {
-      setLoading(true);
-      setError(null);
+      if (isMountedRef.current) {
+        setLoading(true);
+        setError(null);
+      }
       const [statusResult, submissionResult] = await Promise.all([
         fetchPropertyRegistryStatus(propertyId),
         fetchPropertyRegistrySubmission(propertyId),
       ]);
-      setData(statusResult);
-      setSubmissionData(submissionResult);
+      if (isMountedRef.current) {
+        setData(statusResult);
+        setSubmissionData(submissionResult);
+      }
     } catch (err: any) {
-      setError(err?.message || "Failed to load registry status");
+      if (isMountedRef.current) {
+        setError(err?.message || "Failed to load registry status");
+      }
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
   }, [propertyId]);
 
@@ -449,7 +472,7 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
     try {
       await writeToClipboard(pid);
       setCopyState("copied");
-      scheduleCopyStateReset(setCopyState);
+      copyResetTimeoutRef.current = scheduleCopyStateReset(setCopyState);
     } catch {
       setCopyState("failed");
     }
@@ -461,7 +484,7 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
     try {
       await copyChecklistToClipboard(checklist);
       setCopyState("copied");
-      scheduleCopyStateReset(setCopyState);
+      copyResetTimeoutRef.current = scheduleCopyStateReset(setCopyState);
     } catch {
       setCopyState("failed");
     }
