@@ -5,6 +5,7 @@ type TimelineProps = {
   items: TimelineItem[];
   emptyMessage?: string;
   storageKey?: string;
+  defaultExpandedBuckets?: Partial<Record<TimelineBucketKey, boolean>>;
 };
 
 function formatDayHeading(value: string) {
@@ -47,12 +48,15 @@ function bucketLabel(key: TimelineBucketKey) {
   return "Unknown day";
 }
 
-function defaultBucketState(): Record<TimelineBucketKey, boolean> {
+function defaultBucketState(
+  overrides?: Partial<Record<TimelineBucketKey, boolean>>
+): Record<TimelineBucketKey, boolean> {
   return {
     today: true,
     yesterday: true,
     earlier: false,
     unknown: true,
+    ...overrides,
   };
 }
 
@@ -91,8 +95,11 @@ function groupByBucket(items: TimelineItem[]) {
     .filter((bucket) => bucket.groups.length > 0);
 }
 
-function readStoredBucketState(storageKey?: string): Record<TimelineBucketKey, boolean> {
-  const defaults = defaultBucketState();
+function readStoredBucketState(
+  storageKey?: string,
+  defaultExpandedBuckets?: Partial<Record<TimelineBucketKey, boolean>>
+): Record<TimelineBucketKey, boolean> {
+  const defaults = defaultBucketState(defaultExpandedBuckets);
   if (!storageKey || typeof window === "undefined") return defaults;
   try {
     const raw = window.localStorage.getItem(storageKey);
@@ -104,10 +111,15 @@ function readStoredBucketState(storageKey?: string): Record<TimelineBucketKey, b
   }
 }
 
-export function Timeline({ items, emptyMessage = "No timeline events yet.", storageKey }: TimelineProps) {
+export function Timeline({
+  items,
+  emptyMessage = "No timeline events yet.",
+  storageKey,
+  defaultExpandedBuckets,
+}: TimelineProps) {
   const grouped = React.useMemo(() => groupByBucket(items), [items]);
   const [expandedBuckets, setExpandedBuckets] = React.useState<Record<TimelineBucketKey, boolean>>(() =>
-    readStoredBucketState(storageKey)
+    readStoredBucketState(storageKey, defaultExpandedBuckets)
   );
 
   React.useEffect(() => {

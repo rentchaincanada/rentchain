@@ -104,4 +104,25 @@ describe("Timeline", () => {
     render(<Timeline items={[]} emptyMessage="Nothing to show yet." />);
     expect(screen.getByText(/Nothing to show yet/i)).toBeInTheDocument();
   });
+
+  it("supports overriding default bucket expansion for surfaces that should keep older history visible", () => {
+    render(
+      <Timeline
+        items={[
+          {
+            id: "event-earlier",
+            title: "Executed",
+            description: "Decision executed.",
+            timestamp: "2026-03-28T12:00:00.000Z",
+            domain: "system",
+            actor: "Landlord",
+          },
+        ]}
+        defaultExpandedBuckets={{ earlier: true }}
+      />
+    );
+
+    expect(screen.getByText(/Decision executed\./i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hide" })).toBeInTheDocument();
+  });
 });

@@ -118,7 +118,11 @@ export default function AutomationTimelineV1Page() {
         {!loading && error ? <Card style={{ color: "#b91c1c" }}>Failed to load timeline: {error}</Card> : null}
         {!loading && !error ? (
           <Card>
-            <Timeline items={visibleEvents} emptyMessage="No canonical timeline activity is available yet." />
+            <Timeline
+              items={visibleEvents}
+              emptyMessage="No canonical timeline activity is available yet."
+              defaultExpandedBuckets={{ earlier: true }}
+            />
           </Card>
         ) : null}
 

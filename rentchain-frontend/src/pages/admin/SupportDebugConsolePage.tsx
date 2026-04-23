@@ -197,7 +197,11 @@ export default function SupportDebugConsolePage() {
             </SupportConsoleSection>
 
             <SupportConsoleSection title="Timeline">
-              <Timeline items={payload.timeline} emptyMessage="No canonical timeline activity is available for this resource." />
+              <Timeline
+                items={payload.timeline}
+                emptyMessage="No canonical timeline activity is available for this resource."
+                defaultExpandedBuckets={{ earlier: true }}
+              />
             </SupportConsoleSection>
 
             <SupportConsoleSection title="Debug metadata">
